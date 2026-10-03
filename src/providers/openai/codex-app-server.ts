@@ -830,14 +830,24 @@ function createAbortError(message: string): Error {
 
 /** Find npm's entrypoint only when Windows cannot launch a native Codex binary. */
 function getCodexNpmEntrypoint(env: Record<string, string>): string | undefined {
+  // Match Node's first, case-insensitive PATH key after sorting environment keys.
+  const pathKey = Object.keys(env)
+    .sort()
+    .find((key) => key.toUpperCase() === 'PATH');
+  const searchPath = pathKey
+    ? env[pathKey]
+    : (Object.entries(process.env).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? '');
   // libuv accepts either quote style, including PATH delimiters inside quotes.
   const directories = (
-    (env.PATH ?? env.Path ?? '').match(new RegExp(`"[^"]*"|'[^']*'|[^${path.delimiter}]+`, 'g')) ??
-    []
+    searchPath.match(new RegExp(`"[^"]*"|'[^']*'|[^${path.delimiter}]+`, 'g')) ?? []
   ).map((directory) => directory.replace(/^(["'])(.*)\1$/, '$2'));
-  // Node searches the cwd and all of PATH for native binaries, ignoring .cmd shims.
+  // libuv checks the parent process environment when deciding whether to search cwd.
+  const searchCwd = !Object.keys(process.env).some(
+    (key) => key.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH',
+  );
+  const nativeDirectories = searchCwd ? [process.cwd(), ...directories] : directories;
   if (
-    [process.cwd(), ...directories].some((directory) =>
+    nativeDirectories.some((directory) =>
       ['codex.com', 'codex.exe'].some((file) => fs.existsSync(path.join(directory, file))),
     )
   ) {
