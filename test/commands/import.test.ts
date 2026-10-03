@@ -3,6 +3,7 @@ import path from 'path';
 
 import { createClient } from '@libsql/client/node';
 import { Command } from 'commander';
+import { parse as parseCsv } from 'csv-parse/sync';
 import { sql } from 'drizzle-orm';
 import express from 'express';
 import request from 'supertest';
@@ -26,9 +27,15 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { blobsRouter } from '../../src/server/routes/blobs';
 import { TraceStore } from '../../src/tracing/store';
-import { ResultFailureReason } from '../../src/types/index';
+import { type Prompt, ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
-import { createOutputData } from '../../src/util/output';
+import { createOutputData, writeOutput } from '../../src/util/output';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
+import EvalFactory from '../factories/evalFactory';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -194,6 +201,240 @@ describe('importCommand', () => {
       expect(process.exitCode).not.toBe(1);
       expect(await Eval.findById(sampleData.evalId)).toBeDefined();
     });
+  });
+
+  describe('export projection round trips', () => {
+    describe.each([
+      { name: 'missing', body: undefined },
+      { name: 'null', body: null },
+      { name: 'string', body: 'historical body' },
+      { name: 'object', body: { unavailable: true } },
+    ])('legacy table with $name body', ({ body }) => {
+      it.each([false, true])(
+        'sanitizes its header with prompt stripping=%s',
+        async (stripPrompt) => {
+          const dir = createTempDir();
+          const fixture = {
+            evalId: 'eval-malformed-legacy-body',
+            config: {},
+            results: {
+              version: 2,
+              results: [],
+              stats: { successes: 0, failures: 0 },
+              table: {
+                head: {
+                  vars: ['subject'],
+                  prompts: [
+                    createCompletedPrompt('Legacy header input', {
+                      display: 'Legacy header display',
+                      config: { password: 'Legacy header credential', temperature: 0.25 },
+                    }),
+                  ],
+                },
+                ...(body !== undefined && { body }),
+              },
+            },
+          };
+          const original = structuredClone(fixture);
+          const restore = mockProcessEnv({
+            PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt),
+            PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+            PROMPTFOO_STRIP_TEST_VARS: 'false',
+          });
+          try {
+            const input = path.join(dir, 'legacy.json');
+            fs.writeFileSync(input, JSON.stringify(fixture));
+            importCommand(program);
+            await program.parseAsync(['node', 'test', 'import', input]);
+            expect(process.exitCode).toBeUndefined();
+            const reopened = await Eval.findById(fixture.evalId);
+            expect(reopened).toBeDefined();
+            const sourceTable = await reopened!.getTable();
+            const originalTable = structuredClone(sourceTable);
+            for (const extension of ['json', 'yaml', 'txt', 'xml']) {
+              const output = path.join(dir, `reexport.${extension}`);
+              await writeOutput(output, reopened!, null);
+              const contents = fs.readFileSync(output, 'utf8');
+              expect(contents).not.toContain('Legacy header credential');
+              expect(contents.includes('Legacy header input')).toBe(!stripPrompt);
+              expect(contents.includes('Legacy header display')).toBe(!stripPrompt);
+              if (extension === 'json') {
+                const table = JSON.parse(contents).results.table;
+                expect(table.body).toEqual(body);
+                expect(Object.hasOwn(table, 'body')).toBe(body !== undefined);
+                expect(table.head.vars).toEqual(['subject']);
+                expect(table.head.prompts[0]).toMatchObject({
+                  raw: stripPrompt ? '[prompt stripped]' : 'Legacy header input',
+                  label: stripPrompt ? '[prompt stripped]' : 'Legacy header input',
+                  display: stripPrompt ? '[prompt stripped]' : 'Legacy header display',
+                  config: { password: '[REDACTED]', temperature: 0.25 },
+                });
+              }
+            }
+            expect(sourceTable).toEqual(originalTable);
+            expect(fixture).toEqual(original);
+          } finally {
+            restore();
+            removeTempDir(dir);
+          }
+        },
+      );
+    });
+
+    it.each(['namedScores', 'namedScoresCount', 'namedScoreWeights'] as const)(
+      'normalizes nonfinite and null %s values through export and persisted import',
+      async (metricMap) => {
+        const dir = createTempDir();
+        const metrics = createPromptMetrics({
+          namedScores: { token: 0, password: -0.5, apiKey: 1 },
+          namedScoresCount: { token: 1, password: 2, apiKey: 3 },
+          namedScoreWeights: { token: 0, password: 0.5, apiKey: 2 },
+        });
+        metrics[metricMap] = { token: NaN, password: Infinity, apiKey: null as unknown as number };
+        const prompt = createCompletedPrompt('metric input', {
+          id: sha256('metric input'),
+          metrics,
+          config: { password: 'fixture prompt credential', temperature: 0.2 },
+        });
+        const original = structuredClone(prompt);
+        try {
+          const eval_ = new Eval({}, { prompts: [prompt] });
+          await eval_.addResult(createEvaluateResult({ promptId: prompt.id }));
+          const output = path.join(dir, 'metrics.json');
+          await writeOutput(output, eval_, null);
+          const contents = fs.readFileSync(output, 'utf8');
+          const exported = JSON.parse(contents);
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', output]);
+          expect(process.exitCode).toBeUndefined();
+          const reopened = await Eval.findById(exported.evalId);
+          expect(reopened).toBeDefined();
+          const table = await reopened!.getTable();
+          const expected = {
+            ...metrics,
+            [metricMap]: { token: null, password: null, apiKey: null },
+          };
+          expect(exported.results.prompts[0].metrics).toEqual(expected);
+          expect(table.head.prompts[0].metrics).toEqual(expected);
+          expect(exported.results.prompts[0].config).toEqual({
+            password: '[REDACTED]',
+            temperature: 0.2,
+          });
+          expect(contents).not.toContain('fixture prompt credential');
+          expect(prompt).toEqual(original);
+          expect(prompt.metrics).toBe(metrics);
+        } finally {
+          removeTempDir(dir);
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'preserves imported prompt associations with prompt stripping %s',
+      async (stripPrompt) => {
+        const dir = createTempDir();
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt) });
+        const prompts = ['First greeting', 'Second greeting'].map((text) =>
+          createCompletedPrompt(text, { id: sha256(text), label: text }),
+        );
+        const original = structuredClone(prompts);
+        try {
+          const eval_ = new Eval({}, { prompts });
+          for (const [promptIdx, prompt] of prompts.entries()) {
+            await eval_.addResult(createEvaluateResult({ prompt, promptId: prompt.id, promptIdx }));
+          }
+          const output = path.join(dir, 'prompts.json');
+          await writeOutput(output, eval_, null);
+          const exported = JSON.parse(fs.readFileSync(output, 'utf8'));
+          expect(exported.results.prompts.map((prompt: Prompt) => prompt.label)).toEqual(
+            stripPrompt ? ['[prompt stripped]', '[prompt stripped]'] : prompts.map((p) => p.label),
+          );
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', output]);
+          expect(process.exitCode).toBeUndefined();
+
+          const reopened = await Eval.findById(exported.evalId);
+          expect(reopened).toBeDefined();
+          const ids = prompts.map((prompt) => prompt.id).sort();
+          const rows = await EvalResult.findManyByEvalId(exported.evalId);
+          const db = await getDb();
+          const links = await db.select().from(evalsToPromptsTable).all();
+          expect(rows.map((row) => row.promptId).sort()).toEqual(ids);
+          expect(
+            links
+              .filter((link) => link.evalId === exported.evalId)
+              .map((link) => link.promptId)
+              .sort(),
+          ).toEqual(ids);
+          expect(reopened!.prompts.map((prompt) => prompt.id).sort()).toEqual(ids);
+          expect(prompts).toEqual(original);
+        } finally {
+          restoreEnv();
+          removeTempDir(dir);
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'exports imported primitive row prompts with prompt stripping %s',
+      async (stripPrompt) => {
+        const dir = createTempDir();
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt) });
+        const prompt = createCompletedPrompt('normal aggregate input', {
+          id: sha256('normal aggregate input'),
+        });
+        const primitive = 'historical primitive prompt';
+        const rows = [
+          createEvaluateResult({ prompt: primitive as unknown as Prompt, promptId: prompt.id }),
+          createEvaluateResult({ prompt, promptId: prompt.id, testIdx: 1 }),
+        ];
+        const fixture = {
+          evalId: 'eval-primitive-prompt-' + stripPrompt,
+          config: {},
+          results: { version: 3, prompts: [prompt], results: rows },
+        };
+        const original = structuredClone(fixture);
+        try {
+          const input = path.join(dir, 'input.json');
+          fs.writeFileSync(input, JSON.stringify(fixture));
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', input]);
+          expect(process.exitCode).toBeUndefined();
+          const reopened = await Eval.findById(fixture.evalId);
+          expect(reopened).toBeDefined();
+          const summary = await reopened!.toEvaluateSummary();
+          const output = path.join(dir, 'output.json');
+          await writeOutput(output, reopened!, null);
+          const content = fs.readFileSync(output, 'utf8');
+          const exported = JSON.parse(content);
+          for (const results of [summary.results, exported.results.results]) {
+            expect(results).toHaveLength(2);
+            expect(results.every((row: { success: boolean }) => row.success)).toBe(true);
+            expect(results.map((row: { promptId: string }) => row.promptId)).toEqual([
+              prompt.id,
+              prompt.id,
+            ]);
+            const first = results.find((row: { testIdx: number }) => row.testIdx === 0);
+            expect(first.prompt).toEqual(
+              stripPrompt ? { raw: '[prompt stripped]', label: '[prompt stripped]' } : primitive,
+            );
+            const neighbor = results.find((row: { testIdx: number }) => row.testIdx === 1);
+            expect(neighbor.prompt.raw).toBe(stripPrompt ? '[prompt stripped]' : prompt.raw);
+          }
+          if (stripPrompt) {
+            expect(content).not.toContain(primitive);
+          }
+          expect(fixture).toEqual(original);
+          expect(
+            (await EvalResult.findManyByEvalId(fixture.evalId)).find((row) => row.testIdx === 0)
+              ?.prompt,
+          ).toBe(primitive);
+        } finally {
+          restoreEnv();
+          removeTempDir(dir);
+        }
+      },
+    );
   });
 
   describe('with real sample file', () => {
@@ -944,6 +1185,98 @@ describe('importCommand', () => {
       }
     });
 
+    it.each([
+      { config: 'legacy-config' },
+      { config: 42 },
+      { config: true },
+      { config: ['legacy-array'] },
+    ])(
+      're-exports imported non-record legacy config $config under independent strip flags',
+      async ({ config }) => {
+        const dir = createTempDir();
+        const fixture = {
+          id: 'eval-legacy-primitive-config',
+          config,
+          results: {
+            version: 2,
+            results: [],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 0 },
+          },
+        };
+        try {
+          const input = path.join(dir, 'input.json');
+          fs.writeFileSync(input, JSON.stringify(fixture));
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', input]);
+          expect(process.exitCode).toBeUndefined();
+          const reopened = await Eval.findById(fixture.id);
+          expect(reopened!.config).toEqual(config);
+          for (const [prompt, vars] of [
+            [false, false],
+            [true, false],
+            [false, true],
+            [true, true],
+          ]) {
+            const restoreEnv = mockProcessEnv({
+              PROMPTFOO_STRIP_PROMPT_TEXT: String(prompt),
+              PROMPTFOO_STRIP_TEST_VARS: String(vars),
+            });
+            try {
+              const output = path.join(dir, `output-${prompt}-${vars}.json`);
+              await writeOutput(output, reopened!, null);
+              expect(JSON.parse(fs.readFileSync(output, 'utf8')).config).toEqual(config);
+              expect(reopened!.config).toEqual(config);
+            } finally {
+              restoreEnv();
+            }
+          }
+        } finally {
+          removeTempDir(dir);
+        }
+      },
+    );
+
+    it('exports stored V2 rows to CSV and JSONL with scoped stripping', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const evaluation = (await Eval.findById(stored.id))!;
+      evaluation.config.env = {
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      };
+      const before = structuredClone(evaluation.oldResults!);
+      const dir = createTempDir();
+      try {
+        const jsonl = path.join(dir, 'legacy.jsonl');
+        const csv = path.join(dir, 'legacy.csv');
+        await writeOutput(jsonl, evaluation, null);
+        await writeOutput(csv, evaluation, null);
+        const rows = fs
+          .readFileSync(jsonl, 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line));
+        expect(rows).toHaveLength(before.results.length);
+        expect(rows.map((row) => row.score)).toEqual(before.results.map((row) => row.score));
+        expect(rows.map((row) => row.success)).toEqual(before.results.map((row) => row.success));
+        for (const row of rows) {
+          expect(row.response.output).toBe('[output stripped]');
+          expect(row.vars).toEqual({});
+        }
+        const cells = parseCsv(fs.readFileSync(csv, 'utf8')) as string[][];
+        expect(cells).toHaveLength(before.table.body.length + 1);
+        expect(cells[0].join(' ')).toContain('[prompt stripped]');
+        expect(cells[1].join(' ')).toContain('[output stripped]');
+        expect(cells[1].slice(0, before.table.head.vars.length)).toEqual(
+          before.table.head.vars.map(() => ''),
+        );
+        expect(evaluation.oldResults).toEqual(before);
+      } finally {
+        removeTempDir(dir);
+      }
+    });
+
     it('should import legacy table-backed eval exports', async () => {
       const evalId = 'eval-legacy-table-backed';
       const filePath = path.join(__dirname, `temp-legacy-v2-${Date.now()}.json`);
@@ -1080,6 +1413,56 @@ describe('importCommand', () => {
         expect.stringContaining('Eval openai-evals-evalrun_import_fixture already exists'),
       );
       expect(process.exitCode).toBe(1);
+    });
+
+    it('reimports stripped OpenAI prompts that originally have no IDs', async () => {
+      const dir = createTempDir();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+      try {
+        importCommand(program);
+        await program.parseAsync([
+          'node',
+          'test',
+          'import',
+          path.join(__dirname, '../__fixtures__/openai-evals-multi-run-items.jsonl'),
+        ]);
+        expect(process.exitCode).toBeUndefined();
+        const [imported] = await Eval.getMany(10);
+        expect(imported.prompts).toHaveLength(2);
+        expect(imported.prompts.every((prompt) => prompt.id === undefined)).toBe(true);
+        const original = structuredClone(imported.prompts);
+        const originalRows = await EvalResult.findManyByEvalId(imported.id);
+        const ids = originalRows.map((row) => row.promptId).sort();
+        const output = path.join(dir, 'stripped-openai.json');
+        await writeOutput(output, imported, null);
+        const exported = JSON.parse(fs.readFileSync(output, 'utf8'));
+        expect(exported.results.prompts.map((prompt: Prompt) => prompt.id).sort()).toEqual(ids);
+        expect(exported.results.prompts.map((prompt: Prompt) => prompt.label)).toEqual([
+          '[prompt stripped]',
+          '[prompt stripped]',
+        ]);
+        exported.evalId += '-round-trip';
+        fs.writeFileSync(output, JSON.stringify(exported));
+        await program.parseAsync(['node', 'test', 'import', output]);
+        expect(process.exitCode).toBeUndefined();
+        const rows = await EvalResult.findManyByEvalId(exported.evalId);
+        expect(rows.map((row) => row.promptId).sort()).toEqual(ids);
+        const db = await getDb();
+        const links = await db.select().from(evalsToPromptsTable).all();
+        expect(
+          links
+            .filter((link) => link.evalId === exported.evalId)
+            .map((link) => link.promptId)
+            .sort(),
+        ).toEqual(ids);
+        expect(rows.map((row) => row.response?.tokenUsage)).toEqual(
+          originalRows.map((row) => row.response?.tokenUsage),
+        );
+        expect(imported.prompts).toEqual(original);
+      } finally {
+        restoreEnv();
+        removeTempDir(dir);
+      }
     });
 
     it('should import multi-run samples as comparable prompt columns', async () => {

@@ -66,8 +66,9 @@ import EvalResult, {
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
-  projectPrompt,
   projectTracesForOutput,
+  sanitizePromptForArtifact,
+  sanitizeSummaryForArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -520,7 +521,8 @@ export default class Eval {
 
       for (const prompt of renderedPrompts) {
         const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
+        // Imported completed prompts already have IDs referenced by their result rows.
+        const promptId = (opts?.completedPrompts && prompt.id) || hashPrompt(prompt);
 
         await tx
           .insert(promptsTable)
@@ -747,11 +749,11 @@ export default class Eval {
     return this.prompts;
   }
 
-  async getTable(): Promise<EvaluateTable> {
+  async getTable(stripFlags = getStripFlags(this.config.env)): Promise<EvaluateTable> {
     if (this.useOldResults()) {
       return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
     }
-    return convertResultsToTable(await this.toResultsFile());
+    return convertResultsToTable(await this.toResultsFile(stripFlags));
   }
 
   async addResult(result: EvaluateResult) {
@@ -1434,7 +1436,9 @@ export default class Eval {
     return stats;
   }
 
-  async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
+  async toEvaluateSummary(
+    stripFlags = getStripFlags(this.config.env),
+  ): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return {
@@ -1450,9 +1454,7 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const stripFlags = getStripFlags(this.config.env);
-
-    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
+    const prompts = this.prompts.map((prompt) => sanitizePromptForArtifact(prompt, stripFlags));
 
     return {
       version: 3,
@@ -1508,19 +1510,19 @@ export default class Eval {
     }
   }
 
-  async toResultsFile(): Promise<ResultsFile> {
+  async toResultsFile(stripFlags = getStripFlags(this.config.env)): Promise<ResultsFile> {
     const traces = await this.getTraces();
-    const stripFlags = getStripFlags(this.config.env);
+    const prompts = this.getPrompts();
 
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
-      results: await this.toEvaluateSummary(),
+      results: sanitizeSummaryForArtifact(await this.toEvaluateSummary(stripFlags), stripFlags),
       config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
-      prompts: this.getPrompts().map((prompt) =>
-        projectPrompt(prompt, stripFlags.shouldStripPromptText),
-      ),
+      prompts: Array.isArray(prompts)
+        ? prompts.map((prompt) => sanitizePromptForArtifact(prompt, stripFlags))
+        : prompts,
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
       ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),

@@ -11,6 +11,7 @@ const DUMMY_BASE = 'http://placeholder';
 const URL_REFERENCE = /^(?:[a-z][a-z0-9+.-]*:\/\/|\/[^?#]*[?#])/i;
 
 export const REDACTED = '[REDACTED]';
+export const OUTPUT_SANITIZE_MAX_DEPTH = 64;
 
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
@@ -688,6 +689,53 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function stripConfigPromptSelectors(value: unknown): unknown {
+  return Array.isArray(value) ? value.map(() => '[prompt stripped]') : '[prompt stripped]';
+}
+
+function stripConfigProviderPrompts(provider: unknown): unknown {
+  if (Array.isArray(provider)) {
+    return provider.map(stripConfigProviderPrompts);
+  }
+  if (!isRecord(provider)) {
+    return provider;
+  }
+  return Object.fromEntries(
+    Object.entries(provider).map(([key, value]) => {
+      if (key === 'prompts') {
+        return [key, stripConfigPromptSelectors(value)];
+      }
+      // Provider maps contain options one level below the provider ID. Vendor config
+      // and environment/input maps are opaque, even when they have a `prompts` key.
+      if (!['config', 'env', 'inputs'].includes(key) && isRecord(value) && 'prompts' in value) {
+        return [key, { ...value, prompts: stripConfigPromptSelectors(value.prompts) }];
+      }
+      return [key, value];
+    }),
+  );
+}
+
+/** Remove grading prompts from an assertion or nested assertion set. */
+export function stripAssertionRubricPrompts<T>(assertion: T, depth = 0): T {
+  if (!isRecord(assertion)) {
+    return assertion;
+  }
+  if (depth > OUTPUT_SANITIZE_MAX_DEPTH) {
+    return REDACTED as T;
+  }
+  const { rubricPrompt: _rubricPrompt, ...projected }: Record<string, unknown> = assertion;
+  if (Array.isArray(assertion.assert)) {
+    projected.assert = assertion.assert.map((child) =>
+      stripAssertionRubricPrompts(child, depth + 1),
+    );
+  }
+  return projected as T;
+}
+
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
 export function sanitizeConfigForOutput(
   config: Partial<UnifiedConfig>,
@@ -698,50 +746,106 @@ export function sanitizeConfigForOutput(
     shouldStripResponseOutput?: boolean;
   } = {},
 ): Partial<UnifiedConfig> {
-  const safe = sanitizeTracingConfigForPersistence(config);
-  const { basePath, ...outputConfig } = safe;
-  const sanitized = sanitizeObject(outputConfig, {
-    context: 'output config',
-    sanitizeUrls: true,
-    throwOnError: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as Partial<UnifiedConfig>;
+  if (!isRecord(config)) {
+    try {
+      return sanitizeObject(config, {
+        throwOnError: true,
+        maxDepth: OUTPUT_SANITIZE_MAX_DEPTH,
+        sanitizeUrls: true,
+      });
+    } catch {
+      return {};
+    }
+  }
+  let safe: Partial<UnifiedConfig>;
+  let basePath: UnifiedConfig['basePath'];
+  let sanitized: Partial<UnifiedConfig>;
+  try {
+    safe = sanitizeTracingConfigForPersistence(config);
+    const { basePath: originalBasePath, ...outputConfig } = safe;
+    basePath = originalBasePath;
+    sanitized = sanitizeObject(outputConfig, {
+      context: 'output config',
+      sanitizeUrls: true,
+      throwOnError: true,
+      maxDepth: OUTPUT_SANITIZE_MAX_DEPTH,
+    });
+    if (!isRecord(sanitized)) {
+      return {};
+    }
+  } catch {
+    return {};
+  }
   if (basePath !== undefined) {
     sanitized.basePath = basePath;
   }
   if (options.shouldStripPromptText) {
     delete sanitized.prompts;
+    if ('providers' in sanitized) {
+      sanitized.providers = stripConfigProviderPrompts(
+        sanitized.providers,
+      ) as UnifiedConfig['providers'];
+    }
+    const runtimeConfig = sanitized as Record<string, unknown>;
+    if (isRecord(runtimeConfig.providerPromptMap)) {
+      runtimeConfig.providerPromptMap = Object.fromEntries(
+        Object.entries(runtimeConfig.providerPromptMap).map(([provider, prompts]) => [
+          provider,
+          stripConfigPromptSelectors(prompts),
+        ]),
+      );
+    }
   }
   const {
     shouldStripTestVars: stripVars,
     shouldStripMetadata: stripMetadata,
     shouldStripResponseOutput: stripOutput,
   } = options;
-  const tests = [
+  const tests: unknown[] = [
     ...(Array.isArray(sanitized.tests) ? sanitized.tests : []),
     sanitized.defaultTest,
-    ...(sanitized.scenarios ?? []).flatMap((scenario) =>
-      typeof scenario === 'object'
-        ? [...(scenario.config ?? []), ...(Array.isArray(scenario.tests) ? scenario.tests : [])]
+    ...(Array.isArray(sanitized.scenarios) ? sanitized.scenarios : []).flatMap((scenario) =>
+      isRecord(scenario)
+        ? [
+            ...(Array.isArray(scenario.config) ? scenario.config : [scenario.config]),
+            ...(Array.isArray(scenario.tests) ? scenario.tests : []),
+          ]
         : [],
     ),
   ];
   for (const test of tests) {
-    if (!test || typeof test !== 'object') {
+    if (!isRecord(test)) {
       continue;
     }
-    if (stripVars && 'vars' in test) {
+    if (options.shouldStripPromptText) {
+      if (Array.isArray(test.assert)) {
+        test.assert = test.assert.map((assertion) => stripAssertionRubricPrompts(assertion));
+      }
+      if ('prompts' in test) {
+        test.prompts = stripConfigPromptSelectors(test.prompts);
+      }
+      if (isRecord(test.options)) {
+        delete test.options.prefix;
+        delete test.options.suffix;
+        delete test.options.rubricPrompt;
+      }
+    }
+    if (stripVars) {
       delete test.vars;
     }
-    if (stripMetadata && 'metadata' in test) {
-      // Keep the internal marker so exported remote rows cannot execute local file references.
-      if (test.metadata?.__promptfoo?.remote === true) {
+    if (stripMetadata) {
+      // Preserve provenance so imported remote rows cannot execute local file references.
+      if (
+        isRecord(test.metadata) &&
+        isRecord(test.metadata.__promptfoo) &&
+        test.metadata.__promptfoo.remote === true
+      ) {
         test.metadata = { __promptfoo: { remote: true } };
       } else {
         delete test.metadata;
       }
     }
-    if (stripOutput && 'providerOutput' in test) {
+    if (stripOutput) {
       delete test.providerOutput;
     }
   }
@@ -1002,7 +1106,7 @@ function sanitizeJsonString(
     }
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
-      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
+      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str, depth, maxDepth);
       if (sanitizedUrlEncoded !== str) {
         return sanitizedUrlEncoded;
       }
@@ -1061,7 +1165,11 @@ function decodeFormComponent(component: string): string | undefined {
  * the value is JSON but contains no secrets (so callers can preserve the
  * original byte-for-byte).
  */
-function redactNestedJsonValue(decoded: string | undefined): string | null {
+function redactNestedJsonValue(
+  decoded: string | undefined,
+  depth = 0,
+  maxDepth = Number.POSITIVE_INFINITY,
+): string | null {
   if (decoded === undefined) {
     return null;
   }
@@ -1078,10 +1186,7 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
   if (!parsed || typeof parsed !== 'object') {
     return null;
   }
-  const sanitized = sanitizeObject(parsed, {
-    sanitizeUrls: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  });
+  const sanitized = recursiveSanitize(parsed, depth + 1, maxDepth, true);
   const originalSerialized = JSON.stringify(parsed);
   const sanitizedSerialized = JSON.stringify(sanitized);
   return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
@@ -1099,7 +1204,11 @@ function isPureTemplateValue(value: string): boolean {
   return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
 }
 
-export function sanitizeUrlEncodedString(value: string): string {
+export function sanitizeUrlEncodedString(
+  value: string,
+  depth = 0,
+  maxDepth = Number.POSITIVE_INFINITY,
+): string {
   if (!value.includes('=')) {
     return value;
   }
@@ -1142,7 +1251,7 @@ export function sanitizeUrlEncodedString(value: string): string {
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
     // redacted at the leaf rather than leaked as opaque bytes.
-    const nestedJson = redactNestedJsonValue(decodedValue);
+    const nestedJson = redactNestedJsonValue(decodedValue, depth, maxDepth);
     if (nestedJson !== null) {
       changed = true;
       return `${separator}${rawKey}=${encodeURIComponent(nestedJson)}`;

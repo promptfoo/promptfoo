@@ -3,10 +3,12 @@ import { ResultFailureReason } from '../../types/index';
 
 import type Eval from '../../models/eval';
 import type {
+  AtomicTestCase,
   CompletedPrompt,
   EnvOverrides,
   EvalResultsFilterMode,
   EvalTableDTO,
+  EvaluateTable,
   EvaluateTableRow,
   Prompt,
 } from '../../types/index';
@@ -270,8 +272,9 @@ type StreamRow = {
     failureReason?: ResultFailureReason;
     gradingResult?: { reason?: string; comment?: string } | null;
     metadata?: Record<string, unknown>;
+    testCase?: AtomicTestCase;
   } | null>;
-  test: { description?: string };
+  test: { description?: string; vars?: Record<string, unknown> };
 };
 
 /**
@@ -284,7 +287,7 @@ function batchToStreamRows(
   batchResults: Iterable<{
     testIdx: number;
     promptIdx: number;
-    testCase?: { vars?: Record<string, unknown>; description?: string };
+    testCase?: AtomicTestCase;
     response?: { output?: string };
     success: boolean;
     score?: number;
@@ -307,7 +310,7 @@ function batchToStreamRows(
           return value === undefined ? '' : String(value);
         }),
         outputs: new Array(numPrompts).fill(null),
-        test: { description: result.testCase?.description },
+        test: { description: result.testCase?.description, vars: result.testCase?.vars },
       };
       rowsByTestIdx.set(result.testIdx, row);
     }
@@ -319,6 +322,7 @@ function batchToStreamRows(
       failureReason: result.failureReason,
       gradingResult: result.gradingResult,
       metadata: result.metadata,
+      testCase: result.testCase,
     };
   }
   return Array.from(rowsByTestIdx.values());
@@ -745,6 +749,8 @@ export async function generateEvalCsv(
 export interface StreamCsvOptions {
   /** Whether this is a redteam eval */
   isRedteam?: boolean;
+  /** Artifact projection: header first, then bounded batches with only head.vars populated. */
+  projectTable?: (table: EvaluateTable) => EvaluateTable;
   /** Callback to write a chunk of CSV data */
   write: (data: string) => void | Promise<void>;
 }
@@ -762,8 +768,13 @@ export interface StreamCsvOptions {
  * @param options - Streaming options including the write callback
  */
 export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Promise<void> {
-  const { isRedteam = false, write } = options;
+  const { isRedteam = false, write, projectTable } = options;
   const env = eval_.config?.env;
+  if (eval_.useOldResults?.()) {
+    const table = await eval_.getTable();
+    await write(evalTableToCsv(projectTable ? projectTable(table) : table, { env, isRedteam }));
+    return;
+  }
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
   const numPrompts = prompts.length;
@@ -803,7 +814,10 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       : [];
   }
 
-  const headers = buildCsvHeaders(varNames, prompts, {
+  const headerPrompts = projectTable
+    ? projectTable({ head: { vars: varNames, prompts }, body: [] }).head.prompts
+    : prompts;
+  const headers = buildCsvHeaders(varNames, headerPrompts, {
     hasDescriptions,
     isRedteam,
     namedScoreNamesByPrompt,
@@ -812,7 +826,15 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
 
   for await (const batchResults of eval_.fetchResultsBatched()) {
     const rows = batchToStreamRows(batchResults, varNames, numPrompts);
-    const csvRows = rows.map((row) =>
+    const projectedRows = projectTable
+      ? projectTable({
+          // Only the projected rows are consumed here. Header prompts were
+          // already sanitized once above, including their nested configs.
+          head: { vars: varNames, prompts: [] },
+          body: rows as unknown as EvaluateTableRow[],
+        }).body
+      : rows;
+    const csvRows = projectedRows.map((row) =>
       tableRowToCsvValues(row as unknown as EvaluateTableRow, {
         hasDescriptions,
         isRedteam,

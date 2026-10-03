@@ -1,13 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database/index';
+import { evalsToPromptsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/database/signal', async () => {
@@ -110,6 +114,40 @@ describe('eval routes', () => {
   }
 
   describe('POST /', () => {
+    it('retains distinct stripped prompt IDs when receiving shared results', async () => {
+      const prompts = [0, 1].map(() =>
+        createCompletedPrompt('[prompt stripped]', { id: randomUUID() }),
+      );
+      const payload = { config: { tests: [] }, prompts, results: [] };
+      const original = structuredClone(payload);
+      const received = await api.post('/api/eval').send(payload);
+      expect(received.status).toBe(200);
+      testEvalIds.add(received.body.id);
+
+      const results = prompts.map((prompt, promptIdx) => ({
+        ...createEvaluateResult({ prompt, promptId: prompt.id, promptIdx }),
+        id: randomUUID(),
+      }));
+      const uploaded = await api.post(`/api/eval/${received.body.id}/results`).send(results);
+      expect(uploaded.status).toBe(204);
+
+      const eval_ = await Eval.findById(received.body.id);
+      invariant(eval_, 'Received eval is required');
+      const expectedIds = prompts.map((prompt) => prompt.id).sort();
+      const rows = await eval_.getResults();
+      expect(rows.map((row) => row.promptId).sort()).toEqual(expectedIds);
+      expect(eval_.prompts.map((prompt) => prompt.id).sort()).toEqual(expectedIds);
+      const db = await getDb();
+      const links = await db.select().from(evalsToPromptsTable).all();
+      expect(
+        links
+          .filter((link) => link.evalId === eval_.id)
+          .map((link) => link.promptId)
+          .sort(),
+      ).toEqual(expectedIds);
+      expect(payload).toEqual(original);
+    });
+
     it('returns 500 when v4 prompt persistence fails', async () => {
       const createSpy = vi.spyOn(Eval, 'create');
       vi.spyOn(Eval.prototype, 'addPrompts').mockRejectedValueOnce(

@@ -813,6 +813,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         createdAt: incEval.createdAt === undefined ? undefined : new Date(incEval.createdAt),
         results: incEval.results,
         vars: incEval.vars,
+        completedPrompts: incEval.prompts,
       });
       if (incEval.prompts) {
         await eval_.addPrompts(incEval.prompts);
