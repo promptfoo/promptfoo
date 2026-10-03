@@ -1018,12 +1018,22 @@ describe('createShareableUrl', () => {
         mockEval.config = {
           basePath: '/home/alice/project',
           providers: [row.provider],
-          tests: [row.testCase, { provider: 'echo', metadata: row.testCase.metadata }],
+          tests: [
+            row.testCase,
+            {
+              provider: 'echo',
+              metadata: {
+                ...row.testCase.metadata,
+                __promptfoo: { ...row.testCase.metadata.__promptfoo, remote: true },
+              },
+            },
+          ],
           defaultTest: row.testCase,
           scenarios: [{ config: [row.testCase], tests: [row.testCase] }],
         };
+        const resultRow = { ...row, metadata: row.testCase.metadata };
         mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
-          yield [row];
+          yield [resultRow];
         });
         mockFetch
           .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
@@ -1031,6 +1041,8 @@ describe('createShareableUrl', () => {
 
         await createShareableUrl(mockEval as Eval);
 
+        const sharedConfig = JSON.parse(mockFetch.mock.calls[0][1].body).config;
+        expect(sharedConfig.tests[1].metadata.__promptfoo).toEqual({ remote: true });
         const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
         for (const [, options] of mockFetch.mock.calls) {
           expect(options.body).not.toContain('/home/alice');
@@ -1052,6 +1064,8 @@ describe('createShareableUrl', () => {
           expect(JSON.stringify(uploaded)).not.toContain('private-');
           expect(uploaded.testCase.vars).toBeUndefined();
         } else {
+          expect(uploaded.metadata.note).toBe('private-note');
+          expect(resultRow.metadata).toBe(row.testCase.metadata);
           expect(uploaded.testCase.vars.basePath).toBe('user-variable');
           expect(uploaded.testCase.vars.nested.files).toEqual([
             'file://input.txt',
