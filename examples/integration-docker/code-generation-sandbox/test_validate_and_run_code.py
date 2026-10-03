@@ -119,7 +119,7 @@ class SandboxTest(unittest.TestCase):
                     if name == "runtime error":
                         self.assertIn("fixture failure", result["reason"])
                     elif name == "CPU limit":
-                        self.assertTrue(executions[-1]["timeout"])
+                        self.assertTrue(executions[-1]["timeout"], executions[-1])
                     elif name == "memory limit":
                         self.assertTrue(executions[-1]["oom_killed"], executions[-1])
         self.assertEqual(len(created_ids), len(cases))
