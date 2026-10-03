@@ -1432,6 +1432,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       cacheWriteTokens,
       this.getRegion(),
       this.config.serviceTier,
+      this.config,
     );
 
     // Build metadata
@@ -1796,6 +1797,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         usage.cacheWriteInputTokens,
         this.getRegion(),
         this.config.serviceTier,
+        this.config,
       );
 
       // Surface MCP failures via the response `error` field. If the model also

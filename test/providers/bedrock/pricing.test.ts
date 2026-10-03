@@ -368,3 +368,120 @@ describe('calculateBedrockCost', () => {
     ).toBeUndefined();
   });
 });
+
+describe('explicit Bedrock cost rates', () => {
+  it('uses complete effective rates for an otherwise unpriced InvokeModel family', () => {
+    const model = 'us.anthropic.claude-sonnet-4-6';
+    expect(calculateBedrockInvokeModelCost(model, 10, 20)).toBeUndefined();
+    expect(
+      calculateBedrockInvokeModelCost(model, 10, 20, 0, 0, 'us-east-1', {
+        inputCost: 0.01,
+        outputCost: 0.02,
+      }),
+    ).toBeCloseTo(0.5);
+    expect(
+      calculateBedrockInvokeModelCost(model, 10, 20, 0, 0, 'us-east-1', { inputCost: 0.01 }),
+    ).toBeUndefined();
+  });
+
+  it('preserves explicit zero and direction-specific precedence over cost', () => {
+    expect(
+      calculateBedrockCost('custom-model', 10, 20, 0, 0, undefined, undefined, {
+        cost: 0.1,
+        inputCost: 0,
+        outputCost: 0.02,
+      }),
+    ).toBeCloseTo(0.4);
+    expect(
+      calculateBedrockInvokeModelCost('custom-model', 10, 20, 0, 0, undefined, { cost: 0 }),
+    ).toBe(0);
+  });
+
+  it('uses automatic rates only for the unspecified direction', () => {
+    const model = 'us.anthropic.claude-sonnet-5';
+    const outputOnly = calculateBedrockCost(model, 0, 20, 0, 0, 'us-east-1', {
+      type: 'priority',
+    });
+    expect(
+      calculateBedrockCost(
+        model,
+        10,
+        20,
+        0,
+        0,
+        'us-east-1',
+        { type: 'priority' },
+        {
+          inputCost: 0.01,
+        },
+      ),
+    ).toBeCloseTo(0.1 + outputOnly!);
+    expect(
+      calculateBedrockCost('custom-model', 10, 20, 0, 0, undefined, undefined, {
+        inputCost: 0.01,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('does not apply endpoint, service-tier, or long-context multipliers to explicit rates', () => {
+    expect(
+      calculateBedrockCost(
+        'us.anthropic.claude-sonnet-4',
+        300_000,
+        10,
+        0,
+        0,
+        'us-east-1',
+        { type: 'priority' },
+        { inputCost: 0.01, outputCost: 0.02 },
+      ),
+    ).toBeCloseTo(3000.2);
+  });
+
+  it.each([-1, NaN, Infinity, '0.01', null])('omits a charge for invalid rate %s', (inputCost) => {
+    expect(
+      calculateBedrockCost('anthropic.claude-sonnet-5', 10, 20, 0, 0, undefined, undefined, {
+        inputCost: inputCost as number,
+        outputCost: 0.02,
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ['anthropic.claude-sonnet-5', 0.5825],
+    ['amazon.nova-lite-v1:0', 0.55],
+  ])('derives known cache rates from the effective input rate for %s', (model, expected) => {
+    expect(
+      calculateBedrockCost(model, 10, 20, 20, 5, undefined, undefined, {
+        inputCost: 0.01,
+        outputCost: 0.02,
+      }),
+    ).toBeCloseTo(expected);
+  });
+
+  it.each([
+    ['custom-model', 'nova'],
+    ['arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/profile-id', undefined],
+    ['arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/profile-id', 'claude'],
+  ] as const)(
+    'does not infer unknown cache rates for %s with family %s',
+    (model, inferenceModelType) => {
+      expect(
+        calculateBedrockCost(model, 10, 20, 20, 5, undefined, undefined, {
+          inputCost: 0.01,
+          outputCost: 0.02,
+          inferenceModelType,
+        }),
+      ).toBeUndefined();
+    },
+  );
+
+  it('omits a charge when cache meters are unknown', () => {
+    expect(
+      calculateBedrockCost('custom-model', 10, 20, 20, 5, undefined, undefined, {
+        inputCost: 0.01,
+        outputCost: 0.02,
+      }),
+    ).toBeUndefined();
+  });
+});

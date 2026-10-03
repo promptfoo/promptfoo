@@ -15,8 +15,9 @@ import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
 
 import type { EnvOverrides } from '../../types/env';
+import type { BedrockCostConfig } from './pricing';
 
-export interface BedrockOptions {
+export interface BedrockOptions extends BedrockCostConfig {
   accessKeyId?: string;
   apiKey?: string;
   profile?: string;

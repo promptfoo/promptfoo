@@ -227,6 +227,22 @@ and logs a warning, including the default `temperature` the InvokeModel path wou
 | `guardrailIdentifier`          | Guardrail ID for content filtering                                 |
 | `guardrailVersion`             | Guardrail version (default: DRAFT)                                 |
 
+### Cost Overrides
+
+Both `bedrock:` (InvokeModel) and `bedrock:converse:` accept `inputCost` and `outputCost` in dollars per token. These are your effective rates: Promptfoo does not add endpoint premiums, service-tier multipliers, or long-context surcharges to them. A numeric `cost` sets both directions; direction-specific values take precedence, including zero.
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    config:
+      inputCost: 0.000003 # Example rate: $3 per million input tokens
+      outputCost: 0.000015 # Example rate: $15 per million output tokens
+```
+
+An unspecified direction uses the existing automatic rate, when available. For models without verified InvokeModel pricing, supply both rates or `cost`. Rates must be finite, nonnegative numbers; invalid or incomplete rates leave cost unavailable, which does not mean the call was free.
+
+For Claude and Nova, cache-read and cache-write charges follow their existing model-specific ratios using the effective input rate. Application inference-profile ARNs with `inferenceModelType: nova` or `nova2` also use the Nova cache ratios when both rates are supplied. If a response includes cache tokens for an unidentified model family, an input/output override leaves cost unavailable because those cache rates are unknown. These overrides require no additional AWS permissions or pricing API calls.
+
 ### Performance Configuration
 
 Configure latency and service tier. [Latency optimization](https://docs.aws.amazon.com/bedrock/latest/userguide/latency-optimized-inference.html)

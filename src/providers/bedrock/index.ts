@@ -652,6 +652,26 @@ export function addConfigParam(
   }
 }
 
+function getNovaTokenUsage(responseJson: any, _promptText: string): TokenUsage {
+  const usage = responseJson?.usage;
+  const inputTokens = coerceStrToNum(usage?.inputTokens);
+  const cacheReadInputTokens = coerceStrToNum(usage?.cacheReadInputTokenCount);
+  const cacheCreationInputTokens = coerceStrToNum(usage?.cacheWriteInputTokenCount);
+
+  return {
+    prompt:
+      inputTokens === undefined
+        ? undefined
+        : inputTokens + (cacheReadInputTokens ?? 0) + (cacheCreationInputTokens ?? 0),
+    completion: coerceStrToNum(usage?.outputTokens),
+    total: coerceStrToNum(usage?.totalTokens),
+    numRequests: 1,
+    ...(cacheReadInputTokens !== undefined || cacheCreationInputTokens !== undefined
+      ? { completionDetails: { cacheReadInputTokens, cacheCreationInputTokens } }
+      : {}),
+  };
+}
+
 function getOpenAiCompatibleTokenUsage(responseJson: any, _promptText: string): TokenUsage {
   const usage = responseJson?.usage;
   return {
@@ -1317,24 +1337,7 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      const usage = responseJson?.usage;
-      if (!usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
-      }
-
-      return {
-        prompt: coerceStrToNum(usage.inputTokens),
-        completion: coerceStrToNum(usage.outputTokens),
-        total: coerceStrToNum(usage.totalTokens),
-        numRequests: 1,
-      };
-    },
+    tokenUsage: getNovaTokenUsage,
   },
   /**
    * Amazon Nova 2 model handler with extended thinking (reasoning) support.
@@ -1470,24 +1473,7 @@ export const BEDROCK_MODEL = {
 
       return parts.join('\n\n');
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      const usage = responseJson?.usage;
-      if (!usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
-      }
-
-      return {
-        prompt: coerceStrToNum(usage.inputTokens),
-        completion: coerceStrToNum(usage.outputTokens),
-        total: coerceStrToNum(usage.totalTokens),
-        numRequests: 1,
-      };
-    },
+    tokenUsage: getNovaTokenUsage,
   },
   CLAUDE_COMPLETION: {
     params: async (
@@ -2971,12 +2957,15 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
-      // Claude's displayed prompt count includes cache reads and writes. Billing
-      // needs the API's uncached input count because cache tokens are priced separately.
-      const billablePromptTokens =
-        model === BEDROCK_MODEL.CLAUDE_MESSAGES
-          ? coerceStrToNum(output.usage?.input_tokens ?? output.usage?.prompt_tokens)
-          : tokenUsage.prompt;
+      // Displayed prompt counts include cache tokens; billing prices them separately.
+      let billablePromptTokens = tokenUsage.prompt;
+      if (model === BEDROCK_MODEL.CLAUDE_MESSAGES) {
+        billablePromptTokens = coerceStrToNum(
+          output.usage?.input_tokens ?? output.usage?.prompt_tokens,
+        );
+      } else if (model === BEDROCK_MODEL.AMAZON_NOVA || model === BEDROCK_MODEL.AMAZON_NOVA_2) {
+        billablePromptTokens = coerceStrToNum(output.usage?.inputTokens);
+      }
       const cost = calculateBedrockInvokeModelCost(
         this.modelName,
         billablePromptTokens,
@@ -2986,6 +2975,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.completionDetails?.cacheCreationInputTokens ??
           coerceStrToNum(output.usage?.cache_creation_input_tokens),
         region,
+        mergedConfig,
       );
 
       return {
