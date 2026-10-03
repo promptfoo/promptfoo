@@ -1275,19 +1275,25 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
   );
 
   it.each(['Name', 'TWFu'])('retains literal custom image value %s', async (literal) => {
-    const { rubric } = await new Grader().getResult(JSON.stringify({ image: literal }), 'Blue.', {
-      vars: { image: inputImage },
-      metadata: safeMetadata,
-    });
+    const { rubric } = await new Grader().getResult(
+      JSON.stringify({ image: literal }),
+      'Blue.',
+      { vars: { image: inputImage }, metadata: safeMetadata },
+      undefined,
+      undefined,
+    );
     expect(rubric).toContain(`<UserQuery>{"image":"${literal}"}</UserQuery>`);
   });
 
   it('removes raw media variables that Google converts to inline attachments', async () => {
     const rawImage = `/9j/${Buffer.from('PRIVATE_JPEG_BYTES').toString('base64')}`;
-    const { rubric } = await new Grader().getResult(`${actualTask}\n${rawImage}`, 'Blue.', {
-      vars: { image: inputImage, otherImage: rawImage },
-      metadata: safeMetadata,
-    });
+    const { rubric } = await new Grader().getResult(
+      `${actualTask}\n${rawImage}`,
+      'Blue.',
+      { vars: { image: inputImage, otherImage: rawImage }, metadata: safeMetadata },
+      undefined,
+      undefined,
+    );
     expect(rubric).toContain(actualTask);
     expect(rubric).not.toContain(rawImage);
   });
