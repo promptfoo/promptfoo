@@ -582,6 +582,15 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
   };
   it.each([
     ['plain', `${actualTask}\n${inputImage}`, true],
+    ['instruction-delimited plaintext', `[INST] ${actualTask}; image: ${inputImage} [/INST]`, true],
+    ['bracket-prefixed plaintext', `[image] ${actualTask}; image: ${inputImage}`, true],
+    ['numeric-bracket plaintext', `[1] ${actualTask}; image: ${inputImage} [end]`, true],
+    ['multiline bracket plaintext', `[1]\n${actualTask}\nimage: ${inputImage}\n[end]`, true],
+    [
+      'custom bracket plaintext field',
+      JSON.stringify({ payload: `[1] ${actualTask}; image: ${inputImage} [end]` }),
+      true,
+    ],
     ['image only', inputImage, false],
     ['brace-prefixed plain text', `{${actualTask}}`, true],
     [
@@ -650,6 +659,28 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       false,
     ],
     ['custom prompt envelope', JSON.stringify({ prompt: actualTask, image: inputImage }), true],
+    [
+      'typed-array media bytes',
+      JSON.stringify({
+        image: { source: { bytes: new Uint8Array([137, 80, 78, 71]) }, question: actualTask },
+      }),
+      true,
+    ],
+    [
+      'Buffer media bytes',
+      JSON.stringify({ image: { data: Buffer.from([137, 80, 78, 71]), question: actualTask } }),
+      true,
+    ],
+    [
+      'opaque numeric media data',
+      JSON.stringify({ image: { data: { pixels: { 0: 137, 1: 80 } }, question: actualTask } }),
+      true,
+    ],
+    [
+      'typed-array media only',
+      JSON.stringify({ image: { source: { bytes: new Uint8Array([137, 80, 78, 71]) } } }),
+      false,
+    ],
     [
       'nested media envelope',
       JSON.stringify({
@@ -888,6 +919,7 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
         payload.slice(0, 32),
         payload.slice(32),
         nativeImageData,
+        '137',
         'UNSENT_DATASET_TASK',
         'ASSERTION_OVERRIDE_TASK',
         'CONTEXT_OVERRIDE_TASK',
@@ -953,6 +985,14 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
   });
 
   it.each([
+    ['type-tagged JSON', `{"type":"image","data":"${nativeImageData}",`],
+    ['input_image JSON', `{"input_image":"${nativeImageData}",`],
+    ['image_url JSON', `{"image_url":"${nativeImageData}",`],
+    ['MIME-tagged JSON', `{"mime_type":"image/png","data":"${nativeImageData}",`],
+    [
+      'nested type-tagged JSON',
+      JSON.stringify({ payload: `{"type":"image","data":"${nativeImageData}",` }),
+    ],
     ['native JSON', `{"image":{"data":"${nativeImageData}",}`],
     ['native YAML', `- role: user\n  source: {data: ${nativeImageData}, broken: [`],
     [

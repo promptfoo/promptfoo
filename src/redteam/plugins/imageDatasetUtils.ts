@@ -81,8 +81,29 @@ export function getImageDatasetRequestText(
     }
     return redacted.trim();
   };
+  const jsonContainer = /^\s*(?:\{|\[\s*(?:["[{\]]|-?\d|true\b|false\b|null\b))/;
+  const mediaType =
+    /^(?:image|image_url|input_image|audio|input_audio|video|file|input_file|base64)$/;
+  const mediaContainerField =
+    /^(?:images?|image_url|input_image|input_audio|inline_?data|file_?data)$/i;
+  const mediaMime = /^(?:image|audio|video)\//i;
   const rejectMalformedMedia = (text: string) => {
-    if (/(?:^|[\s,{])["']?(?:image|source|inline_?data)["']?\s*:/i.test(text)) {
+    const yaml = /^\s*- role:/.test(text);
+    if (!yaml && !jsonContainer.test(text)) {
+      return;
+    }
+    // Match property positions, not prose labels such as "[1] Describe this image: ...".
+    const properties = yaml
+      ? /(?:[{,]|\n|^)\s*(?:-\s*)?["']?(\w+)["']?\s*:\s*["']?([\w/.-]*)/g
+      : /[{,]\s*["']?(\w+)["']?\s*:\s*["']?([\w/.-]*)/g;
+    const markedMedia = [...text.matchAll(properties)].some(
+      ([, key, value]) =>
+        mediaContainerField.test(key) ||
+        key === 'source' ||
+        (key === 'type' && mediaType.test(value)) ||
+        (['mimeType', 'mime_type', 'media_type'].includes(key) && mediaMime.test(value)),
+    );
+    if (markedMedia) {
       throw new Error(
         'Image grading cannot safely read malformed media. Use valid JSON or YAML with a structured media field.',
       );
@@ -112,11 +133,9 @@ export function getImageDatasetRequestText(
       const object = value as Record<string, unknown>;
       const media =
         mediaContainer ||
-        /^(?:image|image_url|input_image|audio|input_audio|video|file|input_file|base64)$/.test(
-          String(object.type),
-        ) ||
+        mediaType.test(String(object.type)) ||
         [object.mimeType, object.mime_type, object.media_type].some(
-          (mime) => typeof mime === 'string' && /^(?:image|audio|video)\//.test(mime),
+          (mime) => typeof mime === 'string' && mediaMime.test(mime),
         );
       const nativeMessage = ['system', 'developer', 'user', 'assistant', 'model', 'tool'].includes(
         String(object.role),
@@ -126,12 +145,15 @@ export function getImageDatasetRequestText(
         [undefined, 'text', 'input_text', 'output_text'].some((type) => type === object.type);
       return Object.fromEntries(
         Object.entries(object).flatMap(([field, child]) => {
-          const mediaField =
-            /^(?:images?|image_url|input_image|input_audio|inline_?data|file_?data)$/i.test(
-              field,
-            ) ||
-            (media && /^(?:data|bytes|source|url|uri|file_data)$/.test(field)) ||
-            (key === 'source' && field === 'bytes' && typeof child === 'string');
+          // Encoded payload fields are opaque even when JSON represents their
+          // bytes as Buffer/typed-array objects. Their containers may carry text.
+          if (
+            (media && /^(?:data|bytes|url|uri|file_data)$/.test(field)) ||
+            (key === 'source' && field === 'bytes' && typeof child !== 'number')
+          ) {
+            return [];
+          }
+          const mediaField = mediaContainerField.test(field) || (media && field === 'source');
           const sanitized = sanitize(
             child,
             field,
@@ -149,7 +171,7 @@ export function getImageDatasetRequestText(
     }
     if (typeof value === 'string') {
       // HTTP targets may parse JSON stored inside another request field.
-      if (!literalText && /^\s*[\[{]/.test(value)) {
+      if (!literalText && jsonContainer.test(value)) {
         try {
           return sanitize(JSON.parse(value));
         } catch (error) {
