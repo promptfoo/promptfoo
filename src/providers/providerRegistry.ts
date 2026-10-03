@@ -19,41 +19,39 @@ class ProviderRegistry {
     this.providers.add(provider);
 
     if (!this.shutdownRegistered) {
-      this.registerShutdownHandlers();
+      let shuttingDown = false;
+
+      const shutdown = async (signal: string) => {
+        if (shuttingDown) {
+          return; // Prevent duplicate shutdown
+        }
+        shuttingDown = true;
+
+        logger.debug(
+          `Received ${signal}, shutting down ${this.providers.size} Python providers...`,
+        );
+
+        await Promise.all(
+          Array.from(this.providers).map((p) =>
+            p.shutdown().catch((err) => {
+              logger.error(`Error shutting down provider: ${err}`);
+            }),
+          ),
+        );
+
+        logger.debug('Python provider shutdown complete');
+      };
+
+      process.once('SIGINT', () => void shutdown('SIGINT'));
+      process.once('SIGTERM', () => void shutdown('SIGTERM'));
+      // Use beforeExit for async cleanup (exit event cannot await)
+      process.once('beforeExit', () => void shutdown('beforeExit'));
       this.shutdownRegistered = true;
     }
   }
 
   unregister(provider: CleanupProvider): void {
     this.providers.delete(provider);
-  }
-
-  private registerShutdownHandlers(): void {
-    let shuttingDown = false;
-
-    const shutdown = async (signal: string) => {
-      if (shuttingDown) {
-        return; // Prevent duplicate shutdown
-      }
-      shuttingDown = true;
-
-      logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
-
-      await Promise.all(
-        Array.from(this.providers).map((p) =>
-          p.shutdown().catch((err) => {
-            logger.error(`Error shutting down provider: ${err}`);
-          }),
-        ),
-      );
-
-      logger.debug('Python provider shutdown complete');
-    };
-
-    process.once('SIGINT', () => void shutdown('SIGINT'));
-    process.once('SIGTERM', () => void shutdown('SIGTERM'));
-    // Use beforeExit for async cleanup (exit event cannot await)
-    process.once('beforeExit', () => void shutdown('beforeExit'));
   }
 
   async shutdownAll(): Promise<void> {

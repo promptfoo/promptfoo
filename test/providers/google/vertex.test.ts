@@ -6,7 +6,88 @@ import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
+import { createChatCompletion, createGeminiUsageCounts } from '../../factories/literalFixtures';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
+
+const { createEmptyGlobFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
+
+const createCacheReset = () => () => {
+  mockCacheGet.mockReset();
+  mockCacheGet.mockResolvedValue(null);
+  mockCacheSet.mockReset();
+
+  mockIsCacheEnabled.mockReturnValue(true);
+};
+
+const createEmptyProviderOptions = () => ({
+  config: {},
+});
+const createAnthropicTokenUsage = () => ({
+  input_tokens: 5,
+  output_tokens: 1,
+  cache_creation_input_tokens: 0,
+  cache_read_input_tokens: 0,
+});
+
+const createGeminiUsageResponse = (candidatesTokenCount: number, totalTokenCount: number) => ({
+  candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+  usageMetadata: {
+    promptTokenCount: 1_000,
+    candidatesTokenCount,
+    totalTokenCount,
+  },
+});
+
+const createEnabledThinkingOptions = () => ({
+  config: {
+    thinking: { type: 'enabled' as const, budget_tokens: 5000 },
+  },
+});
+
+const createNoToolsGeminiResponse = () => ({
+  data: [
+    {
+      candidates: [{ content: { parts: [{ text: 'no tools used' }] } }],
+      usageMetadata: { totalTokenCount: 10, promptTokenCount: 5, candidatesTokenCount: 5 },
+    },
+  ],
+});
+
+const createDisabledThinkingOptions = () => ({
+  config: {
+    thinking: { type: 'disabled' as const },
+  },
+});
+
+const createWeatherLocationSchema = () => ({
+  type: 'OBJECT' as const,
+  properties: {
+    location: { type: 'STRING' as const },
+  },
+  required: ['location'],
+});
+
+const createGlobalRegionOptions = () => ({
+  config: { region: 'global' },
+});
+
+const createCachedTokenUsage = () => ({
+  total: 15,
+  prompt: 10,
+  completion: 5,
+});
+
+const createLlamaSafetySettings = () => ({
+  safetySettings: {
+    llama_guard_settings: { marker: 'llama-secret-safety-setting' },
+  },
+});
+
+const createRegionalOptions = () => ({
+  config: {
+    region: 'us-central1',
+  },
+});
 
 // Hoisted mocks for cache
 const mockCacheGet = vi.hoisted(() => vi.fn());
@@ -46,18 +127,7 @@ vi.mock('csv-stringify/sync', async (importOriginal) => {
   };
 });
 
-vi.mock('glob', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    globSync: vi.fn().mockReturnValue([]),
-
-    hasMagic: (path: string) => {
-      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
-      // This mimics glob's actual behavior where backslash paths return false
-      return /[*?[\]{}]/.test(path) && !path.includes('\\');
-    },
-  };
-});
+vi.mock('glob', createEmptyGlobFactory());
 
 vi.mock('fs', async (importOriginal) => {
   return {
@@ -167,6 +237,45 @@ function expectHashedBodyCacheKeys(expectedPattern: RegExp, forbiddenValues: str
   return cacheSetKey;
 }
 
+const createMockGeminiResponse = () => ({
+  data: [
+    {
+      candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+      usageMetadata: createGeminiUsageCounts(10, 5, 5),
+    },
+  ],
+});
+
+const createMockClaudeMessage = () => ({
+  id: 'test-id',
+  type: 'message',
+  role: 'assistant',
+  model: 'claude-3-5-sonnet-v2@20241022',
+  content: [{ type: 'text', text: 'Response from Claude' }],
+  stop_reason: 'end_turn',
+  stop_sequence: null,
+  usage: {
+    input_tokens: 20,
+    output_tokens: 30,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+  },
+});
+
+const createMockClaudeResponse = () => ({
+  data: createMockClaudeMessage(),
+});
+
+const createThinkingOptions = () => ({
+  config: {
+    generationConfig: {
+      thinkingConfig: {
+        thinkingBudget: 1024,
+      },
+    },
+  },
+});
+
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
 
@@ -198,18 +307,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
   });
 
   it('should call the Gemini API and return the response', async () => {
-    const mockResponse = {
-      data: [
-        {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            totalTokenCount: 10,
-            promptTokenCount: 5,
-            candidatesTokenCount: 5,
-          },
-        },
-      ],
-    };
+    const mockResponse = createMockGeminiResponse();
 
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -277,16 +375,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
           } as any,
         },
       });
-      const mockRequest = mockVertexRequest([
-        {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            promptTokenCount: 1000,
-            candidatesTokenCount: 500,
-            totalTokenCount: 1500,
-          },
-        },
-      ]);
+      const mockRequest = mockVertexRequest([createGeminiUsageResponse(500, 1500)]);
 
       const result = await latestProvider.callGeminiApi('test prompt');
       const request = mockRequest.mock.calls.at(-1)?.[0];
@@ -311,16 +400,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         config: {},
         env: { VERTEX_REGION: region },
       });
-      const mockRequest = mockVertexRequest([
-        {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            promptTokenCount: 1000,
-            candidatesTokenCount: 500,
-            totalTokenCount: 1500,
-          },
-        },
-      ]);
+      const mockRequest = mockVertexRequest([createGeminiUsageResponse(500, 1500)]);
 
       const result = await latestProvider.callGeminiApi('test prompt');
 
@@ -544,14 +624,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       } as any,
     });
 
-    const mockResponse = {
-      data: [
-        {
-          candidates: [{ content: { parts: [{ text: 'no tools used' }] } }],
-          usageMetadata: { totalTokenCount: 10, promptTokenCount: 5, candidatesTokenCount: 5 },
-        },
-      ],
-    };
+    const mockResponse = createNoToolsGeminiResponse();
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
     vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: { request: mockRequest } as unknown as JSONClient,
@@ -630,14 +703,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       } as any,
     });
-    const mockRequest = vi.fn().mockResolvedValue({
-      data: [
-        {
-          candidates: [{ content: { parts: [{ text: 'no tools used' }] } }],
-          usageMetadata: { totalTokenCount: 10, promptTokenCount: 5, candidatesTokenCount: 5 },
-        },
-      ],
-    });
+    const mockRequest = vi.fn().mockResolvedValue(createNoToolsGeminiResponse());
     vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: { request: mockRequest } as unknown as JSONClient,
       projectId: 'test-project-id',
@@ -665,14 +731,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     });
 
-    const mockResponse = {
-      data: [
-        {
-          candidates: [{ content: { parts: [{ text: 'no tools used' }] } }],
-          usageMetadata: { totalTokenCount: 10, promptTokenCount: 5, candidatesTokenCount: 5 },
-        },
-      ],
-    };
+    const mockResponse = createNoToolsGeminiResponse();
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
     vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: { request: mockRequest } as unknown as JSONClient,
@@ -731,11 +790,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               },
             },
           ],
-          usageMetadata: {
-            totalTokenCount: 10,
-            promptTokenCount: 5,
-            candidatesTokenCount: 5,
-          },
+          usageMetadata: createGeminiUsageCounts(10, 5, 5),
         },
       ],
     };
@@ -786,24 +841,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
   });
 
   it('should use model name in cache key', async () => {
-    const mockResponse = {
-      data: [
-        {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'response text' }],
-              },
-            },
-          ],
-          usageMetadata: {
-            totalTokenCount: 10,
-            promptTokenCount: 5,
-            candidatesTokenCount: 5,
-          },
-        },
-      ],
-    };
+    const mockResponse = createMockGeminiResponse();
 
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -841,15 +879,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     const mockRequest = mockVertexRequest({
       candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-      usageMetadata: {
-        totalTokenCount: 10,
-        promptTokenCount: 5,
-        candidatesTokenCount: 5,
-      },
+      usageMetadata: createGeminiUsageCounts(10, 5, 5),
     });
-    const publicProvider = new VertexChatProvider('gemini-pro', {
-      config: { region: 'global' },
-    });
+    const publicProvider = new VertexChatProvider('gemini-pro', createGlobalRegionOptions());
     const proxyProvider = new VertexChatProvider('gemini-pro', {
       config: { region: 'global' },
       env: { VERTEX_API_HOST: 'vertex-proxy.example.test' },
@@ -876,11 +908,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
           args: '{"location":"New York"}',
         },
       }),
-      tokenUsage: {
-        total: 15,
-        prompt: 10,
-        completion: 5,
-      },
+      tokenUsage: createCachedTokenUsage(),
       cost: 0.00045,
       metadata: {
         groundingMetadata: {
@@ -901,13 +929,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               {
                 name: 'get_weather',
                 description: 'Get the weather for a location',
-                parameters: {
-                  type: 'OBJECT',
-                  properties: {
-                    location: { type: 'STRING' },
-                  },
-                  required: ['location'],
-                },
+                parameters: createWeatherLocationSchema(),
               },
             ],
           },
@@ -980,16 +1002,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     ['gemini-3.5-flash-lite', 'us', 0.000605],
   ])('should call and price %s on Vertex %s', async (modelId, region, expectedCost) => {
     const geminiProvider = new VertexChatProvider(modelId, { config: { region } });
-    const mockRequest = mockVertexRequest([
-      {
-        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-        usageMetadata: {
-          promptTokenCount: 1_000,
-          candidatesTokenCount: 100,
-          totalTokenCount: 1_100,
-        },
-      },
-    ]);
+    const mockRequest = mockVertexRequest([createGeminiUsageResponse(100, 1_100)]);
 
     const response = await geminiProvider.callGeminiApi('test prompt');
 
@@ -1084,11 +1097,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
             functionDeclarations: [
               {
                 name: 'get_weather',
-                parameters: {
-                  type: 'OBJECT',
-                  properties: { location: { type: 'STRING' } },
-                  required: ['location'],
-                },
+                parameters: createWeatherLocationSchema(),
               },
             ],
           },
@@ -1123,9 +1132,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
   it('exposes text thought signatures in metadata without changing the textual output', async () => {
     const signedPart = { text: 'Signed response', thoughtSignature: 'signed-thought' };
-    const geminiProvider = new VertexChatProvider('gemini-3.6-flash', {
-      config: { region: 'global' },
-    });
+    const geminiProvider = new VertexChatProvider('gemini-3.6-flash', createGlobalRegionOptions());
     mockVertexRequest([
       {
         candidates: [{ content: { parts: [signedPart] } }],
@@ -1217,16 +1224,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const priorityProvider = new VertexChatProvider('gemini-3.1-pro-preview-customtools', {
       config: { passthrough: { service_tier: 'priority' } },
     });
-    const mockRequest = mockVertexRequest([
-      {
-        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-        usageMetadata: {
-          promptTokenCount: 1_000,
-          candidatesTokenCount: 100,
-          totalTokenCount: 1_100,
-        },
-      },
-    ]);
+    const mockRequest = mockVertexRequest([createGeminiUsageResponse(100, 1_100)]);
 
     const response = await priorityProvider.callGeminiApi('test prompt');
 
@@ -1261,16 +1259,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       const geminiProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
         config: { region: 'global', ...config },
       });
-      const mockRequest = mockVertexRequest([
-        {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            promptTokenCount: 1_000,
-            candidatesTokenCount: 100,
-            totalTokenCount: 1_100,
-          },
-        },
-      ]);
+      const mockRequest = mockVertexRequest([createGeminiUsageResponse(100, 1_100)]);
 
       const response = await geminiProvider.callGeminiApi('test prompt');
 
@@ -1284,19 +1273,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const geminiProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
       config: { region: 'global', service_tier: 'priority' },
     });
-    mockVertexRequest(
-      [
-        {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            promptTokenCount: 1_000,
-            candidatesTokenCount: 100,
-            totalTokenCount: 1_100,
-          },
-        },
-      ],
-      { 'x-gemini-service-tier': 'standard' },
-    );
+    mockVertexRequest([createGeminiUsageResponse(100, 1_100)], {
+      'x-gemini-service-tier': 'standard',
+    });
 
     const response = await geminiProvider.callGeminiApi('test prompt');
 
@@ -1375,11 +1354,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
             args: '{"param":"test_value"}',
           },
         }),
-        tokenUsage: {
-          total: 15,
-          prompt: 10,
-          completion: 5,
-        },
+        tokenUsage: createCachedTokenUsage(),
       };
 
       mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
@@ -1601,15 +1576,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
   describe('thinking token tracking', () => {
     it('should track thinking tokens when present in response', async () => {
-      const provider = new VertexChatProvider('gemini-2.5-flash', {
-        config: {
-          generationConfig: {
-            thinkingConfig: {
-              thinkingBudget: 1024,
-            },
-          },
-        },
-      });
+      const provider = new VertexChatProvider('gemini-2.5-flash', createThinkingOptions());
 
       const mockResponse = {
         data: [
@@ -1685,15 +1652,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     it('should track thinking tokens with zero value', async () => {
-      const provider = new VertexChatProvider('gemini-2.5-flash', {
-        config: {
-          generationConfig: {
-            thinkingConfig: {
-              thinkingBudget: 1024,
-            },
-          },
-        },
-      });
+      const provider = new VertexChatProvider('gemini-2.5-flash', createThinkingOptions());
 
       const mockResponse = {
         data: [
@@ -1733,15 +1692,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     it('should track thinking tokens in cached responses', async () => {
-      const provider = new VertexChatProvider('gemini-2.5-flash', {
-        config: {
-          generationConfig: {
-            thinkingConfig: {
-              thinkingBudget: 1024,
-            },
-          },
-        },
-      });
+      const provider = new VertexChatProvider('gemini-2.5-flash', createThinkingOptions());
 
       const mockCachedResponse = {
         output: 'cached response with thinking',
@@ -1779,18 +1730,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       });
 
-      const mockResponse = {
-        data: [
-          {
-            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-            usageMetadata: {
-              totalTokenCount: 10,
-              promptTokenCount: 5,
-              candidatesTokenCount: 5,
-            },
-          },
-        ],
-      };
+      const mockResponse = createMockGeminiResponse();
 
       const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -1834,18 +1774,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       });
 
-      const mockResponse = {
-        data: [
-          {
-            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-            usageMetadata: {
-              totalTokenCount: 10,
-              promptTokenCount: 5,
-              candidatesTokenCount: 5,
-            },
-          },
-        ],
-      };
+      const mockResponse = createMockGeminiResponse();
 
       const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -1879,22 +1808,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     it('should not include model_armor_config when not configured', async () => {
-      const provider = new VertexChatProvider('gemini-pro', {
-        config: {},
-      });
+      const provider = new VertexChatProvider('gemini-pro', createEmptyProviderOptions());
 
-      const mockResponse = {
-        data: [
-          {
-            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-            usageMetadata: {
-              totalTokenCount: 10,
-              promptTokenCount: 5,
-              candidatesTokenCount: 5,
-            },
-          },
-        ],
-      };
+      const mockResponse = createMockGeminiResponse();
 
       const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -1936,11 +1852,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               blockReasonMessage: 'Prompt was blocked by Model Armor: Prompt Injection detected',
               safetyRatings: [],
             },
-            usageMetadata: {
-              totalTokenCount: 5,
-              promptTokenCount: 5,
-              candidatesTokenCount: 0,
-            },
+            usageMetadata: createGeminiUsageCounts(5, 5, 0),
           },
         ],
       };
@@ -1980,9 +1892,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     it('should handle non-Model Armor blockReason with guardrails response', async () => {
-      const provider = new VertexChatProvider('gemini-pro', {
-        config: {},
-      });
+      const provider = new VertexChatProvider('gemini-pro', createEmptyProviderOptions());
 
       const mockResponse = {
         data: [
@@ -1991,11 +1901,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               blockReason: 'SAFETY',
               safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'HIGH' }],
             },
-            usageMetadata: {
-              totalTokenCount: 5,
-              promptTokenCount: 5,
-              candidatesTokenCount: 0,
-            },
+            usageMetadata: createGeminiUsageCounts(5, 5, 0),
           },
         ],
       };
@@ -2038,18 +1944,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       });
 
-      const mockResponse = {
-        data: [
-          {
-            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-            usageMetadata: {
-              totalTokenCount: 10,
-              promptTokenCount: 5,
-              candidatesTokenCount: 5,
-            },
-          },
-        ],
-      };
+      const mockResponse = createMockGeminiResponse();
 
       const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -2077,9 +1972,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     // TODO: This default message is user-facing and can be adjusted for clarity without
     // breaking behavior semantics (e.g., "Content was blocked by Model Armor policy").
     it('should use default message when blockReasonMessage is not provided', async () => {
-      const provider = new VertexChatProvider('gemini-pro', {
-        config: {},
-      });
+      const provider = new VertexChatProvider('gemini-pro', createEmptyProviderOptions());
 
       const mockResponse = {
         data: [
@@ -2089,11 +1982,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               // No blockReasonMessage
               safetyRatings: [],
             },
-            usageMetadata: {
-              totalTokenCount: 5,
-              promptTokenCount: 5,
-              candidatesTokenCount: 0,
-            },
+            usageMetadata: createGeminiUsageCounts(5, 5, 0),
           },
         ],
       };
@@ -2126,9 +2015,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     it('should handle SAFETY finishReason with guardrails response', async () => {
-      const provider = new VertexChatProvider('gemini-pro', {
-        config: {},
-      });
+      const provider = new VertexChatProvider('gemini-pro', createEmptyProviderOptions());
 
       const mockResponse = {
         data: [
@@ -2139,11 +2026,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
                 finishReason: 'SAFETY',
               },
             ],
-            usageMetadata: {
-              totalTokenCount: 10,
-              promptTokenCount: 5,
-              candidatesTokenCount: 5,
-            },
+            usageMetadata: createGeminiUsageCounts(10, 5, 5),
           },
         ],
       };
@@ -2181,9 +2064,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     it.each(['PROHIBITED_CONTENT', 'RECITATION', 'BLOCKLIST', 'SPII', 'IMAGE_SAFETY'])(
       'should handle %s finishReason with guardrails response',
       async (finishReason) => {
-        const provider = new VertexChatProvider('gemini-pro', {
-          config: {},
-        });
+        const provider = new VertexChatProvider('gemini-pro', createEmptyProviderOptions());
 
         const mockResponse = {
           data: [
@@ -2194,11 +2075,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
                   finishReason,
                 },
               ],
-              usageMetadata: {
-                totalTokenCount: 10,
-                promptTokenCount: 5,
-                candidatesTokenCount: 5,
-              },
+              usageMetadata: createGeminiUsageCounts(10, 5, 5),
             },
           ],
         };
@@ -2235,9 +2112,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     );
 
     it('should handle MAX_TOKENS finishReason with truncated output', async () => {
-      const provider = new VertexChatProvider('gemini-pro', {
-        config: {},
-      });
+      const provider = new VertexChatProvider('gemini-pro', createEmptyProviderOptions());
 
       const longOutput = 'A'.repeat(600);
       const mockResponse = {
@@ -2287,9 +2162,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     it('should handle MAX_TOKENS finishReason with short output (no truncation)', async () => {
-      const provider = new VertexChatProvider('gemini-pro', {
-        config: {},
-      });
+      const provider = new VertexChatProvider('gemini-pro', createEmptyProviderOptions());
 
       const shortOutput = 'Short response';
       const mockResponse = {
@@ -2344,9 +2217,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     ])(
       'reports an error when thinking consumes the token budget before producing output',
       async (candidate) => {
-        const provider = new VertexChatProvider('gemini-3.6-flash', {
-          config: { region: 'global' },
-        });
+        const provider = new VertexChatProvider('gemini-3.6-flash', createGlobalRegionOptions());
         const responseData = [
           {
             candidates: [candidate],
@@ -2369,13 +2240,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 });
 
 describe('VertexChatProvider.callPalm2Api', () => {
-  beforeEach(() => {
-    mockCacheGet.mockReset();
-    mockCacheGet.mockResolvedValue(null);
-    mockCacheSet.mockReset();
-
-    mockIsCacheEnabled.mockReturnValue(true);
-  });
+  beforeEach(createCacheReset());
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -2430,14 +2295,8 @@ describe('VertexChatProvider.callPalm2Api', () => {
 describe('VertexChatProvider.callLlamaApi', () => {
   let provider: VertexChatProvider;
 
-  beforeEach(() => {
-    // Reset cache mocks to default state
-    mockCacheGet.mockReset();
-    mockCacheGet.mockResolvedValue(null);
-    mockCacheSet.mockReset();
-
-    mockIsCacheEnabled.mockReturnValue(true);
-  });
+  // Reset cache mocks to default state
+  beforeEach(createCacheReset());
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -2495,20 +2354,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
     });
 
     const mockResponse = {
-      data: {
-        choices: [
-          {
-            message: {
-              content: 'Llama response content',
-            },
-          },
-        ],
-        usage: {
-          total_tokens: 35,
-          prompt_tokens: 15,
-          completion_tokens: 20,
-        },
-      },
+      data: createChatCompletion('Llama response content', 35, 15, 20),
     };
 
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
@@ -2572,28 +2418,11 @@ describe('VertexChatProvider.callLlamaApi', () => {
       config: {
         region: 'us-central1',
         temperature: 0.7,
-        llamaConfig: {
-          safetySettings: {
-            llama_guard_settings: { marker: 'llama-secret-safety-setting' },
-          },
-        },
+        llamaConfig: createLlamaSafetySettings(),
       },
     });
 
-    mockVertexRequest({
-      choices: [
-        {
-          message: {
-            content: 'Llama response content',
-          },
-        },
-      ],
-      usage: {
-        total_tokens: 35,
-        prompt_tokens: 15,
-        completion_tokens: 20,
-      },
-    });
+    mockVertexRequest(createChatCompletion('Llama response content', 35, 15, 20));
 
     await provider.callLlamaApi(prompt);
 
@@ -2610,11 +2439,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
     provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
       config: {
         region: 'us-central1',
-        llamaConfig: {
-          safetySettings: {
-            llama_guard_settings: { marker: 'llama-secret-safety-setting' },
-          },
-        },
+        llamaConfig: createLlamaSafetySettings(),
       },
     });
 
@@ -2644,11 +2469,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
   });
 
   it('should default safety settings to enabled when not specified', async () => {
-    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
-      config: {
-        region: 'us-central1',
-      },
-    });
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', createRegionalOptions());
 
     const mockResponse = {
       data: {
@@ -2704,11 +2525,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
   });
 
   it('should handle API errors correctly', async () => {
-    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
-      config: {
-        region: 'us-central1',
-      },
-    });
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', createRegionalOptions());
 
     const mockError = {
       response: {
@@ -2747,18 +2564,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
       },
     });
 
-    const mockResponse = {
-      data: [
-        {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-          usageMetadata: {
-            totalTokenCount: 10,
-            promptTokenCount: 5,
-            candidatesTokenCount: 5,
-          },
-        },
-      ],
-    };
+    const mockResponse = createMockGeminiResponse();
 
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -2853,23 +2659,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
       },
     });
 
-    const mockResponse = {
-      data: {
-        id: 'test-id',
-        type: 'message',
-        role: 'assistant',
-        model: 'claude-3-5-sonnet-v2@20241022',
-        content: [{ type: 'text', text: 'Response from Claude' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: 20,
-          output_tokens: 30,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      },
-    };
+    const mockResponse = createMockClaudeResponse();
 
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -2910,21 +2700,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
       },
     });
 
-    mockVertexRequest({
-      id: 'test-id',
-      type: 'message',
-      role: 'assistant',
-      model: 'claude-3-5-sonnet-v2@20241022',
-      content: [{ type: 'text', text: 'Response from Claude' }],
-      stop_reason: 'end_turn',
-      stop_sequence: null,
-      usage: {
-        input_tokens: 20,
-        output_tokens: 30,
-        cache_creation_input_tokens: 0,
-        cache_read_input_tokens: 0,
-      },
-    });
+    mockVertexRequest(createMockClaudeMessage());
 
     await provider.callClaudeApi(prompt);
 
@@ -2942,23 +2718,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
       },
     });
 
-    const mockResponse = {
-      data: {
-        id: 'test-id',
-        type: 'message',
-        role: 'assistant',
-        model: 'claude-3-5-sonnet-v2@20241022',
-        content: [{ type: 'text', text: 'Response from Claude' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: 20,
-          output_tokens: 30,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      },
-    };
+    const mockResponse = createMockClaudeResponse();
 
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -3295,12 +3055,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
         content: [{ type: 'text', text: 'ok' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
-        usage: {
-          input_tokens: 5,
-          output_tokens: 1,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
+        usage: createAnthropicTokenUsage(),
       },
     };
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
@@ -3334,12 +3089,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
         content: [{ type: 'text', text: 'ok' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
-        usage: {
-          input_tokens: 5,
-          output_tokens: 1,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
+        usage: createAnthropicTokenUsage(),
       },
     };
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
@@ -3405,12 +3155,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
         content: [{ type: 'text', text: 'ok' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
-        usage: {
-          input_tokens: 5,
-          output_tokens: 1,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
+        usage: createAnthropicTokenUsage(),
       },
     });
     vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
@@ -3677,12 +3422,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
           content: [{ type: 'text', text: 'ok' }],
           stop_reason: 'end_turn',
           stop_sequence: null,
-          usage: {
-            input_tokens: 5,
-            output_tokens: 1,
-            cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0,
-          },
+          usage: createAnthropicTokenUsage(),
         },
       });
       vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
@@ -3721,12 +3461,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
           content: [{ type: 'text', text: 'ok' }],
           stop_reason: 'end_turn',
           stop_sequence: null,
-          usage: {
-            input_tokens: 5,
-            output_tokens: 1,
-            cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0,
-          },
+          usage: createAnthropicTokenUsage(),
         },
       });
       vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
@@ -3762,12 +3497,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
         content: [{ type: 'text', text: 'ok' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
-        usage: {
-          input_tokens: 5,
-          output_tokens: 1,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
+        usage: createAnthropicTokenUsage(),
       },
     });
     vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
@@ -3809,12 +3539,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
         content: [{ type: 'text', text: 'ok' }],
         stop_reason: 'end_turn',
         stop_sequence: null,
-        usage: {
-          input_tokens: 5,
-          output_tokens: 1,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
+        usage: createAnthropicTokenUsage(),
       },
     };
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
@@ -3845,23 +3570,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
       },
     });
 
-    const mockResponse = {
-      data: {
-        id: 'test-id',
-        type: 'message',
-        role: 'assistant',
-        model: 'claude-3-5-sonnet-v2@20241022',
-        content: [{ type: 'text', text: 'Response from Claude' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: 20,
-          output_tokens: 30,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      },
-    };
+    const mockResponse = createMockClaudeResponse();
 
     const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
@@ -3897,23 +3606,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
     let mockRequest: ReturnType<typeof vi.fn>;
 
     function setupClaudeMocks(): void {
-      mockRequest = vi.fn().mockResolvedValue({
-        data: {
-          id: 'test-id',
-          type: 'message',
-          role: 'assistant',
-          model: 'claude-3-5-sonnet-v2@20241022',
-          content: [{ type: 'text', text: 'Response from Claude' }],
-          stop_reason: 'end_turn',
-          stop_sequence: null,
-          usage: {
-            input_tokens: 20,
-            output_tokens: 30,
-            cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0,
-          },
-        },
-      });
+      mockRequest = vi.fn().mockResolvedValue(createMockClaudeResponse());
 
       vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: { request: mockRequest } as unknown as JSONClient,
@@ -4098,11 +3791,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
     });
 
     it('should convert manual thinking to adaptive for Claude Opus 4.8', async () => {
-      provider = new VertexChatProvider('claude-opus-4-8', {
-        config: {
-          thinking: { type: 'enabled', budget_tokens: 5000 },
-        },
-      });
+      provider = new VertexChatProvider('claude-opus-4-8', createEnabledThinkingOptions());
       setupClaudeMocks();
 
       await provider.callClaudeApi('Hello');
@@ -4111,11 +3800,10 @@ describe('VertexChatProvider.callClaudeApi', () => {
     });
 
     it('should keep manual thinking enabled and bump max_tokens for non-deprecated Claude models', async () => {
-      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
-        config: {
-          thinking: { type: 'enabled', budget_tokens: 5000 },
-        },
-      });
+      provider = new VertexChatProvider(
+        'claude-3-5-sonnet-v2@20241022',
+        createEnabledThinkingOptions(),
+      );
       setupClaudeMocks();
 
       await provider.callClaudeApi('Hello');
@@ -4128,11 +3816,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
     });
 
     it('should not bump max_tokens when adaptive conversion drops budget_tokens for Claude Opus 4.8', async () => {
-      provider = new VertexChatProvider('claude-opus-4-8', {
-        config: {
-          thinking: { type: 'enabled', budget_tokens: 5000 },
-        },
-      });
+      provider = new VertexChatProvider('claude-opus-4-8', createEnabledThinkingOptions());
       setupClaudeMocks();
 
       await provider.callClaudeApi('Hello');
@@ -4146,11 +3830,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
     });
 
     it('should pass through disabled thinking for Claude Opus 4.8 and treat it as not-enabled', async () => {
-      provider = new VertexChatProvider('claude-opus-4-8', {
-        config: {
-          thinking: { type: 'disabled' },
-        },
-      });
+      provider = new VertexChatProvider('claude-opus-4-8', createDisabledThinkingOptions());
       setupClaudeMocks();
 
       await provider.callClaudeApi('Hello');
@@ -4164,9 +3844,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
     it('should omit disabled thinking and preserve always-on adaptive defaults for Fable 5', async () => {
       const model = 'claude-fable-5';
-      provider = new VertexChatProvider(model, {
-        config: { thinking: { type: 'disabled' } },
-      });
+      provider = new VertexChatProvider(model, createDisabledThinkingOptions());
       setupClaudeMocks();
 
       await provider.callClaudeApi('Hello');
@@ -4190,11 +3868,10 @@ describe('VertexChatProvider.callClaudeApi', () => {
     });
 
     it('should ensure max_tokens >= budget_tokens when thinking is enabled', async () => {
-      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
-        config: {
-          thinking: { type: 'enabled', budget_tokens: 5000 },
-        },
-      });
+      provider = new VertexChatProvider(
+        'claude-3-5-sonnet-v2@20241022',
+        createEnabledThinkingOptions(),
+      );
       setupClaudeMocks();
 
       await provider.callClaudeApi('Hello');
@@ -4238,9 +3915,10 @@ describe('VertexChatProvider.callClaudeApi', () => {
     });
 
     it('should include thinking output in response when thinking is enabled', async () => {
-      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
-        config: { thinking: { type: 'enabled', budget_tokens: 5000 } },
-      });
+      provider = new VertexChatProvider(
+        'claude-3-5-sonnet-v2@20241022',
+        createEnabledThinkingOptions(),
+      );
       setupClaudeMocks();
 
       // Override mock response AFTER setupClaudeMocks creates the new mockRequest
@@ -4280,11 +3958,10 @@ describe('VertexChatProvider.callClaudeApi', () => {
     });
 
     it('should use default max_tokens of 512 when thinking is disabled', async () => {
-      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
-        config: {
-          thinking: { type: 'disabled' },
-        },
-      });
+      provider = new VertexChatProvider(
+        'claude-3-5-sonnet-v2@20241022',
+        createDisabledThinkingOptions(),
+      );
       setupClaudeMocks();
 
       await provider.callClaudeApi('Hello');
@@ -4296,11 +3973,10 @@ describe('VertexChatProvider.callClaudeApi', () => {
     });
 
     it('should not show thinking output when thinking is disabled', async () => {
-      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
-        config: {
-          thinking: { type: 'disabled' },
-        },
-      });
+      provider = new VertexChatProvider(
+        'claude-3-5-sonnet-v2@20241022',
+        createDisabledThinkingOptions(),
+      );
       setupClaudeMocks();
 
       const result = await provider.callClaudeApi('Hello');

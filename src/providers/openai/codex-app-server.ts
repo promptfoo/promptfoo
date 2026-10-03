@@ -23,7 +23,8 @@ import {
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
-import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { cleanupAndUnregister, resolveAgenticWorkingDir } from '../agentic-utils';
+import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
 import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
@@ -34,6 +35,11 @@ import {
   withCodexTraceExporter,
 } from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
+import {
+  COMMON_OPTIONAL_PROCESS_ENV_KEYS,
+  findGitRepositoryRoot,
+  getMinimalProcessEnv,
+} from './codexProcess';
 import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,
@@ -377,39 +383,6 @@ interface ThreadHandle {
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
 
-const MINIMAL_CLI_ENV_KEYS = [
-  'PATH',
-  'Path',
-  'HOME',
-  'USER',
-  'USERNAME',
-  'USERPROFILE',
-  'TMPDIR',
-  'TMP',
-  'TEMP',
-  'SHELL',
-  'COMSPEC',
-  'SystemRoot',
-  'PATHEXT',
-  'LANG',
-  'LC_ALL',
-  'TERM',
-] as const;
-
-const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
-  'CODEX_HOME',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'REQUESTS_CA_BUNDLE',
-  'NODE_EXTRA_CA_CERTS',
-  'SSH_AUTH_SOCK',
-  'GIT_SSH_COMMAND',
-] as const;
-
 const CodexCliEnvValueSchema = z.union([z.string(), z.number(), z.boolean()]).transform(String);
 
 const CodexAppServerReasoningEffortSchema = z.enum([
@@ -678,18 +651,6 @@ function mergeCodexAppServerConfig(
   };
 }
 
-function getMinimalProcessEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  const processEnv = getProcessEnv();
-  for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = processEnv[key];
-    if (typeof value === 'string' && value.length > 0) {
-      env[key] = value;
-    }
-  }
-  return env;
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -820,12 +781,6 @@ class StaleExplicitThreadConnectionClosedError extends Error {
 
 function isMethodNotFoundError(error: unknown): boolean {
   return error instanceof JsonRpcError && error.code === -32601;
-}
-
-function createAbortError(message: string): Error {
-  const error = new Error(message);
-  error.name = 'AbortError';
-  return error;
 }
 
 /** Find npm's entrypoint only when Windows cannot launch a native Codex binary. */
@@ -980,9 +935,7 @@ class CodexAppServerConnection {
         pendingRequest.abortListener = () => {
           const error = createAbortError(`codex app-server request aborted: ${method}`);
           this.pending.delete(id);
-          if (pendingRequest.timeout) {
-            clearTimeout(pendingRequest.timeout);
-          }
+          clearTimeout(pendingRequest.timeout);
           reject(error);
           logger.debug('[CodexAppServer] JSON-RPC request aborted', {
             error: error.message,
@@ -1021,12 +974,8 @@ class CodexAppServerConnection {
       let terminateTimer: ReturnType<typeof setTimeout> | undefined;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       const finish = () => {
-        if (terminateTimer) {
-          clearTimeout(terminateTimer);
-        }
-        if (killTimer) {
-          clearTimeout(killTimer);
-        }
+        clearTimeout(terminateTimer);
+        clearTimeout(killTimer);
         this.lineInterface.close();
         resolve();
       };
@@ -1149,9 +1098,7 @@ class CodexAppServerConnection {
     }
 
     this.pending.delete(message.id as JsonRpcId);
-    if (pendingRequest.timeout) {
-      clearTimeout(pendingRequest.timeout);
-    }
+    clearTimeout(pendingRequest.timeout);
     if (pendingRequest.abortSignal && pendingRequest.abortListener) {
       pendingRequest.abortSignal.removeEventListener('abort', pendingRequest.abortListener);
     }
@@ -1247,9 +1194,7 @@ class CodexAppServerConnection {
 
   private rejectPending(error: Error): void {
     for (const [id, pendingRequest] of this.pending) {
-      if (pendingRequest.timeout) {
-        clearTimeout(pendingRequest.timeout);
-      }
+      clearTimeout(pendingRequest.timeout);
       if (pendingRequest.abortSignal && pendingRequest.abortListener) {
         pendingRequest.abortSignal.removeEventListener('abort', pendingRequest.abortListener);
       }
@@ -1276,11 +1221,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private connectionPromises = new Map<string, Promise<CodexAppServerConnection>>();
   private initializingConnections = new Set<CodexAppServerConnection>();
   private threads = new Map<string, ThreadHandle>();
-  private threadPromises = new Map<string, Promise<ThreadHandle>>();
+  private threadPromises = new Map<
+    string,
+    { promise: Promise<ThreadHandle>; connectionInstanceId: string }
+  >();
+  // Retain the legacy Map field in provider serialization fallback output.
   private threadPromiseConnectionInstances = new Map<string, string>();
   private explicitThreadAbortCleanups = new Map<string, Promise<void>>();
   private protectedThreadCounts = new Map<string, number>();
-  private threadRunQueues = new Map<string, Promise<void>>();
+  private threadRunQueues = new AgenticRunQueue('Codex app-server thread turn wait aborted');
   private activeTurnsByThread = new Map<string, CodexAppServerTurnState>();
   private activeTurnsByTurn = new Map<string, CodexAppServerTurnState>();
   private validatedWorkingDirs = new Set<string>();
@@ -1329,7 +1278,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.resolveActiveTurns(new Error('codex app-server provider cleanup interrupted active turn'));
     this.threads.clear();
     this.threadPromises.clear();
-    this.threadPromiseConnectionInstances.clear();
     this.explicitThreadAbortCleanups.clear();
     this.threadRunQueues.clear();
     this.activeTurnsByThread.clear();
@@ -1353,12 +1301,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     );
   }
 
-  async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+  shutdown(): Promise<void> {
+    return cleanupAndUnregister(this);
   }
 
   async callApi(
@@ -1533,49 +1477,45 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
             ? undefined
             : this.getThreadRunQueueKey(resolvedConfig, threadHandle);
 
-          return await this.runSerializedThreadTurn(
-            queueKey,
-            callOptions?.abortSignal,
-            async () => {
-              turnStarted = true;
-              const state = this.createTurnState(
-                connection,
-                connectionKey,
-                connection.instanceId,
-                threadHandle.threadId,
-                promptInput,
-                resolvedConfig,
-                env,
-              );
-              this.registerTurnState(state);
-              try {
-                const turnResponse = await connection.request(
-                  'turn/start',
-                  this.buildTurnStartParams(threadHandle.threadId, promptInput, resolvedConfig),
-                  {
-                    abortSignal: callOptions?.abortSignal,
-                    timeoutMs: this.getRequestTimeoutMs(resolvedConfig),
-                    onResponse: (response) => {
-                      const turnId = (response as any)?.turn?.id;
-                      if (typeof turnId === 'string') {
-                        this.updateTurnStateId(state, turnId);
-                      }
-                    },
+          return await this.threadRunQueues.run(queueKey, callOptions?.abortSignal, async () => {
+            turnStarted = true;
+            const state = this.createTurnState(
+              connection,
+              connectionKey,
+              connection.instanceId,
+              threadHandle.threadId,
+              promptInput,
+              resolvedConfig,
+              env,
+            );
+            this.registerTurnState(state);
+            try {
+              const turnResponse = await connection.request(
+                'turn/start',
+                this.buildTurnStartParams(threadHandle.threadId, promptInput, resolvedConfig),
+                {
+                  abortSignal: callOptions?.abortSignal,
+                  timeoutMs: this.getRequestTimeoutMs(resolvedConfig),
+                  onResponse: (response) => {
+                    const turnId = (response as any)?.turn?.id;
+                    if (typeof turnId === 'string') {
+                      this.updateTurnStateId(state, turnId);
+                    }
                   },
-                );
+                },
+              );
 
-                if (typeof turnResponse?.turn?.id === 'string') {
-                  this.updateTurnStateId(state, turnResponse.turn.id);
-                }
-
-                await this.waitForTurnCompletion(connection, state, resolvedConfig, callOptions);
-                return this.buildProviderResponse(state, threadHandle, resolvedConfig);
-              } finally {
-                this.unregisterTurnState(state);
-                await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
+              if (typeof turnResponse?.turn?.id === 'string') {
+                this.updateTurnStateId(state, turnResponse.turn.id);
               }
-            },
-          );
+
+              await this.waitForTurnCompletion(connection, state, resolvedConfig, callOptions);
+              return this.buildProviderResponse(state, threadHandle, resolvedConfig);
+            } finally {
+              this.unregisterTurnState(state);
+              await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
+            }
+          });
         } finally {
           this.unprotectThread(threadHandle.threadId);
           if (!turnStarted) {
@@ -1588,7 +1528,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       };
 
       return explicitThreadQueueKey
-        ? await this.runSerializedThreadTurn(
+        ? await this.threadRunQueues.run(
             explicitThreadQueueKey,
             callOptions?.abortSignal,
             runThreadTurn,
@@ -1936,10 +1876,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           this.threads.delete(threadCacheKey);
         }
       }
-      for (const [threadCacheKey] of this.threadPromises) {
-        if (this.threadPromiseConnectionInstances.get(threadCacheKey) === connectionInstanceId) {
+      for (const [threadCacheKey, pending] of this.threadPromises) {
+        if (pending.connectionInstanceId === connectionInstanceId) {
           this.threadPromises.delete(threadCacheKey);
-          this.threadPromiseConnectionInstances.delete(threadCacheKey);
         }
       }
     }
@@ -2075,13 +2014,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): Promise<void> {
     const pending: Promise<unknown>[] = Array.from(this.threadPromises.entries())
       .filter(([key]) => key.startsWith(prefix) && key !== keepKey)
-      .map(([, promise]) => promise);
+      .map(([, entry]) => entry.promise);
     const abortCleanups = Array.from(this.explicitThreadAbortCleanups.entries())
       .filter(([key]) => key.startsWith(prefix))
       .map(([, promise]) => promise);
     pending.push(...abortCleanups);
     if (pending.length > 0) {
-      await this.waitForPreviousThreadRun(
+      await this.threadRunQueues.wait(
         Promise.allSettled(pending).then(() => undefined),
         abortSignal,
       );
@@ -2120,7 +2059,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         );
       }
       const cachedOrPending =
-        (cacheKey ? this.threads.get(cacheKey) : undefined) ?? this.threadPromises.get(variantKey);
+        (cacheKey ? this.threads.get(cacheKey) : undefined) ??
+        this.threadPromises.get(variantKey)?.promise;
       if (cachedOrPending !== undefined) {
         return this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
       }
@@ -2215,7 +2155,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (!cacheKey) {
       return undefined;
     }
-    return this.threads.get(cacheKey) ?? this.threadPromises.get(cacheKey);
+    return this.threads.get(cacheKey) ?? this.threadPromises.get(cacheKey)?.promise;
   }
 
   private cacheThreadPromise(
@@ -2229,13 +2169,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     let threadPromise: Promise<ThreadHandle>;
     threadPromise = createThread().finally(() => {
-      if (this.threadPromises.get(cacheKey) === threadPromise) {
+      if (this.threadPromises.get(cacheKey)?.promise === threadPromise) {
         this.threadPromises.delete(cacheKey);
-        this.threadPromiseConnectionInstances.delete(cacheKey);
       }
     });
-    this.threadPromises.set(cacheKey, threadPromise);
-    this.threadPromiseConnectionInstances.set(cacheKey, connectionInstanceId);
+    this.threadPromises.set(cacheKey, { promise: threadPromise, connectionInstanceId });
     return threadPromise;
   }
 
@@ -3110,9 +3048,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ),
       );
     } finally {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
+      clearTimeout(timeout);
       if (abortListener && callOptions?.abortSignal) {
         callOptions.abortSignal.removeEventListener('abort', abortListener);
       }
@@ -3181,64 +3117,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return threadHandle.cacheKey;
     }
     return undefined;
-  }
-
-  private async runSerializedThreadTurn<T>(
-    queueKey: string | undefined,
-    abortSignal: AbortSignal | undefined,
-    executeTurn: () => Promise<T>,
-  ): Promise<T> {
-    if (!queueKey) {
-      return executeTurn();
-    }
-
-    const previousRun = this.threadRunQueues.get(queueKey) ?? Promise.resolve();
-    let releaseCurrentRun: () => void = () => {};
-    const currentRun = new Promise<void>((resolve) => {
-      releaseCurrentRun = resolve;
-    });
-    const queuedRun = previousRun.catch(() => undefined).then(() => currentRun);
-    this.threadRunQueues.set(queueKey, queuedRun);
-    void queuedRun.finally(() => {
-      if (this.threadRunQueues.get(queueKey) === queuedRun) {
-        this.threadRunQueues.delete(queueKey);
-      }
-    });
-
-    try {
-      await this.waitForPreviousThreadRun(previousRun, abortSignal);
-      return await executeTurn();
-    } finally {
-      releaseCurrentRun();
-    }
-  }
-
-  private async waitForPreviousThreadRun(
-    previousRun: Promise<void>,
-    abortSignal: AbortSignal | undefined,
-  ): Promise<void> {
-    const previousRunDone = previousRun.catch(() => undefined);
-    if (!abortSignal) {
-      await previousRunDone;
-      return;
-    }
-    if (abortSignal.aborted) {
-      throw createAbortError('Codex app-server thread turn wait aborted');
-    }
-
-    let onAbort: (() => void) | undefined;
-    const abortPromise = new Promise<void>((_, reject) => {
-      onAbort = () => reject(createAbortError('Codex app-server thread turn wait aborted'));
-      abortSignal.addEventListener('abort', onAbort, { once: true });
-    });
-
-    try {
-      await Promise.race([previousRunDone, abortPromise]);
-    } finally {
-      if (onAbort) {
-        abortSignal.removeEventListener('abort', onAbort);
-      }
-    }
   }
 
   private buildProviderResponse(
@@ -3597,17 +3475,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private findGitRepositoryRoot(workingDir: string): string | undefined {
-    let currentDir = path.resolve(workingDir);
-    while (true) {
-      if (fs.existsSync(path.join(currentDir, '.git'))) {
-        return currentDir;
-      }
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        return undefined;
-      }
-      currentDir = parentDir;
-    }
+    return findGitRepositoryRoot(workingDir);
   }
 
   private warnOnceForDeepTracingThreadOptions(config: CodexAppServerConfig): void {

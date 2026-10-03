@@ -1,3 +1,5 @@
+const { createWarningLoggerModule } = await vi.hoisted(async () => import('../factories/logger'));
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { createN8nProvider, N8nProvider } from '../../src/providers/n8n';
@@ -5,14 +7,18 @@ import { fetchWithRetries } from '../../src/util/fetch';
 
 import type { N8nProviderConfig } from '../../src/providers/n8n';
 
+const createUserContext = () => ({
+  vars: { userId: 'user-123' },
+  prompt: { raw: 'Hello', label: 'test' },
+});
+
+const createSessionContext = () => ({
+  vars: { sessionId: 'my-session-123' },
+  prompt: { raw: 'Hello', label: 'test' },
+});
+
 vi.mock('../../src/util/fetch');
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createWarningLoggerModule());
 
 function createMockResponse(data: unknown, options: ResponseInit = {}) {
   return new Response(typeof data === 'string' ? data : JSON.stringify(data), {
@@ -202,10 +208,7 @@ describe('N8nProvider', () => {
         },
       });
 
-      await provider.callApi('Hello', {
-        vars: { userId: 'user-123' },
-        prompt: { raw: 'Hello', label: 'test' },
-      });
+      await provider.callApi('Hello', createUserContext());
 
       expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
@@ -310,10 +313,7 @@ describe('N8nProvider', () => {
         },
       });
 
-      await provider.callApi('Hello', {
-        vars: { userId: 'user-123' },
-        prompt: { raw: 'Hello', label: 'test' },
-      });
+      await provider.callApi('Hello', createUserContext());
 
       expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
@@ -481,10 +481,7 @@ describe('N8nProvider', () => {
         config: { sessionHeader: 'X-Session-ID' },
       });
 
-      await provider.callApi('Hello', {
-        vars: { sessionId: 'my-session-123' },
-        prompt: { raw: 'Hello', label: 'test' },
-      });
+      await provider.callApi('Hello', createSessionContext());
 
       expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
@@ -512,10 +509,7 @@ describe('N8nProvider', () => {
         },
       });
 
-      await provider.callApi('Hello', {
-        vars: { sessionId: 'my-session-123' },
-        prompt: { raw: 'Hello', label: 'test' },
-      });
+      await provider.callApi('Hello', createSessionContext());
 
       expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',

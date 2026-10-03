@@ -82,12 +82,7 @@ export class ChatKitBrowserPool {
 
     // beforeExit fires when event loop is empty - allows cleanup of browser
     // which otherwise keeps the event loop alive
-    process.on('beforeExit', () => {
-      if (ChatKitBrowserPool.instance) {
-        ChatKitBrowserPool.instance.shutdown().catch(() => {});
-        ChatKitBrowserPool.instance = null;
-      }
-    });
+    process.on('beforeExit', cleanup);
 
     process.on('exit', cleanup);
     // Note: SIGINT/SIGTERM handlers intentionally omitted.

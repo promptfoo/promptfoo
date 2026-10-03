@@ -149,10 +149,6 @@ function looksLikeJson(prompt: string): boolean {
     ) {
       return true;
     }
-    // If it's just whitespace or empty, it might be JSON
-    if (afterBracket.length === 0 || /^\s+$/.test(afterBracket)) {
-      return true;
-    }
     // Otherwise, it's likely plain text (e.g., [INST]...[/INST])
     return false;
   }

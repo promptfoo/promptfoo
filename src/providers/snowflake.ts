@@ -3,6 +3,7 @@ import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
+import { serializeProvider } from './serialization';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
@@ -79,14 +80,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'snowflake',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'snowflake');
   }
 
   async callApi(

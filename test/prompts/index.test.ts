@@ -691,7 +691,7 @@ describe('readProviderPromptMap', () => {
     });
   });
 
-  it('should handle provider objects with id, label, and prompts', () => {
+  const verifyProviderObjectWithLabel = () => {
     config = {
       providers: [{ id: 'provider1', label: 'providerLabel', prompts: ['customPrompt1'] }],
     };
@@ -699,7 +699,9 @@ describe('readProviderPromptMap', () => {
       provider1: ['customPrompt1'],
       providerLabel: ['customPrompt1'],
     });
-  });
+  };
+
+  it('should handle provider objects with id, label, and prompts', verifyProviderObjectWithLabel);
 
   it('should handle provider options map with id and prompts', () => {
     config = {
@@ -715,11 +717,12 @@ describe('readProviderPromptMap', () => {
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ provider1: ['customPrompt1'] });
   });
 
-  it('should handle provider options map without id and use original id', () => {
+  const verifyProviderMapFallback = () => {
     config = {
       providers: [
         {
           originalProvider: {
+            // 'originalProvider' is treated as originalId
             prompts: ['customPrompt1'],
           },
         },
@@ -728,7 +731,12 @@ describe('readProviderPromptMap', () => {
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
       originalProvider: ['customPrompt1'],
     });
-  });
+  };
+
+  it(
+    'should handle provider options map without id and use original id',
+    verifyProviderMapFallback,
+  );
 
   it('should use rawProvider.prompts if provided for provider objects with id', () => {
     config = {
@@ -746,15 +754,10 @@ describe('readProviderPromptMap', () => {
     });
   });
 
-  it('should use rawProvider.prompts for both id and label if provided', () => {
-    config = {
-      providers: [{ id: 'provider1', label: 'providerLabel', prompts: ['customPrompt1'] }],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      provider1: ['customPrompt1'],
-      providerLabel: ['customPrompt1'],
-    });
-  });
+  it(
+    'should use rawProvider.prompts for both id and label if provided',
+    verifyProviderObjectWithLabel,
+  );
 
   it('should fall back to allPrompts for both id and label if no prompts provided', () => {
     config = {
@@ -780,21 +783,10 @@ describe('readProviderPromptMap', () => {
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ explicitId: ['customPrompt1'] });
   });
 
-  it('should fallback to originalId when providerObject.id is not specified in ProviderOptionsMap', () => {
-    config = {
-      providers: [
-        {
-          originalProvider: {
-            // 'originalProvider' is treated as originalId
-            prompts: ['customPrompt1'],
-          },
-        },
-      ],
-    };
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      originalProvider: ['customPrompt1'],
-    });
-  });
+  it(
+    'should fallback to originalId when providerObject.id is not specified in ProviderOptionsMap',
+    verifyProviderMapFallback,
+  );
 });
 
 describe('processPrompts', () => {

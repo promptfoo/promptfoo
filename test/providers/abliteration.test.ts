@@ -2,15 +2,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../src/cache';
 import { AbliterationProvider, createAbliterationProvider } from '../../src/providers/abliteration';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
 
-vi.mock('../../src/cache', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    fetchWithCache: vi.fn(),
-    enableCache: vi.fn(),
-    disableCache: vi.fn(),
-  };
+const { createOpenAiCacheFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
+const createReasoningResponse = () => ({
+  choices: [
+    {
+      message: {
+        content: 'Final answer',
+        reasoning_content: 'Private reasoning',
+      },
+    },
+  ],
+  usage: { total_tokens: 12, prompt_tokens: 7, completion_tokens: 5 },
 });
+
+const createContextApiBaseConfig = () => ({
+  env: {
+    ABLIT_API_BASE_URL: 'https://context.example.com/v1',
+  },
+});
+
+vi.mock('../../src/cache', createOpenAiCacheFactory());
 
 const mockFetchWithCache = vi.mocked(fetchWithCache);
 let restoreEnv: (() => void) | undefined;
@@ -163,11 +177,7 @@ describe('AbliterationProvider', () => {
   });
 
   it('uses providerOptions.env base URL when config does not override it', () => {
-    const provider = new AbliterationProvider('abliterated-model', {
-      env: {
-        ABLIT_API_BASE_URL: 'https://context.example.com/v1',
-      },
-    });
+    const provider = new AbliterationProvider('abliterated-model', createContextApiBaseConfig());
 
     expect(provider.config.apiBaseUrl).toBe('https://context.example.com/v1');
   });
@@ -194,11 +204,7 @@ describe('AbliterationProvider', () => {
       ABLIT_API_BASE_URL: 'https://process.example.com/v1',
     });
 
-    const provider = new AbliterationProvider('abliterated-model', {
-      env: {
-        ABLIT_API_BASE_URL: 'https://context.example.com/v1',
-      },
-    });
+    const provider = new AbliterationProvider('abliterated-model', createContextApiBaseConfig());
 
     expect(provider.config.apiBaseUrl).toBe('https://context.example.com/v1');
   });
@@ -304,15 +310,12 @@ describe('AbliterationProvider', () => {
     mockAbliterationEnv({
       OPENAI_ORGANIZATION: 'openai-org',
     });
-    mockFetchWithCache.mockResolvedValue({
-      data: {
+    mockFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         choices: [{ message: { content: 'Abliterated output' } }],
         usage: { total_tokens: 12, prompt_tokens: 7, completion_tokens: 5 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
     const provider = new AbliterationProvider('abliterated-model');
     const result = await provider.callApi(
@@ -340,22 +343,7 @@ describe('AbliterationProvider', () => {
   });
 
   it('hides reasoning content by default', async () => {
-    mockFetchWithCache.mockResolvedValue({
-      data: {
-        choices: [
-          {
-            message: {
-              content: 'Final answer',
-              reasoning_content: 'Private reasoning',
-            },
-          },
-        ],
-        usage: { total_tokens: 12, prompt_tokens: 7, completion_tokens: 5 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockFetchWithCache.mockResolvedValue(createMockFetchResponse(createReasoningResponse()));
 
     const provider = new AbliterationProvider('abliterated-model');
     const result = await provider.callApi('Test prompt');
@@ -364,8 +352,8 @@ describe('AbliterationProvider', () => {
   });
 
   it('sends Large V2 reasoning options and returns the final answer with token usage', async () => {
-    mockFetchWithCache.mockResolvedValue({
-      data: {
+    mockFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         choices: [
           {
             message: { content: 'CWE-89', reasoning_content: 'Example reasoning' },
@@ -373,11 +361,8 @@ describe('AbliterationProvider', () => {
           },
         ],
         usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
     const provider = new AbliterationProvider('abliterated-model-large-v2', {
       config: { reasoning_effort: 'low', max_tokens: 16384 },
     });
@@ -394,22 +379,7 @@ describe('AbliterationProvider', () => {
   });
 
   it('includes reasoning content when showThinking is enabled', async () => {
-    mockFetchWithCache.mockResolvedValue({
-      data: {
-        choices: [
-          {
-            message: {
-              content: 'Final answer',
-              reasoning_content: 'Private reasoning',
-            },
-          },
-        ],
-        usage: { total_tokens: 12, prompt_tokens: 7, completion_tokens: 5 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockFetchWithCache.mockResolvedValue(createMockFetchResponse(createReasoningResponse()));
 
     const provider = new AbliterationProvider('abliterated-model', {
       config: {

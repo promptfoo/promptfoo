@@ -417,6 +417,16 @@ describe('Provider Registry', () => {
     });
 
     describe('getProviderFactories boundary contract', () => {
+      const createDetachedRegistryCheck = () => async (path: string) => {
+        const before = providerMap.length;
+        const factories = await getProviderFactories(path);
+
+        expect(factories).not.toBe(providerMap);
+        expect(providerMap.length).toBe(before);
+        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
+        expect(factories.some((factory) => factory.test(path))).toBe(true);
+      };
+
       it('returns the providerMap reference itself for the no-family fast path', async () => {
         // Pin identity (toBe, not toEqual) so an accidental `return [...providerMap]`
         // on the hot path regresses loudly instead of silently doubling the
@@ -473,15 +483,7 @@ describe('Provider Registry', () => {
         'bedrock:completion:anthropic.claude-v2',
         'bedrock-agent:agent-id',
         'sagemaker:endpoint-name',
-      ])('loads AWS factories without mutating providerMap for %s', async (path) => {
-        const before = providerMap.length;
-        const factories = await getProviderFactories(path);
-
-        expect(factories).not.toBe(providerMap);
-        expect(providerMap.length).toBe(before);
-        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
-        expect(factories.some((factory) => factory.test(path))).toBe(true);
-      });
+      ])('loads AWS factories without mutating providerMap for %s', createDetachedRegistryCheck());
 
       it('resolves the same AWS factory under concurrent lookups', async () => {
         // All lookups should reuse the factory exported by the cached AWS
@@ -504,15 +506,7 @@ describe('Provider Registry', () => {
 
       it.each(['vertex:chat:gemini-2.5-flash', 'google:gemini-2.5-flash', 'palm:chat-bison'])(
         'loads Google factories without mutating providerMap for %s',
-        async (path) => {
-          const before = providerMap.length;
-          const factories = await getProviderFactories(path);
-
-          expect(factories).not.toBe(providerMap);
-          expect(providerMap.length).toBe(before);
-          expect(providerMap.some((factory) => factory.test(path))).toBe(false);
-          expect(factories.some((factory) => factory.test(path))).toBe(true);
-        },
+        createDetachedRegistryCheck(),
       );
 
       it('resolves the same Google factory under concurrent lookups', async () => {
@@ -1845,6 +1839,17 @@ describe('Provider Registry', () => {
   });
 
   describe('google: prefix routing', () => {
+    const createProviderDispatchCheck =
+      () => async (providerPath: string, loadExpectedProvider: () => Promise<Function>) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        const ExpectedProvider = await loadExpectedProvider();
+        expect(provider).toBeInstanceOf(ExpectedProvider);
+      };
+
     // Empty options so the provider computes its own id() rather than using
     // a caller-supplied override.
     const bareOptions: ProviderOptions = { config: {} };
@@ -2044,18 +2049,7 @@ describe('Provider Registry', () => {
         'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
-    ] as const)(
-      'routes %s to the expected provider class',
-      async (providerPath, loadExpectedProvider) => {
-        const factory = (await getProviderFactories(providerPath)).find((f) =>
-          f.test(providerPath),
-        );
-        expect(factory).toBeDefined();
-        const provider = await factory!.create(providerPath, bareOptions, bareContext);
-        const ExpectedProvider = await loadExpectedProvider();
-        expect(provider).toBeInstanceOf(ExpectedProvider);
-      },
-    );
+    ] as const)('routes %s to the expected provider class', createProviderDispatchCheck());
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-001';
@@ -2125,15 +2119,7 @@ describe('Provider Registry', () => {
       ],
     ] as const)(
       'routes script-like id %s to the expected provider class',
-      async (providerPath, loadExpectedProvider) => {
-        const factory = (await getProviderFactories(providerPath)).find((f) =>
-          f.test(providerPath),
-        );
-        expect(factory).toBeDefined();
-        const provider = await factory!.create(providerPath, bareOptions, bareContext);
-        const ExpectedProvider = await loadExpectedProvider();
-        expect(provider).toBeInstanceOf(ExpectedProvider);
-      },
+      createProviderDispatchCheck(),
     );
 
     it.each([

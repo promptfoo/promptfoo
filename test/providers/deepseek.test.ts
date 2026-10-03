@@ -9,6 +9,11 @@ import { ProviderOptionsSchema } from '../../src/validators/providers';
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
 describe('DeepSeek usage boundaries', () => {
+  it('keeps mutable prices independent across model aliases', () => {
+    const costs = DEEPSEEK_CHAT_MODELS.map(({ cost }) => cost);
+    expect(new Set(costs).size).toBe(costs.length);
+  });
+
   it('bills input-only and output-only responses and preserves valid zero usage', () => {
     expect(calculateDeepSeekCost('deepseek-chat', { inputCost: 0.01 }, 10, 0)).toBeCloseTo(0.1);
     expect(calculateDeepSeekCost('deepseek-chat', { outputCost: 0.02 }, 0, 10)).toBeCloseTo(0.2);

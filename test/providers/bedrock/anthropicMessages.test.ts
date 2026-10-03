@@ -9,6 +9,12 @@ import { isBedrockAnthropicMessagesModel } from '../../../src/providers/bedrock/
 import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 
+const createMessagesRequest = () => ({
+  method: 'post',
+  path: '/v1/messages',
+  body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
+});
+
 describe('Bedrock Anthropic Messages provider', () => {
   let restoreEnv: (() => void) | undefined;
 
@@ -131,11 +137,7 @@ describe('Bedrock Anthropic Messages provider', () => {
           body: Record<string, unknown>;
         }): Promise<{ req: Request }>;
       }
-    ).buildRequest({
-      method: 'post',
-      path: '/v1/messages',
-      body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
-    });
+    ).buildRequest(createMessagesRequest());
     // Credentials are added by the transport at dispatch, not captured by the SDK.
     expect(req.headers.get('x-api-key')).toBeNull();
     expect(req.headers.get('authorization')).toBeNull();
@@ -162,11 +164,7 @@ describe('Bedrock Anthropic Messages provider', () => {
             body: Record<string, unknown>;
           }): Promise<{ req: Request }>;
         }
-      ).buildRequest({
-        method: 'post',
-        path: '/v1/messages',
-        body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
-      });
+      ).buildRequest(createMessagesRequest());
 
       expect(req.headers.get('x-api-key')).toBeNull();
       expect(req.headers.get('authorization')).toBeNull();
@@ -184,11 +182,7 @@ describe('Bedrock Anthropic Messages provider', () => {
       provider.anthropic as unknown as {
         buildRequest: (request: Record<string, unknown>) => Promise<{ req: Request }>;
       }
-    ).buildRequest({
-      method: 'post',
-      path: '/v1/messages',
-      body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
-    });
+    ).buildRequest(createMessagesRequest());
 
     expect(req.headers.get('x-api-key')).toBeNull();
   });
@@ -201,11 +195,7 @@ describe('Bedrock Anthropic Messages provider', () => {
     const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5', {
       config: { apiKey: 'bedrock-key', region: 'us-east-1' },
     });
-    const { req } = await (provider.anthropic as any).buildRequest({
-      method: 'post',
-      path: '/v1/messages',
-      body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
-    });
+    const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
 
     expect(req.headers.get('x-api-key')).toBeNull();
     expect(req.headers.get('x-proxy-secret')).toBeNull();

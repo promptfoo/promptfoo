@@ -13,190 +13,135 @@ import type {
   WebSearchToolConfig20260318,
 } from './types';
 
+function modelsWithCost(ids: string[], cost: { input: number; output: number }) {
+  return ids.map((id) => ({ id, cost: { ...cost } }));
+}
+
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
-  ...['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5'].map(
-    (model) => ({
-      id: model,
-      cost: {
-        input: 10 / 1e6, // $10 / MTok
-        output: 50 / 1e6, // $50 / MTok
-      },
-    }),
+  ...modelsWithCost(
+    ['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5'],
+    {
+      input: 10 / 1e6, // $10 / MTok
+      output: 50 / 1e6, // $50 / MTok
+    },
   ),
   // Claude Opus 5.5 — 1M context billed at a flat rate. Fast mode ($8/$40, Claude API only)
   // is a separate research-preview rate that is intentionally not encoded here.
-  ...['claude-opus-5-5'].map((model) => ({
-    id: model,
-    cost: {
-      input: 4 / 1e6, // $4 / MTok
-      output: 20 / 1e6, // $20 / MTok
-    },
-  })),
+  ...modelsWithCost(['claude-opus-5-5'], {
+    input: 4 / 1e6, // $4 / MTok
+    output: 20 / 1e6, // $20 / MTok
+  }),
   // Claude Opus 5 — the Opus-tier Claude 5 model. 1M context window (both the default
   // and the maximum) with the full low→max effort ladder, at the same list pricing as
   // Opus 4.8 ($5/$25), so it is a drop-in cost swap. The full 1M context bills at this
   // flat rate. Fast mode ($10/$50, Claude API only) is a separate research-preview rate
   // that is intentionally not encoded here; set an explicit `cost` to track it.
-  ...['claude-opus-5'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1e6, // $5 / MTok
-      output: 25 / 1e6, // $25 / MTok
-    },
-  })),
-  {
-    id: 'claude-sonnet-5-5',
-    cost: {
+  ...modelsWithCost(['claude-opus-5'], {
+    input: 5 / 1e6, // $5 / MTok
+    output: 25 / 1e6, // $25 / MTok
+  }),
+  ...modelsWithCost(
+    [
+      'claude-sonnet-5-5',
+      // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
+      // levels. The launch pricing ($2/$10) became permanent on August 10, 2026;
+      // Anthropic canceled the previously announced September price increase. The full 1M
+      // context bills at this flat rate — prompt size never changes the per-token price.
+      'claude-sonnet-5',
+    ],
+    {
       input: 2 / 1e6, // $2 / MTok
       output: 10 / 1e6, // $10 / MTok
     },
-  },
-  // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
-  // levels. The launch pricing ($2/$10) became permanent on August 10, 2026;
-  // Anthropic canceled the previously announced September price increase. The full 1M
-  // context bills at this flat rate — prompt size never changes the per-token price.
-  ...['claude-sonnet-5'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2 / 1e6, // $2 / MTok
-      output: 10 / 1e6, // $10 / MTok
-    },
-  })),
+  ),
   // Claude Mythos Preview - gated research preview for defensive cybersecurity (Project Glasswing)
-  ...['claude-mythos-preview'].map((model) => ({
-    id: model,
-    cost: {
-      input: 25 / 1e6, // $25 / MTok
-      output: 125 / 1e6, // $125 / MTok
-    },
-  })),
+  ...modelsWithCost(['claude-mythos-preview'], {
+    input: 25 / 1e6, // $25 / MTok
+    output: 125 / 1e6, // $125 / MTok
+  }),
   // Claude 4.8 models
   // NOTE: Anthropic publishes a single dateless ID for Opus 4.8 — the documented
   // Claude API alias is the canonical ID itself (`claude-opus-4-8`), so there is no
   // separate `-latest` pointer to register.
-  ...['claude-opus-4-8'].map((model) => ({
-    id: model,
-    cost: {
+  ...modelsWithCost(
+    [
+      'claude-opus-4-8',
+      // Claude 4.7 models
+      // NOTE: Anthropic publishes a single dateless ID for Opus 4.7 — the Models API
+      // returns 404 for `claude-opus-4-7-latest` and for dated snapshots such as
+      // `claude-opus-4-7-20260416` (verified live 2026-07-17), so we intentionally only
+      // register the canonical ID here. (Azure AI Foundry's dated Claude deployment
+      // names are a separate namespace, priced in azure/defaults.ts.)
+      'claude-opus-4-7',
+    ],
+    {
       input: 5 / 1e6, // $5 / MTok
       output: 25 / 1e6, // $25 / MTok
     },
-  })),
-  // Claude 4.7 models
-  // NOTE: Anthropic publishes a single dateless ID for Opus 4.7 — the Models API
-  // returns 404 for `claude-opus-4-7-latest` and for dated snapshots such as
-  // `claude-opus-4-7-20260416` (verified live 2026-07-17), so we intentionally only
-  // register the canonical ID here. (Azure AI Foundry's dated Claude deployment
-  // names are a separate namespace, priced in azure/defaults.ts.)
-  ...['claude-opus-4-7'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1e6, // $5 / MTok
-      output: 25 / 1e6, // $25 / MTok
-    },
-  })),
+  ),
   // Claude 4.6 models
-  ...['claude-sonnet-4-6'].map((model) => ({
-    id: model,
-    cost: {
-      input: 3 / 1e6, // $3 / MTok
-      output: 15 / 1e6, // $15 / MTok
-    },
-  })),
-  ...['claude-opus-4-6'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1e6, // $5 / MTok
-      output: 25 / 1e6, // $25 / MTok
-    },
-  })),
-  ...['claude-opus-4-5', 'claude-opus-4-5-20251101'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1e6, // $5 / MTok
-      output: 25 / 1e6, // $25 / MTok
-    },
-  })),
+  ...modelsWithCost(['claude-sonnet-4-6'], {
+    input: 3 / 1e6, // $3 / MTok
+    output: 15 / 1e6, // $15 / MTok
+  }),
+  ...modelsWithCost(['claude-opus-4-6', 'claude-opus-4-5', 'claude-opus-4-5-20251101'], {
+    input: 5 / 1e6, // $5 / MTok
+    output: 25 / 1e6, // $25 / MTok
+  }),
   // Both are retired on the Anthropic API. The rates stay because Bedrock still serves
   // Opus 4.1, and cost attribution on historical evals needs them.
-  ...['claude-opus-4-1-20250805', 'claude-opus-4-20250514'].map((model) => ({
-    id: model,
-    cost: {
-      input: 15 / 1e6, // $15 / MTok
-      output: 75 / 1e6, // $75 / MTok
-    },
-  })),
-  ...[
-    'claude-sonnet-4-5',
-    'claude-sonnet-4-5-20250929',
-    // Not an Anthropic alias — the Models API 404s on it — but Vertex recognises it (see
-    // VERTEX_CLAUDE_SONNET_4_5_MODELS in google/vertex.ts) and passes the name through to
-    // calculateAnthropicCost, so dropping the row would silently blank Vertex costs.
-    'claude-sonnet-4-5-latest',
-    // Retired on the Anthropic API; still served by Bedrock in every region.
-    'claude-sonnet-4-20250514',
-  ].map((model) => ({
-    id: model,
-    cost: {
+  ...modelsWithCost(['claude-opus-4-1-20250805', 'claude-opus-4-20250514'], {
+    input: 15 / 1e6, // $15 / MTok
+    output: 75 / 1e6, // $75 / MTok
+  }),
+  ...modelsWithCost(
+    [
+      'claude-sonnet-4-5',
+      'claude-sonnet-4-5-20250929',
+      // Not an Anthropic alias — the Models API 404s on it — but Vertex recognises it (see
+      // VERTEX_CLAUDE_SONNET_4_5_MODELS in google/vertex.ts) and passes the name through to
+      // calculateAnthropicCost, so dropping the row would silently blank Vertex costs.
+      'claude-sonnet-4-5-latest',
+      // Retired on the Anthropic API; still served by Bedrock in every region.
+      'claude-sonnet-4-20250514',
+    ],
+    {
       input: 3 / 1e6, // $3 / MTok
       output: 15 / 1e6, // $15 / MTok
     },
-  })),
-  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1 / 1e6, // $1 / MTok
-      output: 5 / 1e6, // $5 / MTok
-    },
-  })),
+  ),
+  ...modelsWithCost(['claude-haiku-4-5', 'claude-haiku-4-5-20251001'], {
+    input: 1 / 1e6, // $1 / MTok
+    output: 5 / 1e6, // $5 / MTok
+  }),
 
   // NOTE: Claude 2.x models are deprecated and will be retired on July 21, 2025.
-  ...['claude-2.0'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.008 / 1000,
-      output: 0.024 / 1000,
-    },
-  })),
-  ...['claude-2.1'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.008 / 1000,
-      output: 0.024 / 1000,
-    },
-  })),
-  ...['claude-3-haiku-20240307'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.00025 / 1000,
-      output: 0.00125 / 1000,
-    },
-  })),
-  ...['claude-3-opus-20240229'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.015 / 1000,
-      output: 0.075 / 1000,
-    },
-  })),
-  ...['claude-3-5-haiku-20241022'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.8 / 1e6,
-      output: 4 / 1e6,
-    },
-  })),
+  ...modelsWithCost(['claude-2.0', 'claude-2.1'], {
+    input: 0.008 / 1000,
+    output: 0.024 / 1000,
+  }),
+  ...modelsWithCost(['claude-3-haiku-20240307'], {
+    input: 0.00025 / 1000,
+    output: 0.00125 / 1000,
+  }),
+  ...modelsWithCost(['claude-3-opus-20240229'], {
+    input: 0.015 / 1000,
+    output: 0.075 / 1000,
+  }),
+  ...modelsWithCost(['claude-3-5-haiku-20241022'], {
+    input: 0.8 / 1e6,
+    output: 4 / 1e6,
+  }),
   // Retired on the Anthropic API; still served by Bedrock (3.5 Sonnet in APAC, 3.7 Sonnet in
   // eu-west-2 and ap-south-1), so the rates stay for cost attribution there.
-  ...['claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022', 'claude-3-7-sonnet-20250219'].map(
-    (model) => ({
-      id: model,
-      cost: {
-        input: 3 / 1e6,
-        output: 15 / 1e6,
-      },
-    }),
+  ...modelsWithCost(
+    ['claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022', 'claude-3-7-sonnet-20250219'],
+    {
+      input: 3 / 1e6,
+      output: 15 / 1e6,
+    },
   ),
 ];
 

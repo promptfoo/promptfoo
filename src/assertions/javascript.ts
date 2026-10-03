@@ -1,64 +1,9 @@
 import { type GradingResult, isGradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
-import { normalizeScriptAssertionResult } from './scriptResultNormalization';
+import { appendToReason, normalizeScriptAssertionResult } from './scriptResultNormalization';
 
 import type { AssertionParams } from '../types/index';
-
-/**
- * Checks if a character at the given index is escaped by backslashes.
- * Handles multiple consecutive backslashes correctly (e.g., \\\\ is two escaped backslashes).
- */
-function isCharEscaped(code: string, index: number): boolean {
-  let backslashCount = 0;
-  let i = index - 1;
-  while (i >= 0 && code[i] === '\\') {
-    backslashCount++;
-    i--;
-  }
-  return backslashCount % 2 === 1;
-}
-
-/**
- * Finds the last semicolon that acts as a statement separator (not inside a string literal).
- * Tracks quote state to skip semicolons inside single quotes, double quotes, and template literals.
- *
- * @returns The index of the last statement-level semicolon, or -1 if none found.
- *
- * @remarks
- * Known limitations (use multiline format for these cases):
- * - Does not handle semicolons inside regex literals (e.g., /;/)
- * - Does not handle semicolons inside template literal expressions (e.g., `${a;b}`)
- */
-function findLastStatementSemicolon(code: string): number {
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inTemplate = false;
-  let lastSemiIndex = -1;
-
-  for (let i = 0; i < code.length; i++) {
-    const char = code[i];
-    const isEscaped = isCharEscaped(code, i);
-
-    // Toggle quote state for unescaped quote characters
-    if (!isEscaped) {
-      if (char === "'" && !inDoubleQuote && !inTemplate) {
-        inSingleQuote = !inSingleQuote;
-      } else if (char === '"' && !inSingleQuote && !inTemplate) {
-        inDoubleQuote = !inDoubleQuote;
-      } else if (char === '`' && !inSingleQuote && !inDoubleQuote) {
-        inTemplate = !inTemplate;
-      }
-    }
-
-    // Track semicolons only when outside all string contexts
-    if (char === ';' && !inSingleQuote && !inDoubleQuote && !inTemplate) {
-      lastSemiIndex = i;
-    }
-  }
-
-  return lastSemiIndex;
-}
 
 /**
  * Builds a function body from a single-line JavaScript assertion.
@@ -86,13 +31,57 @@ export function buildFunctionBody(code: string): string {
   // Check if the assertion starts with a variable declaration
   if (/^(const|let|var)\s/.test(trimmed)) {
     // Find the last semicolon that's actually a statement separator (not inside a string)
-    const lastSemiIndex = findLastStatementSemicolon(trimmed);
+    /**
+     * Finds the last semicolon that acts as a statement separator (not inside a string literal).
+     * Tracks quote state to skip semicolons inside single quotes, double quotes, and template literals.
+     *
+     * The result is the index of the last statement-level semicolon, or -1 if none found.
+     *
+     * @remarks
+     * Known limitations (use multiline format for these cases):
+     * - Does not handle semicolons inside regex literals (e.g., /;/)
+     * - Does not handle semicolons inside template literal expressions (e.g., `${a;b}`)
+     */
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    let inTemplate = false;
+    let lastSemiIndex = -1;
+
+    for (let i = 0; i < trimmed.length; i++) {
+      const char = trimmed[i];
+      /**
+       * Checks if a character at the given index is escaped by backslashes.
+       * Handles multiple consecutive backslashes correctly (e.g., \\\\ is two escaped backslashes).
+       */
+      let backslashCount = 0;
+      let escapeIndex = i - 1;
+      while (escapeIndex >= 0 && trimmed[escapeIndex] === '\\') {
+        backslashCount++;
+        escapeIndex--;
+      }
+
+      // Toggle quote state for unescaped quote characters
+      if (!(backslashCount % 2 === 1)) {
+        if (char === "'" && !inDoubleQuote && !inTemplate) {
+          inSingleQuote = !inSingleQuote;
+        } else if (char === '"' && !inSingleQuote && !inTemplate) {
+          inDoubleQuote = !inDoubleQuote;
+        } else if (char === '`' && !inSingleQuote && !inDoubleQuote) {
+          inTemplate = !inTemplate;
+        }
+      }
+
+      // Track semicolons only when outside all string contexts
+      if (char === ';' && !inSingleQuote && !inDoubleQuote && !inTemplate) {
+        lastSemiIndex = i;
+      }
+    }
+
     if (lastSemiIndex !== -1) {
-      const statements = trimmed.slice(0, lastSemiIndex + 1);
       const expression = trimmed.slice(lastSemiIndex + 1).trim();
       if (expression) {
         // Inject return before the final expression
-        return `${statements} return ${expression}`;
+        return `${trimmed.slice(0, lastSemiIndex + 1)} return ${expression}`;
       }
     }
     // No semicolon or no final expression - use as-is (will likely error or return undefined)
@@ -120,18 +109,6 @@ const validateResult = async (result: unknown): Promise<boolean | number | Gradi
   }
 };
 
-function serializeFunctionAssertion(assertion: AssertionParams['assertion']) {
-  invariant(
-    typeof assertion.value === 'function',
-    `function-valued javascript assertion (type: ${assertion.type}) must have a function value`,
-  );
-  const functionString = assertion.value.toString();
-  return {
-    ...assertion,
-    value: functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
-  };
-}
-
 function normalizeResultAssertion(
   assertion: GradingResult['assertion'],
   fallbackAssertion: AssertionParams['assertion'],
@@ -139,19 +116,18 @@ function normalizeResultAssertion(
   const assertionToNormalize = assertion ?? fallbackAssertion;
 
   if (typeof assertionToNormalize.value === 'function') {
-    return serializeFunctionAssertion(assertionToNormalize);
+    invariant(
+      typeof assertionToNormalize.value === 'function',
+      `function-valued javascript assertion (type: ${assertionToNormalize.type}) must have a function value`,
+    );
+    const functionString = assertionToNormalize.value.toString();
+    return {
+      ...assertionToNormalize,
+      value: functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
+    };
   }
 
   return assertionToNormalize;
-}
-
-function appendRenderedValueToReason(
-  reason: string,
-  renderedValue?: AssertionParams['renderedValue'],
-): string {
-  return typeof renderedValue === 'string' && renderedValue
-    ? `${reason}\n${renderedValue}`
-    : reason;
 }
 
 function normalizeJavascriptAssertionResult(
@@ -238,7 +214,7 @@ export const handleJavascript = async ({
     return {
       pass: false,
       score: 0,
-      reason: appendRenderedValueToReason(
+      reason: appendToReason(
         `Custom function threw error: ${(err as Error).message}
 Stack Trace: ${(err as Error).stack}`,
         err instanceof JavascriptAssertionValidationError ? undefined : renderedValue,

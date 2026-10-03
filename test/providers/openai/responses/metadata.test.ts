@@ -1,3 +1,5 @@
+import { createApiKeyOptions, createStreamingOptions } from '../../../factories/literalFixtures';
+import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -38,9 +40,7 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       headers: mockHeaders,
     });
 
-    const provider = new OpenAiResponsesProvider('gpt-4o', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
 
     const result = await provider.callApi('Test prompt');
 
@@ -60,9 +60,7 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       headers: { 'retry-after': '60' },
     });
 
-    const provider = new OpenAiResponsesProvider('gpt-4o', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
 
     const result = await provider.callApi('Test prompt');
 
@@ -97,18 +95,9 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       usage: { input_tokens: 3896, output_tokens: 100, total_tokens: 3996 },
     };
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
 
-    const provider = new OpenAiResponsesProvider('gpt-4o', {
-      config: {
-        apiKey: 'test-key',
-      },
-    });
+    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
 
     const result = await provider.callApi('Very long prompt that would be truncated');
 
@@ -144,12 +133,7 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       headers: { 'content-type': 'text/event-stream' },
     });
 
-    const provider = new OpenAiResponsesProvider('gpt-4o', {
-      config: {
-        apiKey: 'test-key',
-        stream: true,
-      },
-    });
+    const provider = new OpenAiResponsesProvider('gpt-4o', createStreamingOptions());
 
     const result = await provider.callApi('Test prompt');
 
@@ -177,9 +161,7 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       );
     });
 
-    const provider = new OpenAiResponsesProvider('gpt-4o', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new OpenAiResponsesProvider('gpt-4o', createStreamingOptions());
 
     try {
       const result = await provider.callApi('Test prompt');
@@ -201,9 +183,7 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       });
     });
 
-    const provider = new OpenAiResponsesProvider('gpt-4o', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new OpenAiResponsesProvider('gpt-4o', createStreamingOptions());
 
     await expect(
       provider.callApi('Cancellable stream', undefined, { abortSignal: controller.signal }),

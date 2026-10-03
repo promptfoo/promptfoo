@@ -10,6 +10,21 @@ import { loadApiProvider } from '../../src/providers/index';
 import { OpenInterpreterProvider } from '../../src/providers/openinterpreter';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
+import { waitForMessage } from './appServerTestUtils';
+
+const createTemplatedOptions = () => ({
+  skip_git_repo_check: '{% if skipGitCheck %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+  sandbox_mode: '{% if writable %}\nworkspace-write\n{% else %}\nread-only\n{% endif %}',
+  network_access_enabled: '{% if network %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+  turn_timeout_ms: '{% if timeout %}\n1000\n{% else %}\n500\n{% endif %}',
+});
+
+const createNestedTemplatedOptions = () => ({
+  success: '{{yes}}',
+  rules: '{{no}}',
+  turn_timeout_ms: '{{timeout}}',
+  skip_git_repo_check: '{{skip}}',
+});
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -68,18 +83,6 @@ function createMockAppServer(): MockAppServer {
         .map((line) => JSON.parse(line)),
     send: (message) => stdout.write(`${JSON.stringify(message)}\n`),
   };
-}
-
-async function waitForMessage(
-  server: MockAppServer,
-  predicate: (message: any) => boolean,
-): Promise<any> {
-  let found: any;
-  await vi.waitFor(() => {
-    found = server.messages().find(predicate);
-    expect(found).toBeTruthy();
-  });
-  return found;
 }
 
 async function startTurn(
@@ -536,12 +539,7 @@ describe('OpenInterpreterProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
     const provider = new OpenInterpreterProvider({
-      config: {
-        skip_git_repo_check: '{% if skipGitCheck %}\ntrue\n{% else %}\nfalse\n{% endif %}',
-        sandbox_mode: '{% if writable %}\nworkspace-write\n{% else %}\nread-only\n{% endif %}',
-        network_access_enabled: '{% if network %}\ntrue\n{% else %}\nfalse\n{% endif %}',
-        turn_timeout_ms: '{% if timeout %}\n1000\n{% else %}\n500\n{% endif %}',
-      } as any,
+      config: createTemplatedOptions() as any,
     });
 
     const resultPromise = provider.callApi('conditional config', {
@@ -566,12 +564,7 @@ describe('OpenInterpreterProvider', () => {
       prompt: {
         raw: 'conditional row config',
         label: 'conditional row template',
-        config: {
-          skip_git_repo_check: '{% if skipGitCheck %}\ntrue\n{% else %}\nfalse\n{% endif %}',
-          sandbox_mode: '{% if writable %}\nworkspace-write\n{% else %}\nread-only\n{% endif %}',
-          network_access_enabled: '{% if network %}\ntrue\n{% else %}\nfalse\n{% endif %}',
-          turn_timeout_ms: '{% if timeout %}\n1000\n{% else %}\n500\n{% endif %}',
-        },
+        config: createTemplatedOptions(),
       },
     } as any);
     const { turnStart } = await startTurn(server);
@@ -879,20 +872,10 @@ describe('OpenInterpreterProvider', () => {
         skip_git_repo_check: true,
         server_request_policy: {
           permissions: {
-            permissions: {
-              success: '{{yes}}',
-              rules: '{{no}}',
-              turn_timeout_ms: '{{timeout}}',
-              skip_git_repo_check: '{{skip}}',
-            },
+            permissions: createNestedTemplatedOptions(),
             strict_auto_review: '{{no}}',
           },
-          user_input: {
-            success: '{{yes}}',
-            rules: '{{no}}',
-            turn_timeout_ms: '{{timeout}}',
-            skip_git_repo_check: '{{skip}}',
-          },
+          user_input: createNestedTemplatedOptions(),
           dynamic_tools: {
             boolTool: { success: '{{yes}}', text: '{{no}}' },
           },

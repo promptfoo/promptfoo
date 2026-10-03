@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { AZURE_MODELS } from '../../../src/providers/azure/defaults';
 import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util';
 
+const createModelPricing = (
+  id: string,
+  input: number,
+  cached: number,
+  output: number,
+  longInput: number,
+  longCached: number,
+  longOutput: number,
+) => ({
+  id,
+  input,
+  cached,
+  output,
+  longInput,
+  longCached,
+  longOutput,
+});
+
 describe('throwConfigurationError', () => {
   it('throws error with formatted message and docs link', () => {
     const message = 'Test error message';
@@ -96,42 +114,10 @@ describe('calculateAzureCost', () => {
   );
 
   it.each([
-    {
-      id: 'gpt-5.6',
-      input: 5,
-      cached: 0.5,
-      output: 30,
-      longInput: 10,
-      longCached: 1,
-      longOutput: 45,
-    },
-    {
-      id: 'gpt-5.6-sol',
-      input: 5,
-      cached: 0.5,
-      output: 30,
-      longInput: 10,
-      longCached: 1,
-      longOutput: 45,
-    },
-    {
-      id: 'gpt-5.6-terra',
-      input: 2.5,
-      cached: 0.25,
-      output: 15,
-      longInput: 5,
-      longCached: 0.5,
-      longOutput: 22.5,
-    },
-    {
-      id: 'gpt-5.6-luna',
-      input: 1,
-      cached: 0.1,
-      output: 6,
-      longInput: 2,
-      longCached: 0.2,
-      longOutput: 9,
-    },
+    createModelPricing('gpt-5.6', 5, 0.5, 30, 10, 1, 45),
+    createModelPricing('gpt-5.6-sol', 5, 0.5, 30, 10, 1, 45),
+    createModelPricing('gpt-5.6-terra', 2.5, 0.25, 15, 5, 0.5, 22.5),
+    createModelPricing('gpt-5.6-luna', 1, 0.1, 6, 2, 0.2, 9),
     {
       id: 'gpt-5.5-pro',
       input: 30,
@@ -165,42 +151,10 @@ describe('calculateAzureCost', () => {
   );
 
   it.each([
-    {
-      id: 'gpt-5.6',
-      input: 5,
-      cached: 0.5,
-      output: 30,
-      longInput: 10,
-      longCached: 1,
-      longOutput: 45,
-    },
-    {
-      id: 'gpt-5.6-sol',
-      input: 5,
-      cached: 0.5,
-      output: 30,
-      longInput: 10,
-      longCached: 1,
-      longOutput: 45,
-    },
-    {
-      id: 'gpt-5.6-terra',
-      input: 2.5,
-      cached: 0.25,
-      output: 15,
-      longInput: 5,
-      longCached: 0.5,
-      longOutput: 22.5,
-    },
-    {
-      id: 'gpt-5.6-luna',
-      input: 1,
-      cached: 0.1,
-      output: 6,
-      longInput: 2,
-      longCached: 0.2,
-      longOutput: 9,
-    },
+    createModelPricing('gpt-5.6', 5, 0.5, 30, 10, 1, 45),
+    createModelPricing('gpt-5.6-sol', 5, 0.5, 30, 10, 1, 45),
+    createModelPricing('gpt-5.6-terra', 2.5, 0.25, 15, 5, 0.5, 22.5),
+    createModelPricing('gpt-5.6-luna', 1, 0.1, 6, 2, 0.2, 9),
   ])(
     'uses the priority-tier rate for $id',
     ({ id, input, cached, output, longInput, longCached, longOutput }) => {
@@ -614,6 +568,13 @@ describe('calculateAzureCost', () => {
 });
 
 describe('AZURE_MODELS cost coverage', () => {
+  it('keeps mutable prices independent across model aliases', () => {
+    const costs = AZURE_MODELS.map(({ cost }) => cost);
+    expect(new Set(costs).size).toBe(costs.length);
+    const longContextCosts = costs.flatMap(({ longContext }) => (longContext ? [longContext] : []));
+    expect(new Set(longContextCosts).size).toBe(longContextCosts.length);
+  });
+
   // Guards against the cost=0 / undefined-cost class: every supported model in the pricing
   // table must compute a positive, finite cost for non-zero token usage.
   it('every AZURE_MODELS entry computes a positive, finite cost', () => {

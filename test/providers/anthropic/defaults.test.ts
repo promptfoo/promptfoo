@@ -6,6 +6,7 @@ import {
   getAnthropicProviders,
 } from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { createPassingGrade } from '../../factories/literalFixtures';
 import type Anthropic from '@anthropic-ai/sdk';
 
 vi.mock('proxy-agent', async (importOriginal) => {
@@ -78,11 +79,7 @@ describe('Anthropic Default Providers', () => {
           type: 'tool_use',
           id: 'test-id',
           name: 'grade_output',
-          input: {
-            pass: true,
-            score: 0.85,
-            reason: 'The output meets the criteria.',
-          },
+          input: createPassingGrade(0.85, 'The output meets the criteria.'),
         }),
       };
 
@@ -105,11 +102,7 @@ describe('Anthropic Default Providers', () => {
         const provider = new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, {
           config: showThinking === undefined ? {} : { showThinking },
         });
-        const grade = {
-          pass: true,
-          score: 0.85,
-          reason: 'The output meets the criteria.',
-        };
+        const grade = createPassingGrade(0.85, 'The output meets the criteria.');
         const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
           content: [
             { type: 'thinking', thinking: 'Checking the criteria.', signature: 'signature' },

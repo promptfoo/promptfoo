@@ -5,8 +5,8 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  extractGenAIResponse,
   type GenAISpanContext,
-  type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -158,6 +158,17 @@ function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): 
     .digest('hex')}`;
 }
 
+function getVertexClientOptions(provider: { config: GoogleProviderConfig }) {
+  const credentials = loadCredentials(provider.config.credentials);
+
+  return {
+    credentials,
+    googleAuthOptions: provider.config.googleAuthOptions,
+    scopes: provider.config.scopes,
+    keyFilename: provider.config.keyFilename,
+  };
+}
+
 /**
  * Vertex AI provider for Gemini, Claude, Llama, and Palm2 models.
  *
@@ -242,13 +253,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    * Public for use by integrations like Adaline Gateway.
    */
   async getClientWithCredentials() {
-    const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({
-      credentials,
-      googleAuthOptions: this.config.googleAuthOptions,
-      scopes: this.config.scopes,
-      keyFilename: this.config.keyFilename,
-    });
+    const { client } = await getGoogleClient(getVertexClientOptions(this));
     return client;
   }
 
@@ -277,20 +282,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context),
+      extractGenAIResponse,
+    );
   }
 
   private async callApiInternal(
@@ -1269,13 +1265,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
    * Helper method to get Google client with credentials support
    */
   async getClientWithCredentials() {
-    const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({
-      credentials,
-      googleAuthOptions: this.config.googleAuthOptions,
-      scopes: this.config.scopes,
-      keyFilename: this.config.keyFilename,
-    });
+    const { client } = await getGoogleClient(getVertexClientOptions(this));
     return client;
   }
 

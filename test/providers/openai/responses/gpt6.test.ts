@@ -1,3 +1,4 @@
+import { createMockFetchResponse } from '../../mockProviderResponses';
 // Register the shared Responses HTTP mocks before importing the provider.
 import './setup';
 
@@ -195,12 +196,9 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
           [{ inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, 0.0023],
         ] as const) {
           for (const deployment of [model, `prod-${model}`]) {
-            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-              data: { ...data, model: deployment },
-              cached: false,
-              status: 200,
-              statusText: 'OK',
-            });
+            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
+              createMockFetchResponse({ ...data, model: deployment }),
+            );
             const result = await new OpenAiResponsesProvider(deployment, {
               config: { apiKey: 'test-key', apiBaseUrl, ...rates },
             }).callApi('A test prompt');
@@ -275,12 +273,9 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
         [webItem, 0.31],
         [fileItem, 0.3025],
       ] as const) {
-        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-          data: payload([item]),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
+          createMockFetchResponse(payload([item])),
+        );
         const native = await new OpenAiResponsesProvider(model, {
           config: { apiKey: 'test-key', ...rates },
         }).callApi('A test prompt');
@@ -510,12 +505,7 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
             'https://openrouter.ai/api/v1',
             'https://proxy.example.test/openrouter/api/v1',
           ]) {
-            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-              data: raw,
-              cached: false,
-              status: 200,
-              statusText: 'OK',
-            });
+            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(raw));
             const result = await new OpenAiResponsesProvider(`openai/${model}`, {
               config: { apiKey: 'test-key', apiBaseUrl, stream },
             }).callApi('A benign test prompt');
@@ -567,12 +557,9 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
               ? []
               : [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }],
         };
-        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-          data,
-          cached: false,
-          status: 400,
-          statusText: 'Bad Request',
-        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
+          createMockFetchResponse(data, { status: 400, statusText: 'Bad Request' }),
+        );
         return { result: await provider.callApi('A benign prompt'), data };
       };
       for (const [text, expected] of [
@@ -672,12 +659,7 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
       ]) {
         for (const { events, refusal } of cases) {
           const raw = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
-          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-            data: raw,
-            cached: false,
-            status: 200,
-            statusText: 'OK',
-          });
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(raw));
           const result = await new OpenAiResponsesProvider(model, {
             config: { apiKey: 'test-key', apiBaseUrl, stream: true },
           }).callApi('A benign test prompt');

@@ -10,13 +10,11 @@ import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
 import { processExecutableFile } from './processors/executable';
 import { processJsFile } from './processors/javascript';
-import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
-import { processMarkdownFile } from './processors/markdown';
 import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
-import { processTxtFile } from './processors/text';
+import { processTemplateFile, processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
 
@@ -173,7 +171,7 @@ async function processPrompt(
     return processCsvPrompts(filePath, prompt);
   }
   if (extension === '.j2') {
-    return processJinjaFile(filePath, prompt);
+    return processTemplateFile(filePath, prompt);
   }
   if (extension === '.json') {
     return processJsonFile(filePath, prompt);
@@ -185,7 +183,7 @@ async function processPrompt(
     return processJsFile(filePath, prompt, functionName);
   }
   if (extension === '.md') {
-    return processMarkdownFile(filePath, prompt);
+    return processTemplateFile(filePath, prompt);
   }
   if (extension === '.py') {
     return processPythonFile(filePath, prompt, functionName);

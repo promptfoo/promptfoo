@@ -17,6 +17,11 @@ vi.mock('../../../src/cache', async (importOriginal) => ({
 const mockFetchWithCache = vi.mocked(fetchWithCache);
 
 describe('HyperbolicProvider', () => {
+  it('keeps mutable prices independent across model aliases', () => {
+    const costs = HYPERBOLIC_CHAT_MODELS.map(({ cost }) => cost);
+    expect(new Set(costs).size).toBe(costs.length);
+  });
+
   let provider: HyperbolicProvider;
   const modelName = 'deepseek-ai/DeepSeek-R1';
   const options = {

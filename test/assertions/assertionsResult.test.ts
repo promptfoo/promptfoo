@@ -14,6 +14,16 @@ import {
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../../src/types/index';
 
+const createComponentGrade = () => ({
+  index: 0,
+  result: {
+    pass: true,
+    score: 1,
+    reason: 'Component grading result',
+    tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+  },
+});
+
 vi.mock('../../src/envars');
 
 describe('AssertionsResult', () => {
@@ -933,15 +943,7 @@ describe('AssertionsResult', () => {
 
     it('does not double-count component usage returned unchanged by custom scoring', async () => {
       const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: true,
-          score: 1,
-          reason: 'Component grading result',
-          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
-        },
-      });
+      assertionsResult.addResult(createComponentGrade());
       const scoringFunction: ScoringFunction = (_scores, context) => ({
         pass: true,
         score: 0.8,
@@ -1002,15 +1004,7 @@ describe('AssertionsResult', () => {
 
     it('counts independently graded scoring usage even when token counts match components', async () => {
       const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: true,
-          score: 1,
-          reason: 'Component grading result',
-          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
-        },
-      });
+      assertionsResult.addResult(createComponentGrade());
       const scoringFunction: ScoringFunction = (_scores, context) => ({
         pass: true,
         score: 0.8,

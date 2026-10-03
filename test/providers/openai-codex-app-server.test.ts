@@ -11,6 +11,50 @@ import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
+import { waitForMessage } from './appServerTestUtils';
+
+const createNoCleanupOptions = () => ({
+  config: {
+    thread_cleanup: 'none' as const,
+  },
+});
+
+const createTracedNoCleanupOptions = () => ({
+  config: {
+    deep_tracing: true,
+    thread_cleanup: 'none' as const,
+  },
+});
+
+const createPersistentNoCleanupOptions = () => ({
+  config: {
+    persist_threads: true,
+    thread_cleanup: 'none' as const,
+  },
+});
+
+const createSingleThreadPoolOptions = () => ({
+  config: {
+    persist_threads: true,
+    thread_pool_size: 1,
+    thread_cleanup: 'none' as const,
+  },
+});
+
+const createNetworkReadPermissionGrant = () => ({
+  network: { enabled: true },
+  fileSystem: {
+    read: ['/tmp/promptfoo-fixture'],
+    write: null,
+  },
+});
+
+const createTimeoutOptions = (requestTimeoutMs: number) => ({
+  config: {
+    request_timeout_ms: requestTimeoutMs,
+    thread_cleanup: 'none' as const,
+  },
+});
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -97,18 +141,6 @@ function createMockAppServer(
         .filter(Boolean)
         .map((line) => JSON.parse(line)),
   };
-}
-
-async function waitForMessage(
-  server: MockAppServer,
-  predicate: (message: any) => boolean,
-): Promise<any> {
-  let found: any;
-  await vi.waitFor(() => {
-    found = server.messages().find(predicate);
-    expect(found).toBeTruthy();
-  });
-  return found;
 }
 
 async function flushMicrotasks(): Promise<void> {
@@ -887,11 +919,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Trace this app-server turn');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -958,9 +986,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
   it('does not reuse usage from an earlier protocol turn marker', () => {
     const spans = installSpanRecorder();
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
     const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
 
     (provider as any).startTurnSpan(state, 1);
@@ -984,9 +1010,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
   it('preserves first-turn usage that arrived before the first turn/started', () => {
     const spans = installSpanRecorder();
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
     const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
 
     // Usage can arrive via `thread/tokenUsage/updated` before the first
@@ -1013,11 +1037,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Trace usage ordering');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -1088,9 +1108,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
   it('marks a force-closed turn span ERROR when a new turn starts before the prior ends', () => {
     const spans = installSpanRecorder();
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
     const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
 
     (provider as any).startTurnSpan(state, 1);
@@ -1110,11 +1128,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Return structured output');
 
@@ -1678,13 +1692,7 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       },
     };
-    const permissionGrant = {
-      network: { enabled: true },
-      fileSystem: {
-        read: ['/tmp/promptfoo-fixture'],
-        write: null,
-      },
-    };
+    const permissionGrant = createNetworkReadPermissionGrant();
     const elicitationResponse = {
       action: 'accept' as const,
       content: { project: 'promptfoo', severity: 'low' },
@@ -1747,10 +1755,7 @@ describe('OpenAICodexAppServerProvider', () => {
         turnId: 'turn_advanced_policy',
         itemId: 'perm_advanced_policy',
         reason: 'Needs fixture access',
-        permissions: {
-          network: { enabled: true },
-          fileSystem: { read: ['/tmp/promptfoo-fixture'], write: null },
-        },
+        permissions: createNetworkReadPermissionGrant(),
       },
     });
     const permissionsApproval = await waitForMessage(
@@ -2613,13 +2618,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_pool_size: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createSingleThreadPoolOptions());
 
     const firstResultPromise = provider.callApi('First cached prompt');
 
@@ -2702,12 +2701,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createPersistentNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Reusable cached prompt');
     const firstInitialize = await waitForMessage(
@@ -2795,12 +2789,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createPersistentNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Pending persistent thread');
     const firstInitialize = await waitForMessage(
@@ -2957,13 +2946,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_pool_size: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createSingleThreadPoolOptions());
 
     const firstResultPromise = provider.callApi('Active cached prompt one');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -3046,13 +3029,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_pool_size: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createSingleThreadPoolOptions());
 
     const firstResultPromise = provider.callApi('Concurrent cached prompt one');
     const secondResultPromise = provider.callApi('Concurrent cached prompt two');
@@ -3137,12 +3114,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createPersistentNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Shared cached prompt');
     const secondResultPromise = provider.callApi('Shared cached prompt');
@@ -3222,12 +3194,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const abortController = new AbortController();
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createPersistentNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Shared aborted thread start', undefined, {
       abortSignal: abortController.signal,
@@ -3649,12 +3616,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const abortController = new AbortController();
     const removeAbortListener = vi.spyOn(abortController.signal, 'removeEventListener');
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        request_timeout_ms: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTimeoutOptions(1));
 
     try {
       const resultPromise = provider.callApi('Timeout thread start', undefined, {
@@ -3691,12 +3653,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        request_timeout_ms: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTimeoutOptions(1));
 
     try {
       const timedOutResultPromise = provider.callApi('Timeout before thread start completes');
@@ -3774,12 +3731,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const abortController = new AbortController();
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        request_timeout_ms: 1_000,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTimeoutOptions(1_000));
 
     const activeResultPromise = provider.callApi('Active turn survives unrelated abort');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -4010,12 +3962,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const abortController = new AbortController();
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        request_timeout_ms: 1_000,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTimeoutOptions(1_000));
 
     const abortedResultPromise = provider.callApi(
       'Abort before thread start completes',
@@ -4082,11 +4029,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     try {
       const firstResultPromise = provider.callApi('First attempt', {
@@ -4329,11 +4272,7 @@ describe('OpenAICodexAppServerProvider', () => {
     };
     attachedProvider.self = attachedProvider;
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Rendered config', {
       vars: {
@@ -4541,11 +4480,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     try {
       const firstResultPromise = provider.callApi('Reusable timeout prompt one', {
@@ -4626,11 +4561,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Crash mid-turn');
 
@@ -4661,12 +4592,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        deep_tracing: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Deep tracing crash first');
     const secondResultPromise = provider.callApi('Deep tracing crash second');
@@ -4741,11 +4667,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Recover after retryable app-server error');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -4888,11 +4810,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Run a command with delayed output');
 
@@ -4985,11 +4903,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Run a command with late trailing output');
 
@@ -5073,11 +4987,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Run a command with interleaved output');
 
@@ -5332,11 +5242,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Run a command with noisy output');
 
@@ -5451,11 +5357,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Inspect command output');
 
@@ -5614,11 +5516,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Use a repo skill');
 
@@ -5690,11 +5588,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Try a repo skill');
 
@@ -5759,12 +5653,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        deep_tracing: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
 
     const resultPromise = provider.callApi('Flush native spans');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -5816,9 +5705,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { deep_tracing: true, thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
     const resultPromise = provider.callApi('Inspect managed tracing');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
     server.send({ id: initialize.id, result: {} });
@@ -5866,9 +5753,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { deep_tracing: true, thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
     const resultPromise = provider.callApi('Use legacy app-server');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
     server.send({ id: initialize.id, result: {} });
@@ -5909,9 +5794,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { deep_tracing: true, thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
     const resultPromise = provider.callApi('Inspect disabled managed tracing');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
     server.send({ id: initialize.id, result: {} });
@@ -5956,9 +5839,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { deep_tracing: true, thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
     const resultPromise = provider.callApi('Wait for delayed exporter flush');
     const initialize = await waitForMessageWithoutTimers(
       server,
@@ -6010,12 +5891,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        deep_tracing: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
 
     const resultPromise = provider.callApi('Escalate stalled shutdown');
     const initialize = await waitForMessageWithoutTimers(
@@ -6062,11 +5938,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -6121,11 +5993,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -6153,9 +6021,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -6186,9 +6052,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -6207,9 +6071,7 @@ describe('OpenAICodexAppServerProvider', () => {
   });
 
   it('returns early when abort signal is already aborted before callApi starts', async () => {
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const controller = new AbortController();
     controller.abort();
@@ -6400,9 +6262,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');

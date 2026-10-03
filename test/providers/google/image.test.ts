@@ -1,7 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GoogleImageProvider } from '../../../src/providers/google/image';
-import { mockProcessEnv } from '../../util/utils';
+import { createGoogleImageEnvCleanup, mockProcessEnv } from '../../util/utils';
+
+const createImagePredictionResponse = () => ({
+  status: 200,
+  data: {
+    predictions: [
+      {
+        bytesBase64Encoded: 'base64data',
+        mimeType: 'image/png',
+      },
+    ],
+  },
+  cached: false,
+});
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -42,13 +55,7 @@ describe('GoogleImageProvider', async () => {
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
-  afterEach(() => {
-    mockProcessEnv({ GOOGLE_API_KEY: undefined });
-    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
-    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
-    mockProcessEnv({ GEMINI_API_KEY: undefined });
-  });
+  afterEach(createGoogleImageEnvCleanup());
 
   it('should construct with model name', () => {
     const provider = new GoogleImageProvider('imagen-3.0-generate-001');
@@ -60,18 +67,7 @@ describe('GoogleImageProvider', async () => {
     mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
     const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
-    mockFetchWithCache.mockResolvedValueOnce({
-      status: 200,
-      data: {
-        predictions: [
-          {
-            bytesBase64Encoded: 'base64data',
-            mimeType: 'image/png',
-          },
-        ],
-      },
-      cached: false,
-    });
+    mockFetchWithCache.mockResolvedValueOnce(createImagePredictionResponse());
 
     const result = await provider.callApi('Test prompt');
 
@@ -244,13 +240,7 @@ describe('GoogleImageProvider', async () => {
 
     for (const { model, expectedCost } of testCases) {
       const provider = new GoogleImageProvider(model);
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          predictions: [{ bytesBase64Encoded: 'base64data', mimeType: 'image/png' }],
-        },
-        cached: false,
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createImagePredictionResponse());
 
       const result = await provider.callApi('Test prompt');
       expect(result.cost).toBe(expectedCost);
@@ -379,18 +369,7 @@ describe('GoogleImageProvider', async () => {
 
       const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          predictions: [
-            {
-              bytesBase64Encoded: 'base64data',
-              mimeType: 'image/png',
-            },
-          ],
-        },
-        cached: false,
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createImagePredictionResponse());
 
       const result = await provider.callApi('Test prompt');
 

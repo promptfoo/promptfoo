@@ -1,6 +1,10 @@
+import type { GroqProviderOptions } from './types';
+
 /**
  * Groq-specific utility functions shared between Chat and Responses providers.
  */
+
+const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
 
 /**
  * Groq reasoning models that support extended thinking capabilities.
@@ -23,4 +27,15 @@ export function isGroqReasoningModel(modelName: string): boolean {
  */
 export function groqSupportsTemperature(modelName: string): boolean {
   return isGroqReasoningModel(modelName);
+}
+
+export function getGroqProviderOptions(providerOptions: GroqProviderOptions) {
+  return {
+    ...providerOptions,
+    config: {
+      ...providerOptions.config,
+      apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'GROQ_API_KEY',
+      apiBaseUrl: providerOptions.config?.apiBaseUrl || GROQ_API_BASE_URL,
+    },
+  };
 }
