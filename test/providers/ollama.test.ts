@@ -42,6 +42,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
     });
   });
@@ -61,6 +62,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response more',
     });
   });
@@ -274,7 +276,14 @@ describe('OllamaCompletionProvider', () => {
     // The completion path builds its response separately from the chat path, so it
     // needs its own cache-hit coverage.
     expect(result.cached).toBe(true);
-    expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
+    expect(result.tokenUsage).toEqual({
+      prompt: 10,
+      completion: 20,
+      cached: 30,
+      total: 30,
+      numRequests: 0,
+      incurredTokenUsage: {},
+    });
   });
 
   it('should send format as a top-level parameter on the completion path too', async () => {
@@ -375,7 +384,7 @@ describe('OllamaCompletionProvider', () => {
   it.each([
     [{ bustCache: true }, true],
     [{ debug: true }, true],
-    [{}, undefined],
+    [{}, false],
   ])('should forward bustCache %j to fetchWithCache', async (extra, expected) => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"response":"hi","done":true}\n',
@@ -441,6 +450,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response more',
       tokenUsage: {
         prompt: 26,
@@ -466,6 +476,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
     });
   });
@@ -485,6 +496,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
       tokenUsage: {
         prompt: 26,
@@ -510,6 +522,7 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
       tokenUsage: {
         prompt: 0,
@@ -551,6 +564,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
     });
   });
@@ -570,6 +584,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response more',
     });
   });
@@ -771,7 +786,14 @@ describe('OllamaChatProvider', () => {
     // src/providers/AGENTS.md requires the cached flag; without it the evaluator never
     // takes its "Skipping delay because response is cached" branch.
     expect(result.cached).toBe(true);
-    expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
+    expect(result.tokenUsage).toEqual({
+      prompt: 10,
+      completion: 20,
+      cached: 30,
+      total: 30,
+      numRequests: 0,
+      incurredTokenUsage: {},
+    });
   });
 
   it('should merge passthrough.options instead of clobbering computed options', async () => {
@@ -893,7 +915,7 @@ describe('OllamaChatProvider', () => {
       numRequests: 1,
       completionDetails: { cacheReadInputTokens: 53 },
     });
-    expect(result.cached).toBeUndefined();
+    expect(result.cached).toBe(false);
   });
 
   it('should warn when a completion-only key is set on a chat provider', async () => {
@@ -1144,6 +1166,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response more',
       tokenUsage: {
         prompt: 26,
@@ -1169,6 +1192,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
     });
   });
@@ -1188,6 +1212,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
       tokenUsage: {
         prompt: 26,
@@ -1213,6 +1238,7 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
+      cached: false,
       output: 'test response',
       tokenUsage: {
         prompt: 0,
@@ -1593,6 +1619,36 @@ describe('Ollama provider tracing', () => {
   });
 
   it.each([
+    [
+      OllamaCompletionProvider,
+      '{"response":"cached","done":true,"prompt_eval_count":6,"eval_count":4}\n',
+    ],
+    [
+      OllamaChatProvider,
+      '{"message":{"content":"cached"},"done":true,"prompt_eval_count":6,"eval_count":4}\n',
+    ],
+  ])('records cached usage in %s spans', async (Provider, data) => {
+    const setAttribute = vi.fn();
+    const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+      startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
+        callback({ setAttribute, setStatus: vi.fn(), recordException: vi.fn(), end: vi.fn() }),
+    } as any);
+    try {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data,
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+      await new Provider('llama3.3').callApi('hello');
+      expect(setAttribute).toHaveBeenCalledWith('promptfoo.usage.cached_response_tokens', 10);
+    } finally {
+      getTracer.mockRestore();
+    }
+  });
+
+  it.each([
     {
       operation: 'completion',
       Provider: OllamaCompletionProvider,
@@ -1749,6 +1805,7 @@ describe('OllamaEmbeddingProvider', () => {
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result).toEqual({
+      cached: false,
       embedding: [0.1, 0.2, 0.3],
       // numRequests must be explicit: the similarity matcher accumulates usage without
       // inferring a request count, so omitting it reports zero embedding requests.
@@ -1773,7 +1830,13 @@ describe('OllamaEmbeddingProvider', () => {
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result.cached).toBe(true);
-    expect(result.tokenUsage).toEqual({ cached: 7, total: 7 });
+    expect(result.tokenUsage).toEqual({
+      prompt: 7,
+      cached: 7,
+      total: 7,
+      numRequests: 0,
+      incurredTokenUsage: {},
+    });
   });
 
   it('should default truncate to false so over-long input fails loudly', async () => {

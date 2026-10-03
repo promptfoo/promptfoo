@@ -5,7 +5,10 @@ import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import * as remoteGrading from '../../src/remoteGrading';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
@@ -36,6 +39,40 @@ describe('matchesSimilarity', () => {
   afterEach(() => {
     cliState.selectedProviderConfigs = undefined;
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    { tracing: false, cancellation: true },
+    { tracing: true, cancellation: false },
+    { tracing: true, cancellation: true },
+  ])('forwards embedding call context: %j', async ({ tracing, cancellation }) => {
+    const abortSignal = cancellation ? new AbortController().signal : undefined;
+    const tracedContext = tracing
+      ? {
+          prompt: { raw: 'fixture', label: 'embedding' },
+          vars: {},
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        }
+      : undefined;
+    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+      async (_options, invoke) => invoke(tracedContext),
+    );
+    await withProviderCallExecutionContext({ abortSignal }, () =>
+      withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => tracedContext?.traceparent,
+          withGraderSpan: async (_options, invoke) => invoke(),
+          withProviderSpan: providerSpan,
+        },
+        () => matchesSimilarity('Expected output', 'Sample output', 0.5),
+      ),
+    );
+    const calls = vi.mocked(DefaultEmbeddingProvider.callEmbeddingApi).mock.calls;
+    expect(calls).toHaveLength(2);
+    for (const [, context, options] of calls) {
+      expect(context).toBe(tracedContext);
+      expect(options).toEqual(abortSignal ? { abortSignal } : undefined);
+    }
   });
 
   it('should pass when similarity is above the threshold', async () => {

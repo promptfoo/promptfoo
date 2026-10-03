@@ -1,7 +1,42 @@
 import { getEnvBool, getEnvInt } from '../envars';
 import { loadYaml } from '../util/yamlLoad';
 
-import type { ApiProvider } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
+
+/** An explicit bustCache setting takes precedence over the legacy debug fallback. */
+export function shouldBustProviderCache(
+  context?: Pick<CallApiContextParams, 'bustCache' | 'debug'>,
+): boolean {
+  return context?.bustCache ?? context?.debug ?? false;
+}
+
+/**
+ * Mark cached responses without changing reported usage or cost. The evaluator
+ * uses the cache marker to calculate incurred usage; missing counts stay unknown.
+ */
+export function withResponseCacheMetadata<T extends ProviderResponse | ProviderEmbeddingResponse>(
+  response: T,
+  cached: boolean,
+): Omit<T, 'cached' | 'tokenUsage'> & Pick<ProviderResponse, 'tokenUsage'> & { cached: boolean } {
+  return {
+    ...response,
+    cached,
+    ...(cached &&
+      response.tokenUsage && {
+        tokenUsage: {
+          ...response.tokenUsage,
+          ...(response.tokenUsage.total !== undefined && { cached: response.tokenUsage.total }),
+          numRequests: 0,
+          incurredTokenUsage: {},
+        },
+      }),
+  };
+}
 
 /** Returns the complete model suffix after the given number of provider/type segments. */
 export function modelNameFromProviderPath(providerPath: string, segments: number): string {

@@ -12,7 +12,12 @@ import {
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callGradingProvider, callProviderWithContext, getAndCheckProvider } from './providers';
+import {
+  callGradingProvider,
+  callProviderWithContext,
+  getAndCheckProvider,
+  getGradingProviderCallOptions,
+} from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
@@ -81,12 +86,18 @@ export async function matchesAnswerRelevance(
   );
 
   const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
-  const inputEmbeddingResp = await callGradingProvider(
-    embeddingProvider,
-    'answer-relevance.embedding',
-    () => callEmbeddingApi(input),
-    { callContext: providerCallContext, operationName: 'embeddings' },
-  );
+  const callApiOptions = getGradingProviderCallOptions();
+  const embed = (text: string) =>
+    callGradingProvider(
+      embeddingProvider,
+      'answer-relevance.embedding',
+      (context) =>
+        context || callApiOptions
+          ? callEmbeddingApi(text, context, callApiOptions)
+          : callEmbeddingApi(text),
+      { callContext: providerCallContext, operationName: 'embeddings' },
+    );
+  const inputEmbeddingResp = await embed(input);
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
     return graderFail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
@@ -97,12 +108,7 @@ export async function matchesAnswerRelevance(
   const questionsWithScores: { question: string; similarity: number }[] = [];
 
   for (const question of candidateQuestions) {
-    const resp = await callGradingProvider(
-      embeddingProvider,
-      'answer-relevance.embedding',
-      () => callEmbeddingApi(question),
-      { callContext: providerCallContext, operationName: 'embeddings' },
-    );
+    const resp = await embed(question);
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return graderFail(resp.error || 'No embedding', tokensUsed);

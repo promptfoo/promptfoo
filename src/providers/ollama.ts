@@ -4,7 +4,13 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
+import {
+  getRequestTimeoutMs,
+  parseChatPrompt,
+  shouldBustProviderCache,
+  transformTools,
+  withResponseCacheMetadata,
+} from './shared';
 
 import type {
   ApiProvider,
@@ -468,28 +474,18 @@ function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
     }));
 }
 
-/**
- * Extracts token usage from the chunk carrying `done: true`, following the repo-wide
- * convention that a cache hit reports only `cached`/`total` and no new request
- * (see getTokenUsage in src/providers/openai/util.ts).
- */
-function extractOllamaTokenUsage(
-  finalChunk: {
-    prompt_eval_count?: number;
-    prompt_eval_cached_count?: number;
-    eval_count?: number;
-  },
-  cached: boolean,
-): Partial<TokenUsage> | undefined {
+/** Extract reported usage from the final stream chunk before applying cache metadata. */
+function extractOllamaTokenUsage(finalChunk: {
+  prompt_eval_count?: number;
+  prompt_eval_cached_count?: number;
+  eval_count?: number;
+}): Partial<TokenUsage> | undefined {
   if (finalChunk.prompt_eval_count === undefined && finalChunk.eval_count === undefined) {
     return undefined;
   }
   const prompt = finalChunk.prompt_eval_count || 0;
   const completion = finalChunk.eval_count || 0;
   const total = prompt + completion;
-  if (cached) {
-    return { cached: total, total };
-  }
   // Ollama 0.34+ reports prompt tokens served from its own KV cache. This is a server-side
   // prefix cache hit, not a promptfoo cache hit, so it belongs in completionDetails rather
   // than tokenUsage.cached (which would make the row look like a promptfoo cache hit).
@@ -503,10 +499,6 @@ function extractOllamaTokenUsage(
       numRequests: 1,
     };
   }
-  // Explicit: accumulateTokenUsage defaults incrementRequests to false, and matcher
-  // paths (src/matchers/rag.ts, similarity.ts) call the two-arg form, so an omitted
-  // count reports 0 grader requests. Verified this does not double-count on the
-  // evaluator path, which infers 1 when absent.
   return { prompt, completion, total, numRequests: 1 };
 }
 
@@ -562,11 +554,7 @@ export class OllamaCompletionProvider implements ApiProvider {
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
       const result: GenAISpanResult = {};
       if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
+        result.tokenUsage = response.tokenUsage;
       }
       if (response.finishReason) {
         result.finishReasons = [response.finishReason];
@@ -616,7 +604,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'text',
-        context?.bustCache ?? context?.debug,
+        shouldBustProviderCache(context),
       );
     } catch (err) {
       return {
@@ -664,16 +652,12 @@ export class OllamaCompletionProvider implements ApiProvider {
       // Extract token usage from the final chunk (where done: true)
       const finalChunk = lines.find((chunk: OllamaCompletionJsonL) => chunk.done);
       const finishReason = normalizeFinishReason(finalChunk?.done_reason);
-      const tokenUsage = finalChunk
-        ? extractOllamaTokenUsage(finalChunk, response.cached)
-        : undefined;
+      const tokenUsage = finalChunk ? extractOllamaTokenUsage(finalChunk) : undefined;
 
-      return {
-        output,
-        ...(finishReason && { finishReason }),
-        ...(tokenUsage && { tokenUsage }),
-        ...(response.cached && { cached: true }),
-      };
+      return withResponseCacheMetadata(
+        { output, ...(finishReason && { finishReason }), ...(tokenUsage && { tokenUsage }) },
+        response.cached,
+      );
     } catch (err) {
       return {
         error: `Ollama API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
@@ -722,11 +706,7 @@ export class OllamaChatProvider implements ApiProvider {
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
       const result: GenAISpanResult = {};
       if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
+        result.tokenUsage = response.tokenUsage;
       }
       if (response.finishReason) {
         result.finishReasons = [response.finishReason];
@@ -784,7 +764,7 @@ export class OllamaChatProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'text',
-        context?.bustCache ?? context?.debug,
+        shouldBustProviderCache(context),
       );
     } catch (err) {
       return {
@@ -859,16 +839,12 @@ export class OllamaChatProvider implements ApiProvider {
       output = applyOllamaThinking(output, thinking, this.config.showThinking);
 
       // Extract token usage from the final chunk (where done: true)
-      const tokenUsage = finalChunk
-        ? extractOllamaTokenUsage(finalChunk, response.cached)
-        : undefined;
+      const tokenUsage = finalChunk ? extractOllamaTokenUsage(finalChunk) : undefined;
 
-      return {
-        output,
-        ...(finishReason && { finishReason }),
-        ...(tokenUsage && { tokenUsage }),
-        ...(response.cached && { cached: true }),
-      };
+      return withResponseCacheMetadata(
+        { output, ...(finishReason && { finishReason }), ...(tokenUsage && { tokenUsage }) },
+        response.cached,
+      );
     } catch (err) {
       return {
         error: `Ollama API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
@@ -878,7 +854,10 @@ export class OllamaChatProvider implements ApiProvider {
 }
 
 export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params = {
       model: this.modelName,
@@ -918,6 +897,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         },
         getRequestTimeoutMs(),
         'json',
+        shouldBustProviderCache(context),
       );
     } catch (err) {
       return {
@@ -949,23 +929,14 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         throw new Error('No embedding found in Ollama embeddings API response');
       }
       const promptTokens = response.data.prompt_eval_count;
-      // A cache hit is not a new request: report the tokens as cached so repeated
-      // similarity assertions are not counted as fresh usage (src/providers/AGENTS.md).
       const tokenUsage =
         promptTokens === undefined
           ? undefined
-          : response.cached
-            ? { cached: promptTokens, total: promptTokens }
-            : // accumulateTokenUsage defaults incrementRequests to false, and the
-              // similarity matcher calls it with two args, so an omitted numRequests
-              // reports zero. Other embedding providers set it explicitly too
-              // (src/providers/voyage.ts:119, src/providers/cohere.ts:211).
-              { prompt: promptTokens, total: promptTokens, numRequests: 1 };
-      return {
-        embedding,
-        ...(tokenUsage && { tokenUsage }),
-        ...(response.cached && { cached: true }),
-      };
+          : { prompt: promptTokens, total: promptTokens, numRequests: 1 };
+      return withResponseCacheMetadata(
+        { embedding, ...(tokenUsage && { tokenUsage }) },
+        response.cached,
+      );
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
