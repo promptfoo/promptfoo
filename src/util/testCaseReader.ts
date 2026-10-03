@@ -511,23 +511,44 @@ async function readTestWithEnv(
   isDefaultTest: boolean,
   env: EnvOverrides | undefined,
   loadProviders = true,
-  // Bare vars-file references in imported rows use the tests file's directory.
-  varsBasePath = basePath,
+  // Bare vars-file references and providers in imported rows use the tests file's directory.
+  sourceBasePath = basePath,
 ): Promise<TestCase> {
   if (typeof test === 'object' && isRemoteTestCase(test)) {
     return test as TestCase;
   }
   let testCase: TestCase;
-  let effectiveBasePath = basePath;
+  let effectiveBasePath = sourceBasePath;
 
   if (typeof test === 'string') {
-    const testFilePath = path.resolve(basePath, test);
+    const testFilePath = path.resolve(sourceBasePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
-    testCase = await loadTestWithVars(test, varsBasePath);
+    testCase = await loadTestWithVars(test, sourceBasePath);
+  }
+
+  const providerId =
+    typeof testCase.provider === 'string' ? testCase.provider : testCase.provider?.id;
+  // Provider construction is deferred until after parsing. Keep the source directory
+  // in replayable rows without rewriting bare provider IDs.
+  if (
+    effectiveBasePath !== basePath &&
+    typeof providerId === 'string' &&
+    !isApiProvider(testCase.provider)
+  ) {
+    testCase.metadata = {
+      ...testCase.metadata,
+      __promptfoo: {
+        ...testCase.metadata?.__promptfoo,
+        providerBasePath: path.resolve(effectiveBasePath),
+      },
+    };
+  }
+  if (typeof testCase.metadata?.__promptfoo?.providerBasePath === 'string') {
+    effectiveBasePath = testCase.metadata.__promptfoo.providerBasePath;
   }
 
   if (!loadProviders) {
@@ -980,7 +1001,25 @@ function collectNestedFileReferences(
         ? resolveTestsWatchPaths([{ vars: row.vars }], varsBasePath)
         : [],
     );
-    return [...collectConfigFileReferences(parsed, basePath), ...varsFiles];
+    // Script providers use the row's directory; provider config files and inline
+    // vars still use the config directory. Rewrite only the script ID for collection.
+    const scopedRows = rows.map((row) => {
+      const provider = row?.provider;
+      const id = typeof provider === 'string' ? provider : provider?.id;
+      if (typeof id !== 'string' || !id.startsWith('file://')) {
+        return row;
+      }
+      const script = stripFunctionSuffix(renderEnvOnlyInObject(id).slice('file://'.length));
+      if (!script.endsWith('.py') && !isJavascriptFile(script)) {
+        return row;
+      }
+      const resolvedId = resolveVarsFileReferences(id, varsBasePath);
+      return {
+        ...row,
+        provider: typeof provider === 'string' ? resolvedId : { ...provider, id: resolvedId },
+      };
+    });
+    return [...collectConfigFileReferences(scopedRows, basePath), ...varsFiles];
   } catch {
     return [];
   }
