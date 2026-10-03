@@ -617,6 +617,8 @@ In mixed text, JSON calls must start and end on their own lines and may span mul
 
 Complete calls inside malformed JSON blocks can also be recovered. If malformed output exceeds limits on parsing work or unmatched JSON delimiters, the assertion fails with an explanation instead of reporting a partial F1 score. This failure also applies to `not-tool-call-f1`.
 
+`not-tool-call-f1` passes when F1 is below the assertion threshold and reports `1 - F1` as its score. Weighted and test-level threshold calculations use this inverted score.
+
 For example, this OpenAI Responses item matches `value: [get_weather]`:
 
 ```json

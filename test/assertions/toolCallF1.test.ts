@@ -786,9 +786,8 @@ describe('handleToolCallF1', () => {
 
       const result = handleToolCallF1(params);
 
-      // F1=1.0 would normally pass, but inverse makes it fail
       expect(result.pass).toBe(false);
-      expect(result.score).toBe(1);
+      expect(result.score).toBe(0);
     });
 
     it('should pass inverse assertion when F1 is below threshold', () => {
@@ -799,9 +798,29 @@ describe('handleToolCallF1', () => {
 
       const result = handleToolCallF1(params);
 
-      // F1=0 would normally fail, but inverse makes it pass
       expect(result.pass).toBe(true);
-      expect(result.score).toBe(0);
+      expect(result.score).toBe(1);
+    });
+
+    it('inverts a partial tool match score', () => {
+      // expected {get_weather, search}, called {get_weather, calculator, search}:
+      // precision=2/3, recall=1 -> F1=0.8
+      const output = {
+        tool_calls: [
+          { function: { name: 'get_weather', arguments: '{}' } },
+          { function: { name: 'calculator', arguments: '{}' } },
+          { function: { name: 'search', arguments: '{}' } },
+        ],
+      };
+      const params = createParams(output, ['get_weather', 'search'], {
+        inverse: true,
+        threshold: 0.5,
+      });
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeCloseTo(0.2);
     });
   });
 
