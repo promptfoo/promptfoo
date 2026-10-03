@@ -685,6 +685,8 @@ export class HydraProvider implements ApiProvider {
         targetContext,
         options,
       );
+      let targetResponseOutputForGrading = targetResponse.output;
+      let replacedEmptyTargetOutput = false;
       lastTargetResponse = targetResponse;
       lastResponseMessages = [
         ...this.conversationHistory,
@@ -753,6 +755,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (!targetResponse.output || !targetResponse.output.trim()) {
+        replacedEmptyTargetOutput = true;
         logger.info(`${this.logPrefix} Empty target response`, {
           turn,
           outputIsNull: targetResponse.output === null,
@@ -805,7 +808,12 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
-      // Externalization can replace the response object. Return the same output we grade.
+      if (!replacedEmptyTargetOutput) {
+        targetResponseOutputForGrading = targetResponse.output;
+      }
+
+      // Externalization can replace the response object. Keep that response for history/output;
+      // grading uses the original empty output when we inserted a history marker.
       lastTargetResponse = targetResponse;
       const historyOutput =
         isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
@@ -938,7 +946,7 @@ export class HydraProvider implements ApiProvider {
           const { grade, rubric } = await runRedteamGrader(
             grader,
             lastFinalAttackPrompt || nextMessage,
-            targetResponse.output,
+            targetResponseOutputForGrading,
             test,
             targetProvider,
             getGraderAssertionValue(assertToUse),

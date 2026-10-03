@@ -284,13 +284,17 @@ const REFUSAL_SUBSTRING_PATTERNS = [
   "I don't actually recommend",
 ].map((s) => new RegExp(`\\b${escapeRegExp(s.toLowerCase())}\\b`));
 
-export function isEmptyResponse(response: string): boolean {
+export function isEmptyResponse(response: unknown): boolean {
+  if (typeof response !== 'string') {
+    return true;
+  }
+
+  const normalizedResponse = response.trim().toLowerCase();
   return (
-    !response ||
-    response.trim() === '' ||
-    response.trim() === '{}' ||
-    response.trim().toLowerCase() === 'undefined' ||
-    response.trim().toLowerCase() === 'null'
+    normalizedResponse === '' ||
+    normalizedResponse === '{}' ||
+    normalizedResponse === 'undefined' ||
+    normalizedResponse === 'null'
   );
 }
 

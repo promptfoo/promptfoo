@@ -434,6 +434,17 @@ export abstract class RedteamGraderBase {
     return [];
   }
 
+  protected validateTargetResponse(
+    llmOutput: unknown,
+    gradingContext?: RedteamGradingContext,
+  ): void {
+    const imagesForGrading =
+      gradingContext?.imageOutputs ?? gradingContext?.providerResponse?.images;
+    if (!imagesForGrading?.length && isEmptyResponse(llmOutput)) {
+      throw new Error('Target provider returned an empty or nullish response');
+    }
+  }
+
   async getResult(
     prompt: string,
     llmOutput: string,
@@ -454,6 +465,7 @@ export abstract class RedteamGraderBase {
       imageOutputs,
       ...templateGradingContext
     } = gradingContext ?? {};
+    this.validateTargetResponse(llmOutput, gradingContext);
 
     const providerId = provider?.id?.();
     const providerTools = provider?.config?.tools;

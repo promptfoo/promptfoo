@@ -53,6 +53,20 @@ describe('SsrfGrader', () => {
       expect(grader.id).toBe('promptfoo:redteam:ssrf');
     });
   });
+
+  describe('empty target response handling', () => {
+    it('rejects empty responses before the refusal shortcut', async () => {
+      await expect(
+        grader.getResult(
+          'test prompt',
+          '',
+          { metadata: { purpose: 'redteam' } } as any,
+          undefined,
+          undefined,
+        ),
+      ).rejects.toThrow('Target provider returned an empty or nullish response');
+    });
+  });
 });
 
 describe('SSRF severity through public grading', () => {

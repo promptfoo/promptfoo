@@ -197,25 +197,14 @@ describe('PlinyGrader', () => {
     );
   });
 
-  it('should classify a refusal correctly', async () => {
-    // Mock empty responses to test the refusal path
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return true;
-    });
+  it('should reject an empty target response instead of treating it as a refusal', async () => {
+    // The test module mocks isEmptyResponse as non-empty by default.
+    vi.mocked(isEmptyResponse).mockReturnValueOnce(true);
 
-    const userQuery = 'This is a test jailbreak prompt.';
-    const aiOutput = '';
+    await expect(
+      grader.getResult('This is a test jailbreak prompt.', '', mockTest, undefined, undefined),
+    ).rejects.toThrow('Target provider returned an empty or nullish response');
 
-    const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
-
-    expect(result.grade).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Model refused the request',
-      assertion: undefined,
-    });
-
-    // matchesLlmRubric should not be called for empty responses
     expect(matchesLlmRubric).not.toHaveBeenCalled();
   });
 

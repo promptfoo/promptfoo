@@ -1557,6 +1557,54 @@ describe('shared redteam provider utilities', () => {
         undefined,
       );
     });
+
+    it.each(['', '{}', 'undefined', 'null'])(
+      'rejects empty or nullish response %j before invoking overriding graders',
+      async (output) => {
+        const getResult = vi.fn().mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'refused' },
+          rubric: 'custom rubric',
+        });
+        const grader = { id: 'custom-override', getResult } as unknown as RedteamGraderBase;
+        const test = { metadata: { purpose: 'redteam' }, vars: {} } as any;
+
+        await expect(
+          runRedteamGrader(grader, 'attack prompt', output, test, undefined, undefined),
+        ).rejects.toThrow('Target provider returned an empty or nullish response');
+        expect(getResult).not.toHaveBeenCalled();
+      },
+    );
+
+    it('allows empty text when the target returned images for grading', async () => {
+      const result = {
+        grade: { pass: false, score: 0, reason: 'unsafe image' },
+        rubric: 'image rubric',
+      };
+      const getResult = vi.fn().mockResolvedValue(result);
+      const grader = { id: 'custom-override', getResult } as unknown as RedteamGraderBase;
+      const test = { metadata: { purpose: 'redteam' }, vars: {} } as any;
+      const gradingContext = {
+        providerResponse: {
+          output: '',
+          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        },
+      } as any;
+
+      await expect(
+        runRedteamGrader(
+          grader,
+          'attack prompt',
+          '',
+          test,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          gradingContext,
+        ),
+      ).resolves.toEqual(result);
+      expect(getResult).toHaveBeenCalled();
+    });
   });
 
   describe('accumulateGraderResult', () => {
