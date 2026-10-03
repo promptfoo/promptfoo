@@ -371,6 +371,34 @@ describe('AzureResponsesProvider', () => {
       });
       expect(body.text.verbosity).toBeUndefined();
     });
+
+    it('translates chat-format content parts into Responses parts', async () => {
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      const body = await provider.getAzureResponsesBody(
+        JSON.stringify([
+          { role: 'assistant', content: [{ type: 'text', text: 'I can identify colors.' }] },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What color is this?' },
+              { type: 'image_url', image_url: { url: 'https://x/y.png', detail: 'low' } },
+            ],
+          },
+        ]),
+      );
+
+      expect(body.input).toEqual([
+        { role: 'assistant', content: [{ type: 'input_text', text: 'I can identify colors.' }] },
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'What color is this?' },
+            { type: 'input_image', image_url: 'https://x/y.png', detail: 'low' },
+          ],
+        },
+      ]);
+    });
   });
 
   describe('callApi', () => {
@@ -484,6 +512,60 @@ describe('AzureResponsesProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
       expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 500 });
     });
+
+    it.each([
+      {
+        modelName: 'gpt-5.6',
+        promptConfig: {},
+        expectedCost: 0.02,
+        requestedModel: 'my-deployment',
+      },
+      {
+        modelName: 'gpt-4.1',
+        promptConfig: { modelName: 'gpt-5.6' },
+        expectedCost: 0.02,
+        requestedModel: 'my-deployment',
+      },
+      {
+        modelName: 'gpt-5.6',
+        promptConfig: { modelName: 'gpt-4.1' },
+        expectedCost: 0.006,
+        requestedModel: 'my-deployment',
+      },
+      {
+        modelName: 'gpt-5.6',
+        promptConfig: { passthrough: { model: 'gpt-4.1' } },
+        expectedCost: 0.006,
+        requestedModel: 'gpt-4.1',
+      },
+    ])(
+      'prices an aliased deployment with its effective model: $promptConfig',
+      async ({ modelName, promptConfig, expectedCost, requestedModel }) => {
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            output: [
+              { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+            ],
+            usage: { input_tokens: 1_000, output_tokens: 500 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = new AzureResponsesProvider('my-deployment', { config: { modelName } });
+
+        const result = await provider.callApi('What is 2+2?', {
+          vars: {},
+          prompt: { raw: 'What is 2+2?', label: 'test', config: promptConfig },
+        });
+
+        expect(result.error).toBeUndefined();
+        expect(result.cost).toBeCloseTo(expectedCost, 12);
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(body.model).toBe(requestedModel);
+        expect(body).not.toHaveProperty('modelName');
+      },
+    );
 
     it('applies the cached-input rate from Responses usage details', async () => {
       mockFetchWithCache.mockResolvedValue({

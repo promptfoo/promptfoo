@@ -28,7 +28,7 @@ import {
   isOpenRouterEndpoint,
 } from '../openrouterBilling';
 import { ResponsesProcessor } from '../responses/index';
-import { normalizeResponsesInput } from '../responses/input';
+import { parseResponsesInput } from '../responses/input';
 import { getResponsesTokenUsage } from '../responses/processor';
 import { getResponsesOutputText, readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
@@ -1016,20 +1016,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...context?.prompt?.config,
     };
 
-    // Chat-format content parts are translated to their Responses equivalents so multimodal
-    // prompts authored for the chat API work here too (the Responses API rejects
-    // `type: "text"` / `"image_url"` outright).
-    let input;
-    try {
-      const parsedJson = JSON.parse(prompt);
-      if (Array.isArray(parsedJson)) {
-        input = normalizeResponsesInput(parsedJson);
-      } else {
-        input = prompt;
-      }
-    } catch {
-      input = prompt;
-    }
+    const input = parseResponsesInput(prompt);
 
     const {
       isGPT6Model,
