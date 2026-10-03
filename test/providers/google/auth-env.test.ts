@@ -53,7 +53,12 @@ beforeEach(() => {
         }
         return makeClient(String(options?.keyFilename));
       }),
-      fromJSON: vi.fn(async (data) => makeClient(data.client_id)),
+      fromJSON: vi.fn(async (data) => {
+        if (options?.keyFilename === 'missing.json') {
+          throw new Error('fixture absent');
+        }
+        return makeClient(data.client_id ?? String(options?.keyFilename));
+      }),
       getProjectId: vi.fn(async () => options?.projectId),
     } as unknown as GoogleAuth;
   });
@@ -204,6 +209,9 @@ describe('Google scoped ADC inputs', () => {
     vi.mocked(GoogleAuth).mockImplementationOnce(function () {
       return {
         getClient: async () => {
+          throw new Error('temporary credentials failure');
+        },
+        fromJSON: async () => {
           throw new Error('temporary credentials failure');
         },
       } as unknown as GoogleAuth;

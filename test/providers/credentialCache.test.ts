@@ -24,6 +24,35 @@ afterEach(() => {
 });
 
 describe('scoped SDK response cache compatibility', () => {
+  it('partitions effective static keys when a scoped profile clears the host selector', () => {
+    restore = mockProcessEnv({
+      AWS_PROFILE: 'host-profile',
+      AWS_ACCESS_KEY_ID: 'first-access',
+      AWS_SECRET_ACCESS_KEY: 'fixture-secret',
+    });
+    const first = getAwsCredentialCacheNamespace({}, { AWS_PROFILE: '' });
+    mockProcessEnv({ AWS_ACCESS_KEY_ID: 'second-access' });
+    expect(getAwsCredentialCacheNamespace({}, { AWS_PROFILE: '' })).not.toBe(first);
+  });
+
+  it('partitions the public source identity beneath the same scoped AWS role profile', () => {
+    const env = {
+      AWS_PROFILE: 'role-profile',
+      AWS_CONFIG_FILE: '/fixture/role-config',
+      AWS_SECRET_ACCESS_KEY: 'fixture-secret',
+    };
+    const first = getAwsCredentialCacheNamespace({}, { ...env, AWS_ACCESS_KEY_ID: 'first-access' });
+    const second = getAwsCredentialCacheNamespace(
+      {},
+      { ...env, AWS_ACCESS_KEY_ID: 'second-access' },
+    );
+    expect(first).not.toBe(second);
+    expect(getAwsCredentialCacheNamespace({}, { ...env, AWS_ACCESS_KEY_ID: 'first-access' })).toBe(
+      first,
+    );
+    expect(getAwsCredentialCacheNamespace({ profile: 'configured-role' })).toBeUndefined();
+  });
+
   it('retains the exact released SageMaker embedding cache key', () => {
     const provider = new SageMakerEmbeddingProvider('fixture-endpoint', {
       config: {

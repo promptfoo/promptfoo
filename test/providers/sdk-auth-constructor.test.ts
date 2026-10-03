@@ -25,6 +25,36 @@ afterEach(() => {
 });
 
 describe('real cloud SDK credential construction without authentication calls', () => {
+  it.each([undefined, 'configured-options-quota'])(
+    'preserves a shared explicit authClient quota across concurrent environments (options=%s)',
+    async (quotaProjectId) => {
+      const authClient = new UserRefreshClient(
+        'fixture-client',
+        'fixture-secret',
+        'fixture-refresh',
+      );
+      authClient.credentials = {
+        access_token: 'fixture-access',
+        expiry_date: Date.now() + 3600000,
+      };
+      authClient.quotaProjectId = 'caller-quota';
+      const clients = await Promise.all(
+        ['first-quota', 'second-quota'].map((quota) =>
+          cliState.withEnv({ GOOGLE_CLOUD_QUOTA_PROJECT: quota }, () =>
+            GoogleAuthManager.getOAuthClient(
+              { googleAuthOptions: { authClient, clientOptions: { quotaProjectId } } },
+              false,
+            ),
+          ),
+        ),
+      );
+      for (const { client } of clients) {
+        expect(client).toBe(authClient);
+        expect((await client.getRequestHeaders()).get('x-goog-user-project')).toBe('caller-quota');
+      }
+    },
+  );
+
   it('keeps an explicit SDK authClient ahead of a stale ADC path', async () => {
     const authClient = new UserRefreshClient('fixture-client', 'fixture-secret', 'fixture-refresh');
     const { client } = await GoogleAuthManager.getOAuthClient(
@@ -66,6 +96,25 @@ describe('real cloud SDK credential construction without authentication calls', 
       }
     },
   );
+
+  it.each([
+    { type: 'authorized_user', client_id: 'fixture-client', client_secret: 'fixture-secret' },
+    { type: 'service_account', client_email: 'fixture@example.invalid' },
+    null,
+    {},
+  ])('rejects structurally invalid ADC without falling back to a PEM client: %j', async (data) => {
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-incomplete-adc-'));
+    const file = path.join(dir, 'adc.json');
+    fs.writeFileSync(file, JSON.stringify(data));
+    try {
+      await cliState.withEnvFileOverrides({ GOOGLE_APPLICATION_CREDENTIALS: file }, async () => {
+        await expect(GoogleAuthManager.getOAuthClient({}, false)).rejects.toThrow();
+        expect(await GoogleAuthManager.hasDefaultCredentials()).toBe(false);
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 
   it('loads a local scoped ADC file and applies scoped quota over the host quota', async () => {
     const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-adc-fixture-'));

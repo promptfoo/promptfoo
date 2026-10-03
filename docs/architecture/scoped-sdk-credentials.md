@@ -4,9 +4,13 @@ Evaluation environment files are scoped to their invocation. AWS, Google and Azu
 
 AWS forwards static credentials, profile selection, shared/config file locations and web identity options. Without scoped credential inputs, the SDK retains its normal ambient discovery chain. Bedrock preserves explicit key-pair, bearer-token and configured-profile precedence. Agents and Knowledge Bases retain their SigV4 discovery behavior.
 
+Scoped role profiles retain their environment source credentials, and nested SSO profiles retain selected shared/config files. A narrow adapter uses exported SDK package entrypoints for INI parsing, ordinary profile resolution, SSO and STS; it resolves them through the installed optional AWS client's dependency graph. Some exports are marked internal by the SDK, so SDK upgrades must retain the actual profile-chain regression tests. No private distribution paths or separately installed transitive dependencies are required.
+
+Empty static credential placeholders retain normal SDK discovery when they do not mask host keys. Empty shared/config filenames select the SDK's standard home files, and `~/` paths use the same home resolution for SDK calls and cache metadata. A cleared profile selects effective static keys first, then the default shared-file profile.
+
 Google forwards ADC filenames, project and quota-project settings while retaining explicit configured credentials and API-key routing. Azure forwards service principals, certificate and workload identity files, and managed identity selectors while retaining the ambient default credential chain when no scoped identity is selected.
 
-SDK clients are owned by both an environment and an evaluation resource lifetime. Concurrent evaluations can reuse a provider object without sharing credentials or closing one another's resources. Caller-injected clients remain caller-owned.
+SDK clients are owned by both an environment and an evaluation resource lifetime. Concurrent evaluations can reuse a provider object without sharing credentials or closing one another's resources. Caller-injected clients remain caller-owned, including the quota project on a supplied Google auth client. Standalone SDK consumers outside an evaluation keep provider-owned lifetimes; the registry does not retain those clients.
 
 Response caches retain existing ambient/configured keys. Newly scoped identities use stable public selectors, such as AWS access-key IDs or Azure tenant/client IDs; file-backed identities include file revision metadata. Identical selectors and files retain cache reuse across processes. No new persistent cache fingerprint is derived from a raw secret.
 
@@ -14,4 +18,4 @@ A provider-only Bedrock bearer token has no public identity selector, so its add
 
 Empty Azure settings remain harmless when they have no host value to mask. If the selected SDK credential chain would restore a nonblank host value that an invocation explicitly cleared, evaluation reports the masked setting. Supply an explicit scoped identity or remove that host setting before evaluating. Higher-priority secret, certificate or workload identities do not consult cleared lower-priority file settings.
 
-Google ADC environment files are validated as JSON, while explicitly configured SDK API keys, auth clients, credentials and key files retain their priority. A blank ADC placeholder continues normal discovery when there is no host ADC filename to restore; clearing a nonblank host ADC filename reports an actionable error.
+Google ADC environment files are validated by the SDK as credential objects, while explicitly configured SDK API keys, auth clients, credentials and key files retain their priority. A blank ADC placeholder continues normal discovery when there is no host ADC filename to restore; clearing a nonblank host ADC filename reports an actionable error.

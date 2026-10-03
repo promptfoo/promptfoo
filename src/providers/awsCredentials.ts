@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 import { getEnvOverrides, getEnvString } from '../envars';
+import { getScopedAwsProfileCredentials } from './awsProfileCredentials';
 import { getCredentialCacheNamespace } from './credentialCache';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
 
@@ -15,6 +16,21 @@ interface AwsCredentialConfig {
   apiKey?: string;
 }
 
+// Match the SDK's shared-ini loader, including Windows home selectors and ~/.
+function resolveSharedFilePath(filename: string, kind: 'credentials' | 'config'): string {
+  const awsHome =
+    process.env.HOME ||
+    process.env.USERPROFILE ||
+    (process.env.HOMEPATH &&
+      `${process.env.HOMEDRIVE || `C:${path.sep}`}${process.env.HOMEPATH}`) ||
+    homedir();
+  return filename
+    ? filename.startsWith('~/')
+      ? path.join(awsHome, filename.slice(2))
+      : filename
+    : path.join(awsHome, '.aws', kind);
+}
+
 /** Options consumed by the SDK's existing default credential provider. */
 export function getAwsCredentialProviderOptions(env?: EnvOverrides) {
   const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
@@ -26,8 +42,10 @@ export function getAwsCredentialProviderOptions(env?: EnvOverrides) {
       : {}),
     ...(scoped.AWS_SHARED_CREDENTIALS_FILE === undefined
       ? {}
-      : { filepath: scoped.AWS_SHARED_CREDENTIALS_FILE }),
-    ...(scoped.AWS_CONFIG_FILE === undefined ? {} : { configFilepath: scoped.AWS_CONFIG_FILE }),
+      : { filepath: resolveSharedFilePath(scoped.AWS_SHARED_CREDENTIALS_FILE, 'credentials') }),
+    ...(scoped.AWS_CONFIG_FILE === undefined
+      ? {}
+      : { configFilepath: resolveSharedFilePath(scoped.AWS_CONFIG_FILE, 'config') }),
     ...(scoped.AWS_WEB_IDENTITY_TOKEN_FILE === undefined
       ? {}
       : { webIdentityTokenFile: scoped.AWS_WEB_IDENTITY_TOKEN_FILE }),
@@ -54,10 +72,14 @@ export function getScopedAwsCredentialConfig(
     return config;
   }
   const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
+  const value = (key: string) => scoped[key] ?? getEnvString(key);
+  const keyFields = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
+  const harmlessStaticPlaceholders =
+    keyFields.every((key) => !value(key)) &&
+    !value('AWS_SESSION_TOKEN')?.trim() &&
+    !keyFields.some((key) => scoped[key] === '' && process.env[key]);
   const fields = [
-    'AWS_ACCESS_KEY_ID',
-    'AWS_SECRET_ACCESS_KEY',
-    'AWS_SESSION_TOKEN',
+    ...(harmlessStaticPlaceholders ? [] : [...keyFields, 'AWS_SESSION_TOKEN']),
     'AWS_PROFILE',
     ...(includeBearer ? ['AWS_BEARER_TOKEN_BEDROCK'] : []),
   ];
@@ -67,18 +89,33 @@ export function getScopedAwsCredentialConfig(
   ) {
     return undefined;
   }
-  const hasScopedKeys = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'].some(
-    (key) => scoped[key] !== undefined,
-  );
+  const hasScopedKeys =
+    !harmlessStaticPlaceholders &&
+    [...keyFields, 'AWS_SESSION_TOKEN'].some((key) => scoped[key] !== undefined);
   // A selected profile or bearer token must not be displaced by the host's key tuple.
   if (!hasScopedKeys && includeBearer && scoped.AWS_BEARER_TOKEN_BEDROCK !== undefined) {
     return { apiKey: scoped.AWS_BEARER_TOKEN_BEDROCK };
   }
   const profile = scoped.AWS_PROFILE ?? getEnvString('AWS_PROFILE');
-  if (profile || !hasScopedKeys) {
-    return { profile };
+  if (profile === '' && value('AWS_ACCESS_KEY_ID') && value('AWS_SECRET_ACCESS_KEY')) {
+    return {
+      accessKeyId: value('AWS_ACCESS_KEY_ID'),
+      secretAccessKey: value('AWS_SECRET_ACCESS_KEY'),
+      sessionToken: value('AWS_SESSION_TOKEN'),
+      profile,
+    };
   }
-  const value = (key: string) => scoped[key] ?? getEnvString(key);
+  if (profile || !hasScopedKeys) {
+    return {
+      // The SDK's nested INI loader restores process.env for an empty profile.
+      // Keep fromEnv precedence when keys exist; otherwise select the default
+      // profile that a cleared process-level AWS_PROFILE would have used.
+      profile:
+        profile === '' && !(value('AWS_ACCESS_KEY_ID') && value('AWS_SECRET_ACCESS_KEY'))
+          ? 'default'
+          : profile,
+    };
+  }
   return {
     accessKeyId: value('AWS_ACCESS_KEY_ID'),
     secretAccessKey: value('AWS_SECRET_ACCESS_KEY'),
@@ -125,7 +162,7 @@ export async function resolveAwsCredentials(
     });
     return fromSSO({ ...getAwsCredentialProviderOptions(env), profile });
   }
-  return undefined;
+  return getScopedAwsProfileCredentials({ ...getAwsCredentialProviderOptions(env), profile }, env);
 }
 
 /** Stable public identity partition for SDK credentials introduced by scoped environments. */
@@ -142,21 +179,34 @@ export function getAwsCredentialCacheNamespace(
   if (!source || (source === config && !hasScopedProfileFiles)) {
     return undefined;
   }
+  const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
+  const profileSourceAccessKey =
+    source !== config &&
+    source.profile &&
+    ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'].some(
+      (key) => scoped[key] !== undefined,
+    )
+      ? (scoped.AWS_ACCESS_KEY_ID ?? getEnvString('AWS_ACCESS_KEY_ID'))
+      : undefined;
   const files = [options.filepath, options.configFilepath, options.webIdentityTokenFile];
   if (source.profile) {
     files.push(
       options.filepath ??
-        getEnvString('AWS_SHARED_CREDENTIALS_FILE') ??
-        path.join(homedir(), '.aws', 'credentials'),
+        resolveSharedFilePath(getEnvString('AWS_SHARED_CREDENTIALS_FILE') ?? '', 'credentials'),
     );
     files.push(
       options.configFilepath ??
-        getEnvString('AWS_CONFIG_FILE') ??
-        path.join(homedir(), '.aws', 'config'),
+        resolveSharedFilePath(getEnvString('AWS_CONFIG_FILE') ?? '', 'config'),
     );
   }
   return getCredentialCacheNamespace(
-    [source.accessKeyId, source.profile, options.roleArn, options.roleSessionName],
+    [
+      source.accessKeyId,
+      source.profile,
+      options.roleArn,
+      options.roleSessionName,
+      profileSourceAccessKey,
+    ],
     [...new Set(files.filter((file): file is string => file !== undefined))],
   );
 }

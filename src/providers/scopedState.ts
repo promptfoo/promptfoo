@@ -20,7 +20,9 @@ export function createEnvironmentScopedState<T>(
     if (state === undefined) {
       state = create();
       states.set(scope, state);
-      if (cleanup) {
+      // Standalone callers retain the provider-owned lifetime they had before
+      // scoped cleanup. A global registration would keep them alive indefinitely.
+      if (cleanup && providerRegistry.currentScope) {
         const owned = state;
         providerRegistry.register(
           {

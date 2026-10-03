@@ -420,6 +420,7 @@ export class GoogleAuthManager {
       authOptions.keyFilename = keyFilename;
     }
 
+    let adcCredentials: unknown;
     // SDK discovery reads process.env, so forward the effective scoped inputs explicitly.
     if (
       !credentials &&
@@ -442,7 +443,7 @@ export class GoogleAuthManager {
       if (authOptions.keyFilename) {
         const content = await fs.promises.readFile(authOptions.keyFilename, 'utf8');
         try {
-          JSON.parse(content);
+          adcCredentials = JSON.parse(content);
         } catch {
           // keyFilename supports legacy PEM keys, whereas ADC discovery requires JSON.
           throw new Error(
@@ -483,17 +484,21 @@ export class GoogleAuthManager {
     const processedCredentials = this.loadCredentials(credentials);
 
     let client;
-    if (processedCredentials) {
-      let parsedCredentials;
-      try {
-        parsedCredentials = JSON.parse(processedCredentials);
-      } catch (parseError) {
-        const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
-        throw new Error(`[Google] Invalid credentials JSON format: ${errorMsg}`);
+    if (processedCredentials || adcCredentials !== undefined) {
+      let parsedCredentials = adcCredentials;
+      if (processedCredentials) {
+        try {
+          parsedCredentials = JSON.parse(processedCredentials);
+        } catch (parseError) {
+          const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
+          throw new Error(`[Google] Invalid credentials JSON format: ${errorMsg}`);
+        }
       }
 
       try {
-        client = await auth.fromJSON(parsedCredentials);
+        // Let the SDK validate credential fields. Its key-file stream loader can
+        // fall back to PEM after JSON validation errors, which ADC must not do.
+        client = await auth.fromJSON(parsedCredentials as Parameters<typeof auth.fromJSON>[0]);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         logger.error(`[Google] Could not load credentials: ${errorMsg}`);
@@ -505,7 +510,8 @@ export class GoogleAuthManager {
 
     // The SDK reapplies the host quota env after client construction. Restore the
     // resolved scoped value on this client, without changing global environment.
-    if (quotaProjectId !== undefined) {
+    // A caller-supplied authClient already owns its identity and quota settings.
+    if (quotaProjectId !== undefined && client !== authOptions.authClient) {
       client.quotaProjectId = quotaProjectId;
     }
 

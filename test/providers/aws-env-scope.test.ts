@@ -8,6 +8,10 @@ import { clearCache, withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
 import { loadApiProvider } from '../../src/providers';
+import {
+  getAwsCredentialCacheNamespace,
+  resolveAwsCredentials,
+} from '../../src/providers/awsCredentials';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 import { AwsBedrockKnowledgeBaseProvider } from '../../src/providers/bedrock/knowledgeBase';
@@ -44,6 +48,168 @@ afterEach(() => {
 
 // Use real SDK constructors and a local request-handler stub: no credential or model service calls.
 describe('scoped AWS SDK authentication', () => {
+  it.each([
+    { AWS_SESSION_TOKEN: '' },
+    { AWS_SESSION_TOKEN: ' \t ' },
+    { AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '', AWS_SESSION_TOKEN: '' },
+  ])(
+    'preserves default SDK discovery and cache identity for harmless placeholders %j',
+    async (env) => {
+      const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-empty-aws-'));
+      const file = path.join(dir, 'credentials');
+      fs.writeFileSync(
+        file,
+        '[default]\naws_access_key_id=shared-access\naws_secret_access_key=shared-secret\n',
+      );
+      mockProcessEnv({ AWS_SHARED_CREDENTIALS_FILE: file });
+      try {
+        await cliState.withEnvFileOverrides(env, async () => {
+          expect(await resolveAwsCredentials()).toBeUndefined();
+          expect(getAwsCredentialCacheNamespace()).toBeUndefined();
+          const provider = new AwsBedrockCompletionProvider('fixture');
+          const client = await provider.getBedrockInstance();
+          try {
+            expect((await client.config.credentials()).accessKeyId).toBe('shared-access');
+          } finally {
+            client.destroy();
+          }
+        });
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('does not turn empty static masks or incomplete tuples into host discovery', async () => {
+    mockProcessEnv(keys('host'));
+    await expect(
+      resolveAwsCredentials({}, { AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '' }),
+    ).rejects.toThrow('incomplete');
+    await expect(
+      resolveAwsCredentials({}, { AWS_ACCESS_KEY_ID: 'file-access', AWS_SECRET_ACCESS_KEY: '' }),
+    ).rejects.toThrow('incomplete');
+    mockProcessEnv({ AWS_SESSION_TOKEN: 'host-session' });
+    expect(await resolveAwsCredentials({}, { AWS_SESSION_TOKEN: '' })).toEqual({
+      accessKeyId: 'host-access',
+      secretAccessKey: 'host-secret',
+      sessionToken: undefined,
+    });
+  });
+
+  it('clears a host profile to default shared-file discovery when no static keypair is available', async () => {
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-cleared-profile-'));
+    const file = path.join(dir, 'credentials');
+    const write = (label: string) =>
+      fs.writeFileSync(
+        file,
+        `[default]\naws_access_key_id=${label}-access\naws_secret_access_key=${label}-secret\n[host]\naws_access_key_id=host-access\naws_secret_access_key=host-secret\n`,
+      );
+    write('default');
+    mockProcessEnv({ AWS_PROFILE: 'host', AWS_SHARED_CREDENTIALS_FILE: file });
+    try {
+      const provider = new SageMakerCompletionProvider('fixture', {
+        config: { modelType: 'custom' },
+        env: { AWS_PROFILE: '' },
+      });
+      const client = await provider.getSageMakerRuntimeInstance();
+      try {
+        expect((await client.config.credentials()).accessKeyId).toBe('default-access');
+        const firstNamespace = Reflect.get(provider, 'responseCacheNamespace');
+        write('replacement');
+        const nextProvider = new SageMakerCompletionProvider('fixture', {
+          config: { modelType: 'custom' },
+          env: { AWS_PROFILE: '' },
+        });
+        const nextClient = await nextProvider.getSageMakerRuntimeInstance();
+        try {
+          expect((await nextClient.config.credentials()).accessKeyId).toBe('replacement-access');
+          expect(Reflect.get(nextProvider, 'responseCacheNamespace')).not.toBe(firstNamespace);
+        } finally {
+          nextClient.destroy();
+        }
+        expect(process.env.AWS_PROFILE).toBe('host');
+      } finally {
+        client.destroy();
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['AWS_SHARED_CREDENTIALS_FILE', 'AWS_CONFIG_FILE'] as const)(
+    'clears an overridden %s to the SDK default and tracks its file revision',
+    async (selector) => {
+      const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-default-aws-'));
+      fs.mkdirSync(path.join(dir, '.aws'));
+      const file = path.join(
+        dir,
+        '.aws',
+        selector === 'AWS_CONFIG_FILE' ? 'config' : 'credentials',
+      );
+      const write = (label: string) =>
+        fs.writeFileSync(
+          file,
+          `[default]\naws_access_key_id=${label}-access\naws_secret_access_key=${label}-secret\n`,
+        );
+      mockProcessEnv({ HOME: dir });
+      write('first');
+      const resolve = async () => {
+        const provider = new AwsBedrockCompletionProvider('fixture', { env: { [selector]: '' } });
+        const client = await provider.getBedrockInstance();
+        try {
+          return {
+            accessKeyId: (await client.config.credentials()).accessKeyId,
+            namespace: Reflect.get(provider, 'responseCacheNamespace'),
+          };
+        } finally {
+          client.destroy();
+        }
+      };
+      try {
+        const first = await resolve();
+        write('replacement');
+        const second = await resolve();
+        expect(first.accessKeyId).toBe('first-access');
+        expect(second.accessKeyId).toBe('replacement-access');
+        expect(second.namespace).not.toBe(first.namespace);
+        expect(process.env[selector]).toContain('nonexistent-promptfoo-fixture');
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(['AWS_SHARED_CREDENTIALS_FILE', 'AWS_CONFIG_FILE'] as const)(
+    'expands home-relative %s for both SDK resolution and cache revision metadata',
+    async (selector) => {
+      const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-tilde-aws-'));
+      const file = path.join(dir, 'selected-profile');
+      mockProcessEnv({ HOME: dir });
+      const env = { [selector]: '~/selected-profile' };
+      const write = (label: string) =>
+        fs.writeFileSync(
+          file,
+          `[default]\naws_access_key_id=${label}-access\naws_secret_access_key=${label}-secret\n`,
+        );
+      try {
+        write('first');
+        const before = getAwsCredentialCacheNamespace({}, env);
+        const client = await new AwsBedrockCompletionProvider('fixture', {
+          env,
+        }).getBedrockInstance();
+        try {
+          expect((await client.config.credentials()).accessKeyId).toBe('first-access');
+        } finally {
+          client.destroy();
+        }
+        write('replacement');
+        expect(getAwsCredentialCacheNamespace({}, env)).not.toBe(before);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it.each(['config', 'provider'])(
     'keeps explicit key-pair signing ahead of a %s bearer through the real HTTP handler',
     async (source) => {
