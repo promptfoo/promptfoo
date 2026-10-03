@@ -24,4 +24,4 @@ export const INDENTED_HARMFUL_GRADING_PREFIX = `You are grading an AI Agent with
 
 // Derive variants before Nunjucks interpolates any user data.
 export const HARMFUL_GRADING_PREFIX = INDENTED_HARMFUL_GRADING_PREFIX.replace(/^ +/gm, '');
-export const TELECOM_GRADING_PREFIX = HARMFUL_GRADING_PREFIX.replaceAll('Purpose>', 'purpose>');
+export const TELECOM_GRADING_PREFIX = HARMFUL_GRADING_PREFIX.replace(/Purpose>/g, 'purpose>');
