@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -36,7 +37,7 @@ import {
 } from '../../../src/util/testCaseReader';
 import { mockProcessEnv } from '../utils';
 
-import type { TestCase, UnifiedConfig } from '../../../src/types/index';
+import type { TestCase, TestCaseWithVarsFile, UnifiedConfig } from '../../../src/types/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
@@ -457,9 +458,11 @@ describe('suite environment loading', () => {
     const config = await combineConfigs([configPath]);
     const first = config.scenarios?.[0];
     const vars = first && typeof first === 'object' ? first.tests?.[0].vars : undefined;
-    expect(vars?.date).toBeInstanceOf(Date);
-    expect(vars?.url).toBeInstanceOf(URL);
-    expect(Buffer.isBuffer(vars?.bytes)).toBe(true);
+    expect(vars).toMatchObject({
+      date: expect.any(Date),
+      url: expect.any(URL),
+      bytes: expect.any(Buffer),
+    });
   });
 
   it('isolates overlapping combined config loads', async () => {
@@ -612,6 +615,141 @@ describe('suite environment loading', () => {
     const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
     expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['present']);
   });
+
+  it.each([false, true])('loads vars files across test sources (list: %s)', async (asList) => {
+    const dir = path.join(tempDir, 'vars-files');
+    fs.mkdirSync(path.join(dir, 'vars'), { recursive: true });
+    const varsReference = (name: string) => {
+      const reference = `file://vars/${name}.yaml`;
+      return asList ? [reference] : reference;
+    };
+    for (const name of ['default', 'inline', 'row', 'scenario']) {
+      fs.writeFileSync(path.join(dir, 'vars', `${name}.yaml`), `${name}: loaded`);
+    }
+    fs.writeFileSync(
+      path.join(dir, 'tests.json'),
+      JSON.stringify([{ vars: varsReference('row') }]),
+    );
+    const configPath = path.join(dir, 'config.json');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        prompts: ['Hello'],
+        providers: ['echo'],
+        defaultTest: { vars: varsReference('default') },
+        tests: [{ vars: varsReference('inline') }, 'file://tests.json'],
+        scenarios: [{ config: [{}], tests: [{ vars: varsReference('scenario') }] }],
+      }),
+    );
+    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+    expect(testSuite.defaultTest).toMatchObject({ vars: { default: 'loaded' } });
+    expect(testSuite.tests?.map((test) => test.vars)).toEqual([
+      { inline: 'loaded' },
+      { row: 'loaded' },
+    ]);
+    expect(testSuite.scenarios?.[0].tests[0].vars).toEqual({ scenario: 'loaded' });
+  });
+
+  it.each(['file://literal%20vars.yaml', 'literal%20vars.yaml'])(
+    'preserves literal percent escapes in relative vars paths: %s',
+    async (vars) => {
+      const configPath = writeConfig('literal-vars', { defaultTest: { vars } });
+      const filename = path.join(path.dirname(configPath), 'literal%20vars.yaml');
+      fs.writeFileSync(filename, 'source: literal');
+      const { testSuite, watchSources } = await resolveConfigs({ config: [configPath] }, {});
+      expect(testSuite.defaultTest).toMatchObject({ vars: { source: 'literal' } });
+      expect(
+        (watchSources ?? []).flatMap((source) =>
+          resolveTestsWatchPaths(source.tests, source.basePath),
+        ),
+      ).toEqual([filename]);
+    },
+  );
+
+  it.each([false, true])(
+    'loads canonical vars URLs across test sources (list: %s)',
+    async (asList) => {
+      const dir = path.join(tempDir, 'canonical vars');
+      fs.mkdirSync(dir);
+      const varsReference = (name: string) => {
+        const filename = path.join(dir, `${name} vars.yaml`);
+        fs.writeFileSync(filename, `${name}: loaded`);
+        const reference = pathToFileURL(filename).href;
+        return asList ? [reference] : reference;
+      };
+      const defaults = varsReference('default');
+      fs.writeFileSync(
+        path.join(dir, 'tests.json'),
+        JSON.stringify([{ vars: varsReference('row') }]),
+      );
+      const configPath = path.join(dir, 'config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          prompts: ['Hello'],
+          providers: ['echo'],
+          defaultTest: { vars: defaults },
+          tests: [{ vars: varsReference('inline') }, 'file://tests.json'],
+          scenarios: [{ config: [{}], tests: [{ vars: varsReference('scenario') }] }],
+        }),
+      );
+
+      const { testSuite, watchSources } = await resolveConfigs({ config: [configPath] }, {});
+      expect(testSuite.defaultTest).toMatchObject({ vars: { default: 'loaded' } });
+      expect(testSuite.tests?.map((test) => test.vars)).toEqual([
+        { inline: 'loaded' },
+        { row: 'loaded' },
+      ]);
+      expect(testSuite.scenarios?.[0].tests[0].vars).toEqual({ scenario: 'loaded' });
+      expect(
+        (watchSources ?? []).flatMap((source) =>
+          resolveTestsWatchPaths(source.tests, source.basePath),
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          path.join(dir, 'default vars.yaml'),
+          path.join(dir, 'scenario vars.yaml'),
+        ]),
+      );
+    },
+  );
+
+  it.each<{
+    first: TestCaseWithVarsFile['vars'];
+    second: TestCaseWithVarsFile['vars'];
+    expected: TestCase['vars'];
+  }>([
+    { first: { first: 'inline' }, second: 'file://vars.yaml', expected: { source: 'second' } },
+    { first: 'file://vars.yaml', second: { second: 'inline' }, expected: { second: 'inline' } },
+    { first: 'vars.yaml', second: ['file://vars.yaml'], expected: { source: 'second' } },
+    { first: ['vars.yaml'], second: undefined, expected: { source: 'first' } },
+    {
+      first: { first: 'inline' },
+      second: { second: 'inline' },
+      expected: { first: 'inline', second: 'inline' },
+    },
+  ])(
+    'merges default vars $first then $second in their source directories',
+    async ({ first, second, expected }) => {
+      const configs = [first, second].map((vars, index) => {
+        const name = index === 0 ? 'first' : 'second';
+        const configPath = writeConfig(name, { defaultTest: { vars }, tests: [{ vars: {} }] });
+        fs.writeFileSync(path.join(path.dirname(configPath), 'vars.yaml'), `source: ${name}`);
+        return configPath;
+      });
+      const { testSuite, watchSources } = await resolveConfigs({ config: configs }, {});
+      expect(testSuite.defaultTest).toMatchObject({ vars: expected });
+      const selectedVars = second ?? first;
+      if (typeof selectedVars === 'string' || Array.isArray(selectedVars)) {
+        const source = second === undefined ? 'first' : 'second';
+        expect(
+          (watchSources ?? []).flatMap((source) =>
+            resolveTestsWatchPaths(source.tests, source.basePath),
+          ),
+        ).toEqual([path.join(tempDir, source, 'vars.yaml')]);
+      }
+    },
+  );
 
   it('persists dataset rows independently of their source path', async () => {
     const snapshots = [];
@@ -1189,22 +1327,80 @@ describe('suite environment loading', () => {
     },
   );
 
-  it('uses config-relative references inside a nested defaultTest file', async () => {
-    const configPath = writeConfig('default-root', { defaultTest: 'file://defaults/default.yaml' });
-    const dir = path.dirname(configPath);
-    fs.mkdirSync(path.join(dir, 'defaults'));
-    fs.writeFileSync(
-      path.join(dir, 'defaults/default.yaml'),
-      'vars: vars.yaml\nprovider: file://provider.yaml',
-    );
-    fs.writeFileSync(path.join(dir, 'vars.yaml'), 'source: config-root');
-    fs.writeFileSync(path.join(dir, 'provider.yaml'), 'id: echo\nlabel: root');
-    fs.writeFileSync(path.join(dir, 'defaults/provider.yaml'), 'id: echo\nlabel: wrong-shadow');
-    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
-    expect(testSuite.defaultTest).toMatchObject({
-      vars: { source: 'config-root' },
-      provider: { label: 'root' },
+  it.each([{ vars: 'vars.yaml' }, { vars: ['vars.yaml'] }])(
+    'loads and watches config-relative vars $vars inside a nested defaultTest file',
+    async ({ vars }) => {
+      const configPath = writeConfig('default-root', {
+        defaultTest: 'file://defaults/default.yaml',
+      });
+      const dir = path.dirname(configPath);
+      fs.mkdirSync(path.join(dir, 'defaults'));
+      const defaultsPath = path.join(dir, 'defaults/default.yaml');
+      fs.writeFileSync(
+        defaultsPath,
+        `vars: ${JSON.stringify(vars)}\nprovider: file://provider.yaml`,
+      );
+      fs.writeFileSync(path.join(dir, 'vars.yaml'), 'source: config-root');
+      fs.writeFileSync(path.join(dir, 'defaults/vars.yaml'), 'source: wrong-shadow');
+      fs.writeFileSync(path.join(dir, 'provider.yaml'), 'id: echo\nlabel: root');
+      fs.writeFileSync(path.join(dir, 'defaults/provider.yaml'), 'id: echo\nlabel: wrong-shadow');
+      const { testSuite, watchSources } = await resolveConfigs({ config: [configPath] }, {});
+      expect(testSuite.defaultTest).toMatchObject({
+        vars: { source: 'config-root' },
+        provider: { label: 'root' },
+      });
+      const watched = (watchSources ?? []).flatMap((source) =>
+        resolveTestsWatchPaths(source.tests, source.basePath),
+      );
+      expect(watched).toEqual(expect.arrayContaining([defaultsPath, path.join(dir, 'vars.yaml')]));
+      expect(watched).not.toContain(path.join(dir, 'defaults/vars.yaml'));
+    },
+  );
+
+  it('loads external defaults from the later config directory', async () => {
+    const first = writeConfig('first-default-root', {});
+    const second = writeConfig('second-default-root', {
+      defaultTest: 'file://defaults/default.yaml',
     });
+    const firstDir = path.dirname(first);
+    const secondDir = path.dirname(second);
+    fs.mkdirSync(path.join(secondDir, 'defaults'));
+    fs.writeFileSync(path.join(firstDir, 'vars.yaml'), 'source: wrong-first');
+    fs.writeFileSync(
+      path.join(secondDir, 'vars.yaml'),
+      'source: second\ncontext: file://context.txt',
+    );
+    fs.writeFileSync(path.join(firstDir, 'context.txt'), 'wrong-first-context');
+    fs.writeFileSync(path.join(secondDir, 'context.txt'), 'second-context');
+    fs.writeFileSync(path.join(secondDir, 'defaults/default.yaml'), 'vars: vars.yaml');
+
+    const resolved = await resolveConfigs({ config: [first, second] }, {});
+
+    expect(resolved.testSuite.defaultTest).toMatchObject({
+      vars: { source: 'second', context: 'second-context' },
+    });
+    const watched = (resolved.watchSources ?? []).flatMap((source) =>
+      resolveTestsWatchPaths(source.tests, source.basePath),
+    );
+    expect(watched).toContain(path.join(secondDir, 'context.txt'));
+    expect(watched).not.toContain(path.join(firstDir, 'context.txt'));
+  });
+
+  it('retains scenario vars references before loading them', async () => {
+    const configPath = writeConfig('scenario-watch', {
+      scenarios: [{ config: [{}], tests: [{ vars: 'file://scenario-vars.yaml' }] }],
+    });
+    const varsPath = path.join(path.dirname(configPath), 'scenario-vars.yaml');
+    fs.writeFileSync(varsPath, 'source: scenario');
+
+    const resolved = await resolveConfigs({ config: [configPath] }, {});
+
+    expect(resolved.testSuite.scenarios?.[0].tests[0].vars).toEqual({ source: 'scenario' });
+    expect(
+      resolved.watchSources?.flatMap((source) =>
+        resolveTestsWatchPaths(source.tests, source.basePath),
+      ),
+    ).toContain(varsPath);
   });
 
   it('evaluates normalized file-backed defaults and merges non-overlapping command options', async () => {

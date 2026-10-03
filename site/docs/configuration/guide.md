@@ -179,12 +179,16 @@ Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/test-ca
 
 ## Import vars from separate files
 
-The `vars` property can point to a file or directory. For example:
+The `vars` property can point to a YAML or JSON file, or a glob pattern that matches several. For example:
 
 ```yaml
 tests:
   - vars: file://path/to/vars*.yaml
 ```
+
+`vars` also accepts a list of file references, loaded in order. These forms work in `defaultTest.vars` and scenario tests too. Absolute file URLs support encoded characters such as `%20` for a space. Watch mode tracks these vars files and the files they reference.
+
+When combining configs, vars mappings merge by key. If either value is a file reference or list, the later `vars` value replaces the earlier one. Relative paths resolve from the config that declares them.
 
 You can also load individual variables from file by using the `file://` prefix. For example:
 

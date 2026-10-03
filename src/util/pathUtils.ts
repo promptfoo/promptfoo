@@ -59,3 +59,11 @@ export function safeJoin(...paths: string[]): string {
   }
   return path.join(...paths);
 }
+
+export function fileReferenceToPath(reference: string): string {
+  if (/^file:\/\/(?:\/|localhost\/)/.test(reference)) {
+    // Config references are paths/globs, so keep literal # and ? rather than URL fragments.
+    return fileURLToPath(reference.replace(/[?#]/g, encodeURIComponent));
+  }
+  return reference.replace(/^file:\/\//, '');
+}

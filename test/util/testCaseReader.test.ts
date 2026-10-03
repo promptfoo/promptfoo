@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -22,6 +23,7 @@ import {
   readTest,
   readTestFiles,
   readTests,
+  resolveTestsWatchPaths,
 } from '../../src/util/testCaseReader';
 import { createMockProvider } from '../factories/provider';
 
@@ -1890,6 +1892,34 @@ describe('readVarsFiles', () => {
     const result = await readTestFiles('vars.yaml');
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
+  });
+
+  it.each(['vars with spaces.yaml', 'vars?.yaml'])(
+    'loads and watches canonical vars URLs for %s',
+    async (filename) => {
+      const absolutePath = path.resolve('/base', filename);
+      const reference = pathToFileURL(absolutePath).href;
+      vi.mocked(fs.readFileSync).mockReturnValue('source: canonical');
+      vi.mocked(globSync).mockImplementation((pattern) =>
+        pattern === absolutePath ? [absolutePath] : [],
+      );
+
+      await expect(readTestFiles(reference, '/unrelated')).resolves.toEqual({
+        source: 'canonical',
+      });
+      expect(resolveTestsWatchPaths([{ vars: reference }], '/unrelated')).toEqual([absolutePath]);
+    },
+  );
+
+  it('should resolve file:// references relative to the base path', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('var1: value1');
+    vi.mocked(globSync).mockImplementation((pattern) =>
+      pattern === path.resolve('/base', 'vars/*.yaml') ? ['/base/vars/a.yaml'] : [],
+    );
+
+    const result = await readTestFiles('file://vars/*.yaml', '/base');
+
+    expect(result).toEqual({ var1: 'value1' });
   });
 
   it('should read variables from multiple YAML files', async () => {

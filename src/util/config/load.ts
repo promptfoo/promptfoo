@@ -28,6 +28,7 @@ import {
   type RedteamStrategyObject,
   type Scenario,
   type TestCase,
+  type TestCaseWithVarsFile,
   type TestSuite,
   type TestSuiteConfig,
   TestSuiteConfigSchema,
@@ -43,6 +44,7 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
+import { fileReferenceToPath } from '../pathUtils';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
@@ -567,9 +569,12 @@ async function readTestSources(
 }
 
 /** Combines declarative config and keeps each test source's directory for loading and watch. */
-async function prepareCombinedConfig(
-  configPaths: string[],
-): Promise<{ config: UnifiedConfig; testSources: TestSource[] }> {
+async function prepareCombinedConfig(configPaths: string[]): Promise<{
+  config: UnifiedConfig;
+  testSources: TestSource[];
+  watchSources: TestSource[];
+  defaultTestBasePath?: string;
+}> {
   const configSources: { config: UnifiedConfig; basePath: string }[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
@@ -661,12 +666,16 @@ async function prepareCombinedConfig(
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
-  const resolveConfigPath = (basePath: string, reference: string): string => {
+  const resolveConfigPath = (basePath: string, reference: string, varsFile = false): string => {
     if (reference.includes('{{')) {
       reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
     }
     if (reference.includes('{{') || isRemoteTestsReference(reference)) {
       return reference;
+    }
+    if (varsFile) {
+      // Keep a filesystem path after decoding so later loading does not decode it twice.
+      return path.resolve(basePath, fileReferenceToPath(reference));
     }
     const prefix = reference.startsWith('file://') ? 'file://' : '';
     return prefix + path.resolve(basePath, reference.slice(prefix.length));
@@ -720,16 +729,16 @@ async function prepareCombinedConfig(
         ...('config' in test && { config: resolveNestedFileReferences(basePath, test.config) }),
       };
     }
-    const source = test as TestCase;
+    const source = test as TestCaseWithVarsFile;
     // Keep grader IDs unchanged so references can reuse configured providers.
     return {
       ...source,
       ...(source.vars && {
         vars:
           typeof source.vars === 'string'
-            ? resolveConfigPath(basePath, source.vars)
+            ? resolveConfigPath(basePath, source.vars, true)
             : Array.isArray(source.vars)
-              ? source.vars.map((value) => resolveConfigPath(basePath, value))
+              ? source.vars.map((value) => resolveConfigPath(basePath, value, true))
               : resolveNestedFileReferences(basePath, source.vars),
       }),
       ...(typeof source.provider === 'string' &&
@@ -793,6 +802,7 @@ async function prepareCombinedConfig(
     prompts.push(...Array.from(seenPrompts));
   }
 
+  const watchSources: TestSource[] = [];
   let scenarios: UnifiedConfig['scenarios'];
   for (const { config, basePath } of configSources) {
     if (config.scenarios === undefined) {
@@ -800,6 +810,9 @@ async function prepareCombinedConfig(
     }
     scenarios ??= [];
     for (const source of [config.scenarios].flat()) {
+      if (typeof source === 'string') {
+        watchSources.push({ tests: source, basePath });
+      }
       const loaded =
         typeof source === 'string' && source.startsWith('file://')
           ? await cliState.withBasePath(basePath, () =>
@@ -807,6 +820,9 @@ async function prepareCombinedConfig(
             )
           : source;
       for (const scenario of [loaded].flat()) {
+        if (typeof scenario === 'object' && scenario?.tests) {
+          watchSources.push({ tests: scenario.tests, basePath });
+        }
         scenarios.push(
           typeof scenario === 'object' && scenario?.tests
             ? {
@@ -822,6 +838,8 @@ async function prepareCombinedConfig(
     }
   }
 
+  let defaultTestBasePath: string | undefined;
+
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
@@ -831,11 +849,13 @@ async function prepareCombinedConfig(
     prompts,
     tests: [],
     scenarios,
-    defaultTest: configSources.reduce((prev: Partial<TestCase> | string | undefined, source) => {
+    defaultTest: configSources.reduce((prev: TestCaseWithVarsFile | string | undefined, source) => {
       const { config: curr, basePath } = source;
       // The last file default wins; inline defaults only merge when no file was selected.
       if (typeof curr.defaultTest === 'string') {
-        return makeTestAbsolute(basePath, curr.defaultTest) as string;
+        const reference = makeTestAbsolute(basePath, curr.defaultTest) as string;
+        defaultTestBasePath = basePath;
+        return reference;
       }
       // If prev is already a string (file reference), keep it
       if (typeof prev === 'string') {
@@ -846,12 +866,23 @@ async function prepareCombinedConfig(
         return undefined;
       }
       // Otherwise merge objects
-      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      const currDefaultTest =
+        typeof curr.defaultTest === 'object'
+          ? (makeTestAbsolute(basePath, curr.defaultTest) as TestCaseWithVarsFile)
+          : {};
       const prevObj = typeof prev === 'object' ? prev : {};
+      const previousVars = prevObj.vars;
+      const currentVars = currDefaultTest.vars;
       return {
         ...prevObj,
         ...currDefaultTest,
-        vars: { ...prevObj?.vars, ...currDefaultTest?.vars },
+        vars:
+          typeof previousVars === 'string' ||
+          Array.isArray(previousVars) ||
+          typeof currentVars === 'string' ||
+          Array.isArray(currentVars)
+            ? (currentVars ?? previousVars)
+            : { ...previousVars, ...currentVars },
         assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
         options: { ...prevObj?.options, ...currDefaultTest?.options },
         metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
@@ -893,6 +924,8 @@ async function prepareCombinedConfig(
 
   return {
     config: combinedConfig,
+    defaultTestBasePath,
+    watchSources,
     testSources: configSources.map(({ config, basePath }) => ({
       tests: config.tests,
       basePath,
@@ -915,15 +948,20 @@ export async function resolveConfigs(
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
   testSources?: TestSource[];
+  watchSources?: TestSource[];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let testSources: TestSource[] | undefined;
+  let preparedWatchSources: TestSource[] = [];
+  let defaultTestBasePath: string | undefined;
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
     const prepared = await prepareCombinedConfig(configPaths);
     fileConfig = prepared.config;
+    preparedWatchSources = prepared.watchSources;
+    defaultTestBasePath = prepared.defaultTestBasePath;
     testSources = cmdObj.tests || cmdObj.vars || cmdObj.assertions ? [] : prepared.testSources;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
@@ -939,6 +977,7 @@ export async function resolveConfigs(
           promptReferenceSources,
           type,
           testSources,
+          defaultTestBasePath,
         ),
       ),
     ),
@@ -948,6 +987,7 @@ export async function resolveConfigs(
   cliState.selectedProviderConfigs = resolved.selectedProviderConfigs;
   return {
     ...resolved,
+    watchSources: [...preparedWatchSources, ...resolved.watchSources],
     testSources: testSources ?? [{ tests: defaultConfig.tests, basePath: resolved.basePath }],
   };
 }
@@ -959,6 +999,7 @@ async function resolveLoadedConfig(
   promptReferenceSources: PromptReferenceSource[],
   type?: 'DatasetGeneration' | 'AssertionGeneration',
   testSources?: TestSource[],
+  defaultTestBasePath?: string,
 ) {
   const configPaths = cmdObj.config;
   // Standalone assertion mode
@@ -1008,15 +1049,25 @@ async function resolveLoadedConfig(
   cliState.basePath = basePath;
 
   // Get the raw defaultTest value which could be a string (file://), object (TestCase), or undefined
-  const defaultTestRaw: any = fileConfig.defaultTest || defaultConfig.defaultTest;
+  const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
+
+  defaultTestBasePath ??= basePath;
 
   // Load defaultTest from file:// reference if needed
-  let processedDefaultTest: Partial<TestCase> | undefined;
+  let processedDefaultTest: TestCaseWithVarsFile | undefined;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
-    const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
-    processedDefaultTest = loaded as Partial<TestCase>;
-  } else if (defaultTestRaw) {
-    processedDefaultTest = defaultTestRaw as Partial<TestCase>;
+    const loaded = await cliState.withBasePath(defaultTestBasePath, () =>
+      maybeLoadFromExternalFile(defaultTestRaw),
+    );
+    processedDefaultTest = loaded as TestCaseWithVarsFile;
+  } else if (typeof defaultTestRaw === 'object') {
+    processedDefaultTest = defaultTestRaw;
+  }
+  const watchSources: TestSource[] = processedDefaultTest
+    ? [{ tests: [processedDefaultTest], basePath: defaultTestBasePath }]
+    : [];
+  if (typeof defaultTestRaw === 'string') {
+    watchSources.push({ tests: defaultTestRaw, basePath: defaultTestBasePath });
   }
 
   const authoredTracing = fileConfig.tracing || defaultConfig.tracing;
@@ -1099,10 +1150,10 @@ async function resolveLoadedConfig(
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
   config.defaultTest = processedDefaultTest
-    ? await readTestConfig(processedDefaultTest, basePath, true, config.env)
+    ? await readTestConfig(processedDefaultTest, defaultTestBasePath, true, config.env)
     : undefined;
   const parsedDefaultTest = config.defaultTest
-    ? await readTest(clone(config.defaultTest), basePath, true, config.env)
+    ? await readTest(clone(config.defaultTest), defaultTestBasePath, true, config.env)
     : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
@@ -1166,10 +1217,10 @@ async function resolveLoadedConfig(
     testConfigs.map((test) => readTest(test, basePath, false, config.env)),
   );
 
-  let parsedScenarios = config.scenarios;
+  let parsedScenarios: Scenario[] | undefined;
   // Parse testCases for each scenario
-  if (parsedScenarios && (!Array.isArray(parsedScenarios) || parsedScenarios.length > 0)) {
-    parsedScenarios = (await maybeLoadFromExternalFile(parsedScenarios)) as Scenario[];
+  if (config.scenarios) {
+    parsedScenarios = (await maybeLoadFromExternalFile(config.scenarios)) as Scenario[];
     // Flatten the scenarios array in case glob patterns were used
     parsedScenarios = parsedScenarios.flat().map((scenario) =>
       typeof scenario === 'object'
@@ -1185,6 +1236,9 @@ async function resolveLoadedConfig(
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
+      if (typeof scenario === 'object' && scenario.tests) {
+        watchSources.push({ tests: scenario.tests, basePath });
+      }
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
@@ -1319,5 +1373,6 @@ async function resolveLoadedConfig(
     basePath,
     commandLineOptions,
     selectedProviderConfigs: filteredProviderConfigs,
+    watchSources,
   };
 }

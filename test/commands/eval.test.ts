@@ -833,6 +833,36 @@ describe('evalCommand', () => {
       },
     );
 
+    it.each([undefined, 'file://cli-cases.csv'])(
+      'watches default vars when CLI tests are %s',
+      async (tests) => {
+        const varsPath = path.resolve(watchBase, 'second', 'defaults.yaml');
+        const config = {
+          prompts: [],
+          providers: [],
+          tests: [],
+          defaultTest: { vars: { loaded: true } },
+        } as UnifiedConfig;
+        vi.mocked(resolveConfigs).mockResolvedValue({
+          config,
+          testSuite: { prompts: [], providers: [] },
+          basePath: watchBase,
+          watchSources: [
+            {
+              tests: ['file://defaults/default.yaml', { vars: ['second/defaults.yaml'] }],
+              basePath: watchBase,
+            },
+          ],
+        });
+        vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
+        await doEval({ watch: true, write: false, tests }, config, defaultConfigPath, {});
+        expect(chokidarMocks.watch).toHaveBeenCalledWith(
+          expect.arrayContaining([path.resolve(watchBase, 'defaults/default.yaml'), varsPath]),
+          expect.anything(),
+        );
+      },
+    );
+
     it('tolerates tests being absent', async () => {
       const watched = await watchedPathsFor(undefined);
       expect(watched).toContain(defaultConfigPath);

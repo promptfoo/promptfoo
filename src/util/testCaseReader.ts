@@ -22,6 +22,7 @@ import { isApiProvider } from '../types/providers';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { fileReferenceToPath } from './pathUtils';
 import { renderEnvOnlyInObject } from './render';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
@@ -74,7 +75,7 @@ export async function readTestFiles(
 
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(basePath, pathOrGlob);
+    const resolvedPath = path.resolve(basePath, fileReferenceToPath(pathOrGlob));
 
     const paths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
@@ -908,9 +909,15 @@ function hasGlobMagic(reference: string): boolean {
  * watching a pattern's parent directory instead would rerun the evaluation on every
  * unrelated edit beneath it, including the run's own output file.
  */
-function resolveTestsFileReference(reference: string, basePath: string): string[] {
+function resolveTestsFileReference(
+  reference: string,
+  basePath: string,
+  varsFile = false,
+): string[] {
   reference = renderEnvOnlyInObject(reference);
-  const withoutScheme = reference.replace(/^file:\/\//, '');
+  const withoutScheme = varsFile
+    ? fileReferenceToPath(reference)
+    : reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
     return [];
   }
@@ -946,7 +953,11 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
  * unreadable file is left to the loader to report, since this runs only to decide what
  * to watch.
  */
-function collectNestedFileReferences(testsFile: string, basePath: string): string[] {
+function collectNestedFileReferences(
+  testsFile: string,
+  basePath: string,
+  includeVarsFiles = true,
+): string[] {
   const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
   if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
     return [];
@@ -959,7 +970,8 @@ function collectNestedFileReferences(testsFile: string, basePath: string): strin
         : ext === 'jsonl'
           ? parseJsonlLines(raw, testsFile)
           : loadYaml(raw);
-    return collectConfigFileReferences(parsed, basePath);
+    // Inside a vars file, a field named `vars` is data rather than another vars-file import.
+    return collectConfigFileReferences(parsed, basePath, new WeakSet(), includeVarsFiles);
   } catch {
     return [];
   }
@@ -976,6 +988,7 @@ function collectConfigFileReferences(
   value: unknown,
   basePath: string,
   seen: WeakSet<object> = new WeakSet(),
+  includeVarsFiles = true,
 ): string[] {
   if (typeof value === 'string') {
     return value.startsWith('file://') ? resolveTestsFileReference(value, basePath) : [];
@@ -989,8 +1002,17 @@ function collectConfigFileReferences(
     return [];
   }
   seen.add(value);
-  const children = Array.isArray(value) ? value : Object.values(value);
-  return children.flatMap((item) => collectConfigFileReferences(item, basePath, seen));
+  return Object.entries(value).flatMap(([key, item]) => {
+    if (
+      includeVarsFiles &&
+      key === 'vars' &&
+      (typeof item === 'string' ||
+        (Array.isArray(item) && item.every((reference) => typeof reference === 'string')))
+    ) {
+      return resolveTestsWatchPaths([{ vars: item }], basePath);
+    }
+    return collectConfigFileReferences(item, basePath, seen, includeVarsFiles);
+  });
 }
 
 /**
@@ -1033,12 +1055,17 @@ export function resolveTestsWatchPaths(
     }
     if ('vars' in entry && entry.vars) {
       // `vars` may be a file reference, or a list of them, rather than a mapping, e.g.
-      // `{ vars: 'vars/*.yaml' }`. loadTestWithVars() hands both forms straight to
-      // readTestFiles(), so they carry no file:// scheme and resolve as written.
+      // `{ vars: 'file://vars/*.yaml' }`. loadTestWithVars() hands both forms to
+      // readTestFiles(), which accepts them with or without the file:// scheme.
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
-          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+          typeof value === 'string'
+            ? resolveTestsFileReference(value, basePath, true).flatMap((file) => [
+                file,
+                ...collectNestedFileReferences(file, basePath, false),
+              ])
+            : [],
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.

@@ -1305,13 +1305,17 @@ export const TestSuiteConfigSchema = z.object({
   tests: z
     .union([
       z.string(),
-      z.array(z.union([z.string(), TestCaseSchema, TestGeneratorConfigSchema])),
+      z.array(z.union([z.string(), TestCaseWithVarsFileSchema, TestGeneratorConfigSchema])),
       TestGeneratorConfigSchema,
     ])
     .optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
-  scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
+  scenarios: z
+    .array(
+      z.union([z.string(), ScenarioSchema.extend({ tests: z.array(TestCaseWithVarsFileSchema) })]),
+    )
+    .optional(),
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest: z
@@ -1319,7 +1323,7 @@ export const TestSuiteConfigSchema = z.object({
       z.string().refine((val) => val.startsWith('file://'), {
         error: 'defaultTest string must start with file://',
       }),
-      TestCaseSchema.omit({ description: true }),
+      TestCaseWithVarsFileSchema.omit({ description: true }),
     ])
     .optional(),
 
