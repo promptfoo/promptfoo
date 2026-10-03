@@ -53,6 +53,106 @@ describe('LocalFileSystemProvider', () => {
     );
   });
 
+  it.each(['file', 'directory', 'missing directory'] as const)(
+    'rejects legacy media reached through a %s symlink',
+    async (kind) => {
+      tempDir = createTempDir('promptfoo-media-links-');
+      const mediaPath = path.join(tempDir, 'media');
+      const fixturePath = path.join(tempDir, 'fixture');
+      const key = 'audio/abcdef123456.wav';
+      fs.mkdirSync(fixturePath);
+      const payloadPath = path.join(fixturePath, 'abcdef123456.wav');
+      fs.writeFileSync(payloadPath, 'fixture bytes');
+      fs.writeFileSync(`${payloadPath}.meta.json`, 'fixture metadata');
+      const provider = new LocalFileSystemProvider({ basePath: mediaPath });
+      if (kind === 'file') {
+        fs.mkdirSync(path.join(mediaPath, 'audio'));
+        fs.symlinkSync(payloadPath, path.join(mediaPath, key), 'file');
+      } else {
+        fs.symlinkSync(
+          kind === 'directory' ? fixturePath : path.join(tempDir, 'missing'),
+          path.join(mediaPath, 'audio'),
+          'junction',
+        );
+      }
+
+      await expect(provider.retrieve(key)).rejects.toThrow(/symbolic links/i);
+      await expect(provider.retrieveWithMetadata(key)).rejects.toThrow(/symbolic links/i);
+      await expect(provider.exists(key)).resolves.toBe(false);
+      await expect(provider.getUrl(key)).resolves.toBeNull();
+      await expect(provider.delete(key)).rejects.toThrow(/symbolic links/i);
+      await expect(provider.getStats()).resolves.toEqual({ fileCount: 0, totalSizeBytes: 0 });
+      expect(fs.readFileSync(payloadPath, 'utf8')).toBe('fixture bytes');
+      expect(fs.readFileSync(`${payloadPath}.meta.json`, 'utf8')).toBe('fixture metadata');
+    },
+  );
+
+  it('rejects symlinked legacy sidecars before deleting media', async () => {
+    tempDir = createTempDir('promptfoo-media-sidecar-link-');
+    const mediaPath = path.join(tempDir, 'media');
+    const fixturePath = path.join(tempDir, 'fixture.json');
+    fs.writeFileSync(fixturePath, '{}');
+    const provider = new LocalFileSystemProvider({ basePath: mediaPath });
+    const key = 'legacy.json';
+    fs.writeFileSync(path.join(mediaPath, key), 'media bytes');
+    fs.symlinkSync(fixturePath, path.join(mediaPath, `${key}.meta.json`), 'file');
+
+    await expect(provider.delete(key)).rejects.toThrow(/symbolic links/i);
+    await expect(provider.retrieve(key)).resolves.toEqual(Buffer.from('media bytes'));
+    expect(fs.readFileSync(fixturePath, 'utf8')).toBe('{}');
+  });
+
+  it('supports a configured root symlink and missing legacy media', async () => {
+    tempDir = createTempDir('promptfoo-media-root-link-');
+    const mediaPath = path.join(tempDir, 'media');
+    const configuredPath = path.join(tempDir, 'configured');
+    fs.mkdirSync(mediaPath);
+    fs.symlinkSync(mediaPath, configuredPath, 'junction');
+    const key = 'legacy.json';
+    const payload = Buffer.from('{"message":"legacy content"}');
+    fs.writeFileSync(path.join(mediaPath, key), payload);
+    const provider = new LocalFileSystemProvider({ basePath: configuredPath });
+
+    await expect(provider.retrieve(key)).resolves.toEqual(payload);
+    await expect(provider.exists(key)).resolves.toBe(true);
+    await expect(provider.getUrl(key)).resolves.toMatch(/^file:.*legacy\.json$/);
+    await expect(provider.getStats()).resolves.toEqual({
+      fileCount: 1,
+      totalSizeBytes: payload.length,
+    });
+    await provider.delete(key);
+    await expect(provider.retrieve(key)).rejects.toThrow('Media not found');
+    await expect(provider.exists(key)).resolves.toBe(false);
+    await expect(provider.getUrl(key)).resolves.toBeNull();
+    await expect(provider.delete(key)).resolves.toBeUndefined();
+    await expect(provider.delete('missing/nested.json')).resolves.toBeUndefined();
+  });
+
+  it('counts legacy JSON content while excluding bookkeeping files and directories', async () => {
+    tempDir = createTempDir('promptfoo-media-json-stats-');
+    const provider = new LocalFileSystemProvider({ basePath: tempDir });
+    const payload = Buffer.from('{"message":"legacy content"}');
+    fs.mkdirSync(path.join(tempDir, 'legacy'));
+    for (const key of ['content.json', 'legacy/hash-index.json', 'legacy/content.txt']) {
+      fs.writeFileSync(path.join(tempDir, key), payload);
+      await expect(provider.retrieve(key)).resolves.toEqual(payload);
+    }
+    fs.writeFileSync(path.join(tempDir, 'hash-index.json'), '{}');
+    fs.writeFileSync(path.join(tempDir, 'content.json.meta.json'), '{}');
+    const sidecarDirectory = path.join(tempDir, 'directory.meta.json');
+    fs.mkdirSync(sidecarDirectory);
+    fs.writeFileSync(path.join(sidecarDirectory, 'unrelated.json'), payload);
+    await provider.store(Buffer.from('blob bytes'), {
+      contentType: 'audio/wav',
+      mediaType: 'audio',
+    });
+
+    await expect(provider.getStats()).resolves.toEqual({
+      fileCount: 4,
+      totalSizeBytes: payload.length * 3 + Buffer.byteLength('blob bytes'),
+    });
+  });
+
   it('stores and retrieves media under the base path', async () => {
     tempDir = createTempDir('promptfoo-media-');
     const provider = new LocalFileSystemProvider({ basePath: tempDir });
