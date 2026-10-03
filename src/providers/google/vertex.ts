@@ -650,9 +650,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
         );
       }
 
-      let schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
-      );
+      const renderedSchema = renderVarsInObject(config.responseSchema, context?.vars);
+      let schema = maybeLoadFromExternalFile(renderedSchema);
 
       // Parse JSON string if it's a string (not loaded from file)
       if (typeof schema === 'string') {
@@ -663,8 +662,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
       }
 
-      // Apply variable substitution to the loaded schema
-      schema = renderVarsInObject(schema, context?.vars);
+      // File contents have not been rendered yet; inline schemas already have.
+      if (typeof renderedSchema === 'string' && renderedSchema.startsWith('file://')) {
+        schema = renderVarsInObject(schema, context?.vars);
+      }
 
       body.generationConfig.response_schema = schema;
       body.generationConfig.response_mime_type = 'application/json';

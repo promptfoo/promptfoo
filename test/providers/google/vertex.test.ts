@@ -6,6 +6,7 @@ import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
+import { mockProcessEnv } from '../../util/utils';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -4385,6 +4386,92 @@ describe('VertexChatProvider.callClaudeApi', () => {
         }
         throw new Error(`File not found: ${pathStr}`);
       });
+    });
+
+    it.each(
+      ['object', 'JSON string', 'file path', 'rendered file path'].flatMap((source) =>
+        ['{{ 7 * 7 }}', '{{ env.PROMPTFOO_SCHEMA_TEST_CANARY }}'].map((description) => ({
+          source,
+          description,
+        })),
+      ),
+    )(
+      'keeps runtime template text literal in $source: $description',
+      async ({ source, description }) => {
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_SCHEMA_TEST_CANARY: 'schema-test-canary' });
+        try {
+          const schema = {
+            type: 'object',
+            properties: {
+              message: {
+                type: 'string',
+                description: '{{ description }}',
+                enum: ['{{ description }}'],
+              },
+            },
+            required: ['message'],
+          };
+          const schemaFile = 'file://test/response-schema.json';
+          const responseSchema =
+            source === 'object'
+              ? schema
+              : source === 'JSON string'
+                ? JSON.stringify(schema)
+                : source === 'file path'
+                  ? 'file://test/{{ schemaName }}.json'
+                  : '{{ schemaFile }}';
+          vi.mocked(fs.existsSync).mockReturnValue(true);
+          vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(schema));
+          const request = vi.fn().mockResolvedValue({
+            data: [{ candidates: [{ content: { parts: [{ text: '{"message":"ok"}' }] } }] }],
+          });
+          vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+            client: { request } as unknown as JSONClient,
+            projectId: 'test-project-id',
+          });
+          provider = new VertexChatProvider('gemini-2.5-flash', {
+            config: { responseSchema },
+          });
+
+          await provider.callGeminiApi('test', {
+            vars: { description, schemaName: 'response-schema', schemaFile },
+            prompt: { raw: 'test', label: 'test' },
+          });
+
+          expect(request).toHaveBeenCalledWith(
+            expect.objectContaining({
+              data: expect.objectContaining({
+                generationConfig: expect.objectContaining({
+                  response_schema: {
+                    ...schema,
+                    properties: { message: { type: 'string', description, enum: [description] } },
+                  },
+                  response_mime_type: 'application/json',
+                }),
+              }),
+            }),
+          );
+          if (source === 'file path' || source === 'rendered file path') {
+            expect(fs.readFileSync).toHaveBeenCalledWith(
+              expect.stringContaining('response-schema.json'),
+              'utf8',
+            );
+          }
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('rejects invalid inline JSON before calling the provider', async () => {
+      provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: { responseSchema: '{"type": "object",}' },
+      });
+
+      await expect(provider.callGeminiApi('test')).rejects.toThrow(
+        'Invalid JSON in responseSchema',
+      );
+      expect(vertexUtil.getGoogleClient).not.toHaveBeenCalled();
     });
 
     it('should handle responseSchema with JSON string', async () => {
