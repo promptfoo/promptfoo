@@ -1,0 +1,107 @@
+import { spawn } from 'node:child_process';
+import { existsSync, realpathSync } from 'node:fs';
+import path from 'node:path';
+
+/** npm global mode ignores project .npmrc; retain launch cwd and settings for user config. */
+export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projectRoot: string) {
+  const root = realpathSync(projectRoot);
+  const runtimeBin = realpathSync(path.dirname(process.execPath));
+  let enclosingProject: string | undefined;
+  for (let directory = root; ; directory = path.dirname(directory)) {
+    if (
+      existsSync(path.join(directory, 'package.json')) ||
+      existsSync(path.join(directory, '.git'))
+    ) {
+      enclosingProject = directory;
+    }
+    if (path.dirname(directory) === directory) {
+      break;
+    }
+  }
+  const entries = (sourceEnvironment.PATH ?? '/usr/bin:/bin').split(path.delimiter);
+  const trustedPaths = entries.flatMap((entry) => {
+    if (!path.isAbsolute(entry) || entry.includes('/node_modules/.bin')) {
+      return [];
+    }
+    try {
+      const canonical = realpathSync(entry);
+      if (canonical.includes('/node_modules/.bin')) {
+        return [];
+      }
+      const insideProject =
+        enclosingProject !== undefined &&
+        (canonical === enclosingProject ||
+          canonical.startsWith(
+            enclosingProject.endsWith(path.sep)
+              ? enclosingProject
+              : `${enclosingProject}${path.sep}`,
+          ));
+      return canonical === runtimeBin || !insideProject ? [canonical] : [];
+    } catch {
+      return [];
+    }
+  });
+  if (!trustedPaths.length) {
+    throw new Error('No trusted npm executable directory found in the launch PATH.');
+  }
+  return {
+    cwd: projectRoot,
+    env: { ...sourceEnvironment, PATH: [...new Set(trustedPaths)].join(path.delimiter) },
+  };
+}
+
+export async function runNpmUpdate(
+  sourceEnvironment: NodeJS.ProcessEnv,
+  projectRoot: string,
+): Promise<void> {
+  const context = createUpdateContext(sourceEnvironment, projectRoot);
+  const child = spawn('npm', ['install', '--global', 'promptfoo@latest'], {
+    ...context,
+    // Own the process group so terminal Ctrl-C reaches npm only through forwarding.
+    // Closed stdin also prevents background terminal reads from stopping the group.
+    stdio: ['ignore', 'inherit', 'inherit'],
+    shell: false,
+    detached: true,
+  });
+  let terminationSignal: NodeJS.Signals | undefined;
+  const forwardSignal = (signal: NodeJS.Signals, exitCode: number) => {
+    if (terminationSignal) {
+      return;
+    }
+    terminationSignal = signal;
+    process.exitCode = exitCode;
+    if (child.pid) {
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        // The installer may have exited before signal delivery.
+      }
+    }
+  };
+  const forwardInterrupt = () => forwardSignal('SIGINT', 130);
+  const forwardTermination = () => forwardSignal('SIGTERM', 143);
+  process.on('SIGINT', forwardInterrupt);
+  process.on('SIGTERM', forwardTermination);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, signal) => {
+        const stoppedBy = terminationSignal ?? signal;
+        if (code === 0 && !stoppedBy) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              stoppedBy
+                ? `Update stopped by ${stoppedBy}`
+                : `Update exited with code ${code ?? 'unknown'}`,
+            ),
+          );
+        }
+      });
+    });
+  } finally {
+    process.removeListener('SIGINT', forwardInterrupt);
+    process.removeListener('SIGTERM', forwardTermination);
+  }
+}

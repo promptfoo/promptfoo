@@ -25,6 +25,7 @@ import { redteamSetupCommand } from './commands/redteam/setup';
 import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
+import { updateCommand } from './commands/update';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import { EmailValidationError } from './globalConfig/accounts';
@@ -32,6 +33,7 @@ import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
   isMainModule,
+  isUpdateCommandRequested,
   setupEnvFilesFromArgv,
   shouldSkipDefaultConfigLoading,
   shutdownGracefully,
@@ -44,6 +46,7 @@ import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plug
 import { redteamRunCommand } from './redteam/commands/run';
 import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
+import { getInitialProcessEnvironment } from './updates/initialProcessEnvironment';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
@@ -51,6 +54,7 @@ import { formatLibsqlBindingErrorMessage } from './util/libsqlBindingErrors';
 import { VERSION } from './version';
 
 async function main() {
+  const startupEnvironment = getInitialProcessEnvironment();
   const argv = process.argv.slice(2);
   setupEnvFilesFromArgv(argv);
   initializeRunLogging();
@@ -60,8 +64,10 @@ async function main() {
     Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
-  await checkForUpdates();
-  await runDbMigrations({ suppressBindingErrorLogging: true });
+  if (!isUpdateCommandRequested(argv)) {
+    await checkForUpdates();
+    await runDbMigrations({ suppressBindingErrorLogging: true });
+  }
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
   const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
@@ -109,6 +115,7 @@ async function main() {
   modelScanCommand(program);
   optimizeCommand(program, defaultConfig, defaultConfigPath);
   setupRetryCommand(program);
+  updateCommand(program, startupEnvironment);
   validateCommand(program, defaultConfig, defaultConfigPath);
   void showCommand(program);
 
