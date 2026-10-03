@@ -4,6 +4,8 @@ import {
   trackAdditionalGenerationProvider,
   trackGenerationTokenUsage,
 } from '../../src/redteam/generationTokenUsage';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
 import type { ApiProvider, TokenUsage } from '../../src/types/index';
@@ -13,6 +15,52 @@ function createProvider(callApi: ApiProvider['callApi']): ApiProvider {
 }
 
 describe('generation token usage', () => {
+  it.each([
+    { accountingFirst: false, cached: false },
+    { accountingFirst: true, cached: false },
+    { accountingFirst: false, cached: true },
+    { accountingFirst: true, cached: true },
+  ])(
+    'records one call with accountingFirst=$accountingFirst and cached=$cached',
+    async ({ accountingFirst, cached }) => {
+      const usage: TokenUsage = {};
+      const response = {
+        output: 'Hello, world.',
+        cached,
+        tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+      };
+      const callApi = vi.fn().mockResolvedValue(response);
+      const source = createProvider(callApi);
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const execute = vi.spyOn(registry, 'execute');
+      const provider = accountingFirst
+        ? wrapProviderWithRateLimiting(trackGenerationTokenUsage(source, usage), registry)
+        : trackGenerationTokenUsage(wrapProviderWithRateLimiting(source, registry), usage);
+
+      try {
+        expect(await provider.callApi('Say hello.')).toBe(response);
+        expect(callApi).toHaveBeenCalledExactlyOnceWith('Say hello.', undefined, undefined);
+        expect(execute).toHaveBeenCalledOnce();
+        expect(usage).toMatchObject({ total: 23, prompt: 14, completion: 9, numRequests: 1 });
+        expect(usage.cached ?? 0).toBe(cached ? 23 : 0);
+        expect(usage.incurredTokenUsage ?? usage).toMatchObject({
+          total: cached ? 0 : 23,
+          prompt: cached ? 0 : 14,
+          completion: cached ? 0 : 9,
+          numRequests: cached ? 0 : 1,
+        });
+        expect(response).toEqual({
+          output: 'Hello, world.',
+          cached,
+          tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+        });
+      } finally {
+        execute.mockRestore();
+        registry.dispose();
+      }
+    },
+  );
+
   it('preserves cached generation in the logical footprint without incurring usage', async () => {
     const usage: TokenUsage = {};
     const provider = trackGenerationTokenUsage(
