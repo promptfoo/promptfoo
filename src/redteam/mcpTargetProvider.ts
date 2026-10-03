@@ -95,7 +95,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const tools = await this.getTools();
+    const tools = await (this.toolsPromise ??= this.target.getAvailableTools());
 
     if (tools.length === 0) {
       return this.target.callApi(prompt, context, options);
@@ -193,11 +193,6 @@ class RedteamMcpTargetProvider implements ApiProvider {
 
   async cleanup(): Promise<void> {
     await this.target.cleanup?.();
-  }
-
-  private getTools(): Promise<MCPTool[]> {
-    this.toolsPromise ??= this.target.getAvailableTools();
-    return this.toolsPromise;
   }
 }
 

@@ -1,3 +1,7 @@
+const { createLoggerModuleWithLevel } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,15 +18,7 @@ vi.mock('../../../src/esm', async (importOriginal) => {
     importModule: vi.fn(),
   };
 });
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-  getLogLevel: vi.fn().mockReturnValue('info'),
-}));
+vi.mock('../../../src/logger', () => createLoggerModuleWithLevel());
 
 describe('validateStrategies', () => {
   beforeEach(() => {

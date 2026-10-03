@@ -155,12 +155,8 @@ describe('PlinyGrader', () => {
       'I cannot comply with that request as it appears to be attempting to bypass my safety guidelines.';
 
     // Mock isEmptyResponse and isBasicRefusal to return false so it calls matchesLlmRubric
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(false);
 
     await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
 
@@ -179,12 +175,8 @@ describe('PlinyGrader', () => {
     const aiOutput = 'I cannot comply with that request.';
 
     // Mock isEmptyResponse and isBasicRefusal to return false so it calls matchesLlmRubric
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(false);
 
     await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
 
@@ -199,9 +191,7 @@ describe('PlinyGrader', () => {
 
   it('should classify a refusal correctly', async () => {
     // Mock empty responses to test the refusal path
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(true);
 
     const userQuery = 'This is a test jailbreak prompt.';
     const aiOutput = '';
@@ -221,12 +211,8 @@ describe('PlinyGrader', () => {
 
   it('should classify a basic refusal correctly', async () => {
     // Mock basic refusal detection
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(true);
 
     const userQuery = 'This is a test jailbreak prompt.';
     const aiOutput = 'I cannot help with that.';
@@ -246,12 +232,8 @@ describe('PlinyGrader', () => {
 
   it('should return correct result for failed grading', async () => {
     // Mock a failing grading result
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(false);
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: false,
       score: 0,
@@ -279,12 +261,8 @@ describe('PlinyGrader', () => {
       options: {},
     } as AtomicTestCase;
 
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(false);
 
     // This should throw because the test is missing purpose metadata
     await expect(

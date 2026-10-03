@@ -26,6 +26,7 @@ import {
 import { Strategies } from '../../strategies';
 import { getSessionId, isBasicRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
+import { MemorySystem } from '../memory';
 import { getGoalRubric } from '../prompts';
 import {
   accumulateGraderResult,
@@ -61,7 +62,7 @@ import type {
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
-import type { FlaggedTurn, Message } from '../shared';
+import type { FlaggedTurn, Message, SuccessfulAttack } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -124,11 +125,7 @@ export interface CustomMetadata extends BaseRedteamMetadata {
   customResult: boolean;
   customConfidence: number | null;
   stopReason: RoundBacktrackingStopReason;
-  successfulAttacks?: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }>;
+  successfulAttacks?: SuccessfulAttack[];
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
 }
@@ -154,29 +151,6 @@ interface CustomConfig {
   _perTurnLayers?: LayerConfig[];
 }
 
-export class MemorySystem {
-  private conversations: Map<string, Message[]> = new Map();
-
-  addMessage(conversationId: string, message: Message) {
-    if (!this.conversations.has(conversationId)) {
-      this.conversations.set(conversationId, []);
-    }
-    this.conversations.get(conversationId)!.push(message);
-  }
-
-  getConversation(conversationId: string): Message[] {
-    return this.conversations.get(conversationId) || [];
-  }
-
-  duplicateConversationExcludingLastTurn(conversationId: string): string {
-    const originalConversation = this.getConversation(conversationId);
-    const newConversationId = crypto.randomUUID();
-    const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
-    this.conversations.set(newConversationId, newConversation);
-    return newConversationId;
-  }
-}
-
 export class CustomProvider implements ApiProvider {
   readonly config: CustomConfig;
   private readonly nunjucks: any;
@@ -191,11 +165,7 @@ export class CustomProvider implements ApiProvider {
   private stateful: boolean;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
-  private successfulAttacks: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }> = [];
+  private successfulAttacks: SuccessfulAttack[] = [];
 
   constructor(config: CustomConfig) {
     invariant(config.strategyText, 'CustomProvider requires strategyText in config');
