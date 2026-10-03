@@ -111,6 +111,26 @@ describe('YamlEditor', () => {
     expect(screen.getByRole('button', { name: 'Copy YAML configuration' })).toBeInTheDocument();
   });
 
+  it('reports whether edits are saved or discarded', async () => {
+    const user = userEvent.setup();
+    const onDirtyChange = vi.fn();
+    render(<YamlEditorComponent onDirtyChange={onDirtyChange} />);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    const editor = screen.getByTestId('yaml-editor');
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('description: Draft');
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('description: Another draft');
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    await user.click(screen.getByRole('button', { name: 'Discard Changes' }));
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('downloads the current YAML when Download YAML is clicked', async () => {
     const user = userEvent.setup();
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
