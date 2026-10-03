@@ -58,8 +58,8 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   constructor(config: LocalStorageConfig = {}) {
     this.basePath = config.basePath || path.join(getConfigDirectoryPath(true), MEDIA_SUBDIR);
     this.ensureDirectory();
-    // A configured directory may itself be a symlink (including macOS temporary paths).
-    this.realBasePath = fs.realpathSync(this.basePath);
+    // Match fsPromises.realpath when resolving root aliases, including Windows short names.
+    this.realBasePath = fs.realpathSync.native(this.basePath);
     this.hashIndex = this.loadHashIndex();
   }
 

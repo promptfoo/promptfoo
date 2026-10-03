@@ -128,6 +128,32 @@ describe('LocalFileSystemProvider', () => {
     await expect(provider.delete('missing/nested.json')).resolves.toBeUndefined();
   });
 
+  it('supports native path aliases such as Windows short directory names', async () => {
+    tempDir = createTempDir('promptfoo-media-native-path-');
+    const aliasPath = path.join(tempDir, 'MEDIA~1');
+    const mediaPath = path.join(tempDir, 'media with spaces #100%');
+    fs.mkdirSync(aliasPath);
+    fs.mkdirSync(mediaPath);
+    const canonicalRoot = fs.realpathSync.native(mediaPath);
+    const key = 'legacy.json';
+    const payload = Buffer.from('{"message":"legacy content"}');
+    fs.writeFileSync(path.join(canonicalRoot, key), payload);
+
+    // Model native short-name expansion without requiring a Windows filesystem.
+    vi.spyOn(fs.realpathSync, 'native').mockReturnValueOnce(canonicalRoot);
+    const realpath = fsPromises.realpath;
+    vi.spyOn(fsPromises, 'realpath').mockImplementation(async (filePath, options) =>
+      filePath === aliasPath && options === undefined ? canonicalRoot : realpath(filePath, options),
+    );
+    const provider = new LocalFileSystemProvider({ basePath: aliasPath });
+
+    await expect(provider.exists(key)).resolves.toBe(true);
+    await expect(provider.retrieve(key)).resolves.toEqual(payload);
+    await expect(provider.getUrl(key)).resolves.toMatch(/^file:.*legacy\.json$/);
+    await provider.delete(key);
+    expect(fs.existsSync(path.join(canonicalRoot, key))).toBe(false);
+  });
+
   it('counts legacy JSON content while excluding bookkeeping files and directories', async () => {
     tempDir = createTempDir('promptfoo-media-json-stats-');
     const provider = new LocalFileSystemProvider({ basePath: tempDir });
@@ -252,7 +278,7 @@ describe('LocalFileSystemProvider', () => {
       fs.writeFileSync(filePath, 'legacy media');
       const sidecarPath = `${filePath}.meta.json`;
       fs.writeFileSync(sidecarPath, 'legacy metadata', 'utf8');
-      const canonicalSidecarPath = fs.realpathSync(sidecarPath);
+      const canonicalSidecarPath = fs.realpathSync.native(sidecarPath);
       const failure = Object.assign(new Error('Access denied'), { code: 'EACCES' });
       const unlink = fsPromises.unlink;
       vi.spyOn(fsPromises, 'unlink').mockImplementation(async (filePath) => {
