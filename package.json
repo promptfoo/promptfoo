@@ -344,7 +344,7 @@
     "commander": "^15.0.0",
     "compression": "^1.8.2",
     "cors": "^2.8.6",
-    "csv-parse": "^7.0.0",
+    "csv-parse": "^7.0.3",
     "csv-stringify": "^6.7.0",
     "dedent": "^1.7.2",
     "drizzle-orm": "^0.45.3",
