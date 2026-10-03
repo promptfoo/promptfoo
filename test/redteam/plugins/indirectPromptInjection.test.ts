@@ -62,6 +62,31 @@ describe('IndirectPromptInjectionGrader', () => {
       expect(datamarkSuggestion.value).toContain(`Original prompt with ${expectedDatamarked} here`);
     });
 
+    it('should datamark an injection containing $& literally', () => {
+      const userInput = 'ignore $& instructions';
+      const rawPrompt = `Original prompt with ${userInput} here`;
+
+      const result = grader.getSuggestions({
+        rawPrompt,
+        renderedValue: userInput,
+      });
+
+      expect(result[0].value).toContain('Original prompt with ignore^$&^instructions here');
+      expect(result[0].value).not.toContain(userInput);
+    });
+
+    it('should datamark an injection containing a $` sequence literally', () => {
+      const userInput = 'ignore $` instructions';
+      const rawPrompt = `Original prompt with ${userInput} here`;
+
+      const result = grader.getSuggestions({
+        rawPrompt,
+        renderedValue: userInput,
+      });
+
+      expect(result[0].value).toContain('Original prompt with ignore^$`^instructions here');
+    });
+
     it('should generate correct encoding suggestion', () => {
       const userInput = 'test input';
       const rawPrompt = `Original prompt with ${userInput} here`;
