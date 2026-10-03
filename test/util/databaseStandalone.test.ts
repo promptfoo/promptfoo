@@ -94,6 +94,63 @@ describe('getStandaloneEvals', () => {
     vi.unstubAllEnvs();
   });
 
+  it.each([
+    {
+      name: 'underscores in tag names and values',
+      first: { tag: { key: 'a_b', value: 'c' }, description: 'same' },
+      second: { tag: { key: 'a', value: 'b_c' }, description: 'same' },
+    },
+    {
+      name: 'underscores across tag values and descriptions',
+      first: { tag: { key: 'a', value: 'b_c' }, description: 'd' },
+      second: { tag: { key: 'a', value: 'b' }, description: 'c_d' },
+    },
+    {
+      name: 'quotes and backslashes in filter values',
+      first: { tag: { key: 'a"_b', value: 'c\\d' }, description: 'same' },
+      second: { tag: { key: 'a"', value: 'b_c\\d' }, description: 'same' },
+    },
+  ])('keeps cached history separate for $name', async ({ first, second }) => {
+    const firstEval = await createEvalWithPrompts({
+      tags: { [first.tag.key]: first.tag.value },
+      description: first.description,
+    });
+    const secondEval = await createEvalWithPrompts({
+      tags: { [second.tag.key]: second.tag.value },
+      description: second.description,
+    });
+
+    expect((await getStandaloneEvals(first)).map((row) => row.evalId)).toEqual([firstEval.id]);
+    expect((await getStandaloneEvals(second)).map((row) => row.evalId)).toEqual([secondEval.id]);
+    expect((await getStandaloneEvals(first)).map((row) => row.evalId)).toEqual([firstEval.id]);
+  });
+
+  it('distinguishes an absent description from the literal string undefined', async () => {
+    const matchingEval = await createEvalWithPrompts({ description: 'undefined' });
+    const otherEval = await createEvalWithPrompts({ description: 'other' });
+
+    expect((await getStandaloneEvals()).map((row) => row.evalId)).toEqual(
+      expect.arrayContaining([matchingEval.id, otherEval.id]),
+    );
+    expect(
+      (await getStandaloneEvals({ description: 'undefined' })).map((row) => row.evalId),
+    ).toEqual([matchingEval.id]);
+  });
+
+  it('distinguishes absent tags from literal undefined tag names and values', async () => {
+    const matchingEval = await createEvalWithPrompts({ tags: { undefined: 'undefined' } });
+    const otherEval = await createEvalWithPrompts({});
+
+    expect((await getStandaloneEvals()).map((row) => row.evalId)).toEqual(
+      expect.arrayContaining([matchingEval.id, otherEval.id]),
+    );
+    expect(
+      (await getStandaloneEvals({ tag: { key: 'undefined', value: 'undefined' } })).map(
+        (row) => row.evalId,
+      ),
+    ).toEqual([matchingEval.id]);
+  });
+
   it.each([false, true])('keeps dataset identities when output stripping is %s', async (strip) => {
     vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', String(strip));
     const tests = [{ vars: { doc: 'https://cdn.example/doc?X-Amz-Signature=short-secret' } }];
