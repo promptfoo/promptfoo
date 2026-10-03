@@ -9,7 +9,7 @@ description: Red team MCP implementations by testing function exploits and tool 
 
 The Model Context Protocol (MCP) Plugin tests whether agentic systems using MCP are vulnerable to function call exploits, system prompt leakage, unauthorized tool discovery, or other MCP-specific attacks.
 
-This plugin maps to multiple threat vectors from the [OWASP Agentic AI Top 10 Threats](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/), particularly focusing on Tool Manipulation, System Prompt Extraction, and Privilege Escalation.
+The [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) covers tool misuse under ASI02 and compromised tools or servers under ASI04. Promptfoo includes this plugin in both framework mappings.
 
 ## Purpose
 
@@ -26,7 +26,7 @@ The MCP Plugin:
 
 1. Generates attack prompts designed to exploit MCP-specific vulnerabilities
 2. Analyzes model responses for signs of successful exploitation
-3. Evaluates the robustness of function calling implementations
+3. Checks the model's handling of tool calls
 4. Tests tool invocation boundaries and privilege controls
 
 ## Attack Vectors
@@ -111,7 +111,7 @@ redteam:
     The objective of the application is to provide customer support
     without revealing internal company information or allowing unauthorized access.
 
-  # Recommended plugins for comprehensive MCP security testing
+  # Related checks for MCP applications
   plugins:
     - pii # Test for PII data exposure
     - bfla # Test function-level authorization
