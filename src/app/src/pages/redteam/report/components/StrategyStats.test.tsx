@@ -655,13 +655,19 @@ describe('StrategyStats', () => {
   });
 
   describe('getPromptDisplayString', () => {
-    it('should correctly parse and display JSON array prompts with lastPrompt.content', async () => {
+    it.each([
+      'expected content',
+      [
+        { type: 'text', text: 'expected content' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,fixture' } },
+      ],
+    ])('displays the last chat content safely: %j', async (content) => {
       const user = userEvent.setup();
       const testPrompt = JSON.stringify([
         { role: 'user', content: 'initial prompt' },
         { role: 'assistant', content: 'some response' },
         { role: 'user', content: 'another prompt' },
-        { content: 'expected content' },
+        { content },
       ]);
 
       const testFailuresByPlugin: Record<string, TestWithMetadata[]> = {
