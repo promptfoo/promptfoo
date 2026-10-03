@@ -37,6 +37,7 @@ import {
   buildRemoteMaterializationContextVars,
   buildRemoteMaterializedInputVariables,
 } from '../remoteMaterialization';
+import { getRemoteGeneratedRenderSkipVars, getSessionId } from '../remoteTestProvenance';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -45,11 +46,7 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import {
-  extractMaterializedVariablesFromJsonWithMetadata,
-  extractPromptFromTags,
-  getSessionId,
-} from '../util';
+import { extractMaterializedVariablesFromJsonWithMetadata, extractPromptFromTags } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -796,20 +793,20 @@ async function runRedteamConversation({
           ...iterationVars,
           [injectVar]: finalInjectVar,
         };
+        const currentRenderInputVarNames: string[] = [];
 
         // If inputs is defined, extract individual keys from the attack prompt JSON
         if (inputs && Object.keys(inputs).length > 0) {
           if (attackerUsesRemoteProvider) {
             try {
               const parsed = JSON.parse(newInjectVar);
-              Object.assign(
-                updatedVars,
-                buildRemoteMaterializedInputVariables(
-                  { inputMaterialization, materializationHandled, materializedVars },
-                  parsed,
-                  inputs,
-                ).vars,
+              const remoteMaterializedVars = buildRemoteMaterializedInputVariables(
+                { inputMaterialization, materializationHandled, materializedVars },
+                parsed,
+                inputs,
               );
+              Object.assign(updatedVars, remoteMaterializedVars.vars);
+              currentRenderInputVarNames.push(...Object.keys(remoteMaterializedVars.vars));
             } catch {
               // If parsing fails, it's plain text - keep original vars
             }
@@ -825,6 +822,7 @@ async function runRedteamConversation({
                   purpose: test?.metadata?.purpose as string | undefined,
                 });
               Object.assign(updatedVars, localMaterializedVars);
+              currentRenderInputVarNames.push(...Object.keys(localMaterializedVars));
             } catch {
               // If parsing fails, it's plain text - keep original vars
             }
@@ -836,7 +834,10 @@ async function runRedteamConversation({
           updatedVars,
           filters,
           targetProvider,
-          [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+          getRemoteGeneratedRenderSkipVars(iterationContext?.test?.metadata ?? test?.metadata, [
+            injectVar,
+            ...currentRenderInputVarNames,
+          ]),
         );
 
         let targetResponse = await getTargetResponse(
@@ -1224,6 +1225,7 @@ async function runRedteamConversation({
     ...vars,
     [injectVar]: bestPrompt,
   };
+  const finalRenderInputVarNames: string[] = [];
 
   // If inputs is defined, extract individual keys from the best prompt JSON
   if (inputs && Object.keys(inputs).length > 0) {
@@ -1236,11 +1238,13 @@ async function runRedteamConversation({
           materializedVars: bestNode.materializedVars,
         };
         if (remoteBestNodeMaterialization.materializationHandled) {
-          Object.assign(
-            finalUpdatedVars,
-            buildRemoteMaterializedInputVariables(remoteBestNodeMaterialization, parsed, inputs)
-              .vars,
+          const remoteMaterializedVars = buildRemoteMaterializedInputVariables(
+            remoteBestNodeMaterialization,
+            parsed,
+            inputs,
           );
+          Object.assign(finalUpdatedVars, remoteMaterializedVars.vars);
+          finalRenderInputVarNames.push(...Object.keys(remoteMaterializedVars.vars));
         }
       } else {
         const { vars: materializedVars } = await extractMaterializedVariablesFromJsonWithMetadata(
@@ -1254,6 +1258,7 @@ async function runRedteamConversation({
           },
         );
         Object.assign(finalUpdatedVars, materializedVars);
+        finalRenderInputVarNames.push(...Object.keys(materializedVars));
       }
     } catch {
       // If parsing fails, it's plain text - keep original vars
@@ -1265,7 +1270,7 @@ async function runRedteamConversation({
     finalUpdatedVars,
     filters,
     targetProvider,
-    [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+    getRemoteGeneratedRenderSkipVars(test?.metadata, [injectVar, ...finalRenderInputVarNames]),
   );
 
   const finalTargetResponse = await getTargetResponse(

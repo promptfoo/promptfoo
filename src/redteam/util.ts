@@ -2,7 +2,6 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
-import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
 import { getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { pluginDescriptions } from './constants';
@@ -20,7 +19,7 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+import type { ApiProvider, ProviderResponse } from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -420,29 +419,4 @@ export async function extractGoalFromPrompt(
     logger.warn(`Error extracting goal: ${error}`);
     return null;
   }
-}
-
-function toSessionIdString(value: any): string | undefined {
-  if (value === undefined || value === null || value === '') {
-    return undefined;
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  // Stringify non-string values (numbers, objects, arrays, etc.)
-  try {
-    return safeJsonStringify(value);
-  } catch (error) {
-    logger.debug(`Failed to stringify sessionId: ${value}`, { error });
-    return undefined;
-  }
-}
-
-export function getSessionId(
-  response: ProviderResponse | undefined | null,
-  context: Pick<CallApiContextParams, 'vars'> | undefined,
-): string | undefined {
-  return toSessionIdString(response?.sessionId) ?? toSessionIdString(context?.vars?.sessionId);
 }

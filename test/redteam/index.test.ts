@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
@@ -18,10 +18,12 @@ import {
   resolvePluginConfig,
   synthesize,
 } from '../../src/redteam/index';
+import { verifyCodingAgentResult } from '../../src/redteam/plugins/codingAgent/verifiers';
 import { Plugins } from '../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
+import { UnsupportedRemoteRedteamAssertionsError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { loadYaml } from '../../src/util/yamlLoad';
@@ -71,7 +73,7 @@ describe('synthesize', () => {
     id: () => 'test-provider',
   };
 
-  afterAll(() => {
+  afterEach(() => {
     vi.restoreAllMocks();
   });
 
@@ -260,6 +262,39 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should stop synthesis when remote generation returns unsupported redteam graders', async () => {
+      const stopProgressBar = vi.fn();
+      vi.mocked(cliProgress.SingleBar).mockImplementationOnce(function () {
+        return {
+          increment: vi.fn(),
+          start: vi.fn(),
+          stop: stopProgressBar,
+          update: vi.fn(),
+        } as any;
+      });
+      const mockPluginAction = vi
+        .fn()
+        .mockRejectedValue(
+          new UnsupportedRemoteRedteamAssertionsError('ssrf', [
+            'promptfoo:redteam:future-remote-plugin',
+          ]),
+        );
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'ssrf' });
+
+      await expect(
+        synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'ssrf', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+          showProgressBar: true,
+        }),
+      ).rejects.toThrow(UnsupportedRemoteRedteamAssertionsError);
+      expect(stopProgressBar).toHaveBeenCalledOnce();
     });
 
     it('should aggregate token usage and count unmetered generation provider calls', async () => {
@@ -1206,6 +1241,144 @@ describe('synthesize', () => {
           }),
         ]),
       );
+    });
+
+    it.each([
+      [false, false],
+      [false, true],
+      [true, false],
+      [true, true],
+    ])(
+      'tracks strategy copies (in-place: %s, verifier provenance: %s)',
+      async (mutatesInputs, tracksVerifier) => {
+        const attack = '{{ range.constructor("return process.version")() }}';
+        const secret = 'FRESH_LOCAL_STRATEGY_SECRET_9239';
+        const mockPluginAction = vi.fn().mockResolvedValue([
+          {
+            vars: { query: attack, trusted: '{{ 6 * 7 }}' },
+            metadata: {
+              __promptfooRemoteGenerated: {
+                metadata: [],
+                unsafeRenderVars: ['query'],
+                vars: tracksVerifier ? ['query'] : [],
+              },
+              pluginId: 'test-plugin',
+            },
+          },
+        ]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        const mockCustomAction = vi.fn().mockImplementation((testCases: any[]) =>
+          testCases.map((testCase) => {
+            const vars = {
+              ...testCase.vars,
+              query: 'safe transformed payload',
+              copiedAttack: testCase.vars.query,
+              secretEnvValue: secret,
+            };
+            return mutatesInputs ? Object.assign(testCase, { vars }) : { ...testCase, vars };
+          }),
+        );
+        vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+          return [{ id: 'custom', action: mockCustomAction }].find(predicate);
+        });
+
+        const result = await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['{{query}}'],
+          strategies: [{ id: 'custom' }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.testCases.find((testCase) => !testCase.metadata?.strategyId)?.vars).toEqual({
+          query: attack,
+          trusted: '{{ 6 * 7 }}',
+        });
+        const strategyTestCase = result.testCases.find(
+          (testCase) => testCase.metadata?.strategyId === 'custom',
+        );
+        expect(strategyTestCase?.vars).toEqual({
+          query: 'safe transformed payload',
+          copiedAttack: attack,
+          trusted: '{{ 6 * 7 }}',
+          secretEnvValue: secret,
+        });
+        expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toEqual({
+          metadata: [],
+          unsafeRenderVars: ['query', 'copiedAttack', 'secretEnvValue'],
+          vars: tracksVerifier ? ['query', 'copiedAttack'] : [],
+        });
+        await expect(
+          verifyCodingAgentResult(
+            'coding-agent:secret-env-read',
+            secret,
+            strategyTestCase!,
+            undefined,
+          ),
+        ).resolves.toMatchObject({ kind: 'sensitive-value-observed' });
+      },
+    );
+
+    it('should mark fresh strategy materialization variables as unsafe render data', async () => {
+      const attack = '{{ range.constructor("return process.version")() }}';
+      const inputs = {
+        document: { description: 'Document text', type: 'text' },
+        question: { description: 'Question text', type: 'text' },
+      } satisfies Inputs;
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: {
+            pluginConfig: { inputs },
+            pluginId: 'test-plugin',
+          },
+          vars: {
+            [MULTI_INPUT_VAR]: JSON.stringify({ document: 'safe document', question: 'safe' }),
+            document: 'safe document',
+            question: 'safe',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases: any[]) =>
+        testCases.map((testCase) => ({
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [MULTI_INPUT_VAR]: JSON.stringify({ document: attack, question: 'safe' }),
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'jailbreak:composite',
+      });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['{{document}} {{question}}'],
+        provider: mockProvider,
+        purpose: 'Review a document',
+        strategies: [{ id: 'jailbreak:composite' }],
+        targetIds: ['test-provider'],
+      });
+
+      const strategyTestCase = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'jailbreak:composite',
+      );
+      expect(strategyTestCase?.vars?.document).toBe(attack);
+      expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toBeUndefined();
     });
 
     it('should fall back to base strategy ID for custom variants', async () => {
