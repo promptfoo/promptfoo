@@ -67,8 +67,8 @@ async function outcome(credential: TokenCredential) {
 }
 beforeEach(() => {
   sdkMetadata.version = undefined;
-  restore = mockProcessEnv({}, { clear: true });
   directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-workload-fallback-'));
+  restore = mockProcessEnv({}, { clear: true });
   const deny = () => {
     throw new Error('Unexpected network access.');
   };
@@ -77,6 +77,7 @@ beforeEach(() => {
   vi.spyOn(https, 'request').mockImplementation(deny);
 });
 afterEach(() => {
+  vi.resetAllMocks();
   vi.restoreAllMocks();
   restore();
   fs.rmSync(directory, { recursive: true, force: true });

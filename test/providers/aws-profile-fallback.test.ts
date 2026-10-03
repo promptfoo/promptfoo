@@ -18,6 +18,7 @@ const clientRequire = createRequire(require.resolve('@aws-sdk/client-bedrock-run
 const nodeRequire = createRequire(clientRequire.resolve('@aws-sdk/credential-provider-node'));
 const { defaultProvider } = nodeRequire('@aws-sdk/credential-provider-node');
 const { fromIni } = nodeRequire('@aws-sdk/credential-provider-ini');
+const { fromProcess } = nodeRequire('@aws-sdk/credential-provider-process');
 const expiration = new Date('2100-01-01T00:00:00Z');
 const credential = (label: string) => ({
   accessKeyId: `${label}-access`,
@@ -44,6 +45,10 @@ beforeEach(() => {
   );
   restore = mockProcessEnv(
     {
+      // credential_process launches the real shell; retain only its OS inputs.
+      ComSpec: process.env.ComSpec,
+      SystemRoot: process.env.SystemRoot,
+      PATH: process.env.PATH,
       HOME: dir,
       AWS_PROFILE: 'fixture',
       AWS_CONFIG_FILE: configFilepath,
@@ -141,8 +146,10 @@ describe('scoped AWS profile fallback', () => {
     );
     fs.appendFileSync(
       configFilepath,
-      `credential_process=${JSON.stringify(process.execPath)} ${JSON.stringify(script)}\n`,
+      `credential_process=${JSON.stringify(process.execPath.replaceAll('\\', '/'))} ${JSON.stringify(script.replaceAll('\\', '/'))}\n`,
     );
+    // Check the fixture directly so a shell failure cannot hide as web fallback.
+    expect(await fromProcess(options())()).toMatchObject({ accessKeyId: 'process-access' });
     expect(await defaultProvider(options())()).toMatchObject({ accessKeyId: 'process-access' });
     const provider = await getScopedAwsProfileCredentials(options(), {
       AWS_SESSION_TOKEN: 'scoped',

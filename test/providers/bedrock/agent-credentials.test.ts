@@ -76,6 +76,7 @@ afterEach(() => {
   for (const client of clients.splice(0)) {
     client.destroy();
   }
+  vi.resetAllMocks();
   vi.restoreAllMocks();
   restore();
   fs.rmSync(dir, { recursive: true, force: true });

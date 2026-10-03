@@ -45,10 +45,33 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   restore();
   vi.restoreAllMocks();
   fs.rmSync(directory, { recursive: true, force: true });
 });
+
+function useCaseInsensitiveEnvironment() {
+  const environment: Record<string, string | undefined> = {};
+  const existingKey = (key: string) =>
+    Object.keys(environment).find((name) => name.toUpperCase() === key.toUpperCase()) ?? key;
+  // Model Windows main-thread environment access on every test platform, while
+  // preserving the first inserted spelling in enumeration like process.env.
+  vi.stubGlobal('process', {
+    ...process,
+    env: new Proxy(environment, {
+      get(target, key) {
+        return typeof key === 'string' ? target[existingKey(key)] : Reflect.get(target, key);
+      },
+      set(target, key, value) {
+        return Reflect.set(target, existingKey(String(key)), String(value));
+      },
+      deleteProperty(target, key) {
+        return Reflect.deleteProperty(target, existingKey(String(key)));
+      },
+    }),
+  });
+}
 
 function withProjectScope<T>(scope: Scope, run: (options: OAuthClientOptions) => Promise<T>) {
   const env = { GOOGLE_CLOUD_PROJECT: '' };
@@ -164,23 +187,37 @@ describe('Google SDK project discovery with empty project settings', () => {
         })),
       ),
     ),
-  )('retains $alias for $scope with host=$hostProject', async ({ alias, scope, hostProject }) => {
-    mockProcessEnv({
-      GOOGLE_APPLICATION_CREDENTIALS: credentialFile,
-      GOOGLE_CLOUD_PROJECT: hostProject,
-      [alias]: 'alias-project',
-    });
-    const expected = await releasedProjectId(scope);
-    const result = await withProjectScope(scope, (options) =>
-      GoogleAuthManager.getOAuthClient(options),
-    );
-    expect(result.projectId).toBe(expected);
-    expect(result.projectId).toBe('alias-project');
-    expect(gcloudProject).not.toHaveBeenCalled();
-    expect(metadataProject).not.toHaveBeenCalled();
-    expect(process.env.GOOGLE_CLOUD_PROJECT).toBe(hostProject);
-    expect(process.env[alias]).toBe('alias-project');
-  });
+  )(
+    'matches SDK $alias discovery for $scope with host=$hostProject',
+    async ({ alias, scope, hostProject }) => {
+      mockProcessEnv({
+        GOOGLE_APPLICATION_CREDENTIALS: credentialFile,
+        GOOGLE_CLOUD_PROJECT: hostProject,
+        [alias]: 'alias-project',
+      });
+      const hostBefore = { ...process.env };
+      // On Windows main threads, the lowercase spelling replaced the uppercase
+      // fixture value. Clearing the primary therefore clears that same alias.
+      const masksSameVariable =
+        scope !== 'ambient' &&
+        alias === 'google_cloud_project' &&
+        !(
+          Object.keys(process.env).includes('GOOGLE_CLOUD_PROJECT') &&
+          Object.keys(process.env).includes('google_cloud_project')
+        );
+      const expected = await releasedProjectId(scope);
+      gcloudProject.mockClear();
+      metadataProject.mockClear();
+      const result = await withProjectScope(scope, (options) =>
+        GoogleAuthManager.getOAuthClient(options),
+      );
+      expect(result.projectId).toBe(expected);
+      expect(result.projectId).toBe(masksSameVariable ? undefined : 'alias-project');
+      expect(gcloudProject).not.toHaveBeenCalled();
+      expect(metadataProject).not.toHaveBeenCalled();
+      expect({ ...process.env }).toEqual(hostBefore);
+    },
+  );
 
   it.each(['provider', 'suite', 'file'] as const)(
     'preserves SDK alias precedence when a %s project masks the host',
@@ -192,19 +229,69 @@ describe('Google SDK project discovery with empty project settings', () => {
         gcloud_project: 'second-alias',
         google_cloud_project: 'third-alias',
       });
-      for (const expected of ['first-alias', 'second-alias', 'third-alias']) {
+      const hostProject = process.env.GOOGLE_CLOUD_PROJECT;
+      const environmentKeys = Object.keys(process.env);
+      // Distinct-case variables coexist on POSIX and Windows workers. Windows
+      // main threads have only two variables, with the last assigned values.
+      const remainingAliases =
+        environmentKeys.includes('GCLOUD_PROJECT') && environmentKeys.includes('gcloud_project')
+          ? [
+              ['GCLOUD_PROJECT', 'first-alias'],
+              ['gcloud_project', 'second-alias'],
+            ]
+          : [['GCLOUD_PROJECT', 'second-alias']];
+      if (
+        environmentKeys.includes('GOOGLE_CLOUD_PROJECT') &&
+        environmentKeys.includes('google_cloud_project')
+      ) {
+        remainingAliases.push(['google_cloud_project', 'third-alias']);
+      }
+      for (const [alias, expected] of remainingAliases) {
         expect(await releasedProjectId(scope)).toBe(expected);
         const result = await withProjectScope(scope, (options) =>
           GoogleAuthManager.getOAuthClient(options),
         );
         expect(result.projectId).toBe(expected);
-        mockProcessEnv(
-          expected === 'first-alias' ? { GCLOUD_PROJECT: '' } : { gcloud_project: '' },
-        );
+        mockProcessEnv({ [alias]: '' });
       }
-      expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('host-project');
+      expect(process.env.GOOGLE_CLOUD_PROJECT).toBe(hostProject);
     },
   );
+
+  it.each(
+    ['GOOGLE_CLOUD_PROJECT', 'google_cloud_project'].flatMap((spelling) =>
+      (['provider', 'suite', 'file'] as const).map((scope) => ({ spelling, scope })),
+    ),
+  )('clears case-insensitive $spelling through a $scope mask', async ({ spelling, scope }) => {
+    useCaseInsensitiveEnvironment();
+    mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: credentialFile, [spelling]: 'host-project' });
+    const hostBefore = { ...process.env };
+    expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('host-project');
+    expect(process.env.google_cloud_project).toBe('host-project');
+    expect(await releasedProjectId(scope)).toBeUndefined();
+    const result = await withProjectScope(scope, (options) =>
+      GoogleAuthManager.getOAuthClient(options),
+    );
+    expect(result.projectId).toBeUndefined();
+    expect({ ...process.env }).toEqual(hostBefore);
+  });
+
+  it('retains a separate lowercase project even when its value matches the masked primary', async () => {
+    // Windows worker environments, like POSIX, can hold both exact keys.
+    vi.stubGlobal('process', { ...process, env: {} });
+    mockProcessEnv({
+      GOOGLE_APPLICATION_CREDENTIALS: credentialFile,
+      GOOGLE_CLOUD_PROJECT: 'same-project',
+      google_cloud_project: 'same-project',
+    });
+    expect(await releasedProjectId('file')).toBe('same-project');
+    const result = await withProjectScope('file', (options) =>
+      GoogleAuthManager.getOAuthClient(options),
+    );
+    expect(result.projectId).toBe('same-project');
+    expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('same-project');
+    expect(process.env.google_cloud_project).toBe('same-project');
+  });
 
   it.each(['provider', 'suite', 'file'] as const)(
     'keeps an actual %s host mask isolated when no alias or credential project is available',

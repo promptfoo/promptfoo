@@ -482,11 +482,16 @@ export class GoogleAuthManager {
       Boolean(process.env.GOOGLE_CLOUD_PROJECT);
     if (masksHostProject) {
       // Retain the SDK's other project aliases when only this variable is cleared.
+      // Case-insensitive environments expose the same variable under both
+      // spellings; a lowercase alias is independent only if both keys exist.
+      const environmentKeys = Object.keys(process.env);
+      const lowercaseProject =
+        environmentKeys.includes('GOOGLE_CLOUD_PROJECT') &&
+        environmentKeys.includes('google_cloud_project')
+          ? process.env.google_cloud_project
+          : undefined;
       authOptions.projectId =
-        process.env.GCLOUD_PROJECT ||
-        process.env.gcloud_project ||
-        process.env.google_cloud_project ||
-        '';
+        process.env.GCLOUD_PROJECT || process.env.gcloud_project || lowercaseProject || '';
     }
     const environmentQuotaProjectId =
       env?.GOOGLE_CLOUD_QUOTA_PROJECT ?? getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT');

@@ -77,6 +77,7 @@ afterEach(() => {
   for (const instance of providers.splice(0)) {
     instance.knowledgeBaseClient?.destroy();
   }
+  vi.resetAllMocks();
   vi.restoreAllMocks();
   restore();
 });
