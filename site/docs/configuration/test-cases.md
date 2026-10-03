@@ -615,7 +615,9 @@ Without the `file://` prefix, values are passed as plain strings to your provide
 | Videos (mp4, etc.)      | Converted to base64 | Multimodal models |
 | PDFs                    | Text extraction     | Document analysis |
 | Text files              | Loaded as string    | Any use case      |
-| YAML/JSON               | Parsed to object    | Structured data   |
+| YAML/JSON               | Loaded as JSON text | Structured data   |
+
+Text, JSON, and YAML references nested inside object or array vars are loaded the same way. Nested images, PDFs, and scripts are left as `file://` strings.
 
 ### Example: Vision Model Test
 
