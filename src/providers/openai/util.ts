@@ -7,8 +7,6 @@ import { calculateCost } from '../shared';
 import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
 
-const ajv = getAjv();
-
 const GPT_LONG_CONTEXT_THRESHOLD = 272_000;
 const AZURE_OPENAI_HOSTNAME = /(?:^|\.)(?:openai\.azure\.com|services\.ai\.azure\.com)$/;
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
@@ -1317,7 +1315,7 @@ export function validateFunctionCall(
   if (!functionSchema) {
     throw new Error(`Called "${functionName}", but there is no function with that name`);
   }
-  const validate = ajv.compile(functionSchema);
+  const validate = getAjv().compile(functionSchema);
   if (!validate(functionArgs)) {
     throw new Error(
       `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,

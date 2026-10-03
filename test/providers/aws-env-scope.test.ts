@@ -296,15 +296,30 @@ describe('scoped AWS SDK authentication', () => {
     }
   });
 
-  it.each([true, false])(
-    'preserves empty-profile clearing with scoped keys=%s',
-    async (scopedKeys) => {
+  it.each(
+    ['bedrock', 'sagemaker', 'agent'].flatMap((kind) =>
+      [true, false].map((scopedKeys) => ({ kind, scopedKeys })),
+    ),
+  )(
+    'preserves empty-profile clearing for $kind with scoped keys=$scopedKeys',
+    async ({ kind, scopedKeys }) => {
       mockProcessEnv({ AWS_PROFILE: 'ignored-host-profile', ...keys('host') });
       await cliState.withEnvFileOverrides(
         { AWS_PROFILE: '', ...(scopedKeys ? keys('file') : {}) },
         async () => {
-          const provider = new AwsBedrockCompletionProvider('fixture');
-          const client = await provider.getBedrockInstance();
+          const provider =
+            kind === 'bedrock'
+              ? new AwsBedrockCompletionProvider('fixture')
+              : kind === 'sagemaker'
+                ? new SageMakerCompletionProvider('fixture', { config: { modelType: 'custom' } })
+                : new AwsBedrockAgentsProvider('fixture');
+          const method =
+            kind === 'bedrock'
+              ? 'getBedrockInstance'
+              : kind === 'sagemaker'
+                ? 'getSageMakerRuntimeInstance'
+                : 'getAgentRuntimeClient';
+          const client = await Reflect.get(provider, method).call(provider);
           try {
             expect(await client.config.credentials()).toMatchObject({
               accessKeyId: `${scopedKeys ? 'file' : 'host'}-access`,

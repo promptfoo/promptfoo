@@ -76,6 +76,20 @@ describe('contracts leaf surface', () => {
   });
 
   describe('ProviderEnvOverridesSchema', () => {
+    it.each([
+      { PROMPTFOO_PYTHON: 'python3', PROMPTFOO_PYTHON_WORKERS: '2' },
+      { PROMPTFOO_PYTHON: '', PROMPTFOO_PYTHON_WORKERS: '' },
+    ])('preserves Python runtime overrides: %j', (env) => {
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
+    it.each(['PROMPTFOO_PYTHON', 'PROMPTFOO_PYTHON_WORKERS'])(
+      'rejects non-string %s values',
+      (key) => {
+        expect(ProviderEnvOverridesSchema.safeParse({ [key]: 2 }).success).toBe(false);
+      },
+    );
+
     it('preserves Google Cloud project and location aliases', () => {
       const env = {
         GOOGLE_CLOUD_PROJECT: 'live-project',
