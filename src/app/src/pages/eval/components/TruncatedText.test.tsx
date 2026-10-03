@@ -53,12 +53,39 @@ describe('TruncatedText', () => {
 
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
     expect(truncationToggler).toBeInTheDocument();
-    expect(truncationToggler).toHaveStyle('cursor: pointer');
+    expect(truncationToggler).toHaveClass('cursor-pointer');
 
     await user.click(truncationToggler as Element);
 
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
+  });
+
+  it('exposes the truncation toggle as a labeled keyboard-operable button', async () => {
+    const user = userEvent.setup();
+    const longText = 'This is a very long piece of text that exceeds the configured limit.';
+
+    render(<TruncatedText text={longText} maxLength={20} />);
+
+    const expandButton = screen.getByRole('button', { name: 'Show full text' });
+    const controlledId = expandButton.getAttribute('aria-controls');
+    expect(expandButton).toHaveAttribute('aria-expanded', 'false');
+    expect(controlledId).toBeTruthy();
+    expect(document.getElementById(controlledId!)).toBeInTheDocument();
+
+    await user.tab();
+    expect(expandButton).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    const collapseButton = screen.getByRole('button', { name: 'Show less text' });
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(longText)).toBeInTheDocument();
+
+    await user.keyboard(' ');
+    expect(screen.getByRole('button', { name: 'Show full text' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
   it("should collapse back to the truncated state when the user clicks the 'Show less' UI after expanding", () => {
@@ -196,7 +223,7 @@ describe('TruncatedText', () => {
 
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
     expect(truncationToggler).toBeInTheDocument();
-    expect(truncationToggler).toHaveStyle('cursor: pointer');
+    expect(truncationToggler).toHaveClass('cursor-pointer');
 
     await user.click(truncationToggler as Element);
     expect(screen.getByText(longText)).toBeInTheDocument();
@@ -358,7 +385,7 @@ describe('TruncatedText', () => {
 
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
     expect(truncationToggler).toBeInTheDocument();
-    expect(truncationToggler).toHaveStyle('cursor: pointer');
+    expect(truncationToggler).toHaveClass('cursor-pointer');
 
     // Should be truncated since the nested text is longer than maxLength
     expect(mainDiv).toHaveTextContent('...');
@@ -400,7 +427,7 @@ describe('TruncatedText', () => {
 
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
     expect(truncationToggler).toBeInTheDocument();
-    expect(truncationToggler).toHaveStyle('cursor: pointer');
+    expect(truncationToggler).toHaveClass('cursor-pointer');
 
     await user.click(truncationToggler as Element);
     expect(screen.getByText(longText)).toBeInTheDocument();
