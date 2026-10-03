@@ -2120,6 +2120,42 @@ describe('suite environment loading', () => {
     },
   );
 
+  it.each([false, true])(
+    'replays exported imported providers from long directories (strip metadata: %s)',
+    async (stripMetadata) => {
+      const configPath = writeConfig('exported-provider-origins', {
+        tests: ['nested/cases.yaml'],
+        env: { PROMPTFOO_STRIP_METADATA: String(stripMetadata) },
+      });
+      const base = path.dirname(configPath);
+      const nested = path.join(base, 'nested');
+      fs.mkdirSync(nested);
+      const providerModule = (name: string) =>
+        `module.exports = class { id() { return "./provider.cjs"; } async callApi() { return { output: "${name}" }; } };`;
+      fs.writeFileSync(path.join(base, 'provider.cjs'), providerModule('wrong-root'));
+      fs.writeFileSync(path.join(nested, 'provider.cjs'), providerModule('nested'));
+      fs.writeFileSync(
+        path.join(nested, 'cases.yaml'),
+        '- vars: {}\n  provider: ./provider.cjs\n  metadata: { note: private-note }\n- vars: {}\n  provider: python:provider.py\n',
+      );
+      const initial = await resolveConfigs({ config: [configPath] }, {});
+      const exported = await new Eval(initial.config).toResultsFile();
+      if (stripMetadata) {
+        expect(JSON.stringify(exported.config)).not.toContain('private-note');
+      }
+      const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(exported.config)));
+      const jsProvider = replay.testSuite.tests?.[0].provider;
+      expect(isApiProvider(jsProvider)).toBe(true);
+      if (isApiProvider(jsProvider)) {
+        expect(await jsProvider.callApi('hello')).toMatchObject({ output: 'nested' });
+      }
+      expect(replay.testSuite.tests?.[1].provider).toMatchObject({
+        scriptPath: 'provider.py',
+        options: { config: { basePath: nested } },
+      });
+    },
+  );
+
   it('retains the directory of a test file named inside an imported tests file', async () => {
     const configPath = writeConfig('nested-test-reference', { tests: ['nested/cases.yaml'] });
     const base = path.dirname(configPath);

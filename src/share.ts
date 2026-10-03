@@ -201,6 +201,10 @@ function stripPromptPaths<T extends Partial<Prompt>>(prompt: T): T {
 
 // Mutate only the sanitized share copy; local replay paths stay intact.
 function stripTestPaths(test: TestCase): void {
+  if (test.metadata?.__promptfoo) {
+    const { providerBasePath: _providerBasePath, ...internalMetadata } = test.metadata.__promptfoo;
+    test.metadata = { ...test.metadata, __promptfoo: internalMetadata };
+  }
   if (test.vars) {
     test.vars = stripFilePaths(test.vars);
   }

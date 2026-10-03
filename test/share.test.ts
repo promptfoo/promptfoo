@@ -1008,14 +1008,17 @@ describe('createShareableUrl', () => {
               },
               literal: '/ordinary/user/data',
             },
-            metadata: { note: 'private-note' },
+            metadata: {
+              note: 'private-note',
+              __promptfoo: { providerBasePath: '/home/alice/project/tests' },
+            },
             providerOutput: 'private-output',
           },
         };
         mockEval.config = {
           basePath: '/home/alice/project',
           providers: [row.provider],
-          tests: [row.testCase],
+          tests: [row.testCase, { provider: 'echo', metadata: row.testCase.metadata }],
           defaultTest: row.testCase,
           scenarios: [{ config: [row.testCase], tests: [row.testCase] }],
         };
@@ -1042,6 +1045,9 @@ describe('createShareableUrl', () => {
         expect(uploaded.testCase.options.provider.text.config).toEqual({ temperature: 0 });
         expect(uploaded.testCase.options.provider.classification).toBe('file://classifier.js');
         expect(row.provider.config.basePath).toBe('/home/alice/project');
+        expect(row.testCase.metadata.__promptfoo.providerBasePath).toBe(
+          '/home/alice/project/tests',
+        );
         if (stripData) {
           expect(JSON.stringify(uploaded)).not.toContain('private-');
           expect(uploaded.testCase.vars).toBeUndefined();
