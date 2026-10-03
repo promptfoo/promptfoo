@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { getRequestListener } from '@hono/node-server';
 import express from 'express';
 import logger from '../../logger';
+import { csrfProtection } from '../../server/middleware/csrfProtection';
 import telemetry from '../../telemetry';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { registerResources } from './resources';
@@ -19,6 +20,24 @@ import { registerRunEvaluationTool } from './tools/runEvaluation';
 import { registerShareEvaluationTool } from './tools/shareEvaluation';
 import { registerTestProviderTool } from './tools/testProvider';
 import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
+import type { NextFunction, Request, Response } from 'express';
+
+const MCP_HTTP_HOST = '127.0.0.1';
+const LOCAL_HOST_HEADER = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i;
+
+export function mcpHostProtection(req: Request, res: Response, next: NextFunction): void {
+  if (req.headers.host && LOCAL_HOST_HEADER.test(req.headers.host)) {
+    next();
+    return;
+  }
+
+  logger.warn('[MCP] Blocked request with non-local Host header', {
+    host: req.headers.host,
+    method: req.method,
+    path: req.path,
+  });
+  res.status(403).json({ error: 'MCP HTTP requests require a local Host header' });
+}
 
 function setMcpTransport(transport: 'http' | 'stdio'): void {
   Object.assign(process.env, { MCP_TRANSPORT: transport });
@@ -130,6 +149,8 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   setMcpTransport('http');
 
   const app = express();
+  app.use(mcpHostProtection);
+  app.use(csrfProtection);
   app.use(express.json());
 
   const mcpServer = await createMcpServer();
@@ -168,14 +189,15 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands running until SIGINT/SIGTERM
   return new Promise<void>((resolve) => {
-    const httpServer = app.listen(port, () => {
-      logger.info(`Promptfoo MCP server running at http://localhost:${port}`);
-      logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
-      logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
+    const httpServer = app.listen(port, MCP_HTTP_HOST, () => {
+      logger.info(`Promptfoo MCP server running at http://${MCP_HTTP_HOST}:${port}`);
+      logger.info(`MCP endpoint: http://${MCP_HTTP_HOST}:${port}/mcp`);
+      logger.info(`SSE endpoint: http://${MCP_HTTP_HOST}:${port}/mcp/sse`);
 
       // Track server start
       telemetry.record('feature_used', {
         feature: 'mcp_server_started',
+        host: MCP_HTTP_HOST,
         transport: 'http',
         port,
       });
