@@ -71,6 +71,8 @@ interface ResultsChartsSectionProps {
   isRedteamEval: boolean;
   resultsChartsScores: number[];
   resultsChartsUnavailableReasons: string[];
+  showCharts: boolean | null;
+  toggleShowCharts: (defaultShowCharts: boolean) => void;
   children: (toggleButton: React.ReactNode | null) => React.ReactNode;
 }
 
@@ -180,22 +182,24 @@ export function ResultsChartsSection({
   isRedteamEval,
   resultsChartsScores,
   resultsChartsUnavailableReasons,
+  showCharts,
+  toggleShowCharts,
   children,
 }: ResultsChartsSectionProps) {
-  const [renderResultsCharts, setRenderResultsCharts] = React.useState(
-    !isRedteamEval &&
-      window.innerHeight >= MIN_VIEWPORT_HEIGHT_FOR_CHARTS &&
-      canRenderResultsCharts,
-  );
-
   if (isRedteamEval) {
     return <>{children(null)}</>;
   }
 
+  const shouldShowCharts =
+    showCharts ??
+    (canRenderResultsCharts &&
+      typeof window !== 'undefined' &&
+      window.innerHeight >= MIN_VIEWPORT_HEIGHT_FOR_CHARTS);
+
   const toggleButton = (
-    <Button variant="ghost" size="sm" onClick={() => setRenderResultsCharts((prev) => !prev)}>
+    <Button variant="ghost" size="sm" onClick={() => toggleShowCharts(shouldShowCharts)}>
       <BarChart className="size-4 mr-2" />
-      {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+      {shouldShowCharts ? 'Hide Charts' : 'Show Charts'}
     </Button>
   );
 
@@ -203,16 +207,16 @@ export function ResultsChartsSection({
     <>
       {children(toggleButton)}
       <div
-        aria-hidden={!renderResultsCharts}
+        aria-hidden={!shouldShowCharts}
         className="overflow-hidden transition-all duration-200 ease-out motion-reduce:transition-none"
         style={{
-          maxHeight: renderResultsCharts ? '1200px' : '0px',
-          opacity: renderResultsCharts ? 1 : 0,
-          transform: renderResultsCharts ? 'translateY(0)' : 'translateY(-4px)',
-          pointerEvents: renderResultsCharts ? 'auto' : 'none',
+          maxHeight: shouldShowCharts ? '1200px' : '0px',
+          opacity: shouldShowCharts ? 1 : 0,
+          transform: shouldShowCharts ? 'translateY(0)' : 'translateY(-4px)',
+          pointerEvents: shouldShowCharts ? 'auto' : 'none',
         }}
       >
-        {renderResultsCharts &&
+        {shouldShowCharts &&
           (canRenderResultsCharts ? (
             <ResultsCharts scores={resultsChartsScores} />
           ) : (
@@ -274,6 +278,8 @@ export default function ResultsView({
     setComparisonEvalIds,
     hiddenVarNamesBySchema,
     setHiddenVarNamesForSchema,
+    showCharts = null,
+    toggleShowCharts = () => {},
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -837,6 +843,8 @@ export default function ResultsView({
               isRedteamEval={isRedteamEval}
               resultsChartsScores={resultsChartsScores}
               resultsChartsUnavailableReasons={resultsChartsUnavailableReasons}
+              showCharts={showCharts}
+              toggleShowCharts={toggleShowCharts}
             >
               {(chartsToggleButton) => (
                 <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-border/50">
