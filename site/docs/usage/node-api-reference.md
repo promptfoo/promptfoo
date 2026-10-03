@@ -68,29 +68,35 @@ console.log(`Passed: ${results.stats.successes}/${results.results.length}`);
 console.log(`Shareable URL: ${evalRecord.shareableUrl}`);
 ```
 
-**Common Options:**
+**Suite settings and runtime options:**
+
+Pass `outputPath`, `writeLatestResults`, and `sharing` in the first argument. The second argument controls execution, including caching, concurrency, deadlines, and progress reporting. Import the package's types instead of copying an interface:
 
 ```typescript
-interface EvaluateOptions {
-  // Output and format
-  outputPath?: string | string[];
-  formatOutput?: boolean;
+import { evaluate, type EvaluateOptions, type EvaluateTestSuite } from 'promptfoo';
 
-  // Evaluation behavior
-  maxConcurrency?: number;
-  nunjucksFilters?: Record<string, Function>;
+const testSuite: EvaluateTestSuite = {
+  prompts: ['{{answer}}'],
+  providers: ['echo'],
+  tests: [{ vars: { answer: 'Paris' }, assert: [{ type: 'equals', value: 'Paris' }] }],
+  outputPath: 'results.json',
+  writeLatestResults: true,
+};
 
-  // Caching
-  cache?: boolean;
+const options: EvaluateOptions = {
+  cache: false,
+  maxConcurrency: 2,
+  progressCallback: (completed, total) => {
+    console.log(`${completed}/${total} rows completed`);
+  },
+};
 
-  // Sharing and persistence
-  sharing?: boolean;
-  writeLatestResults?: boolean;
-
-  // Progress tracking
-  onTestComplete?: (result: EvaluateResult) => void;
-}
+const evalRecord = await evaluate(testSuite, options);
+const summary = await evalRecord.toEvaluateSummary();
+console.log(summary.results.map(({ success, score, error }) => ({ success, score, error })));
 ```
+
+`cache: false` applies to this call. `progressCallback` receives counts, the row index, execution context, and aggregate prompt metrics; it does not receive a completed result. Read final results from `toEvaluateSummary()` after `evaluate()` resolves. `onTestComplete` and `formatOutput` are not supported options. `outputPath` selects the export format from the filename.
 
 ---
 

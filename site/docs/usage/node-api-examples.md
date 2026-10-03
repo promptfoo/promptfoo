@@ -462,7 +462,7 @@ const results = await evaluateWithExternalData();
 
 ### Example 12: Streaming Results Processing
 
-Process evaluation results as they complete:
+Use `progressCallback` to report counts while an evaluation runs. Read individual results after it finishes; the API does not provide a per-result streaming callback.
 
 ```typescript
 import { evaluate } from 'promptfoo';
@@ -476,18 +476,16 @@ async function streamingEvaluation() {
     },
     {
       maxConcurrency: 10,
-      onTestComplete: (result) => {
-        // Process each result as it completes
-        if (result.score >= 0.8) {
-          console.log(`✓ ${result.testCase.description ?? 'test'}: ${result.score.toFixed(2)}`);
-        } else {
-          console.log(`✗ ${result.testCase.description ?? 'test'}: ${result.score.toFixed(2)}`);
-        }
+      progressCallback: (completed, total) => {
+        console.log(`${completed}/${total} rows completed`);
       },
     },
   );
 
   const results = await evalRecord.toEvaluateSummary();
+  for (const result of results.results) {
+    console.log(`${result.testCase.description ?? 'test'}: ${result.score.toFixed(2)}`);
+  }
   console.log(`\nFinal stats: ${results.stats.successes}/${results.results.length}`);
 }
 
