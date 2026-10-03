@@ -8,6 +8,7 @@ import {
   createTokenUsage,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createMockTracingOptions } from '../../factories/tracing';
 
 import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
@@ -57,19 +58,7 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 // Tracing mocks
-const mockResolveTracingOptions = vi.hoisted(() =>
-  vi.fn(() => ({
-    enabled: false,
-    includeInAttack: true,
-    includeInGrading: true,
-    includeInternalSpans: false,
-    maxSpans: 50,
-    maxDepth: 5,
-    maxRetries: 3,
-    retryDelayMs: 500,
-    sanitizeAttributes: true,
-  })),
-);
+const mockResolveTracingOptions = vi.hoisted(() => vi.fn(() => createMockTracingOptions(false)));
 
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
@@ -1096,17 +1085,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should fetch trace context when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Mock trace context
       mockFetchTraceContext.mockResolvedValue({
@@ -1150,17 +1129,7 @@ describe('RedteamIterativeMetaProvider', () => {
     });
 
     it('skips trace retrieval when an iterative-meta target response came from cache', async () => {
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
       mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
 
       const result = await runMetaAgentRedteam({
@@ -1188,17 +1157,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should NOT fetch trace context when traceparent is missing', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       const result = await runMetaAgentRedteam({
         context: {
@@ -1346,17 +1305,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should handle fetchTraceContext returning null gracefully', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Return null (no trace found)
       mockFetchTraceContext.mockResolvedValue(null);

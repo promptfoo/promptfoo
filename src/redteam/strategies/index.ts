@@ -39,6 +39,25 @@ import type { Strategy } from './types';
 
 export type { Strategy };
 
+function createEncodingStrategy(
+  id: string,
+  label: string,
+  encoding: (() => typeof addBase64Encoding) | keyof typeof EncodingType,
+): Strategy {
+  return {
+    id,
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding ${label} encoding to ${testCases.length} test cases`);
+      const newTestCases =
+        typeof encoding === 'function'
+          ? encoding()(testCases, injectVar)
+          : addOtherEncodings(testCases, injectVar, EncodingType[encoding]);
+      logger.debug(`Added ${newTestCases.length} ${label} encoded test cases`);
+      return newTestCases;
+    },
+  };
+}
+
 export const Strategies: Strategy[] = [
   {
     id: 'layer',
@@ -56,24 +75,8 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
-  {
-    id: 'base64',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Base64 encoding to ${testCases.length} test cases`);
-      const newTestCases = addBase64Encoding(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'homoglyph',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Homoglyph encoding to ${testCases.length} test cases`);
-      const newTestCases = addHomoglyphs(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} Homoglyph encoded test cases`);
-      return newTestCases;
-    },
-  },
+  createEncodingStrategy('base64', 'Base64', () => addBase64Encoding),
+  createEncodingStrategy('homoglyph', 'Homoglyph', () => addHomoglyphs),
   {
     id: 'basic',
     action: async (_testCases: TestCase[], _injectVar: string, _config?: Record<string, any>) => {
@@ -180,15 +183,7 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
-  {
-    id: 'hex',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Hex encoding to ${testCases.length} test cases`);
-      const newTestCases = addHexEncoding(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} Hex encoded test cases`);
-      return newTestCases;
-    },
-  },
+  createEncodingStrategy('hex', 'Hex', () => addHexEncoding),
   {
     // Deprecated: Use 'jailbreak:meta' instead. This alias exists for backward compatibility.
     id: 'jailbreak',
@@ -347,15 +342,7 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
-  {
-    id: 'rot13',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
-      const newTestCases = addRot13(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
-      return newTestCases;
-    },
-  },
+  createEncodingStrategy('rot13', 'ROT13', () => addRot13),
   {
     // Deprecated: Simba strategy has been removed. This entry exists for backwards compatibility.
     id: 'simba',
@@ -363,42 +350,10 @@ export const Strategies: Strategy[] = [
       return addSimbaTestCases(testCases, injectVar, config);
     },
   },
-  {
-    id: 'morse',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Morse code encoding to ${testCases.length} test cases`);
-      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.MORSE);
-      logger.debug(`Added ${newTestCases.length} Morse code encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'piglatin',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding Pig Latin encoding to ${testCases.length} test cases`);
-      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.PIG_LATIN);
-      logger.debug(`Added ${newTestCases.length} Pig Latin encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'camelcase',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding camelCase encoding to ${testCases.length} test cases`);
-      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.CAMEL_CASE);
-      logger.debug(`Added ${newTestCases.length} camelCase encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'emoji',
-    action: async (testCases, injectVar) => {
-      logger.debug(`Adding emoji encoding to ${testCases.length} test cases`);
-      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.EMOJI);
-      logger.debug(`Added ${newTestCases.length} emoji encoded test cases`);
-      return newTestCases;
-    },
-  },
+  createEncodingStrategy('morse', 'Morse code', 'MORSE'),
+  createEncodingStrategy('piglatin', 'Pig Latin', 'PIG_LATIN'),
+  createEncodingStrategy('camelcase', 'camelCase', 'CAMEL_CASE'),
+  createEncodingStrategy('emoji', 'emoji', 'EMOJI'),
 ];
 
 export async function validateStrategies(strategies: RedteamStrategyObject[]): Promise<void> {

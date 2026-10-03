@@ -1118,3 +1118,9 @@ export function getGraderAssertionValue(
 
   return assertToUse.value;
 }
+
+export interface SuccessfulAttack {
+  turn: number;
+  prompt: string;
+  response: string;
+}

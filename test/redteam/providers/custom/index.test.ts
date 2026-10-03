@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
-import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
+import { CustomProvider } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import { createFailingGrader, createPassingGrader } from '../../../factories/mockGrader';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
-
-import type { Message } from '../../../../src/redteam/providers/shared';
 
 // Hoisted mocks for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -71,49 +70,6 @@ vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal
   };
 });
 
-describe('MemorySystem', () => {
-  let memorySystem: MemorySystem;
-
-  beforeEach(() => {
-    memorySystem = new MemorySystem();
-  });
-
-  it('should add and retrieve messages for a conversation', () => {
-    const conversationId = 'test-convo';
-    const message: Message = { role: 'user', content: 'test message' };
-
-    memorySystem.addMessage(conversationId, message);
-    const conversation = memorySystem.getConversation(conversationId);
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0]).toEqual(message);
-  });
-
-  it('should return empty array for non-existent conversation', () => {
-    const conversation = memorySystem.getConversation('non-existent');
-    expect(conversation).toEqual([]);
-  });
-
-  it('should duplicate conversation excluding last turn', () => {
-    const conversationId = 'test-convo';
-    const messages: Message[] = [
-      { role: 'system', content: 'system message' },
-      { role: 'user', content: 'user message 1' },
-      { role: 'assistant', content: 'assistant message 1' },
-      { role: 'user', content: 'user message 2' },
-      { role: 'assistant', content: 'assistant message 2' },
-    ];
-
-    messages.forEach((msg) => memorySystem.addMessage(conversationId, msg));
-
-    const newConversationId = memorySystem.duplicateConversationExcludingLastTurn(conversationId);
-    const newConversation = memorySystem.getConversation(newConversationId);
-
-    expect(newConversation).toHaveLength(3);
-    expect(newConversation).toEqual(messages.slice(0, 3));
-  });
-});
-
 describe('CustomProvider', () => {
   let customProvider: CustomProvider;
   let mockRedTeamProvider: MockApiProvider;
@@ -159,15 +115,7 @@ describe('CustomProvider', () => {
 
     // Set up default getGraderById mock
     mockGetGraderById.mockReset();
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: {
-            pass: false,
-          },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(createFailingGrader);
 
     // Set up default tryUnblocking mock
     vi.mocked(tryUnblocking).mockReset();
@@ -478,15 +426,9 @@ describe('CustomProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: {
-            pass: true, // Pass means no jailbreak detected
-          },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(
+      /* Pass means no jailbreak detected */ createPassingGrader,
+    );
 
     // Create a new provider with smaller max turns for this test
     const testProvider = new CustomProvider({
@@ -811,15 +753,7 @@ describe('CustomProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: vi.fn(async () => ({
-          grade: {
-            pass: true,
-          },
-        })),
-      } as any;
-    });
+    mockGetGraderById.mockImplementation(createPassingGrader);
 
     const testProvider = new CustomProvider({
       injectVar: 'objective',

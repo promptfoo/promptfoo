@@ -1,3 +1,7 @@
+const { createErrorFirstLoggerModule } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import fs from 'fs/promises';
 
 import confirm from '@inquirer/confirm';
@@ -27,14 +31,7 @@ vi.mock('../../../src/globalConfig/globalConfig', () => ({
   readGlobalConfig: vi.fn(),
   writeGlobalConfigPartial: vi.fn(),
 }));
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createErrorFirstLoggerModule());
 vi.mock('../../../src/redteam/commands/generate', () => ({
   doGenerateRedteam: vi.fn(),
 }));

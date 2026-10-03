@@ -24,6 +24,23 @@ describe('abort on target error', () => {
   let serverPort: number;
   let serverUrl: string;
 
+  async function callTestHttpServer() {
+    const response = await fetch(serverUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'test' }),
+    });
+    return {
+      output: await response.text(),
+      metadata: {
+        http: {
+          status: response.status,
+          statusText: response.statusText,
+        },
+      },
+    };
+  }
+
   beforeAll(async () => {
     // Create a mock server that returns 403 Forbidden
     server = http.createServer((_req, res) => {
@@ -53,23 +70,9 @@ describe('abort on target error', () => {
     // Create a mock provider that returns 403
     const mockApiProvider = createMockProvider({
       id: 'test-http-provider',
-      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
-        // Simulate HTTP call to our mock server
-        const response = await fetch(serverUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: 'test' }),
-        });
-        return {
-          output: await response.text(),
-          metadata: {
-            http: {
-              status: response.status,
-              statusText: response.statusText,
-            },
-          },
-        };
-      }),
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockImplementation(/* Simulate HTTP call to our mock server */ callTestHttpServer),
     });
 
     const testSuite: TestSuite = {
@@ -113,22 +116,7 @@ describe('abort on target error', () => {
     // Create a mock provider that returns 403
     const mockApiProvider = createMockProvider({
       id: 'test-http-provider',
-      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
-        const response = await fetch(serverUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: 'test' }),
-        });
-        return {
-          output: await response.text(),
-          metadata: {
-            http: {
-              status: response.status,
-              statusText: response.statusText,
-            },
-          },
-        };
-      }),
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(callTestHttpServer),
     });
 
     const testSuite: TestSuite = {
