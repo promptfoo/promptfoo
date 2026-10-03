@@ -124,46 +124,81 @@ describe.runIf(hasSdk)('OpenCode environment files through doEval', () => {
     expect(process.env.OPENAI_API_KEY).toBe('host-key');
   });
 
-  it('accepts Windows credential aliases in preflight and passes the winning value to the SDK', async () => {
-    vi.spyOn(os, 'platform').mockReturnValue('win32');
-    mockProcessEnv({ OPENAI_API_KEY: undefined, ANTHROPIC_API_KEY: undefined });
-    const providerPath = path.join(tempDir, 'provider.json');
-    fs.writeFileSync(
-      providerPath,
-      JSON.stringify({
-        id: 'opencode:sdk',
-        config: { provider_id: 'openai', tools: { skill: false } },
-        env: { OPENAI_API_KEY: 'provider-file-key' },
-      }),
-    );
-    const providerEnv: Record<string, string> = {
-      openai_api_key: 'provider-override-key',
-      PROMPTFOO_OPENCODE_ENV_PROBE: 'windows-alias',
-    };
-    const evaluation = await doEval(
-      { write: false, share: false, table: false, progressBar: false },
-      {
-        prompts: ['hello'],
-        providers: [
-          {
-            id: `file://${providerPath}`,
-            env: providerEnv,
+  it.each([
+    {
+      fileKey: 'OPENAI_API_KEY',
+      overrideKey: 'openai_api_key',
+      templateKey: undefined,
+      hostKey: undefined,
+    },
+    ...[
+      ['OPENAI_API_KEY', 'openai_api_key'],
+      ['openai_api_key', 'OPENAI_API_KEY'],
+      ['OpenAI_Api_Key', 'oPeNaI_aPi_KeY'],
+    ].flatMap(([fileKey, overrideKey]) =>
+      [fileKey, overrideKey].flatMap((templateKey) =>
+        [undefined, 'host-key'].map((hostKey) => ({
+          fileKey,
+          overrideKey,
+          templateKey,
+          hostKey,
+        })),
+      ),
+    ),
+  ])(
+    'passes Windows credentials through preflight, templates, and SDK spawn: $fileKey/$overrideKey/$templateKey/$hostKey',
+    async ({ fileKey, overrideKey, templateKey, hostKey }) => {
+      vi.spyOn(os, 'platform').mockReturnValue('win32');
+      mockProcessEnv({ OPENAI_API_KEY: hostKey, ANTHROPIC_API_KEY: undefined });
+      const originalLowercaseKey = process.env.openai_api_key;
+      const providerPath = path.join(tempDir, 'provider.json');
+      fs.writeFileSync(
+        providerPath,
+        JSON.stringify({
+          id: 'opencode:sdk',
+          config: {
+            provider_id: 'openai',
+            tools: { skill: false },
+            apiKey: templateKey ? `{{ env.${templateKey} }}` : undefined,
           },
-        ],
-        tests: [{ vars: {} }],
-      },
-      undefined,
-      { eventSource: 'mcp', cache: false },
-    );
-    const [row] = await evaluation.getResults();
-    expect(row.success).toBe(true);
-    expect(row.response?.output).toBe('windows-alias');
-    expect(
-      Object.entries(spawnedEnvs[0]).filter(([key]) => key.toUpperCase() === 'OPENAI_API_KEY'),
-    ).toEqual([['openai_api_key', 'provider-override-key']]);
-    expect(process.env.OPENAI_API_KEY).toBeUndefined();
-    expect(process.env.openai_api_key).toBeUndefined();
-  });
+          env: { [fileKey]: 'provider-file-key' },
+        }),
+      );
+      const providerEnv: Record<string, string> = {
+        [overrideKey]: 'provider-override-key',
+        PROMPTFOO_OPENCODE_ENV_PROBE: 'windows-alias',
+      };
+      const evaluation = await doEval(
+        { write: false, share: false, table: false, progressBar: false },
+        {
+          prompts: ['hello'],
+          providers: [
+            {
+              id: `file://${providerPath}`,
+              env: providerEnv,
+            },
+          ],
+          tests: [{ vars: {} }],
+        },
+        undefined,
+        { eventSource: 'mcp', cache: false },
+      );
+      const [row] = await evaluation.getResults();
+      expect(row.success).toBe(true);
+      expect(row.response?.output).toBe('windows-alias');
+      const credentialEntries = Object.entries(spawnedEnvs[0]).filter(
+        ([key]) => key.toUpperCase() === 'OPENAI_API_KEY',
+      );
+      expect(credentialEntries).toHaveLength(1);
+      expect(credentialEntries[0][1]).toBe('provider-override-key');
+      if (templateKey) {
+        const serverConfig = JSON.parse(spawnedEnvs[0].OPENCODE_CONFIG_CONTENT!);
+        expect(serverConfig.provider.openai.options.apiKey).toBe('provider-override-key');
+      }
+      expect(process.env.OPENAI_API_KEY).toBe(hostKey);
+      expect(process.env.openai_api_key).toBe(originalLowercaseKey);
+    },
+  );
 
   it('restores the host environment after actual SDK startup rejects', async () => {
     startupError = true;

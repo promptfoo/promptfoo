@@ -108,8 +108,36 @@ describe('Provider Registry', () => {
           options: { env: { [providerKey]: value } },
         });
         expect(provider).toHaveProperty('env', {
-          [value === undefined ? suiteKey : providerKey]: value ?? 'suite-path',
+          [suiteKey]: value ?? 'suite-path',
+          ...(value === undefined ? {} : { [providerKey]: value }),
         });
+      } finally {
+        platform.mockRestore();
+      }
+    },
+  );
+
+  it.each(
+    [
+      ['OPENAI_API_KEY', 'openai_api_key'],
+      ['openai_api_key', 'OPENAI_API_KEY'],
+      ['OpenAI_Api_Key', 'oPeNaI_aPi_KeY'],
+    ].flatMap(([suiteKey, providerKey]) =>
+      [suiteKey, providerKey].map((templateKey) => ({ suiteKey, providerKey, templateKey })),
+    ),
+  )(
+    'renders the winning Windows credential with either spelling: $suiteKey/$providerKey/$templateKey',
+    async ({ suiteKey, providerKey, templateKey }) => {
+      const platform = vi.spyOn(os, 'platform').mockReturnValue('win32');
+      try {
+        const provider = await loadApiProvider('opencode:sdk', {
+          env: { [suiteKey]: 'suite-key' },
+          options: {
+            env: { [providerKey]: 'provider-key' },
+            config: { apiKey: `{{ env.${templateKey} }}` },
+          },
+        });
+        expect(provider).toHaveProperty('config.apiKey', 'provider-key');
       } finally {
         platform.mockRestore();
       }

@@ -147,7 +147,9 @@ export function mergeProviderEnv(
       if (isWindowsOpenCode) {
         for (const existingKey of Object.keys(merged)) {
           if (existingKey !== key && existingKey.toUpperCase() === key.toUpperCase()) {
-            delete merged[existingKey];
+            // Keep earlier spellings available to case-sensitive provider templates.
+            // The server environment later collapses aliases with this same value.
+            merged[existingKey] = value;
           }
         }
       }
