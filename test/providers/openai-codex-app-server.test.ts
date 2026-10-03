@@ -723,6 +723,21 @@ describe('OpenAICodexAppServerProvider', () => {
       }
     });
 
+    it.each(['"', "'"])(
+      'preserves native binaries in PATH entries quoted with %s and containing delimiters',
+      async (quote) => {
+        const nativeBinDir = path.join(npmBinDir, `native${path.delimiter}directory`);
+        fs.mkdirSync(nativeBinDir);
+        fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+
+        const [command] = await getSpawnCall({
+          cli_env: { PATH: `${quote}${nativeBinDir}${quote}${path.delimiter}${npmBinDir}` },
+        });
+
+        expect(command).toBe('codex');
+      },
+    );
+
     it('ignores relative PATH entries that would discover npm in the cwd', async () => {
       const cwd = process.cwd();
       process.chdir(npmBinDir);

@@ -830,9 +830,11 @@ function createAbortError(message: string): Error {
 
 /** Find npm's entrypoint only when Windows cannot launch a native Codex binary. */
 function getCodexNpmEntrypoint(env: Record<string, string>): string | undefined {
-  const directories = (env.PATH ?? env.Path ?? '')
-    .split(path.delimiter)
-    .map((directory) => directory.replace(/^"(.*)"$/, '$1'));
+  // libuv accepts either quote style, including PATH delimiters inside quotes.
+  const directories = (
+    (env.PATH ?? env.Path ?? '').match(new RegExp(`"[^"]*"|'[^']*'|[^${path.delimiter}]+`, 'g')) ??
+    []
+  ).map((directory) => directory.replace(/^(["'])(.*)\1$/, '$2'));
   // Node searches the cwd and all of PATH for native binaries, ignoring .cmd shims.
   if (
     [process.cwd(), ...directories].some((directory) =>
