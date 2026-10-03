@@ -7,6 +7,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Purpose from './Purpose';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
+const createEmptyPurposeConfigFixture = () => ({
+  applicationDefinition: {
+    purpose: '',
+  },
+  target: {},
+  testGenerationInstructions: '',
+});
+
+const createValidPurposeFixture = () => ({
+  purpose: 'A test purpose to enable the next button',
+});
+
 const mockUpdateApplicationDefinition = vi.fn();
 const mockUpdateConfig = vi.fn();
 const mockUseRedTeamConfig = vi.fn();
@@ -64,9 +76,7 @@ describe('Purpose Component', () => {
     vi.mocked(useApiHealth).mockReturnValue(connectedApiHealth);
     mockUseRedTeamConfig.mockReturnValue({
       config: {
-        applicationDefinition: {
-          purpose: 'A test purpose to enable the next button',
-        },
+        applicationDefinition: createValidPurposeFixture(),
         target: {},
         testGenerationInstructions: '',
       },
@@ -108,13 +118,7 @@ describe('Purpose Component', () => {
   it('should enable the Next button when testMode is "model" and purpose is empty', async () => {
     const user = userEvent.setup();
     mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        applicationDefinition: {
-          purpose: '',
-        },
-        target: {},
-        testGenerationInstructions: '',
-      },
+      config: createEmptyPurposeConfigFixture(),
       updateApplicationDefinition: mockUpdateApplicationDefinition,
       updateConfig: mockUpdateConfig,
     });
@@ -203,13 +207,7 @@ describe('Purpose Component', () => {
       const onNextMock = vi.fn();
 
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          applicationDefinition: {
-            purpose: '',
-          },
-          target: {},
-          testGenerationInstructions: '',
-        },
+        config: createEmptyPurposeConfigFixture(),
         updateApplicationDefinition: mockUpdateApplicationDefinition,
         updateConfig: mockUpdateConfig,
       });
@@ -262,9 +260,7 @@ describe('Purpose Component', () => {
 
       mockUseRedTeamConfig.mockReturnValue({
         config: {
-          applicationDefinition: {
-            purpose: 'A test purpose to enable the next button',
-          },
+          applicationDefinition: createValidPurposeFixture(),
           target: {
             id: 'http',
             config: {
@@ -295,9 +291,7 @@ describe('Purpose Component', () => {
 
       mockUseRedTeamConfig.mockReturnValue({
         config: {
-          applicationDefinition: {
-            purpose: 'A test purpose to enable the next button',
-          },
+          applicationDefinition: createValidPurposeFixture(),
           target: {
             id: 'http',
             config: {

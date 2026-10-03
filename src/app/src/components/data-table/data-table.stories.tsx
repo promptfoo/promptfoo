@@ -5,7 +5,7 @@ import { Button } from '@app/components/ui/button';
 import { Download, Plus, Trash2 } from 'lucide-react';
 import { DataTable } from './data-table';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef, Row } from '@tanstack/react-table';
 
 // Sample data type
 interface Evaluation {
@@ -824,21 +824,23 @@ export const PrintStyles: Story = {
   },
 };
 
+const renderEvaluationDetails = (row: Row<Evaluation>) => (
+  <div className="space-y-2">
+    <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
+    <p className="text-sm text-muted-foreground">
+      Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
+      {row.original.createdAt}
+    </p>
+  </div>
+);
+
 // Row expansion - basic
 export const WithRowExpansion: Story = {
   render: () => (
     <DataTable
       columns={columns}
       data={sampleData}
-      renderSubComponent={(row) => (
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
-          <p className="text-sm text-muted-foreground">
-            Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
-            {row.original.createdAt}
-          </p>
-        </div>
-      )}
+      renderSubComponent={(row) => renderEvaluationDetails(row)}
     />
   ),
 };
@@ -908,15 +910,7 @@ export const WithDefaultExpanded: Story = {
       columns={columns}
       data={sampleData}
       expanded={{ '0': true, '2': true }}
-      renderSubComponent={(row) => (
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
-          <p className="text-sm text-muted-foreground">
-            Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
-            {row.original.createdAt}
-          </p>
-        </div>
-      )}
+      renderSubComponent={(row) => renderEvaluationDetails(row)}
     />
   ),
   parameters: {
@@ -961,15 +955,7 @@ export const WithControlledExpansion: Story = {
           data={sampleData}
           expanded={expanded}
           onExpandedChange={(next) => setExpanded(next as Record<string, boolean>)}
-          renderSubComponent={(row) => (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
-              <p className="text-sm text-muted-foreground">
-                Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
-                {row.original.createdAt}
-              </p>
-            </div>
-          )}
+          renderSubComponent={(row) => renderEvaluationDetails(row)}
         />
       </div>
     );

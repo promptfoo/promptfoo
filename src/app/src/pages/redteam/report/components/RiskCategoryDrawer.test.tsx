@@ -4,6 +4,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useNavigate } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createGradingResult } from '../../../../tests/factories';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import type { AtomicTestCase, EvaluateResult, ResultFailureReason } from '@promptfoo/types';
 
@@ -64,11 +65,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       {
         prompt: 'Test prompt',
         output: 'Test output',
-        gradingResult: {
-          pass: false,
-          score: 0,
-          reason: 'Failed test',
-        },
+        gradingResult: createGradingResult(false, 0, 'Failed test'),
         result: createMockEvaluateResult({ pluginId: 'bola' }),
       },
     ],
@@ -169,11 +166,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
         {
           prompt: malformedJsonPrompt,
           output: 'Test output',
-          gradingResult: {
-            pass: false,
-            score: 0,
-            reason: 'Failed test',
-          },
+          gradingResult: createGradingResult(false, 0, 'Failed test'),
           result: createMockEvaluateResult({ pluginId: 'test-plugin' }),
         },
       ],
@@ -202,11 +195,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
         {
           prompt: 'Test prompt',
           output: JSON.stringify(complexOutput),
-          gradingResult: {
-            pass: false,
-            score: 0,
-            reason: 'Failed test',
-          },
+          gradingResult: createGradingResult(false, 0, 'Failed test'),
           result: createMockEvaluateResult({}),
         },
       ],

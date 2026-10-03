@@ -3,6 +3,24 @@ import { generateOrderedYaml } from './yamlHelpers';
 
 import type { Config } from '../types';
 
+const createRedteamConfigFixture = () => ({
+  description: 'Test config',
+  prompts: ['prompt1'],
+  target: {
+    id: 'test-target',
+    config: {},
+  },
+  plugins: [],
+  strategies: [],
+  applicationDefinition: {},
+  entities: [],
+});
+
+const createUnifiedRedteamConfigFixture = () => ({
+  description: 'Test config',
+  redteam: {},
+});
+
 // Mock the external dependencies
 vi.mock('@promptfoo/redteam/constants', () => ({
   subCategoryDescriptions: {
@@ -32,18 +50,7 @@ describe('yamlHelpers', () => {
 
   describe('generateOrderedYaml', () => {
     it('should generate YAML with schema comment', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: {
-          id: 'test-target',
-          config: {},
-        },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
       const mockUnifiedConfig = {
         description: 'Test config',
@@ -111,15 +118,7 @@ describe('yamlHelpers', () => {
     });
 
     it('should not add entities when array is empty', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
       const mockUnifiedConfig = {
         description: 'Test config',
@@ -135,20 +134,9 @@ describe('yamlHelpers', () => {
     });
 
     it('should call yaml.dump with correct options', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
-      const mockUnifiedConfig = {
-        description: 'Test config',
-        redteam: {},
-      };
+      const mockUnifiedConfig = createUnifiedRedteamConfigFixture();
 
       vi.mocked(getUnifiedConfig).mockReturnValue(mockUnifiedConfig as any);
       vi.mocked(yaml.dump).mockReturnValue('description: Test config\n');
@@ -227,20 +215,9 @@ describe('yamlHelpers', () => {
     });
 
     it('should add comments for plugin descriptions', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
-      const mockUnifiedConfig = {
-        description: 'Test config',
-        redteam: {},
-      };
+      const mockUnifiedConfig = createUnifiedRedteamConfigFixture();
 
       vi.mocked(getUnifiedConfig).mockReturnValue(mockUnifiedConfig as any);
       vi.mocked(yaml.dump).mockReturnValue('  - id: plugin-1\n  - id: plugin-2\n');
@@ -252,20 +229,9 @@ describe('yamlHelpers', () => {
     });
 
     it('should handle plugins without descriptions', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
-      const mockUnifiedConfig = {
-        description: 'Test config',
-        redteam: {},
-      };
+      const mockUnifiedConfig = createUnifiedRedteamConfigFixture();
 
       vi.mocked(getUnifiedConfig).mockReturnValue(mockUnifiedConfig as any);
       vi.mocked(yaml.dump).mockReturnValue('  - id: unknown-plugin\n');
@@ -278,20 +244,9 @@ describe('yamlHelpers', () => {
     });
 
     it('should handle multi-line YAML with mixed plugin IDs', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
-      const mockUnifiedConfig = {
-        description: 'Test config',
-        redteam: {},
-      };
+      const mockUnifiedConfig = createUnifiedRedteamConfigFixture();
 
       vi.mocked(getUnifiedConfig).mockReturnValue(mockUnifiedConfig as any);
       vi.mocked(yaml.dump).mockReturnValue(
@@ -306,20 +261,9 @@ describe('yamlHelpers', () => {
     });
 
     it('should preserve YAML structure without id lines', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
-      const mockUnifiedConfig = {
-        description: 'Test config',
-        redteam: {},
-      };
+      const mockUnifiedConfig = createUnifiedRedteamConfigFixture();
 
       vi.mocked(getUnifiedConfig).mockReturnValue(mockUnifiedConfig as any);
       vi.mocked(yaml.dump).mockReturnValue('description: Test\nprompts:\n  - prompt1\n');
@@ -390,15 +334,7 @@ describe('yamlHelpers', () => {
     });
 
     it('should handle undefined purpose', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
       const mockUnifiedConfig = {
         description: 'Test config',
@@ -414,20 +350,9 @@ describe('yamlHelpers', () => {
     });
 
     it('should handle whitespace-only lines in YAML', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
-      const mockUnifiedConfig = {
-        description: 'Test config',
-        redteam: {},
-      };
+      const mockUnifiedConfig = createUnifiedRedteamConfigFixture();
 
       vi.mocked(getUnifiedConfig).mockReturnValue(mockUnifiedConfig as any);
       vi.mocked(yaml.dump).mockReturnValue('description: Test\n  \n  - id: plugin-1\n');
@@ -439,20 +364,9 @@ describe('yamlHelpers', () => {
     });
 
     it('should handle plugin IDs with special characters', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
-      const mockUnifiedConfig = {
-        description: 'Test config',
-        redteam: {},
-      };
+      const mockUnifiedConfig = createUnifiedRedteamConfigFixture();
 
       vi.mocked(getUnifiedConfig).mockReturnValue(mockUnifiedConfig as any);
       vi.mocked(yaml.dump).mockReturnValue('  - id: plugin-with-dashes-123\n');
@@ -464,20 +378,9 @@ describe('yamlHelpers', () => {
     });
 
     it('should handle indented plugin IDs correctly', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
-      const mockUnifiedConfig = {
-        description: 'Test config',
-        redteam: {},
-      };
+      const mockUnifiedConfig = createUnifiedRedteamConfigFixture();
 
       vi.mocked(getUnifiedConfig).mockReturnValue(mockUnifiedConfig as any);
       vi.mocked(yaml.dump).mockReturnValue('plugins:\n    - id: plugin-1\n');
@@ -488,15 +391,7 @@ describe('yamlHelpers', () => {
     });
 
     it('should preserve custom keys not in standard key order', () => {
-      const mockConfig: Config = {
-        description: 'Test config',
-        prompts: ['prompt1'],
-        target: { id: 'test-target', config: {} },
-        plugins: [],
-        strategies: [],
-        applicationDefinition: {},
-        entities: [],
-      };
+      const mockConfig: Config = createRedteamConfigFixture();
 
       // Return config with custom keys not in the standard keyOrder
       const mockUnifiedConfig = {

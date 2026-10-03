@@ -2,16 +2,71 @@ import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
+import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
 import type {
   EvalTableDTO,
+  EvaluateSummaryV2,
   EvaluateTable,
   EvaluateTableOutput,
   PromptMetrics,
   ResultsFile,
 } from '@promptfoo/types';
+
+const createEmptyTableResponseFixture = () => ({
+  table: { head: { prompts: [] }, body: [] },
+  totalCount: 0,
+  filteredCount: 0,
+});
+
+const createEmptyResultsFixture = () => ({
+  results: [],
+});
+
+const createEmptyVersionedTableResponseFixture = () => ({
+  table: { head: { prompts: [] }, body: [] },
+  totalCount: 0,
+  filteredCount: 0,
+  config: {},
+  version: 4,
+});
+
+const createHumanGradingResultFixture = () => ({
+  componentResults: [
+    {
+      assertion: { type: 'human' },
+      pass: true,
+      score: 1,
+      reason: 'test',
+      comment: 'test',
+    },
+  ],
+});
+
+const createEmptyTableFixture = () => ({
+  head: { prompts: [], vars: [] },
+  body: [],
+});
+
+const createHumanRatedRowFixture = () => ({
+  outputs: [
+    { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
+    { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
+  ],
+  vars: [],
+  test: {},
+});
+
+const createEmptyTestVarsFixture = () => ({
+  vars: {},
+});
+
+const createNamedScoresFixture = () => ({
+  accuracy: 0.9,
+  bleu: 0.8,
+});
 
 // Mock crypto.randomUUID
 const mockRandomUUID = vi.fn<() => `${string}-${string}-${string}-${string}-${string}`>();
@@ -22,9 +77,6 @@ vi.stubGlobal('crypto', {
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 const baseMetrics: Omit<PromptMetrics, 'namedScores'> = {
@@ -40,20 +92,20 @@ const baseMetrics: Omit<PromptMetrics, 'namedScores'> = {
   namedScoresCount: {},
 };
 
-// Helper function to compute available metrics (mimics the store's computeAvailableMetrics)
-function computeAvailableMetrics(table: EvaluateTable | null): string[] {
-  if (!table || !table.head?.prompts) {
-    return [];
-  }
+async function loadTable(table: EvaluateTable, config?: ResultsFile['config'], version?: number) {
+  vi.mocked(callApi).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ table, config, version, totalCount: table.body.length }),
+  } as Response);
+  await useTableStore.getState().fetchEvalData('fixture');
+}
 
-  const metrics = new Set<string>();
-  table.head.prompts.forEach((prompt) => {
-    if (prompt.metrics?.namedScores) {
-      Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
-    }
-  });
-
-  return Array.from(metrics).sort();
+async function loadResultsFile(file: ResultsFile) {
+  const table =
+    file.version && file.version >= 4
+      ? convertResultsToTable(file)
+      : (file.results as EvaluateSummaryV2).table;
+  await loadTable(table, file.config, file.version);
 }
 
 const HUMAN_ASSERTION_TYPE = 'human';
@@ -96,6 +148,20 @@ function createMockOutput(hasHumanRating: boolean): EvaluateTableOutput {
 }
 
 const initialTableStoreState = useTableStore.getState();
+
+function createApplyInitialFilter(mockFilterId: string, initialFilter: ResultsFilter) {
+  return () => {
+    useTableStore.setState((prevState) => ({
+      filters: {
+        ...prevState.filters,
+        values: {
+          [mockFilterId]: initialFilter,
+        },
+        appliedCount: 1,
+      },
+    }));
+  };
+}
 
 describe('useTableStore', () => {
   beforeEach(() => {
@@ -222,14 +288,7 @@ describe('useTableStore', () => {
             vars: [],
             test: {},
           },
-          {
-            outputs: [
-              { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
-              { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
-            ],
-            vars: [],
-            test: {},
-          },
+          createHumanRatedRowFixture(),
           {
             outputs: [
               {},
@@ -272,10 +331,7 @@ describe('useTableStore', () => {
     });
 
     it('should return 0 when given an EvaluateTable with an empty body (no rows).', () => {
-      const mockTableWithEmptyBody: EvaluateTable = {
-        head: { prompts: [], vars: [] },
-        body: [],
-      };
+      const mockTableWithEmptyBody: EvaluateTable = createEmptyTableFixture();
 
       act(() => {
         useTableStore.getState().setTable(mockTableWithEmptyBody);
@@ -289,14 +345,7 @@ describe('useTableStore', () => {
       const mockTable = {
         head: { prompts: [], vars: [] },
         body: [
-          {
-            outputs: [
-              { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
-              { gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } },
-            ],
-            vars: [],
-            test: {},
-          },
+          createHumanRatedRowFixture(),
           {
             outputs: [{ gradingResult: { componentResults: [{ assertion: { type: 'human' } }] } }],
             vars: [],
@@ -358,11 +407,7 @@ describe('useTableStore', () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
         ok: true,
-        json: async () => ({
-          table: { head: { prompts: [] }, body: [] },
-          totalCount: 0,
-          filteredCount: 0,
-        }),
+        json: async () => createEmptyTableResponseFixture(),
       });
 
       act(() => {
@@ -388,16 +433,14 @@ describe('useTableStore', () => {
       ];
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile({
+        await loadResultsFile({
           version: 4,
           config: {
             redteam: {
               strategies: strategies,
             },
           },
-          results: {
-            results: [],
-          },
+          results: createEmptyResultsFixture(),
           prompts: [],
           createdAt: '2024-01-01T00:00:00.000Z',
           author: 'test',
@@ -548,17 +591,7 @@ describe('useTableStore', () => {
         sortIndex: 0,
       };
 
-      act(() => {
-        useTableStore.setState((prevState) => ({
-          filters: {
-            ...prevState.filters,
-            values: {
-              [mockFilterId]: initialFilter,
-            },
-            appliedCount: 1,
-          },
-        }));
-      });
+      act(createApplyInitialFilter(mockFilterId, initialFilter));
 
       const updatedFilter: ResultsFilter = {
         ...initialFilter,
@@ -589,17 +622,7 @@ describe('useTableStore', () => {
         sortIndex: 0,
       };
 
-      act(() => {
-        useTableStore.setState((prevState) => ({
-          filters: {
-            ...prevState.filters,
-            values: {
-              [mockFilterId]: initialFilter,
-            },
-            appliedCount: 1,
-          },
-        }));
-      });
+      act(createApplyInitialFilter(mockFilterId, initialFilter));
 
       const updatedFilter: ResultsFilter = {
         ...initialFilter,
@@ -783,7 +806,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toEqual([]);
     });
 
-    it('should not populate strategy options when setTableFromResultsFile receives non-redteam config', async () => {
+    it('should not populate strategy options when fetchEvalData receives non-redteam config', async () => {
       const mockResultsFile = {
         version: 4,
         config: {
@@ -791,15 +814,13 @@ describe('useTableStore', () => {
           // No redteam section
         },
         prompts: [],
-        results: {
-          results: [],
-        },
+        results: createEmptyResultsFixture(),
         createdAt: '2024-01-01T00:00:00.000Z',
         author: 'test',
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+        await loadResultsFile(mockResultsFile as any);
       });
 
       const state = useTableStore.getState();
@@ -808,7 +829,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toBeUndefined();
     });
 
-    it('should populate strategy options when setTableFromResultsFile receives redteam config', async () => {
+    it('should populate strategy options when fetchEvalData receives redteam config', async () => {
       const mockResultsFile = {
         version: 4,
         config: {
@@ -818,15 +839,13 @@ describe('useTableStore', () => {
           },
         },
         prompts: [],
-        results: {
-          results: [],
-        },
+        results: createEmptyResultsFixture(),
         createdAt: '2024-01-01T00:00:00.000Z',
         author: 'test',
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+        await loadResultsFile(mockResultsFile as any);
       });
 
       const state = useTableStore.getState();
@@ -1147,11 +1166,7 @@ describe('useTableStore', () => {
         }
         return {
           ok: true,
-          json: async () => ({
-            table: { head: { prompts: [] }, body: [] },
-            totalCount: 0,
-            filteredCount: 0,
-          }),
+          json: async () => createEmptyTableResponseFixture(),
         } as any;
       });
 
@@ -1215,11 +1230,7 @@ describe('useTableStore', () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
         ok: true,
-        json: async () => ({
-          table: { head: { prompts: [] }, body: [] },
-          totalCount: 0,
-          filteredCount: 0,
-        }),
+        json: async () => createEmptyTableResponseFixture(),
         headers: new Headers(),
         redirected: false,
         status: 200,
@@ -1230,11 +1241,7 @@ describe('useTableStore', () => {
         bodyUsed: false,
         clone: () =>
           ({
-            json: async () => ({
-              table: { head: { prompts: [] }, body: [] },
-              totalCount: 0,
-              filteredCount: 0,
-            }),
+            json: async () => createEmptyTableResponseFixture(),
           }) as any,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
         blob: () => Promise.resolve(new Blob()),
@@ -1257,11 +1264,7 @@ describe('useTableStore', () => {
       mockCallApi.mockClear();
       mockCallApi.mockResolvedValue({
         ok: true,
-        json: async () => ({
-          table: { head: { prompts: [] }, body: [] },
-          totalCount: 0,
-          filteredCount: 0,
-        }),
+        json: async () => createEmptyTableResponseFixture(),
         headers: new Headers(),
         redirected: false,
         status: 200,
@@ -1272,11 +1275,7 @@ describe('useTableStore', () => {
         bodyUsed: false,
         clone: () =>
           ({
-            json: async () => ({
-              table: { head: { prompts: [] }, body: [] },
-              totalCount: 0,
-              filteredCount: 0,
-            }),
+            json: async () => createEmptyTableResponseFixture(),
           }) as any,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
         blob: () => Promise.resolve(new Blob()),
@@ -1301,11 +1300,7 @@ describe('useTableStore', () => {
 
         return {
           ok: true,
-          json: async () => ({
-            table: { head: { prompts: [] }, body: [] },
-            totalCount: 0,
-            filteredCount: 0,
-          }),
+          json: async () => createEmptyTableResponseFixture(),
           headers: new Headers(),
           redirected: false,
           status: 200,
@@ -1316,11 +1311,7 @@ describe('useTableStore', () => {
           bodyUsed: false,
           clone: () =>
             ({
-              json: async () => ({
-                table: { head: { prompts: [] }, body: [] },
-                totalCount: 0,
-                filteredCount: 0,
-              }),
+              json: async () => createEmptyTableResponseFixture(),
             }) as any,
           arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
           blob: () => Promise.resolve(new Blob()),
@@ -1454,11 +1445,7 @@ describe('useTableStore', () => {
         const mockEvalId = 'test-eval-id';
         (callApi as Mock).mockResolvedValue({
           ok: true,
-          json: async () => ({
-            table: { head: { prompts: [] }, body: [] },
-            totalCount: 0,
-            filteredCount: 0,
-          }),
+          json: async () => createEmptyTableResponseFixture(),
         });
 
         await act(async () => {
@@ -1494,6 +1481,8 @@ describe('useTableStore', () => {
         });
 
         expect(stateAfterFetch.shouldHighlightSearchText).toBe(true);
+        const requestUrl = new URL(vi.mocked(callApi).mock.calls[0][0], 'http://localhost');
+        expect(requestUrl.searchParams.get('search')).toBe(mockSearchText);
       });
       it('should update shouldHighlightSearchText based on the most recent completed request when multiple fetchEvalData calls are made in succession', async () => {
         const mockEvalId = 'test-eval-id';
@@ -1502,33 +1491,15 @@ describe('useTableStore', () => {
         mockCallApi
           .mockResolvedValueOnce({
             ok: true,
-            json: async () => ({
-              table: { head: { prompts: [] }, body: [] },
-              totalCount: 0,
-              filteredCount: 0,
-              config: {},
-              version: 4,
-            }),
+            json: async () => createEmptyVersionedTableResponseFixture(),
           } as any)
           .mockResolvedValueOnce({
             ok: true,
-            json: async () => ({
-              table: { head: { prompts: [] }, body: [] },
-              totalCount: 0,
-              filteredCount: 0,
-              config: {},
-              version: 4,
-            }),
+            json: async () => createEmptyVersionedTableResponseFixture(),
           } as any)
           .mockResolvedValueOnce({
             ok: true,
-            json: async () => ({
-              table: { head: { prompts: [] }, body: [] },
-              totalCount: 0,
-              filteredCount: 0,
-              config: {},
-              version: 4,
-            }),
+            json: async () => createEmptyVersionedTableResponseFixture(),
           } as any);
 
         await act(async () => {
@@ -1655,11 +1626,7 @@ describe('useTableStore', () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
         ok: true,
-        json: async () => ({
-          table: { head: { prompts: [] }, body: [] },
-          totalCount: 0,
-          filteredCount: 0,
-        }),
+        json: async () => createEmptyTableResponseFixture(),
       });
 
       act(() => {
@@ -1696,11 +1663,7 @@ describe('useTableStore', () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
         ok: true,
-        json: async () => ({
-          table: { head: { prompts: [] }, body: [] },
-          totalCount: 0,
-          filteredCount: 0,
-        }),
+        json: async () => createEmptyTableResponseFixture(),
       });
 
       act(() => {
@@ -1730,8 +1693,8 @@ describe('useTableStore', () => {
     });
   });
 
-  describe('setTableFromResultsFile', () => {
-    it("should set `filters.options.strategy` to only include 'basic' when `setTableFromResultsFile` is called with a resultsFile that has no strategies defined", async () => {
+  describe('fetchEvalData with result fixtures', () => {
+    it("should set `filters.options.strategy` to only include 'basic' when `fetchEvalData` loads a resultsFile fixture that has no strategies defined", async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1739,16 +1702,14 @@ describe('useTableStore', () => {
             strategies: [],
           },
         },
-        results: {
-          results: [],
-        } as any,
+        results: createEmptyResultsFixture() as any,
         prompts: [],
         createdAt: '2024-01-01T00:00:00.000Z',
         author: 'test',
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1764,23 +1725,20 @@ describe('useTableStore', () => {
           },
         },
         results: {
-          table: {
-            head: { prompts: [], vars: [] },
-            body: [],
-          },
+          table: createEmptyTableFixture(),
         },
         prompts: [],
       } as any;
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(resultsFile);
+        await loadResultsFile(resultsFile);
       });
 
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual(['strategy1', 'strategy2', 'basic']);
     });
 
-    it('should populate `filters.options.severity` with the correct severities in order when `setTableFromResultsFile` is called with a resultsFile containing redteam plugins with defined severities', async () => {
+    it('should populate `filters.options.severity` with the correct severities in order when `fetchEvalData` loads a resultsFile fixture containing redteam plugins with defined severities', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1793,16 +1751,14 @@ describe('useTableStore', () => {
             ],
           },
         },
-        results: {
-          results: [],
-        } as any,
+        results: createEmptyResultsFixture() as any,
         prompts: [],
         createdAt: '2024-01-01T00:00:00.000Z',
         author: 'test',
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1828,16 +1784,13 @@ describe('useTableStore', () => {
           },
         },
         results: {
-          table: {
-            head: { prompts: [], vars: [] },
-            body: [],
-          },
+          table: createEmptyTableFixture(),
         } as any,
         prompts: [],
       } as any;
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1849,7 +1802,7 @@ describe('useTableStore', () => {
       ]);
     });
 
-    it('should set `userRatedResultsCount` to the correct value when `setTableFromResultsFile` is called with a results file containing user-rated outputs', async () => {
+    it('should set `userRatedResultsCount` to the correct value when `fetchEvalData` loads a results file fixture containing user-rated outputs', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {},
@@ -1866,20 +1819,8 @@ describe('useTableStore', () => {
               cost: 0,
               latencyMs: 0,
               response: { output: 'test' },
-              testCase: {
-                vars: {},
-              },
-              gradingResult: {
-                componentResults: [
-                  {
-                    assertion: { type: 'human' },
-                    pass: true,
-                    score: 1,
-                    reason: 'test',
-                    comment: 'test',
-                  },
-                ],
-              },
+              testCase: createEmptyTestVarsFixture(),
+              gradingResult: createHumanGradingResultFixture(),
             },
             {
               id: '2',
@@ -1892,9 +1833,7 @@ describe('useTableStore', () => {
               cost: 0,
               latencyMs: 0,
               response: { output: 'test' },
-              testCase: {
-                vars: {},
-              },
+              testCase: createEmptyTestVarsFixture(),
             },
             {
               id: '3',
@@ -1907,20 +1846,8 @@ describe('useTableStore', () => {
               cost: 0,
               latencyMs: 0,
               response: { output: 'test' },
-              testCase: {
-                vars: {},
-              },
-              gradingResult: {
-                componentResults: [
-                  {
-                    assertion: { type: 'human' },
-                    pass: true,
-                    score: 1,
-                    reason: 'test',
-                    comment: 'test',
-                  },
-                ],
-              },
+              testCase: createEmptyTestVarsFixture(),
+              gradingResult: createHumanGradingResultFixture(),
             },
           ] as any,
         } as any,
@@ -1930,7 +1857,7 @@ describe('useTableStore', () => {
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1938,8 +1865,8 @@ describe('useTableStore', () => {
     });
   });
 
-  describe('computeAvailableMetrics', () => {
-    it('should return a sorted array of unique metric names when the EvaluateTable contains multiple prompts with different namedScores', () => {
+  describe('computeAvailableMetrics', async () => {
+    it('should return a sorted array of unique metric names when the EvaluateTable contains multiple prompts with different namedScores', async () => {
       const mockTable: EvaluateTable = {
         head: {
           prompts: [
@@ -1949,10 +1876,7 @@ describe('useTableStore', () => {
               provider: 'test-provider',
               metrics: {
                 ...baseMetrics,
-                namedScores: {
-                  accuracy: 0.9,
-                  bleu: 0.8,
-                },
+                namedScores: createNamedScoresFixture(),
               },
             },
             {
@@ -1987,28 +1911,15 @@ describe('useTableStore', () => {
         body: [],
       };
 
-      act(() => {
-        useTableStore.setState({
-          table: mockTable,
-          filters: {
-            values: {},
-            appliedCount: 0,
-            options: {
-              metric: computeAvailableMetrics(mockTable),
-              metadata: [],
-              plugin: [],
-              strategy: [],
-              severity: [],
-            },
-          },
-        });
+      await act(async () => {
+        await loadTable(mockTable);
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual(['accuracy', 'bleu', 'rouge']);
     });
 
-    it('should return an empty array when the EvaluateTable contains prompts but none have metrics.namedScores defined', () => {
+    it('should return an empty array when the EvaluateTable contains prompts but none have metrics.namedScores defined', async () => {
       const mockTable: EvaluateTable = {
         head: {
           prompts: [
@@ -2036,28 +1947,15 @@ describe('useTableStore', () => {
         body: [],
       };
 
-      act(() => {
-        useTableStore.setState({
-          table: mockTable,
-          filters: {
-            values: {},
-            appliedCount: 0,
-            options: {
-              metric: computeAvailableMetrics(mockTable),
-              metadata: [],
-              plugin: [],
-              strategy: [],
-              severity: [],
-            },
-          },
-        });
+      await act(async () => {
+        await loadTable(mockTable);
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual([]);
     });
 
-    it('should handle prompts with empty namedScores objects gracefully', () => {
+    it('should handle prompts with empty namedScores objects gracefully', async () => {
       const mockTable: EvaluateTable = {
         head: {
           prompts: [
@@ -2067,10 +1965,7 @@ describe('useTableStore', () => {
               provider: 'test-provider',
               metrics: {
                 ...baseMetrics,
-                namedScores: {
-                  accuracy: 0.9,
-                  bleu: 0.8,
-                },
+                namedScores: createNamedScoresFixture(),
               },
             },
             {
@@ -2099,27 +1994,14 @@ describe('useTableStore', () => {
         body: [],
       };
 
-      act(() => {
-        useTableStore.setState({
-          table: mockTable,
-          filters: {
-            values: {},
-            appliedCount: 0,
-            options: {
-              metric: computeAvailableMetrics(mockTable),
-              metadata: [],
-              plugin: [],
-              strategy: [],
-              severity: [],
-            },
-          },
-        });
+      await act(async () => {
+        await loadTable(mockTable);
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual(['accuracy', 'bleu', 'rouge']);
     });
-    it('should correctly handle unusual metric names, such as those containing special characters or very long strings', () => {
+    it('should correctly handle unusual metric names, such as those containing special characters or very long strings', async () => {
       const longMetricName = 'a'.repeat(200);
       const mockTable: EvaluateTable = {
         head: {
@@ -2143,28 +2025,15 @@ describe('useTableStore', () => {
         body: [],
       };
 
-      act(() => {
-        useTableStore.setState({
-          table: mockTable,
-          filters: {
-            values: {},
-            appliedCount: 0,
-            options: {
-              metric: computeAvailableMetrics(mockTable),
-              metadata: [],
-              plugin: [],
-              strategy: [],
-              severity: [],
-            },
-          },
-        });
+      await act(async () => {
+        await loadTable(mockTable);
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual([longMetricName, 'metric-with-dashes', 'metric.with.dots']);
     });
 
-    it('should handle gracefully when a prompt has metrics.namedScores set to null', () => {
+    it('should handle gracefully when a prompt has metrics.namedScores set to null', async () => {
       const mockTable: EvaluateTable = {
         head: {
           prompts: [
@@ -2183,21 +2052,8 @@ describe('useTableStore', () => {
         body: [],
       };
 
-      act(() => {
-        useTableStore.setState({
-          table: mockTable,
-          filters: {
-            values: {},
-            appliedCount: 0,
-            options: {
-              metric: computeAvailableMetrics(mockTable),
-              metadata: [],
-              plugin: [],
-              strategy: [],
-              severity: [],
-            },
-          },
-        });
+      await act(async () => {
+        await loadTable(mockTable);
       });
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
@@ -2225,16 +2081,14 @@ describe('useTableStore', () => {
             ],
           },
         },
-        results: {
-          results: [],
-        } as any,
+        results: createEmptyResultsFixture() as any,
         prompts: [],
         createdAt: '2024-01-01T00:00:00.000Z',
         author: 'test',
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -2252,16 +2106,14 @@ describe('useTableStore', () => {
             plugins: pluginIds.map((id) => ({ id })),
           },
         },
-        results: {
-          results: [],
-        } as any,
+        results: createEmptyResultsFixture() as any,
         prompts: [],
         createdAt: '2024-01-01T00:00:00.000Z',
         author: 'test',
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -2277,16 +2129,14 @@ describe('useTableStore', () => {
             plugins: [{ id: 'plugin-critical', severity: Severity.Critical }],
           },
         },
-        results: {
-          results: [],
-        } as any,
+        results: createEmptyResultsFixture() as any,
         prompts: [],
         createdAt: '2024-01-01T00:00:00.000Z',
         author: 'test',
       };
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -2311,7 +2161,7 @@ describe('useTableStore', () => {
       expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'jailbreak']);
     });
 
-    it('should populate plugin options when resultsFile redteam plugins are string IDs (setTableFromResultsFile)', async () => {
+    it('should populate plugin options when resultsFile redteam plugins are string IDs (fetchEvalData)', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: { redteam: { strategies: [], plugins: ['pii', 'bias'] } },
@@ -2322,7 +2172,7 @@ describe('useTableStore', () => {
       } as any;
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'bias']);
@@ -2342,7 +2192,7 @@ describe('useTableStore', () => {
       } as any;
 
       await act(async () => {
-        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+        await loadResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -2498,10 +2348,7 @@ describe('useTableStore', () => {
         useTableStore.getState().setFilteredMetrics(initialMetrics);
       });
 
-      const newTable: EvaluateTable = {
-        head: { prompts: [], vars: [] },
-        body: [],
-      };
+      const newTable: EvaluateTable = createEmptyTableFixture();
 
       act(() => {
         useTableStore.getState().setTable(newTable);

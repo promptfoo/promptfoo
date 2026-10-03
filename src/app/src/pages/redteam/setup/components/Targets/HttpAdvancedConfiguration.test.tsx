@@ -5,8 +5,36 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createUnconfiguredProvider } from '../../../../../tests/factories';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import type { ProviderOptions } from '@promptfoo/types';
+
+const createCertificateTarget = (certificateType: string) => ({
+  id: 'http-provider',
+  config: {
+    signatureAuth: {
+      enabled: true,
+      certificateType,
+    },
+  },
+});
+
+const createPemTarget = () => ({
+  id: 'http-provider',
+  config: {
+    signatureAuth: {
+      enabled: true,
+      certificateType: 'pem',
+      certificate: 'test-cert',
+      privateKey: 'test-key',
+    },
+  },
+});
+
+const createTokenEstimationTarget = () => ({
+  id: 'http-provider',
+  config: { tokenEstimation: { enabled: true, multiplier: 1.3 } },
+});
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
@@ -126,10 +154,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it("should update selectedTarget.config.tokenEstimation to { enabled: true, multiplier: 1.3 } when the 'Enable token estimation' switch is toggled on", async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: {},
-    };
+    const selectedTarget: ProviderOptions = createUnconfiguredProvider('http-provider');
 
     renderWithProviders(
       <HttpAdvancedConfiguration
@@ -153,10 +178,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it("should update selectedTarget.config.tokenEstimation to { enabled: false } when the 'Enable token estimation' switch is toggled off", async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: { tokenEstimation: { enabled: true, multiplier: 1.3 } },
-    };
+    const selectedTarget: ProviderOptions = createTokenEstimationTarget();
 
     renderWithProviders(
       <HttpAdvancedConfiguration
@@ -177,10 +199,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it('should display a warning that the multiplier cannot be customized and an input field should be added', async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: { tokenEstimation: { enabled: true, multiplier: 1.3 } },
-    };
+    const selectedTarget: ProviderOptions = createTokenEstimationTarget();
 
     renderWithProviders(
       <HttpAdvancedConfiguration
@@ -236,15 +255,7 @@ describe('HttpAdvancedConfiguration', () => {
   describe('JKS Keystore Configuration', () => {
     it('should render fields for JKS keystore file upload, keystore path, password, and key alias when JKS certificateType is selected', async () => {
       const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
-        id: 'http-provider',
-        config: {
-          signatureAuth: {
-            enabled: true,
-            certificateType: 'jks',
-          },
-        },
-      };
+      const selectedTarget: ProviderOptions = createCertificateTarget('jks');
 
       renderWithProviders(
         <HttpAdvancedConfiguration
@@ -266,15 +277,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it('should render fields for PFX certificate file upload, PFX file path, and password when PFX certificateType is selected', async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: {
-        signatureAuth: {
-          enabled: true,
-          certificateType: 'pfx',
-        },
-      },
-    };
+    const selectedTarget: ProviderOptions = createCertificateTarget('pfx');
 
     renderWithProviders(
       <HttpAdvancedConfiguration
@@ -294,15 +297,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it('should call `updateCustomTarget` with the updated pfxPassword when the user enters a value in the PFX configuration field', async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: {
-        signatureAuth: {
-          enabled: true,
-          certificateType: 'pfx',
-        },
-      },
-    };
+    const selectedTarget: ProviderOptions = createCertificateTarget('pfx');
 
     renderWithProviders(
       <HttpAdvancedConfiguration
@@ -329,15 +324,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it('should call updateCustomTarget with the updated keystorePassword or keyAlias when the user enters values in the JKS configuration fields', async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: {
-        signatureAuth: {
-          enabled: true,
-          certificateType: 'jks',
-        },
-      },
-    };
+    const selectedTarget: ProviderOptions = createCertificateTarget('jks');
 
     renderWithProviders(
       <HttpAdvancedConfiguration
@@ -375,15 +362,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it('should accept environment variable syntax in the Keystore Password field without validation errors', async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: {
-        signatureAuth: {
-          enabled: true,
-          certificateType: 'jks',
-        },
-      },
-    };
+    const selectedTarget: ProviderOptions = createCertificateTarget('jks');
 
     renderWithProviders(
       <HttpAdvancedConfiguration
@@ -413,17 +392,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it('should clear unrelated fields when selecting JKS certificate type', async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: {
-        signatureAuth: {
-          enabled: true,
-          certificateType: 'pem',
-          certificate: 'test-cert',
-          privateKey: 'test-key',
-        },
-      },
-    };
+    const selectedTarget: ProviderOptions = createPemTarget();
 
     renderWithProviders(
       <HttpAdvancedConfiguration
@@ -470,17 +439,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it('should clear unrelated fields when selecting PFX certificate type', async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: {
-        signatureAuth: {
-          enabled: true,
-          certificateType: 'pem',
-          certificate: 'test-cert',
-          privateKey: 'test-key',
-        },
-      },
-    };
+    const selectedTarget: ProviderOptions = createPemTarget();
 
     renderWithProviders(
       <HttpAdvancedConfiguration
@@ -527,10 +486,7 @@ describe('HttpAdvancedConfiguration', () => {
 
   it('should initialize file auth when File is selected in the authorization tab', async () => {
     const user = userEvent.setup();
-    const selectedTarget: ProviderOptions = {
-      id: 'http-provider',
-      config: {},
-    };
+    const selectedTarget: ProviderOptions = createUnconfiguredProvider('http-provider');
 
     renderWithProviders(
       <HttpAdvancedConfiguration

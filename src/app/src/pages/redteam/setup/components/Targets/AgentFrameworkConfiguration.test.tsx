@@ -3,6 +3,7 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { createUnconfiguredProvider } from '../../../../../tests/factories';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -17,10 +18,7 @@ describe('AgentFrameworkConfiguration', () => {
   it('should call updateCustomTarget with the correct field and value when the Provider ID input is changed by the user', async () => {
     const user = userEvent.setup();
     const mockUpdateCustomTarget = vi.fn();
-    const selectedTarget: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
     const agentType = 'langchain';
     const newPath = 'file:///path/to/my_agent.py';
 
@@ -45,10 +43,7 @@ describe('AgentFrameworkConfiguration', () => {
 
   it('should display fallback framework name and description when an invalid agentType is provided', () => {
     const mockUpdateCustomTarget = vi.fn();
-    const selectedTarget: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
     const invalidAgentType = 'invalid-agent-type';
 
     renderWithProviders(
@@ -67,10 +62,7 @@ describe('AgentFrameworkConfiguration', () => {
   it('should handle clipboard API unavailability gracefully', async () => {
     const user = userEvent.setup();
     const mockUpdateCustomTarget = vi.fn();
-    const selectedTarget: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
     const agentType = 'langchain';
 
     const writeTextMock = vi.fn().mockRejectedValue(new Error('Clipboard API not available'));
@@ -121,10 +113,7 @@ describe('AgentFrameworkConfiguration', () => {
   it('should call updateCustomTarget even with an invalid Provider ID format', async () => {
     const user = userEvent.setup();
     const mockUpdateCustomTarget = vi.fn();
-    const selectedTarget: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
     const agentType = 'langchain';
     const invalidPath = '/path/to/my_agent.py';
 
@@ -150,10 +139,7 @@ describe('AgentFrameworkConfiguration', () => {
   it('should call updateCustomTarget with the provided invalid file path when the Provider ID input is changed', async () => {
     const user = userEvent.setup();
     const mockUpdateCustomTarget = vi.fn();
-    const selectedTarget: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
     const agentType = 'langchain';
     const invalidPath = 'file:///path/to/nonexistent_file.py';
 

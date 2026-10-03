@@ -12,8 +12,8 @@ import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
-import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useToast } from '@app/hooks/useToast';
+import { checkEmailStatus, clearEmail, saveEmail } from '@app/utils/emailVerification';
 
 interface EmailVerificationDialogProps {
   open: boolean;
@@ -31,21 +31,10 @@ export function EmailVerificationDialog({
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { saveEmail, clearEmail, checkEmailStatus } = useEmailVerification();
   const { showToast } = useToast();
 
   const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const handleEmailChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newEmail = event.target.value;
-    setEmail(newEmail);
-
-    if (emailError && newEmail && validateEmail(newEmail)) {
-      setEmailError('');
-    }
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
   const handleSubmit = async () => {
@@ -99,12 +88,6 @@ export function EmailVerificationDialog({
     }
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && !isSubmitting) {
-      handleSubmit();
-    }
-  };
-
   return (
     <Dialog
       open={open}
@@ -128,8 +111,19 @@ export function EmailVerificationDialog({
               autoFocus
               type="email"
               value={email}
-              onChange={handleEmailChange}
-              onKeyDown={handleKeyPress}
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                const newEmail = event.target.value;
+                setEmail(newEmail);
+
+                if (emailError && newEmail && validateEmail(newEmail)) {
+                  setEmailError('');
+                }
+              }}
+              onKeyDown={(event: React.KeyboardEvent) => {
+                if (event.key === 'Enter' && !isSubmitting) {
+                  handleSubmit();
+                }
+              }}
               disabled={isSubmitting}
               placeholder="your.email@company.com"
               className={emailError ? 'border-destructive' : ''}

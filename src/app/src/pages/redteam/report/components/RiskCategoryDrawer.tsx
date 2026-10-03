@@ -10,8 +10,9 @@ import {
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
-import { getActualPrompt } from '@app/utils/providerResponse';
+import { getRedteamHistoryMessages } from '@app/utils/redteamHistory';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { ChevronDown, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
@@ -36,11 +37,8 @@ const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'
 
 // Sort function for prioritizing specific strategies
 function sortByPriorityStrategies(a: TestWithMetadata, b: TestWithMetadata): number {
-  const strategyA = getStrategyIdFromTest(a);
-  const strategyB = getStrategyIdFromTest(b);
-
-  const priorityA = PRIORITY_STRATEGIES.indexOf(strategyA || '');
-  const priorityB = PRIORITY_STRATEGIES.indexOf(strategyB || '');
+  const priorityA = PRIORITY_STRATEGIES.indexOf(getStrategyIdFromTest(a) || '');
+  const priorityB = PRIORITY_STRATEGIES.indexOf(getStrategyIdFromTest(b) || '');
 
   // If both have priority, sort by priority index
   if (priorityA !== -1 && priorityB !== -1) {
@@ -87,52 +85,6 @@ function getOutputDisplay(output: string | object): string {
   return JSON.stringify(output);
 }
 
-interface RedteamHistoryEntry {
-  prompt?: string;
-  promptAudio?: { data?: string; format?: string };
-  promptImage?: { data?: string; format?: string };
-  output?: string;
-  outputAudio?: { data?: string; format?: string };
-  outputImage?: { data?: string; format?: string };
-}
-
-function buildChatMessages(test: TestWithMetadata): Message[] {
-  const metadata = test.result?.metadata;
-  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
-    | RedteamHistoryEntry[]
-    | unknown[];
-
-  const historyMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
-    .filter((entry): entry is RedteamHistoryEntry => {
-      const e = entry as RedteamHistoryEntry;
-      return Boolean(e?.prompt && e?.output);
-    })
-    .flatMap((entry: RedteamHistoryEntry): Message[] => [
-      {
-        role: 'user' as const,
-        content: entry.prompt!,
-        audio: entry.promptAudio,
-        image: entry.promptImage,
-      },
-      {
-        role: 'assistant' as const,
-        content: entry.output!,
-        audio: entry.outputAudio,
-        image: entry.outputImage,
-      },
-    ]);
-
-  if (historyMessages.length > 0) {
-    return historyMessages;
-  }
-
-  // Fallback to last turn
-  return [
-    { role: 'user' as const, content: getPromptDisplayString(test.prompt) },
-    { role: 'assistant' as const, content: getOutputDisplay(test.output) },
-  ];
-}
-
 const RiskCategoryDrawer = ({
   open,
   onClose,
@@ -148,7 +100,7 @@ const RiskCategoryDrawer = ({
   const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
     undefined,
   );
-  const [activeTab, setActiveTab] = React.useState(0);
+  const [activeTab, setActiveTab] = React.useState('flagged');
   const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
   const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
 
@@ -192,7 +144,15 @@ const RiskCategoryDrawer = ({
     const hasSuggestions = test.gradingResult?.componentResults?.some(
       (result) => (result.suggestions?.length || 0) > 0,
     );
-    const chatMessages = buildChatMessages(test);
+    const historyMessages = getRedteamHistoryMessages(test.result?.metadata);
+    const chatMessages: Message[] =
+      historyMessages.length > 0
+        ? historyMessages
+        : [
+            // Fallback to last turn
+            { role: 'user' as const, content: getPromptDisplayString(test.prompt) },
+            { role: 'assistant' as const, content: getOutputDisplay(test.output) },
+          ];
     const maxTurns = Math.ceil(chatMessages.length / 2);
     const strategyLabel = strategyId
       ? displayNameOverrides[strategyId as keyof typeof displayNameOverrides] || strategyId
@@ -320,8 +280,7 @@ const RiskCategoryDrawer = ({
             onClick={(event) => {
               const firstFailure = failures.length > 0 ? failures[0] : null;
               const firstPass = passes.length > 0 ? passes[0] : null;
-              const testWithPluginId = firstFailure || firstPass;
-              const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+              const pluginId = (firstFailure || firstPass)?.result?.metadata?.pluginId;
 
               const filterParam = encodeURIComponent(
                 JSON.stringify([
@@ -346,10 +305,8 @@ const RiskCategoryDrawer = ({
 
           <Tabs
             defaultValue="flagged"
-            value={activeTab === 0 ? 'flagged' : activeTab === 1 ? 'passed' : 'flow'}
-            onValueChange={(value) =>
-              setActiveTab(value === 'flagged' ? 0 : value === 'passed' ? 1 : 2)
-            }
+            value={activeTab}
+            onValueChange={setActiveTab}
             className="mt-4"
           >
             <TabsList className="grid !h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3 sm:!h-10 sm:gap-0">

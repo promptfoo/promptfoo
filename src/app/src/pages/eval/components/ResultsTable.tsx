@@ -18,7 +18,6 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   getIncurredTokenAccounting,
   getPrimaryTokenUsageLabel,
@@ -36,6 +35,7 @@ import {
 } from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import {
   createColumnHelper,
   flexRender,
@@ -51,7 +51,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
 import type {
@@ -92,10 +92,8 @@ const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
  *   - storage ref/blob ref string understood by `isStorageRef` / `isBlobRef`
  *   - data URL (`data:audio/...`)
  *   - raw base64 audio data
- * @param format Audio MIME subtype used when constructing inline base64 sources and the `<source>` type.
- * Defaults to `'mp3'`. Typical values include `'mp3'`, `'wav'`, `'ogg'`, and `'webm'`.
  */
-function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
+function StorageRefAudioPlayer({ data }: { data: string }) {
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(isStorageRef(data) || isBlobRef(data));
 
@@ -104,7 +102,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
 
     if (isStorageRef(data) || isBlobRef(data)) {
       setLoading(true);
-      resolveAudioUrl(data, format).then((url) => {
+      resolveAudioUrl(data).then((url) => {
         if (!cancelled) {
           setAudioUrl(url);
           setLoading(false);
@@ -112,7 +110,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
       });
     } else {
       // Inline base64
-      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
+      const url = data.startsWith('data:') ? data : `data:audio/mp3;base64,${data}`;
       setAudioUrl(url);
       setLoading(false);
     }
@@ -120,7 +118,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
     return () => {
       cancelled = true;
     };
-  }, [data, format]);
+  }, [data]);
 
   if (loading) {
     return (
@@ -137,7 +135,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
 
   return (
     <audio controls style={{ maxWidth: '100%', height: '32px' }}>
-      <source src={audioUrl} type={`audio/${format}`} />
+      <source src={audioUrl} type="audio/mp3" />
       Your browser does not support the audio element.
     </audio>
   );
@@ -1520,6 +1518,27 @@ function ResultsTableBodyRow({
   );
 }
 
+function isFilterApplied(filter: ResultsFilter): boolean {
+  // For metadata filters with exists operator, only field is required
+  if (filter.type === 'metadata' && filter.operator === 'exists') {
+    return Boolean(filter.field);
+  }
+  // For other metadata operators, both field and value are required
+  if (filter.type === 'metadata') {
+    return Boolean(filter.value && filter.field);
+  }
+  // For metric filters with is_defined operator, only field is required
+  if (filter.type === 'metric' && filter.operator === 'is_defined') {
+    return Boolean(filter.field);
+  }
+  // For metric filters with comparison operators, both field and value are required
+  if (filter.type === 'metric') {
+    return Boolean(filter.value && filter.field);
+  }
+  // For non-metadata/non-metric filters, value is required
+  return Boolean(filter.value);
+}
+
 interface ResultsTableProps {
   maxTextLength: number;
   columnVisibility: VisibilityState;
@@ -1891,26 +1910,7 @@ function ResultsTable({
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
-      .filter((filter) => {
-        // For metadata filters with exists operator, only field is required
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        // For other metadata operators, both field and value are required
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For metric filters with is_defined operator, only field is required
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        // For metric filters with comparison operators, both field and value are required
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For non-metadata/non-metric filters, value is required
-        return Boolean(filter.value);
-      })
+      .filter(isFilterApplied)
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
@@ -1999,21 +1999,7 @@ function ResultsTable({
       // For metric filters with is_defined operator, only field is required.
       // For metric filters with comparison operators, both field and value are required.
       // For non-metadata/non-metric filters, value is required.
-      filters: Object.values(filters.values).filter((filter) => {
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        return Boolean(filter.value);
-      }),
+      filters: Object.values(filters.values).filter(isFilterApplied),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [

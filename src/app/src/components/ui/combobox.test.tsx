@@ -290,10 +290,12 @@ describe('Combobox', () => {
   });
 
   describe('clear button', () => {
-    it('shows clear button when value is selected', () => {
+    const verifyClearButton = () => {
       render(<Combobox options={mockOptions} value="apple" onChange={vi.fn()} />);
       expect(screen.getByLabelText('Clear selection')).toBeInTheDocument();
-    });
+    };
+
+    it('shows clear button when value is selected', verifyClearButton);
 
     it('does not show clear button when no value is selected', () => {
       render(<Combobox options={mockOptions} onChange={vi.fn()} />);
@@ -328,10 +330,7 @@ describe('Combobox', () => {
       expect(screen.queryByLabelText('Clear selection')).not.toBeInTheDocument();
     });
 
-    it('shows clear button by default (clearable=true)', () => {
-      render(<Combobox options={mockOptions} value="apple" onChange={vi.fn()} />);
-      expect(screen.getByLabelText('Clear selection')).toBeInTheDocument();
-    });
+    it('shows clear button by default (clearable=true)', verifyClearButton);
   });
 
   describe('label prop', () => {

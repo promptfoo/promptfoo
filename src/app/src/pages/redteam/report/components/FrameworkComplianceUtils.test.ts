@@ -8,6 +8,11 @@ import {
 
 import type { CategoryStats } from './FrameworkComplianceUtils';
 
+const createMixedComplianceStatsFixture = () => ({
+  'compliant-plugin': { pass: 8, total: 10, failCount: 2 },
+  'non-compliant-plugin': { pass: 6, total: 10, failCount: 4 },
+});
+
 describe('expandPluginCollections', () => {
   it('should return an empty set when the plugins array is empty', () => {
     const plugins: string[] = [];
@@ -112,10 +117,7 @@ describe('categorizePlugins', () => {
 
   it('should correctly categorize plugins into compliant, nonCompliant, and untested arrays when given a mix of plugins', () => {
     const plugins = ['compliant-plugin', 'non-compliant-plugin', 'untested-plugin'];
-    const categoryStats = createCategoryStats({
-      'compliant-plugin': { pass: 8, total: 10, failCount: 2 },
-      'non-compliant-plugin': { pass: 6, total: 10, failCount: 4 },
-    });
+    const categoryStats = createCategoryStats(createMixedComplianceStatsFixture());
     const passRateThreshold = 0.75;
 
     const result = categorizePlugins(plugins, categoryStats, passRateThreshold);
@@ -127,10 +129,7 @@ describe('categorizePlugins', () => {
 
   it('should correctly categorize plugins when plugins argument is a Set', () => {
     const pluginsSet = new Set(['compliant-plugin', 'non-compliant-plugin', 'untested-plugin']);
-    const categoryStats: CategoryStats = {
-      'compliant-plugin': { pass: 8, total: 10, failCount: 2 },
-      'non-compliant-plugin': { pass: 6, total: 10, failCount: 4 },
-    };
+    const categoryStats: CategoryStats = createMixedComplianceStatsFixture();
     const passRateThreshold = 0.75;
 
     const result = categorizePlugins(pluginsSet, categoryStats, passRateThreshold);

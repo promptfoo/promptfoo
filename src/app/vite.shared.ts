@@ -1,23 +1,20 @@
-import { fileURLToPath } from 'node:url';
 import path from 'path';
 
 import { type TransformOptions, transformAsync } from '@babel/core';
 import { reactCompilerPreset } from '@vitejs/plugin-react';
 import type { Plugin } from 'vite';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 export const browserModuleReplacements = [
   {
     // logger.ts uses fs, path, winston - replace with console-based logger
-    nodePath: path.resolve(__dirname, '../logger.ts'),
-    browserPath: path.resolve(__dirname, '../logger.browser.ts'),
+    nodePath: path.resolve(import.meta.dirname, '../logger.ts'),
+    browserPath: path.resolve(import.meta.dirname, '../logger.browser.ts'),
     patterns: ['./logger', '../logger', '/logger'],
   },
   {
     // createHash.ts uses Node crypto - replace with pure JS SHA-256
-    nodePath: path.resolve(__dirname, '../util/createHash.ts'),
-    browserPath: path.resolve(__dirname, '../util/createHash.browser.ts'),
+    nodePath: path.resolve(import.meta.dirname, '../util/createHash.ts'),
+    browserPath: path.resolve(import.meta.dirname, '../util/createHash.browser.ts'),
     patterns: ['./createHash', '../createHash', '/createHash'],
   },
 ] as const;
@@ -46,8 +43,6 @@ export const vendorCodeSplittingGroups = [
 ] as const;
 
 const browserModuleImportFilter = /(?:^|[\\/])(?:logger|createHash)(?:\.ts)?$/;
-const nodeModulesPathPattern = /[\\/]node_modules[\\/]/;
-
 // Extract React Compiler Babel plugins from @vitejs/plugin-react's preset.
 // Validate the runtime shape defensively so plugin-react API changes disable
 // only this optimization instead of failing config evaluation.
@@ -92,13 +87,6 @@ const reactCompilerCodeFilter: RegExp | undefined = (() => {
 
   return codeCandidate instanceof RegExp ? codeCandidate : undefined;
 })();
-const reactCompilerFileFilter = /\.[jt]sx?$/;
-const reactCompilerFileExcludes = [
-  // Keep this table out of React Compiler centrally. Source-level compiler
-  // opt-out directives are flagged by GitHub code scanning as unknown JS directives.
-  /[\\/]src[\\/]app[\\/]src[\\/]pages[\\/]eval[\\/]components[\\/]ResultsTable\.tsx$/,
-];
-
 export function browserModulesPlugin(): Plugin {
   return {
     name: 'browser-modules',
@@ -118,10 +106,7 @@ export function browserModulesPlugin(): Plugin {
         }
 
         for (const { nodePath, browserPath, patterns } of browserModuleReplacements) {
-          const matches = patterns.some(
-            (pattern) => source === pattern || source.endsWith(pattern),
-          );
-          if (!matches) {
+          if (!patterns.some((pattern) => source === pattern || source.endsWith(pattern))) {
             continue;
           }
 
@@ -155,8 +140,7 @@ export function reactCompilerPlugin(): Plugin {
       }
     },
     async transform(code, id) {
-      const compilerPlugins = reactCompilerPlugins;
-      if (!compilerPlugins?.length) {
+      if (!reactCompilerPlugins?.length) {
         return null;
       }
 
@@ -164,9 +148,13 @@ export function reactCompilerPlugin(): Plugin {
 
       if (
         !cleanId ||
-        nodeModulesPathPattern.test(cleanId) ||
-        !reactCompilerFileFilter.test(cleanId) ||
-        reactCompilerFileExcludes.some((pattern) => pattern.test(cleanId)) ||
+        /[\\/]node_modules[\\/]/.test(cleanId) ||
+        !/\.[jt]sx?$/.test(cleanId) ||
+        [
+          // Keep this table out of React Compiler centrally. Source-level compiler
+          // opt-out directives are flagged by GitHub code scanning as unknown JS directives.
+          /[\\/]src[\\/]app[\\/]src[\\/]pages[\\/]eval[\\/]components[\\/]ResultsTable\.tsx$/,
+        ].some((pattern) => pattern.test(cleanId)) ||
         (reactCompilerCodeFilter && !reactCompilerCodeFilter.test(code))
       ) {
         return null;
@@ -180,7 +168,7 @@ export function reactCompilerPlugin(): Plugin {
         parserOpts: {
           plugins: ['jsx', 'typescript'],
         },
-        plugins: compilerPlugins,
+        plugins: reactCompilerPlugins,
       });
 
       return result?.code ? { code: result.code, map: result.map } : null;

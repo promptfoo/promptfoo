@@ -16,19 +16,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import {
-  AddIcon,
-  AlertTriangleIcon,
-  CheckCircleIcon,
-  DeleteIcon,
-  ErrorIcon,
-  HistoryIcon,
-  SearchIcon,
-} from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
+import {
+  Plus as AddIcon,
+  AlertTriangle as AlertTriangleIcon,
+  CheckCircle as CheckCircleIcon,
+  Trash2 as DeleteIcon,
+  XCircle as ErrorIcon,
+  History as HistoryIcon,
+  Search as SearchIcon,
+} from 'lucide-react';
 import { Link as RouterLink, useNavigate } from 'react-router';
 import { type ListScansQuery, MODEL_AUDIT_SORT_FIELDS } from '../../../../types/api/modelAudit';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';

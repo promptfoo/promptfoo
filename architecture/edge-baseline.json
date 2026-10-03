@@ -1,8 +1,8 @@
 {
   "app -> contracts": 7,
-  "app -> legacy-contracts": 94,
+  "app -> legacy-contracts": 92,
   "app -> legacy-runtime": 7,
-  "app -> node": 22,
+  "app -> node": 25,
   "app -> providers": 7,
   "app -> redteam": 115,
   "cli -> core": 5,

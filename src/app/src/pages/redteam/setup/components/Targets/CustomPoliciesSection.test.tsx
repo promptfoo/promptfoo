@@ -4,11 +4,23 @@ import { useToast } from '@app/hooks/useToast';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { createEmptyPlugins } from '../../../../../tests/factories';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
 import { CustomPoliciesSection } from './CustomPoliciesSection';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
+
+function expectCsvParseError() {
+  expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Error parsing CSV'), 'error');
+}
+
+const createPolicies = (firstPolicy: string, secondPolicy: string) => ({
+  plugins: [
+    { id: 'policy', config: { policy: firstPolicy } },
+    { id: 'policy', config: { policy: secondPolicy } },
+  ],
+});
 
 vi.mock('../../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry', () => ({
@@ -57,9 +69,7 @@ describe('CustomPoliciesSection', () => {
     vi.clearAllMocks();
 
     (useRedTeamConfig as unknown as Mock).mockReturnValue({
-      config: {
-        plugins: [],
-      },
+      config: createEmptyPlugins(),
       updateConfig: mockUpdateConfig,
     });
 
@@ -73,9 +83,7 @@ describe('CustomPoliciesSection', () => {
       // Start with empty config
       const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [],
-        },
+        config: createEmptyPlugins(),
         updateConfig: mockUpdateConfig,
       });
 
@@ -94,12 +102,7 @@ describe('CustomPoliciesSection', () => {
     it('should display policies from config when they exist', async () => {
       const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [
-            { id: 'policy', config: { policy: 'Custom Policy Text 1' } },
-            { id: 'policy', config: { policy: 'Custom Policy Text 2' } },
-          ],
-        },
+        config: createPolicies('Custom Policy Text 1', 'Custom Policy Text 2'),
         updateConfig: mockUpdateConfig,
       });
 
@@ -116,12 +119,7 @@ describe('CustomPoliciesSection', () => {
       // Start with some custom policies
       const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [
-            { id: 'policy', config: { policy: 'Custom Policy Text 1' } },
-            { id: 'policy', config: { policy: 'Custom Policy Text 2' } },
-          ],
-        },
+        config: createPolicies('Custom Policy Text 1', 'Custom Policy Text 2'),
         updateConfig: mockUpdateConfig,
       });
 
@@ -135,9 +133,7 @@ describe('CustomPoliciesSection', () => {
 
       // Simulate config reset (plugins becomes empty)
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [],
-        },
+        config: createEmptyPlugins(),
         updateConfig: mockUpdateConfig,
       });
 
@@ -268,12 +264,7 @@ describe('CustomPoliciesSection', () => {
 
       await user.upload(fileInput, file);
 
-      await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith(
-          expect.stringContaining('Error parsing CSV'),
-          'error',
-        );
-      });
+      await waitFor(expectCsvParseError);
     });
 
     it('should show an error toast when a file cannot be read as text', async () => {
@@ -291,12 +282,7 @@ describe('CustomPoliciesSection', () => {
 
       await user.upload(fileInput, file);
 
-      await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith(
-          expect.stringContaining('Error parsing CSV'),
-          'error',
-        );
-      });
+      await waitFor(expectCsvParseError);
     });
   });
 
@@ -521,12 +507,7 @@ describe('CustomPoliciesSection', () => {
       // Setup initial policies
       const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [
-            { id: 'policy', config: { policy: 'Policy text one' } },
-            { id: 'policy', config: { policy: 'Policy text two' } },
-          ],
-        },
+        config: createPolicies('Policy text one', 'Policy text two'),
         updateConfig: mockUpdateConfig,
       });
 
@@ -572,12 +553,7 @@ describe('CustomPoliciesSection', () => {
     it('labels edit actions by row', async () => {
       const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [
-            { id: 'policy', config: { policy: 'Policy text one' } },
-            { id: 'policy', config: { policy: 'Policy text two' } },
-          ],
-        },
+        config: createPolicies('Policy text one', 'Policy text two'),
         updateConfig: mockUpdateConfig,
       });
 

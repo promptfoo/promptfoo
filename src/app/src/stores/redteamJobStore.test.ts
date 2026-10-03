@@ -8,25 +8,22 @@ describe('useRedteamJobStore', () => {
     // Reset to clean state before each test
     useRedteamJobStore.setState({
       jobId: null,
-      startedAt: null,
       _hasHydrated: false,
     });
   });
 
   describe('initial state', () => {
-    it('should have null jobId and startedAt after reset', () => {
+    it('should have null jobId after reset', () => {
       const state = useRedteamJobStore.getState();
       expect(state.jobId).toBeNull();
-      expect(state.startedAt).toBeNull();
       // Note: _hasHydrated is set by onRehydrateStorage callback
       // In tests it may be true immediately since there's no localStorage delay
     });
   });
 
   describe('setJob', () => {
-    it('should set jobId and startedAt when called', () => {
+    it('should set jobId when called', () => {
       const testJobId = 'test-job-123';
-      const beforeTime = Date.now();
 
       act(() => {
         useRedteamJobStore.getState().setJob(testJobId);
@@ -34,8 +31,6 @@ describe('useRedteamJobStore', () => {
 
       const state = useRedteamJobStore.getState();
       expect(state.jobId).toBe(testJobId);
-      expect(state.startedAt).toBeGreaterThanOrEqual(beforeTime);
-      expect(state.startedAt).toBeLessThanOrEqual(Date.now());
     });
 
     it('should overwrite previous job when called again', () => {
@@ -51,26 +46,27 @@ describe('useRedteamJobStore', () => {
 
       expect(useRedteamJobStore.getState().jobId).toBe('job-2');
     });
+  });
 
-    it('should update startedAt when overwriting a job', async () => {
-      act(() => {
-        useRedteamJobStore.getState().setJob('job-1');
-      });
+  it('recovers a persisted older-client job and saves later job changes', async () => {
+    localStorage.setItem(
+      'promptfoo-redteam-job',
+      JSON.stringify({ state: { jobId: 'saved-job', startedAt: 123 }, version: 0 }),
+    );
 
-      const firstStartedAt = useRedteamJobStore.getState().startedAt;
-      expect(firstStartedAt).not.toBeNull();
-
-      // Wait a small amount of time to ensure different timestamp
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      act(() => {
-        useRedteamJobStore.getState().setJob('job-2');
-      });
-
-      const secondStartedAt = useRedteamJobStore.getState().startedAt;
-      expect(secondStartedAt).not.toBeNull();
-      expect(secondStartedAt).toBeGreaterThan(firstStartedAt!);
+    await useRedteamJobStore.persist.rehydrate();
+    expect(useRedteamJobStore.getState()).toMatchObject({
+      jobId: 'saved-job',
+      _hasHydrated: true,
     });
+
+    act(() => useRedteamJobStore.getState().setJob('replacement-job'));
+    expect(JSON.parse(localStorage.getItem('promptfoo-redteam-job')!).state.jobId).toBe(
+      'replacement-job',
+    );
+
+    act(() => useRedteamJobStore.getState().clearJob());
+    expect(JSON.parse(localStorage.getItem('promptfoo-redteam-job')!).state.jobId).toBeNull();
   });
 
   describe('setHasHydrated', () => {
@@ -90,14 +86,13 @@ describe('useRedteamJobStore', () => {
   });
 
   describe('clearJob', () => {
-    it('should clear jobId and startedAt', () => {
+    it('should clear jobId', () => {
       // Set a job first
       act(() => {
         useRedteamJobStore.getState().setJob('test-job-456');
       });
 
       expect(useRedteamJobStore.getState().jobId).toBe('test-job-456');
-      expect(useRedteamJobStore.getState().startedAt).not.toBeNull();
 
       // Clear it
       act(() => {
@@ -106,7 +101,6 @@ describe('useRedteamJobStore', () => {
 
       const state = useRedteamJobStore.getState();
       expect(state.jobId).toBeNull();
-      expect(state.startedAt).toBeNull();
     });
 
     it('should be safe to call when no job is set', () => {
@@ -117,7 +111,6 @@ describe('useRedteamJobStore', () => {
       });
 
       expect(useRedteamJobStore.getState().jobId).toBeNull();
-      expect(useRedteamJobStore.getState().startedAt).toBeNull();
     });
   });
 });

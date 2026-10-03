@@ -4,13 +4,18 @@ import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert'
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
 import { CopyButton } from '@app/components/ui/copy-button';
-import { CancelIcon, DownloadIcon, SaveIcon, TerminalIcon } from '@app/components/ui/icons';
 import { useToast } from '@app/hooks/useToast';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
 import * as yaml from 'js-yaml';
+import {
+  X as CancelIcon,
+  Download as DownloadIcon,
+  Save as SaveIcon,
+  Terminal as TerminalIcon,
+} from 'lucide-react';
 import { validateYamlConfigDraft } from './yamlConfigValidation';
 import 'prismjs/themes/prism.css';
 

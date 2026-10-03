@@ -471,6 +471,14 @@ export default function StrategyConfigDialog({
     setLayerPlugins((prev) => prev.filter((p) => p !== pluginToRemove));
   };
 
+  const handleIterationsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
+    setLocalConfig({
+      ...localConfig,
+      numIterations: clampValue(value, 3, maxIterationsLimit),
+    });
+  };
+
   const renderBasicStrategyConfig = () => (
     <>
       <p className="mb-3 text-sm text-muted-foreground">
@@ -509,13 +517,7 @@ export default function StrategyConfigDialog({
           id="num-iterations"
           type="number"
           value={localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)}
-          onChange={(e) => {
-            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-            setLocalConfig({
-              ...localConfig,
-              numIterations: clampValue(value, 3, maxIterationsLimit),
-            });
-          }}
+          onChange={(e) => handleIterationsChange(e)}
           placeholder="Number of iterations (default: 10)"
           min={3}
           max={maxIterationsLimit}
@@ -812,13 +814,7 @@ export default function StrategyConfigDialog({
           id="meta-num-iterations"
           type="number"
           value={localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)}
-          onChange={(e) => {
-            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-            setLocalConfig({
-              ...localConfig,
-              numIterations: clampValue(value, 3, maxIterationsLimit),
-            });
-          }}
+          onChange={(e) => handleIterationsChange(e)}
           placeholder="Number of iterations (default: 10)"
           min={3}
           max={maxIterationsLimit}

@@ -8,6 +8,12 @@ import CommonConfigurationOptions from './CommonConfigurationOptions';
 import type { Inputs } from '@promptfoo/contracts';
 import type { ProviderOptions } from '@promptfoo/types';
 
+const createDelayedTarget = () => ({
+  id: 'test-provider',
+  delay: 100,
+  config: {},
+});
+
 vi.mock('./ExtensionEditor', () => ({
   default: ({
     extensions,
@@ -154,11 +160,7 @@ describe('CommonConfigurationOptions', () => {
   });
 
   it('should expand Delay section when target has delay set', () => {
-    const targetWithDelay: ProviderOptions = {
-      id: 'test-provider',
-      delay: 100,
-      config: {},
-    };
+    const targetWithDelay: ProviderOptions = createDelayedTarget();
 
     renderWithProviders(
       <CommonConfigurationOptions {...defaultProps} selectedTarget={targetWithDelay} />,
@@ -171,11 +173,7 @@ describe('CommonConfigurationOptions', () => {
   it('should call updateCustomTarget when delay is changed', async () => {
     const user = userEvent.setup();
     const updateCustomTarget = vi.fn();
-    const targetWithDelay: ProviderOptions = {
-      id: 'test-provider',
-      delay: 100,
-      config: {},
-    };
+    const targetWithDelay: ProviderOptions = createDelayedTarget();
 
     renderWithProviders(
       <CommonConfigurationOptions

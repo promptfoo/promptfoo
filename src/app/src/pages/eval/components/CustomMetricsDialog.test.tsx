@@ -6,6 +6,25 @@ import CustomMetricsDialog from './CustomMetricsDialog';
 import { useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
 
+const createEmptyFiltersFixture = () => ({
+  values: {},
+  appliedCount: 0,
+  options: {
+    metric: [],
+    metadata: [],
+  },
+});
+
+const createEmptyRedteamConfigFixture = () => ({
+  redteam: {
+    plugins: [],
+  },
+});
+
+const createAccuracyScoresFixture = () => ({
+  accuracy: 100,
+});
+
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),
 }));
@@ -56,20 +75,9 @@ describe('MetricsTable', () => {
     vi.mocked(useCustomPoliciesMap).mockReturnValue({});
     vi.mocked(useTableStore).mockReturnValue({
       table: mockTableData,
-      config: {
-        redteam: {
-          plugins: [],
-        },
-      },
+      config: createEmptyRedteamConfigFixture(),
       addFilter: mockAddFilter,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-          metadata: [],
-        },
-      },
+      filters: createEmptyFiltersFixture(),
     } as any);
   });
 
@@ -101,20 +109,9 @@ describe('MetricsTable', () => {
   it('should return null when table is missing', () => {
     vi.mocked(useTableStore).mockReturnValue({
       table: null,
-      config: {
-        redteam: {
-          plugins: [],
-        },
-      },
+      config: createEmptyRedteamConfigFixture(),
       addFilter: vi.fn(),
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-          metadata: [],
-        },
-      },
+      filters: createEmptyFiltersFixture(),
     } as any);
 
     const { container } = render(<CustomMetricsDialog open={true} onClose={vi.fn()} />);
@@ -156,9 +153,7 @@ describe('MetricsTable', () => {
                 namedScores: {
                   accuracy: 80,
                 },
-                namedScoresCount: {
-                  accuracy: 100,
-                },
+                namedScoresCount: createAccuracyScoresFixture(),
                 cost: 0,
                 score: 0,
                 testPassCount: 0,
@@ -178,9 +173,7 @@ describe('MetricsTable', () => {
                 namedScores: {
                   accuracy: 60,
                 },
-                namedScoresCount: {
-                  accuracy: 100,
-                },
+                namedScoresCount: createAccuracyScoresFixture(),
                 cost: 0,
                 score: 0,
                 testPassCount: 0,
@@ -197,20 +190,9 @@ describe('MetricsTable', () => {
         },
         body: [],
       },
-      config: {
-        redteam: {
-          plugins: [],
-        },
-      },
+      config: createEmptyRedteamConfigFixture(),
       addFilter: mockAddFilter,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-          metadata: [],
-        },
-      },
+      filters: createEmptyFiltersFixture(),
     } as any);
 
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
@@ -249,20 +231,9 @@ describe('MetricsTable', () => {
         },
         body: [],
       },
-      config: {
-        redteam: {
-          plugins: [],
-        },
-      },
+      config: createEmptyRedteamConfigFixture(),
       addFilter: mockAddFilter,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-          metadata: [],
-        },
-      },
+      filters: createEmptyFiltersFixture(),
     } as any);
 
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
@@ -277,14 +248,7 @@ describe('MetricsTable', () => {
       table: mockTableData,
       config: null,
       addFilter: vi.fn(),
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-          metadata: [],
-        },
-      },
+      filters: createEmptyFiltersFixture(),
     } as any);
 
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
@@ -325,20 +289,9 @@ describe('MetricsTable', () => {
         },
         body: [],
       },
-      config: {
-        redteam: {
-          plugins: [],
-        },
-      },
+      config: createEmptyRedteamConfigFixture(),
       addFilter: mockAddFilter,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-          metadata: [],
-        },
-      },
+      filters: createEmptyFiltersFixture(),
     } as any);
 
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
@@ -359,9 +312,7 @@ describe('MetricsTable', () => {
               namedScores: {
                 accuracy: 0.9,
               },
-              namedScoresCount: {
-                accuracy: 100,
-              },
+              namedScoresCount: createAccuracyScoresFixture(),
               cost: 0,
               score: 0,
               testPassCount: 0,
@@ -405,20 +356,9 @@ describe('MetricsTable', () => {
 
     vi.mocked(useTableStore).mockReturnValue({
       table: mockTableDataWithMissingMetrics,
-      config: {
-        redteam: {
-          plugins: [],
-        },
-      },
+      config: createEmptyRedteamConfigFixture(),
       addFilter: mockAddFilter,
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-          metadata: [],
-        },
-      },
+      filters: createEmptyFiltersFixture(),
     } as any);
 
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);

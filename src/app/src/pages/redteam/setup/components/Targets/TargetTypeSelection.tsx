@@ -106,10 +106,6 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   // Check if user has entered a target name - must have actual content
   const hasTargetName = Boolean(selectedTarget?.label?.trim());
 
-  const getNextButtonText = () => {
-    return 'Next';
-  };
-
   const isNextButtonDisabled = () => {
     return !hasTargetName || !isValidSelection();
   };
@@ -130,7 +126,6 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
       description="Configure the AI system you want to test"
       onNext={handleNext}
       onBack={onBack}
-      nextLabel={getNextButtonText()}
       nextDisabled={isNextButtonDisabled()}
       warningMessage={isNextButtonDisabled() ? getNextButtonTooltip() : undefined}
     >

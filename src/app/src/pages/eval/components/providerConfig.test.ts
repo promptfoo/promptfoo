@@ -567,19 +567,14 @@ describe('getProviderDisplayName', () => {
   });
 
   describe('matchType handling', () => {
-    it('returns providerString as label when matchType is "label"', () => {
-      const config = { id: 'openai:gpt-4o', label: 'gpt-4o' };
-      const result = getProviderDisplayName('gpt-4o', config, 'label');
-      expect(result.prefix).toBe('');
-      expect(result.name).toBe('gpt-4o');
-      expect(result.label).toBe('gpt-4o');
-    });
-
-    it('prevents duplication when label equals model name and matched by label', () => {
+    it.each([
+      'returns providerString as label when matchType is "label"',
+      'prevents duplication when label equals model name and matched by label',
+    ])('%s', () => {
       // This is the critical case that caused the "gpt-4o:gpt-4o" bug
       const config = { id: 'openai:gpt-4o', label: 'gpt-4o' };
-      const result = getProviderDisplayName('gpt-4o', config, 'label');
       // With matchType='label', we should NOT split on colon
+      const result = getProviderDisplayName('gpt-4o', config, 'label');
       expect(result.prefix).toBe('');
       expect(result.name).toBe('gpt-4o');
       expect(result.label).toBe('gpt-4o');

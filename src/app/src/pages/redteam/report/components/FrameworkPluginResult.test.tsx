@@ -1,17 +1,14 @@
-import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen } from '@testing-library/react';
+import { createRouterModule } from '@app/tests/browserMocks';
+import { renderWithRouter as renderWithProviders } from '@app/tests/renderWithRouter';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkPluginResult from './FrameworkPluginResult';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router', async () => {
   const actual = await vi.importActual('react-router');
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
+  return createRouterModule(actual, () => () => mockNavigate);
 });
 
 vi.mock('./FrameworkComplianceUtils', async () => {
@@ -21,15 +18,6 @@ vi.mock('./FrameworkComplianceUtils', async () => {
     getPluginDisplayName: vi.fn((plugin) => plugin),
   };
 });
-
-// Helper to render with TooltipProvider and MemoryRouter
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(
-    <TooltipProvider>
-      <MemoryRouter>{ui}</MemoryRouter>
-    </TooltipProvider>,
-  );
-};
 
 describe('FrameworkPluginResult', () => {
   beforeEach(() => {

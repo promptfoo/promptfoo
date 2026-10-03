@@ -3,11 +3,19 @@ import { callApi } from '@app/utils/api';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCodingTarget } from '../../../../../tests/factories';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import TargetConfiguration from './TargetConfiguration';
 
 import type { Config } from '../../types';
+
+function setImportedCodingTarget() {
+  useRedTeamConfig.getState().setFullConfig({
+    ...useRedTeamConfig.getState().config,
+    target: createCodingTarget('read-only', 'Imported target'),
+  });
+}
 
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: () => ({ recordEvent: vi.fn() }) }));
 vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
@@ -74,16 +82,7 @@ describe('TargetConfiguration lifecycle validation', () => {
       'Invalid JSON configuration',
     );
 
-    act(() => {
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id: 'openinterpreter',
-          label: 'Imported target',
-          config: { sandbox_mode: 'read-only' },
-        },
-      });
-    });
+    act(setImportedCodingTarget);
 
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
     expect(screen.getByRole('button', { name: /Next/i })).toBeEnabled();
@@ -122,16 +121,7 @@ describe('TargetConfiguration lifecycle validation', () => {
   it('refreshes the raw editor when a same-type target is imported without an existing error', () => {
     render(<TargetConfigurationHarness />);
 
-    act(() => {
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id: 'openinterpreter',
-          label: 'Imported target',
-          config: { sandbox_mode: 'read-only' },
-        },
-      });
-    });
+    act(setImportedCodingTarget);
 
     expect(screen.getByTestId('code-editor')).toHaveValue(
       JSON.stringify({ sandbox_mode: 'read-only' }, null, 2),

@@ -24,7 +24,6 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
-import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -32,6 +31,7 @@ import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
+import { checkEmailStatus } from '@app/utils/emailVerification';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {
@@ -72,19 +72,6 @@ interface JobStatusResponse {
   hasRunningJob: boolean;
   jobId?: string;
 }
-
-const getRunTargetValidationError = (
-  targetConfigError: string | null,
-  confirmedTarget: ProviderOptions,
-  latestTarget: ProviderOptions,
-): string | null => {
-  if (targetConfigError) {
-    return targetConfigError;
-  }
-  return isEqual(confirmedTarget, latestTarget)
-    ? null
-    : 'Target configuration changed while preparing the run. Review and try again.';
-};
 
 interface IntentEntry {
   display: string;
@@ -137,26 +124,6 @@ function getDisplayedIntents(plugins: readonly ReviewPlugin[]): IntentEntry[] {
   });
 }
 
-function removeIntentEntry(
-  plugins: readonly ReviewPlugin[],
-  pluginIndex: number,
-  entryIndex: number,
-): ReviewPlugin[] | null {
-  const target = plugins[pluginIndex];
-  if (!target || !isIntentPlugin(target)) {
-    return null;
-  }
-  const currentIntents: (string | string[])[] = Array.isArray(target.config.intent)
-    ? target.config.intent
-    : [target.config.intent];
-  const newIntents = currentIntents.filter((_, i) => i !== entryIndex);
-  return plugins.map((p, i) =>
-    i === pluginIndex && isIntentPlugin(p)
-      ? { ...p, config: { ...p.config, intent: newIntents } }
-      : p,
-  );
-}
-
 export default function Review({
   onBack,
   navigateToPlugins,
@@ -189,7 +156,6 @@ export default function Review({
   const confirmedRunTargetRef = useRef<ProviderOptions | null>(null);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
-  const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
   const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
   const [isRunOptionsExpanded, setIsRunOptionsExpanded] = useState(true);
@@ -206,12 +172,11 @@ export default function Review({
     }
 
     const sections: { title: string; content: string }[] = [];
-    const lines = config.purpose.split('\n');
     let currentSection: { title: string; content: string } | null = null;
     let inCodeBlock = false;
     let contentLines: string[] = [];
 
-    for (const line of lines) {
+    for (const line of config.purpose.split('\n')) {
       // Check if we're entering or exiting a code block
       if (line === '```') {
         inCodeBlock = !inCodeBlock;
@@ -265,10 +230,6 @@ export default function Review({
       }
       return newSet;
     });
-  };
-
-  const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    updateConfig('description', event.target.value);
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
@@ -353,36 +314,6 @@ export default function Review({
     recoverJob();
   }, [_hasHydrated]); // Run once after hydration completes
 
-  const handleSaveYaml = () => {
-    if (targetConfigError) {
-      showToast(targetConfigError, 'error');
-      return;
-    }
-
-    const blob = new Blob([yamlContent], { type: 'text/yaml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'promptfooconfig.yaml';
-    link.click();
-    URL.revokeObjectURL(url);
-    recordEvent('feature_used', {
-      feature: 'redteam_config_download',
-      numPlugins: config.plugins.length,
-      numStrategies: config.strategies.length,
-      targetType: config.target.id,
-    });
-  };
-
-  const handleOpenYamlDialog = () => {
-    if (targetConfigError) {
-      showToast(targetConfigError, 'error');
-      return;
-    }
-
-    setIsYamlDialogOpen(true);
-  };
-
   const getPluginSummary = useCallback((plugin: string | RedteamPlugin) => {
     if (typeof plugin === 'string') {
       return { label: plugin, count: 1 };
@@ -416,10 +347,23 @@ export default function Review({
 
   const handleRemoveIntent = useCallback(
     (pluginIndex: number, entryIndex: number) => {
-      const next = removeIntentEntry(config.plugins, pluginIndex, entryIndex);
-      if (next) {
-        updateConfig('plugins', next);
+      const plugins: readonly ReviewPlugin[] = config.plugins;
+      const target = plugins[pluginIndex];
+      if (!target || !isIntentPlugin(target)) {
+        return;
       }
+      const currentIntents: (string | string[])[] = Array.isArray(target.config.intent)
+        ? target.config.intent
+        : [target.config.intent];
+      const newIntents = currentIntents.filter((_, i) => i !== entryIndex);
+      updateConfig(
+        'plugins',
+        plugins.map((p, i) =>
+          i === pluginIndex && isIntentPlugin(p)
+            ? { ...p, config: { ...p.config, intent: newIntents } }
+            : p,
+        ),
+      );
     },
     [config.plugins, updateConfig],
   );
@@ -480,9 +424,7 @@ export default function Review({
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
-      const response = await callApi('/redteam/status');
-      const data = await response.json();
-      return data;
+      return await (await callApi('/redteam/status')).json();
     } catch (error) {
       console.error('Error checking job status:', error);
       return { hasRunningJob: false };
@@ -593,14 +535,14 @@ export default function Review({
     const { config: latestConfig } = useRedTeamConfig.getState();
     const { targetConfigError: latestTargetConfigError } =
       useRedTeamTargetConfigValidation.getState();
-    const runTargetValidationError = getRunTargetValidationError(
-      latestTargetConfigError,
-      confirmedTarget,
-      latestConfig.target,
-    );
-    if (runTargetValidationError) {
+    const latestTarget = latestConfig.target;
+    if (latestTargetConfigError || !isEqual(confirmedTarget, latestTarget)) {
       confirmedRunTargetRef.current = null;
-      showToast(runTargetValidationError, 'error');
+      showToast(
+        latestTargetConfigError ||
+          'Target configuration changed while preparing the run. Review and try again.',
+        'error',
+      );
       return;
     }
 
@@ -669,9 +611,8 @@ export default function Review({
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showToast(
-        `An error occurred while starting the evaluation: ${errorMessage}. Please try again.`,
+        `An error occurred while starting the evaluation: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
         'error',
       );
     }
@@ -727,7 +668,9 @@ export default function Review({
             id="description"
             placeholder="My Red Team Configuration"
             value={config.description}
-            onChange={handleDescriptionChange}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+              updateConfig('description', event.target.value);
+            }}
             autoFocus
           />
         </div>
@@ -757,8 +700,7 @@ export default function Review({
                       aria-label={`Remove plugin ${label}`}
                       onClick={() => {
                         const newPlugins = config.plugins.filter((plugin) => {
-                          const pluginLabel = getPluginSummary(plugin).label;
-                          return pluginLabel !== label;
+                          return getPluginSummary(plugin).label !== label;
                         });
                         updateConfig('plugins', newPlugins);
                       }}
@@ -809,8 +751,7 @@ export default function Review({
                         // Special handling for 'basic' strategy - set enabled: false instead of removing
                         if (strategyId === 'basic') {
                           const newStrategies = config.strategies.map((strategy) => {
-                            const id = getStrategyId(strategy);
-                            if (id === 'basic') {
+                            if (getStrategyId(strategy) === 'basic') {
                               return {
                                 id: 'basic',
                                 config: {
@@ -824,8 +765,7 @@ export default function Review({
                           updateConfig('strategies', newStrategies);
                         } else {
                           const newStrategies = config.strategies.filter((strategy) => {
-                            const id = getStrategyId(strategy);
-                            return id !== strategyId;
+                            return getStrategyId(strategy) !== strategyId;
                           });
                           updateConfig('strategies', newStrategies);
                         }
@@ -1237,7 +1177,25 @@ export default function Review({
             <Code>promptfoo redteam run</Code>
             <div className="mt-4 flex gap-3">
               <Button
-                onClick={handleSaveYaml}
+                onClick={() => {
+                  if (targetConfigError) {
+                    showToast(targetConfigError, 'error');
+                    return;
+                  }
+
+                  const url = URL.createObjectURL(new Blob([yamlContent], { type: 'text/yaml' }));
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = 'promptfooconfig.yaml';
+                  link.click();
+                  URL.revokeObjectURL(url);
+                  recordEvent('feature_used', {
+                    feature: 'redteam_config_download',
+                    numPlugins: config.plugins.length,
+                    numStrategies: config.strategies.length,
+                    targetType: config.target.id,
+                  });
+                }}
                 disabled={Boolean(targetConfigError)}
                 className="gap-2"
               >
@@ -1246,7 +1204,14 @@ export default function Review({
               </Button>
               <Button
                 variant="outline"
-                onClick={handleOpenYamlDialog}
+                onClick={() => {
+                  if (targetConfigError) {
+                    showToast(targetConfigError, 'error');
+                    return;
+                  }
+
+                  setIsYamlDialogOpen(true);
+                }}
                 disabled={Boolean(targetConfigError)}
                 className="gap-2"
               >

@@ -6,6 +6,14 @@ import ResultsTab from './ResultsTab';
 
 import type { ScanResult } from '../ModelAudit.types';
 
+const createSuccessfulScanFixture = () => ({
+  path: '/path/to/scan',
+  success: true,
+  issues: [],
+  scannedFiles: 15,
+  rawOutput: 'raw output',
+});
+
 vi.mock('./ChecksSection', () => ({
   default: vi.fn(() => <div data-testid="checks-section"></div>),
 }));
@@ -166,31 +174,11 @@ describe('ResultsTab', () => {
     expect(mockOnShowFilesDialog).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle malformed scanResults gracefully when scanResults.issues is undefined', () => {
-    const mockScanResults: ScanResult = {
-      path: '/path/to/scan',
-      success: true,
-      issues: [],
-      scannedFiles: 15,
-      rawOutput: 'raw output',
-    };
-    const mockOnShowFilesDialog = vi.fn();
-
-    const { container } = render(
-      <ResultsTab scanResults={mockScanResults} onShowFilesDialog={mockOnShowFilesDialog} />,
-    );
-
-    expect(container.firstChild).toBeInTheDocument();
-  });
-
-  it('should handle malformed scanResults gracefully when scanResults.checks is undefined', () => {
-    const mockScanResults: ScanResult = {
-      path: '/path/to/scan',
-      success: true,
-      issues: [],
-      scannedFiles: 15,
-      rawOutput: 'raw output',
-    };
+  it.each([
+    'should handle malformed scanResults gracefully when scanResults.issues is undefined',
+    'should handle malformed scanResults gracefully when scanResults.checks is undefined',
+  ])('%s', () => {
+    const mockScanResults: ScanResult = createSuccessfulScanFixture();
     const mockOnShowFilesDialog = vi.fn();
 
     const { container } = render(

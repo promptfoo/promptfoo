@@ -6,18 +6,6 @@ export type ThemePreference = ResolvedTheme | 'system';
 const DARK_MODE_STORAGE_KEY = 'darkMode';
 const SYSTEM_DARK_MODE_QUERY = '(prefers-color-scheme: dark)';
 
-function getSystemTheme(): ResolvedTheme {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return 'light';
-  }
-
-  try {
-    return window.matchMedia(SYSTEM_DARK_MODE_QUERY).matches ? 'dark' : 'light';
-  } catch {
-    return 'light';
-  }
-}
-
 function getStoredThemePreference(): ThemePreference {
   let savedMode: string | null = null;
 
@@ -38,68 +26,34 @@ function getStoredThemePreference(): ThemePreference {
   return 'system';
 }
 
-function persistThemePreference(preference: ThemePreference) {
-  try {
-    if (preference === 'system') {
-      localStorage.removeItem(DARK_MODE_STORAGE_KEY);
-      return;
-    }
-
-    localStorage.setItem(DARK_MODE_STORAGE_KEY, String(preference === 'dark'));
-  } catch (error) {
-    console.debug('[ThemeSelector] Failed to persist theme preference', { error, preference });
-  }
-}
-
-function applyResolvedTheme(theme: ResolvedTheme) {
-  if (typeof document === 'undefined') {
-    return;
-  }
-
-  if (theme === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
-
-  document.documentElement.style.colorScheme = theme;
-}
-
-function subscribeToSystemThemePreference(
-  systemPreference: MediaQueryList,
-  listener: (event: MediaQueryListEvent) => void,
-) {
-  if (
-    typeof systemPreference.addEventListener === 'function' &&
-    typeof systemPreference.removeEventListener === 'function'
-  ) {
-    systemPreference.addEventListener('change', listener);
-    return () => {
-      systemPreference.removeEventListener('change', listener);
-    };
-  }
-
-  if (
-    typeof systemPreference.addListener === 'function' &&
-    typeof systemPreference.removeListener === 'function'
-  ) {
-    systemPreference.addListener(listener);
-    return () => {
-      systemPreference.removeListener(listener);
-    };
-  }
-
-  return () => {};
-}
-
 export function useThemePreference() {
   const [themePreference, setThemePreferenceState] =
     useState<ThemePreference>(getStoredThemePreference);
-  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(getSystemTheme);
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return 'light';
+    }
+
+    try {
+      return window.matchMedia(SYSTEM_DARK_MODE_QUERY).matches ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
   const resolvedTheme = themePreference === 'system' ? systemTheme : themePreference;
 
   useLayoutEffect(() => {
-    applyResolvedTheme(resolvedTheme);
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    if (resolvedTheme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+
+    document.documentElement.style.colorScheme = resolvedTheme;
   }, [resolvedTheme]);
 
   useEffect(() => {
@@ -119,7 +73,27 @@ export function useThemePreference() {
       setSystemTheme(matches ? 'dark' : 'light');
     };
 
-    return subscribeToSystemThemePreference(systemPreference, handleSystemPreferenceChange);
+    if (
+      typeof systemPreference.addEventListener === 'function' &&
+      typeof systemPreference.removeEventListener === 'function'
+    ) {
+      systemPreference.addEventListener('change', handleSystemPreferenceChange);
+      return () => {
+        systemPreference.removeEventListener('change', handleSystemPreferenceChange);
+      };
+    }
+
+    if (
+      typeof systemPreference.addListener === 'function' &&
+      typeof systemPreference.removeListener === 'function'
+    ) {
+      systemPreference.addListener(handleSystemPreferenceChange);
+      return () => {
+        systemPreference.removeListener(handleSystemPreferenceChange);
+      };
+    }
+
+    return () => {};
   }, []);
 
   useEffect(() => {
@@ -141,17 +115,24 @@ export function useThemePreference() {
   }, []);
 
   const setThemePreference = useCallback((preference: ThemePreference) => {
-    persistThemePreference(preference);
+    try {
+      if (preference === 'system') {
+        localStorage.removeItem(DARK_MODE_STORAGE_KEY);
+      } else {
+        localStorage.setItem(DARK_MODE_STORAGE_KEY, String(preference === 'dark'));
+      }
+    } catch (error) {
+      console.debug('[ThemeSelector] Failed to persist theme preference', { error, preference });
+    }
     setThemePreferenceState(preference);
   }, []);
 
   return useMemo(
     () => ({
-      resolvedTheme,
       setThemePreference,
       systemTheme,
       themePreference,
     }),
-    [resolvedTheme, setThemePreference, systemTheme, themePreference],
+    [setThemePreference, systemTheme, themePreference],
   );
 }

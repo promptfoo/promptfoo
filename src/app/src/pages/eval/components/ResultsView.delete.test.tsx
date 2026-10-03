@@ -7,6 +7,27 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 
+function createPendingDeleteResponse() {
+  let resolveDelete!: () => void;
+  const response = new Promise<Response>((resolve) => {
+    resolveDelete = () =>
+      resolve({
+        ok: true,
+        json: async () => ({ message: 'Success' }),
+      } as Response);
+  });
+  return { response, resolveDelete };
+}
+
+const createEvalSummary = () => ({
+  evalId: 'eval-1',
+  datasetId: null,
+  label: 'Eval 1',
+  createdAt: 1000,
+  description: 'Test eval 1',
+  numTests: 10,
+});
+
 const mockShowToast = vi.fn();
 const mockNavigate = vi.fn();
 const mockOnRecentEvalSelected = vi.fn();
@@ -171,14 +192,7 @@ describe('ResultsView - Delete Functionality', () => {
 
   const defaultProps = {
     recentEvals: [
-      {
-        evalId: 'eval-1',
-        datasetId: null,
-        label: 'Eval 1',
-        createdAt: 1000,
-        description: 'Test eval 1',
-        numTests: 10,
-      },
+      createEvalSummary(),
       {
         evalId: 'eval-2',
         datasetId: null,
@@ -374,16 +388,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     renderWithMockData({
       ...defaultProps,
-      recentEvals: [
-        {
-          evalId: 'eval-1',
-          datasetId: null,
-          label: 'Eval 1',
-          createdAt: 1000,
-          description: 'Test eval 1',
-          numTests: 10,
-        },
-      ],
+      recentEvals: [createEvalSummary()],
       defaultEvalId: 'eval-1',
     });
 
@@ -436,16 +441,8 @@ describe('ResultsView - Delete Functionality', () => {
   it('should show loading state during deletion', async () => {
     const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
-    let resolveDelete: () => void;
-    vi.mocked(callApi).mockReturnValue(
-      new Promise<Response>((resolve) => {
-        resolveDelete = () =>
-          resolve({
-            ok: true,
-            json: async () => ({ message: 'Success' }),
-          } as Response);
-      }),
-    );
+    const { response, resolveDelete } = createPendingDeleteResponse();
+    vi.mocked(callApi).mockReturnValue(response);
 
     renderWithMockData();
 
@@ -508,16 +505,8 @@ describe('ResultsView - Delete Functionality', () => {
   it('should not close delete confirmation dialog by clicking outside or pressing escape when deletion is in progress', async () => {
     const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
-    let resolveDelete: () => void;
-    vi.mocked(callApi).mockReturnValue(
-      new Promise<Response>((resolve) => {
-        resolveDelete = () =>
-          resolve({
-            ok: true,
-            json: async () => ({ message: 'Success' }),
-          } as Response);
-      }),
-    );
+    const { response, resolveDelete } = createPendingDeleteResponse();
+    vi.mocked(callApi).mockReturnValue(response);
 
     renderWithMockData();
 

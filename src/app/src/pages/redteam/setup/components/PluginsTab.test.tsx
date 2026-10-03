@@ -362,6 +362,35 @@ describe('PluginsTab', () => {
     expect(screen.getByTestId('plugins-tab-container')).toBeInTheDocument();
   });
 
+  function createSetPlugins(testPlugins?: typeof initialStoreState.config.plugins) {
+    return () => {
+      useRedTeamConfig.setState({
+        ...initialStoreState,
+        config: {
+          ...initialStoreState.config,
+          plugins: testPlugins ?? ['sql-injection', 'harmful:hate', 'contracts', 'bola'],
+        },
+      });
+    };
+  }
+
+  function resetPluginStores() {
+    act(() => {
+      useRedTeamConfig.setState({
+        ...initialStoreState,
+        config: { ...initialStoreState.config, plugins: [] },
+      });
+      useRecentlyUsedPlugins.setState({ ...initialRecentPluginsState, plugins: [] });
+    });
+  }
+
+  function restorePluginStores() {
+    act(() => {
+      useRedTeamConfig.setState(initialStoreState);
+      useRecentlyUsedPlugins.setState(initialRecentPluginsState);
+    });
+  }
+
   describe('View Logic', () => {
     test('Plugin search filters the plugin list based on the search query', async () => {
       const user = userEvent.setup();
@@ -387,23 +416,10 @@ describe('PluginsTab', () => {
     });
 
     describe('Category Filtering', () => {
-      beforeEach(() => {
-        // Reset stores before each category filtering test
-        act(() => {
-          useRedTeamConfig.setState({
-            ...initialStoreState,
-            config: { ...initialStoreState.config, plugins: [] },
-          });
-          useRecentlyUsedPlugins.setState({ ...initialRecentPluginsState, plugins: [] });
-        });
-      });
+      // Reset stores before each category filtering test
+      beforeEach(resetPluginStores);
 
-      afterEach(() => {
-        act(() => {
-          useRedTeamConfig.setState(initialStoreState);
-          useRecentlyUsedPlugins.setState(initialRecentPluginsState);
-        });
-      });
+      afterEach(() => restorePluginStores());
 
       // Helper to get plugins for a category (excluding intent, policy, and domain-specific plugins)
       const getVisiblePluginsForCategory = (category: string) => {
@@ -712,37 +728,16 @@ describe('PluginsTab', () => {
     });
 
     describe('Selected Plugins List', () => {
-      beforeEach(() => {
-        // Reset stores before each selected plugins list test
-        act(() => {
-          useRedTeamConfig.setState({
-            ...initialStoreState,
-            config: { ...initialStoreState.config, plugins: [] },
-          });
-          useRecentlyUsedPlugins.setState({ ...initialRecentPluginsState, plugins: [] });
-        });
-      });
+      // Reset stores before each selected plugins list test
+      beforeEach(resetPluginStores);
 
-      afterEach(() => {
-        act(() => {
-          useRedTeamConfig.setState(initialStoreState);
-          useRecentlyUsedPlugins.setState(initialRecentPluginsState);
-        });
-      });
+      afterEach(() => restorePluginStores());
 
       test('Renders all selected plugins', async () => {
         // Set up the store with selected plugins from different categories
         const testPlugins = ['sql-injection', 'harmful:hate', 'contracts', 'bola'];
 
-        act(() => {
-          useRedTeamConfig.setState({
-            ...initialStoreState,
-            config: {
-              ...initialStoreState.config,
-              plugins: testPlugins,
-            },
-          });
-        });
+        act(createSetPlugins(testPlugins));
 
         renderComponent();
 
@@ -782,15 +777,7 @@ describe('PluginsTab', () => {
         // indirect-prompt-injection and prompt-extraction require config
         const testPlugins = ['sql-injection', 'indirect-prompt-injection'];
 
-        act(() => {
-          useRedTeamConfig.setState({
-            ...initialStoreState,
-            config: {
-              ...initialStoreState.config,
-              plugins: testPlugins,
-            },
-          });
-        });
+        act(createSetPlugins(testPlugins));
 
         renderComponent();
 
@@ -813,15 +800,7 @@ describe('PluginsTab', () => {
       test('labels plugin action buttons in the list and selected sidebar', async () => {
         const testPlugins = ['indirect-prompt-injection', 'aegis'];
 
-        act(() => {
-          useRedTeamConfig.setState({
-            ...initialStoreState,
-            config: {
-              ...initialStoreState.config,
-              plugins: testPlugins,
-            },
-          });
-        });
+        act(createSetPlugins(testPlugins));
 
         renderComponent();
 
@@ -860,10 +839,7 @@ describe('PluginsTab', () => {
 
     afterEach(() => {
       // Clean up store state after each test
-      act(() => {
-        useRedTeamConfig.setState(initialStoreState);
-        useRecentlyUsedPlugins.setState(initialRecentPluginsState);
-      });
+      restorePluginStores();
     });
 
     describe('Presets', () => {
@@ -1574,15 +1550,7 @@ describe('PluginsTab', () => {
           const user = userEvent.setup();
 
           // Pre-populate the store with several plugins
-          act(() => {
-            useRedTeamConfig.setState({
-              ...initialStoreState,
-              config: {
-                ...initialStoreState.config,
-                plugins: ['sql-injection', 'harmful:hate', 'contracts', 'bola'],
-              },
-            });
-          });
+          act(createSetPlugins());
 
           // Verify initial store state
           expect(useRedTeamConfig.getState().config.plugins).toHaveLength(4);
@@ -1754,15 +1722,7 @@ describe('PluginsTab', () => {
         const user = userEvent.setup();
 
         // Pre-populate the store with plugins from different categories
-        act(() => {
-          useRedTeamConfig.setState({
-            ...initialStoreState,
-            config: {
-              ...initialStoreState.config,
-              plugins: ['sql-injection', 'harmful:hate', 'contracts', 'bola'],
-            },
-          });
-        });
+        act(createSetPlugins());
 
         // Verify initial store state
         expect(useRedTeamConfig.getState().config.plugins).toHaveLength(4);
@@ -1797,15 +1757,7 @@ describe('PluginsTab', () => {
         const user = userEvent.setup();
 
         // Pre-populate the store with plugins from different categories
-        act(() => {
-          useRedTeamConfig.setState({
-            ...initialStoreState,
-            config: {
-              ...initialStoreState.config,
-              plugins: ['sql-injection', 'harmful:hate', 'contracts', 'bola'],
-            },
-          });
-        });
+        act(createSetPlugins());
 
         // Verify initial store state
         expect(useRedTeamConfig.getState().config.plugins).toHaveLength(4);

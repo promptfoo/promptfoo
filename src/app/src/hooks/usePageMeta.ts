@@ -3,10 +3,9 @@ import { useEffect } from 'react';
 interface PageMetaOptions {
   title: string;
   description?: string;
-  image?: string;
 }
 
-export function usePageMeta({ title, description, image }: PageMetaOptions) {
+export function usePageMeta({ title, description }: PageMetaOptions) {
   useEffect(() => {
     const defaultTitle = document.title;
     const descriptionTag = document.querySelector('meta[name="description"]');
@@ -28,9 +27,6 @@ export function usePageMeta({ title, description, image }: PageMetaOptions) {
     if (description && ogDescriptionTag) {
       ogDescriptionTag.setAttribute('content', description);
     }
-    if (image && ogImageTag) {
-      ogImageTag.setAttribute('content', image);
-    }
 
     return () => {
       document.title = defaultTitle;
@@ -47,5 +43,5 @@ export function usePageMeta({ title, description, image }: PageMetaOptions) {
         ogImageTag.setAttribute('content', defaultOgImage);
       }
     };
-  }, [title, description, image]);
+  }, [title, description]);
 }

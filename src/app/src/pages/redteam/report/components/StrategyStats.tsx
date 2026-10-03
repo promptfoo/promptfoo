@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@app/components/ui/badge';
 import { Card, CardContent } from '@app/components/ui/card';
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
-import { Spinner } from '@app/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { cn } from '@app/lib/utils';
@@ -14,23 +13,6 @@ import { type RedteamPluginObject } from '@promptfoo/redteam/types';
 import { compareByASRDescending } from '../utils/utils';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
-
-/**
- * Gets the progress bar color based on ASR percentage.
- * All colors are red-toned since attacks succeeding is always bad.
- */
-const getProgressBarColor = (asr: number): string => {
-  if (asr >= 75) {
-    return 'bg-red-700';
-  }
-  if (asr >= 50) {
-    return 'bg-red-600';
-  }
-  if (asr >= 25) {
-    return 'bg-red-500';
-  }
-  return 'bg-red-400';
-};
 
 const DrawerContent = ({
   selectedStrategy,
@@ -51,66 +33,41 @@ const DrawerContent = ({
 }) => {
   const customPoliciesById = useCustomPoliciesMap(plugins);
 
-  const pluginStats = useMemo(() => {
+  const { pluginStats, examplesByStrategy } = useMemo(() => {
     const pluginStats: Record<string, { successfulAttacks: number; total: number }> = {};
+    const failures: TestWithMetadata[] = [];
+    const passes: TestWithMetadata[] = [];
 
-    Object.entries(failedAttacksByPlugin).forEach(([plugin, tests]) => {
-      tests.forEach((test) => {
-        const testStrategy = getStrategyIdFromTest(test);
-        if (testStrategy === selectedStrategy) {
-          if (!pluginStats[plugin]) {
-            pluginStats[plugin] = { successfulAttacks: 0, total: 0 };
+    for (const [byPlugin, examples, successful] of [
+      [failedAttacksByPlugin, passes, false],
+      [succeededAttacksByPlugin, failures, true],
+    ] as const) {
+      Object.entries(byPlugin).forEach(([plugin, tests]) => {
+        tests.forEach((test) => {
+          if (getStrategyIdFromTest(test) === selectedStrategy) {
+            if (!pluginStats[plugin]) {
+              pluginStats[plugin] = { successfulAttacks: 0, total: 0 };
+            }
+            if (successful) {
+              pluginStats[plugin].successfulAttacks++;
+            }
+            pluginStats[plugin].total++;
+            examples.push(test);
           }
-          pluginStats[plugin].total++;
-        }
+        });
       });
-    });
+    }
 
-    Object.entries(succeededAttacksByPlugin).forEach(([plugin, tests]) => {
-      tests.forEach((test) => {
-        const testStrategy = getStrategyIdFromTest(test);
-        if (testStrategy === selectedStrategy) {
-          if (!pluginStats[plugin]) {
-            pluginStats[plugin] = { successfulAttacks: 0, total: 0 };
-          }
-          pluginStats[plugin].successfulAttacks++;
-          pluginStats[plugin].total++;
-        }
-      });
-    });
-
-    return Object.entries(pluginStats)
-      .map(([plugin, stats]) => ({
-        plugin,
-        ...stats,
-        asr: calculateAttackSuccessRate(stats.total, stats.successfulAttacks),
-      }))
-      .sort(compareByASRDescending);
-  }, [succeededAttacksByPlugin, failedAttacksByPlugin, selectedStrategy]);
-
-  const examplesByStrategy = useMemo(() => {
-    const failures: (typeof succeededAttacksByPlugin)[string] = [];
-    const passes: (typeof failedAttacksByPlugin)[string] = [];
-
-    Object.values(succeededAttacksByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const testStrategy = getStrategyIdFromTest(test);
-        if (testStrategy === selectedStrategy) {
-          failures.push(test);
-        }
-      });
-    });
-
-    Object.values(failedAttacksByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const testStrategy = getStrategyIdFromTest(test);
-        if (testStrategy === selectedStrategy) {
-          passes.push(test);
-        }
-      });
-    });
-
-    return { failures, passes };
+    return {
+      pluginStats: Object.entries(pluginStats)
+        .map(([plugin, stats]) => ({
+          plugin,
+          ...stats,
+          asr: calculateAttackSuccessRate(stats.total, stats.successfulAttacks),
+        }))
+        .sort(compareByASRDescending),
+      examplesByStrategy: { failures, passes },
+    };
   }, [succeededAttacksByPlugin, failedAttacksByPlugin, selectedStrategy]);
 
   const getPromptDisplayString = (prompt: string): string => {
@@ -241,12 +198,11 @@ const DrawerContent = ({
           </thead>
           <tbody className="divide-y divide-border">
             {pluginStats.map((stat) => {
-              const customPolicy = customPoliciesById[stat.plugin];
               return (
                 <tr key={stat.plugin} className="hover:bg-muted/30">
                   <td className="px-4 py-3 font-medium">
                     <div>
-                      {customPolicy?.name ??
+                      {customPoliciesById[stat.plugin]?.name ??
                         (displayNameOverrides[stat.plugin as keyof typeof displayNameOverrides] ||
                           stat.plugin)}
                     </div>
@@ -393,8 +349,6 @@ const StrategyStats = ({
   plugins: RedteamPluginObject[];
 }) => {
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
 
   /**
    * Sort strategies by ASR (highest first)
@@ -405,39 +359,7 @@ const StrategyStats = ({
     return compareByASRDescending({ asr: asrA }, { asr: asrB });
   });
 
-  const handleStrategyClick = async (strategy: string) => {
-    try {
-      setIsLoading(true);
-      setSelectedStrategy(strategy);
-      // ... any async operations
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Unknown error'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDrawerClose = () => {
-    setSelectedStrategy(null);
-  };
-
   const [tabValue, setTabValue] = useState('flagged');
-
-  if (error) {
-    return (
-      <div className="p-4">
-        <p className="text-destructive">Error loading strategy stats: {error.message}</p>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-4">
-        <Spinner />
-      </div>
-    );
-  }
 
   return (
     <>
@@ -451,6 +373,18 @@ const StrategyStats = ({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
             {strategies.map(([strategy, { total, failCount }]) => {
               const asr = calculateAttackSuccessRate(total, failCount);
+              /**
+               * Gets the progress bar color based on ASR percentage.
+               * All colors are red-toned since attacks succeeding is always bad.
+               */
+              let progressBarColor: string = 'bg-red-400';
+              if (asr >= 75) {
+                progressBarColor = 'bg-red-700';
+              } else if (asr >= 50) {
+                progressBarColor = 'bg-red-600';
+              } else if (asr >= 25) {
+                progressBarColor = 'bg-red-500';
+              }
               return (
                 <div
                   key={strategy}
@@ -459,10 +393,10 @@ const StrategyStats = ({
                   aria-label={`View details for ${strategy} attack method`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
-                      handleStrategyClick(strategy);
+                      setSelectedStrategy(strategy);
                     }
                   }}
-                  onClick={() => handleStrategyClick(strategy)}
+                  onClick={() => setSelectedStrategy(strategy)}
                   className={cn(
                     'cursor-pointer rounded-lg p-4 transition-all',
                     'hover:bg-muted/50',
@@ -480,10 +414,7 @@ const StrategyStats = ({
                   <div className="mb-2 flex items-center">
                     <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600 print:bg-zinc-300">
                       <div
-                        className={cn(
-                          'h-full rounded-full transition-all',
-                          getProgressBarColor(asr),
-                        )}
+                        className={cn('h-full rounded-full transition-all', progressBarColor)}
                         style={{ width: `${asr}%` }}
                       />
                     </div>
@@ -504,7 +435,9 @@ const StrategyStats = ({
       <StrategySheet
         selectedStrategy={selectedStrategy}
         isOpen={!!selectedStrategy}
-        onClose={handleDrawerClose}
+        onClose={() => {
+          setSelectedStrategy(null);
+        }}
         tabValue={tabValue}
         onTabChange={(newValue) => setTabValue(newValue)}
         failuresByPlugin={failuresByPlugin}

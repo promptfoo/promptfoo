@@ -8,6 +8,18 @@ import EvalOutputCell from './EvalOutputCell';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
+const createTwoPixelImage = () => ({
+  data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+});
+
+const createOnePixelImage = () => ({
+  data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+});
+
+const createThreePixelImage = () => ({
+  data: 'iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAYAAABWKLW/AAAAHElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+});
+
 // Mock the EvalOutputPromptDialog component
 vi.mock('./EvalOutputPromptDialog', () => ({
   default: vi.fn(() => <div data-testid="dialog-component">Mocked Dialog Component</div>),
@@ -108,13 +120,9 @@ describe('EvalOutputCell duplicate image prevention', () => {
         text: dataUri,
         images: [
           // This duplicate should be skipped (resolveImageSource converts base64 to data URI)
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
+          createOnePixelImage(),
           // This additional image should be rendered
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
+          createTwoPixelImage(),
         ],
       });
 
@@ -129,12 +137,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
       const dataUri = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQ==';
       const props = createBaseProps({
         text: dataUri,
-        images: [
-          { data: dataUri },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [{ data: dataUri }, createTwoPixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -180,12 +183,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
       const dataUri = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCI+PC9zdmc+';
       const props = createBaseProps({
         text: dataUri,
-        images: [
-          { data: dataUri },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [{ data: dataUri }, createTwoPixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -225,9 +223,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
           {
             data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
           },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
+          createTwoPixelImage(),
         ],
       });
 
@@ -250,9 +246,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
           {
             data: primarySvgSrc,
           },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
+          createTwoPixelImage(),
         ],
       });
 
@@ -288,14 +282,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
     it('should NOT detect regular text as primary rendered image', () => {
       const props = createBaseProps({
         text: 'This is just regular text output, not an image',
-        images: [
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [createOnePixelImage(), createTwoPixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -309,14 +296,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
       const dataUri = 'data:text/plain;base64,SGVsbG8gV29ybGQ=';
       const props = createBaseProps({
         text: dataUri,
-        images: [
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [createOnePixelImage(), createTwoPixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -338,12 +318,8 @@ describe('EvalOutputCell duplicate image prevention', () => {
           {
             data: duplicateImageData,
           },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAYAAABWKLW/AAAAHElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
+          createTwoPixelImage(),
+          createThreePixelImage(),
         ],
       });
 
@@ -357,17 +333,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
     it('should render all images when primary is NOT rendered as image', () => {
       const props = createBaseProps({
         text: 'Just regular text, no image here',
-        images: [
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAYAAABWKLW/AAAAHElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [createOnePixelImage(), createTwoPixelImage(), createThreePixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -473,14 +439,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
     it('should handle null text with images array', () => {
       const props = createBaseProps({
         text: null as unknown as string,
-        images: [
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [createOnePixelImage(), createTwoPixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -493,14 +452,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
     it('should handle empty string text with images array', () => {
       const props = createBaseProps({
         text: '',
-        images: [
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [createOnePixelImage(), createTwoPixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -535,12 +487,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
       const dataUri = 'data:image/png;base64,primary-image-data';
       const props = createBaseProps({
         text: dataUri,
-        images: [
-          { data: null as unknown as string },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [{ data: null as unknown as string }, createOnePixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -555,14 +502,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
       const props = createBaseProps({
         text: dataUri,
         prompt: 'Generate a blue circle',
-        images: [
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [createOnePixelImage(), createTwoPixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -582,14 +522,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
     it('should handle case where resolveImageSource returns undefined for text but images exist', () => {
       const props = createBaseProps({
         text: 'some-invalid-blob-ref',
-        images: [
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [createOnePixelImage(), createTwoPixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -612,9 +545,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
           {
             data: duplicateImageData,
           },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
+          createTwoPixelImage(),
         ],
       });
 
@@ -646,11 +577,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
           data: 'base64-audio-data',
           transcript: 'Audio transcript',
         },
-        images: [
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [createOnePixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -667,11 +594,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
         video: {
           url: '/api/video/test.mp4',
         },
-        images: [
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-        ],
+        images: [createOnePixelImage()],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -694,9 +617,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
         provider: 'google:gemini-3.1-flash-image-preview',
         images: [
           // This is the duplicate that should be skipped
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
+          createOnePixelImage(),
         ],
       });
 
@@ -722,12 +643,8 @@ describe('EvalOutputCell duplicate image prevention', () => {
           {
             data: duplicateImageData,
           },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
-          {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAYAAABWKLW/AAAAHElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          },
+          createTwoPixelImage(),
+          createThreePixelImage(),
         ],
       });
 

@@ -84,18 +84,9 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   const { showToast } = useToast();
 
   // Use the new hooks for CSV and JSON downloads
-  const { download: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(
-    DownloadFormat.CSV,
-    {
-      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
-    },
-  );
+  const { download: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(DownloadFormat.CSV);
   const { download: downloadJsonApi, isLoading: isLoadingJson } = useDownloadEval(
     DownloadFormat.JSON,
-
-    {
-      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
-    },
   );
 
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
@@ -221,25 +212,13 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     handleClose();
   };
 
-  const downloadTable = async () => {
+  const downloadResults = async (download: (evalId: string) => Promise<void>) => {
     if (!evalId) {
       showToast('No evaluation ID', 'error');
       return;
     }
     try {
-      await downloadJsonApi(evalId);
-    } catch {
-      // Error is already handled by the hook
-    }
-  };
-
-  const downloadCsv = async () => {
-    if (!evalId) {
-      showToast('No evaluation ID', 'error');
-      return;
-    }
-    try {
-      await downloadCsvApi(evalId);
+      await download(evalId);
     } catch {
       // Error is already handled by the hook
     }
@@ -390,7 +369,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Button
-                  onClick={downloadCsv}
+                  onClick={() => downloadResults(downloadCsvApi)}
                   variant="outline"
                   className="h-12"
                   disabled={isLoadingCsv}
@@ -400,7 +379,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                 </Button>
 
                 <Button
-                  onClick={downloadTable}
+                  onClick={() => downloadResults(downloadJsonApi)}
                   variant="outline"
                   className="h-12"
                   disabled={isLoadingJson}

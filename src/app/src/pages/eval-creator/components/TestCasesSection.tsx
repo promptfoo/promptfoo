@@ -10,18 +10,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import {
-  AlertTriangleIcon,
-  ContentCopyIcon,
-  DeleteIcon,
-  EditIcon,
-  UploadIcon,
-} from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import {
+  AlertTriangle as AlertTriangleIcon,
+  Copy as ContentCopyIcon,
+  Trash2 as DeleteIcon,
+  Edit as EditIcon,
+  Upload as UploadIcon,
+} from 'lucide-react';
 import TestCaseDialog from './TestCaseDialog';
 import type { CsvRow, TestCase, TestGeneratorConfig } from '@promptfoo/types';
 

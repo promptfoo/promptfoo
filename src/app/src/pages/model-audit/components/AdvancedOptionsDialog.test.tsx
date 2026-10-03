@@ -5,6 +5,24 @@ import AdvancedOptionsDialog from './AdvancedOptionsDialog';
 
 import type { ScanOptions } from '../ModelAudit.types';
 
+const createScanner = (
+  id: string,
+  scannerClass: string,
+  description: string,
+  extension: string,
+) => ({
+  id,
+  class: scannerClass,
+  description,
+  extensions: [extension],
+  dependencies: [],
+});
+
+const createEmptyScanOptions = () => ({
+  blacklist: [],
+  timeout: 300,
+});
+
 describe('AdvancedOptionsDialog', () => {
   const mockOnClose = vi.fn();
   const mockOnOptionsChange = vi.fn();
@@ -195,13 +213,7 @@ describe('AdvancedOptionsDialog', () => {
         scanOptions={defaultScanOptions}
         onOptionsChange={onOptionsChange}
         scannerCatalog={[
-          {
-            id: 'pickle',
-            class: 'PickleScanner',
-            description: 'Scans pickle files',
-            extensions: ['.pkl'],
-            dependencies: [],
-          },
+          createScanner('pickle', 'PickleScanner', 'Scans pickle files', '.pkl'),
           {
             id: 'weight_distribution',
             class: 'WeightDistributionScanner',
@@ -236,15 +248,7 @@ describe('AdvancedOptionsDialog', () => {
         onClose={vi.fn()}
         scanOptions={{ ...defaultScanOptions, excludeScanner: ['pickle'] }}
         onOptionsChange={onOptionsChange}
-        scannerCatalog={[
-          {
-            id: 'pickle',
-            class: 'PickleScanner',
-            description: 'Scans pickle files',
-            extensions: ['.pkl'],
-            dependencies: [],
-          },
-        ]}
+        scannerCatalog={[createScanner('pickle', 'PickleScanner', 'Scans pickle files', '.pkl')]}
       />,
     );
 
@@ -408,10 +412,7 @@ describe('AdvancedOptionsDialog', () => {
   it('should not add an empty pattern to localOptions.blacklist when the user tries to add an empty string', async () => {
     const user = userEvent.setup();
     const onOptionsChange = vi.fn();
-    const initialScanOptions: ScanOptions = {
-      blacklist: [],
-      timeout: 300,
-    };
+    const initialScanOptions: ScanOptions = createEmptyScanOptions();
 
     render(
       <AdvancedOptionsDialog
@@ -440,10 +441,7 @@ describe('AdvancedOptionsDialog', () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const onOptionsChange = vi.fn();
-    const initialScanOptions: ScanOptions = {
-      blacklist: [],
-      timeout: 300,
-    };
+    const initialScanOptions: ScanOptions = createEmptyScanOptions();
 
     render(
       <AdvancedOptionsDialog
@@ -468,18 +466,10 @@ describe('AdvancedOptionsDialog', () => {
   });
 
   describe('toggleScannerOption', () => {
-    it('should add scanner to scanners array when checked', async () => {
+    const verifyScannerSelection = async () => {
       const user = userEvent.setup();
       const onOptionsChange = vi.fn();
-      const scannerCatalog = [
-        {
-          id: 'scanner1',
-          class: 'Scanner1',
-          description: 'Test scanner 1',
-          extensions: ['.txt'],
-          dependencies: [],
-        },
-      ];
+      const scannerCatalog = [createScanner('scanner1', 'Scanner1', 'Test scanner 1', '.txt')];
 
       render(
         <AdvancedOptionsDialog
@@ -500,20 +490,14 @@ describe('AdvancedOptionsDialog', () => {
           excludeScanner: [],
         }),
       );
-    });
+    };
+
+    it('should add scanner to scanners array when checked', verifyScannerSelection);
 
     it('should remove scanner from scanners array when unchecked', async () => {
       const user = userEvent.setup();
       const onOptionsChange = vi.fn();
-      const scannerCatalog = [
-        {
-          id: 'scanner1',
-          class: 'Scanner1',
-          description: 'Test scanner 1',
-          extensions: ['.txt'],
-          dependencies: [],
-        },
-      ];
+      const scannerCatalog = [createScanner('scanner1', 'Scanner1', 'Test scanner 1', '.txt')];
 
       render(
         <AdvancedOptionsDialog
@@ -541,15 +525,7 @@ describe('AdvancedOptionsDialog', () => {
     it('should deduplicate scanner IDs when adding', async () => {
       const user = userEvent.setup();
       const onOptionsChange = vi.fn();
-      const scannerCatalog = [
-        {
-          id: 'scanner1',
-          class: 'Scanner1',
-          description: 'Test scanner 1',
-          extensions: ['.txt'],
-          dependencies: [],
-        },
-      ];
+      const scannerCatalog = [createScanner('scanner1', 'Scanner1', 'Test scanner 1', '.txt')];
 
       render(
         <AdvancedOptionsDialog
@@ -578,15 +554,7 @@ describe('AdvancedOptionsDialog', () => {
     it('should remove scanner from excludeScanner when adding to scanners', async () => {
       const user = userEvent.setup();
       const onOptionsChange = vi.fn();
-      const scannerCatalog = [
-        {
-          id: 'scanner1',
-          class: 'Scanner1',
-          description: 'Test scanner 1',
-          extensions: ['.txt'],
-          dependencies: [],
-        },
-      ];
+      const scannerCatalog = [createScanner('scanner1', 'Scanner1', 'Test scanner 1', '.txt')];
 
       render(
         <AdvancedOptionsDialog
@@ -614,15 +582,7 @@ describe('AdvancedOptionsDialog', () => {
     it('should remove scanner from scanners when adding to excludeScanner', async () => {
       const user = userEvent.setup();
       const onOptionsChange = vi.fn();
-      const scannerCatalog = [
-        {
-          id: 'scanner1',
-          class: 'Scanner1',
-          description: 'Test scanner 1',
-          extensions: ['.txt'],
-          dependencies: [],
-        },
-      ];
+      const scannerCatalog = [createScanner('scanner1', 'Scanner1', 'Test scanner 1', '.txt')];
 
       render(
         <AdvancedOptionsDialog
@@ -650,15 +610,7 @@ describe('AdvancedOptionsDialog', () => {
     it('should handle multiple quick toggles correctly', async () => {
       const user = userEvent.setup();
       const onOptionsChange = vi.fn();
-      const scannerCatalog = [
-        {
-          id: 'scanner1',
-          class: 'Scanner1',
-          description: 'Test scanner 1',
-          extensions: ['.txt'],
-          dependencies: [],
-        },
-      ];
+      const scannerCatalog = [createScanner('scanner1', 'Scanner1', 'Test scanner 1', '.txt')];
 
       render(
         <AdvancedOptionsDialog
@@ -686,51 +638,13 @@ describe('AdvancedOptionsDialog', () => {
       );
     });
 
-    it('should handle undefined scanners and excludeScanner arrays', async () => {
-      const user = userEvent.setup();
-      const onOptionsChange = vi.fn();
-      const scannerCatalog = [
-        {
-          id: 'scanner1',
-          class: 'Scanner1',
-          description: 'Test scanner 1',
-          extensions: ['.txt'],
-          dependencies: [],
-        },
-      ];
-
-      render(
-        <AdvancedOptionsDialog
-          open={true}
-          onClose={vi.fn()}
-          scanOptions={{ blacklist: [], timeout: 3600 }}
-          onOptionsChange={onOptionsChange}
-          scannerCatalog={scannerCatalog}
-        />,
-      );
-
-      await user.click(screen.getByRole('checkbox', { name: 'Only run scanner1' }));
-      await user.click(screen.getByRole('button', { name: 'Save Options' }));
-
-      expect(onOptionsChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scanners: ['scanner1'],
-          excludeScanner: [],
-        }),
-      );
-    });
+    it('should handle undefined scanners and excludeScanner arrays', verifyScannerSelection);
 
     it('should preserve other scanners when toggling one', async () => {
       const user = userEvent.setup();
       const onOptionsChange = vi.fn();
       const scannerCatalog = [
-        {
-          id: 'scanner1',
-          class: 'Scanner1',
-          description: 'Test scanner 1',
-          extensions: ['.txt'],
-          dependencies: [],
-        },
+        createScanner('scanner1', 'Scanner1', 'Test scanner 1', '.txt'),
         {
           id: 'scanner2',
           class: 'Scanner2',
@@ -763,15 +677,7 @@ describe('AdvancedOptionsDialog', () => {
     it('should not remove from excludeScanner when unchecking scanners', async () => {
       const user = userEvent.setup();
       const onOptionsChange = vi.fn();
-      const scannerCatalog = [
-        {
-          id: 'scanner1',
-          class: 'Scanner1',
-          description: 'Test scanner 1',
-          extensions: ['.txt'],
-          dependencies: [],
-        },
-      ];
+      const scannerCatalog = [createScanner('scanner1', 'Scanner1', 'Test scanner 1', '.txt')];
 
       render(
         <AdvancedOptionsDialog

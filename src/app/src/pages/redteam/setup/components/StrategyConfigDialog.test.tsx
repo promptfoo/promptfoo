@@ -4,6 +4,16 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
 
+const createStrategy = (
+  id: 'jailbreak:meta' | 'jailbreak:hydra' = 'jailbreak:meta',
+  name: string = 'Meta-Agent Jailbreak',
+  description: string = 'Meta-Agent Jailbreak strategy',
+) => ({
+  id,
+  name,
+  description,
+});
+
 describe('StrategyConfigDialog', () => {
   const mockOnSave = vi.fn();
   const mockOnClose = vi.fn();
@@ -593,11 +603,7 @@ describe('StrategyConfigDialog', () => {
         config={{}}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:hydra',
-          name: 'Hydra',
-          description: 'Hydra multi-turn jailbreak',
-        }}
+        strategyData={createStrategy('jailbreak:hydra', 'Hydra', 'Hydra multi-turn jailbreak')}
       />,
     );
 
@@ -644,11 +650,7 @@ describe('StrategyConfigDialog', () => {
         config={{}}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:hydra',
-          name: 'Hydra',
-          description: 'Hydra multi-turn jailbreak',
-        }}
+        strategyData={createStrategy('jailbreak:hydra', 'Hydra', 'Hydra multi-turn jailbreak')}
       />,
     );
 
@@ -683,11 +685,7 @@ describe('StrategyConfigDialog', () => {
         config={initialConfig}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 
@@ -711,11 +709,7 @@ describe('StrategyConfigDialog', () => {
         config={{}}
         onClose={() => {}}
         onSave={() => {}}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 
@@ -763,11 +757,7 @@ describe('StrategyConfigDialog', () => {
         config={initialConfig}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 
@@ -792,11 +782,7 @@ describe('StrategyConfigDialog', () => {
         config={newConfig}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 
@@ -848,11 +834,7 @@ describe('StrategyConfigDialog', () => {
         config={initialConfig}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 
@@ -875,11 +857,7 @@ describe('StrategyConfigDialog', () => {
         config={{ numIterations: 8 }}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 
@@ -893,11 +871,7 @@ describe('StrategyConfigDialog', () => {
         config={{ numIterations: 5 }}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 
@@ -921,11 +895,7 @@ describe('StrategyConfigDialog', () => {
         config={initialConfig}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 
@@ -958,11 +928,7 @@ describe('StrategyConfigDialog', () => {
         config={initialConfig}
         onClose={mockOnClose}
         onSave={mockOnSave}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 
@@ -987,11 +953,7 @@ describe('StrategyConfigDialog', () => {
         config={{}}
         onClose={() => {}}
         onSave={() => {}}
-        strategyData={{
-          id: 'jailbreak:meta',
-          name: 'Meta-Agent Jailbreak',
-          description: 'Meta-Agent Jailbreak strategy',
-        }}
+        strategyData={createStrategy()}
       />,
     );
 

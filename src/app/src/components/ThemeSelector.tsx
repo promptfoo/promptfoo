@@ -33,21 +33,12 @@ const THEME_OPTIONS = {
   }
 >;
 
-function getNextThemePreference(themePreference: ThemePreference): ThemePreference {
-  return NEXT_THEME_PREFERENCE[themePreference];
-}
-
 function ThemeSelector() {
   const { setThemePreference, systemTheme, themePreference } = useThemePreference();
-  const nextThemePreference = getNextThemePreference(themePreference);
+  const nextThemePreference = NEXT_THEME_PREFERENCE[themePreference];
   const currentThemeLabel = THEME_OPTIONS[themePreference].label;
-  const nextThemeLabel = THEME_OPTIONS[nextThemePreference].label;
   const currentStateLabel =
     themePreference === 'system' ? `${currentThemeLabel} (${systemTheme})` : currentThemeLabel;
-
-  const handleThemePreferenceChange = () => {
-    setThemePreference(nextThemePreference);
-  };
 
   return (
     <Tooltip>
@@ -56,8 +47,10 @@ function ThemeSelector() {
           variant="ghost"
           size="icon"
           type="button"
-          onClick={handleThemePreferenceChange}
-          aria-label={`Theme preference: ${currentStateLabel}. Switch to ${nextThemeLabel}.`}
+          onClick={() => {
+            setThemePreference(nextThemePreference);
+          }}
+          aria-label={`Theme preference: ${currentStateLabel}. Switch to ${THEME_OPTIONS[nextThemePreference].label}.`}
           className={cn(
             'relative size-11 rounded-full text-foreground/60 transition-all duration-200 hover:rotate-[15deg] hover:text-foreground sm:size-9',
             '[&_svg]:size-5',

@@ -1,9 +1,9 @@
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
-import { PlayArrowIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
+import { Play as PlayArrowIcon, Settings as SettingsIcon } from 'lucide-react';
 import InstallationGuide from './InstallationGuide';
 import PathSelector from './PathSelector';
 

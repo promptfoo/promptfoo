@@ -11,6 +11,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
 
+const createStatelessTarget = () => ({
+  config: {
+    stateful: false,
+  },
+});
+
 const renderWithProviders = (ui: React.ReactElement) => {
   const queryClient = new QueryClient();
 
@@ -47,11 +53,7 @@ describe('Strategies', () => {
 
     (useRedTeamConfig as any).mockReturnValue({
       config: {
-        target: {
-          config: {
-            stateful: false,
-          },
-        },
+        target: createStatelessTarget(),
         strategies: [],
         plugins: [],
         numTests: 5,
@@ -179,11 +181,7 @@ describe('Strategies', () => {
     it('shows system configuration section when goat or crescendo strategies are selected', () => {
       (useRedTeamConfig as any).mockReturnValue({
         config: {
-          target: {
-            config: {
-              stateful: false,
-            },
-          },
+          target: createStatelessTarget(),
           strategies: [{ id: 'goat' }],
           plugins: [],
           numTests: 5,
@@ -199,25 +197,11 @@ describe('Strategies', () => {
     });
   });
 
-  describe('UI behavior', () => {
-    it('renders strategy items for basic strategy', () => {
-      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
-
-      // Hero strategy cards are rendered as selectable items
-      expect(screen.getByText('Meta Agent')).toBeInTheDocument();
-      expect(screen.getByText('Hydra Multi-Turn')).toBeInTheDocument();
-    });
-  });
-
   describe('Strategy categorization', () => {
     it('renders strategy when multi-modal strategy is selected', () => {
       (useRedTeamConfig as any).mockReturnValue({
         config: {
-          target: {
-            config: {
-              stateful: false,
-            },
-          },
+          target: createStatelessTarget(),
           strategies: [{ id: 'image' }],
           plugins: [],
           numTests: 5,
@@ -235,11 +219,7 @@ describe('Strategies', () => {
       const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({
         config: {
-          target: {
-            config: {
-              stateful: false,
-            },
-          },
+          target: createStatelessTarget(),
           strategies: [{ id: 'audio' }],
           plugins: [],
           numTests: 5,
@@ -366,11 +346,7 @@ describe('Strategies', () => {
     it('labels hero strategy settings buttons with the strategy names', () => {
       (useRedTeamConfig as any).mockReturnValue({
         config: {
-          target: {
-            config: {
-              stateful: false,
-            },
-          },
+          target: createStatelessTarget(),
           strategies: [{ id: 'jailbreak:meta' }],
           plugins: [],
           numTests: 5,

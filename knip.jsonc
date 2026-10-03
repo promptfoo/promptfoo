@@ -54,7 +54,11 @@
       }
     },
     "src/app": {
-      "entry": ["index.html"],
+      "entry": [
+        "index.html",
+        // Cloud-consumed: app/src/pages/model-audit/* and app/src/components/shared/cli-auth/*.
+        "src/components/ui/icons.tsx"
+      ],
       "project": ["src/**/*.{js,ts,tsx}"],
       "ignoreDependencies": [
         // Tailwind v4 is loaded through the CSS/PostCSS pipeline.

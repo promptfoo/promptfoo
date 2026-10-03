@@ -22,7 +22,6 @@ vi.mock('@app/utils/media', () => ({
   formatLatency: (ms: number) => `${ms}ms`,
   formatMediaDate: (date: string) => date,
   getKindIcon: () => (props: { className?: string }) => <svg data-testid="kind-icon" {...props} />,
-  getKindLabel: (kind: string) => kind.charAt(0).toUpperCase() + kind.slice(1),
   MEDIA_MAX_ZOOM: 5,
   MEDIA_MIN_ZOOM: 1,
   MEDIA_ZOOM_STEP: 1.5,

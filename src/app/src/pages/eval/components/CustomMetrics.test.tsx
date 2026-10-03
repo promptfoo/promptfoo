@@ -10,6 +10,11 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CustomMetrics from './CustomMetrics';
 
+const createMetricScores = (metric1: number, metric2: number) => ({
+  metric1,
+  metric2,
+});
+
 // Mock the hooks that make API calls or use crypto
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -62,10 +67,7 @@ describe('CustomMetrics', () => {
   });
 
   it('renders a Box with class custom-metric-container and data-testid custom-metrics when metrics are present', () => {
-    const lookup = {
-      metric1: 10.5,
-      metric2: 20.75,
-    };
+    const lookup = createMetricScores(10.5, 20.75);
 
     renderWithProviders(<CustomMetrics lookup={lookup} />);
 
@@ -75,10 +77,7 @@ describe('CustomMetrics', () => {
   });
 
   it('displays metrics with simple scores', () => {
-    const lookup = {
-      metric1: 10.5,
-      metric2: 20.75,
-    };
+    const lookup = createMetricScores(10.5, 20.75);
 
     renderWithProviders(<CustomMetrics lookup={lookup} />);
 
@@ -86,31 +85,9 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('20.75');
   });
 
-  it('displays metrics with counts', () => {
-    const lookup = {
-      metric1: 30,
-      metric2: 40,
-    };
-    const counts = {
-      metric1: 60,
-      metric2: 80,
-    };
-
-    renderWithProviders(<CustomMetrics lookup={lookup} counts={counts} />);
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.50 (30.00/60.00)');
-    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.50 (40.00/80.00)');
-  });
-
   it('displays metrics with totals as percentages', () => {
-    const lookup = {
-      metric1: 30,
-      metric2: 40,
-    };
-    const metricTotals = {
-      metric1: 60,
-      metric2: 80,
-    };
+    const lookup = createMetricScores(30, 40);
+    const metricTotals = createMetricScores(60, 80);
 
     renderWithProviders(<CustomMetrics lookup={lookup} metricTotals={metricTotals} />);
 
@@ -119,37 +96,13 @@ describe('CustomMetrics', () => {
   });
 
   it('handles zero values correctly', () => {
-    const lookup = {
-      metric1: 0,
-      metric2: 0,
-    };
+    const lookup = createMetricScores(0, 0);
 
     const { rerender } = renderWithProviders(<CustomMetrics lookup={lookup} />);
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.00');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.00');
 
-    rerender(
-      <CustomMetrics
-        lookup={lookup}
-        counts={{
-          metric1: 0,
-          metric2: 0,
-        }}
-      />,
-    );
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0');
-    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0');
-
-    rerender(
-      <CustomMetrics
-        lookup={lookup}
-        metricTotals={{
-          metric1: 0,
-          metric2: 0,
-        }}
-      />,
-    );
+    rerender(<CustomMetrics lookup={lookup} metricTotals={createMetricScores(0, 0)} />);
 
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.00');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.00');
@@ -289,21 +242,14 @@ describe('CustomMetrics', () => {
     ]);
   });
 
-  it('handles missing metrics in counts/totals objects', () => {
+  it('handles missing metrics in totals objects', () => {
     const lookup = { metric1: 10, metric2: 20 };
-    const counts = { metric1: 20 };
     const metricTotals = { metric2: 40 };
 
-    renderWithProviders(
-      <CustomMetrics lookup={lookup} counts={counts} metricTotals={metricTotals} />,
-    );
+    renderWithProviders(<CustomMetrics lookup={lookup} metricTotals={metricTotals} />);
 
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.50 (10.00/20.00)');
+    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('10.00');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('50.00% (20.00/40.00)');
-  });
-
-  it('should include a comment to fix the missing key prop warning', () => {
-    expect(true).toBe(true);
   });
 
   it('correctly handles undefined metric values in lookup', () => {
@@ -357,14 +303,5 @@ describe('CustomMetrics', () => {
     await user.click(showMoreButton);
 
     expect(onShowMore).toHaveBeenCalled();
-  });
-
-  it('displays 0 when counts contains a zero value for a metric', () => {
-    const lookup = { metric1: 10 };
-    const counts = { metric1: 0 };
-
-    renderWithProviders(<CustomMetrics lookup={lookup} counts={counts} />);
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('10.00');
   });
 });

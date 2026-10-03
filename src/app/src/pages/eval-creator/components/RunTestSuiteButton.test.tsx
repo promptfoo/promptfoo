@@ -12,6 +12,18 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
 
+const createInlineTestSuite = () => ({
+  prompts: ['prompt 1'],
+  providers: ['openai:gpt-4'],
+  tests: [{ vars: { foo: 'bar' } }],
+});
+
+const createFileTestSuite = () => ({
+  prompts: 'file://prompt.txt',
+  providers: 'openai:gpt-4',
+  tests: 'file://tests.csv',
+});
+
 const renderWithProvider = (ui: React.ReactElement) => {
   return render(<EvalHistoryProvider>{ui}</EvalHistoryProvider>);
 };
@@ -33,6 +45,15 @@ vi.mock('@app/hooks/useToast', () => ({
     showToast: mockShowToast,
   }),
 }));
+
+function createRunEvalClick() {
+  return async () => {
+    screen
+      .getByRole('button', { name: 'Run Eval' })
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+  };
+}
 
 describe('RunTestSuiteButton', () => {
   let timers: TestTimers;
@@ -66,22 +87,14 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('should be enabled when there is at least one prompt and one test', () => {
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
+    useStore.getState().updateConfig(createInlineTestSuite());
     renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).not.toBeDisabled();
   });
 
   it('should be enabled for scalar provider, prompt, and test configs', () => {
-    useStore.getState().updateConfig({
-      prompts: 'file://prompt.txt',
-      providers: 'openai:gpt-4',
-      tests: 'file://tests.csv',
-    });
+    useStore.getState().updateConfig(createFileTestSuite());
 
     renderWithProvider(<RunTestSuiteButton />);
 
@@ -90,19 +103,10 @@ describe('RunTestSuiteButton', () => {
 
   it('should serialize scalar prompt configs as an array before submitting eval jobs', async () => {
     mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
-    useStore.getState().updateConfig({
-      prompts: 'file://prompt.txt',
-      providers: 'openai:gpt-4',
-      tests: 'file://tests.csv',
-    });
+    useStore.getState().updateConfig(createFileTestSuite());
 
     renderWithProvider(<RunTestSuiteButton />);
-    await act(async () => {
-      screen
-        .getByRole('button', { name: 'Run Eval' })
-        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
+    await act(createRunEvalClick());
 
     const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
     expect(typeof requestInit.body).toBe('string');
@@ -122,12 +126,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     renderWithProvider(<RunTestSuiteButton />);
-    await act(async () => {
-      screen
-        .getByRole('button', { name: 'Run Eval' })
-        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
+    await act(createRunEvalClick());
 
     const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
     expect(typeof requestInit.body).toBe('string');
@@ -158,12 +157,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     renderWithProvider(<RunTestSuiteButton />);
-    await act(async () => {
-      screen
-        .getByRole('button', { name: 'Run Eval' })
-        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
+    await act(createRunEvalClick());
 
     const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(requestInit.body as string)).toMatchObject({ tracing });
@@ -180,12 +174,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     renderWithProvider(<RunTestSuiteButton />);
-    await act(async () => {
-      screen
-        .getByRole('button', { name: 'Run Eval' })
-        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
+    await act(createRunEvalClick());
 
     const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(requestInit.body as string)).toMatchObject({
@@ -218,11 +207,7 @@ describe('RunTestSuiteButton', () => {
       },
     ]);
 
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
+    useStore.getState().updateConfig(createInlineTestSuite());
 
     renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
@@ -252,11 +237,7 @@ describe('RunTestSuiteButton', () => {
     // Mock callApi to reject with an error
     rejectCallApi(new Error(errorMessage));
 
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
+    useStore.getState().updateConfig(createInlineTestSuite());
 
     renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
@@ -278,11 +259,7 @@ describe('RunTestSuiteButton', () => {
     const mockJobId = '123';
     mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: mockJobId } }]);
 
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
+    useStore.getState().updateConfig(createInlineTestSuite());
 
     const { unmount } = renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
@@ -310,11 +287,7 @@ describe('RunTestSuiteButton', () => {
         }),
     );
 
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
+    useStore.getState().updateConfig(createInlineTestSuite());
 
     const { unmount } = renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });

@@ -6,61 +6,48 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptDialog from './PromptDialog';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
+const createPromptTextFixture = () => ({
+  raw: 'This is a sample prompt for testing purposes.',
+  display: '[display] This is a sample prompt for testing purposes.',
+  label: 'This is a sample prompt for testing purposes.',
+});
+
+const createEval = (
+  id: string = 'eval-abcdef123456',
+  datasetId: string = 'dataset-qwerty',
+  testPassCount: number = 8,
+  testErrorCount: number = 1,
+  score: number = 0.85,
+) => ({
+  id,
+  datasetId,
+  metrics: {
+    testPassCount,
+    testFailCount: 1,
+    testErrorCount,
+    score,
+    assertPassCount: 0,
+    assertFailCount: 0,
+    totalLatencyMs: 0,
+    tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    namedScores: {},
+    namedScoresCount: {},
+    cost: 0,
+  },
+});
+
 const mockSelectedPrompt: ServerPromptWithMetadata = {
   id: 'prompt:1a2b3c4d5e6f',
-  prompt: {
-    raw: 'This is a sample prompt for testing purposes.',
-    display: '[display] This is a sample prompt for testing purposes.',
-    label: 'This is a sample prompt for testing purposes.',
-  },
+  prompt: createPromptTextFixture(),
   count: 2,
   recentEvalDate: '2023-10-27T10:00:00.000Z',
   recentEvalId: 'eval-zyxwvu987654',
-  evals: [
-    {
-      id: 'eval-abcdef123456',
-      datasetId: 'dataset-qwerty',
-      metrics: {
-        testPassCount: 8,
-        testFailCount: 1,
-        testErrorCount: 1,
-        score: 0.85,
-        assertPassCount: 0,
-        assertFailCount: 0,
-        totalLatencyMs: 0,
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        namedScores: {},
-        namedScoresCount: {},
-        cost: 0,
-      },
-    },
-    {
-      id: 'eval-zyxwvu987654',
-      datasetId: 'dataset-asdfgh',
-      metrics: {
-        testPassCount: 9,
-        testFailCount: 1,
-        testErrorCount: 0,
-        score: 0.92,
-        assertPassCount: 0,
-        assertFailCount: 0,
-        totalLatencyMs: 0,
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        namedScores: {},
-        namedScoresCount: {},
-        cost: 0,
-      },
-    },
-  ],
+  evals: [createEval(), createEval('eval-zyxwvu987654', 'dataset-asdfgh', 9, 0, 0.92)],
 };
 
 const mockSelectedPromptNoEvals: ServerPromptWithMetadata = {
   id: 'prompt:1a2b3c4d5e6f',
-  prompt: {
-    raw: 'This is a sample prompt for testing purposes.',
-    display: '[display] This is a sample prompt for testing purposes.',
-    label: 'This is a sample prompt for testing purposes.',
-  },
+  prompt: createPromptTextFixture(),
   count: 0,
   recentEvalDate: '2023-10-26T12:00:00.000Z',
   recentEvalId: 'eval-123',
@@ -69,49 +56,13 @@ const mockSelectedPromptNoEvals: ServerPromptWithMetadata = {
 
 const mockSelectedPromptThreeEvals: ServerPromptWithMetadata = {
   id: 'prompt:1a2b3c4d5e6f',
-  prompt: {
-    raw: 'This is a sample prompt for testing purposes.',
-    display: '[display] This is a sample prompt for testing purposes.',
-    label: 'This is a sample prompt for testing purposes.',
-  },
+  prompt: createPromptTextFixture(),
   count: 2,
   recentEvalDate: '2023-10-27T10:00:00.000Z',
   recentEvalId: 'eval-zyxwvu987654',
   evals: [
-    {
-      id: 'eval-abcdef123456',
-      datasetId: 'dataset-qwerty',
-      metrics: {
-        testPassCount: 8,
-        testFailCount: 1,
-        testErrorCount: 1,
-        score: 0.85,
-        assertPassCount: 0,
-        assertFailCount: 0,
-        totalLatencyMs: 0,
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        namedScores: {},
-        namedScoresCount: {},
-        cost: 0,
-      },
-    },
-    {
-      id: 'eval-zyxwvu987654',
-      datasetId: 'dataset-asdfgh',
-      metrics: {
-        testPassCount: 9,
-        testFailCount: 1,
-        testErrorCount: 0,
-        score: 0.92,
-        assertPassCount: 0,
-        assertFailCount: 0,
-        totalLatencyMs: 0,
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        namedScores: {},
-        namedScoresCount: {},
-        cost: 0,
-      },
-    },
+    createEval(),
+    createEval('eval-zyxwvu987654', 'dataset-asdfgh', 9, 0, 0.92),
     {
       id: 'eval-123456abcdef',
       datasetId: 'dataset-poiuyt',
@@ -385,11 +336,7 @@ describe('PromptDialog', () => {
     const handleClose = vi.fn();
     const mockSelectedPrompt: ServerPromptWithMetadata = {
       id: 'prompt:1a2b3c4d5e6f',
-      prompt: {
-        raw: 'This is a sample prompt for testing purposes.',
-        display: '[display] This is a sample prompt for testing purposes.',
-        label: 'This is a sample prompt for testing purposes.',
-      },
+      prompt: createPromptTextFixture(),
       count: 0,
       recentEvalDate: '',
       recentEvalId: '',
@@ -415,11 +362,7 @@ describe('PromptDialog', () => {
     const handleClose = vi.fn();
     const mockSelectedPrompt: ServerPromptWithMetadata = {
       id: 'prompt:1a2b3c4d5e6f',
-      prompt: {
-        raw: 'This is a sample prompt for testing purposes.',
-        display: '[display] This is a sample prompt for testing purposes.',
-        label: 'This is a sample prompt for testing purposes.',
-      },
+      prompt: createPromptTextFixture(),
       count: 1,
       recentEvalDate: '2023-10-27T10:00:00.000Z',
       recentEvalId: 'eval-abcdef123456',

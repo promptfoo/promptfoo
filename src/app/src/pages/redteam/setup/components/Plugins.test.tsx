@@ -11,6 +11,15 @@ import Plugins from './Plugins';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
+const createIndirectInjectionConfigFixture = () => ({
+  plugins: [{ id: 'indirect-prompt-injection', config: { applicationDefinition: 'test app' } }],
+});
+
+const createPolicy = (policy: string) => ({
+  id: 'policy',
+  config: { policy },
+});
+
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');
   return {
@@ -800,16 +809,7 @@ describe('Plugins', () => {
       const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
         config: {
-          plugins: [
-            {
-              id: 'policy',
-              config: { policy: 'Policy 1' },
-            },
-            {
-              id: 'policy',
-              config: { policy: 'Policy 2' },
-            },
-          ],
+          plugins: [createPolicy('Policy 1'), createPolicy('Policy 2')],
         },
         updatePlugins: mockUpdatePlugins,
       });
@@ -1032,14 +1032,8 @@ describe('Plugins', () => {
                 intent: ['Test prompt 1', 'Test prompt 2', 'Test prompt 3'],
               },
             },
-            {
-              id: 'policy',
-              config: { policy: 'Policy 1' },
-            },
-            {
-              id: 'policy',
-              config: { policy: 'Policy 2' },
-            },
+            createPolicy('Policy 1'),
+            createPolicy('Policy 2'),
           ],
         },
         updatePlugins: mockUpdatePlugins,
@@ -1093,170 +1087,6 @@ describe('Plugins', () => {
       // This test verifies the tabs are keyboard accessible
       expect(pluginsTab).toHaveAttribute('tabindex');
       expect(customPromptsTab).toHaveAttribute('tabindex');
-    });
-  });
-
-  // Test Generation Timeout Tests
-  describe('Test Generation Timeout Behavior', () => {
-    const mockCallApi = vi.fn();
-    const mockToast = { showToast: vi.fn() };
-
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
-
-    // Import the actual implementation code for testing
-    // This simulates the key logic from generateTestCaseWithConfig function
-    const generateTestCaseWithConfig = async (
-      plugin: string,
-      config: any,
-      toast: any,
-      callApi: any,
-    ) => {
-      try {
-        const response = await callApi('/redteam/generate-test', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            Pragma: 'no-cache',
-          },
-          body: JSON.stringify({
-            pluginId: plugin,
-            config: config,
-          }),
-          timeout: 10000, // 10 second timeout
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        return data;
-      } catch (error) {
-        // This is the actual error handling logic from Plugins.tsx
-        const errorMessage =
-          error instanceof Error
-            ? error.message.includes('timed out')
-              ? 'Test generation timed out. Please try again or check your connection.'
-              : error.message
-            : 'Failed to generate test case';
-
-        toast.showToast(errorMessage, 'error');
-        throw error;
-      }
-    };
-
-    it('should call API with 10 second timeout', async () => {
-      const mockResponse = {
-        json: vi.fn().mockResolvedValue({
-          prompt: 'Test prompt',
-          context: 'Test context',
-        }),
-      };
-      mockCallApi.mockResolvedValueOnce(mockResponse);
-
-      await generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi);
-
-      expect(mockCallApi).toHaveBeenCalledWith(
-        '/redteam/generate-test',
-        expect.objectContaining({
-          method: 'POST',
-          timeout: 10000,
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-          }),
-        }),
-      );
-    });
-
-    it('should show timeout-specific error message when request times out', async () => {
-      const timeoutError = new Error('Request timed out after 10000ms');
-      mockCallApi.mockRejectedValueOnce(timeoutError);
-
-      await expect(generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi)).rejects.toThrow(
-        timeoutError,
-      );
-
-      expect(mockToast.showToast).toHaveBeenCalledWith(
-        'Test generation timed out. Please try again or check your connection.',
-        'error',
-      );
-    });
-
-    it('should show generic error message for non-timeout errors', async () => {
-      const genericError = new Error('Internal server error');
-      mockCallApi.mockRejectedValueOnce(genericError);
-
-      await expect(generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi)).rejects.toThrow(
-        genericError,
-      );
-
-      expect(mockToast.showToast).toHaveBeenCalledWith('Internal server error', 'error');
-    });
-
-    it('should handle various timeout error messages', async () => {
-      const timeoutMessages = [
-        'Request timed out after 10000ms',
-        'The operation timed out',
-        'Connection timed out while waiting',
-      ];
-
-      for (const message of timeoutMessages) {
-        mockCallApi.mockRejectedValueOnce(new Error(message));
-        const localMockToast = { showToast: vi.fn() };
-
-        await expect(
-          generateTestCaseWithConfig('bola', {}, localMockToast, mockCallApi),
-        ).rejects.toThrow();
-
-        expect(localMockToast.showToast).toHaveBeenCalledWith(
-          'Test generation timed out. Please try again or check your connection.',
-          'error',
-        );
-      }
-    });
-
-    it('should handle API response with error property', async () => {
-      const errorResponse = {
-        json: vi.fn().mockResolvedValue({
-          error: 'Invalid configuration provided',
-        }),
-      };
-      mockCallApi.mockResolvedValueOnce(errorResponse);
-
-      await expect(generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi)).rejects.toThrow(
-        'Invalid configuration provided',
-      );
-
-      expect(mockToast.showToast).toHaveBeenCalledWith('Invalid configuration provided', 'error');
-    });
-
-    it('should pass plugin configuration in request body', async () => {
-      const mockResponse = {
-        json: vi.fn().mockResolvedValue({
-          prompt: 'Test prompt',
-          context: 'Test context',
-        }),
-      };
-      mockCallApi.mockResolvedValueOnce(mockResponse);
-
-      const pluginConfig = {
-        applicationDefinition: { purpose: 'Test app' },
-        additionalConfig: { key: 'value' },
-      };
-
-      await generateTestCaseWithConfig('harmful:hate', pluginConfig, mockToast, mockCallApi);
-
-      const callArgs = mockCallApi.mock.calls[0];
-      const requestBody = JSON.parse(callArgs[1].body);
-
-      expect(requestBody).toEqual({
-        pluginId: 'harmful:hate',
-        config: pluginConfig,
-      });
     });
   });
 
@@ -1434,11 +1264,7 @@ describe('Plugins', () => {
     it('should clean up config for plugins deselected via preset switch', async () => {
       // Start with a plugin that has config
       const user = userEvent.setup();
-      const configWithPluginConfig = {
-        plugins: [
-          { id: 'indirect-prompt-injection', config: { applicationDefinition: 'test app' } },
-        ],
-      };
+      const configWithPluginConfig = createIndirectInjectionConfigFixture();
 
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithPluginConfig,
@@ -1510,11 +1336,7 @@ describe('Plugins', () => {
 
     it('should clean up configs when plugins are deselected individually', async () => {
       // Start with a plugin that has config
-      const configWithPluginConfig = {
-        plugins: [
-          { id: 'indirect-prompt-injection', config: { applicationDefinition: 'test app' } },
-        ],
-      };
+      const configWithPluginConfig = createIndirectInjectionConfigFixture();
 
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithPluginConfig,
@@ -1731,11 +1553,7 @@ describe('Plugins', () => {
 
     it('should not trigger state update if config has not changed', async () => {
       // Start with a plugin that has config
-      const configWithConfig = {
-        plugins: [
-          { id: 'indirect-prompt-injection', config: { applicationDefinition: 'test app' } },
-        ],
-      };
+      const configWithConfig = createIndirectInjectionConfigFixture();
 
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithConfig,

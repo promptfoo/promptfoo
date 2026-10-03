@@ -2,8 +2,25 @@ import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { createSessionInputs } from '../../../../../../tests/factories';
 import SessionsTab from './SessionsTab';
 import type { ProviderOptions } from '@promptfoo/types';
+
+const createSessionRequestFixture = () => ({
+  url: 'https://api.example.com/session',
+  method: 'POST',
+});
+
+const createJsonSessionRequestFixture = () => ({
+  url: 'https://api.example.com/session',
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+});
+
+const createSuccessfulTestResponseFixture = () => ({
+  success: true,
+  message: 'Test passed',
+});
 
 // Mock the callApi utility
 vi.mock('@app/utils/api', () => ({
@@ -76,11 +93,7 @@ describe('SessionsTab', () => {
               config: {
                 ...baseProvider.config,
                 sessionSource: 'endpoint',
-                session: {
-                  url: 'https://api.example.com/session',
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                },
+                session: createJsonSessionRequestFixture(),
               },
             }}
             updateCustomTarget={onUpdate}
@@ -125,10 +138,7 @@ describe('SessionsTab', () => {
               config: {
                 ...baseProvider.config,
                 sessionSource: 'endpoint',
-                session: {
-                  url: 'https://api.example.com/session',
-                  method: 'POST',
-                },
+                session: createSessionRequestFixture(),
               },
             }}
             updateCustomTarget={onUpdate}
@@ -168,10 +178,7 @@ describe('SessionsTab', () => {
               config: {
                 ...baseProvider.config,
                 sessionSource: 'endpoint',
-                session: {
-                  url: 'https://api.example.com/session',
-                  method: 'POST',
-                },
+                session: createSessionRequestFixture(),
               },
             }}
             updateCustomTarget={onUpdate}
@@ -234,11 +241,7 @@ describe('SessionsTab', () => {
               config: {
                 ...baseProvider.config,
                 sessionSource: 'endpoint',
-                session: {
-                  url: 'https://api.example.com/session',
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                },
+                session: createJsonSessionRequestFixture(),
               },
             }}
             updateCustomTarget={onUpdate}
@@ -266,11 +269,7 @@ describe('SessionsTab', () => {
               config: {
                 ...baseProvider.config,
                 sessionSource: 'endpoint',
-                session: {
-                  url: 'https://api.example.com/session',
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                },
+                session: createJsonSessionRequestFixture(),
               },
             }}
             updateCustomTarget={onUpdate}
@@ -302,11 +301,7 @@ describe('SessionsTab', () => {
               config: {
                 ...baseProvider.config,
                 sessionSource: 'endpoint',
-                session: {
-                  url: 'https://api.example.com/session',
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                },
+                session: createJsonSessionRequestFixture(),
               },
             }}
             updateCustomTarget={onUpdate}
@@ -333,10 +328,7 @@ describe('SessionsTab', () => {
               config: {
                 ...baseProvider.config,
                 sessionSource: 'endpoint',
-                session: {
-                  url: 'https://api.example.com/session',
-                  method: 'POST',
-                },
+                session: createSessionRequestFixture(),
               },
             }}
             updateCustomTarget={onUpdate}
@@ -368,10 +360,7 @@ describe('SessionsTab', () => {
               config: {
                 ...baseProvider.config,
                 sessionSource: 'endpoint',
-                session: {
-                  url: 'https://api.example.com/session',
-                  method: 'POST',
-                },
+                session: createSessionRequestFixture(),
               },
             }}
             updateCustomTarget={onUpdate}
@@ -632,10 +621,7 @@ describe('SessionsTab', () => {
       const user = userEvent.setup();
       const mockResponse = {
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          message: 'Test passed',
-        }),
+        json: vi.fn().mockResolvedValue(createSuccessfulTestResponseFixture()),
       };
       (callApi as Mock).mockImplementation(
         () =>
@@ -669,10 +655,7 @@ describe('SessionsTab', () => {
       const user = userEvent.setup();
       const mockResponse = {
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          message: 'Test passed',
-        }),
+        json: vi.fn().mockResolvedValue(createSuccessfulTestResponseFixture()),
       };
       (callApi as Mock).mockResolvedValue(mockResponse);
 
@@ -680,10 +663,7 @@ describe('SessionsTab', () => {
         <SessionsTab
           selectedTarget={{
             ...baseProvider,
-            inputs: {
-              user_id: 'User identifier',
-              session_token: 'Session token',
-            },
+            inputs: createSessionInputs('User identifier', 'Session token'),
           }}
           updateCustomTarget={mockUpdateCustomTarget}
           onTestComplete={mockOnTestComplete}
@@ -715,16 +695,13 @@ describe('SessionsTab', () => {
   });
 
   describe('handleTestSessionClick', () => {
-    it('should open variable selection dialog when multiple inputs exist', async () => {
+    const verifySessionVariableSelection = async () => {
       const user = userEvent.setup();
       render(
         <SessionsTab
           selectedTarget={{
             ...baseProvider,
-            inputs: {
-              user_id: 'User identifier',
-              session_token: 'Session token',
-            },
+            inputs: createSessionInputs('User identifier', 'Session token'),
           }}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
@@ -733,17 +710,20 @@ describe('SessionsTab', () => {
       const testButton = screen.getByRole('button', { name: /test session/i });
       await user.click(testButton);
 
+      // Dialog should be shown (implies variable was pre-selected)
       expect(screen.getByTestId('variable-selection-dialog')).toBeInTheDocument();
-    });
+    };
+
+    it(
+      'should open variable selection dialog when multiple inputs exist',
+      verifySessionVariableSelection,
+    );
 
     it('should run test directly when no inputs exist', async () => {
       const user = userEvent.setup();
       const mockResponse = {
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          message: 'Test passed',
-        }),
+        json: vi.fn().mockResolvedValue(createSuccessfulTestResponseFixture()),
       };
       (callApi as Mock).mockResolvedValue(mockResponse);
 
@@ -767,27 +747,7 @@ describe('SessionsTab', () => {
       });
     });
 
-    it('should pre-select first variable if none selected', async () => {
-      const user = userEvent.setup();
-      render(
-        <SessionsTab
-          selectedTarget={{
-            ...baseProvider,
-            inputs: {
-              user_id: 'User identifier',
-              session_token: 'Session token',
-            },
-          }}
-          updateCustomTarget={mockUpdateCustomTarget}
-        />,
-      );
-
-      const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
-
-      // Dialog should be shown (implies variable was pre-selected)
-      expect(screen.getByTestId('variable-selection-dialog')).toBeInTheDocument();
-    });
+    it('should pre-select first variable if none selected', verifySessionVariableSelection);
   });
 
   describe('Test result details rendering', () => {
@@ -964,10 +924,7 @@ describe('SessionsTab', () => {
             config: {
               ...baseProvider.config,
               sessionSource: 'endpoint',
-              session: {
-                url: 'https://api.example.com/session',
-                method: 'POST',
-              },
+              session: createSessionRequestFixture(),
             },
           }}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -1007,10 +964,7 @@ describe('SessionsTab', () => {
             config: {
               ...baseProvider.config,
               sessionSource: 'endpoint',
-              session: {
-                url: 'https://api.example.com/session',
-                method: 'POST',
-              },
+              session: createSessionRequestFixture(),
             },
           }}
           updateCustomTarget={mockUpdateCustomTarget}
@@ -1062,10 +1016,7 @@ describe('SessionsTab', () => {
       const user = userEvent.setup();
       const mockResponse = {
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          message: 'Test passed',
-        }),
+        json: vi.fn().mockResolvedValue(createSuccessfulTestResponseFixture()),
       };
       (callApi as Mock).mockResolvedValue(mockResponse);
 
@@ -1096,10 +1047,7 @@ describe('SessionsTab', () => {
       const user = userEvent.setup();
       const mockResponse = {
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          message: 'Test passed',
-        }),
+        json: vi.fn().mockResolvedValue(createSuccessfulTestResponseFixture()),
       };
       (callApi as Mock).mockResolvedValue(mockResponse);
 

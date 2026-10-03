@@ -1,6 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createUnconfiguredProvider } from '../../../../../tests/factories';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -309,10 +310,7 @@ describe('FoundationModelConfiguration', () => {
   });
 
   it('should handle transition from older model versions to newer ones', () => {
-    const initialTarget: ProviderOptions = {
-      id: 'google:gemini-2.5-pro',
-      config: {},
-    };
+    const initialTarget: ProviderOptions = createUnconfiguredProvider('google:gemini-2.5-pro');
 
     render(
       <FoundationModelConfiguration
@@ -327,10 +325,7 @@ describe('FoundationModelConfiguration', () => {
   });
 
   it('should handle undefined selectedTarget.id without errors', () => {
-    const emptyTarget: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const emptyTarget: ProviderOptions = createUnconfiguredProvider('');
 
     render(
       <FoundationModelConfiguration
@@ -345,10 +340,7 @@ describe('FoundationModelConfiguration', () => {
   });
 
   it('should handle empty string selectedTarget.id without errors', () => {
-    const emptyStringTarget: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const emptyStringTarget: ProviderOptions = createUnconfiguredProvider('');
 
     render(
       <FoundationModelConfiguration
@@ -364,10 +356,7 @@ describe('FoundationModelConfiguration', () => {
 
   it('should call updateCustomTarget with the provided model ID, even if it does not match the expected format for the selected provider', async () => {
     const user = userEvent.setup();
-    const googleTarget: ProviderOptions = {
-      id: 'google:gemini-2.5-pro',
-      config: {},
-    };
+    const googleTarget: ProviderOptions = createUnconfiguredProvider('google:gemini-2.5-pro');
 
     render(
       <FoundationModelConfiguration
@@ -388,10 +377,9 @@ describe('FoundationModelConfiguration', () => {
   it('should show the Bedrock API selector and use legacy InvokeModel ids by default', () => {
     render(
       <FoundationModelConfiguration
-        selectedTarget={{
-          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {},
-        }}
+        selectedTarget={createUnconfiguredProvider(
+          'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        )}
         updateCustomTarget={mockUpdateCustomTarget}
         providerType="bedrock"
       />,
@@ -408,10 +396,9 @@ describe('FoundationModelConfiguration', () => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
-        selectedTarget={{
-          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {},
-        }}
+        selectedTarget={createUnconfiguredProvider(
+          'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        )}
         updateCustomTarget={mockUpdateCustomTarget}
         providerType="bedrock"
       />,
@@ -840,10 +827,9 @@ describe('FoundationModelConfiguration', () => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
-        selectedTarget={{
-          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {},
-        }}
+        selectedTarget={createUnconfiguredProvider(
+          'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        )}
         updateCustomTarget={mockUpdateCustomTarget}
         providerType="bedrock"
       />,
@@ -938,10 +924,9 @@ describe('FoundationModelConfiguration', () => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
-        selectedTarget={{
-          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {},
-        }}
+        selectedTarget={createUnconfiguredProvider(
+          'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        )}
         updateCustomTarget={mockUpdateCustomTarget}
         providerType="bedrock"
       />,

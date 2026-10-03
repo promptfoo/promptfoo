@@ -18,40 +18,32 @@ export async function callApi(
   return fetch(`${apiBaseUrl}/api${path}`, options);
 }
 
-export async function fetchUserEmail(): Promise<string | null> {
+async function fetchUserField<Field extends 'email' | 'id'>(
+  field: Field,
+  label: string,
+): Promise<string | null> {
   try {
-    const response = await callApi('/user/email', {
+    const response = await callApi(`/user/${field}`, {
       method: 'GET',
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch user email');
+      throw new Error(`Failed to fetch user ${label}`);
     }
 
-    const data: GetUserResponse = await response.json();
-    return data.email;
+    return ((await response.json()) as Pick<GetUserResponse & GetUserIdResponse, Field>)[field];
   } catch (error) {
-    console.error('Error fetching user email:', error);
+    console.error(`Error fetching user ${label}:`, error);
     return null;
   }
 }
 
-export async function fetchUserId(): Promise<string | null> {
-  try {
-    const response = await callApi('/user/id', {
-      method: 'GET',
-    });
+export function fetchUserEmail(): Promise<string | null> {
+  return fetchUserField('email', 'email');
+}
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch user ID');
-    }
-
-    const data: GetUserIdResponse = await response.json();
-    return data.id;
-  } catch (error) {
-    console.error('Error fetching user ID:', error);
-    return null;
-  }
+export function fetchUserId(): Promise<string | null> {
+  return fetchUserField('id', 'ID');
 }
 
 export async function updateEvalAuthor(

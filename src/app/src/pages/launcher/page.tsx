@@ -3,14 +3,13 @@ import { useEffect, useState } from 'react';
 import logoPanda from '@app/assets/logo.svg';
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Card } from '@app/components/ui/card';
-import { GlobeIcon, TerminalIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import useApiConfig from '@app/stores/apiConfig';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, Globe as GlobeIcon, Terminal as TerminalIcon } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import ThemeSelector from '../../components/ThemeSelector';
 

@@ -8,8 +8,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
-import { ExpandLessIcon, ExpandMoreIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { ChevronUp as ExpandLessIcon, ChevronDown as ExpandMoreIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import type { ScanAsset, ScanCheck } from '../ModelAudit.types';

@@ -6,6 +6,20 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UpdateBanner from './UpdateBanner';
 
+const createNpmVersionInfo = () => ({
+  updateAvailable: true,
+  latestVersion: '2.0.0',
+  currentVersion: '1.9.0',
+  updateCommands: createNpmUpdateCommands(),
+  commandType: 'npm' as const,
+  isNpx: false,
+});
+
+const createNpmUpdateCommands = () => ({
+  primary: 'npm i -g promptfoo@latest',
+  alternative: null,
+});
+
 vi.mock('@app/hooks/useVersionCheck');
 
 describe('UpdateBanner', () => {
@@ -23,17 +37,7 @@ describe('UpdateBanner', () => {
 
   it('should render the banner with correct info when an update with a primary command is available', () => {
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
-      versionInfo: {
-        updateAvailable: true,
-        latestVersion: '2.0.0',
-        currentVersion: '1.9.0',
-        updateCommands: {
-          primary: 'npm i -g promptfoo@latest',
-          alternative: null,
-        },
-        commandType: 'npm',
-        isNpx: false,
-      },
+      versionInfo: createNpmVersionInfo(),
       loading: false,
       error: null,
       dismissed: false,
@@ -61,17 +65,7 @@ describe('UpdateBanner', () => {
   it('should copy the update command to the clipboard and show check icon when the copy command button is clicked', async () => {
     const user = userEvent.setup();
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
-      versionInfo: {
-        updateAvailable: true,
-        latestVersion: '2.0.0',
-        currentVersion: '1.9.0',
-        updateCommands: {
-          primary: 'npm i -g promptfoo@latest',
-          alternative: null,
-        },
-        commandType: 'npm',
-        isNpx: false,
-      },
+      versionInfo: createNpmVersionInfo(),
       loading: false,
       error: null,
       dismissed: false,
@@ -100,14 +94,7 @@ describe('UpdateBanner', () => {
   it('should announce a successful copy to assistive technology', async () => {
     const user = userEvent.setup();
     mockUseVersionCheck.mockReturnValue({
-      versionInfo: {
-        updateAvailable: true,
-        latestVersion: '2.0.0',
-        currentVersion: '1.9.0',
-        updateCommands: { primary: 'npm i -g promptfoo@latest', alternative: null },
-        commandType: 'npm',
-        isNpx: false,
-      },
+      versionInfo: createNpmVersionInfo(),
       loading: false,
       error: null,
       dismissed: false,
@@ -132,14 +119,7 @@ describe('UpdateBanner', () => {
   it('should not report copy success when the clipboard fallback rejects the command', async () => {
     const user = userEvent.setup();
     mockUseVersionCheck.mockReturnValue({
-      versionInfo: {
-        updateAvailable: true,
-        latestVersion: '2.0.0',
-        currentVersion: '1.9.0',
-        updateCommands: { primary: 'npm i -g promptfoo@latest', alternative: null },
-        commandType: 'npm',
-        isNpx: false,
-      },
+      versionInfo: createNpmVersionInfo(),
       loading: false,
       error: null,
       dismissed: false,
@@ -163,14 +143,7 @@ describe('UpdateBanner', () => {
 
   it('should announce update information politely without including action controls', () => {
     mockUseVersionCheck.mockReturnValue({
-      versionInfo: {
-        updateAvailable: true,
-        latestVersion: '2.0.0',
-        currentVersion: '1.9.0',
-        updateCommands: { primary: 'npm i -g promptfoo@latest', alternative: null },
-        commandType: 'npm',
-        isNpx: false,
-      },
+      versionInfo: createNpmVersionInfo(),
       loading: false,
       error: null,
       dismissed: false,
@@ -253,17 +226,7 @@ describe('UpdateBanner', () => {
     const user = userEvent.setup();
     const dismiss = vi.fn();
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
-      versionInfo: {
-        updateAvailable: true,
-        latestVersion: '2.0.0',
-        currentVersion: '1.9.0',
-        updateCommands: {
-          primary: 'npm i -g promptfoo@latest',
-          alternative: null,
-        },
-        commandType: 'npm',
-        isNpx: false,
-      },
+      versionInfo: createNpmVersionInfo(),
       loading: false,
       error: null,
       dismissed: false,
@@ -286,17 +249,7 @@ describe('UpdateBanner', () => {
 
   it('should render correctly in both dark and light modes', () => {
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
-      versionInfo: {
-        updateAvailable: true,
-        latestVersion: '2.0.0',
-        currentVersion: '1.9.0',
-        updateCommands: {
-          primary: 'npm i -g promptfoo@latest',
-          alternative: null,
-        },
-        commandType: 'npm',
-        isNpx: false,
-      },
+      versionInfo: createNpmVersionInfo(),
       loading: false,
       error: null,
       dismissed: false,
@@ -318,42 +271,16 @@ describe('UpdateBanner', () => {
     document.documentElement.removeAttribute('data-theme');
   });
 
-  it('should render the copy command button with default text when commandType is undefined', () => {
+  it.each([
+    'should render the copy command button with default text when commandType is undefined',
+    'should render with default command text when commandType is null',
+  ])('%s', () => {
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
         latestVersion: '2.0.0',
         currentVersion: '1.9.0',
-        updateCommands: {
-          primary: 'npm i -g promptfoo@latest',
-          alternative: null,
-        },
-        commandType: undefined,
-        isNpx: false,
-      },
-      loading: false,
-      error: null,
-      dismissed: false,
-      dismiss: vi.fn(),
-    };
-    mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
-
-    renderWithProviders(<UpdateBanner />);
-
-    const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
-    expect(copyCommandButton).toBeInTheDocument();
-  });
-
-  it('should render with default command text when commandType is null', () => {
-    const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
-      versionInfo: {
-        updateAvailable: true,
-        latestVersion: '2.0.0',
-        currentVersion: '1.9.0',
-        updateCommands: {
-          primary: 'npm i -g promptfoo@latest',
-          alternative: null,
-        },
+        updateCommands: createNpmUpdateCommands(),
         commandType: undefined,
         isNpx: false,
       },
@@ -379,17 +306,7 @@ describe('UpdateBanner', () => {
       dismiss: vi.fn(),
     };
     const visibleState: ReturnType<typeof useVersionCheck> = {
-      versionInfo: {
-        updateAvailable: true,
-        latestVersion: '2.0.0',
-        currentVersion: '1.9.0',
-        updateCommands: {
-          primary: 'npm i -g promptfoo@latest',
-          alternative: null,
-        },
-        commandType: 'npm',
-        isNpx: false,
-      },
+      versionInfo: createNpmVersionInfo(),
       loading: false,
       error: null,
       dismissed: false,

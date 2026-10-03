@@ -1,36 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDataGridDate, formatDuration, isValidDuration } from './date';
-
-describe('isValidDuration', () => {
-  it('should return true for valid positive numbers', () => {
-    expect(isValidDuration(0)).toBe(true);
-    expect(isValidDuration(1)).toBe(true);
-    expect(isValidDuration(1000)).toBe(true);
-    expect(isValidDuration(0.5)).toBe(true);
-  });
-
-  it('should return false for NaN', () => {
-    expect(isValidDuration(NaN)).toBe(false);
-  });
-
-  it('should return false for Infinity', () => {
-    expect(isValidDuration(Infinity)).toBe(false);
-    expect(isValidDuration(-Infinity)).toBe(false);
-  });
-
-  it('should return false for negative numbers', () => {
-    expect(isValidDuration(-1)).toBe(false);
-    expect(isValidDuration(-1000)).toBe(false);
-  });
-
-  it('should return false for non-number types', () => {
-    expect(isValidDuration('1000')).toBe(false);
-    expect(isValidDuration(null)).toBe(false);
-    expect(isValidDuration(undefined)).toBe(false);
-    expect(isValidDuration({})).toBe(false);
-    expect(isValidDuration([])).toBe(false);
-  });
-});
+import { formatDataGridDate, formatDuration } from './date';
 
 describe('formatDuration', () => {
   describe('milliseconds (< 1000ms)', () => {
@@ -42,6 +11,7 @@ describe('formatDuration', () => {
     });
 
     it('should round milliseconds to nearest integer', () => {
+      expect(formatDuration(0.5)).toBe('1ms');
       expect(formatDuration(500.4)).toBe('500ms');
       expect(formatDuration(500.6)).toBe('501ms');
     });
@@ -90,6 +60,10 @@ describe('formatDuration', () => {
   });
 
   describe('invalid inputs', () => {
+    it.each(['1000', null, undefined, {}, []])('should return null for non-number %j', (value) => {
+      expect(formatDuration(value as unknown as number)).toBe(null);
+    });
+
     it('should return null for NaN', () => {
       expect(formatDuration(NaN)).toBe(null);
     });

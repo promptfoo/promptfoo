@@ -1,4 +1,5 @@
 import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
+import { createRouterModule } from '@app/tests/browserMocks';
 import { formatDataGridDate } from '@app/utils/date';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,10 +12,7 @@ vi.mock('@app/utils/api');
 
 vi.mock('react-router', async () => {
   const actual = await vi.importActual('react-router');
-  return {
-    ...actual,
-    useNavigate: vi.fn(),
-  };
+  return createRouterModule(actual, () => vi.fn());
 });
 
 // Mock the DataTable component to simplify testing

@@ -6,6 +6,23 @@ import { useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TestSuites from './TestSuites';
 
+const createStats = (pass: number, passWithFilter: number, failCount: number) => ({
+  pass,
+  total: 10,
+  passWithFilter,
+  failCount,
+});
+
+const createEmptyRefFixture = () => ({
+  current: null,
+});
+
+const createExpectedHateFilterFixture = () => ({
+  type: 'plugin',
+  operator: 'equals',
+  value: 'harmful:hate',
+});
+
 vi.mock('react-router', () => ({
   useNavigate: vi.fn(),
 }));
@@ -21,32 +38,49 @@ function mockCsvDownloadApis() {
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 }
 
+const resetLocation = () => mockWindowLocation({ search: '?evalId=test-eval-123' });
+
+function resetTestSuitesMocks(mockNavigate: ReturnType<typeof useNavigate>, setup: () => void) {
+  vi.clearAllMocks();
+  vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+  setup();
+}
+
+function createNavigateToFailures(
+  defaultProps: React.ComponentProps<typeof TestSuites>,
+  mockNavigate: ReturnType<typeof useNavigate>,
+) {
+  return async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+
+    await user.click(viewLogsButton);
+
+    const expectedFilter = encodeURIComponent(JSON.stringify([createExpectedHateFilterFixture()]));
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
+    );
+  };
+}
+
 describe('TestSuites Component', () => {
   const mockNavigate = vi.fn();
 
-  const mockRef = {
-    current: null,
-  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockRef =
+    createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
-      'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
-        failCount: 2,
-      },
+      'harmful:hate': createStats(8, 9, 2),
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
-  });
+  beforeEach(() => resetTestSuitesMocks(mockNavigate, resetLocation));
 
   it('should render empty state message when categoryStats is empty', () => {
     renderWithProviders(<TestSuites {...defaultProps} categoryStats={{}} />);
@@ -97,18 +131,8 @@ describe('TestSuites Component', () => {
     const propsWithUnknownSeverity = {
       ...defaultProps,
       categoryStats: {
-        'harmful:hate': {
-          pass: 8,
-          total: 10,
-          passWithFilter: 9,
-          failCount: 2,
-        },
-        'plugin-with-unknown-severity': {
-          pass: 5,
-          total: 10,
-          passWithFilter: 5,
-          failCount: 5,
-        },
+        'harmful:hate': createStats(8, 9, 2),
+        'plugin-with-unknown-severity': createStats(5, 5, 5),
       },
     };
 
@@ -133,82 +157,25 @@ describe('TestSuites Component', () => {
 
 describe('TestSuites Component Navigation', () => {
   const mockNavigate = vi.fn();
-  const mockRef = {
-    current: null,
-  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockRef =
+    createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
 
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
-      'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
-        failCount: 2,
-      },
-      'harmful:cybercrime': {
-        pass: 5,
-        total: 10,
-        passWithFilter: 5,
-        failCount: 5,
-      },
+      'harmful:hate': createStats(8, 9, 2),
+      'harmful:cybercrime': createStats(5, 5, 5),
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+  beforeEach(() => resetTestSuitesMocks(mockNavigate, resetLocation));
 
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
-  });
-
-  it('should navigate to eval page with correct search params when clicking View logs', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<TestSuites {...defaultProps} />);
-
-    const viewLogsButtons = screen.getAllByText('View logs');
-    const viewLogsButton = viewLogsButtons[0];
-
-    await user.click(viewLogsButton);
-
-    const expectedFilter = encodeURIComponent(
-      JSON.stringify([
-        {
-          type: 'plugin',
-          operator: 'equals',
-          value: 'harmful:hate',
-        },
-      ]),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
-    );
-  });
-
-  it('should navigate to eval page with a JSON-encoded filter and mode=failures when attackSuccessRate > 0', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<TestSuites {...defaultProps} />);
-
-    const viewLogsButtons = screen.getAllByText('View logs');
-    const viewLogsButton = viewLogsButtons[0];
-
-    await user.click(viewLogsButton);
-
-    const expectedFilter = encodeURIComponent(
-      JSON.stringify([
-        {
-          type: 'plugin',
-          operator: 'equals',
-          value: 'harmful:hate',
-        },
-      ]),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
-    );
-  });
+  it.each([
+    'should navigate to eval page with correct search params when clicking View logs',
+    'should navigate to eval page with a JSON-encoded filter and mode=failures when attackSuccessRate > 0',
+  ])('%s', createNavigateToFailures(defaultProps, mockNavigate));
   it('should not navigate again when browser back button is used', async () => {
     const user = userEvent.setup();
     renderWithProviders(<TestSuites {...defaultProps} />);
@@ -250,18 +217,12 @@ describe('TestSuites Component Navigation', () => {
 describe('TestSuites Component Navigation with Missing EvalId', () => {
   const mockNavigate = vi.fn();
 
-  const mockRef = {
-    current: null,
-  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockRef =
+    createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
-      'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
-        failCount: 2,
-      },
+      'harmful:hate': createStats(8, 9, 2),
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
@@ -274,45 +235,21 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
     mockWindowLocation({ search: '' });
   });
 
-  it('should navigate to eval page without evalId when evalId is missing from URL parameters', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<TestSuites {...defaultProps} />);
-
-    const viewLogsButtons = screen.getAllByText('View logs');
-    const viewLogsButton = viewLogsButtons[0];
-
-    await user.click(viewLogsButton);
-
-    const expectedFilter = encodeURIComponent(
-      JSON.stringify([
-        {
-          type: 'plugin',
-          operator: 'equals',
-          value: 'harmful:hate',
-        },
-      ]),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
-    );
-  });
+  it(
+    'should navigate to eval page without evalId when evalId is missing from URL parameters',
+    createNavigateToFailures(defaultProps, mockNavigate),
+  );
 });
 
 describe('TestSuites Component Filtering', () => {
   const mockNavigate = vi.fn();
-  const mockRef = {
-    current: null,
-  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockRef =
+    createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
 
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
-      'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
-        failCount: 2,
-      },
+      'harmful:hate': createStats(8, 9, 2),
       'pii:direct': {
         pass: 0,
         total: 0, // This will be filtered out
@@ -324,12 +261,7 @@ describe('TestSuites Component Filtering', () => {
     vulnerabilitiesDataGridRef: mockRef,
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
-  });
+  beforeEach(() => resetTestSuitesMocks(mockNavigate, resetLocation));
 
   it('should filter out subcategories with zero total tests', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
@@ -343,29 +275,18 @@ describe('TestSuites Component Filtering', () => {
 describe('TestSuites Component CSV Export', () => {
   const mockNavigate = vi.fn();
 
-  const mockRef = {
-    current: null,
-  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockRef =
+    createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
-      'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
-        failCount: 2,
-      },
+      'harmful:hate': createStats(8, 9, 2),
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    mockCsvDownloadApis();
-  });
+  beforeEach(() => resetTestSuitesMocks(mockNavigate, mockCsvDownloadApis));
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -393,19 +314,13 @@ describe('TestSuites Component CSV Export', () => {
 
 describe('TestSuites Component - Zero Attack Success Rate', () => {
   const mockNavigate = vi.fn();
-  const mockRef = {
-    current: null,
-  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockRef =
+    createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
 
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
-      'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
-        failCount: 2,
-      },
+      'harmful:hate': createStats(8, 9, 2),
       hallucination: {
         pass: 10,
         total: 10,
@@ -417,12 +332,7 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
     vulnerabilitiesDataGridRef: mockRef,
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
-  });
+  beforeEach(() => resetTestSuitesMocks(mockNavigate, resetLocation));
 
   it('should correctly display 0.00% attack success rate', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
@@ -442,12 +352,7 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
   const evalId = 'test-eval-123';
   const plugins: any[] = [];
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    mockCsvDownloadApis();
-  });
+  beforeEach(() => resetTestSuitesMocks(mockNavigate, mockCsvDownloadApis));
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -467,9 +372,8 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
       },
     };
 
-    const mockRef = {
-      current: null,
-    } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+    const mockRef =
+      createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
 
     renderWithProviders(
       <TestSuites
@@ -501,18 +405,12 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
 
 describe('TestSuites Component - Large Filter Object', () => {
   const mockNavigate = vi.fn();
-  const mockRef = {
-    current: null,
-  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockRef =
+    createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
 
   const _evalId = 'test-eval-123';
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
-  });
+  beforeEach(() => resetTestSuitesMocks(mockNavigate, resetLocation));
 
   it('should navigate with a large filter object without exceeding URL length limits', async () => {
     const user = userEvent.setup();
@@ -527,12 +425,7 @@ describe('TestSuites Component - Large Filter Object', () => {
     const defaultProps = {
       evalId: 'test-eval-123',
       categoryStats: {
-        'harmful:hate': {
-          pass: 8,
-          total: 10,
-          passWithFilter: 9,
-          failCount: 2,
-        },
+        'harmful:hate': createStats(8, 9, 2),
       },
       plugins: [],
       vulnerabilitiesDataGridRef: mockRef,
@@ -559,21 +452,15 @@ describe('TestSuites Component - Large Filter Object', () => {
 
 describe('TestSuites Component Navigation with Special Characters in Plugin ID', () => {
   const mockNavigate = vi.fn();
-  const mockRef = {
-    current: null,
-  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockRef =
+    createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
 
   const evalId = 'test-eval-123';
   const specialPluginId = 'plugin:with"special\'chars\\and unicode:你好';
   const defaultProps = {
     evalId: evalId,
     categoryStats: {
-      [specialPluginId]: {
-        pass: 5,
-        total: 10,
-        passWithFilter: 5,
-        failCount: 5,
-      },
+      [specialPluginId]: createStats(5, 5, 5),
     },
     plugins: [
       {
@@ -584,12 +471,7 @@ describe('TestSuites Component Navigation with Special Characters in Plugin ID',
     vulnerabilitiesDataGridRef: mockRef,
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
-  });
+  beforeEach(() => resetTestSuitesMocks(mockNavigate, resetLocation));
 
   it('should navigate to eval page with correctly encoded search params when pluginId contains special characters', async () => {
     const user = userEvent.setup();
@@ -617,9 +499,8 @@ describe('TestSuites Component Navigation with Special Characters in Plugin ID',
 
 describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
   const mockNavigate = vi.fn();
-  const mockRef = {
-    current: null,
-  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockRef =
+    createEmptyRefFixture() as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
 
   const evalId = 'test-eval-123';
 
@@ -637,12 +518,7 @@ describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
     vulnerabilitiesDataGridRef: mockRef,
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
-  });
+  beforeEach(() => resetTestSuitesMocks(mockNavigate, resetLocation));
 
   it('should navigate to eval page with mode=passes when attackSuccessRate is 0', async () => {
     const user = userEvent.setup();
@@ -653,15 +529,7 @@ describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
 
     await user.click(viewLogsButton);
 
-    const expectedFilter = encodeURIComponent(
-      JSON.stringify([
-        {
-          type: 'plugin',
-          operator: 'equals',
-          value: 'harmful:hate',
-        },
-      ]),
-    );
+    const expectedFilter = encodeURIComponent(JSON.stringify([createExpectedHateFilterFixture()]));
     expect(mockNavigate).toHaveBeenCalledWith(
       `/eval/${evalId}?filter=${expectedFilter}&mode=passes`,
     );

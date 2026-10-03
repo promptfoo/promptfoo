@@ -17,25 +17,6 @@ interface VideoHoverPreviewProps {
 }
 
 /**
- * Check if the device supports hover (not a touch-only device)
- */
-function useIsTouchDevice() {
-  const [isTouch, setIsTouch] = useState(false);
-
-  useEffect(() => {
-    // Check for touch capability and no hover support
-    const mediaQuery = window.matchMedia('(hover: none)');
-    setIsTouch(mediaQuery.matches);
-
-    const handler = (e: MediaQueryListEvent) => setIsTouch(e.matches);
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, []);
-
-  return isTouch;
-}
-
-/**
  * Video preview component that shows a thumbnail and plays video on hover.
  * Features:
  * - Generates and caches video thumbnails
@@ -53,7 +34,20 @@ export function VideoHoverPreview({
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isTouchPlaying, setIsTouchPlaying] = useState(false);
-  const isTouchDevice = useIsTouchDevice();
+  /**
+   * Check if the device supports hover (not a touch-only device)
+   */
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+  useEffect(() => {
+    // Check for touch capability and no hover support
+    const mediaQuery = window.matchMedia('(hover: none)');
+    setIsTouchDevice(mediaQuery.matches);
+
+    const handler = (e: MediaQueryListEvent) => setIsTouchDevice(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
 
   const { isIntentional, hoverProps } = useHoverIntent({
     delay: 300,
@@ -90,10 +84,6 @@ export function VideoHoverPreview({
     }
   }, [wantsToPlay, isVideoLoaded]);
 
-  const handleVideoCanPlay = useCallback(() => {
-    setIsVideoLoaded(true);
-  }, []);
-
   // Handle tap on touch devices
   const handlePlayButtonClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -125,7 +115,9 @@ export function VideoHoverPreview({
         loop
         playsInline
         preload="none"
-        onCanPlay={handleVideoCanPlay}
+        onCanPlay={() => {
+          setIsVideoLoaded(true);
+        }}
         aria-hidden="true"
       />
 

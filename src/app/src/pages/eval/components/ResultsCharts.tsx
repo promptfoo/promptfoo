@@ -72,6 +72,14 @@ Chart.register(
   Colors,
 );
 
+function formatPercentageTick(value: string | number, index: number, values: unknown[]) {
+  let ret = String(Math.round(Number(value) * 100));
+  if (index === values.length - 1) {
+    ret += '%';
+  }
+  return ret;
+}
+
 function HistogramChart({ table }: ChartProps) {
   const histogramCanvasRef = useRef(null);
   const histogramChartInstance = useRef<Chart | null>(null);
@@ -342,13 +350,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${xAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: string | number, index: number, values: unknown[]) {
-                let ret = String(Math.round(Number(value) * 100));
-                if (index === values.length - 1) {
-                  ret += '%';
-                }
-                return ret;
-              },
+              callback: formatPercentageTick,
             },
           },
           y: {
@@ -357,13 +359,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${yAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: string | number, index: number, values: unknown[]) {
-                let ret = String(Math.round(Number(value) * 100));
-                if (index === values.length - 1) {
-                  ret += '%';
-                }
-                return ret;
-              },
+              callback: formatPercentageTick,
             },
           },
         },
@@ -472,13 +468,7 @@ function MetricChart({ table }: ChartProps) {
           },
           y: {
             ticks: {
-              callback(value: string | number, index: number, values: unknown[]) {
-                let ret = String(Math.round(Number(value) * 100));
-                if (index === values.length - 1) {
-                  ret += '%';
-                }
-                return ret;
-              },
+              callback: formatPercentageTick,
             },
           },
         },

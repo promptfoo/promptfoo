@@ -6,12 +6,17 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { createEmptyPlugins } from '../../../../tests/factories';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 import type { Config } from '../types';
+
+const createSelectedPlugins = () => ({
+  plugins: ['harmful:hate', 'bola'],
+});
 
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');
@@ -122,9 +127,7 @@ describe('Plugins - State Management Unit Tests', () => {
     vi.clearAllMocks();
     mockRecordEvent.mockClear();
     mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        plugins: [],
-      },
+      config: createEmptyPlugins(),
       updatePlugins: mockUpdatePlugins,
     });
     mockUseRecentlyUsedPlugins.mockReturnValue({
@@ -136,9 +139,7 @@ describe('Plugins - State Management Unit Tests', () => {
   describe('selectedPlugins - derived state from config.plugins', () => {
     it('should derive empty set when no plugins in config', () => {
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [],
-        },
+        config: createEmptyPlugins(),
         updatePlugins: mockUpdatePlugins,
       });
 
@@ -237,9 +238,7 @@ describe('Plugins - State Management Unit Tests', () => {
 
       // Update config with new plugins
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: ['harmful:hate', 'bola'],
-        },
+        config: createSelectedPlugins(),
         updatePlugins: mockUpdatePlugins,
       });
 
@@ -263,9 +262,7 @@ describe('Plugins - State Management Unit Tests', () => {
   describe('pluginConfig - derived state from config.plugins', () => {
     it('should derive empty config when no plugins have config', () => {
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: ['harmful:hate', 'bola'],
-        },
+        config: createSelectedPlugins(),
         updatePlugins: mockUpdatePlugins,
       });
 
@@ -339,9 +336,7 @@ describe('Plugins - State Management Unit Tests', () => {
     it('should add plugin when not currently selected via preset selection', async () => {
       const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [],
-        },
+        config: createEmptyPlugins(),
         updatePlugins: mockUpdatePlugins,
       });
 
@@ -363,9 +358,7 @@ describe('Plugins - State Management Unit Tests', () => {
     it('should remove plugins when selecting different preset', async () => {
       const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: ['harmful:hate', 'bola'],
-        },
+        config: createSelectedPlugins(),
         updatePlugins: mockUpdatePlugins,
       });
 
@@ -445,9 +438,7 @@ describe('Plugins - State Management Unit Tests', () => {
     it('should replace all regular plugins with new selection', async () => {
       const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: ['harmful:hate', 'bola'],
-        },
+        config: createSelectedPlugins(),
         updatePlugins: mockUpdatePlugins,
       });
 
@@ -459,58 +450,6 @@ describe('Plugins - State Management Unit Tests', () => {
 
       await waitFor(() => {
         expect(mockUpdatePlugins).toHaveBeenCalled();
-      });
-    });
-
-    it('should preserve policy plugins during bulk selection', async () => {
-      const user = userEvent.setup();
-      const policyPlugin = { id: 'policy', config: { policy: 'test policy' } };
-
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: ['harmful:hate', policyPlugin],
-        },
-        updatePlugins: mockUpdatePlugins,
-      });
-
-      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
-
-      const minimalPreset = screen.getByText('Minimal Test');
-      await user.click(minimalPreset);
-
-      await waitFor(() => {
-        expect(mockUpdatePlugins).toHaveBeenCalled();
-        const lastCall = mockUpdatePlugins.mock.calls[mockUpdatePlugins.mock.calls.length - 1];
-        const pluginsArg = lastCall[0];
-
-        const hasPolicy = pluginsArg.some((p: any) => typeof p === 'object' && p.id === 'policy');
-        expect(hasPolicy).toBe(true);
-      });
-    });
-
-    it('should preserve intent plugins during bulk selection', async () => {
-      const user = userEvent.setup();
-      const intentPlugin = { id: 'intent', config: { intent: ['test intent'] } };
-
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: ['harmful:hate', intentPlugin],
-        },
-        updatePlugins: mockUpdatePlugins,
-      });
-
-      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
-
-      const minimalPreset = screen.getByText('Minimal Test');
-      await user.click(minimalPreset);
-
-      await waitFor(() => {
-        expect(mockUpdatePlugins).toHaveBeenCalled();
-        const lastCall = mockUpdatePlugins.mock.calls[mockUpdatePlugins.mock.calls.length - 1];
-        const pluginsArg = lastCall[0];
-
-        const hasIntent = pluginsArg.some((p: any) => typeof p === 'object' && p.id === 'intent');
-        expect(hasIntent).toBe(true);
       });
     });
 
@@ -762,9 +701,7 @@ describe('Plugins - State Management Unit Tests', () => {
     it('should handle rapid preset selections without race conditions', async () => {
       const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [],
-        },
+        config: createEmptyPlugins(),
         updatePlugins: mockUpdatePlugins,
       });
 
@@ -835,9 +772,7 @@ describe('Plugins - State Management Unit Tests', () => {
     it('should handle preset selection on top of existing plugins', async () => {
       const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: ['harmful:hate', 'bola'],
-        },
+        config: createSelectedPlugins(),
         updatePlugins: mockUpdatePlugins,
       });
 

@@ -6,6 +6,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategories from './RiskCategories';
 import { useReportStore } from './store';
 
+const createSqlInjectionStatsFixture = () => ({
+  categoryStats: {
+    'sql-injection': { pass: 8, total: 10 },
+  },
+});
+
+const createSecurityCategoryStatsFixture = () => ({
+  categoryStats: {
+    'sql-injection': { pass: 8, total: 10 },
+    rbac: { pass: 5, total: 5 },
+  },
+});
+
+const createCollapseSecurityButtonQueryFixture = () => ({
+  name: 'Collapse Security & Access Control category, 8 of 10 passed, failing',
+});
+
 // Mock the store
 vi.mock('./store', () => ({
   useReportStore: vi.fn(),
@@ -53,12 +70,7 @@ describe('RiskCategories', () => {
   });
 
   it('should render categories with tests as collapsible rows', () => {
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-        rbac: { pass: 5, total: 5 },
-      },
-    });
+    const mockProps = createMockProps(createSecurityCategoryStatsFixture());
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
@@ -70,11 +82,7 @@ describe('RiskCategories', () => {
   });
 
   it('keeps category rows compact on narrow screens', () => {
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-      },
-    });
+    const mockProps = createMockProps(createSqlInjectionStatsFixture());
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
@@ -92,11 +100,7 @@ describe('RiskCategories', () => {
   });
 
   it('stacks the heading summary on narrow screens', () => {
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-      },
-    });
+    const mockProps = createMockProps(createSqlInjectionStatsFixture());
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
@@ -107,12 +111,7 @@ describe('RiskCategories', () => {
   });
 
   it('should display correct pass rate for categories', () => {
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-        rbac: { pass: 5, total: 5 },
-      },
-    });
+    const mockProps = createMockProps(createSecurityCategoryStatsFixture());
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
@@ -122,12 +121,7 @@ describe('RiskCategories', () => {
   });
 
   it('should show plugins expanded by default', () => {
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-        rbac: { pass: 5, total: 5 },
-      },
-    });
+    const mockProps = createMockProps(createSecurityCategoryStatsFixture());
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
@@ -138,11 +132,7 @@ describe('RiskCategories', () => {
 
   it('should open drawer when a plugin is clicked', async () => {
     const user = userEvent.setup();
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-      },
-    });
+    const mockProps = createMockProps(createSqlInjectionStatsFixture());
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
@@ -236,17 +226,11 @@ describe('RiskCategories', () => {
     Object.defineProperty(categoryDescriptions, categoryName, { value: undefined });
 
     try {
-      const mockProps = createMockProps({
-        categoryStats: {
-          'sql-injection': { pass: 8, total: 10 },
-        },
-      });
+      const mockProps = createMockProps(createSqlInjectionStatsFixture());
 
       renderWithProviders(<RiskCategories {...mockProps} />);
 
-      const categoryButton = screen.getByRole('button', {
-        name: 'Collapse Security & Access Control category, 8 of 10 passed, failing',
-      });
+      const categoryButton = screen.getByRole('button', createCollapseSecurityButtonQueryFixture());
       expect(categoryButton).not.toHaveAccessibleDescription();
     } finally {
       Object.defineProperty(categoryDescriptions, categoryName, { value: originalDescription });
@@ -296,11 +280,7 @@ describe('RiskCategories', () => {
 
   it('should collapse category when clicked', async () => {
     const user = userEvent.setup();
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-      },
-    });
+    const mockProps = createMockProps(createSqlInjectionStatsFixture());
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
@@ -320,17 +300,11 @@ describe('RiskCategories', () => {
 
   it('exposes category disclosure state with an explicit action name', async () => {
     const user = userEvent.setup();
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-      },
-    });
+    const mockProps = createMockProps(createSqlInjectionStatsFixture());
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
-    const collapseButton = screen.getByRole('button', {
-      name: 'Collapse Security & Access Control category, 8 of 10 passed, failing',
-    });
+    const collapseButton = screen.getByRole('button', createCollapseSecurityButtonQueryFixture());
     expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
     expect(collapseButton).toHaveAccessibleDescription(
       categoryDescriptions['Security & Access Control'],
@@ -359,17 +333,11 @@ describe('RiskCategories', () => {
 
   it('keeps category disclosure and plugin details as independent native actions', async () => {
     const user = userEvent.setup();
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-      },
-    });
+    const mockProps = createMockProps(createSqlInjectionStatsFixture());
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
-    const categoryButton = screen.getByRole('button', {
-      name: 'Collapse Security & Access Control category, 8 of 10 passed, failing',
-    });
+    const categoryButton = screen.getByRole('button', createCollapseSecurityButtonQueryFixture());
     const pluginButton = screen.getByRole('button', {
       name: 'View SQL Injection details, 8 of 10 passed, failing',
     });

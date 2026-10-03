@@ -2,11 +2,24 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCodingTarget } from '../../../../../tests/factories';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import TargetTypeSelection from './TargetTypeSelection';
 
 import type { ProviderOptions } from '../../types';
+
+function setRestrictedCodingTarget() {
+  useRedTeamConfig.getState().setFullConfig({
+    ...useRedTeamConfig.getState().config,
+    target: createRestrictedCodingTargetFixture(),
+  });
+}
+
+const createRestrictedCodingTargetFixture = () => ({
+  id: 'openinterpreter',
+  config: { sandbox_mode: 'read-only', approval_policy: 'on-request' },
+});
 
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({ recordEvent: vi.fn() }),
@@ -39,11 +52,7 @@ describe('TargetTypeSelection hydration', () => {
       useRedTeamConfig.setState({
         config: {
           ...useRedTeamConfig.getState().config,
-          target: {
-            id: 'openinterpreter',
-            label: 'Unsafe target',
-            config: { sandbox_mode: 'danger-full-access' },
-          },
+          target: createCodingTarget('danger-full-access', 'Unsafe target'),
         },
         providerType: undefined,
       });
@@ -104,11 +113,7 @@ describe('TargetTypeSelection hydration', () => {
     useRedTeamTargetConfigValidation
       .getState()
       .replaceTargetConfigValidation('Invalid JSON configuration', '{"sandbox_mode":"read-only",}');
-    const staleTarget = {
-      id: 'openinterpreter',
-      label: 'Unsafe target',
-      config: { sandbox_mode: 'danger-full-access' },
-    };
+    const staleTarget = createCodingTarget('danger-full-access', 'Unsafe target');
     const originalSetItem = Storage.prototype.setItem;
     let targetWrites = 0;
     let raced = false;
@@ -201,15 +206,7 @@ describe('TargetTypeSelection hydration', () => {
       </TooltipProvider>,
     );
 
-    act(() => {
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id: 'openinterpreter',
-          config: { sandbox_mode: 'read-only', approval_policy: 'on-request' },
-        },
-      });
-    });
+    act(setRestrictedCodingTarget);
 
     const targetName = screen.getByRole('textbox', { name: /Target Name/i });
     expect(targetName).toHaveValue('');
@@ -228,15 +225,7 @@ describe('TargetTypeSelection hydration', () => {
   it('keeps the provider editor available when the type step mounts after a label-less import', async () => {
     const user = userEvent.setup();
 
-    act(() => {
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: {
-          id: 'openinterpreter',
-          config: { sandbox_mode: 'read-only', approval_policy: 'on-request' },
-        },
-      });
-    });
+    act(setRestrictedCodingTarget);
 
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
     expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();

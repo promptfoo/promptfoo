@@ -29,9 +29,6 @@ export function VideoThumbnail({
   const { thumbnail, isLoading, error } = useVideoThumbnail(videoUrl, hash, isVisible);
   const [imageLoaded, setImageLoaded] = useState(false);
 
-  // Show fallback icon if there's an error or thumbnail hasn't loaded yet
-  const showFallback = error || !thumbnail;
-
   return (
     <div
       className={cn(
@@ -57,7 +54,8 @@ export function VideoThumbnail({
       )}
 
       {/* Fallback icon */}
-      {showFallback && !isLoading && (
+      {/* Show fallback icon if there's an error or thumbnail hasn't loaded yet */}
+      {(error || !thumbnail) && !isLoading && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="relative">
             <Video className="h-12 w-12 text-blue-400 dark:text-blue-500" />

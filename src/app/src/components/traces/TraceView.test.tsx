@@ -2,6 +2,12 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import TraceView, { type Trace } from './TraceView';
 
+const createSingleSpanTraceFixture = () => ({
+  traceId: 'trace-1',
+  testCaseId: '0-0',
+  spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
+});
+
 vi.mock('./TraceTimeline', () => ({
   default: ({ trace }: { trace: { traceId: string } }) => (
     <div data-testid="trace-timeline">Trace ID: {trace.traceId}</div>
@@ -296,13 +302,7 @@ describe('TraceView', () => {
   });
 
   it('should render "No traces available for this test case" when testIndex is negative', () => {
-    const mockTraces = [
-      {
-        traceId: 'trace-1',
-        testCaseId: '0-0',
-        spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
-      },
-    ];
+    const mockTraces = [createSingleSpanTraceFixture()];
 
     render(
       <TraceView
@@ -318,13 +318,7 @@ describe('TraceView', () => {
   });
 
   it('should render "No traces available for this test case" when testIndex is NaN', () => {
-    const mockTraces = [
-      {
-        traceId: 'trace-1',
-        testCaseId: '0-0',
-        spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
-      },
-    ];
+    const mockTraces = [createSingleSpanTraceFixture()];
 
     render(
       <TraceView
@@ -340,13 +334,7 @@ describe('TraceView', () => {
   });
 
   it('should render "No traces available for this test case" when promptIndex is negative', () => {
-    const mockTraces = [
-      {
-        traceId: 'trace-1',
-        testCaseId: '0-0',
-        spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
-      },
-    ];
+    const mockTraces = [createSingleSpanTraceFixture()];
 
     render(
       <TraceView
@@ -362,13 +350,7 @@ describe('TraceView', () => {
   });
 
   it('should render "No traces available for this test case" when promptIndex is NaN', () => {
-    const mockTraces = [
-      {
-        traceId: 'trace-1',
-        testCaseId: '0-0',
-        spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
-      },
-    ];
+    const mockTraces = [createSingleSpanTraceFixture()];
 
     render(
       <TraceView

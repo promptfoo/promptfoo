@@ -44,17 +44,15 @@ interface TestSuitesProps {
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
 }
 
-const getRiskScoreColor = (riskScore: number): string => {
-  if (riskScore >= severityRiskScores[Severity.Critical]) {
-    return getSeverityColor(Severity.Critical);
-  } else if (riskScore >= severityRiskScores[Severity.High]) {
-    return getSeverityColor(Severity.High);
-  } else if (riskScore >= severityRiskScores[Severity.Medium]) {
-    return getSeverityColor(Severity.Medium);
-  } else {
-    return getSeverityColor(Severity.Low);
-  }
-};
+function createSeverityOrder(): Record<Severity, number> {
+  return {
+    [Severity.Critical]: 5,
+    [Severity.High]: 4,
+    [Severity.Medium]: 3,
+    [Severity.Low]: 2,
+    [Severity.Informational]: 1,
+  };
+}
 
 const TestSuites = ({
   evalId,
@@ -73,7 +71,7 @@ const TestSuites = ({
   const [pluginsById, setPluginsById] = React.useState<Record<string, RedteamPluginObject>>({});
 
   React.useEffect(() => {
-    async function buildPluginsById() {
+    const buildPluginsById = async () => {
       const result: Record<string, RedteamPluginObject> = {};
 
       for (const plugin of plugins) {
@@ -97,7 +95,7 @@ const TestSuites = ({
       }
 
       setPluginsById(result);
-    }
+    };
 
     buildPluginsById();
   }, [plugins, pluginSeverityMap]);
@@ -217,13 +215,7 @@ const TestSuites = ({
       }
 
       if (sortModel.length > 0 && sortModel[0].id === 'severity') {
-        const severityOrder: Record<Severity, number> = {
-          [Severity.Critical]: 5,
-          [Severity.High]: 4,
-          [Severity.Medium]: 3,
-          [Severity.Low]: 2,
-          [Severity.Informational]: 1,
-        };
+        const severityOrder = createSeverityOrder();
 
         return sortModel[0].desc
           ? severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity]
@@ -281,8 +273,7 @@ const TestSuites = ({
     ].join('\n');
 
     // Create and trigger download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
     const link = document.createElement('a');
     link.setAttribute('href', url);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -332,13 +323,23 @@ const TestSuites = ({
         meta: { align: 'right' },
         cell: ({ row }) => {
           const value = row.original.riskScore;
+          let riskScoreColor: string;
+          if (value >= severityRiskScores[Severity.Critical]) {
+            riskScoreColor = getSeverityColor(Severity.Critical);
+          } else if (value >= severityRiskScores[Severity.High]) {
+            riskScoreColor = getSeverityColor(Severity.High);
+          } else if (value >= severityRiskScores[Severity.Medium]) {
+            riskScoreColor = getSeverityColor(Severity.Medium);
+          } else {
+            riskScoreColor = getSeverityColor(Severity.Low);
+          }
           return (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="flex cursor-help items-center justify-end gap-2 tabular-nums">
                   <span
                     className="size-3 rounded-full"
-                    style={{ backgroundColor: getRiskScoreColor(value) }}
+                    style={{ backgroundColor: riskScoreColor }}
                   />
                   {value.toFixed(2)}
                 </span>
@@ -450,16 +451,9 @@ const TestSuites = ({
           return severityDisplayNames[value] || 'Unknown';
         },
         sortingFn: (rowA, rowB) => {
-          const severityOrder: Record<Severity, number> = {
-            [Severity.Critical]: 5,
-            [Severity.High]: 4,
-            [Severity.Medium]: 3,
-            [Severity.Low]: 2,
-            [Severity.Informational]: 1,
-          };
+          const severityOrder = createSeverityOrder();
           const a = severityOrder[rowA.original.severity as Severity] ?? 0;
-          const b = severityOrder[rowB.original.severity as Severity] ?? 0;
-          return a - b;
+          return a - (severityOrder[rowB.original.severity as Severity] ?? 0);
         },
         meta: {
           filterVariant: 'select',

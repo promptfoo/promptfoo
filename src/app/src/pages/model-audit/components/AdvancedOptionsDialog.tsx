@@ -12,12 +12,12 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { HelperText } from '@app/components/ui/helper-text';
-import { XIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Spinner } from '@app/components/ui/spinner';
 import { Switch } from '@app/components/ui/switch';
+import { X as XIcon } from 'lucide-react';
 import { DEFAULT_SCAN_OPTIONS } from '../stores';
 
 import type { ScannerCatalogEntry, ScanOptions } from '../ModelAudit.types';

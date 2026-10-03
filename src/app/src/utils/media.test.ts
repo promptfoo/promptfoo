@@ -18,6 +18,18 @@ import {
   resolveVideoSource,
 } from './media';
 
+const createBlobReferenceFixture = () => ({
+  blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+});
+
+const createVideoUrlFixture = () => ({
+  url: 'https://example.com/video.mp4',
+});
+
+const createInlineDataFixture = () => ({
+  data: 'SGVsbG8gV29ybGQ=',
+});
+
 // Mock the store
 vi.mock('@app/stores/apiConfig', () => ({
   default: {
@@ -31,11 +43,31 @@ const mockState = (apiBaseUrl: string) =>
   ({
     apiBaseUrl,
     setApiBaseUrl: vi.fn(),
-    fetchingPromise: null,
-    setFetchingPromise: vi.fn(),
     persistApiBaseUrl: false,
     enablePersistApiBaseUrl: vi.fn(),
   }) as ReturnType<typeof useApiConfig.getState>;
+
+function mockDownloadAnchor() {
+  const clickSpy = vi.fn();
+  const mockAnchor = {
+    href: '',
+    download: '',
+    style: { display: '' } as CSSStyleDeclaration,
+    click: clickSpy as () => void,
+  };
+
+  // Mock createElement to return a mock anchor element
+  vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+    if (tagName === 'a') {
+      return mockAnchor as HTMLAnchorElement;
+    }
+    return document.createElement(tagName);
+  });
+
+  vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
+  vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
+  return { clickSpy, mockAnchor };
+}
 
 describe('formatBytes', () => {
   it('should format zero bytes', () => {
@@ -269,9 +301,7 @@ describe('resolveVideoSource', () => {
 
   describe('blob reference resolution', () => {
     it('resolves promptfoo:// blob URI in blobRef string', () => {
-      const result = resolveVideoSource({
-        blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
-      });
+      const result = resolveVideoSource(createBlobReferenceFixture());
 
       expect(result).toEqual({
         src: '/api/blobs/abc123def456789012345678901234567890',
@@ -357,9 +387,7 @@ describe('resolveVideoSource', () => {
     });
 
     it('resolves https:// URLs', () => {
-      const result = resolveVideoSource({
-        url: 'https://example.com/video.mp4',
-      });
+      const result = resolveVideoSource(createVideoUrlFixture());
 
       expect(result).toEqual({
         src: 'https://example.com/video.mp4',
@@ -395,9 +423,7 @@ describe('resolveVideoSource', () => {
 
   describe('format handling', () => {
     it('uses mp4 as default format', () => {
-      const result = resolveVideoSource({
-        url: 'https://example.com/video.mp4',
-      });
+      const result = resolveVideoSource(createVideoUrlFixture());
 
       expect(result?.type).toBe('video/mp4');
     });
@@ -532,9 +558,7 @@ describe('resolveVideoSource', () => {
 
   describe('direct HTTP(S) URL resolution', () => {
     it('should return an object with the direct HTTP(S) URL as src and type video/mp4 when given a video object with a url starting with http:// or https:// and no blobRef or storageRef', () => {
-      const videoObject = {
-        url: 'https://example.com/video.mp4',
-      };
+      const videoObject = createVideoUrlFixture();
 
       const result = resolveVideoSource(videoObject);
 
@@ -579,9 +603,7 @@ describe('resolveVideoSource', () => {
     it('prepends apiBaseUrl to blob paths', () => {
       vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
 
-      const result = resolveVideoSource({
-        blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
-      });
+      const result = resolveVideoSource(createBlobReferenceFixture());
 
       expect(result?.src).toBe(
         'https://api.example.com/api/blobs/abc123def456789012345678901234567890',
@@ -722,9 +744,7 @@ describe('resolveImageSource security', () => {
   });
 
   it('should resolve blobRef from image object', () => {
-    const result = resolveImageSource({
-      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
-    });
+    const result = resolveImageSource(createBlobReferenceFixture());
     expect(result).toBe('/api/blobs/abc123def456789012345678901234567890');
   });
 
@@ -737,9 +757,7 @@ describe('resolveImageSource security', () => {
   });
 
   it('should resolve data from image object with default png format', () => {
-    const result = resolveImageSource({
-      data: 'SGVsbG8gV29ybGQ=',
-    });
+    const result = resolveImageSource(createInlineDataFixture());
     expect(result).toBe('data:image/png;base64,SGVsbG8gV29ybGQ=');
   });
 
@@ -780,9 +798,7 @@ describe('resolveAudioSource', () => {
   });
 
   it('should resolve blobRef and return audio source with type', () => {
-    const result = resolveAudioSource({
-      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
-    });
+    const result = resolveAudioSource(createBlobReferenceFixture());
 
     expect(result).toEqual({
       src: '/api/blobs/abc123def456789012345678901234567890',
@@ -812,9 +828,7 @@ describe('resolveAudioSource', () => {
   });
 
   it('should use data from audio object with base64 encoding', () => {
-    const result = resolveAudioSource({
-      data: 'SGVsbG8gV29ybGQ=',
-    });
+    const result = resolveAudioSource(createInlineDataFixture());
 
     expect(result).toEqual({
       src: 'data:audio/mp3;base64,SGVsbG8gV29ybGQ=',
@@ -885,9 +899,7 @@ describe('resolveAudioSource', () => {
   });
 
   it('should use mp3 as default format', () => {
-    const result = resolveAudioSource({
-      data: 'SGVsbG8gV29ybGQ=',
-    });
+    const result = resolveAudioSource(createInlineDataFixture());
 
     expect(result?.type).toBe('audio/mp3');
   });
@@ -967,24 +979,7 @@ describe('downloadFile', () => {
   let mockAnchor: Partial<HTMLAnchorElement>;
 
   beforeEach(() => {
-    clickSpy = vi.fn();
-    mockAnchor = {
-      href: '',
-      download: '',
-      style: { display: '' } as CSSStyleDeclaration,
-      click: clickSpy as () => void,
-    };
-
-    // Mock createElement to return a mock anchor element
-    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
-      if (tagName === 'a') {
-        return mockAnchor as HTMLAnchorElement;
-      }
-      return document.createElement(tagName);
-    });
-
-    vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
-    vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
+    ({ clickSpy, mockAnchor } = mockDownloadAnchor());
   });
 
   afterEach(() => {
@@ -1018,27 +1013,10 @@ describe('downloadFile', () => {
 });
 
 describe('downloadMediaItem', () => {
-  let clickSpy: ReturnType<typeof vi.fn>;
   let mockAnchor: Partial<HTMLAnchorElement>;
 
   beforeEach(() => {
-    clickSpy = vi.fn();
-    mockAnchor = {
-      href: '',
-      download: '',
-      style: { display: '' } as CSSStyleDeclaration,
-      click: clickSpy as () => void,
-    };
-
-    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
-      if (tagName === 'a') {
-        return mockAnchor as HTMLAnchorElement;
-      }
-      return document.createElement(tagName);
-    });
-
-    vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
-    vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
+    ({ mockAnchor } = mockDownloadAnchor());
   });
 
   afterEach(() => {

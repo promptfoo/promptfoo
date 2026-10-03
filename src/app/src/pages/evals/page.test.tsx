@@ -1,3 +1,4 @@
+import { createRouterModule } from '@app/tests/browserMocks';
 import { render } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,10 +14,7 @@ vi.mock('./components/EvalsTable', () => ({
 
 vi.mock('react-router', async () => {
   const actual = await vi.importActual('react-router');
-  return {
-    ...actual,
-    useNavigate: vi.fn(),
-  };
+  return createRouterModule(actual, () => vi.fn());
 });
 
 describe('EvalsIndexPage', () => {

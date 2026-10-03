@@ -12,6 +12,16 @@ vi.mock('../stores');
 const mockCallApi = vi.mocked(callApi);
 const mockUseModelAuditConfigStore = vi.mocked(useModelAuditConfigStore);
 
+function createPathRequestExpectation(pathToAdd: string) {
+  return () => {
+    expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: pathToAdd }),
+    });
+  };
+}
+
 describe('PathSelector', () => {
   const onAddPath = vi.fn();
   const onRemovePath = vi.fn();
@@ -53,13 +63,7 @@ describe('PathSelector', () => {
       await user.paste(pathToAdd);
       await user.click(addButton);
 
-      await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: pathToAdd }),
-        });
-      });
+      await waitFor(createPathRequestExpectation(pathToAdd));
 
       await waitFor(() => {
         expect(onAddPath).toHaveBeenCalledTimes(1);
@@ -92,13 +96,7 @@ describe('PathSelector', () => {
       await user.paste(pathToAdd);
       await user.click(addButton);
 
-      await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: pathToAdd }),
-        });
-      });
+      await waitFor(createPathRequestExpectation(pathToAdd));
 
       await waitFor(() => {
         expect(onAddPath).toHaveBeenCalledTimes(1);
@@ -134,13 +132,7 @@ describe('PathSelector', () => {
       await user.paste(pathToAdd);
       await user.click(addButton);
 
-      await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: pathToAdd }),
-        });
-      });
+      await waitFor(createPathRequestExpectation(pathToAdd));
 
       await waitFor(() => {
         expect(onAddPath).toHaveBeenCalledTimes(1);
@@ -177,13 +169,7 @@ describe('PathSelector', () => {
       await user.paste(pathToAdd);
       await user.click(addButton);
 
-      await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: pathToAdd }),
-        });
-      });
+      await waitFor(createPathRequestExpectation(pathToAdd));
 
       await waitFor(() => {
         expect(onAddPath).toHaveBeenCalledTimes(1);

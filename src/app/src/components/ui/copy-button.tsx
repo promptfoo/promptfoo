@@ -22,9 +22,7 @@ export function CopyButton({
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      clearTimeout(timeoutRef.current ?? undefined);
     };
   }, []);
 
@@ -34,9 +32,7 @@ export function CopyButton({
       setCopied(true);
 
       // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      clearTimeout(timeoutRef.current ?? undefined);
 
       timeoutRef.current = setTimeout(() => {
         setCopied(false);

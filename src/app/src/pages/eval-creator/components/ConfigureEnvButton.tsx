@@ -13,11 +13,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { ExpandMoreIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
+import { ChevronDown as ExpandMoreIcon, Settings as SettingsIcon } from 'lucide-react';
 
 interface EnvSectionProps {
   title: string;

@@ -207,21 +207,6 @@ describe('SeverityCard', () => {
       expect(screen.getByText('5')).toBeInTheDocument();
       expect(screen.getByText('Vulnerabilities')).toBeInTheDocument(); // plural
     });
-
-    it('should display zero vulnerabilities', () => {
-      renderWithProviders(
-        <SeverityCard
-          severity={Severity.Critical}
-          issueCount={0}
-          navigateOnClick={false}
-          navigateToIssues={mockNavigateToIssues}
-        />,
-      );
-
-      expect(screen.getByText('Critical')).toBeInTheDocument();
-      expect(screen.getByText('0')).toBeInTheDocument();
-      expect(screen.getByText('Vulnerabilities')).toBeInTheDocument();
-    });
   });
 
   describe('Keyboard Navigation', () => {

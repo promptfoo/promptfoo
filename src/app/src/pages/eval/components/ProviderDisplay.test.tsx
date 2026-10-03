@@ -2,6 +2,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createFoundationProvider } from '../../../tests/factories';
 import { filterConfigForDisplay, ProviderDisplay } from './ProviderDisplay';
 
 describe('filterConfigForDisplay', () => {
@@ -362,13 +363,7 @@ describe('ProviderDisplay', () => {
     it('does not duplicate display when label equals model name', () => {
       // Critical regression test: when label="gpt-4o" and id="openai:gpt-4o",
       // matching by label should show "gpt-4o" ONCE, not "gpt-4o:gpt-4o"
-      const providers = [
-        {
-          id: 'openai:gpt-4o',
-          label: 'gpt-4o',
-          config: { temperature: 0.7 },
-        },
-      ];
+      const providers = [createFoundationProvider('openai:gpt-4o', 'gpt-4o', 0.7)];
       renderWithProviders('gpt-4o', providers);
 
       // Should show label exactly once
@@ -422,13 +417,7 @@ describe('ProviderDisplay', () => {
     it('shows id in tooltip when label is just the model name', async () => {
       // When label="gpt-4o" but id="openai:gpt-4o", we SHOULD show the id
       // because "gpt-4o" could be from any provider (openai, azure, etc.)
-      const providers = [
-        {
-          id: 'openai:gpt-4o',
-          label: 'gpt-4o',
-          config: { temperature: 0.7 },
-        },
-      ];
+      const providers = [createFoundationProvider('openai:gpt-4o', 'gpt-4o', 0.7)];
       renderWithProviders('gpt-4o', providers);
 
       const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));

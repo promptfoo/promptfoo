@@ -8,6 +8,16 @@ import {
   normalizeProviders,
 } from './setupReadiness';
 
+const createProviderPromptConfig = () => ({
+  providers: ['openai:gpt-4.1'],
+  prompts: ['Write a summary'],
+});
+
+const createSelectBestConfig = () => ({
+  providers: ['openai:gpt-4.1'],
+  assert: [{ type: 'select-best' as const, value: 'Choose the clearer reply' }],
+});
+
 describe('setupReadiness', () => {
   describe('normalizeProviders', () => {
     it('normalizes shorthand providers and ignores blank values', () => {
@@ -360,10 +370,7 @@ describe('setupReadiness', () => {
     });
 
     it('blocks imported webhook checks without a configured endpoint', () => {
-      const baseConfig = {
-        providers: ['openai:gpt-4.1'],
-        prompts: ['Write a summary'],
-      };
+      const baseConfig = createProviderPromptConfig();
 
       expect(
         getSetupReadiness({
@@ -380,10 +387,7 @@ describe('setupReadiness', () => {
     });
 
     it('rejects text score thresholds outside their supported range', () => {
-      const baseConfig = {
-        providers: ['openai:gpt-4.1'],
-        prompts: ['Write a summary'],
-      };
+      const baseConfig = createProviderPromptConfig();
 
       expect(
         getSetupReadiness({
@@ -406,10 +410,7 @@ describe('setupReadiness', () => {
     });
 
     it('validates external Pi scorer criteria and passing thresholds', () => {
-      const baseConfig = {
-        providers: ['openai:gpt-4.1'],
-        prompts: ['Write a summary'],
-      };
+      const baseConfig = createProviderPromptConfig();
 
       expect(
         getSetupReadiness({
@@ -446,10 +447,7 @@ describe('setupReadiness', () => {
     });
 
     it('rejects normalized rubric score thresholds outside the score range', () => {
-      const baseConfig = {
-        providers: ['openai:gpt-4.1'],
-        prompts: ['Write a summary'],
-      };
+      const baseConfig = createProviderPromptConfig();
 
       expect(
         getSetupReadiness({
@@ -484,10 +482,7 @@ describe('setupReadiness', () => {
     });
 
     it('rejects normalized perplexity score thresholds outside their score range', () => {
-      const baseConfig = {
-        providers: ['openai:gpt-4.1'],
-        prompts: ['Write a summary'],
-      };
+      const baseConfig = createProviderPromptConfig();
 
       expect(
         getSetupReadiness({
@@ -713,12 +708,7 @@ describe('setupReadiness', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
         prompts: ['Write a reply'],
-        tests: [
-          {
-            providers: ['openai:gpt-4.1'],
-            assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
-          },
-        ],
+        tests: [createSelectBestConfig()],
       });
 
       // Two providers, one prompt → the fix is on the shorter (prompt) axis, step 2.
@@ -806,12 +796,7 @@ describe('setupReadiness', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1', 'file://providers.yaml'],
         prompts: ['Write a reply'],
-        tests: [
-          {
-            providers: ['openai:gpt-4.1'],
-            assert: [{ type: 'select-best', value: 'Choose the clearer reply' }],
-          },
-        ],
+        tests: [createSelectBestConfig()],
       });
 
       expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));

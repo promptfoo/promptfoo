@@ -29,9 +29,6 @@ import type {
   TargetStrategy,
 } from './testCaseGenerationTypes';
 
-// Re-export types for backward compatibility
-export type { GeneratedTestCase, TargetPlugin, TargetResponse, TargetStrategy };
-
 const DEFAULT_PLUGIN = 'harmful:hate';
 
 const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout

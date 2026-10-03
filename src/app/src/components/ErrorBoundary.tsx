@@ -24,16 +24,6 @@ interface State {
 }
 
 class ErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-      showDetails: false,
-    };
-  }
-
   static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
@@ -48,12 +38,15 @@ class ErrorBoundary extends React.Component<Props, State> {
     });
   }
 
-  private handleReload = (): void => {
-    window.location.reload();
-  };
-
   private toggleDetails = (): void => {
     this.setState((prevState) => ({ showDetails: !prevState.showDetails }));
+  };
+
+  state: Readonly<State> = {
+    hasError: false,
+    error: null,
+    errorInfo: null,
+    showDetails: false,
   };
 
   render(): React.ReactNode {
@@ -61,8 +54,6 @@ class ErrorBoundary extends React.Component<Props, State> {
       if (this.props.fallback) {
         return this.props.fallback;
       }
-
-      const isDev = import.meta.env.DEV;
 
       return (
         <div className="p-4 max-w-full">
@@ -79,7 +70,7 @@ class ErrorBoundary extends React.Component<Props, State> {
             <Button
               variant="outline"
               size="sm"
-              onClick={this.handleReload}
+              onClick={() => window.location.reload()}
               className="shrink-0 gap-1"
             >
               <RefreshCw className="size-3" />
@@ -87,7 +78,7 @@ class ErrorBoundary extends React.Component<Props, State> {
             </Button>
           </Alert>
 
-          {isDev && (
+          {import.meta.env.DEV && (
             <div className="mt-4">
               <Collapsible open={this.state.showDetails} onOpenChange={this.toggleDetails}>
                 <CollapsibleTrigger asChild>

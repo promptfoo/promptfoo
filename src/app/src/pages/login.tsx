@@ -4,12 +4,6 @@ import logoPanda from '@app/assets/logo.svg';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { HelperText } from '@app/components/ui/helper-text';
-import {
-  KeyIcon,
-  OpenInNewIcon,
-  VisibilityIcon,
-  VisibilityOffIcon,
-} from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
@@ -17,6 +11,12 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
+import {
+  Key as KeyIcon,
+  ExternalLink as OpenInNewIcon,
+  Eye as VisibilityIcon,
+  EyeOff as VisibilityOffIcon,
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 
 interface LoginState {
