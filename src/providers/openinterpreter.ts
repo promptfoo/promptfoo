@@ -563,11 +563,6 @@ export class OpenInterpreterProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // cleanup() removes the temporary INTERPRETER_HOME; recreate it so the
-    // provider stays usable when a long-lived process reuses it afterwards.
-    if (this.temporaryHome && !fs.existsSync(this.temporaryHome)) {
-      fs.mkdirSync(this.temporaryHome, { recursive: true });
-    }
     let temporaryWorkspace: string | undefined;
     try {
       const promptConfig = context?.prompt?.config
@@ -580,7 +575,7 @@ export class OpenInterpreterProvider implements ApiProvider {
         context?.vars,
         false,
       );
-      const effectiveConfig = {
+      const effectiveConfig = parseOpenInterpreterConfig({
         ...renderedBaseConfig,
         ...(promptConfig ?? {}),
         cli_config: mergeRecords(renderedBaseConfig.cli_config, promptConfig?.cli_config),
@@ -589,15 +584,21 @@ export class OpenInterpreterProvider implements ApiProvider {
           renderedBaseConfig.server_request_policy,
           promptConfig?.server_request_policy,
         ),
-      } as OpenInterpreterConfig;
+      });
       validateThreadPersistence(effectiveConfig);
+
+      const interpreterHome = resolveInterpreterHome(effectiveConfig) ?? this.interpreterHome;
+      // cleanup() removes the temporary home. Restore it only after the current
+      // config has been validated, and only when this call still uses it.
+      if (this.temporaryHome === interpreterHome && !fs.existsSync(interpreterHome)) {
+        fs.mkdirSync(interpreterHome, { recursive: true });
+      }
 
       if (!effectiveConfig.working_dir) {
         temporaryWorkspace = fs.mkdtempSync(
           path.join(os.tmpdir(), 'promptfoo-openinterpreter-workspace-'),
         );
       }
-      const interpreterHome = resolveInterpreterHome(effectiveConfig) ?? this.interpreterHome;
       const normalized = normalizePrompt(prompt, effectiveConfig, temporaryWorkspace);
       if (normalized.error) {
         return { error: normalized.error };
@@ -610,15 +611,17 @@ export class OpenInterpreterProvider implements ApiProvider {
       );
       const mappedContext: CallApiContextParams = {
         ...(context ?? { vars: {}, prompt: { raw: prompt, label: 'Open Interpreter' } }),
-        // The config above is already rendered and validated. Prevent the delegate
-        // from evaluating literal template syntax returned by a row variable.
-        vars: undefined as unknown as CallApiContextParams['vars'],
         prompt: {
           ...(context?.prompt ?? { raw: prompt, label: 'Open Interpreter' }),
           config: mappedConfig,
         },
       };
-      const response = await this.delegate.callApi(normalized.prompt, mappedContext, callOptions);
+      const response = await this.delegate.callApiWithRenderedConfig(
+        normalized.prompt,
+        mappedConfig,
+        mappedContext,
+        callOptions,
+      );
       if (response.error) {
         const interpreterPath = mappedConfig.codex_path_override ?? '';
         if (
