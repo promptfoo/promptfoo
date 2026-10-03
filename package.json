@@ -294,7 +294,7 @@
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@azure/ai-projects": "^2.1.1",
     "@azure/identity": "^4.13.3",
-    "@azure/msal-node": "^6.0.0",
+    "@azure/msal-node": "^7.0.0",
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^18.0.0",
