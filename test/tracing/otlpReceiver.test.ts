@@ -118,6 +118,294 @@ describe('OTLPReceiver', () => {
     vi.restoreAllMocks();
   });
 
+  describe('span events', () => {
+    const payload = (events: unknown) => ({
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  traceId: 'a'.repeat(32),
+                  spanId: 'b'.repeat(16),
+                  name: 'event fixture',
+                  startTimeUnixNano: '1700000000000000000',
+                  endTimeUnixNano: '1700000000000750000',
+                  attributes: [{ key: 'promptfoo.eval.id', value: { stringValue: 'eval-events' } }],
+                  events,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    it.each([
+      {},
+      [null],
+      [{ name: 'event', timeUnixNano: 'invalid' }],
+      [{ name: 'event', timeUnixNano: '1e-1' }],
+      [{ name: 'event', attributes: {} }],
+      [{ name: 'event', attributes: [null] }],
+    ])('rejects malformed optional events with a client error: %j', async (events) => {
+      await request(receiver.getApp()).post('/v1/traces').send(payload(events)).expect(400);
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
+    it.each(['json', 'protobuf'])(
+      'preserves fractional milliseconds and missing timestamp fallback in %s',
+      async (format) => {
+        const body = payload([
+          { name: 'precise', timeUnixNano: '1700000000000250000' },
+          { name: 'fallback' },
+        ]);
+        body.resourceSpans[0].scopeSpans[0].spans[0].startTimeUnixNano = '1700000000000250000';
+        const encoded =
+          format === 'protobuf'
+            ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(
+                body,
+              )
+            : body;
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .set(
+            'Content-Type',
+            format === 'protobuf' ? 'application/x-protobuf' : 'application/json',
+          )
+          .send(encoded)
+          .expect(200);
+        expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.arrayContaining([
+            expect.objectContaining({
+              startTime: 1700000000000.25,
+              endTime: 1700000000000.75,
+              events: [
+                { name: 'precise', timestamp: 1700000000000.25, attributes: {} },
+                { name: 'fallback', timestamp: 1700000000000.25, attributes: {} },
+              ],
+            }),
+          ]),
+          expect.any(Object),
+        );
+      },
+    );
+
+    it.each(['json', 'protobuf'])(
+      'preserves bytes-valued event attributes in %s',
+      async (format) => {
+        const bytes = Buffer.from('ordinary event bytes').toString('base64');
+        const body = payload([
+          { name: 'bytes', attributes: [{ key: 'detail', value: { bytesValue: bytes } }] },
+        ]);
+        const encoded =
+          format === 'protobuf'
+            ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(
+                body,
+              )
+            : body;
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .set(
+            'Content-Type',
+            format === 'protobuf' ? 'application/x-protobuf' : 'application/json',
+          )
+          .send(encoded)
+          .expect(200);
+        expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+          { name: 'bytes', timestamp: 1700000000000, attributes: { detail: bytes } },
+        ]);
+      },
+    );
+
+    it.each(['json', 'protobuf'])(
+      'treats null optional event fields as unset in %s',
+      async (format) => {
+        const body = payload([{ name: 'optional fields', timeUnixNano: null, attributes: null }]);
+        const encoded =
+          format === 'protobuf'
+            ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(
+                body,
+              )
+            : body;
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .set(
+            'Content-Type',
+            format === 'protobuf' ? 'application/x-protobuf' : 'application/json',
+          )
+          .send(encoded)
+          .expect(200);
+        expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+          { name: 'optional fields', timestamp: 1700000000000, attributes: {} },
+        ]);
+      },
+    );
+
+    it.each(['json', 'protobuf'])('skips unset event attribute values in %s', async (format) => {
+      const body = payload([
+        {
+          name: 'optional values',
+          attributes: [
+            { key: 'omitted' },
+            { key: 'null', value: null },
+            { key: 'empty', value: {} },
+            { key: 'ready', value: { boolValue: false } },
+            { key: 'count', value: { intValue: '0' } },
+          ],
+        },
+      ]);
+      const encoded =
+        format === 'protobuf'
+          ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(body)
+          : body;
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', format === 'protobuf' ? 'application/x-protobuf' : 'application/json')
+        .send(encoded)
+        .expect(200);
+      expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+        {
+          name: 'optional values',
+          timestamp: 1700000000000,
+          attributes: { ready: false, count: 0 },
+        },
+      ]);
+    });
+
+    it.each([
+      { intValue: '123456' },
+      { intValue: '0' },
+      { doubleValue: 1.5 },
+      { boolValue: false },
+    ])('redacts configured scalar event-name echoes during ingestion: %j', async (value) => {
+      receiver.setRedactAttributes(['private_marker']);
+      const name = String(Object.values(value)[0]);
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .send(
+          payload([
+            { name, attributes: [{ key: 'private_marker', value }] },
+            { name: 'ordinary event', attributes: [{ key: 'count', value: { intValue: '7' } }] },
+          ]),
+        )
+        .expect(200);
+      expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+        {
+          name: '[REDACTED]',
+          timestamp: 1700000000000,
+          attributes: { private_marker: '[REDACTED]' },
+        },
+        { name: 'ordinary event', timestamp: 1700000000000, attributes: { count: 7 } },
+      ]);
+    });
+
+    it.each([
+      ['json', false],
+      ['protobuf', false],
+      ['json', true],
+      ['protobuf', true],
+    ] as const)(
+      'preserves exact int64 attributes in %s before redaction: %s',
+      async (format, redact) => {
+        if (redact) {
+          receiver.setRedactAttributes(['private_marker']);
+        }
+        const values = ['9223372036854775807', '-9223372036854775808'];
+        const body = payload(
+          values.map((value) => ({
+            name: value,
+            attributes: [
+              { key: 'private_marker', value: { intValue: value } },
+              { key: 'count', value: { intValue: '42' } },
+            ],
+          })),
+        );
+        const encoded =
+          format === 'protobuf'
+            ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(
+                body,
+              )
+            : body;
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .set(
+            'Content-Type',
+            format === 'protobuf' ? 'application/x-protobuf' : 'application/json',
+          )
+          .send(encoded)
+          .expect(200);
+        expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual(
+          values.map((value) => ({
+            name: redact ? '[REDACTED]' : value,
+            timestamp: 1700000000000,
+            attributes: { private_marker: redact ? '[REDACTED]' : value, count: 42 },
+          })),
+        );
+      },
+    );
+
+    it.each([
+      ['1.70000000000025e18', '1.70000000000075e18'],
+      ['17000000000002500000e-1', '17000000000007500000e-1'],
+    ])('accepts integer exponent-form span and event timestamps: %s', async (start, end) => {
+      const body = payload([
+        { name: 'exponent', timeUnixNano: start },
+        { name: 'zero exponent', timeUnixNano: '0e+10' },
+      ]);
+      const span = body.resourceSpans[0].scopeSpans[0].spans[0];
+      span.startTimeUnixNano = start;
+      span.endTimeUnixNano = end;
+      await request(receiver.getApp()).post('/v1/traces').send(body).expect(200);
+      expect(mockTraceStore.addSpans.mock.calls[0][1][0]).toMatchObject({
+        startTime: 1700000000000.25,
+        endTime: 1700000000000.75,
+        events: [
+          { name: 'exponent', timestamp: 1700000000000.25, attributes: {} },
+          { name: 'zero exponent', timestamp: 1700000000000.25, attributes: {} },
+        ],
+      });
+    });
+
+    it('redacts nested configured attributes and matching event names through the shared sanitizer', async () => {
+      receiver.setRedactAttributes(['private_marker']);
+      const body = payload([
+        {
+          name: 'fixture-private-value',
+          attributes: [
+            {
+              key: 'arguments',
+              value: {
+                kvlistValue: {
+                  values: [
+                    { key: 'private_marker', value: { stringValue: 'fixture-private-value' } },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      ]);
+      await request(receiver.getApp()).post('/v1/traces').send(body).expect(200);
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining([
+          expect.objectContaining({
+            events: [
+              {
+                name: '[REDACTED]',
+                timestamp: 1700000000000,
+                attributes: { arguments: { private_marker: '[REDACTED]' } },
+              },
+            ],
+          }),
+        ]),
+        expect.any(Object),
+      );
+    });
+  });
+
   describe('Health check', () => {
     it('should respond to health check endpoint', async () => {
       const response = await request(receiver.getApp()).get('/health').expect(200);
@@ -493,11 +781,20 @@ describe('OTLPReceiver', () => {
                     spanId: spanIdBytes,
                     name: 'protobuf-test-span',
                     kind: 2, // SPAN_KIND_SERVER
-                    startTimeUnixNano: 1700000000000000000n,
-                    endTimeUnixNano: 1700000001000000000n,
+                    startTimeUnixNano: '1700000000000000000',
+                    endTimeUnixNano: '1700000001000000000',
                     attributes: [
                       { key: 'http.method', value: { stringValue: 'POST' } },
                       { key: 'http.status_code', value: { intValue: 200 } },
+                    ],
+                    events: [
+                      {
+                        name: 'guardrail decision',
+                        timeUnixNano: '1700000000500000000',
+                        attributes: [
+                          { key: 'guardrails.decision', value: { stringValue: 'blocked' } },
+                        ],
+                      },
                     ],
                     status: {
                       code: 1, // STATUS_CODE_OK
@@ -535,6 +832,13 @@ describe('OTLPReceiver', () => {
               'otel.scope.name': 'opentelemetry.instrumentation.test',
               'otel.scope.version': '1.0.0',
             }),
+            events: [
+              {
+                name: 'guardrail decision',
+                timestamp: 1700000000500,
+                attributes: { 'guardrails.decision': 'blocked' },
+              },
+            ],
             statusCode: 1,
             statusMessage: 'Success',
           }),

@@ -15,18 +15,22 @@ import {
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
+
+class InvalidSpanEventError extends Error {}
 
 interface OTLPAttribute {
   key: string;
-  value: {
+  value?: {
     stringValue?: string;
     intValue?: string;
     doubleValue?: number;
     boolValue?: boolean;
+    bytesValue?: string;
     arrayValue?: { values: any[] };
     kvlistValue?: { values: OTLPAttribute[] };
-  };
+  } | null;
 }
 
 interface OTLPSpan {
@@ -38,10 +42,17 @@ interface OTLPSpan {
   startTimeUnixNano: string;
   endTimeUnixNano?: string;
   attributes?: OTLPAttribute[];
+  events?: OTLPSpanEvent[];
   status?: {
     code: number;
     message?: string;
   };
+}
+
+interface OTLPSpanEvent {
+  timeUnixNano?: string | null;
+  name: string;
+  attributes?: OTLPAttribute[] | null;
 }
 
 interface OTLPScopeSpan {
@@ -317,73 +328,43 @@ export class OTLPReceiver {
     }
   }
 
-  private shouldRedactAttribute(key: string, redactAttributePatterns: string[]): boolean {
-    if (redactAttributePatterns.length === 0) {
-      return false;
-    }
-    const lowered = key.toLowerCase();
-    return redactAttributePatterns.some((pattern) => lowered.includes(pattern));
-  }
-
-  private redactAttributeValue(value: unknown, redactAttributePatterns: string[]): unknown {
-    if (Array.isArray(value)) {
-      return value.map((item) => this.redactAttributeValue(item, redactAttributePatterns));
-    }
-    if (!value || typeof value !== 'object') {
-      return value;
-    }
-
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [
-        key,
-        this.shouldRedactAttribute(key, redactAttributePatterns)
-          ? '[REDACTED]'
-          : this.redactAttributeValue(nestedValue, redactAttributePatterns),
-      ]),
-    );
-  }
-
   redactAttributes(
     attributes: Record<string, unknown> | undefined,
     redactAttributePatterns = this.redactAttributePatterns,
+    redactedValues?: Set<string>,
   ): Record<string, unknown> {
-    if (!attributes || redactAttributePatterns.length === 0) {
-      return attributes ?? {};
-    }
-    const redacted: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(attributes)) {
-      redacted[key] = this.shouldRedactAttribute(key, redactAttributePatterns)
-        ? '[REDACTED]'
-        : this.redactAttributeValue(value, redactAttributePatterns);
-    }
-    return redacted;
+    return sanitizeTraceAttributes(attributes, {
+      redactAttributes: redactAttributePatterns,
+      sanitizeSensitiveAttributes: false,
+      truncateValues: false,
+      redactedValues,
+    });
   }
 
   private redactSpan(span: SpanData, redactAttributePatterns: string[]): SpanData {
     if (redactAttributePatterns.length === 0) {
       return span;
     }
-    const attributes = span.attributes ?? {};
-    // Collect the values of attributes whose KEY will be redacted. A span `name` or
-    // `statusMessage` that echoes one of those values (e.g. an exporter copies a redacted
-    // attribute such as `otel.log.body` or `event.name` into the span name, or echoes a
-    // credential into an error message) must be scrubbed too — otherwise the secret leaks
-    // through a span field the operator believes `redactAttributes` covers.
-    const redactedSourceValues = new Set<string>();
-    for (const [key, value] of Object.entries(attributes)) {
-      if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
-        redactedSourceValues.add(value);
-      }
-    }
-    // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
+    const redactedValues = new Set<string>();
+    const attributes = this.redactAttributes(
+      span.attributes,
+      redactAttributePatterns,
+      redactedValues,
+    );
+    const events = span.events?.map((event) => ({
+      ...event,
+      attributes: this.redactAttributes(event.attributes, redactAttributePatterns, redactedValues),
+    }));
     const scrubEcho = <T extends string | undefined>(value: T): T =>
-      typeof value === 'string' && redactedSourceValues.has(value) ? ('[REDACTED]' as T) : value;
-
+      typeof value === 'string' && redactedValues.has(value) ? ('[REDACTED]' as T) : value;
     return {
       ...span,
       name: scrubEcho(span.name),
       statusMessage: scrubEcho(span.statusMessage),
-      attributes: this.redactAttributes(attributes, redactAttributePatterns),
+      attributes,
+      ...(events
+        ? { events: events.map((event) => ({ ...event, name: scrubEcho(event.name) })) }
+        : {}),
     };
   }
 
@@ -670,7 +651,10 @@ export class OTLPReceiver {
     );
 
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.toLowerCase().includes('invalid protobuf')) {
+    if (
+      errorMessage.toLowerCase().includes('invalid protobuf') ||
+      error instanceof InvalidSpanEventError
+    ) {
       res.status(400).json({ error: errorMessage });
       return;
     }
@@ -713,6 +697,7 @@ export class OTLPReceiver {
             'otel.span.kind': spanKindName,
             'otel.span.kind_code': span.kind,
           };
+          const startTime = this.toMilliseconds(span.startTimeUnixNano) ?? 0;
 
           traces.push({
             traceId,
@@ -720,9 +705,12 @@ export class OTLPReceiver {
               spanId,
               parentSpanId,
               name: span.name,
-              startTime: Number(span.startTimeUnixNano) / 1_000_000, // Convert to ms
-              endTime: span.endTimeUnixNano ? Number(span.endTimeUnixNano) / 1_000_000 : undefined,
+              startTime,
+              endTime: this.toMilliseconds(span.endTimeUnixNano),
               attributes,
+              events: this.parseEvents(span.events, startTime, (attributes) =>
+                this.parseAttributes(attributes),
+              ),
               statusCode: span.status?.code,
               statusMessage: span.status?.message,
             },
@@ -902,6 +890,11 @@ export class OTLPReceiver {
           'otel.span.kind': spanKindName,
           'otel.span.kind_code': spanKindCode,
         },
+        events: this.parseEvents(
+          span.events,
+          this.toMilliseconds(span.startTimeUnixNano) ?? 0,
+          (attributes) => this.parseDecodedAttributes(attributes),
+        ),
         statusCode: span.status?.code,
         statusMessage: span.status?.message,
       },
@@ -933,7 +926,8 @@ export class OTLPReceiver {
       return value.stringValue;
     }
     if (value.intValue !== undefined) {
-      return typeof value.intValue === 'number' ? value.intValue : Number(value.intValue);
+      const parsed = Number(value.intValue);
+      return Number.isSafeInteger(parsed) ? parsed : String(value.intValue);
     }
     if (value.doubleValue !== undefined) {
       return value.doubleValue;
@@ -975,17 +969,24 @@ export class OTLPReceiver {
   }
 
   private parseAttributeValue(value: OTLPAttribute['value']): any {
+    if (!value) {
+      return undefined;
+    }
     if (value.stringValue !== undefined) {
       return value.stringValue;
     }
     if (value.intValue !== undefined) {
-      return Number(value.intValue);
+      const parsed = Number(value.intValue);
+      return Number.isSafeInteger(parsed) ? parsed : String(value.intValue);
     }
     if (value.doubleValue !== undefined) {
       return value.doubleValue;
     }
     if (value.boolValue !== undefined) {
       return value.boolValue;
+    }
+    if (typeof value.bytesValue === 'string') {
+      return Buffer.from(value.bytesValue, 'base64').toString('base64');
     }
     if (value.arrayValue?.values) {
       return value.arrayValue.values.map((v) => this.parseAttributeValue(v));
@@ -1095,13 +1096,63 @@ export class OTLPReceiver {
     this.acceptFormats = normalizeAcceptFormats(acceptFormats);
   }
 
-  private toMilliseconds(
-    value: DecodedSpan['startTimeUnixNano'] | DecodedSpan['endTimeUnixNano'],
-  ): number | undefined {
-    if (value === undefined) {
+  private parseEvents(
+    events: unknown,
+    startTime: number,
+    parseAttributes: (attributes: any[]) => Record<string, any>,
+  ): NonNullable<SpanData['events']> {
+    if (events === undefined || events === null) {
+      return [];
+    }
+    if (!Array.isArray(events)) {
+      throw new InvalidSpanEventError('Invalid OTLP span events: expected an array');
+    }
+    return events.map((event) => {
+      if (!event || typeof event !== 'object' || typeof event.name !== 'string') {
+        throw new InvalidSpanEventError('Invalid OTLP span event: expected a name');
+      }
+      const eventTime = event.timeUnixNano == null ? 0 : this.toMilliseconds(event.timeUnixNano);
+      const timestamp = eventTime === 0 ? startTime : eventTime;
+      if (timestamp === undefined || !Number.isFinite(timestamp)) {
+        throw new InvalidSpanEventError('Invalid OTLP span event timestamp');
+      }
+      if (event.attributes != null && !Array.isArray(event.attributes)) {
+        throw new InvalidSpanEventError('Invalid OTLP span event attributes');
+      }
+      try {
+        return { name: event.name, timestamp, attributes: parseAttributes(event.attributes ?? []) };
+      } catch {
+        throw new InvalidSpanEventError('Invalid OTLP span event attributes');
+      }
+    });
+  }
+
+  private toMilliseconds(value: unknown): number | undefined {
+    const parts = /^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(String(value));
+    if (!parts) {
       return undefined;
     }
-    return Number(value) / 1_000_000;
+    const fraction = parts[2] ?? '';
+    const digits = (parts[1] + fraction).replace(/^0+/, '');
+    if (!digits) {
+      return 0;
+    }
+    const shift = Number(parts[3] ?? 0) - fraction.length;
+    const integerLength = digits.length + shift;
+    // Safe integer milliseconds need at most 22 decimal nanosecond digits.
+    if (!Number.isSafeInteger(shift) || integerLength < 1 || integerLength > 22) {
+      return undefined;
+    }
+    if (shift < 0 && /[1-9]/.test(digits.slice(shift))) {
+      return undefined;
+    }
+    const nanoseconds = BigInt(
+      shift < 0 ? digits.slice(0, shift) : digits.padEnd(integerLength, '0'),
+    );
+    const milliseconds = Number((nanoseconds / 1_000_000n).toString());
+    return Number.isSafeInteger(milliseconds)
+      ? milliseconds + Number((nanoseconds % 1_000_000n).toString()) / 1_000_000
+      : undefined;
   }
 }
 

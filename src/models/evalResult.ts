@@ -169,25 +169,44 @@ export function projectTracesForOutput(
     return {
       ...projectedTrace,
       spans: projectedTrace.spans.map((span) => {
-        if (!span.attributes) {
-          return span;
-        }
-
-        const projectedAttributes = { ...span.attributes };
-        if (shouldStripPromptText) {
-          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
-        }
-        if (shouldStripResponseOutput) {
-          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
-        }
-
-        const { attributes: _attributes, ...projectedSpan } = span;
-        return {
-          ...projectedSpan,
-          ...(Object.keys(projectedAttributes).length > 0 && {
-            attributes: projectedAttributes,
-          }),
+        const strippedValues = new Map<string, string>();
+        const projectAttributes = <T extends { attributes?: Record<string, unknown> }>(
+          item: T,
+        ): T => {
+          if (!item.attributes) {
+            return item;
+          }
+          const attributes = { ...item.attributes };
+          for (const [key, strip, marker] of [
+            [PromptfooAttributes.REQUEST_BODY, shouldStripPromptText, '[prompt stripped]'],
+            [PromptfooAttributes.RESPONSE_BODY, shouldStripResponseOutput, '[output stripped]'],
+          ] as const) {
+            if (strip) {
+              const value = attributes[key];
+              if (
+                typeof value === 'string' ||
+                typeof value === 'number' ||
+                typeof value === 'boolean'
+              ) {
+                strippedValues.set(String(value), marker);
+              }
+              delete attributes[key];
+            }
+          }
+          const { attributes: _attributes, ...projected } = item;
+          return { ...projected, ...(Object.keys(attributes).length > 0 && { attributes }) } as T;
         };
+        const projected = projectAttributes(span);
+        const events = span.events?.map(projectAttributes);
+        return events
+          ? {
+              ...projected,
+              events: events.map((event) => ({
+                ...event,
+                name: strippedValues.get(event.name) ?? event.name,
+              })),
+            }
+          : projected;
       }),
     };
   });

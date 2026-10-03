@@ -333,6 +333,42 @@ describe('fetchTraceContext', () => {
     ]);
   });
 
+  it.each([true, false])(
+    'applies configured redaction to local event attributes: %s',
+    async (redact) => {
+      mocks.isExternalTraceProvider.mockReturnValue(false);
+      const events = [
+        {
+          name: 'ordinary private value',
+          timestamp: 1.5,
+          attributes: { details: { customer_note: 'ordinary private value' }, phase: 'ready' },
+        },
+        { name: 'ordinary event', timestamp: 2 },
+      ];
+      storedSpans.push({ spanId: 'local', name: 'ordinary span', startTime: 1, events });
+
+      const result = await fetchTraceContext('trace-1', {
+        maxRetries: 0,
+        sanitizeAttributes: true,
+        ...(redact ? { redactAttributes: ['customer_note'] } : {}),
+      });
+
+      expect(result?.spans[0].events).toEqual([
+        {
+          name: redact ? '[REDACTED]' : 'ordinary private value',
+          timestamp: 1.5,
+          attributes: {
+            details: { customer_note: redact ? '[REDACTED]' : 'ordinary private value' },
+            phase: 'ready',
+          },
+        },
+        { name: 'ordinary event', timestamp: 2, attributes: {} },
+      ]);
+      expect(storedSpans[0].events).toEqual(events);
+      expect(events[0].name).toBe('ordinary private value');
+    },
+  );
+
   it('stores large traces in database-safe batches', async () => {
     const spans = Array.from({ length: 501 }, (_, index) => ({
       spanId: String(index),
