@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as huggingfaceDatasets from '../../../src/integrations/huggingfaceDatasets';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { getImageDatasetRequestText } from '../../../src/redteam/plugins/imageDatasetUtils';
 import { UnsafeBenchGrader, UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
 import {
   VLGuardDatasetManager,
@@ -70,6 +71,18 @@ async function expectMissingImage(grader: RedteamGraderBase, test: AtomicTestCas
   await expect(grader.getResult(prompt, output, test, undefined, undefined)).rejects.toThrow(error);
   expect(matchesLlmRubric).not.toHaveBeenCalled();
 }
+
+it('bounds malformed YAML scanning when blank lines have no following property', () => {
+  const malformedRequest = `- role: user\n${'\n'.repeat(100_000)}[`;
+  const start = performance.now();
+  const text = getImageDatasetRequestText(malformedRequest);
+  const elapsedMs = performance.now() - start;
+
+  expect(text).toBe(malformedRequest);
+  // A non-property suffix makes the old scanner retry from every newline (~14s).
+  // The fixed scan takes milliseconds; leave generous headroom for CI.
+  expect(elapsedMs).toBeLessThan(1_000);
+});
 
 describe('VLGuard active grading', () => {
   it.each(['image', 'prompt', 'uploadedPicture'])(
