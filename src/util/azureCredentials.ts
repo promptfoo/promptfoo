@@ -62,25 +62,21 @@ export async function createAzureCredential(
   const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
   const includesEnvironment = !selector || ['prod', 'environmentcredential'].includes(selector);
   const includesWorkload = !selector || ['prod', 'workloadidentitycredential'].includes(selector);
+  const includesManaged = !selector || ['prod', 'managedidentitycredential'].includes(selector);
   const defaultCredential = () =>
     new identity.DefaultAzureCredential({
       managedIdentityClientId: clientId,
       workloadIdentityClientId: clientId,
-      tenantId,
       authorityHost,
     });
-  if (!includesEnvironment && !includesWorkload) {
-    if (selector === 'managedidentitycredential') {
-      rejectHostMasks({ AZURE_CLIENT_ID: clientId });
-      return defaultCredential();
-    }
+  if (!includesEnvironment && !includesWorkload && !includesManaged) {
     // Developer credentials use their own tenant selection; an environment
     // principal's tenant must not become an explicit CLI --tenant option.
     return authorityHost
       ? new identity.DefaultAzureCredential({ authorityHost })
       : new identity.DefaultAzureCredential();
   }
-  if (includesEnvironment && clientSecret) {
+  if (includesEnvironment && clientSecret && clientId && tenantId) {
     if (!clientId?.trim() || !clientSecret.trim() || !tenantId?.trim()) {
       throw new Error(
         'Scoped Azure service principal credentials are incomplete. Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET and AZURE_TENANT_ID together in the effective environment.',
@@ -106,7 +102,7 @@ export async function createAzureCredential(
     );
   }
   const tokenFilePath = value('AZURE_FEDERATED_TOKEN_FILE');
-  if (includesWorkload && tokenFilePath) {
+  if (includesWorkload && tokenFilePath && clientId && tenantId) {
     rejectHostMasks({ AZURE_CLIENT_ID: clientId, AZURE_TENANT_ID: tenantId });
     return new identity.WorkloadIdentityCredential({
       clientId,
@@ -115,20 +111,35 @@ export async function createAzureCredential(
       authorityHost,
     });
   }
-  // The default chain reads these files directly from process.env and cannot
-  // represent a cleared scoped selector. Do not silently restore a host identity.
+  // Reject only masks that could restore a usable ambient mode. Partial host
+  // settings cannot select that identity and must retain ordinary SDK fallback.
+  const hostEnvironmentAvailable =
+    includesEnvironment &&
+    process.env.AZURE_CLIENT_ID &&
+    process.env.AZURE_TENANT_ID &&
+    (process.env.AZURE_CLIENT_SECRET ||
+      process.env.AZURE_CLIENT_CERTIFICATE_PATH ||
+      (process.env.AZURE_USERNAME && process.env.AZURE_PASSWORD));
+  const hostWorkloadAvailable =
+    (includesWorkload || includesManaged) &&
+    process.env.AZURE_FEDERATED_TOKEN_FILE &&
+    process.env.AZURE_TENANT_ID &&
+    (clientId || process.env.AZURE_CLIENT_ID);
   rejectHostMasks({
-    AZURE_CLIENT_ID: clientId,
-    AZURE_TENANT_ID: tenantId,
-    ...(includesEnvironment
+    ...(includesManaged || hostEnvironmentAvailable || hostWorkloadAvailable
+      ? { AZURE_CLIENT_ID: clientId }
+      : {}),
+    ...(hostEnvironmentAvailable || hostWorkloadAvailable ? { AZURE_TENANT_ID: tenantId } : {}),
+    ...(hostEnvironmentAvailable
       ? {
           AZURE_CLIENT_SECRET: clientSecret,
           AZURE_CLIENT_CERTIFICATE_PATH: certificatePath,
         }
       : {}),
-    ...(includesWorkload ? { AZURE_FEDERATED_TOKEN_FILE: tokenFilePath } : {}),
+    ...(hostWorkloadAvailable ? { AZURE_FEDERATED_TOKEN_FILE: tokenFilePath } : {}),
   });
-  // AZURE_CLIENT_ID alone selects a user-assigned managed identity; it is not an
-  // incomplete client-secret tuple. Keep the remaining developer credential chain.
+  // Partial identities remain unavailable to their SDK mode and retain fallback.
+  // Do not pass tenantId here: it would also constrain CLI/PowerShell/azd tenants.
+  // Complete scoped principal/workload identities receive it above.
   return defaultCredential();
 }

@@ -473,6 +473,22 @@ export class GoogleAuthManager {
       authOptions.projectId ??
       env?.GOOGLE_CLOUD_PROJECT ??
       getEnvString('GOOGLE_CLOUD_PROJECT');
+    const scopedProjectId =
+      env?.GOOGLE_CLOUD_PROJECT ??
+      getEnvOverrides()?.GOOGLE_CLOUD_PROJECT ??
+      getEnvOverrides('file')?.GOOGLE_CLOUD_PROJECT;
+    const masksHostProject =
+      authOptions.projectId === '' &&
+      scopedProjectId === '' &&
+      Boolean(process.env.GOOGLE_CLOUD_PROJECT);
+    if (masksHostProject) {
+      // Retain the SDK's other project aliases when only this variable is cleared.
+      authOptions.projectId =
+        process.env.GCLOUD_PROJECT ||
+        process.env.gcloud_project ||
+        process.env.google_cloud_project ||
+        '';
+    }
     const environmentQuotaProjectId =
       env?.GOOGLE_CLOUD_QUOTA_PROJECT ?? getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT');
     // Explicit credential JSON/key files retain the SDK's quota precedence.
@@ -546,10 +562,11 @@ export class GoogleAuthManager {
     // Try to get project ID from Google Auth Library
     let projectId;
     try {
-      // An empty scoped project must not be rediscovered from the host environment.
-      // The selected credential file may still provide its own project ID.
+      // Only an actual host mask restricts discovery; harmless empty placeholders
+      // still allow gcloud/metadata discovery. A masked project may come from the
+      // selected credential file when no unmasked SDK alias is available.
       projectId = detectProjectId
-        ? authOptions.projectId === ''
+        ? masksHostProject && authOptions.projectId === ''
           ? client.projectId || undefined
           : await auth.getProjectId()
         : undefined;

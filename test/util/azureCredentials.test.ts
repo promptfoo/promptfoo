@@ -193,7 +193,7 @@ describe('scoped Azure credentials', () => {
     }
   });
   it.each([{ AZURE_CLIENT_ID: '' }])(
-    'rejects an empty scoped principal without selecting lower credentials: %j',
+    'preserves default fallback for an empty scoped principal without host credentials: %j',
     async (env) => {
       await cliState.withEnv(
         {
@@ -202,7 +202,10 @@ describe('scoped Azure credentials', () => {
           AZURE_TENANT_ID: 'suite-tenant',
         },
         async () => {
-          await expect(createAzureCredential({}, env)).rejects.toThrow('incomplete');
+          await createAzureCredential({}, env);
+          expect(DefaultAzureCredential).toHaveBeenCalledWith(
+            expect.objectContaining({ managedIdentityClientId: '' }),
+          );
         },
       );
     },

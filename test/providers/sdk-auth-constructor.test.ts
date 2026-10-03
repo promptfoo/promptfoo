@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { ClientSecretCredential, DefaultAzureCredential } from '@azure/identity';
+import {
+  ClientSecretCredential,
+  CredentialUnavailableError,
+  DefaultAzureCredential,
+} from '@azure/identity';
 import { GoogleAuth, JWT, UserRefreshClient } from 'google-auth-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
@@ -25,6 +29,217 @@ afterEach(() => {
 });
 
 describe('real cloud SDK credential construction without authentication calls', () => {
+  it.each(['AZURE_CLIENT_ID', 'AZURE_TENANT_ID'])(
+    'does not restore a host username credential through cleared %s',
+    async (cleared) => {
+      mockProcessEnv({
+        AZURE_TOKEN_CREDENTIALS: 'EnvironmentCredential',
+        AZURE_CLIENT_ID: 'host-client',
+        AZURE_TENANT_ID: 'host-tenant',
+        AZURE_USERNAME: 'fixture@example.invalid',
+        AZURE_PASSWORD: 'fixture-password',
+      });
+      await expect(createAzureCredential({}, { [cleared]: '' })).rejects.toThrow('empty');
+    },
+  );
+
+  it.each(['AZURE_TENANT_ID', 'AZURE_FEDERATED_TOKEN_FILE'])(
+    'does not restore a host workload source in managed identity through cleared %s',
+    async (cleared) => {
+      mockProcessEnv({
+        AZURE_TOKEN_CREDENTIALS: 'ManagedIdentityCredential',
+        AZURE_CLIENT_ID: 'host-client',
+        AZURE_TENANT_ID: 'host-tenant',
+        AZURE_FEDERATED_TOKEN_FILE: '/fixture/host-token',
+      });
+      await expect(createAzureCredential({}, { [cleared]: '' })).rejects.toThrow('empty');
+    },
+  );
+  it.each(
+    [
+      'AZURE_TENANT_ID',
+      'AZURE_CLIENT_SECRET',
+      'AZURE_CLIENT_CERTIFICATE_PATH',
+      'AZURE_FEDERATED_TOKEN_FILE',
+    ].flatMap((cleared) =>
+      [
+        undefined,
+        'prod',
+        'dev',
+        'EnvironmentCredential',
+        'WorkloadIdentityCredential',
+        'ManagedIdentityCredential',
+      ].map((selector) => ({ cleared, selector })),
+    ),
+  )(
+    'retains fallback for a cleared incomplete host $cleared/$selector',
+    async ({ cleared, selector }) => {
+      mockProcessEnv({ AZURE_TOKEN_CREDENTIALS: selector, [cleared]: 'host-fixture' });
+      const restoreSelected = mockProcessEnv({ [cleared]: '' });
+      let expected;
+      try {
+        expected = new DefaultAzureCredential();
+      } finally {
+        restoreSelected();
+      }
+      const actual = await createAzureCredential({}, { [cleared]: '' });
+      expect(actual).toBeInstanceOf(DefaultAzureCredential);
+      const describeSources = (credential: object) =>
+        Reflect.get(credential, '_sources').map(
+          (source: {
+            credentialName?: string;
+            constructor: { name: string };
+            tenantId?: string;
+          }) => ({
+            kind: source.credentialName ?? source.constructor.name,
+            tenantId: source.tenantId,
+          }),
+        );
+      expect(describeSources(actual)).toEqual(describeSources(expected));
+    },
+  );
+
+  it.each(['EnvironmentCredential', 'WorkloadIdentityCredential', 'dev'])(
+    'retains unavailable host-client fallback when managed identity is excluded by %s',
+    async (selector) => {
+      mockProcessEnv({ AZURE_TOKEN_CREDENTIALS: selector, AZURE_CLIENT_ID: 'host-client' });
+      const actual = await createAzureCredential({}, { AZURE_CLIENT_ID: '' });
+      expect(actual).toBeInstanceOf(DefaultAzureCredential);
+    },
+  );
+
+  it.each([undefined, 'prod', 'ManagedIdentityCredential'])(
+    'does not restore a cleared host managed identity with selector %s',
+    async (selector) => {
+      mockProcessEnv({ AZURE_TOKEN_CREDENTIALS: selector, AZURE_CLIENT_ID: 'host-client' });
+      await expect(createAzureCredential({}, { AZURE_CLIENT_ID: '' })).rejects.toThrow('empty');
+    },
+  );
+  it.each(
+    ['AZURE_CLIENT_SECRET', 'AZURE_CLIENT_CERTIFICATE_PATH', 'AZURE_FEDERATED_TOKEN_FILE'].flatMap(
+      (mode) =>
+        [
+          'mode-only',
+          'missing-client',
+          'missing-tenant',
+          'empty-client',
+          'empty-tenant',
+          'empty-mode',
+        ].flatMap((partial) =>
+          [
+            undefined,
+            'prod',
+            'dev',
+            'EnvironmentCredential',
+            'WorkloadIdentityCredential',
+            'ManagedIdentityCredential',
+            'invalid-selector',
+          ].map((selector) => ({ mode, partial, selector })),
+        ),
+    ),
+  )(
+    'retains Azure SDK fallback for $mode/$partial/$selector',
+    async ({ mode, partial, selector }) => {
+      mockProcessEnv({ AZURE_TOKEN_CREDENTIALS: selector });
+      const selected = {
+        [mode]:
+          partial === 'empty-mode'
+            ? ''
+            : mode === 'AZURE_CLIENT_SECRET'
+              ? 'fixture-secret'
+              : '/fixture/unused-file',
+        ...(partial === 'mode-only' || partial === 'missing-client'
+          ? {}
+          : { AZURE_CLIENT_ID: partial === 'empty-client' ? '' : 'fixture-client' }),
+        ...(partial === 'mode-only' || partial === 'missing-tenant'
+          ? {}
+          : { AZURE_TENANT_ID: partial === 'empty-tenant' ? '' : 'fixture-tenant' }),
+      };
+      const restoreSelected = mockProcessEnv(selected);
+      let expected: DefaultAzureCredential | undefined;
+      let expectedError: unknown;
+      try {
+        expected = new DefaultAzureCredential();
+      } catch (error) {
+        expectedError = error;
+      } finally {
+        restoreSelected();
+      }
+      if (expectedError) {
+        await expect(createAzureCredential({}, selected)).rejects.toThrow(
+          (expectedError as Error).message,
+        );
+        return;
+      }
+      const actual = await createAzureCredential({}, selected);
+      expect(actual).toBeInstanceOf(DefaultAzureCredential);
+      const describeSources = (credential: object) =>
+        Reflect.get(credential, '_sources').map(
+          (source: {
+            credentialName?: string;
+            constructor: { name: string };
+            tenantId?: string;
+          }) => ({
+            kind: source.credentialName ?? source.constructor.name,
+            tenantId: source.tenantId,
+          }),
+        );
+      expect(describeSources(actual)).toEqual(describeSources(expected!));
+      // Exercise the real SDK chain while every credential exchange stays local.
+      const resolveLocally = async (credential: object) => {
+        for (const source of Reflect.get(credential, '_sources')) {
+          vi.spyOn(source, 'getToken').mockImplementation(async () => {
+            if (source.constructor.name === 'AzureCliCredential') {
+              return { token: 'fixture-developer-token', expiresOnTimestamp: Date.now() + 3600000 };
+            }
+            throw new CredentialUnavailableError('Fixture credential unavailable');
+          });
+        }
+        try {
+          const token = await (credential as DefaultAzureCredential).getToken('fixture-scope');
+          return { token: token?.token };
+        } catch (error) {
+          return { error: (error as Error).constructor.name };
+        }
+      };
+      expect(await resolveLocally(actual)).toEqual(await resolveLocally(expected!));
+    },
+  );
+
+  it.each(
+    ['AZURE_CLIENT_SECRET', 'AZURE_CLIENT_CERTIFICATE_PATH', 'AZURE_FEDERATED_TOKEN_FILE'].flatMap(
+      (mode) => ['AZURE_CLIENT_ID', 'AZURE_TENANT_ID', mode].map((cleared) => ({ mode, cleared })),
+    ),
+  )('retains host-mask protection for $mode/$cleared', async ({ mode, cleared }) => {
+    mockProcessEnv({
+      AZURE_CLIENT_ID: 'host-client',
+      AZURE_TENANT_ID: 'host-tenant',
+      [mode]: mode === 'AZURE_CLIENT_SECRET' ? 'host-secret' : '/fixture/host-file',
+    });
+    await expect(createAzureCredential({}, { [cleared]: '' })).rejects.toThrow('empty');
+  });
+
+  it.each(['AZURE_CLIENT_SECRET', 'AZURE_CLIENT_CERTIFICATE_PATH', 'AZURE_FEDERATED_TOKEN_FILE'])(
+    'keeps complete scoped %s identities ahead of developer fallback',
+    async (mode) => {
+      const selected = {
+        AZURE_CLIENT_ID: 'fixture-client',
+        AZURE_TENANT_ID: 'fixture-tenant',
+        [mode]: mode === 'AZURE_CLIENT_SECRET' ? 'fixture-secret' : '/fixture/unused-file',
+      };
+      const restoreSelected = mockProcessEnv(selected);
+      let expected;
+      try {
+        const chain = new DefaultAzureCredential();
+        const sources = Reflect.get(chain, '_sources');
+        expected = mode === 'AZURE_FEDERATED_TOKEN_FILE' ? sources[1] : sources[0]._credential;
+      } finally {
+        restoreSelected();
+      }
+      const actual = await createAzureCredential({}, selected);
+      expect(actual.constructor).toBe(expected.constructor);
+    },
+  );
   it.each(
     [
       'explicit-json',
