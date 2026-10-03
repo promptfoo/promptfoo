@@ -120,6 +120,55 @@ describe('dataset generation', () => {
       });
     });
 
+    it.each([
+      ['numPersonas', '0'],
+      ['numPersonas', '-1'],
+      ['numPersonas', '1.5'],
+      ['numPersonas', '2invalid'],
+      ['numPersonas', '9007199254740992'],
+      ['numTestCasesPerPersona', '0'],
+      ['numTestCasesPerPersona', 'NaN'],
+      ['numTestCasesPerPersona', ''],
+      ['numTestCasesPerPersona', '1.5'],
+    ])('rejects invalid %s=%s before loading config or generating', async (name, value) => {
+      await expect(
+        doGenerateDataset({
+          config: 'fixture.yaml',
+          defaultConfig: {},
+          defaultConfigPath: undefined,
+          cache: true,
+          write: false,
+          numPersonas: '2',
+          numTestCasesPerPersona: '3',
+          [name]: value,
+        }),
+      ).rejects.toThrow(`Option --${name} must be a positive safe integer`);
+      expect(resolveConfigs).not.toHaveBeenCalled();
+      expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it.each(['tests.txt', 'tests.json', ''])(
+      'rejects output %j before generation',
+      async (output) => {
+        await expect(
+          doGenerateDataset({
+            config: 'fixture.yaml',
+            defaultConfig: {},
+            defaultConfigPath: undefined,
+            cache: true,
+            write: false,
+            numPersonas: '2',
+            numTestCasesPerPersona: '3',
+            output,
+          }),
+        ).rejects.toThrow('Unsupported output file type');
+        expect(resolveConfigs).not.toHaveBeenCalled();
+        expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+      },
+    );
+
     it('should write YAML output', async () => {
       const configPath = 'config.yaml';
 

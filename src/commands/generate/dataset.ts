@@ -12,6 +12,7 @@ import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { loadYaml } from '../../util/yamlLoad';
+import { parseGenerationCount, validateGenerationOutput } from './options';
 import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
@@ -29,6 +30,13 @@ interface DatasetGenerateOptions {
 }
 
 export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
+  const numPersonas = parseGenerationCount(options.numPersonas, '--numPersonas');
+  const numTestCasesPerPersona = parseGenerationCount(
+    options.numTestCasesPerPersona,
+    '--numTestCasesPerPersona',
+  );
+  validateGenerationOutput(options.output, ['.csv', '.yaml']);
+
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');
@@ -63,8 +71,8 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
-    numPersonas: Number.parseInt(options.numPersonas, 10),
-    numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
+    numPersonas,
+    numTestCasesPerPersona,
     provider: options.provider,
   });
   const configAddition = { tests: results.map((result) => ({ vars: result })) };
@@ -73,10 +81,8 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     // Should the output be written as a YAML or CSV?
     if (options.output.endsWith('.csv')) {
       await fs.writeFile(options.output, serializeObjectArrayAsCSV(results));
-    } else if (options.output.endsWith('.yaml')) {
-      await fs.writeFile(options.output, yamlString);
     } else {
-      throw new Error(`Unsupported output file type: ${options.output}`);
+      await fs.writeFile(options.output, yamlString);
     }
     printBorder();
     logger.info(`Wrote ${results.length} new test cases to ${options.output}`);

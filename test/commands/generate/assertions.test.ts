@@ -132,6 +132,46 @@ describe('assertion generation', () => {
       });
     });
 
+    it.each(['0', '-1', '1.5', '2invalid', 'NaN', '', '9007199254740992'])(
+      'rejects invalid assertion count %j before loading config or generating',
+      async (numAssertions) => {
+        await expect(
+          doGenerateAssertions({
+            config: 'fixture.yaml',
+            defaultConfig: {},
+            defaultConfigPath: undefined,
+            cache: true,
+            write: false,
+            type: 'llm-rubric',
+            numAssertions,
+          }),
+        ).rejects.toThrow('Option --numAssertions must be a positive safe integer');
+        expect(resolveConfigs).not.toHaveBeenCalled();
+        expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['assertions.csv', 'assertions.txt', ''])(
+      'rejects output %j before generation',
+      async (output) => {
+        await expect(
+          doGenerateAssertions({
+            config: 'fixture.yaml',
+            defaultConfig: {},
+            defaultConfigPath: undefined,
+            cache: true,
+            write: false,
+            type: 'llm-rubric',
+            output,
+          }),
+        ).rejects.toThrow('Unsupported output file type');
+        expect(resolveConfigs).not.toHaveBeenCalled();
+        expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+      },
+    );
+
     it('should write YAML output', async () => {
       const configPath = 'config.yaml';
 
