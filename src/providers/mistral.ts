@@ -18,6 +18,14 @@ import type {
 } from '../types/index';
 
 const MISTRAL_CHAT_MODELS = [
+  // Z.ai GLM 5.3 hosted by Mistral: https://docs.mistral.ai/models/zai-glm-5-3
+  {
+    id: 'zai-glm-5-3',
+    cost: {
+      input: 1.4 / 1000000,
+      output: 4.4 / 1000000,
+    },
+  },
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
     id,
     cost: {
@@ -558,7 +566,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
+    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
     const apiKeyCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
@@ -759,8 +767,9 @@ export class MistralEmbeddingProvider implements ApiProvider {
       env?: EnvOverrides;
     } = {},
   ) {
-    const { modelName, config, env } = options;
+    const { modelName, config, env, id } = options;
     this.modelName = modelName || 'mistral-embed';
+    this.id = id ? () => id : this.id;
     if (!MistralEmbeddingProvider.MISTRAL_EMBEDDING_MODELS_NAMES.includes(this.modelName)) {
       logger.warn(`Using unknown Mistral embedding model: ${this.modelName}`);
     }
@@ -799,7 +808,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
+    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
     const apiKeyCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar

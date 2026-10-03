@@ -3,6 +3,7 @@ import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
 import webpack from 'webpack';
+import browserInventoryPlugin from './src/plugins/browser-inventory';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config, Plugin } from '@docusaurus/types';
 
@@ -467,6 +468,7 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 
   plugins: [
+    browserInventoryPlugin,
     webpackProgressCompatibilityPlugin,
     buildTimestampPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
