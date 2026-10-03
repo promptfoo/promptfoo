@@ -167,19 +167,45 @@ describe('getTokenUsage', () => {
     });
   });
 
-  it('should prefer prompt_tokens_details.cached_tokens over the top-level field', () => {
+  it('should read cached tokens from usage.prompt_cache_hit_tokens (e.g. DeepSeek)', () => {
+    const data = {
+      usage: {
+        total_tokens: 100,
+        prompt_tokens: 40,
+        completion_tokens: 60,
+        prompt_cache_hit_tokens: 32,
+        prompt_cache_miss_tokens: 8,
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result).toEqual({
+      total: 100,
+      prompt: 40,
+      completion: 60,
+      numRequests: 1,
+      completionDetails: {
+        cacheReadInputTokens: 32,
+      },
+    });
+  });
+
+  it.each([0, 32])('prefers nested cached tokens (%s) over top-level counters', (cached) => {
     const data = {
       usage: {
         total_tokens: 100,
         prompt_tokens: 40,
         completion_tokens: 60,
         cached_tokens: 7,
-        prompt_tokens_details: { cached_tokens: 32 },
+        prompt_cache_hit_tokens: 24,
+        prompt_tokens_details: { cached_tokens: cached },
       },
     };
 
     const result = getTokenUsage(data, false);
-    expect(result.completionDetails).toEqual({ cacheReadInputTokens: 32 });
+    expect(result.completionDetails).toEqual(
+      cached === 0 ? undefined : { cacheReadInputTokens: cached },
+    );
   });
 
   it.each([

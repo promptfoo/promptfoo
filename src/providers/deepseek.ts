@@ -2,6 +2,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { renderVarsInObject } from '../util/render';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { getOpenAICompletionTokenDetails } from './openai/util';
 import { clampCachedTokens } from './shared';
 
 import type {
@@ -183,12 +184,12 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
   }
 
   protected override calculateResponseCost(
-    data: OpenAiChatCompletionCostData & { usage?: { prompt_cache_hit_tokens?: number } },
+    data: OpenAiChatCompletionCostData,
     config: OpenAiCompletionOptions,
     cached: boolean,
   ): number | undefined {
     if (cached) {
-      return undefined;
+      return 0;
     }
     const { usage } = data;
     const passthrough = config.passthrough as { model?: string } | undefined;
@@ -197,7 +198,7 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
       config,
       usage?.prompt_tokens,
       usage?.completion_tokens,
-      usage?.prompt_tokens_details?.cached_tokens ?? usage?.prompt_cache_hit_tokens,
+      getOpenAICompletionTokenDetails(usage ?? {})?.cacheReadInputTokens,
     );
   }
 }
