@@ -198,6 +198,16 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test value1');
     });
 
+    it('should not corrupt dollar-sign sequences when pre-resolving nested variables', async () => {
+      const prompt = toPrompt('Say {{greeting}}');
+      const renderedPrompt = await renderPrompt(
+        prompt,
+        { greeting: 'Cost is {{price}}', price: 'only $`5' },
+        {},
+      );
+      expect(renderedPrompt).toBe('Say Cost is only $`5');
+    });
+
     it('should handle complex variable substitutions in non-JSON prompts', async () => {
       const prompt = toPrompt('{{ var1[var2] }}');
       const renderedPrompt = await renderPrompt(
@@ -634,6 +644,22 @@ describe('evaluatorHelpers', () => {
         config_ref: '[object Object]', // When object is converted to string
       };
       expect(resolveVariables(variables)).toEqual(expected);
+    });
+
+    it('should insert substituted values literally when they contain dollar-sign sequences', () => {
+      const variables = {
+        greeting: 'Say {{price}}!',
+        price: 'costs $`5 (was $&; see $1)',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        greeting: 'Say costs $`5 (was $&; see $1)!',
+        price: 'costs $`5 (was $&; see $1)',
+      });
+    });
+
+    it('should resolve a placeholder whose value is only a replacement pattern', () => {
+      const variables = { alias: '{{pattern}}', pattern: '$&' };
+      expect(resolveVariables(variables)).toEqual({ alias: '$&', pattern: '$&' });
     });
   });
 
