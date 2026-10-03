@@ -154,7 +154,7 @@ describe('AzureCompletionProvider', () => {
     );
   });
 
-  it('returns graceful output instead of crashing on an empty choices array', async () => {
+  it('leaves output undefined for an empty choices array', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [],
@@ -170,10 +170,10 @@ describe('AzureCompletionProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBeUndefined();
-    expect(result.output).toBe('');
+    expect(result.output).toBeUndefined();
   });
 
-  it('returns graceful output when the response has no choices field', async () => {
+  it('leaves output undefined when the response has no choices field', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
@@ -188,7 +188,7 @@ describe('AzureCompletionProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBeUndefined();
-    expect(result.output).toBe('');
+    expect(result.output).toBeUndefined();
   });
 
   it('should handle API errors', async () => {
