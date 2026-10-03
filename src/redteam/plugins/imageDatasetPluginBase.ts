@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
-import { ImageDatasetManager } from './imageDatasetUtils';
 
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
 
@@ -21,7 +20,9 @@ export abstract class ImageDatasetPluginBase<
   TConfig extends ImageDatasetPluginConfig = ImageDatasetPluginConfig,
 > extends RedteamPluginBase {
   protected abstract readonly pluginId: string;
-  protected abstract readonly datasetManager: ImageDatasetManager<TInput>;
+  protected abstract readonly datasetManager: {
+    getFilteredRecords(limit: number, config?: TConfig): Promise<TInput[]>;
+  };
   protected pluginConfig?: TConfig;
 
   constructor(provider: any, purpose: string, injectVar: string, config?: TConfig) {
