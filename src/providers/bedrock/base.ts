@@ -124,6 +124,7 @@ export function createBedrockCacheKeyHash({
 export abstract class AwsBedrockGenericProvider {
   private readonly getSdkState = createEnvironmentScopedState(
     () => ({
+      cacheNamespace: this.selectResponseCacheNamespace(),
       client: undefined as BedrockRuntime | undefined,
       initialization: undefined as Promise<BedrockRuntime> | undefined,
     }),
@@ -134,6 +135,13 @@ export abstract class AwsBedrockGenericProvider {
     },
   );
   protected get responseCacheNamespace(): string | undefined {
+    return this.getSdkState().cacheNamespace;
+  }
+
+  private selectResponseCacheNamespace(): string | undefined {
+    if (this.config.accessKeyId && this.config.secretAccessKey) {
+      return undefined;
+    }
     const bearer = this.getApiKey();
     if (bearer) {
       // Keep the existing main fingerprint for config/file/ambient bearer tokens.
@@ -236,9 +244,10 @@ export abstract class AwsBedrockGenericProvider {
     }
     const state = this.getSdkState();
     return (state.initialization ??= (async () => {
-      const apiKey = this.getApiKey();
       const authOptions = await this.getBedrockAuthOptions();
-      const handler = await createBedrockRequestHandler({ apiKey });
+      const handler = await createBedrockRequestHandler({
+        apiKey: 'token' in authOptions ? authOptions.token.token : undefined,
+      });
 
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');

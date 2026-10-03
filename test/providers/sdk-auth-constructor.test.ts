@@ -25,6 +25,48 @@ afterEach(() => {
 });
 
 describe('real cloud SDK credential construction without authentication calls', () => {
+  it('keeps an explicit SDK authClient ahead of a stale ADC path', async () => {
+    const authClient = new UserRefreshClient('fixture-client', 'fixture-secret', 'fixture-refresh');
+    const { client } = await GoogleAuthManager.getOAuthClient(
+      {
+        googleAuthOptions: { authClient },
+        env: { GOOGLE_APPLICATION_CREDENTIALS: '/absent-fixture/adc.json' },
+      },
+      false,
+    );
+    expect(client).toBe(authClient);
+  });
+
+  it.each([{ apiKey: 'fixture-api-key' }, { clientOptions: { apiKey: 'fixture-api-key' } }])(
+    'keeps explicit SDK API-key authentication ahead of a stale ADC path: %j',
+    async (googleAuthOptions) => {
+      const { client } = await GoogleAuthManager.getOAuthClient(
+        { googleAuthOptions, env: { GOOGLE_APPLICATION_CREDENTIALS: '/absent-fixture/adc.json' } },
+        false,
+      );
+      expect(client.apiKey).toBe('fixture-api-key');
+    },
+  );
+
+  it.each(['{invalid ADC json', '-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----'])(
+    'rejects non-JSON scoped ADC rather than accepting a deferred PEM client',
+    async (content) => {
+      const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-invalid-adc-'));
+      const file = path.join(dir, 'adc.json');
+      fs.writeFileSync(file, content);
+      try {
+        await cliState.withEnvFileOverrides({ GOOGLE_APPLICATION_CREDENTIALS: file }, async () => {
+          await expect(GoogleAuthManager.getOAuthClient({}, false)).rejects.toThrow(
+            'valid ADC JSON',
+          );
+          expect(await GoogleAuthManager.hasDefaultCredentials()).toBe(false);
+        });
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('loads a local scoped ADC file and applies scoped quota over the host quota', async () => {
     const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-adc-fixture-'));
     const file = path.join(dir, 'adc.json');

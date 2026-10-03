@@ -32,10 +32,14 @@ class ProviderRegistry {
     });
   }
 
-  register(provider: CleanupProvider, scope: object | undefined = this.currentScope): void {
+  register(
+    provider: CleanupProvider,
+    scope: object | undefined = this.currentScope,
+    manageProcessSignals = true,
+  ): void {
     this.providers.set(provider, scope);
 
-    if (!this.shutdownRegistered) {
+    if (manageProcessSignals && !this.shutdownRegistered) {
       this.registerShutdownHandlers();
       this.shutdownRegistered = true;
     }

@@ -19,6 +19,11 @@ interface AwsCredentialConfig {
 export function getAwsCredentialProviderOptions(env?: EnvOverrides) {
   const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
   return {
+    ...(['AWS_PROFILE', 'AWS_SHARED_CREDENTIALS_FILE', 'AWS_CONFIG_FILE'].some(
+      (name) => scoped[name] !== undefined,
+    )
+      ? { ignoreCache: true }
+      : {}),
     ...(scoped.AWS_SHARED_CREDENTIALS_FILE === undefined
       ? {}
       : { filepath: scoped.AWS_SHARED_CREDENTIALS_FILE }),
@@ -118,7 +123,7 @@ export async function resolveAwsCredentials(
         'AWS SSO profiles require @aws-sdk/credential-provider-sso. Please install it with: npm install @aws-sdk/credential-provider-sso',
       );
     });
-    return fromSSO({ profile });
+    return fromSSO({ ...getAwsCredentialProviderOptions(env), profile });
   }
   return undefined;
 }
@@ -129,10 +134,14 @@ export function getAwsCredentialCacheNamespace(
   env?: EnvOverrides,
 ): string | undefined {
   const source = getScopedAwsCredentialConfig(config, env);
-  if (!source || source === config) {
+  const options = getAwsCredentialProviderOptions(env);
+  const hasScopedProfileFiles =
+    source?.profile &&
+    !(source.accessKeyId && source.secretAccessKey) &&
+    (options.filepath !== undefined || options.configFilepath !== undefined);
+  if (!source || (source === config && !hasScopedProfileFiles)) {
     return undefined;
   }
-  const options = getAwsCredentialProviderOptions(env);
   const files = [options.filepath, options.configFilepath, options.webIdentityTokenFile];
   if (source.profile) {
     files.push(

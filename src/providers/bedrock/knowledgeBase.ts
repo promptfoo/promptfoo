@@ -81,7 +81,7 @@ export class AwsBedrockKnowledgeBaseProvider
   implements ApiProvider
 {
   protected override get responseCacheNamespace(): string | undefined {
-    return getAwsCredentialCacheNamespace(this.config, this.env);
+    return this.getClientState().cacheNamespace;
   }
 
   private injectedClient?: BedrockAgentRuntimeClient;
@@ -96,6 +96,7 @@ export class AwsBedrockKnowledgeBaseProvider
   }
   private readonly getClientState = createEnvironmentScopedState(
     () => ({
+      cacheNamespace: getAwsCredentialCacheNamespace(this.config, this.env),
       client: undefined as BedrockAgentRuntimeClient | undefined,
       initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
     }),

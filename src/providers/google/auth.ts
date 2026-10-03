@@ -11,6 +11,8 @@
  * 4. GEMINI_API_KEY (secondary)
  */
 
+import fs from 'node:fs';
+
 import cliState from '../../cliState';
 import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -422,18 +424,32 @@ export class GoogleAuthManager {
     if (
       !credentials &&
       !authOptions.credentials &&
+      !authOptions.authClient &&
       !authOptions.keyFilename &&
-      !authOptions.keyFile
+      !authOptions.keyFile &&
+      !authOptions.apiKey &&
+      !authOptions.clientOptions?.apiKey
     ) {
       const scopedFilename = [env, getEnvOverrides(), getEnvOverrides('file')]
         .map((layer) => layer?.GOOGLE_APPLICATION_CREDENTIALS)
         .find((value) => value !== undefined);
-      if (scopedFilename === '') {
+      if (scopedFilename === '' && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
         throw new Error(
-          '[Google] Scoped GOOGLE_APPLICATION_CREDENTIALS is empty. Supply an ADC filename or remove the scoped override.',
+          '[Google] Scoped GOOGLE_APPLICATION_CREDENTIALS is empty, but the SDK would restore its host value. Supply explicit credentials or remove the host ADC setting.',
         );
       }
       authOptions.keyFilename = scopedFilename ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS');
+      if (authOptions.keyFilename) {
+        const content = await fs.promises.readFile(authOptions.keyFilename, 'utf8');
+        try {
+          JSON.parse(content);
+        } catch {
+          // keyFilename supports legacy PEM keys, whereas ADC discovery requires JSON.
+          throw new Error(
+            '[Google] GOOGLE_APPLICATION_CREDENTIALS must point to a valid ADC JSON file.',
+          );
+        }
+      }
     }
     authOptions.projectId =
       opts.projectId ??

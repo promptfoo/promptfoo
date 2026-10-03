@@ -33,6 +33,7 @@ export function createEnvironmentScopedState<T>(
             },
           },
           lifetime,
+          false,
         );
       }
     }

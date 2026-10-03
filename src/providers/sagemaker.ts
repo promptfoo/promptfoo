@@ -99,6 +99,7 @@ interface SageMakerOptions extends ProviderOptions {
 abstract class SageMakerGenericProvider {
   private readonly getSdkState = createEnvironmentScopedState(
     () => ({
+      cacheNamespace: getAwsCredentialCacheNamespace(this.config, this.env),
       client: undefined as any,
       runtimes: new Map<string, Promise<any>>(),
     }),
@@ -112,7 +113,7 @@ abstract class SageMakerGenericProvider {
     },
   );
   protected get responseCacheNamespace(): string | undefined {
-    return getAwsCredentialCacheNamespace(this.config, this.env);
+    return this.getSdkState().cacheNamespace;
   }
   env?: EnvOverrides;
 
@@ -901,7 +902,7 @@ export class SageMakerEmbeddingProvider
 
     // Generate shorter, more efficient hashed keys
     const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex');
+    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
 
     return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
   }

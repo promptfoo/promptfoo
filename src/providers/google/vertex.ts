@@ -179,8 +179,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
       this.config.credentials ||
       this.config.keyFilename ||
       this.config.googleAuthOptions?.credentials ||
+      this.config.googleAuthOptions?.authClient ||
       this.config.googleAuthOptions?.keyFilename ||
-      this.config.googleAuthOptions?.keyFile
+      this.config.googleAuthOptions?.keyFile ||
+      this.config.googleAuthOptions?.apiKey ||
+      this.config.googleAuthOptions?.clientOptions?.apiKey
     ) {
       return undefined;
     }

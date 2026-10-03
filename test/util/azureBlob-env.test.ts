@@ -82,16 +82,20 @@ describe('Azure Blob authentication scopes with the installed SDK', () => {
     },
   );
 
-  it.each([{ ...principal, AZURE_CLIENT_SECRET: '' }])(
-    'rejects an incomplete selected principal without starting a download',
-    async (env) => {
-      mockProcessEnv({ AZURE_STORAGE_CONNECTION_STRING: undefined });
-      await expect(
-        cliState.withEnv(env, () => readAzureBlobText('az://account/container/tests.json')),
-      ).rejects.toThrow('Scoped Azure service principal credentials are incomplete');
-      expect(BlobClient.prototype.downloadToBuffer).not.toHaveBeenCalled();
-    },
-  );
+  it('preserves default identity discovery for a blank secret without a host secret to mask', async () => {
+    mockProcessEnv({
+      AZURE_STORAGE_CONNECTION_STRING: undefined,
+      AZURE_CLIENT_SECRET: undefined,
+      AZURE_FEDERATED_TOKEN_FILE: undefined,
+      AZURE_CLIENT_CERTIFICATE_PATH: undefined,
+    });
+    expect(
+      await cliState.withEnv({ ...principal, AZURE_CLIENT_SECRET: '' }, () =>
+        readAzureBlobText('az://account/container/tests.json'),
+      ),
+    ).toBe('fixture');
+    expect(credential).toBeInstanceOf(DefaultAzureCredential);
+  });
 
   it('keeps a higher connection string ahead of a lower principal', async () => {
     await cliState.withEnvFileOverrides(principal, () =>

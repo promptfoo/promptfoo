@@ -192,51 +192,109 @@ describe('scoped Azure credentials', () => {
       });
     }
   });
-  it.each([
-    { AZURE_CLIENT_ID: '' },
-    { AZURE_CLIENT_SECRET: '' },
-    { AZURE_CLIENT_ID: '', AZURE_CLIENT_SECRET: '', AZURE_TENANT_ID: '' },
-  ])('rejects an empty scoped principal without selecting lower credentials: %j', async (env) => {
-    await cliState.withEnv(
-      {
-        AZURE_CLIENT_ID: 'suite-client',
-        AZURE_CLIENT_SECRET: 'suite-secret',
-        AZURE_TENANT_ID: 'suite-tenant',
-      },
-      async () => {
-        await expect(createAzureCredential({}, env)).rejects.toThrow('incomplete');
-      },
-    );
-  });
+  it.each([{ AZURE_CLIENT_ID: '' }])(
+    'rejects an empty scoped principal without selecting lower credentials: %j',
+    async (env) => {
+      await cliState.withEnv(
+        {
+          AZURE_CLIENT_ID: 'suite-client',
+          AZURE_CLIENT_SECRET: 'suite-secret',
+          AZURE_TENANT_ID: 'suite-tenant',
+        },
+        async () => {
+          await expect(createAzureCredential({}, env)).rejects.toThrow('incomplete');
+        },
+      );
+    },
+  );
 });
 
 describe('Azure identity modes without client secrets', () => {
-  it('forwards file-only certificate password and chain overrides with ambient identity', async () => {
-    mockProcessEnv({
-      AZURE_CLIENT_ID: 'ambient-client',
-      AZURE_TENANT_ID: 'ambient-tenant',
-      AZURE_CLIENT_CERTIFICATE_PATH: '/fixture/ambient.pem',
-      AZURE_CLIENT_CERTIFICATE_PASSWORD: 'old-password',
-      AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: 'false',
-    });
+  it('preserves harmless blank placeholders without ambient values to rediscover', async () => {
     await cliState.withEnvFileOverrides(
       {
-        AZURE_CLIENT_CERTIFICATE_PASSWORD: 'file-password',
-        AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: 'true',
+        AZURE_CLIENT_ID: '',
+        AZURE_TENANT_ID: '',
+        AZURE_CLIENT_SECRET: '',
+        AZURE_CLIENT_CERTIFICATE_PATH: '',
+        AZURE_FEDERATED_TOKEN_FILE: '',
       },
       () => createAzureCredential(),
     );
-    expect(ClientCertificateCredential).toHaveBeenCalledWith(
-      'ambient-tenant',
-      'ambient-client',
-      {
-        certificatePath: '/fixture/ambient.pem',
-        certificatePassword: 'file-password',
-      },
-      { authorityHost: undefined, sendCertificateChain: true },
-    );
-    expect(DefaultAzureCredential).not.toHaveBeenCalled();
+    expect(DefaultAzureCredential).toHaveBeenCalledOnce();
   });
+  it.each(['secret', 'certificate'])(
+    'ignores cleared lower-priority files for a selected %s identity',
+    async (mode) => {
+      mockProcessEnv({ AZURE_FEDERATED_TOKEN_FILE: '/fixture/host-token' });
+      await cliState.withEnvFileOverrides(
+        {
+          ...principal('file'),
+          AZURE_FEDERATED_TOKEN_FILE: '',
+          AZURE_CLIENT_SECRET: mode === 'secret' ? 'fixture-secret' : '',
+          AZURE_CLIENT_CERTIFICATE_PATH: mode === 'certificate' ? '/fixture/file.pem' : '',
+        },
+        () => createAzureCredential(),
+      );
+      if (mode === 'secret') {
+        expect(ClientSecretCredential).toHaveBeenCalledOnce();
+      } else {
+        expect(ClientCertificateCredential).toHaveBeenCalledOnce();
+      }
+      expect(DefaultAzureCredential).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    'AZURE_CLIENT_ID',
+    'AZURE_TENANT_ID',
+    'AZURE_FEDERATED_TOKEN_FILE',
+    'AZURE_CLIENT_CERTIFICATE_PATH',
+  ])('does not restore host identity through an explicitly empty %s selector', async (name) => {
+    mockProcessEnv({
+      AZURE_CLIENT_ID: 'host-client',
+      AZURE_TENANT_ID: 'host-tenant',
+      ...(name === 'AZURE_CLIENT_CERTIFICATE_PATH'
+        ? { AZURE_CLIENT_CERTIFICATE_PATH: '/fixture/host.pem' }
+        : { AZURE_FEDERATED_TOKEN_FILE: '/fixture/host-token' }),
+    });
+    await cliState.withEnvFileOverrides({ [name]: '' }, async () => {
+      await expect(createAzureCredential()).rejects.toThrow('empty');
+    });
+    expect(DefaultAzureCredential).not.toHaveBeenCalled();
+    expect(WorkloadIdentityCredential).not.toHaveBeenCalled();
+    expect(ClientCertificateCredential).not.toHaveBeenCalled();
+  });
+
+  it.each(['true', 'TRUE', '1'])(
+    'forwards file-only certificate password and chain=%s overrides with ambient identity',
+    async (flag) => {
+      mockProcessEnv({
+        AZURE_CLIENT_ID: 'ambient-client',
+        AZURE_TENANT_ID: 'ambient-tenant',
+        AZURE_CLIENT_CERTIFICATE_PATH: '/fixture/ambient.pem',
+        AZURE_CLIENT_CERTIFICATE_PASSWORD: 'old-password',
+        AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: 'false',
+      });
+      await cliState.withEnvFileOverrides(
+        {
+          AZURE_CLIENT_CERTIFICATE_PASSWORD: 'file-password',
+          AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: flag,
+        },
+        () => createAzureCredential(),
+      );
+      expect(ClientCertificateCredential).toHaveBeenCalledWith(
+        'ambient-tenant',
+        'ambient-client',
+        {
+          certificatePath: '/fixture/ambient.pem',
+          certificatePassword: 'file-password',
+        },
+        { authorityHost: undefined, sendCertificateChain: true },
+      );
+      expect(DefaultAzureCredential).not.toHaveBeenCalled();
+    },
+  );
   it('preserves user-assigned managed identity selection from an env file', async () => {
     await cliState.withEnvFileOverrides({ AZURE_CLIENT_ID: 'managed-client' }, () =>
       createAzureCredential(),

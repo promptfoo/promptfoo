@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -43,6 +44,99 @@ afterEach(() => {
 
 // Use real SDK constructors and a local request-handler stub: no credential or model service calls.
 describe('scoped AWS SDK authentication', () => {
+  it.each(['config', 'provider'])(
+    'keeps explicit key-pair signing ahead of a %s bearer through the real HTTP handler',
+    async (source) => {
+      const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+        response: { statusCode: 200, headers: {}, body: new TextEncoder().encode('{}') },
+      });
+      const provider = new AwsBedrockCompletionProvider('fixture', {
+        config: {
+          accessKeyId: 'explicit-access',
+          secretAccessKey: 'explicit-secret',
+          ...(source === 'config' ? { apiKey: 'lower-bearer' } : {}),
+        },
+        env: source === 'provider' ? { AWS_BEARER_TOKEN_BEDROCK: 'lower-bearer' } : undefined,
+      });
+      const client = await provider.getBedrockInstance();
+      try {
+        await client.invokeModel({
+          modelId: 'fixture',
+          body: new TextEncoder().encode('{}'),
+          contentType: 'application/json',
+        });
+        const authorization = new Headers(handle.mock.calls[0][0].headers).get('authorization');
+        expect(authorization).toContain('Credential=explicit-access/');
+        expect(authorization).not.toContain('Bearer');
+      } finally {
+        client.destroy();
+      }
+    },
+  );
+
+  it.each(['bedrock', 'sagemaker', 'agent', 'knowledge-base'])(
+    'binds %s cache identity to its live client and reloads scoped files for a new lifetime',
+    async (kind) => {
+      const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-live-rotation-'));
+      const filename = path.join(dir, 'credentials');
+      const write = (label: string) =>
+        fs.writeFileSync(
+          filename,
+          `[fixture]\naws_access_key_id = ${label}-access\naws_secret_access_key = ${label}-secret\n`,
+        );
+      write('before');
+      const provider =
+        kind === 'bedrock'
+          ? new AwsBedrockCompletionProvider('fixture')
+          : kind === 'sagemaker'
+            ? new SageMakerCompletionProvider('fixture', { config: { modelType: 'custom' } })
+            : kind === 'agent'
+              ? new AwsBedrockAgentsProvider('fixture')
+              : new AwsBedrockKnowledgeBaseProvider('fixture', {
+                  config: { knowledgeBaseId: 'fixture' },
+                });
+      const method =
+        kind === 'bedrock'
+          ? 'getBedrockInstance'
+          : kind === 'sagemaker'
+            ? 'getSageMakerRuntimeInstance'
+            : kind === 'agent'
+              ? 'getAgentRuntimeClient'
+              : 'getKnowledgeBaseClient';
+      const env = { AWS_PROFILE: 'fixture', AWS_SHARED_CREDENTIALS_FILE: filename };
+      try {
+        await cliState.withEnvFileOverrides(env, async () => {
+          const first = await Reflect.get(provider, method).call(provider);
+          try {
+            expect((await first.config.credentials()).accessKeyId).toBe('before-access');
+            const originalNamespace = Reflect.get(provider, 'responseCacheNamespace');
+            write('after');
+            expect(await Reflect.get(provider, method).call(provider)).toBe(first);
+            expect((await first.config.credentials()).accessKeyId).toBe('before-access');
+            expect(Reflect.get(provider, 'responseCacheNamespace')).toBe(originalNamespace);
+            await cliState.withEnvFileOverrides(env, async () => {
+              const next = await Reflect.get(provider, method).call(provider);
+              try {
+                expect(next).not.toBe(first);
+                expect((await next.config.credentials()).accessKeyId).toBe('after-access');
+                expect(Reflect.get(provider, 'responseCacheNamespace')).not.toBe(originalNamespace);
+              } finally {
+                next.destroy();
+              }
+            });
+            // An SDK refresh can re-resolve credentials, but never writes into the new lifetime's namespace.
+            await first.config.credentials({ forceRefresh: true });
+            expect(Reflect.get(provider, 'responseCacheNamespace')).toBe(originalNamespace);
+          } finally {
+            first.destroy();
+          }
+        });
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('signs with each concurrent scope key pair while preserving the host session-token default', async () => {
     mockProcessEnv({
       AWS_SESSION_TOKEN: 'shell-session',

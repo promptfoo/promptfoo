@@ -15,6 +15,8 @@ import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { getProviderFromCloud } from '../../../src/util/cloud';
 import { mockProcessEnv } from '../../util/utils';
 
+const readFile = fs.promises.readFile.bind(fs.promises);
+
 const makeClient = (value: string) => ({
   quotaProjectId: 'host-quota',
   getAccessToken: vi.fn(async () => ({ token: value })),
@@ -26,6 +28,10 @@ vi.mock('../../../src/util/cloud', async (importOriginal) => ({
 }));
 let restore: () => void;
 beforeEach(() => {
+  vi.spyOn(fs.promises, 'readFile').mockImplementation(((filename: string, ...options: any[]) =>
+    fs.existsSync(filename)
+      ? Reflect.apply(readFile, fs.promises, [filename, ...options])
+      : Promise.resolve('{}')) as typeof fs.promises.readFile);
   restore = mockProcessEnv({
     GOOGLE_API_KEY: undefined,
     GEMINI_API_KEY: undefined,
@@ -213,6 +219,7 @@ describe('Google scoped ADC inputs', () => {
   it.each(['provider', 'suite', 'file'] as const)(
     'preserves invalid %s ADC diagnostics for Live connections',
     async (scope) => {
+      mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'host.json' });
       const { GoogleLiveProvider } = await import('../../../src/providers/google/live');
       for (const [filename, error] of [
         ['', 'Scoped GOOGLE_APPLICATION_CREDENTIALS is empty'],
@@ -241,6 +248,7 @@ describe('Google scoped ADC inputs', () => {
   });
 
   it('does not reuse a previous Live client when ADC is explicitly masked', async () => {
+    mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'host.json' });
     await cliState.withEnv({}, async () => {
       expect(
         await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }),
@@ -252,17 +260,17 @@ describe('Google scoped ADC inputs', () => {
     });
   });
 
-  it('preserves SDK discovery for an empty host ADC variable without weakening scoped masks', async () => {
+  it('preserves SDK discovery for empty ADC placeholders without host values to mask', async () => {
     mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: '' });
     vi.mocked(GoogleAuth).mockImplementation(function () {
       return { getClient: async () => makeClient('discovered') } as unknown as GoogleAuth;
     });
     await cliState.withEnv({}, async () => {
       expect(await getGoogleAccessToken()).toBe('discovered');
-      await expect(
-        getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' }),
-      ).rejects.toThrow('Scoped GOOGLE_APPLICATION_CREDENTIALS is empty');
-      expect(GoogleAuth).toHaveBeenCalledOnce();
+      expect(await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' })).toBe(
+        'discovered',
+      );
+      expect(GoogleAuth).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -479,15 +487,15 @@ describe('Google scoped ADC inputs', () => {
     });
     expect(GoogleAuth).toHaveBeenCalledTimes(2);
   });
-  it('keeps host-empty ADC discovery distinct from an explicit empty probe mask', async () => {
+  it('preserves ambient discovery for an explicit empty probe placeholder', async () => {
     mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: '' });
     await cliState.withEnv({}, async () => {
       await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
       expect(GoogleAuth).toHaveBeenCalledOnce();
       await expect(
         GoogleAuthManager.hasDefaultCredentials({ GOOGLE_APPLICATION_CREDENTIALS: '' }),
-      ).resolves.toBe(false);
-      expect(GoogleAuth).toHaveBeenCalledOnce();
+      ).resolves.toBe(true);
+      expect(GoogleAuth).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -186,12 +186,13 @@ interface BedrockAgentsOptions {
  */
 export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implements ApiProvider {
   protected override get responseCacheNamespace(): string | undefined {
-    return getAwsCredentialCacheNamespace(this.config, this.env);
+    return this.getClientState().cacheNamespace;
   }
 
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
   private readonly getClientState = createEnvironmentScopedState(
     () => ({
+      cacheNamespace: getAwsCredentialCacheNamespace(this.config, this.env),
       client: undefined as BedrockAgentRuntimeClient | undefined,
       initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
     }),

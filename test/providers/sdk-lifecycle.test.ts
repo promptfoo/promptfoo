@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
@@ -44,6 +48,18 @@ const providers = [
 ] as const;
 
 describe('SDK client lifecycle', () => {
+  it('does not take over SIGTERM for standalone SDK-only consumers', () => {
+    const source = pathToFileURL(path.resolve('src/providers/bedrock/index.ts')).href;
+    const script = `import { AwsBedrockCompletionProvider } from ${JSON.stringify(source)}; await new AwsBedrockCompletionProvider('fixture').getBedrockInstance(); process.kill(process.pid, 'SIGTERM');`;
+    const child = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '-e', script],
+      { encoding: 'utf8', timeout: 15000 },
+    );
+    expect(child.error).toBeUndefined();
+    expect(child.signal).toBe('SIGTERM');
+  });
+
   const mutableClients = [
     ['bedrock', providers[0][1], 'getBedrockInstance', 'bedrock'],
     ['sagemaker', providers[1][1], 'getSageMakerRuntimeInstance', 'sagemakerRuntime'],

@@ -14,6 +14,7 @@ import {
   getOpaqueCredentialCacheNamespace,
 } from '../../src/providers/credentialCache';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
+import { SageMakerEmbeddingProvider } from '../../src/providers/sagemaker';
 import { mockProcessEnv } from '../util/utils';
 
 let restore: (() => void) | undefined;
@@ -23,6 +24,20 @@ afterEach(() => {
 });
 
 describe('scoped SDK response cache compatibility', () => {
+  it('retains the exact released SageMaker embedding cache key', () => {
+    const provider = new SageMakerEmbeddingProvider('fixture-endpoint', {
+      config: {
+        region: 'us-east-1',
+        modelType: 'custom',
+        contentType: 'application/json',
+        acceptType: 'application/json',
+      },
+    });
+    expect(Reflect.get(provider, 'getCacheKey').call(provider, 'fixture input')).toBe(
+      'sagemaker:embedding:v1:fixture-endpoint:bda3c7ef0c3f3baa:25221529',
+    );
+  });
+
   it('keeps identical public identities stable in independently started processes', () => {
     const moduleUrl = pathToFileURL(path.resolve('src/providers/credentialCache.ts')).href;
     const script = `import { getCredentialCacheNamespace } from ${JSON.stringify(moduleUrl)}; process.stdout.write(getCredentialCacheNamespace(['fixture-access-key', 'profile']));`;
@@ -32,6 +47,27 @@ describe('scoped SDK response cache compatibility', () => {
       });
     expect(run()).toBe(run());
     expect(run()).toBe(getCredentialCacheNamespace(['fixture-access-key', 'profile']));
+  });
+
+  it('partitions configured SSO profiles only when a scoped file changes their identity', () => {
+    const config = { profile: 'fixture' };
+    expect(getAwsCredentialCacheNamespace(config)).toBeUndefined();
+    const first = getAwsCredentialCacheNamespace(config, {
+      AWS_CONFIG_FILE: '/fixture/first-config',
+    });
+    const second = getAwsCredentialCacheNamespace(config, {
+      AWS_CONFIG_FILE: '/fixture/second-config',
+    });
+    expect(first).not.toBe(second);
+    expect(
+      getAwsCredentialCacheNamespace(config, { AWS_CONFIG_FILE: '/fixture/first-config' }),
+    ).toBe(first);
+    expect(
+      getAwsCredentialCacheNamespace(
+        { accessKeyId: 'fixed', secretAccessKey: 'fixed' },
+        { AWS_CONFIG_FILE: '/fixture/first-config' },
+      ),
+    ).toBeUndefined();
   });
 
   it('keeps opaque identities isolated without persistent secret fingerprints', () => {

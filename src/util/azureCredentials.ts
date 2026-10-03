@@ -46,7 +46,17 @@ export async function createAzureCredential(
   const clientId = config.azureClientId ?? value('AZURE_CLIENT_ID');
   const clientSecret = config.azureClientSecret ?? value('AZURE_CLIENT_SECRET');
   const tenantId = config.azureTenantId ?? value('AZURE_TENANT_ID');
-  if (clientSecret !== undefined) {
+  const rejectHostMasks = (values: Record<string, string | undefined>) => {
+    const masked = Object.entries(values).find(
+      ([name, selected]) => selected === '' && process.env[name],
+    );
+    if (masked) {
+      throw new Error(
+        `Scoped ${masked[0]} is empty, but the Azure SDK would restore its host value. Supply an explicit scoped identity or remove the host value before evaluating.`,
+      );
+    }
+  };
+  if (clientSecret) {
     if (!clientId?.trim() || !clientSecret.trim() || !tenantId?.trim()) {
       throw new Error(
         'Scoped Azure service principal credentials are incomplete. Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET and AZURE_TENANT_ID together in the effective environment.',
@@ -65,12 +75,15 @@ export async function createAzureCredential(
       },
       {
         authorityHost,
-        sendCertificateChain: value('AZURE_CLIENT_SEND_CERTIFICATE_CHAIN') === 'true',
+        sendCertificateChain: ['true', '1'].includes(
+          value('AZURE_CLIENT_SEND_CERTIFICATE_CHAIN')?.toLowerCase() ?? '',
+        ),
       },
     );
   }
   const tokenFilePath = value('AZURE_FEDERATED_TOKEN_FILE');
   if (tokenFilePath) {
+    rejectHostMasks({ AZURE_CLIENT_ID: clientId, AZURE_TENANT_ID: tenantId });
     return new identity.WorkloadIdentityCredential({
       clientId,
       tenantId,
@@ -78,6 +91,15 @@ export async function createAzureCredential(
       authorityHost,
     });
   }
+  // The default chain reads these files directly from process.env and cannot
+  // represent a cleared scoped selector. Do not silently restore a host identity.
+  rejectHostMasks({
+    AZURE_CLIENT_ID: clientId,
+    AZURE_TENANT_ID: tenantId,
+    AZURE_CLIENT_SECRET: clientSecret,
+    AZURE_CLIENT_CERTIFICATE_PATH: certificatePath,
+    AZURE_FEDERATED_TOKEN_FILE: tokenFilePath,
+  });
   // AZURE_CLIENT_ID alone selects a user-assigned managed identity; it is not an
   // incomplete client-secret tuple. Keep the remaining developer credential chain.
   return new identity.DefaultAzureCredential({

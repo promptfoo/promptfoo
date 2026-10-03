@@ -81,6 +81,7 @@ interface FoundryClientState {
   projectClient?: Promise<AzureAIProjectClient>;
   agentPromise?: Promise<FoundryAgent>;
   resolvedAgent?: FoundryAgent;
+  cacheNamespace?: string;
 }
 
 const MAX_REQUEST_TIMEOUT_MS = 2_147_483_647;
@@ -293,7 +294,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   assistantConfig: NonNullable<AzureAssistantProviderOptions['config']>;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
-  private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({}));
+  private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({
+    cacheNamespace: this.selectResponseCacheNamespace(),
+  }));
   private warnedUnsupportedFields = new Set<string>();
 
   override async initialize(): Promise<void> {
@@ -320,9 +323,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private getResponseCacheNamespace(): string | undefined {
-    if (this.config.azureClientId && this.config.azureTenantId && this.config.azureClientSecret) {
-      return undefined;
-    }
+    return this.getClientState().cacheNamespace;
+  }
+
+  private selectResponseCacheNamespace(): string | undefined {
     const env = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), this.env);
     const names = [
       'AZURE_CLIENT_ID',
@@ -334,7 +338,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       'AZURE_CLIENT_SEND_CERTIFICATE_CHAIN',
       'AZURE_AUTHORITY_HOST',
     ];
-    if (!names.some((name) => env[name] !== undefined)) {
+    const hasConfiguredIdentity = [
+      this.config.azureClientId,
+      this.config.azureTenantId,
+      this.config.azureClientSecret,
+    ].some((value) => value !== undefined);
+    if (!hasConfiguredIdentity && !names.some((name) => env[name] !== undefined)) {
       return undefined;
     }
     return getCredentialCacheNamespace(
