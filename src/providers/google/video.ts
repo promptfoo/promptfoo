@@ -7,7 +7,6 @@ import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
-import { resolveProviderEnv } from '../env';
 import {
   determineGoogleVertexMode,
   getGoogleApiKey,
@@ -188,7 +187,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private getLocation(config: GoogleVideoOptions): string {
     return (
       config.region ||
-      (this.env?.GOOGLE_LOCATION ?? getEnvString('GOOGLE_LOCATION')) ||
+      getEnvString('GOOGLE_LOCATION') ||
+      this.env?.GOOGLE_LOCATION ||
       DEFAULT_LOCATION
     );
   }
@@ -216,7 +216,11 @@ export class GoogleVideoProvider implements ApiProvider {
 
   private async getClientWithCredentials(config: GoogleVideoOptions) {
     const credentials = loadCredentials(config.credentials);
-    const { client } = await getGoogleClient({ credentials, env: this.env });
+    const { client } = await getGoogleClient({
+      credentials,
+      env: this.env,
+      projectId: config.projectId,
+    });
     return client;
   }
 
@@ -857,11 +861,10 @@ export class GoogleVideoProvider implements ApiProvider {
     if (isVertexMode) {
       let projectId =
         effectiveConfig.projectId ||
-        resolveProviderEnv(this.env, [
-          'VERTEX_PROJECT_ID',
-          'GOOGLE_PROJECT_ID',
-          'GOOGLE_CLOUD_PROJECT',
-        ])?.value;
+        getEnvString('GOOGLE_CLOUD_PROJECT') ||
+        getEnvString('GOOGLE_PROJECT_ID') ||
+        this.env?.GOOGLE_CLOUD_PROJECT ||
+        this.env?.GOOGLE_PROJECT_ID;
 
       if (!projectId) {
         try {

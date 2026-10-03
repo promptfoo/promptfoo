@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -12,7 +11,6 @@ import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 import { AwsBedrockKnowledgeBaseProvider } from '../../src/providers/bedrock/knowledgeBase';
 import { NovaSonicProvider } from '../../src/providers/bedrock/nova-sonic';
-import { BedrockTokenProvider } from '../../src/providers/bedrock/tokenProvider';
 import {
   SageMakerCompletionProvider,
   SageMakerEmbeddingProvider,
@@ -45,9 +43,8 @@ afterEach(() => {
 
 // Use real SDK constructors and a local request-handler stub: no credential or model service calls.
 describe('scoped AWS SDK authentication', () => {
-  it('signs with each concurrent scope key pair without inheriting an ambient bearer or session token', async () => {
+  it('signs with each concurrent scope key pair while preserving the host session-token default', async () => {
     mockProcessEnv({
-      AWS_BEARER_TOKEN_BEDROCK: 'shell-bearer',
       AWS_SESSION_TOKEN: 'shell-session',
     });
     await Promise.all(
@@ -68,7 +65,7 @@ describe('scoped AWS SDK authentication', () => {
             });
             const request = handle.mock.calls[0][0];
             expect(request.headers.authorization).toContain(`Credential=${label}-access/`);
-            expect(request.headers['x-amz-security-token']).toBeUndefined();
+            expect(request.headers['x-amz-security-token']).toBe('shell-session');
           } finally {
             client.destroy();
           }
@@ -100,7 +97,7 @@ describe('scoped AWS SDK authentication', () => {
     }
   });
 
-  it('keeps provider credential tuples together through the actual loader', async () => {
+  it('preserves per-key provider and suite environment merging through the loader', async () => {
     const suite = { ...keys('suite'), AWS_SESSION_TOKEN: 'suite-session' };
     const provider = (await loadApiProvider('sagemaker:custom:fixture', {
       env: suite,
@@ -109,74 +106,21 @@ describe('scoped AWS SDK authentication', () => {
     expect(await provider.getCredentials()).toEqual({
       accessKeyId: 'provider-access',
       secretAccessKey: 'provider-secret',
+      sessionToken: 'suite-session',
     });
     const partial = (await loadApiProvider('sagemaker:custom:fixture', {
       env: suite,
       options: { env: { AWS_ACCESS_KEY_ID: 'partial-access' } },
     })) as SageMakerCompletionProvider;
-    await expect(partial.getCredentials()).rejects.toThrow('incomplete');
-    await expect(partial.getSageMakerRuntimeInstance()).rejects.toThrow('incomplete');
+    expect(await partial.getCredentials()).toEqual({
+      accessKeyId: 'partial-access',
+      secretAccessKey: 'suite-secret',
+      sessionToken: 'suite-session',
+    });
   });
 
-  it.each(['bedrock-agent:fixture', 'bedrock:agents:fixture'])(
-    'rejects unsupported scoped bearer authentication for %s',
-    async (id) => {
-      const provider = (await loadApiProvider(id, {
-        env: keys('suite'),
-        options: { env: { AWS_BEARER_TOKEN_BEDROCK: 'provider-bearer' } },
-      })) as AwsBedrockAgentsProvider;
-      await expect(
-        provider.getAgentRuntimeClient().then((client) => {
-          client.destroy();
-          return client;
-        }),
-      ).rejects.toThrow('Bedrock Agents do not support bearer');
-    },
-  );
-
-  it.each(['config', 'provider', 'suite', 'file'] as const)(
-    'rejects Knowledge Base %s bearer authentication before SDK credential discovery or transport',
-    async (scope) => {
-      const handle = vi
-        .spyOn(NodeHttpHandler.prototype, 'handle')
-        .mockRejectedValue(new Error('Unexpected transport'));
-      const env = { AWS_BEARER_TOKEN_BEDROCK: 'selected-bearer' };
-      for (const ambient of [false, true]) {
-        const restoreHost = mockProcessEnv(
-          ambient
-            ? keys('host')
-            : { AWS_ACCESS_KEY_ID: undefined, AWS_SECRET_ACCESS_KEY: undefined },
-        );
-        const provider = new AwsBedrockKnowledgeBaseProvider('fixture', {
-          config: {
-            knowledgeBaseId: 'fixture-kb',
-            region: 'us-east-1',
-            ...(scope === 'config' ? { apiKey: 'selected-bearer' } : {}),
-          },
-          env: scope === 'provider' ? env : undefined,
-        });
-        const credentials = vi.spyOn(provider, 'getCredentials');
-        const run = () => withCacheEnabled(false, () => provider.callApi('fixture'));
-        try {
-          await expect(
-            scope === 'suite'
-              ? cliState.withEnv(env, run)
-              : scope === 'file'
-                ? cliState.withEnvFileOverrides(env, run)
-                : run(),
-          ).rejects.toThrow('Knowledge Bases do not support bearer');
-          expect(credentials).not.toHaveBeenCalled();
-          expect(handle).not.toHaveBeenCalled();
-        } finally {
-          provider.knowledgeBaseClient?.destroy();
-          restoreHost();
-        }
-      }
-    },
-  );
-
   it('signs a Knowledge Base request with scoped AWS credentials ahead of an ambient bearer', async () => {
-    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     const provider = new AwsBedrockKnowledgeBaseProvider('fixture', {
       config: { knowledgeBaseId: 'fixture-kb', region: 'us-east-1' },
       env: keys('selected'),
@@ -202,22 +146,6 @@ describe('scoped AWS SDK authentication', () => {
       client.destroy();
     }
   });
-
-  it.each(['bedrock:video:amazon.nova-reel-v1:0', 'bedrock:video:luma.ray-v2:0'])(
-    'rejects bearer-only video authentication for %s before starting a job',
-    async (id) => {
-      const provider = await loadApiProvider(id, {
-        env: keys('suite'),
-        options: {
-          config: { s3OutputUri: 's3://fixture-bucket/videos/' },
-          env: { AWS_BEARER_TOKEN_BEDROCK: 'provider-bearer' },
-        },
-      });
-      expect(await provider.callApi('fixture video')).toMatchObject({
-        error: expect.stringContaining('requires AWS access credentials or a profile'),
-      });
-    },
-  );
 
   it('preserves Nova Sonic scoped credential validation errors', async () => {
     const provider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
@@ -308,30 +236,33 @@ describe('scoped AWS SDK authentication', () => {
         )
         .join('\n'),
     );
-    mockProcessEnv({ AWS_SHARED_CREDENTIALS_FILE: file, ...keys('host') });
+    mockProcessEnv({ AWS_SHARED_CREDENTIALS_FILE: '/absent-host-credentials', ...keys('host') });
     try {
       await Promise.all(
         ['a', 'b'].map((label) =>
-          cliState.withEnvFileOverrides({ AWS_PROFILE: label }, async () => {
-            const providers = [
-              new AwsBedrockCompletionProvider('anthropic.claude-v2'),
-              new SageMakerCompletionProvider('fixture', { config: { modelType: 'custom' } }),
-            ];
-            for (const provider of providers) {
-              const client =
-                provider instanceof AwsBedrockCompletionProvider
-                  ? await provider.getBedrockInstance()
-                  : await provider.getSageMakerRuntimeInstance();
-              try {
-                expect(await client.config.credentials()).toMatchObject({
-                  accessKeyId: `${label}-access`,
-                  secretAccessKey: `${label}-secret`,
-                });
-              } finally {
-                client.destroy();
+          cliState.withEnvFileOverrides(
+            { AWS_PROFILE: label, AWS_SHARED_CREDENTIALS_FILE: file },
+            async () => {
+              const providers = [
+                new AwsBedrockCompletionProvider('anthropic.claude-v2'),
+                new SageMakerCompletionProvider('fixture', { config: { modelType: 'custom' } }),
+              ];
+              for (const provider of providers) {
+                const client =
+                  provider instanceof AwsBedrockCompletionProvider
+                    ? await provider.getBedrockInstance()
+                    : await provider.getSageMakerRuntimeInstance();
+                try {
+                  expect(await client.config.credentials()).toMatchObject({
+                    accessKeyId: `${label}-access`,
+                    secretAccessKey: `${label}-secret`,
+                  });
+                } finally {
+                  client.destroy();
+                }
               }
-            }
-          }),
+            },
+          ),
         ),
       );
     } finally {
@@ -339,20 +270,50 @@ describe('scoped AWS SDK authentication', () => {
     }
   });
 
-  it.each([
-    { AWS_ACCESS_KEY_ID: '' },
-    { AWS_SECRET_ACCESS_KEY: '' },
-    { AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '', AWS_SESSION_TOKEN: '' },
-    { AWS_PROFILE: '' },
-  ])(
-    'rejects an explicitly empty provider auth context instead of borrowing suite keys: %j',
-    async (env) => {
-      const provider = (await loadApiProvider('sagemaker:custom:fixture', {
-        env: keys('suite'),
-        options: { env },
-      })) as SageMakerCompletionProvider;
-      await expect(provider.getCredentials()).rejects.toThrow(/incomplete|empty/);
-      await expect(provider.getSageMakerRuntimeInstance()).rejects.toThrow(/incomplete|empty/);
+  it('preserves ambient profile priority when only the shared credential filename is scoped', async () => {
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-file-only-profile-'));
+    const file = path.join(dir, 'credentials');
+    fs.writeFileSync(
+      file,
+      '[ambient-profile]\naws_access_key_id = profile-access\naws_secret_access_key = profile-secret\n',
+    );
+    mockProcessEnv({ AWS_PROFILE: 'ambient-profile', ...keys('host') });
+    try {
+      await cliState.withEnvFileOverrides({ AWS_SHARED_CREDENTIALS_FILE: file }, async () => {
+        const provider = new AwsBedrockCompletionProvider('fixture');
+        expect(await provider.getCredentials()).toBeUndefined();
+        const client = await provider.getBedrockInstance();
+        try {
+          expect(await client.config.credentials()).toMatchObject({
+            accessKeyId: 'profile-access',
+          });
+        } finally {
+          client.destroy();
+        }
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([true, false])(
+    'preserves empty-profile clearing with scoped keys=%s',
+    async (scopedKeys) => {
+      mockProcessEnv({ AWS_PROFILE: 'ignored-host-profile', ...keys('host') });
+      await cliState.withEnvFileOverrides(
+        { AWS_PROFILE: '', ...(scopedKeys ? keys('file') : {}) },
+        async () => {
+          const provider = new AwsBedrockCompletionProvider('fixture');
+          const client = await provider.getBedrockInstance();
+          try {
+            expect(await client.config.credentials()).toMatchObject({
+              accessKeyId: `${scopedKeys ? 'file' : 'host'}-access`,
+            });
+          } finally {
+            client.destroy();
+          }
+        },
+      );
     },
   );
 
@@ -376,6 +337,7 @@ describe('scoped AWS SDK authentication', () => {
             config: { modelType: 'custom', ...config },
             env: scope === 'provider' ? env : undefined,
           });
+
           await expect(provider.getCredentials()).rejects.toThrow(/incomplete|empty/);
           await expect(provider.getSageMakerRuntimeInstance()).rejects.toThrow(/incomplete|empty/);
         };
@@ -387,41 +349,6 @@ describe('scoped AWS SDK authentication', () => {
       }
     },
   );
-
-  it.each(['config', 'provider', 'suite', 'file'] as const)(
-    'rejects a whitespace-only native Bedrock bearer from %s',
-    async (scope) => {
-      mockProcessEnv({ ...keys('host'), AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
-      const env = { AWS_BEARER_TOKEN_BEDROCK: ' \t ' };
-      await cliState.withEnvFileOverrides(scope === 'file' ? env : {}, () =>
-        cliState.withEnv(scope === 'suite' ? env : {}, async () => {
-          const provider = new AwsBedrockCompletionProvider('anthropic.claude-v2', {
-            config: scope === 'config' ? { apiKey: ' \t ' } : {},
-            env: scope === 'provider' ? env : undefined,
-          });
-          await expect(provider.getCredentials()).rejects.toThrow('empty');
-          await expect(provider.getBedrockInstance()).rejects.toThrow('empty');
-        }),
-      );
-    },
-  );
-
-  it('rejects empty file credentials and an empty provider bearer before ambient SDK discovery', async () => {
-    mockProcessEnv({ ...keys('host'), AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
-    await cliState.withEnvFileOverrides(
-      { AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '' },
-      async () => {
-        await expect(
-          new AwsBedrockCompletionProvider('anthropic.claude-v2').getCredentials(),
-        ).rejects.toThrow('incomplete');
-      },
-    );
-    const provider = (await loadApiProvider('bedrock:anthropic.claude-v2', {
-      env: keys('suite'),
-      options: { env: { AWS_BEARER_TOKEN_BEDROCK: '' } },
-    })) as AwsBedrockCompletionProvider;
-    await expect(provider.getCredentials()).rejects.toThrow('empty');
-  });
 
   it.each([
     [
@@ -526,22 +453,7 @@ describe('scoped AWS SDK authentication', () => {
     },
   );
 
-  it('signs generated bearer tokens with each scope when one token provider is reused concurrently', async () => {
-    const provider = new BedrockTokenProvider({}, undefined, 'us-east-1');
-    const tokens = await Promise.all(
-      ['first', 'second'].map((label) => cliState.withEnv(keys(label), () => provider.getToken())),
-    );
-    for (const [index, label] of ['first', 'second'].entries()) {
-      const signed = Buffer.from(
-        tokens[index]!.replace(/^bedrock-api-key-/, ''),
-        'base64',
-      ).toString();
-      expect(signed).toContain(`X-Amz-Credential=${label}-access%2F`);
-    }
-  });
-
   it('forwards scoped credentials to the separate Nova Sonic SDK constructor', async () => {
-    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'shell-bearer' });
     const provider = new NovaSonicProvider('amazon.nova-sonic-v1:0', { env: keys('sonic') });
     const client = await Reflect.get(provider, 'getBedrockClient').call(provider);
     try {
@@ -555,7 +467,7 @@ describe('scoped AWS SDK authentication', () => {
     }
   });
   it.each(['bedrock', 'sagemaker'])(
-    'isolates %s response caches across SDK owners and preserves reuse, bypass and clearing',
+    'reuses %s responses for unchanged scoped credentials and honors bypass and clearing',
     async (kind) => {
       await cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory' }, () =>
         withCacheEnabled(true, async () => {
@@ -594,21 +506,20 @@ describe('scoped AWS SDK authentication', () => {
             cached: true,
           });
           expect(send).toHaveBeenCalledTimes(1);
-          // The same named profile can refer to rotated credentials; a new owner cannot
-          // reuse a previous owner's response without an established principal identity.
+          // A fresh provider with the same configured identity retains response-cache reuse.
           const second = makeProvider();
           expect(await second.callApi('same prompt')).toMatchObject({ output: 'fixture' });
-          expect(send).toHaveBeenCalledTimes(2);
+          expect(send).toHaveBeenCalledTimes(1);
           await withCacheEnabled(false, () => first.callApi('same prompt'));
-          expect(send).toHaveBeenCalledTimes(3);
+          expect(send).toHaveBeenCalledTimes(2);
           await clearCache();
           await first.callApi('same prompt');
-          expect(send).toHaveBeenCalledTimes(4);
+          expect(send).toHaveBeenCalledTimes(3);
         }),
       );
     },
   );
-  it('isolates embedding caches across SageMaker credential owners while reusing the same owner', async () => {
+  it('reuses embedding caches for unchanged SageMaker scoped credentials', async () => {
     await cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory' }, () =>
       withCacheEnabled(true, async () => {
         const send = vi.fn().mockResolvedValue({
@@ -631,7 +542,7 @@ describe('scoped AWS SDK authentication', () => {
         expect(await makeProvider().callEmbeddingApi('same input')).toMatchObject({
           embedding: [0.1, 0.2],
         });
-        expect(send).toHaveBeenCalledTimes(2);
+        expect(send).toHaveBeenCalledTimes(1);
       }),
     );
   });

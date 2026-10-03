@@ -5,12 +5,18 @@
  * This is extracted to avoid circular dependency issues.
  */
 
-import { createHash, randomUUID } from 'crypto';
+import { createHmac } from 'crypto';
 
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { getScopedAwsCredentialConfig, resolveAwsCredentials } from '../awsCredentials';
+import {
+  getAwsCredentialCacheNamespace,
+  getAwsCredentialProviderOptions,
+  getScopedAwsCredentialConfig,
+  resolveAwsCredentials,
+} from '../awsCredentials';
+import { getOpaqueCredentialCacheNamespace } from '../credentialCache';
 import { createEnvironmentScopedState } from '../scopedState';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
@@ -32,27 +38,68 @@ export interface BedrockOptions {
   endpoint?: string;
 }
 
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(canonicalize);
-  }
-  if (value && typeof value === 'object') {
-    const proto = Object.getPrototypeOf(value);
-    if (proto === Object.prototype || proto === null) {
-      return Object.fromEntries(
-        Object.entries(value)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([key, entry]) => [key, canonicalize(entry)]),
-      );
-    }
-  }
-  return value;
-}
+const BEDROCK_CACHE_KEY_HMAC_KEY = 'promptfoo:bedrock:cache-key:v1';
 
 function hashBedrockCacheValue(value: unknown) {
-  return createHash('sha256')
-    .update(JSON.stringify(canonicalize(value)) ?? '')
+  return createHmac('sha256', BEDROCK_CACHE_KEY_HMAC_KEY)
+    .update(JSON.stringify(value) ?? '')
     .digest('hex');
+}
+
+function getNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function fingerprintBedrockAuthValue(authSource: string, value: string, index: number) {
+  return createHmac('sha256', value)
+    .update(`${BEDROCK_CACHE_KEY_HMAC_KEY}:${authSource}:${index}`)
+    .digest('hex');
+}
+
+function getBedrockAuthCacheNamespace(authSource: string, values: (string | undefined)[]) {
+  return hashBedrockCacheValue([
+    authSource,
+    ...values.map((value, index) =>
+      value ? fingerprintBedrockAuthValue(authSource, value, index) : undefined,
+    ),
+  ]);
+}
+
+function createBedrockAuthCacheMetadata({ config }: { config: BedrockOptions }) {
+  const bearerConfig = getNonEmptyString(config.apiKey);
+  const bearerEnv = getNonEmptyString(getEnvString('AWS_BEARER_TOKEN_BEDROCK'));
+  const accessKeyId = getNonEmptyString(config.accessKeyId);
+  const secretAccessKey = getNonEmptyString(config.secretAccessKey);
+  const sessionToken = getNonEmptyString(config.sessionToken);
+  const profile = getNonEmptyString(config.profile);
+  const hasExplicitCredentials = Boolean(accessKeyId && secretAccessKey);
+  const authSource = hasExplicitCredentials
+    ? 'explicit-credentials'
+    : bearerConfig
+      ? 'bearer-config'
+      : bearerEnv
+        ? 'bearer-env'
+        : profile
+          ? 'profile'
+          : 'default';
+  const credentialNamespace =
+    authSource === 'bearer-config'
+      ? getBedrockAuthCacheNamespace(authSource, [bearerConfig])
+      : authSource === 'bearer-env'
+        ? getBedrockAuthCacheNamespace(authSource, [bearerEnv])
+        : authSource === 'explicit-credentials'
+          ? getBedrockAuthCacheNamespace(authSource, [accessKeyId, secretAccessKey, sessionToken])
+          : authSource === 'profile'
+            ? getBedrockAuthCacheNamespace(authSource, [profile])
+            : undefined;
+
+  return {
+    authSource,
+    credentialNamespace,
+    endpoint: config.endpoint,
+    hasExplicitCredentials,
+    hasSessionToken: hasExplicitCredentials && Boolean(sessionToken),
+  };
 }
 
 export function createBedrockCacheKeyHash({
@@ -61,20 +108,22 @@ export function createBedrockCacheKeyHash({
   region,
   cacheNamespace,
 }: {
-  config: Pick<BedrockOptions, 'endpoint'>;
+  config: BedrockOptions;
   params: unknown;
   region: string;
-  cacheNamespace: string;
+  cacheNamespace?: string;
 }) {
-  // The namespace is opaque and belongs to the SDK client owner. No credential,
-  // bearer token or profile contents enter a persistent cache fingerprint.
-  return `${hashBedrockCacheValue({ cacheNamespace, endpoint: config.endpoint })}:${hashBedrockCacheValue({ params, region })}`;
+  const authFingerprint = hashBedrockCacheValue(createBedrockAuthCacheMetadata({ config }));
+
+  return `${cacheNamespace ? `${cacheNamespace}:` : ''}${authFingerprint}:${hashBedrockCacheValue({
+    params,
+    region,
+  })}`;
 }
 
 export abstract class AwsBedrockGenericProvider {
   private readonly getSdkState = createEnvironmentScopedState(
     () => ({
-      namespace: randomUUID(),
       client: undefined as BedrockRuntime | undefined,
       initialization: undefined as Promise<BedrockRuntime> | undefined,
     }),
@@ -84,8 +133,16 @@ export abstract class AwsBedrockGenericProvider {
       state.client?.destroy();
     },
   );
-  protected get responseCacheNamespace(): string {
-    return this.getSdkState().namespace;
+  protected get responseCacheNamespace(): string | undefined {
+    const bearer = this.getApiKey();
+    if (bearer) {
+      // Keep the existing main fingerprint for config/file/ambient bearer tokens.
+      // A provider-only bearer is new here and lacks a safe public identity.
+      return bearer === (this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK'))
+        ? undefined
+        : getOpaqueCredentialCacheNamespace(bearer);
+    }
+    return getAwsCredentialCacheNamespace(this.config, this.env);
   }
   modelName: string;
   env?: EnvOverrides;
@@ -132,32 +189,23 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   protected getApiKey(): string | undefined {
-    const source = getScopedAwsCredentialConfig(this.config, this.env, true);
-    if (source) {
-      if (
-        [source.accessKeyId, source.secretAccessKey, source.sessionToken].some(
-          (value) => value !== undefined,
-        )
-      ) {
-        return undefined;
-      }
-      if (source.apiKey !== undefined && !source.apiKey.trim()) {
-        throw new Error(
-          'Scoped AWS_BEARER_TOKEN_BEDROCK is empty. Supply a bearer token or remove the scoped override.',
-        );
-      }
-      return source.apiKey;
-    }
-    return getEnvString('AWS_BEARER_TOKEN_BEDROCK');
+    return (
+      this.config.apiKey ||
+      this.env?.AWS_BEARER_TOKEN_BEDROCK ||
+      getEnvString('AWS_BEARER_TOKEN_BEDROCK')
+    );
   }
 
   protected getProfile(): string | undefined {
-    return getScopedAwsCredentialConfig(this.config, this.env, true)?.profile;
+    return getScopedAwsCredentialConfig(this.config, this.env)?.profile;
   }
 
   async getCredentials(): Promise<
     AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
   > {
+    if (this.config.accessKeyId && this.config.secretAccessKey) {
+      return resolveAwsCredentials(this.config, this.env);
+    }
     if (this.getApiKey()) {
       return undefined;
     }
@@ -169,13 +217,16 @@ export abstract class AwsBedrockGenericProvider {
     const profile = this.getProfile();
     const apiKey = this.getApiKey();
     return {
+      ...getAwsCredentialProviderOptions(this.env),
       ...(credentials ? { credentials } : {}),
-      ...(profile ? { profile } : {}),
-      ...(apiKey
-        ? { token: { token: apiKey }, authSchemePreference: ['httpBearerAuth'] }
-        : credentials || profile
-          ? { authSchemePreference: ['sigv4'] }
-          : {}),
+      ...(profile === undefined ? {} : { profile }),
+      ...(credentials
+        ? { authSchemePreference: ['sigv4'] }
+        : apiKey
+          ? { token: { token: apiKey }, authSchemePreference: ['httpBearerAuth'] }
+          : credentials || profile
+            ? { authSchemePreference: ['sigv4'] }
+            : {}),
     };
   }
 

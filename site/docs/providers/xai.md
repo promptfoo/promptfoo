@@ -638,8 +638,6 @@ xAI supports video generation through the Grok Imagine API. Two video models are
 - `xai:video:grok-imagine-video` - base model, $0.050/sec
 - `xai:video:grok-imagine-video-1.5` - latest model, $0.080/sec (aliases: `grok-imagine-video-1.5-preview`, `grok-imagine-video-1.5-2026-05-30`)
 
-Video caching is available only with the default API endpoint. Custom or regional endpoints always generate a fresh video.
-
 Example using the base model:
 
 ```yaml title="promptfooconfig.yaml"

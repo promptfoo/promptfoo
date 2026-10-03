@@ -6,8 +6,12 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
-import { getScopedAwsCredentialConfig, resolveAwsCredentials } from './awsCredentials';
-import { resolveProviderEnv } from './env';
+import {
+  getAwsCredentialCacheNamespace,
+  getAwsCredentialProviderOptions,
+  getScopedAwsCredentialConfig,
+  resolveAwsCredentials,
+} from './awsCredentials';
 import { createEnvironmentScopedState } from './scopedState';
 
 import type { EnvOverrides } from '../types/env';
@@ -95,7 +99,6 @@ interface SageMakerOptions extends ProviderOptions {
 abstract class SageMakerGenericProvider {
   private readonly getSdkState = createEnvironmentScopedState(
     () => ({
-      namespace: crypto.randomUUID(),
       client: undefined as any,
       runtimes: new Map<string, Promise<any>>(),
     }),
@@ -108,8 +111,8 @@ abstract class SageMakerGenericProvider {
       }
     },
   );
-  protected get responseCacheNamespace(): string {
-    return this.getSdkState().namespace;
+  protected get responseCacheNamespace(): string | undefined {
+    return getAwsCredentialCacheNamespace(this.config, this.env);
   }
   env?: EnvOverrides;
 
@@ -203,11 +206,12 @@ abstract class SageMakerGenericProvider {
         const profile = getScopedAwsCredentialConfig(this.config, this.env)?.profile;
 
         const runtime = new SageMakerRuntimeClient({
+          ...getAwsCredentialProviderOptions(this.env),
           region: runtimeRegion,
           maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
-          ...(profile ? { profile } : {}),
+          ...(profile === undefined ? {} : { profile }),
         });
 
         state.client = runtime;
@@ -228,7 +232,10 @@ abstract class SageMakerGenericProvider {
   getRegion(): string {
     return (
       this.config?.region ||
-      resolveProviderEnv(this.env, ['AWS_REGION', 'AWS_DEFAULT_REGION'])?.value ||
+      this.env?.AWS_REGION ||
+      getEnvString('AWS_REGION') ||
+      this.env?.AWS_DEFAULT_REGION ||
+      getEnvString('AWS_DEFAULT_REGION') ||
       'us-east-1'
     );
   }

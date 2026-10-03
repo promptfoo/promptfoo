@@ -3,7 +3,6 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { getRequestTimeoutMs } from '../shared';
-import { GoogleAuthManager } from './auth';
 import {
   createAuthCacheDiscriminator,
   geminiFormatAndSystemInstructions,
@@ -117,7 +116,15 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return GoogleAuthManager.getImageApiKey(this.config, this.env).apiKey;
+    return (
+      this.config.apiKey ||
+      getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
+      getEnvString('GEMINI_API_KEY') ||
+      this.env?.GOOGLE_API_KEY ||
+      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
+      this.env?.GEMINI_API_KEY
+    );
   }
 
   /**
@@ -147,13 +154,15 @@ export class GeminiImageProvider implements ApiProvider {
       return { error: sizeError };
     }
 
-    if (
-      GoogleAuthManager.determineVertexMode(this.config, this.env, [
-        'GOOGLE_API_KEY',
-        'GOOGLE_GENERATIVE_AI_API_KEY',
-        'GEMINI_API_KEY',
-      ])
-    ) {
+    // Check if we should use Vertex AI (when projectId is provided)
+    const projectId =
+      this.config.projectId ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      this.env?.GOOGLE_PROJECT_ID;
+
+    if (projectId) {
       return this.callVertexApi(prompt, context);
     }
 
@@ -231,12 +240,17 @@ export class GeminiImageProvider implements ApiProvider {
     const location = usesGlobalVertexEndpoint
       ? 'global'
       : this.config.region ||
-        (this.env?.GOOGLE_LOCATION ?? getEnvString('GOOGLE_LOCATION')) ||
+        getEnvString('GOOGLE_LOCATION') ||
+        this.env?.GOOGLE_LOCATION ||
         'us-central1';
 
     try {
       const credentials = loadCredentials(this.config.credentials);
-      const { client } = await getGoogleClient({ credentials, env: this.env });
+      const { client } = await getGoogleClient({
+        credentials,
+        env: this.env,
+        projectId: this.config.projectId,
+      });
       const projectId = await resolveProjectId(this.config, this.env);
 
       if (!projectId) {

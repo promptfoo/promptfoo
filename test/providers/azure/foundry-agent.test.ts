@@ -1605,9 +1605,7 @@ describe('AzureFoundryAgentProvider', () => {
       await provider.callApi(`weather in Paris ${secret}`);
 
       const cacheKey = mockCache.get.mock.calls[0][0] as string;
-      expect(cacheKey).toMatch(
-        /^azure_foundry_agent:weather-agent:[a-f0-9-]{36}:[a-f0-9]{64}:[a-f0-9]{64}$/,
-      );
+      expect(cacheKey).toMatch(/^azure_foundry_agent:weather-agent:[a-f0-9]{64}:[a-f0-9]{64}$/);
       expect(cacheKey).not.toContain(projectUrl);
       expect(cacheKey).not.toContain(secret);
       expect(cacheKey).not.toContain('weather in Paris');
@@ -1638,12 +1636,8 @@ describe('AzureFoundryAgentProvider', () => {
       await providerB.callApi(prompt);
 
       const [cacheKeyA, cacheKeyB] = mockCache.get.mock.calls.map(([key]) => key as string);
-      expect(cacheKeyA).toMatch(
-        /^azure_foundry_agent:weather-agent:[a-f0-9-]{36}:[a-f0-9]{64}:[a-f0-9]{64}$/,
-      );
-      expect(cacheKeyB).toMatch(
-        /^azure_foundry_agent:weather-agent:[a-f0-9-]{36}:[a-f0-9]{64}:[a-f0-9]{64}$/,
-      );
+      expect(cacheKeyA).toMatch(/^azure_foundry_agent:weather-agent:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKeyB).toMatch(/^azure_foundry_agent:weather-agent:[a-f0-9]{64}:[a-f0-9]{64}$/);
       expect(cacheKeyA).not.toBe(cacheKeyB);
       expect(cacheKeyA).not.toContain(projectUrl);
       expect(cacheKeyB).not.toContain(otherProjectUrl);

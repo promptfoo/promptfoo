@@ -32,7 +32,7 @@ class ProviderRegistry {
     });
   }
 
-  register(provider: CleanupProvider, scope?: object): void {
+  register(provider: CleanupProvider, scope: object | undefined = this.currentScope): void {
     this.providers.set(provider, scope);
 
     if (!this.shutdownRegistered) {

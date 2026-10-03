@@ -12,26 +12,13 @@
  */
 
 import cliState from '../../cliState';
-import { type EnvVarKey, getEnvOverrides, getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { resolveProviderEnv } from '../env';
 import type { GoogleAuthOptions } from 'google-auth-library';
 
-import type { EnvOverrides } from '../../contracts/env';
+import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
-
-const GOOGLE_PROJECT_ENV_KEYS: readonly string[] = [
-  'VERTEX_PROJECT_ID',
-  'GOOGLE_PROJECT_ID',
-  'GOOGLE_CLOUD_PROJECT',
-];
-const GOOGLE_MODE_ENV_KEYS = [
-  'GOOGLE_GENAI_USE_VERTEXAI',
-  ...GOOGLE_PROJECT_ENV_KEYS,
-  'GOOGLE_APPLICATION_CREDENTIALS',
-];
-const GOOGLE_API_KEY_ENV_KEYS = ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'] as const;
 
 // gcp-metadata (8.x) emits a `MetadataLookupWarning` of the form
 // `received unexpected error = ${err.message} code = ${code}` when the optional ADC probe cannot
@@ -143,7 +130,6 @@ export interface ApiKeyResult {
     | 'GOOGLE_API_KEY'
     | 'GEMINI_API_KEY'
     | 'PALM_API_KEY'
-    | 'GOOGLE_GENERATIVE_AI_API_KEY'
     | 'none';
 }
 
@@ -157,6 +143,7 @@ export interface ApiKeyResult {
  * - Conflict detection and warnings
  */
 export class GoogleAuthManager {
+  private static readonly ambientScope = {};
   private static credentialProbes = new WeakMap<
     object,
     { settings: string; result: Promise<boolean> }
@@ -165,8 +152,6 @@ export class GoogleAuthManager {
   /**
    * Get API key with proper priority order.
    *
-   * Environment scope takes priority; Vertex ADC wins over API keys in the same scope.
-   * API key aliases are checked in this order within each scope.
    * Priority (aligned with Python SDK):
    * 1. config.apiKey (explicit)
    * 2. VERTEX_API_KEY (Vertex mode only)
@@ -184,77 +169,57 @@ export class GoogleAuthManager {
     env?: EnvOverrides,
     isVertexMode: boolean = false,
   ): ApiKeyResult {
-    return this.resolveApiKey(
-      config,
-      env,
-      isVertexMode ? ['VERTEX_API_KEY', 'GOOGLE_API_KEY'] : GOOGLE_API_KEY_ENV_KEYS,
-      isVertexMode ? 'all' : 'none',
-    );
-  }
-
-  /** Explicit scoped ADC wins in Live; incidental host ADC must not hide an API key. */
-  static getLiveApiKey(config: CompletionOptions, env?: EnvOverrides): ApiKeyResult {
-    return this.resolveApiKey(config, env, ['GOOGLE_API_KEY', 'GEMINI_API_KEY'], 'scoped');
-  }
-
-  static getImageApiKey(config: CompletionOptions, env?: EnvOverrides): ApiKeyResult {
-    return this.resolveApiKey(
-      config,
-      env,
-      ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
-      'none',
-    );
-  }
-
-  private static resolveApiKey(
-    config: CompletionOptions,
-    env: EnvOverrides | undefined,
-    keys: readonly Exclude<ApiKeyResult['source'], 'config' | 'none'>[],
-    adcPriority: 'none' | 'scoped' | 'all',
-  ): ApiKeyResult {
+    // 1. Explicit config always wins
     if (config.apiKey) {
       return { apiKey: config.apiKey, source: 'config' };
     }
-    const ambient: EnvOverrides = {
-      ...Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),
-      GOOGLE_APPLICATION_CREDENTIALS: getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
-    };
-    // Select the scope before the alias; an empty value masks that name in lower scopes.
-    const masked = new Set<string>();
-    for (const layer of [env, getEnvOverrides(), getEnvOverrides('file'), ambient]) {
-      if (
-        (adcPriority === 'all' || (adcPriority === 'scoped' && layer !== ambient)) &&
-        layer?.GOOGLE_APPLICATION_CREDENTIALS !== undefined
-      ) {
-        return { apiKey: undefined, source: 'none' };
-      }
-      for (const source of keys) {
-        const apiKey = layer?.[source];
-        if (masked.has(source) || apiKey === undefined) {
-          continue;
-        }
-        masked.add(source);
-        if (!apiKey.trim()) {
-          continue;
-        }
-        if (source === 'VERTEX_API_KEY') {
-          logger.warn(
-            '[Google] VERTEX_API_KEY is not a standard SDK env var. Use GOOGLE_API_KEY instead.',
-          );
-        } else if (source === 'PALM_API_KEY') {
-          logger.warn('[Google] PALM_API_KEY is deprecated. Use GOOGLE_API_KEY instead.');
-        } else if (source === 'GEMINI_API_KEY') {
-          logger.debug(
-            '[Google] GEMINI_API_KEY is not a standard SDK env var. Consider using GOOGLE_API_KEY.',
-          );
-        } else if (adcPriority !== 'all' && layer?.GEMINI_API_KEY) {
-          logger.debug(
-            '[Google] Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.',
-          );
-        }
-        return { apiKey, source };
+
+    // 2. Vertex-specific API key (only in Vertex mode) - deprecated, not in SDK
+    if (isVertexMode) {
+      const vertexKey = env?.VERTEX_API_KEY || getEnvString('VERTEX_API_KEY');
+      if (vertexKey) {
+        logger.warn(
+          '[Google] VERTEX_API_KEY is not a standard SDK env var. Use GOOGLE_API_KEY instead.',
+        );
+        return { apiKey: vertexKey, source: 'VERTEX_API_KEY' };
       }
     }
+
+    // 3. GOOGLE_API_KEY (primary - SDK aligned)
+    const googleKey = env?.GOOGLE_API_KEY || getEnvString('GOOGLE_API_KEY');
+
+    // 4. GEMINI_API_KEY (secondary, AI Studio only - not in SDK, for backward compatibility)
+    const geminiKey = isVertexMode
+      ? undefined
+      : env?.GEMINI_API_KEY || getEnvString('GEMINI_API_KEY');
+
+    // 5. PALM_API_KEY (legacy, AI Studio only - deprecated)
+    const palmKey = isVertexMode ? undefined : env?.PALM_API_KEY || getEnvString('PALM_API_KEY');
+
+    // SDK alignment: note when both GOOGLE_API_KEY and GEMINI_API_KEY are set
+    // This is not an error - GOOGLE_API_KEY correctly takes precedence (SDK-aligned)
+    if (googleKey && geminiKey) {
+      logger.debug(
+        '[Google] Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.',
+      );
+    }
+
+    if (googleKey) {
+      return { apiKey: googleKey, source: 'GOOGLE_API_KEY' };
+    }
+
+    if (geminiKey) {
+      logger.debug(
+        '[Google] GEMINI_API_KEY is not a standard SDK env var. Consider using GOOGLE_API_KEY.',
+      );
+      return { apiKey: geminiKey, source: 'GEMINI_API_KEY' };
+    }
+
+    if (palmKey) {
+      logger.warn('[Google] PALM_API_KEY is deprecated. Use GOOGLE_API_KEY instead.');
+      return { apiKey: palmKey, source: 'PALM_API_KEY' };
+    }
+
     return { apiKey: undefined, source: 'none' };
   }
 
@@ -272,9 +237,8 @@ export class GoogleAuthManager {
     const isStrict = strictMutualExclusivity === true;
 
     // Check for Python SDK environment variables
-    const useVertexEnv =
-      env?.GOOGLE_GENAI_USE_VERTEXAI ?? getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
-    const cloudProject = env?.GOOGLE_CLOUD_PROJECT ?? getEnvString('GOOGLE_CLOUD_PROJECT');
+    const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
+    const cloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
 
     // SDK alignment: project/location and apiKey are mutually exclusive
     // Only applies to explicit config values, not env vars (matching SDK behavior)
@@ -316,7 +280,7 @@ export class GoogleAuthManager {
     // Vertex mode requires either API key or project ID
     if (vertexai && !apiKey && !projectId && !cloudProject && !credentials) {
       const hasAdc = Boolean(
-        env?.GOOGLE_APPLICATION_CREDENTIALS ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
+        env?.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_APPLICATION_CREDENTIALS,
       );
       if (!hasAdc) {
         logger.debug(
@@ -327,73 +291,59 @@ export class GoogleAuthManager {
     }
   }
 
-  /** Select a mode before flattening scopes; empty values mask only their own name. */
-  static getVertexModeFromEnv(
-    layers: readonly (EnvOverrides | undefined)[],
-    apiKeyNames: readonly string[] = GOOGLE_API_KEY_ENV_KEYS,
-  ): boolean | undefined {
-    const names = [...GOOGLE_MODE_ENV_KEYS, ...apiKeyNames];
-    const masked = new Set<string>();
-    for (const layer of layers) {
-      for (const name of names) {
-        const value = layer?.[name];
-        if (masked.has(name) || value === undefined) {
-          continue;
-        }
-        masked.add(name);
-        if (name === 'GOOGLE_GENAI_USE_VERTEXAI') {
-          if (value === 'true' || value === '1') {
-            logger.debug('[Google] Vertex AI mode enabled via GOOGLE_GENAI_USE_VERTEXAI');
-            return true;
-          }
-          if (value === 'false' || value === '0') {
-            return false;
-          }
-        } else if (name === 'GOOGLE_APPLICATION_CREDENTIALS' || value.trim()) {
-          return (
-            name === 'GOOGLE_APPLICATION_CREDENTIALS' || GOOGLE_PROJECT_ENV_KEYS.includes(name)
-          );
-        }
-      }
-    }
-    return undefined;
-  }
-
-  /** Explicit configuration wins; otherwise select project/ADC or API key within each scope. */
+  /**
+   * Determine if Vertex AI mode should be used.
+   *
+   * Priority:
+   * 1. Explicit vertexai config flag
+   * 2. GOOGLE_GENAI_USE_VERTEXAI env var (Python SDK compatibility)
+   * 3. Auto-detect from projectId/credentials presence
+   * 4. Default: false (Google AI Studio)
+   *
+   * @param config - Provider configuration
+   * @param env - Environment overrides
+   * @returns Whether to use Vertex AI mode
+   */
   static determineVertexMode(
     config: CompletionOptions & { vertexai?: boolean },
     env?: EnvOverrides,
-    apiKeyNames: readonly string[] = GOOGLE_API_KEY_ENV_KEYS,
   ): boolean {
+    // 1. Explicit config flag takes precedence
     if (config.vertexai !== undefined) {
       return config.vertexai;
     }
-    if (config.projectId || config.credentials) {
+
+    // 2. Python SDK env var
+    const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
+    if (useVertexEnv === 'true' || useVertexEnv === '1') {
+      logger.debug('[Google] Vertex AI mode enabled via GOOGLE_GENAI_USE_VERTEXAI');
       return true;
     }
-    if (config.apiKey) {
+    if (useVertexEnv === 'false' || useVertexEnv === '0') {
       return false;
     }
-    const names = [...GOOGLE_MODE_ENV_KEYS, ...apiKeyNames];
-    const mode =
-      this.getVertexModeFromEnv(
-        [
-          env,
-          getEnvOverrides(),
-          getEnvOverrides('file'),
-          // Empty host values are unset; scoped empty ADC was handled above.
-          Object.fromEntries(
-            names.map((name) => [name, getEnvString(name as EnvVarKey) || undefined]),
-          ),
-        ],
-        apiKeyNames,
-      ) ?? false;
-    if (mode) {
+
+    // 3. Auto-detect from config/env (explicit project/credentials suggests Vertex)
+    const hasProjectId = Boolean(
+      config.projectId ||
+        env?.VERTEX_PROJECT_ID ||
+        getEnvString('VERTEX_PROJECT_ID') ||
+        env?.GOOGLE_PROJECT_ID ||
+        getEnvString('GOOGLE_PROJECT_ID') ||
+        getEnvString('GOOGLE_CLOUD_PROJECT'),
+    );
+    const hasCredentials = Boolean(config.credentials);
+
+    if (hasProjectId || hasCredentials) {
       logger.debug(
-        '[Google] Auto-detected Vertex AI mode from projectId/credentials. Set vertexai: true/false explicitly to suppress this message.',
+        '[Google] Auto-detected Vertex AI mode from projectId/credentials. ' +
+          'Set vertexai: true/false explicitly to suppress this message.',
       );
+      return true;
     }
-    return mode;
+
+    // 4. Default: Google AI Studio mode
+    return false;
   }
 
   /**
@@ -595,17 +545,25 @@ export class GoogleAuthManager {
       scopes: config.scopes,
     });
 
-    const project = resolveProviderEnv(env, [
-      'VERTEX_PROJECT_ID',
-      'GOOGLE_PROJECT_ID',
-      'GOOGLE_CLOUD_PROJECT',
-    ]);
-    if (project && project.name !== 'GOOGLE_CLOUD_PROJECT' && !config.projectId) {
+    // Check for non-SDK env vars and warn
+    const vertexProjectId = env?.VERTEX_PROJECT_ID || getEnvString('VERTEX_PROJECT_ID');
+    const googleProjectId = env?.GOOGLE_PROJECT_ID || getEnvString('GOOGLE_PROJECT_ID');
+    const cloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
+
+    if (vertexProjectId && !config.projectId) {
       logger.debug(
-        `[Google] ${project.name} is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.`,
+        '[Google] VERTEX_PROJECT_ID is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.',
       );
     }
-    return config.projectId || project?.value || authProjectId || '';
+    if (googleProjectId && !config.projectId && !vertexProjectId) {
+      logger.debug(
+        '[Google] GOOGLE_PROJECT_ID is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.',
+      );
+    }
+
+    return (
+      config.projectId || vertexProjectId || googleProjectId || cloudProject || authProjectId || ''
+    );
   }
 
   /**
@@ -627,13 +585,17 @@ export class GoogleAuthManager {
     env?: EnvOverrides,
     hasApiKey?: boolean,
   ): string {
-    const region = resolveProviderEnv(env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION']);
-    if (region?.name === 'VERTEX_REGION' && !config.region) {
+    // Check for non-SDK env vars
+    const vertexRegion = env?.VERTEX_REGION || getEnvString('VERTEX_REGION');
+    const cloudLocation = getEnvString('GOOGLE_CLOUD_LOCATION');
+
+    if (vertexRegion && !config.region) {
       logger.debug(
         '[Google] VERTEX_REGION is not a standard SDK env var. Consider using GOOGLE_CLOUD_LOCATION.',
       );
     }
-    const configuredRegion = config.region || region?.value;
+
+    const configuredRegion = config.region || vertexRegion || cloudLocation;
 
     if (configuredRegion) {
       return configuredRegion;
@@ -655,7 +617,7 @@ export class GoogleAuthManager {
    * @returns True if ADC is available
    */
   static async hasDefaultCredentials(env?: EnvOverrides): Promise<boolean> {
-    const scope = cliState.envScope;
+    const scope = cliState.envScope ?? this.ambientScope;
     const resolvedEnv = {
       GOOGLE_APPLICATION_CREDENTIALS:
         env?.GOOGLE_APPLICATION_CREDENTIALS ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
@@ -686,7 +648,9 @@ export class GoogleAuthManager {
     return result;
   }
 
-  /** Clear invocation-owned credential discovery results. */
+  /**
+   * Clear internal auth detection caches (useful for testing).
+   */
   static clearCache(): void {
     this.credentialProbes = new WeakMap();
   }

@@ -1347,8 +1347,6 @@ Copy the project endpoint from your Foundry project overview:
 export AZURE_AI_PROJECT_URL="https://your-resource.services.ai.azure.com/api/projects/your-project"
 ```
 
-Foundry accepts a complete service principal (`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`) from provider/suite `env` or invocation env files, or the corresponding `azureClient*`/`azureTenantId` config fields. Keep all three values in one scope; empty or incomplete scoped principals are rejected. Without scoped credentials, the ambient `DefaultAzureCredential` chain applies.
-
 ### Basic Configuration
 
 Replace `my-foundry-agent` with your agent's name:
@@ -1488,7 +1486,7 @@ After a retry, totals are marked incomplete because Azure may not report usage f
 
 ### Caching
 
-Responses are cached by project, agent, request settings, and prompt within one provider instance and invocation environment. Calls with local callbacks, an explicit `maxPollTimeMs`, or conversation linkage bypass the cache. Use `--no-cache` to force fresh responses during testing.
+Responses are cached by project, agent, request settings, and prompt. Calls with local callbacks, an explicit `maxPollTimeMs`, or conversation linkage bypass the cache. Use `--no-cache` to force fresh responses during testing.
 
 ### Environment Variables
 

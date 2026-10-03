@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt } from '../../envars';
 import logger from '../../logger';
@@ -7,6 +5,11 @@ import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
+import {
+  getAwsCredentialCacheNamespace,
+  getAwsCredentialProviderOptions,
+  resolveAwsCredentials,
+} from '../awsCredentials';
 import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
@@ -77,6 +80,10 @@ export class AwsBedrockKnowledgeBaseProvider
   extends AwsBedrockGenericProvider
   implements ApiProvider
 {
+  protected override get responseCacheNamespace(): string | undefined {
+    return getAwsCredentialCacheNamespace(this.config, this.env);
+  }
+
   private injectedClient?: BedrockAgentRuntimeClient;
   get knowledgeBaseClient(): BedrockAgentRuntimeClient | undefined {
     return this.injectedClient ?? this.getClientState().client;
@@ -89,7 +96,6 @@ export class AwsBedrockKnowledgeBaseProvider
   }
   private readonly getClientState = createEnvironmentScopedState(
     () => ({
-      namespace: randomUUID(),
       client: undefined as BedrockAgentRuntimeClient | undefined,
       initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
     }),
@@ -99,9 +105,6 @@ export class AwsBedrockKnowledgeBaseProvider
       state.client?.destroy();
     },
   );
-  protected get responseCacheNamespace(): string {
-    return this.getClientState().namespace;
-  }
   kbConfig: BedrockKnowledgeBaseOptions;
 
   constructor(
@@ -134,19 +137,20 @@ export class AwsBedrockKnowledgeBaseProvider
     return `[Amazon Bedrock Knowledge Base Provider ${this.kbConfig.knowledgeBaseId}]`;
   }
 
+  override async getCredentials() {
+    return resolveAwsCredentials(this.config, this.env);
+  }
+
   async getKnowledgeBaseClient() {
     if (this.knowledgeBaseClient) {
       return this.knowledgeBaseClient;
     }
     const state = this.getClientState();
     return (state.initialization ??= (async () => {
-      if (this.getApiKey()) {
-        throw new Error(
-          'Bedrock Knowledge Bases do not support bearer token authentication. Configure AWS credentials or a profile instead.',
-        );
-      }
       // The Agent Runtime SDK uses SigV4; a custom handler is only needed for proxies.
-      const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
+      const apiKey = this.getApiKey();
+      const handler =
+        apiKey || hasProxyEnv() ? await createBedrockRequestHandler({ apiKey }) : undefined;
 
       const credentials = await this.getCredentials();
       try {
@@ -156,8 +160,9 @@ export class AwsBedrockKnowledgeBaseProvider
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
+          ...getAwsCredentialProviderOptions(this.env),
           ...(credentials ? { credentials } : {}),
-          ...(this.getProfile() ? { profile: this.getProfile() } : {}),
+          ...(this.getProfile() === undefined ? {} : { profile: this.getProfile() }),
         });
         state.client = client;
       } catch (err) {
@@ -266,7 +271,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     const cache = await getCache();
 
-    const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken', 'apiKey', 'profile'];
+    const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken'];
     const cacheConfig = {
       region: this.getRegion(),
       modelName: this.modelName,
@@ -277,7 +282,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
     // Earlier cached results did not apply configured generation parameters.
-    const cacheKey = `bedrock-kb:v2:${cacheNamespace}:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
+    const cacheKey = `bedrock-kb:v2:${cacheNamespace ? `${cacheNamespace}:` : ''}${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
       JSON.stringify({
         configStr,
         prompt,

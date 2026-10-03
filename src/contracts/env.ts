@@ -9,7 +9,6 @@ export const ProviderEnvOverridesSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().optional(),
   ANTHROPIC_CUSTOM_HEADERS: z.string().optional(),
-  ANTHROPIC_TEMPERATURE: z.string().optional(),
   ATLASCLOUD_API_KEY: z.string().optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_BEARER_TOKEN_BEDROCK: z.string().optional(),
@@ -22,6 +21,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_API_HOST: z.string().optional(),
   AZURE_API_KEY: z.string().optional(),
   AZURE_AUTHORITY_HOST: z.string().optional(),
+  AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
   AZURE_CLIENT_ID: z.string().optional(),
   AZURE_CLIENT_SECRET: z.string().optional(),
   AZURE_DEPLOYMENT_NAME: z.string().optional(),
@@ -70,7 +70,6 @@ export const ProviderEnvOverridesSchema = z.object({
   GOOGLE_PROJECT_ID: z.string().optional(),
   GOOGLE_LOCATION: z.string().optional(),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().optional(),
-  GOOGLE_GENAI_USE_VERTEXAI: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
   HELICONE_API_KEY: z.string().optional(),
@@ -121,14 +120,9 @@ export const ProviderEnvOverridesSchema = z.object({
   ORCAROUTER_API_KEY: z.string().optional(),
   PALM_API_HOST: z.string().optional(),
   PALM_API_KEY: z.string().optional(),
-  PORTKEY_API_BASE_URL: z.string().optional(),
   PORTKEY_API_KEY: z.string().optional(),
   PROMPTFOO_CA_CERT_PATH: z.string().optional(),
-  PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: z.string().optional(),
-  PROMPTFOO_DISABLE_TEMPLATING: z.string().optional(),
-  PROMPTFOO_MAX_CONCURRENCY: z.string().optional(),
   PROMPTFOO_PFX_CERT_PATH: z.string().optional(),
-  PROMPTFOO_TRACING_ENABLED: z.string().optional(),
   PROMPTFOO_PFX_PASSWORD: z.string().optional(),
   PROMPTFOO_JKS_CERT_PATH: z.string().optional(),
   PROMPTFOO_JKS_PASSWORD: z.string().optional(),
@@ -143,8 +137,8 @@ export const ProviderEnvOverridesSchema = z.object({
   SHAREPOINT_CLIENT_ID: z.string().optional(),
   SHAREPOINT_TENANT_ID: z.string().optional(),
   SLACK_BOT_TOKEN: z.string().optional(),
-  SNOWFLAKE_ACCOUNT_IDENTIFIER: z.string().optional(),
   TOGETHER_API_KEY: z.string().optional(),
+  TYPESAFE_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_BASE_URL: z.string().optional(),
   VERTEX_API_HOST: z.string().optional(),
@@ -164,6 +158,15 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_CONTENT_SAFETY_ENDPOINT: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_VERSION: z.string().optional(),
+  AWS_SHARED_CREDENTIALS_FILE: z.string().optional(),
+  AWS_CONFIG_FILE: z.string().optional(),
+  AWS_WEB_IDENTITY_TOKEN_FILE: z.string().optional(),
+  AWS_ROLE_ARN: z.string().optional(),
+  AWS_ROLE_SESSION_NAME: z.string().optional(),
+  AZURE_CLIENT_CERTIFICATE_PATH: z.string().optional(),
+  AZURE_CLIENT_CERTIFICATE_PASSWORD: z.string().optional(),
+  AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: z.string().optional(),
+  AZURE_FEDERATED_TOKEN_FILE: z.string().optional(),
   AWS_REGION: z.string().optional(),
   AWS_DEFAULT_REGION: z.string().optional(),
   AWS_SAGEMAKER_MAX_TOKENS: z.string().optional(),
@@ -173,14 +176,10 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-// These settings apply to the whole evaluation, not an individual provider.
-export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
-  AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
-});
-
 // The runtime schema silently strips unknown keys at parse time (zod's default
 // `z.object` mode). The type widens with `Record<string, string | undefined>`
 // so downstream code can read arbitrary template variables (e.g.,
 // `{{ env.MY_CUSTOM_VAR }}`) without a cast; callers that need to preserve
 // unknown keys must read them off the unparsed source object.
-export type EnvOverrides = z.infer<typeof EnvOverridesSchema> & Record<string, string | undefined>;
+export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
+  Record<string, string | undefined>;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EnvOverridesSchema } from '../contracts/env';
+import { ProviderEnvOverridesSchema } from '../contracts/env';
 import {
   BaseTokenUsageSchema,
   type NormalizedTokenUsage,
@@ -1179,7 +1179,7 @@ export const TestSuiteSchema = z.object({
   nunjucksFilters: NunjucksFilterMapSchema.optional(),
 
   // Envar overrides
-  env: EnvOverridesSchema.optional(),
+  env: ProviderEnvOverridesSchema.optional(),
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
@@ -1343,7 +1343,7 @@ export const TestSuiteConfigSchema = z.object({
   // Envvar overrides
   env: z
     .union([
-      EnvOverridesSchema,
+      ProviderEnvOverridesSchema,
       z.record(
         z.string(),
         z.union([

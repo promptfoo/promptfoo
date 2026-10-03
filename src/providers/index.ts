@@ -90,71 +90,34 @@ export async function loadApiProvider(
   const env = context.env ?? cliState.env;
   const basePath = context.basePath ?? cliState.basePath;
   return cliState.withBasePath(basePath, () =>
-    cliState.withEnv(env, () => createApiProvider(providerPath, { ...context, basePath, env })),
+    cliState.withEnv(env, () =>
+      createApiProvider(providerPath, { ...context, basePath, env }, context.env),
+    ),
   );
 }
 
 async function createApiProvider(
   providerPath: string,
   context: LoadApiProviderContext,
-  completeTemplateEnv?: EnvOverrides,
-  originalEnvLayers?: (EnvOverrides | undefined)[],
+  callerEnv: EnvOverrides | undefined,
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
 
   // Merge environment overrides: context.env (test suite level) is base,
   // options.env (provider-specific) takes precedence for per-provider customization
-  // Explicit templates address named variables, so they need the complete map.
-  // Alias precedence is only for implicit provider environment lookup.
-  const templateEnv = completeTemplateEnv ?? mergeProviderEnv('', env, options.env);
-  const renderTemplate = <T>(value: T): T =>
-    cliState.withEnv(templateEnv, () => renderEnvOnlyInObject(value, templateEnv));
-  const renderedProviderPath = renderTemplate(providerPath);
-  let mergedEnv = mergeProviderEnv(
-    renderedProviderPath,
-    ...(originalEnvLayers && /^(?:google|palm):live:/.test(renderedProviderPath)
-      ? originalEnvLayers
-      : [env, options.env]),
+  const renderedProviderPath = renderEnvOnlyInObject(
+    providerPath,
+    mergeProviderEnv('', env, options.env),
   );
+  const mergedEnv = mergeProviderEnv(renderedProviderPath, env, options.env);
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
-  const renderedConfig = options.config ? renderTemplate(options.config) : undefined;
-  const renderedId = options.id ? renderTemplate(options.id) : undefined;
-  if (/^(?:google|palm):(?:image:|video:|[^:]*-image)/.test(renderedProviderPath)) {
-    const { GoogleAuthManager } = await import('./google/auth');
-    const mode = GoogleAuthManager.getVertexModeFromEnv(
-      [...(originalEnvLayers ?? [env, options.env])].reverse(),
-      /^(?:google|palm):video:/.test(renderedProviderPath)
-        ? ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY']
-        : ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
-    );
-    // Preserve the selected environment mode without overriding explicit provider or prompt config.
-    if (mode !== undefined) {
-      mergedEnv = { ...mergedEnv, GOOGLE_GENAI_USE_VERTEXAI: String(mode) };
-    }
-  }
-  if (
-    renderedProviderPath.startsWith('vertex:') &&
-    renderedConfig?.expressMode === false &&
-    templateEnv?.GOOGLE_APPLICATION_CREDENTIALS !== undefined
-  ) {
-    // Forced OAuth must retain ADC even when a higher API key prunes the implicit auth group.
-    mergedEnv ??= {};
-    mergedEnv.GOOGLE_APPLICATION_CREDENTIALS = templateEnv.GOOGLE_APPLICATION_CREDENTIALS;
-  }
-
-  // Named selectors use the complete namespace, not implicit native-alias pruning.
-  const apiKeyEnvar = renderedConfig?.apiKeyEnvar;
-  if (
-    mergedEnv &&
-    templateEnv &&
-    typeof apiKeyEnvar === 'string' &&
-    Object.prototype.hasOwnProperty.call(templateEnv, apiKeyEnvar)
-  ) {
-    mergedEnv[apiKeyEnvar] = templateEnv[apiKeyEnvar];
-  }
+  const renderedConfig = options.config
+    ? renderEnvOnlyInObject(options.config, mergedEnv)
+    : undefined;
+  const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
 
   const providerOptions: ProviderOptions = {
     id: renderedId,
@@ -180,9 +143,9 @@ async function createApiProvider(
       );
     }
 
-    const cloudTemplateEnv = mergeProviderEnv('', templateEnv, cloudProvider.env, options.env);
-    const resolvedCloudPath = cliState.withEnv(cloudTemplateEnv, () =>
-      renderEnvOnlyInObject(cloudProvider.id, cloudTemplateEnv),
+    const resolvedCloudPath = renderEnvOnlyInObject(
+      cloudProvider.id,
+      mergeProviderEnv('', env, cloudProvider.env, options.env),
     );
 
     // Merge local config overrides with cloud provider config
@@ -213,16 +176,7 @@ async function createApiProvider(
       env: mergedOptions.env,
     };
 
-    const provider = await cliState.withEnv(mergedOptions.env, () =>
-      createApiProvider(
-        cloudProvider.id,
-        mergedContext,
-        cloudTemplateEnv,
-        originalEnvLayers
-          ? [cloudProvider.env, ...originalEnvLayers]
-          : [env, cloudProvider.env, options.env],
-      ),
-    );
+    const provider = await loadApiProvider(resolvedCloudPath, mergedContext);
     // Preserve the target already fetched above for per-evaluation grading context.
     provider.config ??= {};
     provider.config.linkedTargetId ??= renderedProviderPath;
@@ -244,44 +198,32 @@ async function createApiProvider(
       );
     }
 
-    const fileProviderId = fileContent.id;
-    invariant(fileProviderId, `Provider config ${relativePath} must have an id`);
+    invariant(fileContent.id, `Provider config ${relativePath} must have an id`);
     logger.info('Loaded provider from config file', {
       providerConfigPath: relativePath,
       providerId: fileContent.id,
     });
 
-    const fileTemplateEnv = mergeProviderEnv('', templateEnv, fileContent.env, options.env);
-    const resolvedFilePath = cliState.withEnv(fileTemplateEnv, () =>
-      renderEnvOnlyInObject(fileProviderId, fileTemplateEnv),
+    const resolvedFilePath = renderEnvOnlyInObject(
+      fileContent.id,
+      mergeProviderEnv('', env, fileContent.env, callerEnv, options.env),
     );
-    // Provider files own their defaults; Codex SDK explicitly gives suite key aliases precedence.
-    const mergedFileEnv = mergeProviderEnv(resolvedFilePath, env, fileContent.env, options.env);
-    if (mergedFileEnv && /^openai:(?:codex-sdk|codex)(?::|$)/.test(resolvedFilePath)) {
-      const aliases = [fileContent.env, env, options.env].map(
-        (scope) =>
-          scope && { OPENAI_API_KEY: scope.OPENAI_API_KEY, CODEX_API_KEY: scope.CODEX_API_KEY },
-      );
-      delete mergedFileEnv.OPENAI_API_KEY;
-      delete mergedFileEnv.CODEX_API_KEY;
-      Object.assign(mergedFileEnv, mergeProviderEnv(resolvedFilePath, ...aliases));
-    }
-
-    return cliState.withEnv(mergedFileEnv, () =>
-      createApiProvider(
-        fileProviderId,
-        {
-          basePath,
-          env: mergedFileEnv,
-          options: { ...fileContent, env: mergedFileEnv },
-        },
-        fileTemplateEnv,
-        // Inner wrapper defaults remain below the already combined outer scopes.
-        originalEnvLayers
-          ? [fileContent.env, ...originalEnvLayers]
-          : [env, fileContent.env, options.env],
-      ),
+    // Explicit callers can override file defaults. An inherited evaluation environment
+    // remains below file defaults, as it does for files expanded by loadApiProviders.
+    const mergedFileEnv = mergeProviderEnv(
+      resolvedFilePath,
+      env,
+      fileContent.env,
+      callerEnv,
+      options.env,
     );
+    return loadApiProvider(resolvedFilePath, {
+      basePath,
+      options: {
+        ...fileContent,
+        env: mergedFileEnv,
+      },
+    });
   }
 
   for (const factory of await getProviderFactories(renderedProviderPath)) {
@@ -292,7 +234,7 @@ async function createApiProvider(
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;
-      ret.label ||= renderTemplate(options.label || '');
+      ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
       return ret;
     }
   }

@@ -68,8 +68,8 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     const promptApiKey =
       promptConfig?.apiKey ??
       (promptConfig?.apiKeyEnvar
-        ? (this.env?.[promptConfig.apiKeyEnvar as keyof EnvOverrides] ??
-          getEnvString(promptConfig.apiKeyEnvar as EnvVarKey))
+        ? (getEnvString(promptConfig.apiKeyEnvar as EnvVarKey) ??
+          this.env?.[promptConfig.apiKeyEnvar as keyof EnvOverrides])
         : undefined);
     const effectiveApiKey = promptApiKey ?? this.getApiKey();
 

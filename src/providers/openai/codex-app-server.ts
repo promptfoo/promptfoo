@@ -8,7 +8,7 @@ import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@op
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { getProcessEnv } from '../../envars';
+import { getEnvString, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
@@ -25,7 +25,6 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
-import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -1265,7 +1264,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   getApiKey(config: CodexAppServerConfig = this.config): string | undefined {
-    return resolveProviderApiKey(config, this.env, ['OPENAI_API_KEY', 'CODEX_API_KEY']);
+    return (
+      config.apiKey ||
+      this.env?.OPENAI_API_KEY ||
+      this.env?.CODEX_API_KEY ||
+      getEnvString('OPENAI_API_KEY') ||
+      getEnvString('CODEX_API_KEY')
+    );
   }
 
   requiresApiKey(): boolean {

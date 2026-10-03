@@ -1,7 +1,6 @@
 import { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ProviderOptionsSchema } from '../../../src/validators/providers';
 
 const mockRun = vi.hoisted(() => vi.fn());
 const mockGetOrCreateTrace = vi.hoisted(() => vi.fn(async (fn: () => Promise<unknown>) => fn()));
@@ -154,7 +153,6 @@ import {
 import { Manifest, SandboxAgent } from '@openai/agents/sandbox';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
-import logger from '../../../src/logger';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import {
   loadAgentDefinition,
@@ -1289,44 +1287,6 @@ describe('OpenAiAgentsProvider', () => {
 
     expect(mockRun.mock.calls[0][2].sessionInputCallback).toBe(sessionInputCallback);
   });
-
-  it.each(['suite', 'file'] as const)(
-    'reads tracing enablement from the %s layer',
-    async (layer) => {
-      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
-        config: { agent: { name: 'Scoped Agent', instructions: 'Return a test answer.' } },
-      });
-      const run =
-        layer === 'suite'
-          ? cliState.withEnv.bind(cliState)
-          : cliState.withEnvFileOverrides.bind(cliState);
-      await run({ PROMPTFOO_TRACING_ENABLED: 'true' }, () => provider.callApi('hello'));
-      expect(logger.debug).toHaveBeenCalledWith('[AgentsProvider] Setting up tracing');
-    },
-  );
-
-  it.each([
-    ['true', 'false', true],
-    ['false', 'true', false],
-    ['', 'true', false],
-  ])(
-    'retains provider tracing=%s over suite tracing=%s',
-    async (providerValue, suiteValue, enabled) => {
-      const provider = new OpenAiAgentsProvider(
-        'gpt-5-mini',
-        ProviderOptionsSchema.parse({
-          config: { agent: { name: 'Scoped Agent', instructions: 'Return a test answer.' } },
-          env: { PROMPTFOO_TRACING_ENABLED: providerValue },
-        }),
-      );
-      await cliState.withEnv({ PROMPTFOO_TRACING_ENABLED: suiteValue }, () =>
-        provider.callApi('hello'),
-      );
-      expect(logger.debug).toHaveBeenCalledWith(
-        enabled ? '[AgentsProvider] Setting up tracing' : '[AgentsProvider] Tracing not enabled',
-      );
-    },
-  );
 
   it('adds the Promptfoo trace exporter without replacing existing processors', async () => {
     vi.resetModules();

@@ -1,7 +1,6 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -132,7 +131,8 @@ export class AI21ChatCompletionProvider implements ApiProvider {
   getApiUrl(): string {
     return (
       this.config.apiBaseUrl ||
-      resolveProviderEnv(this.env, ['AI21_API_BASE_URL'])?.value ||
+      this.env?.AI21_API_BASE_URL ||
+      getEnvString('AI21_API_BASE_URL') ||
       this.getApiUrlDefault()
     );
   }
@@ -142,11 +142,15 @@ export class AI21ChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
-      : undefined;
+    logger.debug(`AI21 apiKeyenvar: ${this.config.apiKeyEnvar}`);
     return (
-      this.config.apiKey || (namedKey ?? this.env?.AI21_API_KEY ?? getEnvString('AI21_API_KEY'))
+      this.config.apiKey ||
+      (this.config?.apiKeyEnvar
+        ? getEnvString(this.config.apiKeyEnvar) ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.AI21_API_KEY ||
+      getEnvString('AI21_API_KEY')
     );
   }
 
@@ -193,6 +197,8 @@ export class AI21ChatCompletionProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {

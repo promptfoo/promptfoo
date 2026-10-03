@@ -11,7 +11,6 @@ import {
 } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { withGenAIToolSpan } from '../tracing';
-import { GoogleAuthManager } from './auth';
 import { GOOGLE_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -296,7 +295,8 @@ export class GoogleLiveProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return GoogleAuthManager.getLiveApiKey(this.config, this.env).apiKey;
+    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
+    return this.config.apiKey || getEnvString('GOOGLE_API_KEY') || getEnvString('GEMINI_API_KEY');
   }
 
   /**

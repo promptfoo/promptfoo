@@ -10,44 +10,80 @@ interface AzureCredentialConfig {
   azureAuthorityHost?: string;
 }
 
-/** Bind scoped service principals without changing the ambient Azure credential chain. */
+/** Forward scoped Azure auth inputs while retaining ambient developer and managed identity discovery. */
 export async function createAzureCredential(
   config: AzureCredentialConfig = {},
   env?: EnvOverrides,
 ): Promise<TokenCredential> {
   const identity = await import('@azure/identity');
-  const sources = [
-    {
-      clientId: config.azureClientId,
-      clientSecret: config.azureClientSecret,
-      tenantId: config.azureTenantId,
-    },
-    ...[env, getEnvOverrides(), getEnvOverrides('file')].map((layer) => ({
-      clientId: layer?.AZURE_CLIENT_ID,
-      clientSecret: layer?.AZURE_CLIENT_SECRET,
-      tenantId: layer?.AZURE_TENANT_ID,
-    })),
+  const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
+  const names = [
+    'AZURE_CLIENT_ID',
+    'AZURE_CLIENT_SECRET',
+    'AZURE_TENANT_ID',
+    'AZURE_CLIENT_CERTIFICATE_PATH',
+    'AZURE_CLIENT_CERTIFICATE_PASSWORD',
+    'AZURE_CLIENT_SEND_CERTIFICATE_CHAIN',
+    'AZURE_FEDERATED_TOKEN_FILE',
   ];
   const selectedAuthorityHost =
     config.azureAuthorityHost ?? env?.AZURE_AUTHORITY_HOST ?? getEnvString('AZURE_AUTHORITY_HOST');
-  // Pass the default explicitly so an empty mask cannot trigger SDK host rediscovery.
   const authorityHost =
     selectedAuthorityHost === ''
       ? identity.AzureAuthorityHosts.AzurePublicCloud
       : selectedAuthorityHost;
-  const source = sources.find(({ clientId, clientSecret, tenantId }) =>
-    [clientId, clientSecret, tenantId].some((value) => value !== undefined),
-  );
-  if (source) {
-    const { clientId, clientSecret, tenantId } = source;
-    if (!clientId?.trim() || !clientSecret?.trim() || !tenantId?.trim()) {
+  const hasScopedIdentity =
+    names.some((key) => scoped[key] !== undefined) ||
+    [config.azureClientId, config.azureClientSecret, config.azureTenantId].some(
+      (value) => value !== undefined,
+    );
+  if (!hasScopedIdentity) {
+    return authorityHost
+      ? new identity.DefaultAzureCredential({ authorityHost })
+      : new identity.DefaultAzureCredential();
+  }
+  const value = (key: string) => scoped[key] ?? getEnvString(key);
+  const clientId = config.azureClientId ?? value('AZURE_CLIENT_ID');
+  const clientSecret = config.azureClientSecret ?? value('AZURE_CLIENT_SECRET');
+  const tenantId = config.azureTenantId ?? value('AZURE_TENANT_ID');
+  if (clientSecret !== undefined) {
+    if (!clientId?.trim() || !clientSecret.trim() || !tenantId?.trim()) {
       throw new Error(
-        'Scoped Azure service principal credentials are incomplete. Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET and AZURE_TENANT_ID together in the same configuration scope.',
+        'Scoped Azure service principal credentials are incomplete. Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET and AZURE_TENANT_ID together in the effective environment.',
       );
     }
     return new identity.ClientSecretCredential(tenantId, clientId, clientSecret, { authorityHost });
   }
-  return authorityHost
-    ? new identity.DefaultAzureCredential({ authorityHost })
-    : new identity.DefaultAzureCredential();
+  const certificatePath = value('AZURE_CLIENT_CERTIFICATE_PATH');
+  if (certificatePath && clientId && tenantId) {
+    return new identity.ClientCertificateCredential(
+      tenantId,
+      clientId,
+      {
+        certificatePath,
+        certificatePassword: value('AZURE_CLIENT_CERTIFICATE_PASSWORD'),
+      },
+      {
+        authorityHost,
+        sendCertificateChain: value('AZURE_CLIENT_SEND_CERTIFICATE_CHAIN') === 'true',
+      },
+    );
+  }
+  const tokenFilePath = value('AZURE_FEDERATED_TOKEN_FILE');
+  if (tokenFilePath) {
+    return new identity.WorkloadIdentityCredential({
+      clientId,
+      tenantId,
+      tokenFilePath,
+      authorityHost,
+    });
+  }
+  // AZURE_CLIENT_ID alone selects a user-assigned managed identity; it is not an
+  // incomplete client-secret tuple. Keep the remaining developer credential chain.
+  return new identity.DefaultAzureCredential({
+    managedIdentityClientId: clientId,
+    workloadIdentityClientId: clientId,
+    tenantId,
+    authorityHost,
+  });
 }

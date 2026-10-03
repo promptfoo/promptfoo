@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import cliState from '../../../src/cliState';
 import { BedrockTokenProvider } from '../../../src/providers/bedrock/tokenProvider';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -31,54 +30,6 @@ describe('BedrockTokenProvider', () => {
     restoreEnv?.();
     restoreEnv = undefined;
     vi.resetAllMocks();
-  });
-
-  it.each(
-    ['provider', 'suite', 'file'].flatMap((scope) =>
-      ['', ' \t '].map((value) => ({ scope, value })),
-    ),
-  )(
-    'rejects blank $scope credential masks before using lower credentials: $value',
-    async ({ scope, value }) => {
-      const restore = mockProcessEnv({
-        AWS_BEARER_TOKEN_BEDROCK: 'host-token',
-        AWS_ACCESS_KEY_ID: 'host-key',
-        AWS_SECRET_ACCESS_KEY: 'host-secret',
-      });
-      try {
-        for (const key of ['AWS_BEARER_TOKEN_BEDROCK', 'AWS_ACCESS_KEY_ID', 'AWS_PROFILE']) {
-          const env = { [key]: value };
-          await cliState.withEnvFileOverrides(scope === 'file' ? env : {}, () =>
-            cliState.withEnv(scope === 'suite' ? env : {}, async () => {
-              const provider = new BedrockTokenProvider(
-                {},
-                scope === 'provider' ? env : undefined,
-                'us-east-1',
-              );
-              await expect(provider.getToken()).rejects.toThrow(/empty|incomplete/);
-              expect(getTokenProvider).not.toHaveBeenCalled();
-            }),
-          );
-        }
-      } finally {
-        restore();
-      }
-    },
-  );
-
-  it('keeps scoped key credentials ahead of a lower bearer token', async () => {
-    await cliState.withEnv({ AWS_BEARER_TOKEN_BEDROCK: 'suite-token' }, async () => {
-      const provider = new BedrockTokenProvider(
-        {},
-        { AWS_ACCESS_KEY_ID: 'provider-key', AWS_SECRET_ACCESS_KEY: 'provider-secret' },
-        'us-east-1',
-      );
-      await expect(provider.getToken()).resolves.toBe('generated-token');
-      expect(getTokenProvider).toHaveBeenCalledWith({
-        region: 'us-east-1',
-        credentials: { accessKeyId: 'provider-key', secretAccessKey: 'provider-secret' },
-      });
-    });
   });
 
   it('prefers a configured bearer token without loading the generator', async () => {
@@ -140,18 +91,7 @@ describe('BedrockTokenProvider', () => {
         },
       );
 
-      it.each(['accessKeyId', 'secretAccessKey', 'sessionToken', 'profile'])(
-        'rejects explicitly empty or whitespace %s before selecting a lower token',
-        async (key) => {
-          for (const value of ['', '   ']) {
-            const provider = new BedrockTokenProvider({ [key]: value }, env, 'us-east-1');
-            await expect(provider.getToken()).rejects.toThrow(/empty|incomplete/);
-          }
-          expect(getTokenProvider).not.toHaveBeenCalled();
-        },
-      );
-
-      it.each([undefined, '{{ env.MISSING }}'])(
+      it.each([undefined, '', '   ', '{{ env.MISSING }}'])(
         'keeps environment fallback for unconfigured AWS fields (%s)',
         async (value) => {
           const provider = new BedrockTokenProvider(
@@ -273,32 +213,6 @@ describe('BedrockTokenProvider', () => {
       restore();
     }
   });
-
-  it.each(
-    ['', ' \t '].flatMap((profile) => [false, true].map((hasKeys) => ({ profile, hasKeys }))),
-  )(
-    'ignores blank ambient profiles ($profile), with static keys: $hasKeys',
-    async ({ profile, hasKeys }) => {
-      const restore = mockProcessEnv({
-        AWS_PROFILE: profile,
-        AWS_ACCESS_KEY_ID: hasKeys ? 'ambient-key' : undefined,
-        AWS_SECRET_ACCESS_KEY: hasKeys ? 'ambient-secret' : undefined,
-      });
-      try {
-        await expect(new BedrockTokenProvider({}, undefined, 'us-east-1').getToken()).resolves.toBe(
-          'generated-token',
-        );
-        expect(getTokenProvider).toHaveBeenCalledExactlyOnceWith({
-          region: 'us-east-1',
-          ...(hasKeys && {
-            credentials: { accessKeyId: 'ambient-key', secretAccessKey: 'ambient-secret' },
-          }),
-        });
-      } finally {
-        restore();
-      }
-    },
-  );
 
   it('rejects a partial config tuple instead of filling it from another source', async () => {
     const provider = new BedrockTokenProvider(

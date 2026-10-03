@@ -9,7 +9,9 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 
+import { FilesystemBlobStorageProvider } from '../blobs/filesystemProvider';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 
@@ -25,28 +27,6 @@ const MEDIA_SUBDIR = 'media';
 const HASH_INDEX_FILE = 'hash-index.json';
 
 /**
- * Get file extension from content type
- */
-function getExtensionFromContentType(contentType: string): string {
-  const typeMap: Record<string, string> = {
-    'audio/wav': 'wav',
-    'audio/mp3': 'mp3',
-    'audio/mpeg': 'mp3',
-    'audio/ogg': 'ogg',
-    'audio/webm': 'webm',
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/jpg': 'jpg',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-    'video/mp4': 'mp4',
-    'video/webm': 'webm',
-    'video/ogg': 'ogv',
-  };
-  return typeMap[contentType] || 'bin';
-}
-
-/**
  * Compute SHA-256 hash of data
  */
 function computeHash(data: Buffer): string {
@@ -59,14 +39,25 @@ function computeHash(data: Buffer): string {
 export class LocalFileSystemProvider implements MediaStorageProvider {
   readonly providerId = 'local';
   private basePath: string;
-  private hashIndexPath: string;
-  private hashIndex: Map<string, string> = new Map();
+  private readonly hashIndex: ReadonlyMap<string, string>;
+  private blobProvider?: FilesystemBlobStorageProvider;
+
+  private get blobs(): FilesystemBlobStorageProvider {
+    return (this.blobProvider ??= new FilesystemBlobStorageProvider({
+      basePath: path.join(this.basePath, 'blob-data'),
+    }));
+  }
+
+  private blobHash(key: string): string {
+    const hash = key.slice('blob/'.length);
+    this.blobs.getFilePath(hash);
+    return hash;
+  }
 
   constructor(config: LocalStorageConfig = {}) {
     this.basePath = config.basePath || path.join(getConfigDirectoryPath(true), MEDIA_SUBDIR);
-    this.hashIndexPath = path.join(this.basePath, HASH_INDEX_FILE);
     this.ensureDirectory();
-    this.loadHashIndex();
+    this.hashIndex = this.loadHashIndex();
   }
 
   /**
@@ -80,32 +71,22 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   }
 
   /**
-   * Load the hash index from disk
+   * Load legacy lookup entries without rewriting the index. New writes use blob paths.
    */
-  private loadHashIndex(): void {
+  private loadHashIndex(): ReadonlyMap<string, string> {
+    const indexPath = path.join(this.basePath, HASH_INDEX_FILE);
     try {
-      if (fs.existsSync(this.hashIndexPath)) {
-        const data = fs.readFileSync(this.hashIndexPath, 'utf8');
+      if (fs.existsSync(indexPath)) {
+        const data = fs.readFileSync(indexPath, 'utf8');
         const parsed = JSON.parse(data);
-        this.hashIndex = new Map(Object.entries(parsed));
-        logger.debug(`[LocalStorage] Loaded hash index with ${this.hashIndex.size} entries`);
+        const index = new Map<string, string>(Object.entries(parsed));
+        logger.debug(`[LocalStorage] Loaded hash index with ${index.size} entries`);
+        return index;
       }
     } catch (error) {
       logger.warn(`[LocalStorage] Failed to load hash index, starting fresh`, { error });
-      this.hashIndex = new Map();
     }
-  }
-
-  /**
-   * Save the hash index to disk
-   */
-  private async saveHashIndex(): Promise<void> {
-    try {
-      const data = JSON.stringify(Object.fromEntries(this.hashIndex), null, 2);
-      await fsPromises.writeFile(this.hashIndexPath, data, 'utf8');
-    } catch (error) {
-      logger.warn(`[LocalStorage] Failed to save hash index`, { error });
-    }
+    return new Map();
   }
 
   /**
@@ -124,22 +105,12 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     return targetPath;
   }
 
-  /**
-   * Generate a storage key from hash and metadata
-   */
-  private generateKey(hash: string, metadata: MediaMetadata): string {
-    const extension = getExtensionFromContentType(metadata.contentType);
-    const prefix = metadata.mediaType || 'media';
-    // Use first 12 chars of hash for shorter filenames while maintaining uniqueness
-    return `${prefix}/${hash.slice(0, 12)}.${extension}`;
-  }
-
   async store(data: Buffer, metadata: MediaMetadata): Promise<StoreResult> {
     const contentHash = computeHash(data);
 
     // Check for existing file with same hash (deduplication)
     const existingKey = await this.findByHash(contentHash);
-    if (existingKey) {
+    if (existingKey && !existingKey.startsWith('blob/')) {
       logger.debug(`[LocalStorage] Deduplicated media: ${existingKey}`);
       return {
         ref: {
@@ -152,38 +123,32 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       };
     }
 
-    // Generate new key and store
-    const key = this.generateKey(contentHash, metadata);
-    const filePath = this.getFilePath(key);
-
-    // Ensure subdirectory exists
-    const dir = path.dirname(filePath);
-    await fsPromises.mkdir(dir, { recursive: true });
-
-    // Write file
-    await fsPromises.writeFile(filePath, data);
-
-    // Update hash index
-    this.hashIndex.set(contentHash, key);
-    await this.saveHashIndex();
-
-    logger.debug(`[LocalStorage] Stored media: ${key} (${data.length} bytes)`);
+    // Keep the media owner/configuration separate from the global blob registry.
+    const mimeType =
+      metadata.contentType === 'image/jpg'
+        ? 'image/jpeg'
+        : metadata.contentType === 'audio/mp3'
+          ? 'audio/mpeg'
+          : metadata.contentType;
+    const result = await this.blobs.store(data, mimeType);
+    const key = `blob/${result.ref.hash}`;
 
     const ref: MediaStorageRef = {
       provider: this.providerId,
       key,
       contentHash,
-      metadata: {
-        ...metadata,
-        sizeBytes: data.length,
-        contentHash,
-      },
+      metadata: result.deduplicated
+        ? metadata
+        : { ...metadata, sizeBytes: data.length, contentHash },
     };
 
-    return { ref, deduplicated: false };
+    return { ref, deduplicated: result.deduplicated };
   }
 
   async retrieve(key: string): Promise<Buffer> {
+    if (key.startsWith('blob/')) {
+      return (await this.blobs.getByHash(this.blobHash(key))).data;
+    }
     const filePath = this.getFilePath(key);
 
     try {
@@ -196,8 +161,19 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     }
   }
 
+  async retrieveWithMetadata(key: string): Promise<{ data: Buffer; contentType?: string }> {
+    if (key.startsWith('blob/')) {
+      const { data, metadata } = await this.blobs.getByHash(this.blobHash(key));
+      return { data, contentType: metadata.mimeType };
+    }
+    return { data: await this.retrieve(key) };
+  }
+
   async exists(key: string): Promise<boolean> {
     try {
+      if (key.startsWith('blob/')) {
+        return await this.blobs.exists(this.blobHash(key));
+      }
       const filePath = this.getFilePath(key);
       await fsPromises.access(filePath);
       return true;
@@ -207,17 +183,12 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   }
 
   async delete(key: string): Promise<void> {
+    if (key.startsWith('blob/')) {
+      await this.blobs.deleteByHash(this.blobHash(key));
+      return;
+    }
     const filePath = this.getFilePath(key);
     const metadataPath = `${filePath}.meta.json`;
-
-    // Find and remove from hash index
-    for (const [hash, storedKey] of this.hashIndex.entries()) {
-      if (storedKey === key) {
-        this.hashIndex.delete(hash);
-        break;
-      }
-    }
-    await this.saveHashIndex();
 
     // Delete files (ignore ENOENT errors)
     try {
@@ -245,9 +216,11 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     // For local storage, return a file:// URL or null
     // The web UI will need to handle this via the API
     try {
-      const filePath = this.getFilePath(key);
+      const filePath = key.startsWith('blob/')
+        ? this.blobs.getFilePath(this.blobHash(key))
+        : this.getFilePath(key);
       await fsPromises.access(filePath);
-      return `file://${filePath}`;
+      return pathToFileURL(filePath).href;
     } catch {
       return null;
     }
@@ -258,12 +231,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     if (key && (await this.exists(key))) {
       return key;
     }
-    // Clean up stale index entry if file doesn't exist
-    if (key) {
-      this.hashIndex.delete(contentHash);
-      await this.saveHashIndex();
-    }
-    return null;
+    return (await this.blobs.exists(contentHash)) ? `blob/${contentHash}` : null;
   }
 
   /**
@@ -279,6 +247,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   async getStats(): Promise<{ fileCount: number; totalSizeBytes: number }> {
     let fileCount = 0;
     let totalSizeBytes = 0;
+    const blobBase = path.join(this.basePath, 'blob-data') + path.sep;
 
     const walkDir = async (dir: string): Promise<void> => {
       let entries: fs.Dirent[];
@@ -296,6 +265,10 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         }
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
+          // Blob writers reserve hash-prefixed directories for unpublished staging files.
+          if (fullPath.startsWith(blobBase) && /^[a-f0-9]{64}\./i.test(entry.name)) {
+            continue;
+          }
           await walkDir(fullPath);
         } else if (!entry.name.endsWith('.json')) {
           // Skip metadata files

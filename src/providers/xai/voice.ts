@@ -10,10 +10,9 @@
  */
 
 import WebSocket from 'ws';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { resolveProviderApiKey } from '../credentials';
-import { resolveProviderEnv } from '../env';
 import { convertG711ToPcm16, convertPcm16ToWav } from '../openai/audio';
 
 import type { EnvOverrides } from '../../types/env';
@@ -225,7 +224,7 @@ export class XAIVoiceProvider implements ApiProvider {
   }
 
   protected getApiKey(): string | undefined {
-    return resolveProviderApiKey(this.config, this.env, ['XAI_API_KEY']);
+    return this.config.apiKey || getEnvString('XAI_API_KEY');
   }
 
   /**
@@ -239,7 +238,7 @@ export class XAIVoiceProvider implements ApiProvider {
     if (this.config.apiBaseUrl) {
       return this.config.apiBaseUrl;
     }
-    const envApiBaseUrl = resolveProviderEnv(this.env, ['XAI_API_BASE_URL'])?.value;
+    const envApiBaseUrl = this.env?.XAI_API_BASE_URL || getEnvString('XAI_API_BASE_URL');
     if (envApiBaseUrl) {
       return envApiBaseUrl;
     }

@@ -3,6 +3,11 @@ import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
+import {
+  getAwsCredentialCacheNamespace,
+  getAwsCredentialProviderOptions,
+  resolveAwsCredentials,
+} from '../awsCredentials';
 import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { createBedrockRequestHandler, hasProxyEnv } from './util';
@@ -180,6 +185,10 @@ interface BedrockAgentsOptions {
  * ```
  */
 export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implements ApiProvider {
+  protected override get responseCacheNamespace(): string | undefined {
+    return getAwsCredentialCacheNamespace(this.config, this.env);
+  }
+
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
   private readonly getClientState = createEnvironmentScopedState(
     () => ({
@@ -240,17 +249,11 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       return state.client;
     }
     return (state.initialization ??= (async () => {
-      if (this.getApiKey()) {
-        throw new Error(
-          'Bedrock Agents do not support bearer token authentication. Configure AWS access credentials or a profile instead.',
-        );
-      }
-
       // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
       // need a custom handler for proxy support.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
-      const credentials = await this.getCredentials();
+      const credentials = await resolveAwsCredentials(this.config, this.env);
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
 
@@ -259,8 +262,9 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
+          ...getAwsCredentialProviderOptions(this.env),
           ...(credentials ? { credentials } : {}),
-          ...(this.getProfile() ? { profile: this.getProfile() } : {}),
+          ...(this.getProfile() === undefined ? {} : { profile: this.getProfile() }),
         });
       } catch (err) {
         logger.error(`Error creating BedrockAgentRuntimeClient: ${err}`);
@@ -529,7 +533,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = await getCache();
     // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
-    const cacheKey = `bedrock-agent:v2:${this.responseCacheNamespace}:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
+    const cacheKey = `bedrock-agent:v2:${this.responseCacheNamespace ? `${this.responseCacheNamespace}:` : ''}${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
       JSON.stringify({
         prompt,
         actionGroups: this.config.actionGroups,

@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -5,7 +6,6 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
-import { isMissingPackageImportError } from '../util/packageImportErrors';
 import { A2AProvider } from './a2a';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
@@ -24,7 +24,6 @@ import { AzureModerationProvider } from './azure/moderation';
 import { AzureRealtimeProvider } from './azure/realtime';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
-import { getBedrockTextRoute } from './bedrock/routing';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -74,7 +73,7 @@ import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
-import { resolveOpenAiApiUrl } from './openai';
+import { loadOpenAiAgentsModule } from './openai/agents-availability';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -104,6 +103,7 @@ import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
+import { loadSlackProviderModule } from './slack-availability';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
@@ -123,165 +123,38 @@ import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
-const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
-
-/** Aliases read together by these providers must keep their original scope priority. */
-function getProviderEnvAliasGroups(providerPath: string): readonly (readonly string[])[] {
-  if (CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
-    return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
-  }
-  if (/^azure(?:openai)?:foundry-agent:/.test(providerPath)) {
-    return [['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID']];
-  }
-  if (/^(?:openclaw|clawdbot)(?::|$)/.test(providerPath)) {
-    return [
-      [
-        'OPENCLAW_GATEWAY_TOKEN',
-        'CLAWDBOT_GATEWAY_TOKEN',
-        'OPENCLAW_GATEWAY_PASSWORD',
-        'CLAWDBOT_GATEWAY_PASSWORD',
-      ],
-    ];
-  }
-  if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
-    return [['HF_TOKEN', 'HF_API_TOKEN']];
-  }
-  if (providerPath.startsWith('replicate:')) {
-    return [['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN']];
-  }
-  if (providerPath.startsWith('nscale:')) {
-    return [['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']];
-  }
-  const awsAuth = [
-    'AWS_ACCESS_KEY_ID',
-    'AWS_SECRET_ACCESS_KEY',
-    'AWS_SESSION_TOKEN',
-    'AWS_PROFILE',
-    'AWS_BEARER_TOKEN_BEDROCK',
-  ];
-  if (providerPath.startsWith('sagemaker:')) {
-    return [
-      awsAuth.filter((key) => key !== 'AWS_BEARER_TOKEN_BEDROCK'),
-      ['AWS_REGION', 'AWS_DEFAULT_REGION'],
-    ];
-  }
-  if (providerPath.startsWith('bedrock:')) {
-    const mode = getBedrockTextRoute(providerPath)?.apiMode;
-    return mode === 'chat' || mode === 'messages' || mode === 'responses'
-      ? [awsAuth, ['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
-      : [awsAuth];
-  }
-  if (providerPath.startsWith('bedrock-agent:')) {
-    return [awsAuth];
-  }
-  if (/^(?:google|palm):live:/.test(providerPath)) {
-    return [['GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_API_KEY', 'GEMINI_API_KEY']];
-  }
-  if (/^(?:google|palm):(?:image:|[^:]*-image)/.test(providerPath)) {
-    return [
-      ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
-      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
-    ];
-  }
-  if (/^(?:google|palm):video:/.test(providerPath)) {
-    return [
-      ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'],
-      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
-    ];
-  }
-  if (providerPath.startsWith('vertex:')) {
-    const modelName = providerPath.replace(/^vertex:(?:chat:)?/, '');
-    const supportsApiKey =
-      !/^(?:live|embeddings?|video):/.test(modelName) &&
-      !modelName.includes('claude') &&
-      modelName.includes('gemini') &&
-      !['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(modelName);
-    return [
-      // Only Gemini chat supports express API keys; all other routes require OAuth.
-      supportsApiKey
-        ? ['VERTEX_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS']
-        : ['GOOGLE_APPLICATION_CREDENTIALS'],
-      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
-      ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
-    ];
-  }
-  if (/^(?:google|palm):(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash)$/.test(providerPath)) {
-    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY']];
-  }
-  if (/^(?:google|palm):/.test(providerPath)) {
-    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY']];
-  }
-  if (/^(?:azure|azureopenai):/.test(providerPath)) {
-    return [
-      providerPath.split(':')[1] === 'moderation'
-        ? ['AZURE_CONTENT_SAFETY_API_KEY', 'AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']
-        : ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'],
-      [
-        'AZURE_API_HOST',
-        'AZURE_OPENAI_API_HOST',
-        'AZURE_API_BASE_URL',
-        'AZURE_OPENAI_API_BASE_URL',
-        'AZURE_OPENAI_BASE_URL',
-      ],
-    ];
-  }
-  return [];
-}
-
-function getProviderEndpointAliases(providerPath: string): readonly string[] {
-  if (providerPath.startsWith('openai:') && !CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
-    return ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'];
-  }
-  if (providerPath.startsWith('mistral:')) {
-    return ['MISTRAL_API_HOST', 'MISTRAL_API_BASE_URL'];
-  }
-  if (/^(?:google|palm):/.test(providerPath)) {
-    return ['GOOGLE_API_HOST', 'PALM_API_HOST', 'GOOGLE_API_BASE_URL'];
-  }
-  if (/^(?:openclaw|clawdbot)(?::|$)/.test(providerPath)) {
-    return ['OPENCLAW_GATEWAY_URL', 'CLAWDBOT_GATEWAY_URL'];
-  }
-  return [];
-}
-
 /** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
 export function mergeProviderEnv(
   providerPath: string,
   ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
 ): NonNullable<ProviderOptions['env']> | undefined {
-  const aliasGroups = [
-    ...getProviderEnvAliasGroups(providerPath),
-    getProviderEndpointAliases(providerPath),
-  ];
+  const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  const isWindowsOpenCode = os.platform() === 'win32' && /^opencode(?::|$)/.test(providerPath);
   let merged: NonNullable<ProviderOptions['env']> | undefined;
   for (const layer of layers) {
     if (!layer) {
       continue;
     }
     merged ??= {};
-    for (const aliases of aliasGroups) {
-      // Ordinary aliases retain their existing empty-value meaning. A scoped
-      // credential field, including an empty mask, must never borrow a lower tuple.
-      const credentialTuple =
-        aliases.includes('AWS_ACCESS_KEY_ID') || aliases.includes('AZURE_CLIENT_ID');
-      if (
-        aliases.some((key) =>
-          credentialTuple
-            ? layer[key] !== undefined
-            : /^(?:google|palm|vertex):/.test(providerPath) && key.endsWith('API_KEY')
-              ? layer[key]?.trim()
-              : layer[key],
-        )
-      ) {
-        for (const key of aliases) {
-          delete merged[key];
+    if (isCodexSDK && (layer.OPENAI_API_KEY || layer.CODEX_API_KEY)) {
+      delete merged.OPENAI_API_KEY;
+      delete merged.CODEX_API_KEY;
+    }
+    for (const [key, value] of Object.entries(layer)) {
+      if (value === undefined) {
+        continue;
+      }
+      if (isWindowsOpenCode) {
+        for (const existingKey of Object.keys(merged)) {
+          if (existingKey !== key && existingKey.toUpperCase() === key.toUpperCase()) {
+            // Keep earlier spellings available to case-sensitive provider templates.
+            // The server environment later collapses aliases with this same value.
+            merged[existingKey] = value;
+          }
         }
       }
+      merged[key] = value;
     }
-    Object.assign(
-      merged,
-      Object.fromEntries(Object.entries(layer).filter(([, value]) => value !== undefined)),
-    );
   }
   return merged;
 }
@@ -682,7 +555,7 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new CohereEmbeddingProvider(modelName, providerOptions.config, providerOptions.env);
+        return new CohereEmbeddingProvider(modelName, providerOptions);
       }
       if (modelType === 'chat' || modelType === undefined) {
         return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
@@ -1167,7 +1040,10 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
+          env: {
+            ...context.env,
+            ...providerOptions.env,
+          },
         });
       }
 
@@ -1204,7 +1080,18 @@ export const providerMap: ProviderFactory[] = [
       const isLiveProvider =
         modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
       if (!isLiveProvider && !['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const apiUrl = resolveOpenAiApiUrl(providerOptions.config, providerOptions.env);
+        const apiHost =
+          providerOptions.config?.apiHost ||
+          providerOptions.env?.OPENAI_API_HOST ||
+          getEnvString('OPENAI_API_HOST');
+        const apiUrl = apiHost
+          ? `https://${apiHost}/v1`
+          : providerOptions.config?.apiBaseUrl ||
+            providerOptions.env?.OPENAI_API_BASE_URL ||
+            providerOptions.env?.OPENAI_BASE_URL ||
+            getEnvString('OPENAI_API_BASE_URL') ||
+            getEnvString('OPENAI_BASE_URL') ||
+            'https://api.openai.com/v1';
         for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
           assertOpenAiApiModel(candidate, apiUrl);
         }
@@ -1285,17 +1172,10 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
-        try {
-          const { OpenAiAgentsProvider } = await import('./openai/agents');
-          return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
-        } catch (error) {
-          if (isMissingPackageImportError(error, '@openai/agents')) {
-            throw new Error(
-              'The @openai/agents package is required for OpenAI Agents providers. Install it with: npm install @openai/agents',
-            );
-          }
-          throw error;
-        }
+        const { OpenAiAgentsProvider } = await loadOpenAiAgentsModule(
+          () => import('./openai/agents'),
+        );
+        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
       }
       if (modelType === 'chatkit') {
         const { OpenAiChatKitProvider } = await import('./openai/chatkit');
@@ -1466,6 +1346,26 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('typesafe:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { TypeSafeProvider } = await import('./typesafe');
+      const modelName = modelNameFromProviderPath(providerPath, 1);
+      if (!modelName) {
+        throw new Error(
+          `Invalid typesafe provider path: ${providerPath}. Model name is required. Use: typesafe:jev-latest`,
+        );
+      }
+      return new TypeSafeProvider(modelName, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('llamaapi:'),
     create: async (
       providerPath: string,
@@ -1535,8 +1435,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       return new VoyageEmbeddingProvider(
         modelNameFromProviderPath(providerPath, 1),
-        providerOptions.config,
-        providerOptions.env,
+        providerOptions,
       );
     },
   },
@@ -1845,8 +1744,8 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       // Validate dependency is available early, before parsing config
-      const { validateTransformersDependency } = await import('./transformersAvailability');
-      await validateTransformersDependency();
+      const { loadTransformers } = await import('./transformersAvailability');
+      await loadTransformers();
 
       const splits = providerPath.split(':');
       if (splits.length < 3) {
@@ -1881,56 +1780,47 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      try {
-        const { SlackProvider } = await import('./slack');
+      const { SlackProvider } = await loadSlackProviderModule(() => import('./slack'));
 
-        // Handle plain 'slack' format
-        if (providerPath === 'slack') {
-          return new SlackProvider(providerOptions);
-        }
+      // Handle plain 'slack' format
+      if (providerPath === 'slack') {
+        return new SlackProvider(providerOptions);
+      }
 
-        // Handle slack:* formats
-        const splits = providerPath.split(':');
+      // Handle slack:* formats
+      const splits = providerPath.split(':');
 
-        if (splits.length < 2) {
-          throw new Error(
-            'Invalid Slack provider path. Use slack:<channel_id> or slack:channel:<channel_id>',
-          );
-        }
+      if (splits.length < 2) {
+        throw new Error(
+          'Invalid Slack provider path. Use slack:<channel_id> or slack:channel:<channel_id>',
+        );
+      }
 
-        // Handle slack:C0123ABCDEF format
-        if (splits.length === 2) {
-          return new SlackProvider({
-            ...providerOptions,
-            config: {
-              ...providerOptions.config,
-              channel: splits[1],
-            },
-          });
-        }
+      // Handle slack:C0123ABCDEF format
+      if (splits.length === 2) {
+        return new SlackProvider({
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            channel: splits[1],
+          },
+        });
+      }
 
-        // Handle slack:channel:C0123ABCDEF or slack:user:U0123ABCDEF format
-        const targetType = splits[1];
-        const targetId = splits.slice(2).join(':');
+      // Handle slack:channel:C0123ABCDEF or slack:user:U0123ABCDEF format
+      const targetType = splits[1];
+      const targetId = splits.slice(2).join(':');
 
-        if (targetType === 'channel' || targetType === 'user') {
-          return new SlackProvider({
-            ...providerOptions,
-            config: {
-              ...providerOptions.config,
-              channel: targetId,
-            },
-          });
-        } else {
-          throw new Error(`Invalid Slack target type: ${targetType}. Use 'channel' or 'user'`);
-        }
-      } catch (error: any) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@slack/web-api')) {
-          throw new Error(
-            'The Slack provider requires the @slack/web-api package. Please install it with: npm install @slack/web-api@^8',
-          );
-        }
-        throw error;
+      if (targetType === 'channel' || targetType === 'user') {
+        return new SlackProvider({
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            channel: targetId,
+          },
+        });
+      } else {
+        throw new Error(`Invalid Slack target type: ${targetType}. Use 'channel' or 'user'`);
       }
     },
   },

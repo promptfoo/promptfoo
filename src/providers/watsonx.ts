@@ -8,6 +8,7 @@ import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../t
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
+import { loadWatsonXDependency } from './watsonx-availability';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
@@ -453,28 +454,31 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
-      : undefined;
     return (
       this.config.apiKey ||
-      (namedKey ?? this.env?.WATSONX_AI_APIKEY ?? getEnvString('WATSONX_AI_APIKEY'))
+      (this.config.apiKeyEnvar
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.WATSONX_AI_APIKEY ||
+      getEnvString('WATSONX_AI_APIKEY')
     );
   }
 
   private getBearerToken(): string | undefined {
-    const namedToken = this.config.apiBearerTokenEnvar
-      ? (this.env?.[this.config.apiBearerTokenEnvar] ??
-        getEnvString(this.config.apiBearerTokenEnvar as EnvVarKey))
-      : undefined;
     return (
       this.config.apiBearerToken ||
-      (namedToken ?? this.env?.WATSONX_AI_BEARER_TOKEN ?? getEnvString('WATSONX_AI_BEARER_TOKEN'))
+      (this.config.apiBearerTokenEnvar
+        ? getEnvString(this.config.apiBearerTokenEnvar as EnvVarKey) ||
+          this.env?.[this.config.apiBearerTokenEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.WATSONX_AI_BEARER_TOKEN ||
+      getEnvString('WATSONX_AI_BEARER_TOKEN')
     );
   }
 
   private getAuthType(): string | undefined {
-    return this.env?.WATSONX_AI_AUTH_TYPE ?? getEnvString('WATSONX_AI_AUTH_TYPE');
+    return this.env?.WATSONX_AI_AUTH_TYPE || getEnvString('WATSONX_AI_AUTH_TYPE');
   }
 
   private getAuthSelection(): WatsonXAuthSelection {
@@ -505,17 +509,10 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   async getAuth(): Promise<IamAuthenticator | BearerTokenAuthenticator> {
-    let IamAuthenticator: any;
-    let BearerTokenAuthenticator: any;
-
-    try {
-      ({ IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core'));
-    } catch (err) {
-      logger.error(`Error loading ibm-cloud-sdk-core: ${err}`);
-      throw new Error(
-        'The ibm-cloud-sdk-core package is required as a peer dependency. Please install it in your project or globally.',
-      );
-    }
+    const { IamAuthenticator, BearerTokenAuthenticator } = await loadWatsonXDependency(
+      'ibm-cloud-sdk-core',
+      () => import('ibm-cloud-sdk-core'),
+    );
 
     const authSelection = this.getAuthSelection();
     if (!this.client) {
@@ -544,13 +541,14 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   getProjectId(): string {
-    const namedProject = this.options.config.projectIdEnvar
-      ? (this.env?.[this.options.config.projectIdEnvar] ??
-        getEnvString(this.options.config.projectIdEnvar))
-      : undefined;
     const projectId =
       this.options.config.projectId ||
-      (namedProject ?? this.env?.WATSONX_AI_PROJECT_ID ?? getEnvString('WATSONX_AI_PROJECT_ID'));
+      (this.options.config.projectIdEnvar
+        ? getEnvString(this.options.config.projectIdEnvar) ||
+          this.env?.[this.options.config.projectIdEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.WATSONX_AI_PROJECT_ID ||
+      getEnvString('WATSONX_AI_PROJECT_ID');
     invariant(
       projectId && projectId.trim() !== '',
       'WatsonX project ID is not set. Set the WATSONX_AI_PROJECT_ID environment variable or add `projectId` to the provider config.',
@@ -589,21 +587,16 @@ export class WatsonXProvider implements ApiProvider {
 
   private async initializeClient(): Promise<WatsonXAIClient> {
     const authenticator = await this.getAuth();
-
-    try {
-      const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
-      this.client = WatsonXAI.newInstance({
-        version: this.options.config.version || '2023-05-29',
-        serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-        authenticator,
-      });
-      return this.client!;
-    } catch (err) {
-      logger.error(`Error loading @ibm-cloud/watsonx-ai: ${err}`);
-      throw new Error(
-        'The @ibm-cloud/watsonx-ai package is required as a peer dependency. Please install it in your project or globally.',
-      );
-    }
+    const { WatsonXAI } = await loadWatsonXDependency(
+      '@ibm-cloud/watsonx-ai',
+      () => import('@ibm-cloud/watsonx-ai'),
+    );
+    this.client = WatsonXAI.newInstance({
+      version: this.options.config.version || '2023-05-29',
+      serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
+      authenticator,
+    });
+    return this.client!;
   }
 
   async callApi(
@@ -611,13 +604,18 @@ export class WatsonXProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'watsonx',
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      maxTokens: this.options.config.maxNewTokens,
+      maxTokens: config.maxNewTokens,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -644,7 +642,7 @@ export class WatsonXProvider implements ApiProvider {
     );
   }
 
-  private async callApiInternal(
+  protected async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
@@ -779,7 +777,7 @@ export class WatsonXProvider implements ApiProvider {
  * WatsonX Chat Provider using the textChat API for messages-based interactions.
  */
 export class WatsonXChatProvider extends WatsonXProvider {
-  async callApi(
+  protected override async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,

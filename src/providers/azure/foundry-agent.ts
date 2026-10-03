@@ -1,7 +1,7 @@
-import { createHmac, randomUUID } from 'crypto';
+import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { setGenAIResponseAttributes } from '../../tracing/genaiTracer';
 import { createAzureCredential } from '../../util/azureCredentials';
@@ -24,6 +24,7 @@ import {
 } from '../../util/index';
 import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { getCredentialCacheNamespace } from '../credentialCache';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
@@ -77,7 +78,6 @@ type ResponseFunctionCallItem = Extract<
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
 type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
 interface FoundryClientState {
-  cacheNamespace: string;
   projectClient?: Promise<AzureAIProjectClient>;
   agentPromise?: Promise<FoundryAgent>;
   resolvedAgent?: FoundryAgent;
@@ -293,9 +293,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   assistantConfig: NonNullable<AzureAssistantProviderOptions['config']>;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
-  private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({
-    cacheNamespace: randomUUID(),
-  }));
+  private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({}));
   private warnedUnsupportedFields = new Set<string>();
 
   override async initialize(): Promise<void> {
@@ -319,6 +317,38 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     if (this.assistantConfig.functionToolCallbacks) {
       void this.preloadFunctionCallbacks();
     }
+  }
+
+  private getResponseCacheNamespace(): string | undefined {
+    if (this.config.azureClientId && this.config.azureTenantId && this.config.azureClientSecret) {
+      return undefined;
+    }
+    const env = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), this.env);
+    const names = [
+      'AZURE_CLIENT_ID',
+      'AZURE_CLIENT_SECRET',
+      'AZURE_TENANT_ID',
+      'AZURE_FEDERATED_TOKEN_FILE',
+      'AZURE_CLIENT_CERTIFICATE_PATH',
+      'AZURE_CLIENT_CERTIFICATE_PASSWORD',
+      'AZURE_CLIENT_SEND_CERTIFICATE_CHAIN',
+      'AZURE_AUTHORITY_HOST',
+    ];
+    if (!names.some((name) => env[name] !== undefined)) {
+      return undefined;
+    }
+    return getCredentialCacheNamespace(
+      [
+        this.config.azureClientId ?? env.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID'),
+        this.config.azureTenantId ?? env.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'),
+        this.config.azureAuthorityHost ??
+          env.AZURE_AUTHORITY_HOST ??
+          getEnvString('AZURE_AUTHORITY_HOST'),
+      ],
+      ['AZURE_FEDERATED_TOKEN_FILE', 'AZURE_CLIENT_CERTIFICATE_PATH']
+        .map((name) => env[name] ?? getEnvString(name))
+        .filter((file): file is string => file !== undefined),
+    );
   }
 
   private getProjectUrl(): string {
@@ -1070,7 +1100,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
     const maxToolIterations = resolveMaxToolIterations(effectiveConfig.maxToolIterations);
     const projectScope = hashFoundryAgentCacheValue(this.getProjectUrl());
-    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${this.getClientState().cacheNamespace}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
+    const cacheNamespace = this.getResponseCacheNamespace();
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${cacheNamespace ? `${cacheNamespace}:` : ''}${projectScope}:${hashFoundryAgentCacheValue(body)}`;
 
     // Client-side tool behavior is absent from the serialized request body.
     // Callback closures cannot be safely represented in a persistent cache key.

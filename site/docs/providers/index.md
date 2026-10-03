@@ -97,6 +97,7 @@ providers:
 | [Snowflake Cortex](./snowflake.md)                      | Snowflake's AI platform with Claude, GPT, and Llama models       | `snowflake:mistral-large2`                                                                                            |
 | [Together AI](./togetherai.md)                          | Various hosted models                                            | Compatible with OpenAI syntax                                                                                         |
 | [TrueFoundry](./truefoundry.md)                         | Enterprise AI Gateway (LLM, MCP, and Agent Gateway)              | `truefoundry:openai-main/gpt-5`, `truefoundry:anthropic-main/claude-sonnet-5`                                         |
+| [TypeSafe](./typesafe.md)                               | Jev System One model for fast grading and classification         | `typesafe:jev-latest`, `typesafe:jev-1.13.0`                                                                          |
 | [Vercel AI Gateway](./vercel.md)                        | Unified AI Gateway with 0% markup and built-in failover          | `vercel:openai/gpt-4o-mini`, `vercel:anthropic/claude-sonnet-5`                                                       |
 | [Voyage AI](./voyage.md)                                | Specialized embedding models                                     | `voyage:voyage-3`                                                                                                     |
 | [vLLM](./vllm.md)                                       | Local OpenAI-compatible serving and self-hosted judges           | `openai:chat:<served-model-name>` with `apiBaseUrl`                                                                   |
@@ -195,10 +196,6 @@ providers:
     config:
       apiKey: your_api_key_here
 ```
-
-For providers that support `env` overrides, values are resolved in this order:
-provider `env`, evaluation `env`, `--env-file`, then shell variables. Explicit provider
-`config` values take priority. See each provider's documentation for supported settings.
 
 ### Overriding Pricing
 

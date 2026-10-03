@@ -299,9 +299,6 @@ type EnvVars = {
   AZURE_TENANT_ID?: string;
   AZURE_TOKEN_SCOPE?: string;
 
-  // Azure Blob Storage test references
-  AZURE_STORAGE_CONNECTION_STRING?: string;
-
   // Azure Content Safety params
   AZURE_CONTENT_SAFETY_API_KEY?: string;
   AZURE_CONTENT_SAFETY_API_VERSION?: string;
@@ -458,6 +455,9 @@ type EnvVars = {
 
   // TrueFoundry
   TRUEFOUNDRY_API_KEY?: string;
+
+  // TypeSafe
+  TYPESAFE_API_KEY?: string;
 
   // Vertex AI
   VERTEX_API_VERSION?: string;

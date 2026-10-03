@@ -1,13 +1,12 @@
-import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 import { AwsBedrockKnowledgeBaseProvider } from '../../src/providers/bedrock/knowledgeBase';
 import { NovaSonicProvider } from '../../src/providers/bedrock/nova-sonic';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import { createEnvironmentScopedState } from '../../src/providers/scopedState';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -74,7 +73,7 @@ describe('SDK client lifecycle', () => {
           const next = await getClient();
           const nextDestroy = vi.spyOn(next, 'destroy');
           expect(next).not.toBe(previous);
-          expect(Reflect.get(provider, 'responseCacheNamespace')).not.toBe(namespace);
+          expect(Reflect.get(provider, 'responseCacheNamespace')).toBe(namespace);
           expect(previousDestroy).not.toHaveBeenCalled();
           await providerRegistry.shutdownAll(cliState.envScope);
           expect(previousDestroy).toHaveBeenCalledOnce();
@@ -99,7 +98,7 @@ describe('SDK client lifecycle', () => {
         const namespace = Reflect.get(provider, 'responseCacheNamespace');
         Reflect.set(provider, field, value);
         try {
-          expect(Reflect.get(provider, 'responseCacheNamespace')).not.toBe(namespace);
+          expect(Reflect.get(provider, 'responseCacheNamespace')).toBe(namespace);
           const next = await getClient();
           const nextDestroy = vi.spyOn(next, 'destroy');
           credentials.resolve({ accessKeyId: 'retired', secretAccessKey: 'retired' });
@@ -117,33 +116,6 @@ describe('SDK client lifecycle', () => {
       });
     },
   );
-
-  it('keeps a pending Knowledge Base response in its retired cache namespace', async () => {
-    const provider = new AwsBedrockKnowledgeBaseProvider('fixture', {
-      config: { knowledgeBaseId: 'fixture' },
-    });
-    const credentials = createDeferred<{ accessKeyId: string; secretAccessKey: string }>();
-    vi.spyOn(provider, 'getCredentials').mockReturnValueOnce(credentials.promise);
-    const send = vi
-      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
-      .mockResolvedValueOnce({ output: { text: 'retired' } } as never)
-      .mockResolvedValueOnce({ output: { text: 'current' } } as never);
-    await cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory' }, () =>
-      withCacheEnabled(true, async () => {
-        const pending = provider.callApi('same prompt');
-        provider.knowledgeBaseClient = undefined;
-        credentials.resolve({ accessKeyId: 'retired', secretAccessKey: 'retired' });
-        expect(await pending).toMatchObject({ output: 'retired' });
-        expect(await provider.callApi('same prompt')).toMatchObject({ output: 'current' });
-        expect(await provider.callApi('same prompt')).toMatchObject({
-          output: 'current',
-          cached: true,
-        });
-        expect(send).toHaveBeenCalledTimes(2);
-        await providerRegistry.shutdownAll(cliState.envScope);
-      }),
-    );
-  });
 
   it('does not let a retired cleanup owner remove its replacement state', async () => {
     const register = vi.spyOn(providerRegistry, 'register');
@@ -194,6 +166,31 @@ describe('SDK client lifecycle', () => {
       }),
     );
     expect(destroy).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a Python worker registered without explicit scope alive while another SDK evaluation finishes', async () => {
+    const ready = createDeferred<void>();
+    const release = createDeferred<void>();
+    const python = new PythonProvider('fixture.py', { config: { pythonExecutable: 'python3' } });
+    const shutdown = vi.spyOn(python, 'shutdown').mockResolvedValue();
+    const first = providerRegistry.withScope(async () => {
+      // Python workers register lazily during initialization, without passing a scope.
+      providerRegistry.register(python);
+      ready.resolve();
+      await release.promise;
+      expect(shutdown).not.toHaveBeenCalled();
+    });
+    await ready.promise;
+    try {
+      await providerRegistry.withScope(async () => {
+        await new AwsBedrockCompletionProvider('fixture').getBedrockInstance();
+      });
+      expect(shutdown).not.toHaveBeenCalled();
+    } finally {
+      release.resolve();
+    }
+    await first;
+    expect(shutdown).toHaveBeenCalledOnce();
   });
 
   it('keeps concurrent cleanup lifetimes separate through nested environments', async () => {

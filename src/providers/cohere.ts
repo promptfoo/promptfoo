@@ -49,7 +49,6 @@ interface CohereChatOptions {
 }
 
 export class CohereChatCompletionProvider implements ApiProvider {
-  env?: EnvOverrides;
   static COHERE_CHAT_MODELS = [
     'command-a-03-2025',
     'command-r7b-12-2024',
@@ -81,8 +80,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
     options: { config?: CohereChatOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
-    this.env = env;
-    this.apiKey = config?.apiKey || (env?.COHERE_API_KEY ?? getEnvString('COHERE_API_KEY') ?? '');
+    this.apiKey = config?.apiKey || env?.COHERE_API_KEY || getEnvString('COHERE_API_KEY') || '';
     this.modelName = modelName;
     if (!CohereChatCompletionProvider.COHERE_CHAT_MODELS.includes(this.modelName)) {
       logger.warn(`Using unknown Cohere chat model: ${this.modelName}`);
@@ -138,12 +136,17 @@ export class CohereChatCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, config), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, config, context?.bustCache ?? context?.debug),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(
     prompt: string,
     config: CohereChatOptions,
+    bustCache?: boolean,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
@@ -194,12 +197,13 @@ export class CohereChatCompletionProvider implements ApiProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
-            'X-Client-Name':
-              (this.env?.COHERE_CLIENT_NAME ?? getEnvString('COHERE_CLIENT_NAME')) || 'promptfoo',
+            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
           },
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
+        'json',
+        bustCache,
       )) as unknown as { data: any; cached: boolean });
 
       if (data.message) {
@@ -257,11 +261,14 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar))
-      : undefined;
     return (
-      this.config.apiKey || (namedKey ?? this.env?.COHERE_API_KEY ?? getEnvString('COHERE_API_KEY'))
+      this.config.apiKey ||
+      (this.config?.apiKeyEnvar
+        ? getEnvString(this.config.apiKeyEnvar) ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.COHERE_API_KEY ||
+      getEnvString('COHERE_API_KEY')
     );
   }
 
@@ -294,8 +301,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
-            'X-Client-Name':
-              (this.env?.COHERE_CLIENT_NAME ?? getEnvString('COHERE_CLIENT_NAME')) || 'promptfoo',
+            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
           },
           body: JSON.stringify(body),
         },

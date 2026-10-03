@@ -1,0 +1,13 @@
+# Scoped cloud SDK credentials
+
+Evaluation environment files are scoped to their invocation. AWS, Google and Azure SDKs receive the effective credential inputs through constructor options; evaluation setup does not copy them into `process.env`. Provider configuration and the public per-key environment precedence remain unchanged.
+
+AWS forwards static credentials, profile selection, shared/config file locations and web identity options. Without scoped credential inputs, the SDK retains its normal ambient discovery chain. Bedrock preserves explicit key-pair, bearer-token and configured-profile precedence. Agents and Knowledge Bases retain their SigV4 discovery behavior.
+
+Google forwards ADC filenames, project and quota-project settings while retaining explicit configured credentials and API-key routing. Azure forwards service principals, certificate and workload identity files, and managed identity selectors while retaining the ambient default credential chain when no scoped identity is selected.
+
+SDK clients are owned by both an environment and an evaluation resource lifetime. Concurrent evaluations can reuse a provider object without sharing credentials or closing one another's resources. Caller-injected clients remain caller-owned.
+
+Response caches retain existing ambient/configured keys. Newly scoped identities use stable public selectors, such as AWS access-key IDs or Azure tenant/client IDs; file-backed identities include file revision metadata. Identical selectors and files retain cache reuse across processes. No new persistent cache fingerprint is derived from a raw secret.
+
+A provider-only Bedrock bearer token has no public identity selector, so its additional cache namespace is held in memory and cannot be reused across processes. Bearer tokens from configuration, suite environments and environment files continue using Bedrock's existing cache fingerprint. Changing a credential file at the same path invalidates its scoped namespace; unchanged metadata is treated as the same file revision.

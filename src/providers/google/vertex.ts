@@ -1,7 +1,8 @@
-import { createHmac, randomUUID } from 'crypto';
+import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -25,8 +26,7 @@ import {
   parseMessages,
   resolveClaudeSamplingParams,
 } from '../anthropic/util';
-import { resolveProviderEnv } from '../env';
-import { createEnvironmentScopedState } from '../scopedState';
+import { getCredentialCacheNamespace } from '../credentialCache';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
@@ -144,7 +144,8 @@ function getVertexApiHost(
 ): string {
   return (
     configApiHost ||
-    resolveProviderEnv(envOverrides, ['VERTEX_API_HOST'])?.value ||
+    envOverrides?.VERTEX_API_HOST ||
+    getEnvString('VERTEX_API_HOST') ||
     getVertexApiHostForRegion(region)
   );
 }
@@ -153,12 +154,13 @@ function getVertexBodyCacheKey(
   prefix: string,
   body: unknown,
   apiHost: string,
-  cacheNamespace: string,
+  cacheNamespace?: string,
 ): string {
   const serialized = typeof body === 'string' ? body : JSON.stringify(body);
-  return `${prefix}:${createHmac('sha256', 'promptfoo:vertex:cache-key:v1')
-    .update(cacheNamespace)
-    .update('\0')
+  return `${cacheNamespace ? `${cacheNamespace}:` : ''}${prefix}:${createHmac(
+    'sha256',
+    'promptfoo:vertex:cache-key:v1',
+  )
     .update(apiHost)
     .update('\0')
     .update(serialized)
@@ -172,7 +174,27 @@ function getVertexBodyCacheKey(
  * authentication management, and resource cleanup.
  */
 export class VertexChatProvider extends GoogleGenericProvider {
-  private readonly getResponseCacheNamespace = createEnvironmentScopedState(randomUUID);
+  private getResponseCacheNamespace(): string | undefined {
+    if (
+      this.config.credentials ||
+      this.config.keyFilename ||
+      this.config.googleAuthOptions?.credentials ||
+      this.config.googleAuthOptions?.keyFilename ||
+      this.config.googleAuthOptions?.keyFile
+    ) {
+      return undefined;
+    }
+    const adc =
+      this.env?.GOOGLE_APPLICATION_CREDENTIALS ??
+      getEnvOverrides()?.GOOGLE_APPLICATION_CREDENTIALS ??
+      getEnvOverrides('file')?.GOOGLE_APPLICATION_CREDENTIALS;
+    return adc === undefined
+      ? undefined
+      : getCredentialCacheNamespace(
+          [adc, this.env?.GOOGLE_CLOUD_QUOTA_PROJECT ?? getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT')],
+          [adc],
+        );
+  }
 
   constructor(modelName: string, options: GoogleProviderOptions = {}) {
     // Force vertex mode for Vertex AI provider
@@ -195,7 +217,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
    */
   private getApiVersion(): string {
     return (
-      this.config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1'
+      this.config.apiVersion ||
+      this.env?.VERTEX_API_VERSION ||
+      getEnvString('VERTEX_API_VERSION') ||
+      'v1'
     );
   }
 
@@ -204,7 +229,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
    */
   private getPublisher(): string {
     return (
-      this.config.publisher || resolveProviderEnv(this.env, ['VERTEX_PUBLISHER'])?.value || 'google'
+      this.config.publisher ||
+      this.env?.VERTEX_PUBLISHER ||
+      getEnvString('VERTEX_PUBLISHER') ||
+      'google'
     );
   }
 

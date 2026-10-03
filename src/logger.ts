@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import chalk from 'chalk';
+import { Chalk } from 'chalk';
 import winston from 'winston';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
@@ -10,6 +10,8 @@ import { safeJsonStringify } from './util/json';
 import { getLogFiles } from './util/logFiles';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
+// Named construction also works when the CommonJS bundle loads Chalk as an ES module.
+const chalk = new Chalk();
 const MAX_LOG_FILES = 50;
 
 type LogCallback = (message: string) => void;
@@ -508,41 +510,32 @@ export async function closeLogger(): Promise<void> {
       return;
     }
 
-    // Add temporary error handlers to catch "write after end" errors during shutdown.
-    // This can happen due to a race condition where the pipe from winston's Transform
-    // stream still has data when _final() calls transport.end(). The error handlers
-    // prevent this from becoming an uncaught exception that crashes the process.
-    const errorHandlers = new Map<winston.transport, (err: Error) => void>();
-    for (const transport of fileTransports) {
-      const handler = (err: Error) => {
-        // Silently ignore "write after end" errors during shutdown - this is expected
-        // when the logger has buffered data that races with transport closing
-        if (err?.message?.includes('write after end')) {
-          return;
-        }
-        console.error(`Transport error during shutdown: ${err}`);
-      };
-      errorHandlers.set(transport, handler);
-      transport.on('error', handler);
+    // Winston ends transports in _final() before its readable buffer has drained.
+    // Deliver queued records first so backpressure cannot cause writes after end.
+    if (winstonLogger.readableLength > 0 || winstonLogger.writableLength > 0) {
+      await new Promise<void>((resolve) => {
+        const checkDrained = () => {
+          if (winstonLogger.readableLength === 0 && winstonLogger.writableLength === 0) {
+            winstonLogger.off('data', afterWrite);
+            winstonLogger.off('drain', afterWrite);
+            resolve();
+          }
+        };
+        // The transform's write callback runs after it emits data.
+        const afterWrite = () => queueMicrotask(checkDrained);
+        winstonLogger.on('data', afterWrite);
+        winstonLogger.on('drain', afterWrite);
+        afterWrite();
+      });
     }
 
-    // Use winstonLogger.end() instead of ending transports directly.
-    // This properly triggers winston's _final() method which:
-    // 1. Waits for all piped data to flush through the transform stream
-    // 2. Calls transport.end() on each transport in sequence
-    // 3. Waits for each transport's 'finish' event before proceeding
-    // This significantly reduces "write after end" errors from data still in the pipeline.
+    // File transport finish waits for the underlying file stream to flush.
     await new Promise<void>((resolve) => {
       winstonLogger.once('finish', resolve);
       winstonLogger.end();
     });
 
-    // Remove error handlers and file transports
     for (const transport of fileTransports) {
-      const handler = errorHandlers.get(transport);
-      if (handler) {
-        transport.off('error', handler);
-      }
       winstonLogger.remove(transport);
     }
   } catch (error) {

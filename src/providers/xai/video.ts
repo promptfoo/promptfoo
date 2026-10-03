@@ -8,13 +8,10 @@
  *
  * API Documentation: https://docs.x.ai/docs/guides/video-generations-and-edits
  */
-import { randomUUID } from 'node:crypto';
-
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sleep } from '../../util/time';
-import { resolveProviderApiKey } from '../credentials';
-import { resolveProviderEnv } from '../env';
 import {
   buildStorageRefUrl,
   checkVideoCache,
@@ -238,7 +235,10 @@ export class XAIVideoProvider implements ApiProvider {
    * Get API key from config or environment
    */
   getApiKey(): string | undefined {
-    return resolveProviderApiKey(this.config, this.env, ['XAI_API_KEY']);
+    if (this.config?.apiKey) {
+      return this.config.apiKey;
+    }
+    return getEnvString('XAI_API_KEY');
   }
 
   /**
@@ -249,7 +249,7 @@ export class XAIVideoProvider implements ApiProvider {
     if (this.config.apiBaseUrl) {
       return this.config.apiBaseUrl;
     }
-    const envApiBaseUrl = resolveProviderEnv(this.env, ['XAI_API_BASE_URL'])?.value;
+    const envApiBaseUrl = getEnvString('XAI_API_BASE_URL');
     if (envApiBaseUrl) {
       return envApiBaseUrl;
     }
@@ -527,24 +527,22 @@ export class XAIVideoProvider implements ApiProvider {
       }
     }
 
-    // Custom endpoints have no non-secret account discriminator for shared caching.
-    const canCacheVideo = !isEdit && this.getApiUrl() === DEFAULT_API_BASE_URL;
-    const cacheKey = canCacheVideo
-      ? generateVideoCacheKey({
-          provider: 'xai',
-          prompt,
-          model: this.modelName,
-          size: `${aspectRatio}:${resolution}`,
-          seconds: duration,
-          inputReference: config.image?.url
-            ? `image:${config.image.url}`
-            : config.reference_images?.length
-              ? `reference_images:${config.reference_images.map(({ url }) => url).join('|')}`
-              : null,
-        })
-      : randomUUID();
+    // Generate cache key (skip caching for edits)
+    const cacheKey = generateVideoCacheKey({
+      provider: 'xai',
+      prompt,
+      model: this.modelName,
+      size: `${aspectRatio}:${resolution}`,
+      seconds: duration,
+      inputReference: config.image?.url
+        ? `image:${config.image.url}`
+        : config.reference_images?.length
+          ? `reference_images:${config.reference_images.map(({ url }) => url).join('|')}`
+          : null,
+    });
 
-    if (canCacheVideo) {
+    // Check cache (skip for edits)
+    if (!isEdit) {
       const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
       if (cachedVideoKey) {
         logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
@@ -634,7 +632,8 @@ export class XAIVideoProvider implements ApiProvider {
     const latencyMs = Date.now() - startTime;
     const cost = reportedCost ?? calculateVideoCost(actualDuration, false, this.modelName);
 
-    if (canCacheVideo) {
+    // Store cache mapping (skip for edits)
+    if (!isEdit) {
       await storeCacheMapping(cacheKey, storageKey, undefined, undefined, PROVIDER_NAME);
     }
 

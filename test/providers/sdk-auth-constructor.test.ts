@@ -109,20 +109,6 @@ describe('real cloud SDK credential construction without authentication calls', 
     }
   });
 
-  it.each(['vertex:gemini-3.8-flash', 'vertex:chat:gemini-3.8-flash'])(
-    'keeps higher API keys preferred to lower ADC on express-capable %s',
-    async (id) => {
-      const provider = await loadApiProvider(id, {
-        env: { GOOGLE_APPLICATION_CREDENTIALS: 'lower-adc.json' },
-        options: { env: { GOOGLE_API_KEY: 'provider-key' } },
-      });
-      expect(Reflect.get(provider, 'env').GOOGLE_APPLICATION_CREDENTIALS).toBeUndefined();
-      expect(await Reflect.get(provider, 'getAuthHeaders').call(provider)).toMatchObject({
-        'x-goog-api-key': 'provider-key',
-      });
-    },
-  );
-
   it('constructs an explicit Azure service principal and preserves the default chain fallback', async () => {
     const credential = await createAzureCredential(
       {},
@@ -135,25 +121,6 @@ describe('real cloud SDK credential construction without authentication calls', 
     expect(credential).toBeInstanceOf(ClientSecretCredential);
     expect(await createAzureCredential()).toBeInstanceOf(DefaultAzureCredential);
   });
-  it.each(['azure:foundry-agent:fixture', 'azureopenai:foundry-agent:fixture'])(
-    'rejects partial provider credentials on %s instead of borrowing a suite principal',
-    async (id) => {
-      const provider = await loadApiProvider(id, {
-        env: {
-          AZURE_CLIENT_ID: 'suite-client',
-          AZURE_CLIENT_SECRET: 'suite-secret',
-          AZURE_TENANT_ID: 'suite-tenant',
-        },
-        options: {
-          config: { projectUrl: 'https://fixture.services.ai.azure.com/api/projects/fixture' },
-          env: { AZURE_CLIENT_ID: 'provider-client' },
-        },
-      });
-      await expect(Reflect.get(provider, 'initializeClient').call(provider)).rejects.toThrow(
-        'incomplete',
-      );
-    },
-  );
 
   it('isolates concurrent Live ADC clients without minting tokens', async () => {
     const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-live-adc-fixture-'));

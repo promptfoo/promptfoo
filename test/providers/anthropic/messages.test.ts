@@ -1,5 +1,6 @@
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
+import { satisfies } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearCache,
@@ -8,7 +9,6 @@ import {
   getCache,
   withCacheNamespace,
 } from '../../../src/cache';
-import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
@@ -4105,23 +4105,6 @@ describe('AnthropicMessagesProvider', () => {
       );
     });
 
-    it.each(['', 'invalid'])(
-      'does not revive ambient sampling after a provider temperature mask of %j',
-      async (temperature) => {
-        await cliState.withEnv({ ANTHROPIC_TEMPERATURE: '0.9' }, async () => {
-          const provider = createProvider('claude-sonnet-4-6', {
-            config: {},
-            env: { ANTHROPIC_TEMPERATURE: temperature },
-          });
-          const create = vi
-            .spyOn(provider.anthropic.messages, 'create')
-            .mockResolvedValue(mockResponse);
-          await provider.callApi('Masked sampling');
-          expect(create.mock.calls[0][0]).toHaveProperty('temperature', 0);
-        });
-      },
-    );
-
     it('should prefer config temperature over provider-scoped env', async () => {
       const provider = createProvider('claude-sonnet-4-6', {
         config: { temperature: 0.1 },
@@ -4395,47 +4378,6 @@ describe('AnthropicMessagesProvider', () => {
       );
       expect(warnings).toHaveLength(1);
     });
-
-    it.each(['suite', 'file'] as const)(
-      'warns for deprecated sampling supplied by the %s layer',
-      async (layer) => {
-        const provider = createProvider('claude-sonnet-5', { config: {} });
-        const createSpy = vi
-          .spyOn(provider.anthropic.messages, 'create')
-          .mockResolvedValue(mockResp);
-        const warnSpy = vi.spyOn(logger, 'warn');
-        const run =
-          layer === 'suite'
-            ? cliState.withEnv.bind(cliState)
-            : cliState.withEnvFileOverrides.bind(cliState);
-        await run({ ANTHROPIC_TEMPERATURE: '0.3' }, () => provider.callApi('Scoped sampling test'));
-        expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('temperature is deprecated on Claude Sonnet 5'),
-        );
-      },
-    );
-
-    it.each(['', 'invalid'])(
-      'does not warn for masked deprecated sampling: %j',
-      async (temperature) => {
-        await cliState.withEnv({ ANTHROPIC_TEMPERATURE: '0.9' }, async () => {
-          const provider = createProvider('claude-sonnet-5', {
-            config: {},
-            env: { ANTHROPIC_TEMPERATURE: temperature },
-          });
-          const create = vi
-            .spyOn(provider.anthropic.messages, 'create')
-            .mockResolvedValue(mockResp);
-          const warn = vi.spyOn(logger, 'warn');
-          await provider.callApi('Masked sampling');
-          expect(create.mock.calls[0][0]).not.toHaveProperty('temperature');
-          expect(warn).not.toHaveBeenCalledWith(
-            expect.stringContaining('temperature is deprecated'),
-          );
-        });
-      },
-    );
 
     it('warns on Opus 4.7 when temperature set via env override', async () => {
       const provider = createProvider('claude-opus-4-7', {
@@ -5395,9 +5337,45 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
+
+    it.each([false, true])(
+      'sends a supported OAuth client version to newer models (stream: %s)',
+      async (stream) => {
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+        const model = 'claude-opus-5-5';
+        const oauthProvider = createProvider(model, {
+          config: { apiKeyRequired: false, stream },
+        });
+        const message = mockMessageResponse(model);
+        const createSpy = vi
+          .spyOn(oauthProvider.anthropic.messages, 'create')
+          .mockResolvedValue(message);
+        const streamSpy = vi.spyOn(oauthProvider.anthropic.messages, 'stream').mockReturnValue({
+          finalMessage: async () => message,
+        } as ReturnType<typeof oauthProvider.anthropic.messages.stream>);
+
+        const response = await oauthProvider.callApi('hello');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('ok');
+        const requestSpy = stream ? streamSpy : createSpy;
+        expect(requestSpy).toHaveBeenCalledTimes(1);
+        const [params, requestOptions] = requestSpy.mock.calls[0];
+        expect(params.model).toBe(model);
+        const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+        const match = /^claude-cli\/(\d+\.\d+\.\d+) \(external, promptfoo\)$/.exec(
+          headers['user-agent'],
+        );
+        expect(match).not.toBeNull();
+        // The API rejects this model below 2.1.280; compare semver components
+        // correctly across minor/major releases. See issue #11322.
+        expect(satisfies(match?.[1] ?? '', '>=2.1.280')).toBe(true);
+      },
+    );
 
     it('isolates response-cache namespaces for distinct Claude Code OAuth tenants', async () => {
       mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
@@ -5573,7 +5551,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const [, requestOptions] = createSpy.mock.calls[0];
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
 
@@ -5600,7 +5578,7 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
   });
