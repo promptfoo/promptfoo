@@ -88,7 +88,7 @@ describe('N8nProvider', () => {
       { method: 'HEAD' } satisfies N8nProviderConfig,
       { method: 'head' },
       { method: 'HeAd' },
-    ])('sends $method requests without a body', async (config) => {
+    ])('sends $method requests with the payload in the query string', async (config) => {
       vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
         // Use the native Fetch contract without sending a network request.
         new Request(url, options);
@@ -102,12 +102,20 @@ describe('N8nProvider', () => {
 
       expect(result.error).toBeUndefined();
       expect(fetchWithRetries).toHaveBeenCalledWith(
-        'https://n8n.example.com/webhook/agent',
+        'https://n8n.example.com/webhook/agent?prompt=Hello',
         expect.objectContaining({ method: 'HEAD' }),
         expect.any(Number),
         0,
       );
       expect(vi.mocked(fetchWithRetries).mock.calls[0][1]).not.toHaveProperty('body');
+    });
+
+    it.each(['GET', 'HEAD'] as const)('returns an error for a malformed %s URL', async (method) => {
+      const provider = new N8nProvider('relative/webhook', { config: { method } });
+      await expect(provider.callApi('Hello')).resolves.toMatchObject({
+        error: 'n8n webhook call error: Invalid URL',
+      });
+      expect(fetchWithRetries).not.toHaveBeenCalled();
     });
 
     it('should call n8n webhook with default body structure without response caching', async () => {
@@ -906,12 +914,7 @@ describe('createN8nProvider', () => {
   });
 
   it('normalizes lowercase / mixed-case method strings before routing GET vs POST', async () => {
-    // YAML happily accepts `method: get` even though the TypeScript union
-    // declares uppercase verbs. Without normalization, `method === 'GET'`
-    // misses, buildGetUrl() is skipped, and the body is sent with a GET
-    // request — undici rejects with "Request with GET/HEAD method cannot
-    // have body". Normalizing also routes the request through the correct
-    // GET-vs-body policy.
+    // YAML method names must be normalized before choosing body or query placement.
     const mockResponse = createMockResponse({ output: 'ok' });
     vi.mocked(fetchWithRetries).mockImplementation(async () => mockResponse.clone());
 

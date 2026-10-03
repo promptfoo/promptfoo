@@ -436,7 +436,7 @@ export class N8nProvider implements ApiProvider {
     return this.addSessionField(renderValue(this.config.body), context);
   }
 
-  private buildGetUrl(body: N8nRequestBody): string {
+  private buildQueryUrl(body: N8nRequestBody): string {
     const requestUrl = new URL(this.getUrl());
 
     if (typeof body === 'string') {
@@ -541,18 +541,15 @@ export class N8nProvider implements ApiProvider {
     const timeout = this.config.timeout || getRequestTimeoutMs();
 
     const body = this.buildRequestBody(prompt, context);
-    const url = method === 'GET' ? this.buildGetUrl(body) : this.getUrl();
+    // Fetch forbids GET/HEAD bodies; send their payloads in the query string.
+    const isBodyless = method === 'GET' || method === 'HEAD';
     const headers = this.buildHeaders(prompt, context);
-    const renderedBody = typeof body === 'string' ? body : JSON.stringify(body);
     const fetchOptions: RequestInit = {
       method,
       headers,
+      ...(!isBodyless && { body: typeof body === 'string' ? body : JSON.stringify(body) }),
       ...(callOptions?.abortSignal && { signal: callOptions.abortSignal }),
     };
-
-    if (method !== 'GET' && method !== 'HEAD') {
-      fetchOptions.body = renderedBody;
-    }
 
     logger.debug('[n8n] Calling webhook', {
       hasBody: fetchOptions.body !== undefined,
@@ -567,6 +564,7 @@ export class N8nProvider implements ApiProvider {
     let latencyMs: number | undefined;
 
     try {
+      const url = isBodyless ? this.buildQueryUrl(body) : this.getUrl();
       // Every webhook method can dispatch side effects. Never cache or replay it.
       const startedAt = Date.now();
       const response = await fetchWithRetries(url, fetchOptions, timeout, 0);
