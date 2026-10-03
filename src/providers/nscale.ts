@@ -1,12 +1,13 @@
 import { getEnvString } from '../envars';
+import { resolveProviderCreatorInput } from './creator';
 import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { splitLocalOptions } from './openai/localOptions';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
 
 /**
  * Creates an Nscale provider using OpenAI-compatible endpoints
@@ -18,15 +19,12 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  */
 export function createNscaleProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
+  const providerOptions = resolveProviderCreatorInput(options);
   const splits = providerPath.split(':');
 
-  const config = options.config?.config || {};
+  const config = providerOptions.config || {};
   const { localOptions, modelParameters } = splitLocalOptions(config);
 
   const getApiKeyEnvar = () => {
@@ -35,7 +33,7 @@ export function createNscaleProvider(
     }
     // Select a native namespace without copying its credential into config.
     for (const envar of ['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']) {
-      if (options.env?.[envar] || getEnvString(envar)) {
+      if (providerOptions.env?.[envar] || getEnvString(envar)) {
         return envar;
       }
     }
@@ -43,7 +41,7 @@ export function createNscaleProvider(
   };
 
   const nscaleConfig = {
-    ...options,
+    ...providerOptions,
     config: {
       ...localOptions,
       apiKeyEnvar: getApiKeyEnvar(),
@@ -65,9 +63,9 @@ export function createNscaleProvider(
     return new OpenAiEmbeddingProvider(modelName, nscaleConfig);
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
-      config,
-      id: options.id,
-      env: options.env,
+      config: providerOptions.config,
+      id: providerOptions.id,
+      env: providerOptions.env,
     });
   } else {
     // If no specific type is provided, default to chat

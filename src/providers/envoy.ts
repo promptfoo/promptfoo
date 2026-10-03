@@ -1,8 +1,9 @@
 import { getEnvString } from '../envars';
+import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
 
 /**
  * Creates an Envoy AI Gateway provider using OpenAI-compatible endpoints
@@ -28,12 +29,9 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  */
 export function createEnvoyProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
+  const providerOptions = resolveProviderCreatorInput(options);
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
@@ -42,12 +40,11 @@ export function createEnvoyProvider(
   }
 
   // Filter out basePath from config to avoid passing it to the API
-  const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
+  const { basePath: _, ...configWithoutBasePath } = providerOptions.config || {};
 
   const apiBaseUrl =
     configWithoutBasePath.apiBaseUrl ||
-    options.config?.env?.ENVOY_API_BASE_URL ||
-    options.env?.ENVOY_API_BASE_URL ||
+    providerOptions.env?.ENVOY_API_BASE_URL ||
     getEnvString('ENVOY_API_BASE_URL');
 
   if (!apiBaseUrl) {
@@ -60,9 +57,7 @@ export function createEnvoyProvider(
   const normalizedBaseUrl = baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`;
 
   const envoyConfig = {
-    ...options.config,
-    id: options.id ?? options.config?.id,
-    env: options.config?.env ?? options.env,
+    ...providerOptions,
     config: {
       ...configWithoutBasePath,
       apiBaseUrl: normalizedBaseUrl,
