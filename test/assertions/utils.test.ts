@@ -219,6 +219,40 @@ describe('getFinalTest', () => {
     expect(result.provider).toBe(directProvider);
     expect(result.options?.provider).toBe(assertionProvider);
   });
+
+  it('does not stack-overflow when a reused grading provider holds a circular SDK client', () => {
+    // Repro for #10501: after grading-provider reuse, assertion.provider is the
+    // live target ApiProvider. Anthropic's SDK client has cycles
+    // (client.messages._client === client), and getFinalTest clones test.assert.
+    const client: { messages: { _client?: unknown } } = { messages: {} };
+    client.messages._client = client;
+
+    const circularProvider = Object.assign(createMockProvider('anthropic:messages:claude-haiku'), {
+      anthropic: client,
+    });
+
+    const testCase: TestCase = {
+      vars: { x: 'hello' },
+      assert: [
+        {
+          type: 'llm-rubric',
+          value: 'is this a reasonable response?',
+          provider: circularProvider,
+        },
+      ],
+    };
+
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'is this a reasonable response?',
+      provider: circularProvider,
+    };
+
+    const result = getFinalTest(testCase, assertion);
+    expect(result.options?.provider).toBe(circularProvider);
+    expect(result.vars).toEqual({ x: 'hello' });
+    expect(result.vars).not.toBe(testCase.vars);
+  });
 });
 
 describe('loadFromJavaScriptFile', () => {
