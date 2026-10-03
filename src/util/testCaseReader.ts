@@ -12,7 +12,7 @@ import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
-import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
+import { fetchRemoteTestCases, getRemoteTestCaseSource } from '../integrations/remoteTestCases';
 import logger from '../logger';
 import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
@@ -54,7 +54,12 @@ function preserveRemoteTests(tests: TestCase[]): TestCase[] {
       ...test,
       metadata: {
         ...test.metadata,
-        __promptfoo: { ...test.metadata?.__promptfoo, remote: true },
+        __promptfoo: {
+          ...test.metadata?.__promptfoo,
+          remote: true,
+          remoteVars:
+            typeof test.vars === 'object' && test.vars !== null ? Object.keys(test.vars) : [],
+        },
       },
     };
   });
@@ -118,11 +123,12 @@ export async function readStandaloneTestsFile(
   varsPath = renderEnvOnlyInObject(varsPath);
   const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
 
-  if (varsPath.startsWith('huggingface://datasets/')) {
+  const remoteSource = getRemoteTestCaseSource(varsPath);
+  if (remoteSource) {
     telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
+      feature: remoteSource,
     });
-    return preserveRemoteTests(await fetchHuggingFaceDataset(varsPath));
+    return preserveRemoteTests(await fetchRemoteTestCases(varsPath, remoteSource));
   }
 
   if (varsPath.startsWith('az://')) {
@@ -577,7 +583,7 @@ function validateTestCase(testCase: TestCase): void {
     !testCase.options &&
     !testCase.metadata &&
     !testCase.provider &&
-    !testCase.providerOutput &&
+    testCase.providerOutput === undefined &&
     !isDescriptionOnly &&
     typeof testCase.threshold !== 'number'
   ) {
@@ -615,11 +621,12 @@ async function loadTestsFromGlobWithEnv(
   loadProviders = true,
 ): Promise<TestCase[]> {
   loadTestsGlob = renderEnvOnlyInObject(loadTestsGlob);
-  if (loadTestsGlob.startsWith('huggingface://datasets/')) {
+  const remoteSource = getRemoteTestCaseSource(loadTestsGlob);
+  if (remoteSource) {
     telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
+      feature: remoteSource,
     });
-    return preserveRemoteTests(await fetchHuggingFaceDataset(loadTestsGlob));
+    return preserveRemoteTests(await fetchRemoteTestCases(loadTestsGlob, remoteSource));
   }
 
   if (loadTestsGlob.startsWith('file://')) {

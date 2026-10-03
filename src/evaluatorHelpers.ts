@@ -26,7 +26,11 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import {
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+  templateReferencesVariable,
+} from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
 
@@ -54,40 +58,50 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
 export function resolveVariables(
   variables: Record<string, VarValue>,
   skipResolveVars?: string[],
-  varsResolvedFromSkipped?: Set<string>,
+  renderedVarNames?: Set<string>,
+  renderTemplate?: (template: string, vars: Record<string, VarValue>) => string,
 ): Record<string, VarValue> {
-  let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+  const originals = { ...variables };
+  const resolved = new Set(skipResolveVars);
+  const resolving = new Set<string>();
 
-  let iterations = 0;
-  do {
-    resolved = true;
-    for (const key of Object.keys(variables)) {
-      if (
-        skipResolveVars?.includes(key) ||
-        varsResolvedFromSkipped?.has(key) ||
-        typeof variables[key] !== 'string'
-      ) {
-        continue;
-      }
-      const value = variables[key] as string;
-      const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
-        if (variables[varName] === undefined) {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
-          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-            varsResolvedFromSkipped?.add(key);
+  function resolve(key: string): VarValue {
+    if (resolved.has(key) || resolving.has(key)) {
+      return variables[key];
+    }
+    resolving.add(key);
+    const value = originals[key];
+    if (typeof value === 'string') {
+      if (renderTemplate && !referencesUndefinedVariables(value, originals)) {
+        for (const name of Object.keys(originals)) {
+          if (templateReferencesVariable(value, name)) {
+            resolve(name);
           }
-          resolved = false; // Indicate that we've made a replacement and should check again
         }
+        variables[key] = renderTemplate(value, variables);
+        renderedVarNames?.add(key);
+      } else {
+        // Substitute the original template once, without parsing text inserted from other vars.
+        variables[key] = value.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name: string) => {
+          if (originals[name] === undefined) {
+            return placeholder;
+          }
+          const replacement = resolve(name);
+          if (skipResolveVars?.includes(name) || renderedVarNames?.has(name)) {
+            renderedVarNames?.add(key);
+          }
+          return String(replacement);
+        });
       }
     }
-    iterations++;
-  } while (!resolved && iterations < 5);
+    resolving.delete(key);
+    resolved.add(key);
+    return variables[key];
+  }
+
+  for (const key of Object.keys(variables)) {
+    resolve(key);
+  }
 
   return variables;
 }
@@ -425,9 +439,19 @@ export async function renderPrompt(
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
-  // Resolve variable mappings
-  const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  const originalVars = { ...vars };
+  const aliases = resolveVariables({ ...vars }, skipRenderVars);
+  // Share bare aliases with downstream contexts, preserving local expression templates.
+  for (const [key, value] of Object.entries(aliases)) {
+    const original = originalVars[key];
+    if (
+      typeof original === 'string' &&
+      !/{[{%#]/.test(original.replace(/\{\{\s*\w+\s*\}\}/g, ''))
+    ) {
+      vars[key] = value;
+    }
+  }
+  vars = aliases;
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -515,23 +539,13 @@ export async function renderPrompt(
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    // Vars values can be template strings, so we need to render them first:
-    const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => {
-        if (
-          typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
-          varsResolvedFromSkipped.has(key)
-        ) {
-          return [key, value];
-        }
-
-        if (referencesUndefinedVariables(value, vars)) {
-          return [key, value];
-        }
-
-        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
-      }),
+    // Resolve local expressions only for text prompts. JSON prompts insert variable
+    // values as data, and rendered expressions must not replace caller-owned templates.
+    const renderedVars = resolveVariables(
+      originalVars,
+      skipRenderVars,
+      undefined,
+      (template, values) => nunjucks.renderString(autoWrapRawIfPartialNunjucks(template), values),
     );
 
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected

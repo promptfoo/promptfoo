@@ -9,6 +9,7 @@ import {
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import * as time from '../../src/util/time';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
 describe('runEval', () => {
@@ -59,6 +60,304 @@ describe('runEval', () => {
     expect(result.response?.output).toBe('Test output');
     expect(result.prompt.label).toBe('test-label');
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
+  });
+
+  it('keeps runtime output registers literal when resolving local templates', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{message}}', label: 'register fixture' },
+      test: {
+        vars: { message: '{{answer}}!', settings: { marker: 'local value' } },
+      },
+      conversations: {},
+      registers: { answer: '{{settings.marker}}' },
+    });
+    expect(results[0].prompt.raw).toBe('{{settings.marker}}!');
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      '{{settings.marker}}!',
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('resolves local expression dependencies before inserting imported data', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{message}} / {{input}}', label: 'expression fixture' },
+      test: {
+        providerOutput: 'stored',
+        vars: {
+          message: '{{alias ~ "!"}}',
+          alias: '{{suffix}}',
+          suffix: 'done',
+          input: '{{marker}}',
+        },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe('done! / {{marker}}');
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('rejects output-stripped replay before rendering or calling the provider', async () => {
+    const filter = vi.fn(() => 'rendered');
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{input | fixture}}', label: 'redacted fixture' },
+      nunjucksFilters: { fixture: filter },
+      test: {
+        vars: { input: '{{marker}}', marker: 'local value' },
+        metadata: {
+          __promptfoo: { remote: true, remoteVars: ['input'], providerOutputRedacted: true },
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].success).toBe(false);
+    expect(results[0].error).toContain('Stored provider output was removed');
+    expect(filter).not.toHaveBeenCalled();
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('preserves imported data when a remote dataset requests a live response', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{input}} / {{local}}', label: 'remote dataset fixture' },
+      test: {
+        vars: {
+          input: '{{settings.marker}}',
+          local: '{{suffix}}',
+          suffix: 'done',
+          settings: { marker: 'local value' },
+        },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe('{{settings.marker}} / done');
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      '{{settings.marker}} / done',
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('should use empty providerOutput without calling the provider', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        providerOutput: '',
+        metadata: {
+          evaluationId: 'stored-output-replay',
+          tracingEnabled: true,
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(results[0].response?.output).toBe('');
+    expect(results[0].response?.cached).toBe(false);
+    expect(results[0].traceId).toBeUndefined();
+    expect(results[0].evaluationId).toBeUndefined();
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should preserve imported stored-output vars as literal data', async () => {
+    const sleepSpy = vi.spyOn(time, 'sleep').mockResolvedValue(undefined);
+    const callApi = vi.fn().mockResolvedValue({ output: 'should not be called' });
+    const providerWithDelay: ApiProvider = {
+      id: () => 'stored-output-provider',
+      callApi,
+      delay: 100,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: providerWithDelay,
+      prompt: {
+        raw: 'Input: {{input}}\nSecret: {{secretTemplate}}',
+        label: 'test-label',
+      },
+      test: {
+        providerOutput: 'stored output',
+        vars: {
+          input: 'file:///tmp/promptfoo-should-not-read-this-file',
+          secretTemplate: '{{ env.PROMPTFOO_LANGFUSE_TRACE_SECRET }}',
+        },
+        options: { disableVarExpansion: true },
+        metadata: { __promptfoo: { remote: true } },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(results[0].prompt.raw).toContain('file:///tmp/promptfoo-should-not-read-this-file');
+    expect(results[0].prompt.raw).toContain('{{ env.PROMPTFOO_LANGFUSE_TRACE_SECRET }}');
+    expect(results[0].response?.output).toBe('stored output');
+    expect(results[0].response?.cached).toBe(false);
+    expect(callApi).not.toHaveBeenCalled();
+    expect(sleepSpy).not.toHaveBeenCalled();
+  });
+
+  it('combines remote-variable and configured inject-variable literal protection', async () => {
+    const literal = '{{settings.marker}}';
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{prompt}} | {{input}}', label: 'literal fixture' },
+      test: {
+        vars: { input: literal, prompt: literal, settings: { marker: 'local value' } },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: { injectVar: 'prompt' },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe(`${literal} | ${literal}`);
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      `${literal} | ${literal}`,
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('shares bare aliases whose values contain literal template text', async () => {
+    const provider: ApiProvider = {
+      id: () => 'echo-fixture',
+      callApi: vi.fn(async (prompt, context) => {
+        expect(context?.vars.alias).toBe('{{missing}}');
+        return { output: prompt };
+      }),
+    };
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{alias}}', label: 'literal alias' },
+      test: {
+        vars: { source: '{{missing}}', alias: '{{source}}' },
+        assert: [{ type: 'equals', value: '{{alias}}' }],
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(result.success).toBe(true);
+    expect(result.response?.output).toBe('{{missing}}');
+  });
+
+  it('shares resolved ordinary aliases with provider and assertion contexts', async () => {
+    const provider: ApiProvider = {
+      id: () => 'echo-fixture',
+      callApi: vi.fn(async (prompt, context) => {
+        expect(context?.vars.greeting).toBe('Hello Alice');
+        return { output: prompt };
+      }),
+    };
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{greeting}}', label: 'ordinary alias' },
+      test: {
+        vars: { name: 'Alice', greeting: 'Hello {{name}}' },
+        assert: [{ type: 'equals', value: '{{greeting}}' }],
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].success).toBe(true);
+    expect(results[0].score).toBe(1);
+    expect(results[0].vars.greeting).toBe('Hello Alice');
+  });
+
+  it('renders local defaults while keeping imported stored-output values literal', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{input}} / {{context}}', label: 'fixture' },
+      test: {
+        providerOutput: 'stored',
+        vars: { input: '{{source}}', source: 'local context', context: '{{source}}' },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe('{{source}} / local context');
+    expect(results[0].vars.context).toBe('local context');
+  });
+
+  it('renders every local placeholder once while preserving imported literal text', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{context}}', label: 'fixture' },
+      test: {
+        providerOutput: 'stored',
+        vars: {
+          context: '{{input}} | {{reference}} | {{suffix}}',
+          input: '{{literal}}',
+          reference: '{{second}}',
+          suffix: '{{local}}',
+          local: 'local suffix',
+          literal: 'do not insert',
+          second: 'do not insert either',
+        },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input', 'reference'] } },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe('{{literal}} | {{second}} | local suffix');
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('applies explicit provider and test transforms to stored remote output', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: { ...mockProvider, transform: 'output + "-provider"' },
+      prompt: { raw: 'fixture', label: 'fixture' },
+      test: {
+        providerOutput: 'stored text',
+        metadata: { __promptfoo: { remote: true, remoteVars: [] } },
+        options: { transform: 'output + "-test"' },
+        assert: [{ type: 'equals', value: 'stored text-provider-test' }],
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].success).toBe(true);
+    expect(results[0].response?.output).toBe('stored text-provider-test');
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('keeps local stored-output template rendering independent of array expansion', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{input}}', label: 'fixture' },
+      test: {
+        providerOutput: 'stored',
+        vars: { input: '{{source}}', source: 'resolved' },
+        options: { disableVarExpansion: true },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe('resolved');
   });
 
   it('should expose eval runtime vars to prompt and provider rendering', async () => {

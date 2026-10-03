@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
+import { resultIsForTestCase } from '../../../src/util/comparison';
 import { filterTestsByResults } from '../../../src/util/eval/filterTestsUtil';
 import * as util from '../../../src/util/index';
 
@@ -116,6 +117,41 @@ describe('filterTestsUtil', () => {
       vi.mocked(util.resultIsForTestCase).mockImplementation(function (result, test) {
         return result.testCase === test;
       });
+    });
+
+    it('selects and deduplicates stored traces by trace identity', async () => {
+      const tests = ['first', 'second'].map((id, index) => ({
+        vars: { input: 'same', output: 'same', __langfuse_trace_id: id, __langfuse_latency: index },
+        providerOutput: 'same',
+        metadata: { __promptfoo: { remote: true }, langfuseTraceId: id },
+      }));
+      const results = tests.map((test, index) => ({
+        ...mockResults[1],
+        vars: test.vars,
+        testCase: test,
+        testIdx: index,
+      }));
+      const suite = { ...mockTestSuite, tests };
+      await vi
+        .mocked(util.resultIsForTestCase)
+        .withImplementation(resultIsForTestCase, async () => {
+          vi.mocked(util.readOutput).mockResolvedValue({
+            results: { results: [results[1]] },
+          } as any);
+          expect(await filterTestsByResults(suite, 'fixture.json', () => true)).toEqual([tests[1]]);
+          vi.mocked(util.readOutput).mockResolvedValue({ results: { results } } as any);
+          expect(await filterTestsByResults(suite, 'fixture.json', () => true)).toEqual(tests);
+          expect(
+            await filterTestsByResults({ ...suite, tests: [] }, 'fixture.json', () => true),
+          ).toEqual(
+            tests.map((test) => ({
+              ...test,
+              description: undefined,
+              assert: undefined,
+              options: undefined,
+            })),
+          );
+        });
     });
 
     it('should return empty array if testSuite has no tests', async () => {

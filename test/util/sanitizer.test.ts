@@ -134,6 +134,44 @@ describe('sanitizeConfigForOutput', () => {
     expect(JSON.stringify(output)).not.toContain('private-value');
   });
 
+  it('retains imported variable names when stripping user metadata', () => {
+    const config = {
+      tests: [
+        {
+          vars: { input: '{{literal}}', local: '{{source}}' },
+          providerOutput: 'stored',
+          metadata: { note: 'remove me', __promptfoo: { remote: true, remoteVars: ['input'] } },
+        },
+      ],
+    };
+    const result = sanitizeConfigForOutput(config, { shouldStripMetadata: true });
+    expect(result.tests).toMatchObject([
+      { metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } } },
+    ]);
+    expect(config.tests[0].metadata.note).toBe('remove me');
+  });
+
+  it.each([true, false])(
+    'preserves output-redaction state across repeated exports (metadata stripping: %s)',
+    (stripMetadata) => {
+      const config = { tests: [{ providerOutput: '', vars: { input: '{{marker}}' } }] };
+      const output = sanitizeConfigForOutput(config, {
+        shouldStripMetadata: stripMetadata,
+        shouldStripResponseOutput: true,
+      });
+      expect(output.tests).toEqual([
+        {
+          vars: { input: '{{marker}}' },
+          metadata: { __promptfoo: { providerOutputRedacted: true } },
+        },
+      ]);
+      expect(sanitizeConfigForOutput(output, { shouldStripMetadata: true }).tests).toEqual(
+        output.tests,
+      );
+      expect(config.tests[0].providerOutput).toBe('');
+    },
+  );
+
   it('strips saved test data while preserving remote-row safety and local replay data', () => {
     const test = {
       vars: { input: 'private test vars' },
@@ -153,10 +191,33 @@ describe('sanitizeConfigForOutput', () => {
     });
     expect(JSON.stringify(output)).not.toContain('private');
     expect(output.tests).toEqual([
-      { metadata: { __promptfoo: { remote: true } }, assert: test.assert },
+      {
+        metadata: { __promptfoo: { remote: true, providerOutputRedacted: true } },
+        assert: test.assert,
+      },
     ]);
     expect(config.tests[0]).toBe(test);
     expect(config.tests[0].vars.input).toBe('private test vars');
+  });
+
+  it('strips loaded remote row data even when the row contains a path field', () => {
+    const test = {
+      path: 'ordinary-source-label',
+      vars: { input: 'private vars' },
+      providerOutput: 'private output',
+      metadata: { note: 'private metadata', __promptfoo: { remote: true } },
+    };
+    const output = sanitizeConfigForOutput(
+      { tests: [test] },
+      { shouldStripTestVars: true, shouldStripMetadata: true, shouldStripResponseOutput: true },
+    );
+    expect(output.tests).toEqual([
+      {
+        path: 'ordinary-source-label',
+        metadata: { __promptfoo: { remote: true, providerOutputRedacted: true } },
+      },
+    ]);
+    expect(test.providerOutput).toBe('private output');
   });
 
   it.each(['https', 'http', 'ws', 'wss'])(

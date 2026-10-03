@@ -4,7 +4,7 @@
  */
 import safeStringify from 'fast-safe-stringify';
 
-import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
+import type { EvalRuntimeOptions, TestCase, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
@@ -726,23 +726,42 @@ export function sanitizeConfigForOutput(
         : [],
     ),
   ];
-  for (const test of tests) {
-    if (!test || typeof test !== 'object') {
+  for (const entry of tests) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const test = entry as TestCase;
+    if ('path' in entry && test.metadata?.__promptfoo?.remote !== true) {
       continue;
     }
     if (stripVars && 'vars' in test) {
       delete test.vars;
     }
+    const providerOutputRedacted =
+      test.metadata?.__promptfoo?.providerOutputRedacted === true ||
+      (stripOutput && test.providerOutput !== undefined);
     if (stripMetadata && 'metadata' in test) {
       // Keep the internal marker so exported remote rows cannot execute local file references.
       if (test.metadata?.__promptfoo?.remote === true) {
-        test.metadata = { __promptfoo: { remote: true } };
+        const remoteVars = test.metadata.__promptfoo.remoteVars;
+        test.metadata = {
+          __promptfoo: {
+            remote: true,
+            ...(!stripVars && Array.isArray(remoteVars) ? { remoteVars: [...remoteVars] } : {}),
+          },
+        };
       } else {
         delete test.metadata;
       }
     }
     if (stripOutput && 'providerOutput' in test) {
       delete test.providerOutput;
+    }
+    if (providerOutputRedacted) {
+      test.metadata = {
+        ...test.metadata,
+        __promptfoo: { ...test.metadata?.__promptfoo, providerOutputRedacted: true },
+      };
     }
   }
   const provider = safe.tracing?.provider;

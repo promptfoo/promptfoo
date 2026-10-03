@@ -1,6 +1,6 @@
 ---
 sidebar_label: Langfuse
-description: Integrate Langfuse prompts with Promptfoo for LLM testing. Configure version control, labels, and collaborative prompt management using environment variables and SDK setup.
+description: Use Langfuse prompts and stored trace outputs in Promptfoo evals. Configure credentials, filter traces, and grade existing responses without replaying a model.
 ---
 
 # Langfuse integration
@@ -128,3 +128,56 @@ Common label patterns:
 
 - While prompt IDs containing `@` symbols are supported, we recommend avoiding them for clarity. The parser looks for the last `@` followed by a label pattern to distinguish between the prompt ID and label.
 - If you need to use `@` in your label names, consider using a different naming convention.
+
+## Evaluating Langfuse traces
+
+Use `langfuse://traces` as a test source to grade stored outputs. Install `@langfuse/client` and set the credentials described above.
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{input}}'
+providers:
+  - echo
+defaultTest:
+  assert:
+    - type: javascript
+      value: >-
+        output != null &&
+        (typeof output === 'string' ? output.length > 0 : Object.keys(output).length > 0)
+tests: langfuse://traces?tags=production&limit=50
+```
+
+Each trace becomes a test case. The response provider is not called, including when a trace has no output; missing outputs are graded as an empty string. Explicit provider and test transforms still apply. Model-graded assertions still call their configured grading provider. Results are stored locally and are not written back to Langfuse. An empty trace selection stops with an error before evaluation.
+
+Exports created with `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true` cannot replay stored responses. Restore `providerOutput` from the original source before replaying those tests.
+
+Trace input and output may contain production data. They appear in local results and exports. Model-graded assertions can send that data to the grading provider, and sharing an eval also shares its stored trace data.
+
+### Trace filters
+
+| Parameter                      | Meaning                                                          |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `limit`                        | Maximum number of traces; defaults to 100 and is capped at 1,000 |
+| `tags`                         | Comma-separated or repeated tags; traces must include all tags   |
+| `userId`, `sessionId`, `name`  | Match the corresponding trace field                              |
+| `fromTimestamp`, `toTimestamp` | ISO 8601 timestamp bounds                                        |
+| `version`, `release`           | Match the trace version or release                               |
+
+Unknown or empty selectors and repeated scalar selectors are rejected. A `sessionId` filter selects individual traces; it does not reconstruct conversation history or grade session continuity.
+
+### Trace variables
+
+Imported variables and values returned by `transformVars` are treated as literal data, including template syntax and file references. Local variables that are not returned by `transformVars` keep their normal template and file loading behavior.
+
+`input` contains the extracted trace input. The extracted response is stored in `providerOutput` and passed to assertions as `output`. Stored OpenAI tool calls retain the structure needed by `is-valid-openai-tools-call`. Mixed text and tool-call outputs retain their content. The original input is also available:
+
+| Variable                                                         | Value                                              |
+| ---------------------------------------------------------------- | -------------------------------------------------- |
+| `__langfuse_input`                                               | Original input                                     |
+| `__langfuse_trace_id`, `__langfuse_timestamp`                    | Trace ID and timestamp                             |
+| `__langfuse_name`, `__langfuse_user_id`, `__langfuse_session_id` | Optional trace identifiers                         |
+| `__langfuse_tags`, `__langfuse_metadata`                         | Tags and metadata                                  |
+| `__langfuse_latency`, `__langfuse_cost`                          | Latency in seconds and cost in USD, when available |
+| `__langfuse_url`                                                 | Trace link, when supplied by Langfuse              |
+
+Local `defaultTest.vars` entries still render normally. To evaluate a new prompt or response provider against historical inputs, create ordinary test cases instead of using this stored-output source.

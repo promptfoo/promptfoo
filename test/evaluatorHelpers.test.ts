@@ -177,6 +177,42 @@ describe('evaluatorHelpers', () => {
   });
 
   describe('renderPrompt', () => {
+    it('keeps unskipped structured values literal in JSON prompts', async () => {
+      const vars = {
+        input: 'ordinary input',
+        generated: '{{settings.marker}}',
+        settings: { marker: 'local fixture value' },
+      };
+      const result = await renderPrompt(
+        { raw: '{"input":"{{input}}","data":"{{generated}}"}', label: 'JSON fixture' },
+        vars,
+        {},
+        undefined,
+        ['input'],
+      );
+      expect(JSON.parse(result)).toEqual({ input: 'ordinary input', data: '{{settings.marker}}' });
+      expect(vars.generated).toBe('{{settings.marker}}');
+    });
+
+    it('preserves filtered alias templates across repeated renders with literal input', async () => {
+      const vars = {
+        input: '{{settings.marker}}',
+        wrapped: '{{input | trim}}',
+        settings: { marker: 'ordinary fixture text' },
+      };
+      const prompt = { raw: '{{wrapped}}', label: 'fixture' };
+      expect(await renderPrompt(prompt, vars, {}, undefined, ['input'])).toBe(
+        '{{settings.marker}}',
+      );
+      expect(vars.wrapped).toBe('{{input | trim}}');
+      vars.input = 'next {{settings.marker}}';
+      expect(await renderPrompt(prompt, vars, {}, undefined, ['input'])).toBe(
+        'next {{settings.marker}}',
+      );
+      expect(vars.wrapped).toBe('{{input | trim}}');
+      expect(vars.settings.marker).toBe('ordinary fixture text');
+    });
+
     beforeEach(() => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
       mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: undefined });
@@ -581,6 +617,23 @@ describe('evaluatorHelpers', () => {
       const variables = { first: '{{second}}', second: '{{third}}', third: 'value' };
       const expected = { first: 'value', second: 'value', third: 'value' };
       expect(resolveVariables(variables)).toEqual(expected);
+    });
+
+    it('resolves long local alias chains before inserting literal data', () => {
+      const variables = {
+        first: '{{second}}',
+        second: '{{third}}',
+        third: '{{fourth}}',
+        fourth: '{{fifth}}',
+        fifth: '{{sixth}}',
+        sixth: '{{seventh}}',
+        seventh: '{{input}}',
+        input: '{{literal}}',
+        literal: 'do not insert',
+      };
+      const derived = new Set<string>();
+      expect(resolveVariables(variables, ['input'], derived).first).toBe('{{literal}}');
+      expect(derived.has('first')).toBe(true);
     });
 
     it('should not modify variables without placeholders', () => {

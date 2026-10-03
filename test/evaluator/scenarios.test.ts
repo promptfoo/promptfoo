@@ -6,10 +6,45 @@ import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { transform } from '../../src/util/transform';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator scenarios and conversations', () => {
+  it('keeps transformed import metadata private to each scenario variant', async () => {
+    const metadata = { __promptfoo: { remote: true, remoteVars: ['input'] } };
+    const provider = { id: () => 'unused', callApi: vi.fn() };
+    vi.mocked(transform).mockResolvedValueOnce({ question: '{{literal}}' });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{question}}')],
+      defaultTest: { vars: { source: 'local source' } },
+      scenarios: [
+        {
+          config: [
+            {
+              vars: { input: '{{literal}}' },
+              metadata,
+              options: { transformVars: '({ question: vars.input })' },
+            },
+            { vars: { input: 'other input' }, metadata },
+          ],
+          tests: [{ providerOutput: 'stored answer', vars: { question: '{{source}}' } }],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.stats.successes).toBe(2);
+    expect(summary.results.map((result) => result.prompt.raw)).toEqual([
+      '{{literal}}',
+      'local source',
+    ]);
+    expect(metadata.__promptfoo.remoteVars).toEqual(['input']);
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
   it('evaluate with scenarios', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

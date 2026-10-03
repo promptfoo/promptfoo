@@ -212,7 +212,26 @@ function projectTestCase(
     delete projectedTestCase.providerOutput;
   }
   if (options.stripMetadata && testCase.metadata?.__promptfoo?.remote === true) {
-    projectedTestCase.metadata = { __promptfoo: { remote: true } };
+    const remoteVars = testCase.metadata.__promptfoo.remoteVars;
+    projectedTestCase.metadata = {
+      __promptfoo: {
+        remote: true,
+        ...(!options.stripVars && Array.isArray(remoteVars) ? { remoteVars: [...remoteVars] } : {}),
+      },
+    };
+  }
+
+  if (
+    testCase.metadata?.__promptfoo?.providerOutputRedacted === true ||
+    (options.stripOutput && testCase.providerOutput !== undefined)
+  ) {
+    projectedTestCase.metadata = {
+      ...projectedTestCase.metadata,
+      __promptfoo: {
+        ...projectedTestCase.metadata?.__promptfoo,
+        providerOutputRedacted: true,
+      },
+    };
   }
 
   return projectedTestCase;
