@@ -11,12 +11,13 @@ import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
+import { sanitizeScriptContext } from './scriptContext';
 import {
+  applyCachedCallApiMetadata,
   buildScriptArgs,
   hasScriptResultError,
-  sanitizeScriptContext,
   validateScriptResult,
-} from './scriptContext';
+} from './scriptResult';
 
 import type {
   ApiProvider,
@@ -26,6 +27,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
+import type { ScriptApiType } from './scriptResult';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;
@@ -34,33 +36,7 @@ interface PythonProviderConfig {
   [key: string]: any; // Allow arbitrary config properties for user scripts
 }
 
-type PythonApiType = 'call_api' | 'call_embedding_api' | 'call_classification_api';
-
-function applyCachedCallApiMetadata(apiType: PythonApiType, parsedResult: any) {
-  if (apiType !== 'call_api' || typeof parsedResult !== 'object' || parsedResult === null) {
-    return parsedResult;
-  }
-
-  logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
-  parsedResult.cached = true;
-
-  // Update token usage format for cached results
-  if (parsedResult.tokenUsage) {
-    const total = parsedResult.tokenUsage.total || 0;
-    parsedResult.tokenUsage = {
-      cached: total,
-      total,
-      numRequests: parsedResult.tokenUsage.numRequests ?? 1,
-    };
-    logger.debug(
-      `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
-    );
-  }
-
-  return parsedResult;
-}
-
-function applyFreshCallApiMetadata(apiType: PythonApiType, result: any) {
+function applyFreshCallApiMetadata(apiType: ScriptApiType, result: any) {
   if (apiType !== 'call_api' || typeof result !== 'object' || result === null) {
     return result;
   }
@@ -224,7 +200,7 @@ export class PythonProvider implements ApiProvider {
   private async executePythonScript(
     prompt: string,
     context: CallApiContextParams | undefined,
-    apiType: PythonApiType,
+    apiType: ScriptApiType,
   ): Promise<any> {
     if (!this.isInitialized || !this.pool) {
       await this.initialize();
@@ -258,8 +234,7 @@ export class PythonProvider implements ApiProvider {
         `PythonProvider parsed cached result type: ${typeof parsedResult}, keys: ${Object.keys(parsedResult).join(',')}`,
       );
 
-      // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
-      return applyCachedCallApiMetadata(apiType, parsedResult);
+      return applyCachedCallApiMetadata(apiType, parsedResult, 'Python');
     } else {
       const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
 
@@ -283,7 +258,7 @@ export class PythonProvider implements ApiProvider {
       // Use worker pool instead of runPython
       const result = await this.pool!.execute(functionName, args);
 
-      validateScriptResult('Python', apiType, functionName, result);
+      validateScriptResult(apiType, functionName, result, 'Python');
 
       // Store result in cache if enabled and no errors
       const hasError = hasScriptResultError(result);
