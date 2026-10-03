@@ -29,6 +29,22 @@ type LoginCommandOptions = {
 
 type UserTeam = Awaited<ReturnType<typeof getUserTeams>>[number];
 
+function normalizeApiHost(value: string): string {
+  const url = URL.canParse(value) ? new URL(value) : undefined;
+  if (
+    !url ||
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    /[?#]/.test(url.href)
+  ) {
+    throw new Error(
+      '--host must be an HTTP(S) base URL without credentials, a query, or a fragment.',
+    );
+  }
+  return url.href.replace(/\/+$/, '');
+}
+
 function getOrganizationTeams(
   teams: UserTeam[],
   requestedOrganizationId: string | undefined,
@@ -250,12 +266,12 @@ export function authCommand(program: Command) {
       'Cloud auth header (overrides the saved setting and PROMPTFOO_CLOUD_AUTH_HEADER; otherwise defaults to Authorization).',
     )
     .action(async (cmdObj: LoginCommandOptions) => {
-      // Strip a trailing slash from the --host flag so the login-time validate /
-      // team-fetch requests don't hit `//api/v1/...` (which some on-prem ingresses 404).
-      const apiHost = (cmdObj.host || cloudConfig.getApiHost())?.replace(/\/+$/, '');
-
       try {
         if (cmdObj.apiKey) {
+          const apiHost =
+            cmdObj.host === undefined
+              ? cloudConfig.getApiHost()?.replace(/\/+$/, '')
+              : normalizeApiHost(cmdObj.host);
           await loginWithApiKey(cmdObj, apiHost);
           return;
         }
