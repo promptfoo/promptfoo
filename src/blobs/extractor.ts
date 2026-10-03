@@ -4,7 +4,7 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { extractBlobHashesFromValue } from './blobRefs';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
-import { type BlobRef, recordBlobReference, storeBlob } from './index';
+import { type BlobRef, isEvalPersisted, recordBlobReference, storeBlob } from './index';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -154,14 +154,38 @@ type StoreOnce = (
   minSizeBytes?: number,
 ) => Promise<BlobRef | null>;
 
-function createStoreOnce(blobContext: BlobContext): StoreOnce {
+/** Check once per response, only when media needs storage or an existing blob needs a reference. */
+function createPersistenceCheck(context: BlobContext): () => Promise<boolean> {
+  let persisted: Promise<boolean> | undefined;
+  return () => {
+    const { evalId } = context;
+    if (!evalId) {
+      return Promise.resolve(true);
+    }
+    persisted ??= isEvalPersisted(evalId).catch((error: unknown) => {
+      logger.debug('[BlobExtractor] Could not confirm the eval is saved; keeping media inline', {
+        evalId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    });
+    return persisted;
+  };
+}
+
+function createStoreOnce(blobContext: BlobContext, isPersisted: () => Promise<boolean>): StoreOnce {
   const cache = new Map<string, Promise<BlobRef | null>>();
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     // Canonicalize the cache key on the parsed bytes (not the raw input string)
     // so a `data:image/png;base64,XYZ` URL and the bare `XYZ` base64 hit the
     // same cache slot when they decode to the same buffer.
     const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
-    if (!parsed || !shouldExternalize(parsed.buffer, minSizeBytes)) {
+    if (
+      !parsed ||
+      !shouldExternalize(parsed.buffer, minSizeBytes) ||
+      !isBlobStorageEnabled() ||
+      !(await isPersisted())
+    ) {
       return null;
     }
 
@@ -396,7 +420,8 @@ export async function extractAndStoreBinaryData(
   let mutated = false;
   const next: ProviderResponse = { ...response };
   const blobContext = context || {};
-  const storeOnce = createStoreOnce(blobContext);
+  const isPersisted = createPersistenceCheck(blobContext);
+  const storeOnce = createStoreOnce(blobContext, isPersisted);
 
   // Audio at top level
   if (response.audio?.data && typeof response.audio.data === 'string') {
@@ -584,7 +609,7 @@ export async function extractAndStoreBinaryData(
 
   const finalResponse = mutated ? next : response;
   if (blobContext.evalId) {
-    await recordExistingBlobReferences(finalResponse, blobContext, 'response');
+    await recordExistingBlobReferences(finalResponse, blobContext, 'response', isPersisted);
   }
 
   return finalResponse;
@@ -599,9 +624,13 @@ async function recordExistingBlobReferences(
   value: unknown,
   context: BlobContext,
   location: string,
+  isPersisted: () => Promise<boolean>,
 ): Promise<void> {
   const hashes = [...new Set(extractBlobHashesFromValue(value))];
   if (hashes.length > 0) {
+    if (!(await isPersisted())) {
+      return;
+    }
     await Promise.all(hashes.map((hash) => recordBlobReference(hash, { ...context, location })));
     return;
   }
@@ -609,7 +638,7 @@ async function recordExistingBlobReferences(
   if (Array.isArray(value)) {
     await Promise.all(
       value.map((child, idx) =>
-        recordExistingBlobReferences(child, context, `${location}[${idx}]`),
+        recordExistingBlobReferences(child, context, `${location}[${idx}]`, isPersisted),
       ),
     );
     return;
@@ -617,7 +646,12 @@ async function recordExistingBlobReferences(
 
   if (value && typeof value === 'object') {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-      await recordExistingBlobReferences(child, context, location ? `${location}.${key}` : key);
+      await recordExistingBlobReferences(
+        child,
+        context,
+        location ? `${location}.${key}` : key,
+        isPersisted,
+      );
     }
   }
 }
