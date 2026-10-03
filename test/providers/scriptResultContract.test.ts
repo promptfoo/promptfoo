@@ -82,39 +82,52 @@ describe.each([
     },
   );
 
-  it.each([false, 0])('does not cache an own error with value %s', async (error) => {
+  it.each([
+    { method: 'callApi', error: false },
+    { method: 'callEmbeddingApi', error: 0 },
+    { method: 'callClassificationApi', error: 'script failed' },
+  ] as const)('does not cache an own error from $method', async ({ method, error }) => {
     execute.mockImplementation(async () => ({ error }));
+    const expected = method === 'callApi' ? { error, cached: false } : { error };
 
-    expect(await provider.callApi('hello')).toEqual({ error, cached: false });
-    expect(await provider.callApi('hello')).toEqual({ error, cached: false });
+    expect(await provider[method]('hello')).toEqual(expected);
+    expect(await provider[method]('hello')).toEqual(expected);
     expect(execute).toHaveBeenCalledTimes(2);
     expect(mocks.set).not.toHaveBeenCalled();
   });
 
-  it('accepts a non-enumerable own output', async () => {
-    const result = Object.defineProperty({}, 'output', { value: 'hidden output' });
-    execute.mockResolvedValue(result);
+  it.each(['', false, 0, null])('preserves a falsy output %s through the cache', async (output) => {
+    execute.mockResolvedValue({ output });
 
-    expect(await provider.callApi('hello')).toBe(result);
-    expect(result).toHaveProperty('output', 'hidden output');
-    expect(mocks.set).toHaveBeenCalledTimes(1);
+    expect(await provider.callApi('hello')).toEqual({ output, cached: false });
+    expect(await provider.callApi('hello')).toEqual({ output, cached: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['', null])('caches a successful result with error %s', async (error) => {
+    execute.mockResolvedValue({ output: 'ok', error });
+
+    expect(await provider.callApi('hello')).toEqual({ output: 'ok', error, cached: false });
+    expect(await provider.callApi('hello')).toEqual({ output: 'ok', error, cached: true });
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 
   it.each([
-    { method: 'callEmbeddingApi', property: 'embedding', functionName: 'call_embedding_api' },
+    { method: 'callEmbeddingApi', result: { embedding: [] }, functionName: 'call_embedding_api' },
     {
       method: 'callClassificationApi',
-      property: 'classification',
+      result: { classification: {} },
       functionName: 'call_classification_api',
     },
   ] as const)(
-    'preserves presence-only validation and two arguments for $method',
-    async ({ method, property, functionName }) => {
-      const result = { [property]: undefined };
-      execute.mockResolvedValue(result);
+    'preserves $method results through the cache and passes two arguments',
+    async ({ method, result, functionName }) => {
+      const expected = { ...result, tokenUsage: { total: 9, numRequests: 0 } };
+      execute.mockResolvedValue(structuredClone(expected));
 
-      expect(await provider[method]('hello')).toBe(result);
-      expect(result).not.toHaveProperty('cached');
+      expect(await provider[method]('hello')).toEqual(expected);
+      expect(await provider[method]('hello')).toEqual(expected);
+      expect(execute).toHaveBeenCalledTimes(1);
       const call = execute.mock.calls[0];
       expect(call[language === 'Python' ? 0 : 1]).toBe(functionName);
       expect(call[language === 'Python' ? 1 : 2]).toEqual(['hello', { config: { workers: 1 } }]);

@@ -1,8 +1,14 @@
 import logger from '../logger';
 
-import type { CallApiContextParams, ProviderOptions } from '../types/index';
+import type { CallApiContextParams, ProviderOptions } from '../types/providers';
 
-export type ScriptApiType = 'call_api' | 'call_embedding_api' | 'call_classification_api';
+const RESULT_FIELDS = {
+  call_api: ['output', 'string/object', 'instead got:'],
+  call_embedding_api: ['embedding', 'array', 'instead got'],
+  call_classification_api: ['classification', 'object', 'instead of'],
+} as const;
+
+export type ScriptApiType = keyof typeof RESULT_FIELDS;
 
 export function buildScriptArgs(
   apiType: ScriptApiType,
@@ -70,37 +76,22 @@ export function validateScriptResult(
   result: any,
   language: 'Python' | 'Ruby',
 ): void {
-  let propertyName: 'output' | 'embedding' | 'classification';
-  let valueDescription: string;
-  let receivedDescription: string;
-  switch (apiType) {
-    case 'call_api': {
-      const resultType = result === null ? 'null' : typeof result;
-      const resultKeys =
-        result && typeof result === 'object' ? Object.keys(result).join(',') : 'none';
-      logger.debug(`${language} provider result structure: ${resultType}, keys: ${resultKeys}`);
-      if (hasScriptResultProperty(result, 'output')) {
-        logger.debug(
-          `${language} provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
-        );
-      }
-      propertyName = 'output';
-      valueDescription = 'string/object';
-      receivedDescription = 'instead got:';
-      break;
+  const fields = RESULT_FIELDS[apiType];
+  if (!fields) {
+    throw new Error(`Unsupported apiType: ${apiType}`);
+  }
+  const [propertyName, valueDescription, receivedDescription] = fields;
+
+  if (apiType === 'call_api') {
+    const resultType = result === null ? 'null' : typeof result;
+    const resultKeys =
+      result && typeof result === 'object' ? Object.keys(result).join(',') : 'none';
+    logger.debug(`${language} provider result structure: ${resultType}, keys: ${resultKeys}`);
+    if (hasScriptResultProperty(result, 'output')) {
+      logger.debug(
+        `${language} provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
+      );
     }
-    case 'call_embedding_api':
-      propertyName = 'embedding';
-      valueDescription = 'array';
-      receivedDescription = 'instead got';
-      break;
-    case 'call_classification_api':
-      propertyName = 'classification';
-      valueDescription = 'object';
-      receivedDescription = 'instead of';
-      break;
-    default:
-      throw new Error(`Unsupported apiType: ${apiType}`);
   }
 
   if (!hasScriptResultProperty(result, propertyName) && !hasScriptResultProperty(result, 'error')) {
