@@ -1402,6 +1402,16 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
     ],
     ['native JSON', `{"image":{"data":"${nativeImageData}",}`],
     ['native YAML', `- role: user\n  source: {data: ${nativeImageData}, broken: [`],
+    ['CR flow-map image', `- role: user\n  content: {\r image: ${nativeImageData},`],
+    ['CR flow-map MIME', '- role: user\n  content: {\r mime_type: image/png,'],
+    [
+      'blank-line YAML',
+      `- role: user\n${'\n'.repeat(10_000)}  type: image\n  data: ${nativeImageData}\n  broken: [`,
+    ],
+    [
+      'multiline YAML type',
+      `- role: user\n  type:\n    image\n  data: ${nativeImageData}\n  broken: [`,
+    ],
     [
       'nested JSON string',
       JSON.stringify({ question: actualTask, payload: `{"image":{"data":"${nativeImageData}",}` }),

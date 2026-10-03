@@ -2,7 +2,6 @@ import { parse as csvParse } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import { RedteamGraderBase } from './base';
 import { ImageDatasetPluginBase, type ImageDatasetPluginConfig } from './imageDatasetPluginBase';
 import {
@@ -275,7 +274,7 @@ export class VLSUDatasetManager {
       const response = await fetchWithCache(
         VLSU_CSV_URL,
         {},
-        getRequestTimeoutMs(),
+        undefined,
         'text' as 'json', // Force text response
       );
 

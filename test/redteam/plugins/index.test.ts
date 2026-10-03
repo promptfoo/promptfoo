@@ -464,7 +464,6 @@ describe('Plugins', () => {
             email: null,
           }),
         }),
-        expect.any(Number),
       );
       expect(result).toEqual([
         { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },

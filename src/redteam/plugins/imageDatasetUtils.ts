@@ -104,8 +104,9 @@ export function getImageDatasetRequestText(
       return;
     }
     // JSON property markers require an object, not just bracket-prefixed prose.
+    // A newline already starts another YAML property scan; do not rescan its suffix.
     const properties = yaml
-      ? /(?:[{,]|\n|^)\s*(?:-\s*)?["']?(\w+)["']?\s*:\s*["']?([\w/.-]*)/g
+      ? /(?:[{,]|\n|^)[^\S\n]*(?:-\s*)?["']?(\w+)["']?\s*:\s*["']?([\w/.-]*)/g
       : /[{,]\s*["']?(\w+)["']?\s*:\s*["']?([\w/.-]*)/g;
     const markedMedia = [...text.matchAll(properties)].some(
       ([, key, value]) =>
