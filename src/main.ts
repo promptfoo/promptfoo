@@ -19,6 +19,7 @@ import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
 import { optimizeCommand } from './commands/optimize';
+import { providersCommand } from './commands/providers';
 import { initCommand as redteamInitCommand } from './commands/redteam/init';
 import { redteamReportCommand } from './commands/redteam/report';
 import { redteamSetupCommand } from './commands/redteam/setup';
@@ -108,6 +109,7 @@ async function main() {
   logsCommand(program);
   modelScanCommand(program);
   optimizeCommand(program, defaultConfig, defaultConfigPath);
+  providersCommand(program, defaultConfig);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   void showCommand(program);
