@@ -32,10 +32,38 @@ jobs:
       id-token: write
 
     steps:
+      - name: Resolve manual PR commits
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+        run: |
+          gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid,baseRefOid \
+            --jq '"head_sha=\(.headRefOid)\nbase_sha=\(.baseRefOid)"' >> "$GITHUB_OUTPUT"
+
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ github.event.pull_request.head.sha || steps.pr.outputs.head_sha }}
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Load scan policy from the base commit
+        id: policy
+        shell: node {0}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || steps.pr.outputs.base_sha }}
+        run: |
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { execFileSync } = require('node:child_process');
+          const policyDir = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, 'promptfoo-scan-policy-'));
+          const archive = `${policyDir}.tar`;
+          execFileSync('git', ['archive', '--format=tar', '--output', archive, process.env.BASE_SHA]);
+          execFileSync('tar', ['-xf', archive, '-C', policyDir]);
+          fs.unlinkSync(archive);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `config_path=${path.join(policyDir, '.github/promptfoo-code-scan.yaml')}\n`);
 
       # Pin to 24.15.0 (not .nvmrc): Node 24.16.0 adds ~10s to every HTTPS
       # request on Linux runners, dragging the scanner's uncached
@@ -60,5 +88,5 @@ jobs:
           NPM_CONFIG_USERCONFIG: '/dev/null'
         with:
           min-severity: medium
-          config-path: .github/promptfoo-code-scan.yaml
+          config-path: ${{ steps.policy.outputs.config_path }}
           enable-fork-prs: true
