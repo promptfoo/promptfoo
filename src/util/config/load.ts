@@ -1136,7 +1136,7 @@ async function resolveLoadedConfig(
   const testConfigs = await readTestSources(
     testSources?.length
       ? testSources
-      : [{ tests: config.tests || [], basePath: cmdObj.tests || cmdObj.vars ? '' : basePath }],
+      : [{ tests: config.tests || [], basePath: cmdObj.tests ? '' : basePath }],
     config.env,
     false,
   );

@@ -313,9 +313,9 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
       void initializeSourceMapSupport();
     }
 
-    // Handle both string and structured object inputs
-    const message = typeof input === 'string' ? input : input.message;
-    return winstonLogger[level]({ message, location });
+    // Preserve sanitized context for transports that consume structured fields.
+    const info = typeof input === 'string' ? { message: input } : input;
+    return winstonLogger[level]({ ...info, location });
   };
 }
 

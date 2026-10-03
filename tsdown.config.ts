@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { readFileSync } from 'fs';
 
-import { defineConfig } from 'tsdown';
+import { defineConfig, type UserConfig } from 'tsdown';
 
 const require = createRequire(import.meta.url);
 const semver = require('semver') as typeof import('semver');
@@ -51,25 +51,12 @@ const sharedBuildOptions = {
   },
 } as const;
 
-export default defineConfig([
-  // Server (ESM only) - stable path for workflows
-  {
+function esmBuildOptions(entry: UserConfig['entry'], options: Pick<UserConfig, 'treeshake'> = {}) {
+  return {
     ...sharedBuildOptions,
-    entry: { 'server/index': 'src/server/index.ts' },
-    format: ['esm'],
-    shims: true,
-    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    define: {
-      ...versionDefines,
-      BUILD_FORMAT: '"esm"',
-      'process.env.BUILD_FORMAT': '"esm"',
-    },
-  },
-  // CLI binary (ESM only)
-  {
-    ...sharedBuildOptions,
-    entry: ['src/entrypoint.ts', 'src/main.ts'],
-    format: ['esm'],
+    entry,
+    format: ['esm' as const],
+    ...options,
     shims: true, // Provides __dirname, __filename shims automatically
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
     define: {
@@ -77,27 +64,27 @@ export default defineConfig([
       BUILD_FORMAT: '"esm"',
       'process.env.BUILD_FORMAT': '"esm"',
     },
+  };
+}
+
+export default defineConfig([
+  // Server (ESM only) - stable path for workflows
+  esmBuildOptions({ 'server/index': 'src/server/index.ts' }),
+  // CLI binary (ESM only)
+  {
+    ...esmBuildOptions(['src/entrypoint.ts', 'src/main.ts']),
     outputOptions: {
       banner: '#!/usr/bin/env node',
     },
   },
   // Library ESM build
-  {
-    ...sharedBuildOptions,
-    entry: {
+  esmBuildOptions(
+    {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
     },
-    format: ['esm'],
-    treeshake: true,
-    shims: true, // Ensure library ESM build has shims
-    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    define: {
-      ...versionDefines,
-      BUILD_FORMAT: '"esm"',
-      'process.env.BUILD_FORMAT': '"esm"',
-    },
-  },
+    { treeshake: true },
+  ), // Ensure library ESM build has shims
   // Library CJS build for compatibility
   {
     ...sharedBuildOptions,
