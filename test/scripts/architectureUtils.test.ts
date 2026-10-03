@@ -196,6 +196,185 @@ describe('getSourceFiles', () => {
     fs.writeFileSync(absolute, contents);
   }
 
+  it('scans future packages and configured roots without dependencies or generated declarations', () => {
+    write('src/core/a.ts');
+    write('packages/contracts/src/index.mts');
+    write('packages/contracts/src/types.d.mts');
+    write('packages/contracts/src/types.d.cts');
+    write('packages/contracts/dist/index.ts');
+    write('packages/contracts/node_modules/vendor/index.ts');
+    write('packages/contracts/src/ignored.ts');
+    write('internal/shared/index.cts');
+    expect(
+      getSourceFiles(
+        repoRoot,
+        true,
+        ['packages/contracts/src/ignored.ts'],
+        ['internal/shared', 'src/core'],
+      ),
+    ).toEqual(['internal/shared/index.cts', 'packages/contracts/src/index.mts', 'src/core/a.ts']);
+  });
+
+  it('requires new package files to be classified and enforces leaf imports across roots', () => {
+    write('src/index.ts');
+    write('src/runtime/index.ts');
+    write('packages/contracts/src/index.ts', "import '../../../src/runtime/index';");
+    const config: LayerConfig = {
+      publicFacade: 'src/index.ts',
+      leafLayers: ['contracts'],
+      layers: [
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+        { name: 'runtime', roots: ['src/runtime'], allowedDependencies: [] },
+      ],
+    };
+    expect(findUnclassifiedFiles(repoRoot, config)).toEqual(['packages/contracts/src/index.ts']);
+    config.layers.push({
+      name: 'contracts',
+      roots: ['packages/contracts/src'],
+      allowedDependencies: [],
+    });
+    expect(findUnclassifiedFiles(repoRoot, config)).toEqual([]);
+    expect(findViolations(repoRoot, config)).toEqual([
+      expect.objectContaining({
+        kind: 'leaf',
+        importer: 'packages/contracts/src/index.ts',
+        imported: 'src/runtime/index.ts',
+      }),
+    ]);
+  });
+
+  it('resolves exact package aliases ahead of the broad source alias for boundary enforcement', () => {
+    write('src/index.ts');
+    write('src/contracts.ts');
+    write('src/app/component.ts', "import '@promptfoo/contracts';");
+    write('packages/contracts/src/index.ts');
+    const config: LayerConfig = {
+      publicFacade: 'src/index.ts',
+      aliases: { '@promptfoo': 'src', '@promptfoo/contracts': 'packages/contracts/src' },
+      layers: [
+        {
+          name: 'app',
+          roots: ['src/app'],
+          allowedDependencies: ['contracts'],
+          allowedImportPaths: ['src/contracts.ts'],
+        },
+        {
+          name: 'contracts',
+          roots: ['src/contracts.ts', 'packages/contracts/src'],
+          allowedDependencies: [],
+        },
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+      ],
+    };
+    expect(findViolations(repoRoot, config)).toEqual([
+      expect.objectContaining({ kind: 'path', imported: 'packages/contracts/src/index.ts' }),
+    ]);
+  });
+
+  it('checks configured product roots beyond src and packages', () => {
+    write('src/index.ts');
+    write('internal/shared/index.ts', "import '../../src/index';");
+    write('src/runtime.ts', "import '../internal/shared/index';");
+    const config: LayerConfig = {
+      publicFacade: 'src/index.ts',
+      layers: [
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+        { name: 'runtime', roots: ['src/runtime.ts'], allowedDependencies: [] },
+        { name: 'shared', roots: ['internal/shared'], allowedDependencies: [] },
+      ],
+    };
+    expect(findViolations(repoRoot, config)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'facade', importer: 'internal/shared/index.ts' }),
+        expect.objectContaining({
+          kind: 'layer',
+          importer: 'src/runtime.ts',
+          imported: 'internal/shared/index.ts',
+        }),
+      ]),
+    );
+  });
+
+  it.each([
+    'internal/routes/[id].ts',
+    'internal/[routes]/index.ts',
+    'internal/{old,new}/index.ts',
+    'internal/plugin.ts/index.ts',
+    'internal/plugin.tsx/index.ts',
+    'internal/plugin.mts/index.ts',
+    'internal/plugin.cts/index.ts',
+  ])('scans literal configured roots containing glob characters: %s', (sourceFile) => {
+    write('src/index.ts');
+    write(sourceFile, "import 'node:fs';");
+    const root = sourceFile.endsWith('index.ts') ? path.dirname(sourceFile) : sourceFile;
+    const config: LayerConfig = {
+      publicFacade: 'src/index.ts',
+      leafLayers: ['routes'],
+      layers: [
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+        { name: 'routes', roots: [root], allowedDependencies: [] },
+      ],
+    };
+
+    expect(findViolations(repoRoot, config)).toEqual([
+      expect.objectContaining({ kind: 'leaf-external', importer: sourceFile }),
+    ]);
+  });
+
+  it('rejects empty scan and ignore roots before starting the glob', () => {
+    expect(() => getSourceFiles(repoRoot, true, [], [''])).toThrow('root');
+    expect(() => getSourceFiles(repoRoot, true, [''])).toThrow('root');
+  });
+
+  it('includes dot-prefixed sources while retaining dependency and output exclusions', () => {
+    write('packages/widget/src/.internal.ts');
+    write('packages/widget/src/.private/index.ts');
+    write('packages/widget/.cache/node_modules/vendor/index.ts');
+    write('packages/widget/dist/.internal.ts');
+    write('packages/widget/src/.types.d.ts');
+    expect(getSourceFiles(repoRoot)).toEqual([
+      'packages/widget/src/.internal.ts',
+      'packages/widget/src/.private/index.ts',
+    ]);
+  });
+
+  it('treats ignored roots as literal files and directories', () => {
+    write('src/[generated]/index.ts');
+    write('src/g/index.ts');
+    write('src/[id].ts');
+    write('src/i.ts');
+
+    expect(getSourceFiles(repoRoot, true, ['src/[generated]', 'src/[id].ts'])).toEqual([
+      'src/g/index.ts',
+      'src/i.ts',
+    ]);
+  });
+
+  it.each(['internal/tool.cjs', 'internal/tool'])(
+    'enforces single-file layer boundaries for %s',
+    (specifier) => {
+      write('src/index.ts');
+      write('src/runtime.ts', `import '${specifier}';`);
+      write('internal/tool.cts');
+      const config: LayerConfig = {
+        publicFacade: 'src/index.ts',
+        layers: [
+          { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+          { name: 'runtime', roots: ['src/runtime.ts'], allowedDependencies: [] },
+          { name: 'tool', roots: ['internal/tool.cts'], allowedDependencies: [] },
+        ],
+      };
+
+      expect(findViolations(repoRoot, config)).toEqual([
+        expect.objectContaining({
+          kind: 'layer',
+          importer: 'src/runtime.ts',
+          imported: 'internal/tool.cts',
+        }),
+      ]);
+    },
+  );
+
   it('ignores nested node_modules and configured roots', () => {
     write('src/core/a.ts');
     write('src/app/node_modules/pkg/index.ts');
@@ -287,6 +466,11 @@ describe('readLayerConfig', () => {
     expect(() => readLayerConfig(repoRoot)).toThrow(
       'Architecture layer "core" contains an invalid allowedImportPaths entry.',
     );
+  });
+
+  it.each(['', ' ', '..', '../outside', '/absolute'])('rejects invalid source root %j', (root) => {
+    writeConfig({ publicFacade: 'src/index.ts', layers: [coreLayer({ roots: [root] })] });
+    expect(() => readLayerConfig(repoRoot)).toThrow('root');
   });
 
   it('rejects missing layer roots', () => {
