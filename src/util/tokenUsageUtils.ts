@@ -528,9 +528,12 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
     incurredTokenUsage,
     ...generationUsage
   } = parsed.data;
-  const hasUsage =
-    Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+  const hasUsage = [generationUsage, incurredTokenUsage].some(
+    (usage) =>
+      usage &&
+      (Object.values(usage).some((value) => typeof value === 'number' && value !== 0) ||
+        Object.values(usage.completionDetails ?? {}).some((value) => value !== 0)),
+  );
   if (!hasUsage) {
     return false;
   }

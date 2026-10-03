@@ -1226,6 +1226,40 @@ describe('evaluator', () => {
   });
 
   describe('getStats', () => {
+    it('retains billed-only canonical generation when rebuilding persisted summaries', async () => {
+      const config = {
+        metadata: {
+          generationAccounting: {
+            id: 'fixture-ledger',
+            tokenUsage: {
+              total: 0,
+              numRequests: 0,
+              incurredTokenUsage: { total: 12, prompt: 9, completion: 3, numRequests: 1 },
+            },
+          },
+        },
+      };
+      const record = await Eval.create(config, []);
+      const restored = await Eval.findById(record.id);
+      expect(restored).not.toBeNull();
+      const first = restored!.getStats();
+      const second = restored!.getStats();
+      expect(first.tokenUsage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        generation: { total: 0, numRequests: 0 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          generation: { total: 12, prompt: 9, completion: 3, numRequests: 1 },
+        },
+      });
+      expect(second).toEqual(first);
+      expect(restored!.config.metadata?.generationAccounting).toEqual(
+        config.metadata.generationAccounting,
+      );
+    });
+
     it('attributes generation metadata once without increasing target tokens or probes', () => {
       const eval1 = new Eval({
         metadata: {
