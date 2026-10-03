@@ -101,6 +101,7 @@ import {
   handleTrajectoryToolUsed,
 } from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import { validateFallbackChains } from './validateAssertions';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -775,6 +776,8 @@ export async function runAssertions({
     return AssertionsResult.noAssertsResult();
   }
 
+  validateFallbackChains(test.assert);
+
   const mainAssertResult = new AssertionsResult({
     threshold: test.threshold,
   });
@@ -809,17 +812,7 @@ export async function runAssertions({
     })
     .flat();
 
-  const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
-  let preloadedTraceData: TraceData | null | undefined;
-  if (shouldPreloadTrace && traceId) {
-    try {
-      preloadedTraceData = await loadTraceData(traceId);
-    } catch (error) {
-      logger.debug(`Failed to preload trace data for assertions: ${error}`);
-      preloadedTraceData = null;
-    }
-  }
+  let traceDataPromise: Promise<TraceData | null> | undefined;
 
   // Serialize when the grouping queue is active: concurrent dispatch can
   // reorder provider enqueues and split same-judge groups.
@@ -843,41 +836,65 @@ export async function runAssertions({
     return true;
   };
 
-  const runAndRecordAssertion = async ({
-    assertion,
-    assertResult,
-    index,
-  }: (typeof asserts)[number]) => {
-    if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
-      // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
+  const jobs: (typeof asserts)[] = [];
+  for (const entry of asserts) {
+    const previousChain = jobs[jobs.length - 1];
+    const previous = previousChain?.[previousChain.length - 1];
+    if (previous?.assertion.fallback === 'next' && previous.assertResult === entry.assertResult) {
+      previousChain.push(entry);
+    } else {
+      jobs.push([entry]);
+    }
+  }
+
+  const runAndRecordAssertion = async (chain: typeof asserts) => {
+    const failures: NonNullable<NonNullable<GradingResult['metadata']>['fallbackFailures']> = [];
+    for (const { assertion, assertResult, index } of chain) {
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Comparison assertions run after all provider outputs are available.
+        return;
+      }
+      let traceData: TraceData | null | undefined;
+      if (traceId && assertionMayNeedTraceContext(assertion)) {
+        traceDataPromise ??= loadTraceData(traceId).catch((error) => {
+          logger.debug(`Failed to fetch trace data for assertions: ${error}`);
+          return null;
+        });
+        traceData = await traceDataPromise;
+      }
+      const result = await runAssertion({
+        prompt,
+        provider,
+        providerResponse,
+        assertion,
+        test,
+        vars,
+        latencyMs,
+        assertIndex: index,
+        traceId,
+        traceData,
+        claimStoredGradingUsage,
+      });
+      if (!result.pass && assertion.fallback === 'next') {
+        failures.push({ type: assertion.type, reason: result.reason });
+        continue;
+      }
+      assertResult.addResult({
+        index,
+        result:
+          failures.length > 0
+            ? { ...result, metadata: { ...result.metadata, fallbackFailures: failures } }
+            : result,
+        metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+        weight: assertion.weight,
+      });
       return;
     }
-
-    const result = await runAssertion({
-      prompt,
-      provider,
-      providerResponse,
-      assertion,
-      test,
-      vars,
-      latencyMs,
-      assertIndex: index,
-      traceId,
-      traceData: preloadedTraceData,
-      claimStoredGradingUsage,
-    });
-
-    assertResult.addResult({
-      index,
-      result,
-      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
-      weight: assertion.weight,
-    });
   };
 
   const activeAssertions = new Set<Promise<void>>();
   try {
-    await async.forEachOfLimit(asserts, concurrency, async (entry) => {
+    await async.forEachOfLimit(jobs, concurrency, async (entry) => {
       const pending = runAndRecordAssertion(entry);
       activeAssertions.add(pending);
       try {
