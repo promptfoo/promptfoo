@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'fs/promises';
 
 import confirm from '@inquirer/confirm';
@@ -7,6 +8,7 @@ import select from '@inquirer/select';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
+import { validatePythonPath } from '../../../src/python/pythonUtils';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import { redteamInit, renderRedteamConfig } from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
@@ -144,7 +146,7 @@ describe('renderRedteamConfig', () => {
       providers: [
         {
           id: 'custom-provider',
-          label: 'Custom API',
+          label: 'Custom API: preview\n# generated target',
           config: {
             apiKey: '{{CUSTOM_API_KEY}}',
             baseUrl: 'https://api.custom.com',
@@ -166,12 +168,30 @@ describe('renderRedteamConfig', () => {
     expect(parsedConfig.targets).toBeDefined();
     expect(parsedConfig.targets[0]).toMatchObject({
       id: 'custom-provider',
-      label: 'Custom API',
+      label: 'Custom API: preview\n# generated target',
       config: {
         apiKey: '{{CUSTOM_API_KEY}}',
         baseUrl: 'https://api.custom.com',
       },
     });
+  });
+
+  it('serializes YAML-significant custom provider labels', () => {
+    const renderedConfig = renderRedteamConfig({
+      purpose: 'Test custom provider',
+      numTests: 1,
+      plugins: [],
+      strategies: [],
+      prompts: ['Test'],
+      providers: [{ id: 'custom-provider', label: 'Custom: API #1', config: {} }],
+      descriptions: {},
+    });
+
+    const parsedConfig = yaml.load(renderedConfig) as {
+      targets: Array<{ label: string }>;
+    };
+
+    expect(parsedConfig.targets[0].label).toBe('Custom: API #1');
   });
 });
 
@@ -228,6 +248,31 @@ describe('redteamInit', () => {
         expect.objectContaining({ value: 'vertex:gemini-3.6-flash' }),
         expect.objectContaining({ value: 'vertex:gemini-3.5-flash-lite' }),
       ]),
+    );
+  });
+
+  it('writes a syntactically valid Python custom provider template', async () => {
+    vi.mocked(input).mockReset().mockResolvedValueOnce('target').mockResolvedValueOnce('purpose');
+    vi.mocked(select)
+      .mockReset()
+      .mockResolvedValueOnce('agent')
+      .mockResolvedValueOnce('default')
+      .mockResolvedValueOnce('default');
+
+    await redteamInit(undefined);
+
+    const chatProvider = vi
+      .mocked(fs.writeFile)
+      .mock.calls.find(([path]) => path === 'chat.py')?.[1] as string;
+    expect(chatProvider).toContain("urllib.parse.urlparse('https://example.com/api/chat')");
+    const python = await validatePythonPath('python', false);
+    execFileSync(
+      python,
+      ['-c', 'import ast, sys; ast.parse(sys.stdin.read(), filename="chat.py")'],
+      {
+        input: chatProvider,
+        encoding: 'utf8',
+      },
     );
   });
 
