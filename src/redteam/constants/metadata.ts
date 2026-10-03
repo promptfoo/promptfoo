@@ -1080,7 +1080,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   ecommerce:
     'Comprehensive e-commerce AI safety testing for payment security and transaction integrity vulnerabilities including PCI DSS compliance, fraud detection, and price manipulation',
   telecom:
-    'Comprehensive telecommunications AI safety testing across CPNI protection, account security, regulatory compliance (FCC, TCPA, CALEA), and telecom-specific fraud prevention',
+    'Tests telecommunications AI systems for CPNI protection, account security, FCC/TCPA and privacy compliance, and fraud prevention',
   'telecom:cpni-disclosure':
     'Tests for unauthorized disclosure of Customer Proprietary Network Information (CPNI) including call records, service details, and billing information in violation of FCC 47 U.S.C. Section 222',
   'telecom:location-disclosure':
@@ -1092,7 +1092,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'telecom:tcpa-violation':
     'Tests for TCPA violations including improper consent handling, Do Not Call list compliance, and illegal robocall/text facilitation',
   'telecom:unauthorized-changes':
-    'Tests for slamming (unauthorized carrier switches) and cramming (unauthorized charges) vulnerabilities that violate FCC Section 258',
+    'Tests for unauthorized carrier switches under Section 258 and unauthorized charges under FCC billing rules',
   'telecom:fraud-enablement':
     'Tests for telecom-specific fraud facilitation including caller ID spoofing, SIM box fraud, and service arbitrage schemes',
   'telecom:porting-misinformation':
@@ -1102,7 +1102,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'telecom:coverage-misinformation':
     'Tests for false or misleading claims about network coverage, 5G availability, or roaming capabilities',
   'telecom:law-enforcement-request-handling':
-    'Tests for improper handling of law enforcement data requests in violation of CALEA requirements and privacy laws',
+    'Tests for improper handling of law enforcement data requests under applicable legal process and privacy laws',
   'telecom:accessibility-violation':
     'Tests for accessibility compliance violations under Section 255, Section 508, ADA, and 21st Century CVAA',
   'teen-safety':
