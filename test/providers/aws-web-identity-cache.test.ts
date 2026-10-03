@@ -101,49 +101,71 @@ afterEach(() => {
 describe('AWS web identity response cache isolation', () => {
   it.each(
     ['completion', 'embedding'].flatMap((kind) =>
-      ['second', 'denied'].map((next) => ({ kind, next })),
+      ['second', 'denied'].flatMap((next) =>
+        ['scoped-file', 'profile-fallback'].map((mode) => ({ kind, next, mode })),
+      ),
     ),
-  )('does not reuse $kind results for a $next ambient role', async ({ kind, next }) => {
-    const invoke = async () => {
-      const options = {
-        config: { region: 'us-east-1', modelType: 'custom' as const },
-        env: { AWS_WEB_IDENTITY_TOKEN_FILE: tokenFile },
-      };
-      const provider =
-        kind === 'completion'
-          ? new SageMakerCompletionProvider('same-endpoint', options)
-          : new SageMakerEmbeddingProvider('same-endpoint', options);
-      const client = await provider.getSageMakerRuntimeInstance();
-      try {
-        return kind === 'completion'
-          ? await provider.callApi('same input')
-          : await (provider as SageMakerEmbeddingProvider).callEmbeddingApi('same input');
-      } finally {
-        client.destroy();
+  )(
+    'does not reuse $kind results for a $next ambient role via $mode',
+    async ({ kind, next, mode }) => {
+      if (mode === 'profile-fallback') {
+        fs.writeFileSync(
+          path.join(dir, 'role-config'),
+          '[profile fixture]\nrole_arn=arn:aws:iam::444444444444:role/Profile\ncredential_source=Environment\n',
+        );
+        mockProcessEnv({
+          AWS_PROFILE: 'fixture',
+          AWS_CONFIG_FILE: path.join(dir, 'role-config'),
+          AWS_WEB_IDENTITY_TOKEN_FILE: tokenFile,
+        });
       }
-    };
-    await withCacheEnabled(true, async () => {
-      const first = await invoke();
-      expect(first).toMatchObject(
-        kind === 'completion' ? { output: 'first-access' } : { embedding: [1] },
-      );
-      expect(await invoke()).toMatchObject({ cached: true });
-      mockProcessEnv({ AWS_ROLE_ARN: next === 'second' ? roles.second : roles.denied });
-      const other = await invoke();
-      expect(other.cached).not.toBe(true);
-      if (next === 'denied') {
-        expect(other.error).toContain('fixture role denied');
-        expect(endpointKeys).toEqual(['first-access']);
-      } else {
-        expect(other).toMatchObject(
-          kind === 'completion' ? { output: 'second-access' } : { embedding: [2] },
+      const invoke = async () => {
+        const options = {
+          config: { region: 'us-east-1', modelType: 'custom' as const },
+          env:
+            mode === 'scoped-file'
+              ? { AWS_WEB_IDENTITY_TOKEN_FILE: tokenFile }
+              : { AWS_SESSION_TOKEN: 'scoped-session' },
+        };
+        const provider =
+          kind === 'completion'
+            ? new SageMakerCompletionProvider('same-endpoint', options)
+            : new SageMakerEmbeddingProvider('same-endpoint', options);
+        const client = await provider.getSageMakerRuntimeInstance();
+        try {
+          return kind === 'completion'
+            ? await provider.callApi('same input')
+            : await (provider as SageMakerEmbeddingProvider).callEmbeddingApi('same input');
+        } finally {
+          client.destroy();
+        }
+      };
+      await withCacheEnabled(true, async () => {
+        const first = await invoke();
+        expect(first).toMatchObject(
+          kind === 'completion' ? { output: 'first-access' } : { embedding: [1] },
         );
         expect(await invoke()).toMatchObject({ cached: true });
-        expect(endpointKeys).toEqual(['first-access', 'second-access']);
-      }
-      expect(assumedRoles).toEqual([roles.first, next === 'second' ? roles.second : roles.denied]);
-    });
-  });
+        mockProcessEnv({ AWS_ROLE_ARN: next === 'second' ? roles.second : roles.denied });
+        const other = await invoke();
+        expect(other.cached).not.toBe(true);
+        if (next === 'denied') {
+          expect(other.error).toContain('fixture role denied');
+          expect(endpointKeys).toEqual(['first-access']);
+        } else {
+          expect(other).toMatchObject(
+            kind === 'completion' ? { output: 'second-access' } : { embedding: [2] },
+          );
+          expect(await invoke()).toMatchObject({ cached: true });
+          expect(endpointKeys).toEqual(['first-access', 'second-access']);
+        }
+        expect(assumedRoles).toEqual([
+          roles.first,
+          next === 'second' ? roles.second : roles.denied,
+        ]);
+      });
+    },
+  );
 
   it.each(['file', 'suite', 'provider', 'empty'])(
     'keeps %s role selection ahead of ambient role changes',
@@ -199,5 +221,16 @@ describe('AWS web identity response cache isolation', () => {
     expect(getAwsCredentialCacheNamespace({}, env)).toBeUndefined();
     mockProcessEnv({ AWS_ROLE_ARN: roles.second });
     expect(getAwsCredentialCacheNamespace({}, env)).toBeUndefined();
+  });
+
+  it('tracks inherited token-file revisions only in the newly scoped profile namespace', () => {
+    mockProcessEnv({ AWS_WEB_IDENTITY_TOKEN_FILE: tokenFile });
+    expect(getAwsCredentialCacheNamespace()).toBeUndefined();
+    const env = { AWS_SESSION_TOKEN: 'scoped-session' };
+    const first = getAwsCredentialCacheNamespace({}, env);
+    fs.writeFileSync(`${tokenFile}.next`, 'replacement synthetic token');
+    fs.renameSync(`${tokenFile}.next`, tokenFile);
+    expect(getAwsCredentialCacheNamespace({}, env)).not.toBe(first);
+    expect(getAwsCredentialCacheNamespace()).toBeUndefined();
   });
 });

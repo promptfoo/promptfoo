@@ -3,11 +3,7 @@ import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
-import {
-  getAwsCredentialCacheNamespace,
-  getAwsCredentialProviderOptions,
-  resolveAwsCredentials,
-} from '../awsCredentials';
+import { getAwsCredentialCacheNamespace } from '../awsCredentials';
 import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { createBedrockRequestHandler, hasProxyEnv } from './util';
@@ -192,7 +188,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
   private readonly getClientState = createEnvironmentScopedState(
     () => ({
-      cacheNamespace: getAwsCredentialCacheNamespace(this.config, this.env),
+      cacheNamespace: getAwsCredentialCacheNamespace(this.getIamCredentialConfig(), this.env),
       client: undefined as BedrockAgentRuntimeClient | undefined,
       initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
     }),
@@ -254,7 +250,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       // need a custom handler for proxy support.
       const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
-      const credentials = await resolveAwsCredentials(this.config, this.env);
+      const credentialOptions = await this.getIamCredentialOptions();
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
 
@@ -263,9 +259,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
-          ...getAwsCredentialProviderOptions(this.env),
-          ...(credentials ? { credentials } : {}),
-          ...(this.getProfile() === undefined ? {} : { profile: this.getProfile() }),
+          ...credentialOptions,
         });
       } catch (err) {
         logger.error(`Error creating BedrockAgentRuntimeClient: ${err}`);

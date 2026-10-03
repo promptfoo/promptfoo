@@ -87,7 +87,9 @@ describe('scoped AWS profile source credentials', () => {
         );
         expect(provider).toBeTypeOf('function');
         if (value === 'empty') {
-          await expect(provider?.()).rejects.toThrow('AWS role source credentials are incomplete');
+          await expect(provider?.()).rejects.toThrow(
+            'Could not load credentials from any providers',
+          );
           expect(roleAssumer).not.toHaveBeenCalled();
         } else {
           expect(await provider?.()).toEqual(assumedCredentials);
@@ -187,14 +189,14 @@ describe('scoped AWS profile source credentials', () => {
       { ...options(), roleAssumer },
       { AWS_SECRET_ACCESS_KEY: '' },
     );
-    await expect(provider?.()).rejects.toThrow('AWS role source credentials are incomplete');
+    await expect(provider?.()).rejects.toThrow('Could not load credentials from any providers');
     expect(roleAssumer).not.toHaveBeenCalled();
   });
 
   it('preserves nested source profiles and MFA with an Environment leaf without role_arn', async () => {
     fs.writeFileSync(
       configFilepath,
-      '[profile fixture]\nrole_arn = arn:aws:iam::123456789012:role/Outer\nsource_profile = inner\nmfa_serial = fixture-mfa\nrole_session_name = outer-session\n[profile inner]\nrole_arn = arn:aws:iam::123456789012:role/Inner\nsource_profile = source\nrole_session_name = inner-session\n[profile source]\ncredential_source = Environment\n',
+      '[profile fixture]\nrole_arn = arn:aws:iam::123456789012:role/Outer\nsource_profile = inner\nmfa_serial = fixture-mfa\nrole_session_name = outer-session\n[profile inner]\nrole_arn = arn:aws:iam::123456789012:role/Inner\nsource_profile = source\nrole_session_name = inner-session\n[profile source]\ncredential_source = Environment\nmfa_serial = ignored-without-role\n',
     );
     const innerCredentials = { ...assumedCredentials, accessKeyId: 'inner-access' };
     const roleAssumer = vi
@@ -218,6 +220,7 @@ describe('scoped AWS profile source credentials', () => {
       }),
     ]);
     expect(mfaCodeProvider).toHaveBeenCalledWith('fixture-mfa');
+    expect(mfaCodeProvider).toHaveBeenCalledTimes(1);
   });
 
   it('requires an MFA callback before assuming a selected role that requires MFA', async () => {

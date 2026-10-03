@@ -221,7 +221,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
         '@aws-sdk/client-bedrock-runtime'
       );
 
-      const credentialOptions = await this.getMediaCredentialOptions();
+      const credentialOptions = await this.getIamCredentialOptions();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -265,7 +265,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
         '@aws-sdk/client-bedrock-runtime'
       );
 
-      const credentialOptions = await this.getMediaCredentialOptions();
+      const credentialOptions = await this.getIamCredentialOptions();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -329,7 +329,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
 
       // Download from S3
       const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const credentialOptions = await this.getMediaCredentialOptions();
+      const credentialOptions = await this.getIamCredentialOptions();
 
       const s3 = new S3Client({
         region: this.getRegion(),

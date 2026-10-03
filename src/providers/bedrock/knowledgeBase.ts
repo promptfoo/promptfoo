@@ -5,7 +5,6 @@ import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
-import { getAwsCredentialProviderOptions, resolveAwsCredentials } from '../awsCredentials';
 import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
@@ -134,10 +133,6 @@ export class AwsBedrockKnowledgeBaseProvider
     return `[Amazon Bedrock Knowledge Base Provider ${this.kbConfig.knowledgeBaseId}]`;
   }
 
-  override async getCredentials() {
-    return resolveAwsCredentials(this.config, this.env);
-  }
-
   async getKnowledgeBaseClient() {
     if (this.knowledgeBaseClient) {
       return this.knowledgeBaseClient;
@@ -154,7 +149,7 @@ export class AwsBedrockKnowledgeBaseProvider
             })
           : undefined;
 
-      const credentials = await this.getCredentials();
+      const credentialOptions = await this.getIamCredentialOptions();
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
         const client = new BedrockAgentRuntimeClient({
@@ -162,9 +157,7 @@ export class AwsBedrockKnowledgeBaseProvider
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
-          ...getAwsCredentialProviderOptions(this.env),
-          ...(credentials ? { credentials } : {}),
-          ...(this.getProfile() === undefined ? {} : { profile: this.getProfile() }),
+          ...credentialOptions,
         });
         state.client = client;
       } catch (err) {

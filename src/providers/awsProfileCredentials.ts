@@ -34,6 +34,9 @@ interface ProfileOptions {
 type Profile = Record<string, string | undefined>;
 type Profiles = Record<string, Profile>;
 type CredentialFactory = (options: ProfileOptions) => AwsCredentialIdentityProvider;
+type CredentialChain = (
+  ...providers: Array<() => Promise<AwsCredentialIdentity>>
+) => () => Promise<AwsCredentialIdentity>;
 
 /** Resolve through an installed optional client, including with isolated pnpm layouts. */
 function loadProfileSdk() {
@@ -56,15 +59,78 @@ function loadProfileSdk() {
       const iniEntry = nodeRequire.resolve('@aws-sdk/credential-provider-ini');
       const iniRequire = createRequire(iniEntry);
       const { fromIni } = iniRequire(iniEntry) as { fromIni?: CredentialFactory };
-      const { parseKnownFiles } = iniRequire('@smithy/core/config') as {
+      const { parseKnownFiles, chain, CredentialsProviderError } = iniRequire(
+        '@smithy/core/config',
+      ) as {
         parseKnownFiles?: (options: ProfileOptions) => Promise<Profiles>;
+        chain?: CredentialChain;
+        CredentialsProviderError?: new (
+          message: string,
+          options?: { logger?: Logger; tryNextLink?: boolean },
+        ) => Error;
       };
-      if (typeof fromIni !== 'function' || typeof parseKnownFiles !== 'function') {
+      if (
+        typeof fromIni !== 'function' ||
+        typeof parseKnownFiles !== 'function' ||
+        typeof chain !== 'function' ||
+        typeof CredentialsProviderError !== 'function'
+      ) {
         throw new Error('The installed SDK does not export its profile credential helpers.');
       }
+      const credentialProvider = (packageName: string, exportName: string) => {
+        let factory: CredentialFactory | undefined;
+        try {
+          factory = nodeRequire(packageName)[exportName];
+        } catch (cause) {
+          const error = new Error(
+            `Reinstall the AWS SDK: its ${packageName} provider is unavailable.`,
+          );
+          (error as Error & { cause?: unknown }).cause = cause;
+          throw error;
+        }
+        if (typeof factory !== 'function') {
+          throw new Error(`Reinstall the AWS SDK: ${packageName} does not export ${exportName}.`);
+        }
+        return factory;
+      };
       return {
         fromIni,
         parseKnownFiles,
+        chain,
+        CredentialsProviderError,
+        fromProcess: (options: ProfileOptions) =>
+          credentialProvider('@aws-sdk/credential-provider-process', 'fromProcess')(options),
+        fromTokenFile: (options: ProfileOptions) =>
+          credentialProvider('@aws-sdk/credential-provider-web-identity', 'fromTokenFile')(options),
+        async fromRemote(options: ProfileOptions) {
+          // Match the SDK's post-INI remote-provider choice without restarting
+          // fromEnv/fromIni, which could restore a cleared host key pair.
+          if (
+            process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI ||
+            process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI
+          ) {
+            return chain(
+              () => credentialProvider('@aws-sdk/credential-provider-http', 'fromHttp')(options)(),
+              () =>
+                credentialProvider(
+                  '@smithy/credential-provider-imds',
+                  'fromContainerMetadata',
+                )(options)(),
+            )();
+          }
+          if (
+            process.env.AWS_EC2_METADATA_DISABLED &&
+            process.env.AWS_EC2_METADATA_DISABLED !== 'false'
+          ) {
+            throw new CredentialsProviderError('EC2 Instance Metadata Service access disabled', {
+              logger: options.logger,
+            });
+          }
+          return credentialProvider(
+            '@smithy/credential-provider-imds',
+            'fromInstanceMetadata',
+          )(options)();
+        },
         fromSSO(options: ProfileOptions) {
           const { fromSSO } = iniRequire('@aws-sdk/credential-provider-sso') as {
             fromSSO?: CredentialFactory;
@@ -143,6 +209,13 @@ export async function getScopedAwsProfileCredentials(
   };
   function resolveEnvironmentCredentials(): AwsCredentialIdentity {
     const { accessKeyId, secretAccessKey, sessionToken } = environmentCredentials;
+    if (!accessKeyId || !secretAccessKey) {
+      // Unavailable Environment credentials are a skipped link in the SDK's
+      // default chain. A selected but malformed tuple remains a terminal error.
+      throw new sdk.CredentialsProviderError('AWS role source credentials are incomplete.', {
+        logger: options.logger,
+      });
+    }
     if (!accessKeyId?.trim() || !secretAccessKey?.trim()) {
       throw new Error(
         'AWS role source credentials are incomplete. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY together in the effective environment.',
@@ -193,9 +266,6 @@ export async function getScopedAwsProfileCredentials(
   let defaultRoleAssumer: RoleAssumer | undefined;
   return async (properties) => {
     const profiles = await sdk.parseKnownFiles(options);
-    if (!needsScopedProvider(profiles, profile)) {
-      return sdk.fromIni({ ...options, profile })(properties);
-    }
     const callerClientConfig = properties?.callerClientConfig as
       | Record<string, unknown>
       | undefined;
@@ -204,6 +274,18 @@ export async function getScopedAwsProfileCredentials(
       if (!isRole(data) && !(recursive && !data.role_arn && data.credential_source)) {
         return sdk.fromSSO({ ...options, profile: name })(properties);
       }
+      // Native fromIni treats missing MFA configuration as terminal even when
+      // the source credentials are unavailable.
+      if (data.role_arn && data.mfa_serial && !options.mfaCodeProvider) {
+        throw new sdk.CredentialsProviderError(
+          `AWS profile ${name} requires an MFA code provider.`,
+          { logger: options.logger, tryNextLink: false },
+        );
+      }
+      const tokenCode =
+        data.role_arn && data.mfa_serial
+          ? await options.mfaCodeProvider!(data.mfa_serial)
+          : undefined;
       // Match the SDK: the outer role initializes the assumer, which is shared
       // by nested roles and refreshes of this credential-provider lifetime.
       const assume = data.role_arn
@@ -232,14 +314,29 @@ export async function getScopedAwsProfileCredentials(
         DurationSeconds: Number.parseInt(data.duration_seconds || '3600', 10),
       };
       if (data.mfa_serial) {
-        if (!options.mfaCodeProvider) {
-          throw new Error(`AWS profile ${name} requires an MFA code provider.`);
-        }
         params.SerialNumber = data.mfa_serial;
-        params.TokenCode = await options.mfaCodeProvider(data.mfa_serial);
+        params.TokenCode = tokenCode;
       }
       return assume(source, params);
     };
-    return resolve(profile);
+    const settings = { ...options, profile };
+    // Bind caller properties explicitly: the SDK's generic chain helper does
+    // not forward arguments. Keep only the native tail after the adapted INI
+    // provider, including its unavailable-versus-terminal error handling.
+    return sdk.chain(
+      () =>
+        needsScopedProvider(profiles, profile)
+          ? resolve(profile)
+          : sdk.fromIni(settings)(properties),
+      () => sdk.fromProcess(settings)(properties),
+      () => sdk.fromTokenFile(settings)(properties),
+      () => sdk.fromRemote(settings),
+      async () => {
+        throw new sdk.CredentialsProviderError('Could not load credentials from any providers', {
+          logger: options.logger,
+          tryNextLink: false,
+        });
+      },
+    )();
   };
 }

@@ -220,16 +220,19 @@ export abstract class AwsBedrockGenericProvider {
     return resolveAwsCredentials(this.config, this.env);
   }
 
-  /** Async media keeps its released credential selection, including for S3 downloads. */
-  protected async getMediaCredentialOptions() {
+  protected getIamCredentialConfig() {
     // These SDK paths historically ignored provider-only bearer tokens. A
     // configured/environment bearer bypassed only the explicit SSO profile;
-    // the SDK still discovered IAM credentials independently for S3.
-    const config =
-      !(this.config.accessKeyId && this.config.secretAccessKey) &&
+    // these clients still discovered IAM credentials independently.
+    return !(this.config.accessKeyId && this.config.secretAccessKey) &&
       (this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK'))
-        ? { ...this.config, profile: undefined }
-        : this.config;
+      ? { ...this.config, profile: undefined }
+      : this.config;
+  }
+
+  /** Keep released IAM discovery for agent-runtime and async media/S3 clients. */
+  protected async getIamCredentialOptions() {
+    const config = this.getIamCredentialConfig();
     const credentials = await resolveAwsCredentials(config, this.env);
     const profile = getScopedAwsCredentialConfig(config, this.env)?.profile;
     return {

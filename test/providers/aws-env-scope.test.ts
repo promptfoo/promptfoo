@@ -366,7 +366,7 @@ describe('scoped AWS SDK authentication', () => {
       const client = await provider.getBedrockInstance();
       try {
         await expect(client.config.credentials()).rejects.toThrow(
-          'AWS role source credentials are incomplete',
+          'Could not load credentials from any providers',
         );
         expect(handle).not.toHaveBeenCalled();
       } finally {

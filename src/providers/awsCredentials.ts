@@ -204,11 +204,19 @@ export function getAwsCredentialCacheNamespace(
     )
       ? (scoped.AWS_ACCESS_KEY_ID ?? getEnvString('AWS_ACCESS_KEY_ID'))
       : undefined;
-  const files = [options.filepath, options.configFilepath, options.webIdentityTokenFile];
+  // A scoped profile can fall through to the SDK's ambient web-identity link.
+  // Include its public selectors and file revision in this new scoped namespace.
+  const webIdentityTokenFile =
+    options.webIdentityTokenFile ??
+    (source !== config && source.profile ? getEnvString('AWS_WEB_IDENTITY_TOKEN_FILE') : undefined);
+  const files = [options.filepath, options.configFilepath, webIdentityTokenFile];
   // The SDK combines a scoped token file with an inherited role ARN. Keep that
   // public account/role selector in the same response-cache identity.
   const roleArn =
-    options.roleArn ?? (options.webIdentityTokenFile ? getEnvString('AWS_ROLE_ARN') : undefined);
+    options.roleArn ?? (webIdentityTokenFile ? getEnvString('AWS_ROLE_ARN') : undefined);
+  const roleSessionName =
+    options.roleSessionName ??
+    (webIdentityTokenFile ? getEnvString('AWS_ROLE_SESSION_NAME') : undefined);
   if (source.profile) {
     files.push(
       options.filepath ??
@@ -220,7 +228,7 @@ export function getAwsCredentialCacheNamespace(
     );
   }
   return getCredentialCacheNamespace(
-    [source.accessKeyId, source.profile, roleArn, options.roleSessionName, profileSourceAccessKey],
+    [source.accessKeyId, source.profile, roleArn, roleSessionName, profileSourceAccessKey],
     [...new Set(files.filter((file): file is string => file !== undefined))],
   );
 }
