@@ -15,7 +15,6 @@ interface ProviderTypeSelectorProps {
   provider: ProviderOptions | undefined;
   setProvider: (provider: ProviderOptions, providerType: string) => void;
   availableProviderIds?: string[];
-  disableModelSelection?: boolean;
   providerType?: string;
 }
 
