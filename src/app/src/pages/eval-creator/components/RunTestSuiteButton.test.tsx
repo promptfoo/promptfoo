@@ -9,8 +9,10 @@ import {
 import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as yaml from 'js-yaml';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
+import { validateYamlConfigDraft } from './yamlConfigValidation';
 
 const renderWithProvider = (ui: React.ReactElement) => {
   return render(<EvalHistoryProvider>{ui}</EvalHistoryProvider>);
@@ -111,6 +113,44 @@ describe('RunTestSuiteButton', () => {
       providers: 'openai:gpt-4',
       tests: 'file://tests.csv',
     });
+  });
+
+  it('retains YAML column defaults in saved config, exported YAML, and the eval job', async () => {
+    const loaded = validateYamlConfigDraft(
+      yaml.load(`
+providers: [echo]
+prompts: ['{{question}}']
+tests:
+  - vars: {question: hello}
+defaultColumnVisibility:
+  variables: hidden
+  showColumns: ['var:question']
+`),
+    );
+    expect(loaded.success).toBe(true);
+    if (!loaded.success) {
+      throw new Error(loaded.error);
+    }
+    const expected = loaded.config.defaultColumnVisibility;
+    useStore.getState().setConfig(loaded.config);
+    const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+    useStore.getState().setConfig(persisted);
+    expect(useStore.getState().getTestSuite().defaultColumnVisibility).toEqual(expected);
+    expect(yaml.load(yaml.dump(useStore.getState().config))).toMatchObject({
+      defaultColumnVisibility: expected,
+    });
+
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(requestInit.body as string).defaultColumnVisibility).toEqual(expected);
   });
 
   it('should serialize legacy prompt maps into prompt objects before submitting eval jobs', async () => {

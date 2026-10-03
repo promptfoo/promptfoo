@@ -25,6 +25,7 @@ const RunTestSuiteButton = () => {
   const { showToast } = useToast();
   const {
     defaultTest,
+    defaultColumnVisibility,
     derivedMetrics,
     description,
     env,
@@ -83,6 +84,7 @@ const RunTestSuiteButton = () => {
         : undefined;
     const testSuite = {
       defaultTest,
+      defaultColumnVisibility,
       derivedMetrics,
       description,
       env,
