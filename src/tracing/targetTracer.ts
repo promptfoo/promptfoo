@@ -144,8 +144,10 @@ export async function withTargetSpan<T>(
     async (span) => {
       try {
         const result = await withSpanRole(role, () => fn(span));
-        if (result && typeof result === 'object' && 'cached' in result) {
-          span.setAttribute(PromptfooAttributes.CACHE_HIT, Boolean(result.cached));
+        if (result && typeof result === 'object' && ('cacheHit' in result || 'cached' in result)) {
+          const cacheHit = 'cacheHit' in result ? result.cacheHit : undefined;
+          const cached = 'cached' in result ? result.cached : undefined;
+          span.setAttribute(PromptfooAttributes.CACHE_HIT, Boolean(cacheHit ?? cached));
         }
         if (result && typeof result === 'object' && 'error' in result && result.error) {
           const message = String(result.error);
@@ -248,7 +250,11 @@ export async function withTracedProviderCall<T extends ProviderResponse>(
             traceparent: childTraceparent,
           },
           invokeProvider,
-          (response) => ({ tokenUsage: response.tokenUsage, cacheHit: response.cached }),
+          (response) => ({
+            tokenUsage: response.tokenUsage,
+            cacheHit: response.cacheHit ?? response.cached,
+            cached: response.cached,
+          }),
         );
       }
 

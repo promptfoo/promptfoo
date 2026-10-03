@@ -131,6 +131,7 @@ async function getCachedResponse(
     return {
       ...(JSON.parse(cachedResponse) as ProviderResponse),
       cached: true,
+      cacheHit: true,
       cost: 0,
       latencyMs: Date.now() - startedAt,
     };
@@ -155,7 +156,7 @@ async function coalesceRequest(
   const inFlight = inFlightRequests.get(cacheKey);
   if (inFlight) {
     const result = await inFlight;
-    return result.error ? result : { ...result, cached: true, cost: 0 };
+    return result.error ? result : { ...result, cached: true, cacheHit: false, cost: 0 };
   }
 
   const pending = request();
@@ -349,6 +350,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
           audio: { data: audio, format: isPcm ? 'wav' : audioFormat },
           ...(isLegacy ? { cost: (characterCount * (isHd ? 30 : 15)) / 1e6 } : {}),
           cached: false,
+          cacheHit: false,
           latencyMs: Date.now() - startedAt,
         };
 

@@ -982,7 +982,7 @@ assert:
     threshold: 5000
 ```
 
-Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
+Run `promptfoo eval --no-cache` to [disable the cache](/docs/configuration/caching) when checking latency. Stored responses produce an assertion error because they have no current request duration. Concurrent callers sharing a live request can still be graded.
 
 ### Levenshtein distance
 

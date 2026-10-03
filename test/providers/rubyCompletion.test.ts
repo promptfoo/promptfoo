@@ -326,23 +326,30 @@ describe('RubyProvider', () => {
   });
 
   describe('caching', () => {
-    it('should use cached result when available', async () => {
-      const provider = new RubyProvider('script.rb');
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
-        set: vi.fn(),
-      };
-      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+    it.each([undefined, false, true])(
+      'marks a replay when stored cacheHit is %s',
+      async (cacheHit) => {
+        const provider = new RubyProvider('script.rb');
+        mockIsCacheEnabled.mockReturnValue(true);
+        const mockCache = {
+          get: vi
+            .fn()
+            .mockResolvedValue(
+              JSON.stringify({ output: 'cached result', cached: false, cacheHit }),
+            ),
+          set: vi.fn(),
+        };
+        vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
 
-      const result = await provider.callApi('test prompt');
+        const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
-      );
-      expect(mockRunRuby).not.toHaveBeenCalled();
-      expect(result).toEqual({ output: 'cached result', cached: true });
-    });
+        expect(mockCache.get).toHaveBeenCalledWith(
+          expect.stringContaining('ruby:script.rb:default:call_api:'),
+        );
+        expect(mockRunRuby).not.toHaveBeenCalled();
+        expect(result).toEqual({ output: 'cached result', cached: true, cacheHit: true });
+      },
+    );
 
     it('should cache result when cache is enabled', async () => {
       const provider = new RubyProvider('script.rb');
@@ -386,6 +393,7 @@ describe('RubyProvider', () => {
       expect(result).toEqual({
         output: 'cached result with token usage',
         cached: true,
+        cacheHit: true,
         tokenUsage: {
           cached: 25,
           total: 25,

@@ -49,7 +49,7 @@ module.exports = class OpenAIProvider {
   }
 
   async callApi(prompt, context, options) {
-    const { data } = await promptfoo.cache.fetchWithCache(
+    const { data, cached } = await promptfoo.cache.fetchWithCache(
       'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
@@ -69,6 +69,7 @@ module.exports = class OpenAIProvider {
     return {
       output: data.choices[0].message.content,
       tokenUsage: data.usage,
+      cached,
     };
   }
 };
@@ -100,6 +101,8 @@ module.exports = class OpenAIProvider {
   ...
 }
 ```
+
+Set `cached: true` when returning a stored response. If a live request is shared between callers and marked `cached` for billing, also set `cacheHit: false` so latency assertions can grade its current elapsed time. Stored replays must set `cacheHit: true` or omit it; latency assertions reject them.
 
 ### Guardrail Responses
 

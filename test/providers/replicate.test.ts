@@ -279,6 +279,7 @@ describe('ReplicateProvider', () => {
     expect(result).toMatchObject({
       error: 'API call error: Error: Model error',
       cached: true,
+      cacheHit: true,
       tokenUsage: { total: 0, cached: 0, numRequests: 0 },
     });
   });
@@ -439,6 +440,7 @@ describe('ReplicateProvider', () => {
     expect(mockCache.set).toHaveBeenCalledWith(cacheKey, expect.any(String));
     expect(JSON.parse(mockCache.set.mock.calls[0][1])).toEqual({
       output: 'test response',
+      cacheHit: false,
       tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
     });
   });

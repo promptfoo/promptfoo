@@ -672,7 +672,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         output,
         ...(finishReason && { finishReason }),
         ...(tokenUsage && { tokenUsage }),
-        ...(response.cached && { cached: true }),
+        ...(response.cached && { cached: true, cacheHit: true }),
       };
     } catch (err) {
       return {
@@ -867,7 +867,7 @@ export class OllamaChatProvider implements ApiProvider {
         output,
         ...(finishReason && { finishReason }),
         ...(tokenUsage && { tokenUsage }),
-        ...(response.cached && { cached: true }),
+        ...(response.cached && { cached: true, cacheHit: true }),
       };
     } catch (err) {
       return {

@@ -276,6 +276,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
 
       return {
         output: response.data.generated_text || response.data[0]?.generated_text,
+        ...(response.cached && { cacheHit: true }),
       };
     } catch (err) {
       return {

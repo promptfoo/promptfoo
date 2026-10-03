@@ -10,7 +10,11 @@ import {
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import {
+  extractProviderResponseAttributes,
+  type GenAISpanContext,
+  withGenAISpan,
+} from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
@@ -297,24 +301,11 @@ export class ReplicateProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
     return withPredictionLease((retain) =>
       withGenAISpan(
         spanContext,
         () => this.callApiInternal(prompt, options, retain),
-        resultExtractor,
+        extractProviderResponseAttributes,
       ),
     );
   }
@@ -388,6 +379,7 @@ export class ReplicateProvider implements ApiProvider {
             numRequests: 0,
           },
           cached: true,
+          cacheHit: true,
         };
       }
     }
@@ -395,6 +387,7 @@ export class ReplicateProvider implements ApiProvider {
     logger.debug('Calling Replicate', { modelName: this.modelName, promptLength: prompt.length });
     let response;
     let cached = false;
+    let cacheHit = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
       const { creation, shared, claim, release } = await createPrediction(
@@ -410,6 +403,7 @@ export class ReplicateProvider implements ApiProvider {
 
       // If still processing, poll for completion
       const polled = response.status === 'starting' || response.status === 'processing';
+      cacheHit = creation.cached && !polled;
       if (polled) {
         cached = shared;
         response = await this.pollForCompletion(response.id, options?.abortSignal);
@@ -433,6 +427,7 @@ export class ReplicateProvider implements ApiProvider {
       }
       return {
         error: `API call error: ${String(err)}`,
+        cacheHit,
         ...(cached && { cached: true, tokenUsage: createEmptyTokenUsage() }),
       };
     }
@@ -443,6 +438,7 @@ export class ReplicateProvider implements ApiProvider {
 
     const responseMetadata = {
       ...(cached && { cached: true }),
+      cacheHit,
       tokenUsage: { ...createEmptyTokenUsage(), numRequests: Number(!cached) },
     };
 
@@ -666,12 +662,14 @@ export class ReplicateImageProvider extends ReplicateProvider {
 
     let response: any | undefined;
     let cached = false;
+    let cacheHit = false;
     if (isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug('Retrieved cached Replicate image response', { modelName: this.modelName });
         response = JSON.parse(cachedResponse as string);
         cached = true;
+        cacheHit = true;
       }
     }
 
@@ -712,6 +710,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
 
       // If still processing, poll for completion
       const polled = prediction.status === 'starting' || prediction.status === 'processing';
+      cacheHit = creation.cached && !polled;
       if (polled) {
         prediction = await this.pollForCompletion(prediction.id, options?.abortSignal);
       }
@@ -773,6 +772,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
     return {
       output: `![${ellipsizedPrompt}](${url})`,
       cached,
+      cacheHit,
     };
   }
 }

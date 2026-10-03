@@ -359,24 +359,30 @@ describe('GolangProvider', () => {
   });
 
   describe('caching', () => {
-    it('should use cached result when available', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
-        set: vi.fn(),
-      };
-      mockGetCache.mockResolvedValue(mockCache as never);
+    it.each([undefined, false, true])(
+      'marks a replay when stored cacheHit is %s',
+      async (cacheHit) => {
+        const provider = new GolangProvider('script.go', {
+          config: { basePath: '/absolute/path/to' },
+        });
+        mockIsCacheEnabled.mockReturnValue(true);
+        const mockCache = {
+          get: vi
+            .fn()
+            .mockResolvedValue(
+              JSON.stringify({ output: 'cached result', cached: false, cacheHit }),
+            ),
+          set: vi.fn(),
+        };
+        mockGetCache.mockResolvedValue(mockCache as never);
 
-      const result = await provider.callApi('test prompt');
+        const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
-      expect(mockExecFile).not.toHaveBeenCalled();
-      expect(result.cached).toBe(true);
-      expect(result).toEqual({ output: 'cached result', cached: true });
-    });
+        expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
+        expect(mockExecFile).not.toHaveBeenCalled();
+        expect(result).toEqual({ output: 'cached result', cached: true, cacheHit: true });
+      },
+    );
 
     it('should handle cache errors', async () => {
       const provider = new GolangProvider('script.go', {

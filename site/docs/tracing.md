@@ -95,7 +95,7 @@ Instrumented model and agent calls can include these attributes on their GenAI s
 - `promptfoo.provider.id` - Provider identifier
 - `promptfoo.test.index` - Test case index
 - `promptfoo.prompt.label` - Prompt label
-- `promptfoo.cache_hit` - Whether the response was served from cache
+- `promptfoo.cache_hit` - Whether the response was replayed from cache; false for callers sharing a live request
 - `promptfoo.usage.total_tokens` - Total token count reported by the provider
 - `promptfoo.usage.cached_response_tokens` - Tokens associated with a cached Promptfoo response
 - `promptfoo.usage.accepted_prediction_tokens` - Accepted prediction tokens, when available

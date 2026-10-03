@@ -87,7 +87,7 @@ export class GolangProvider implements ApiProvider {
 
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
-      return { ...JSON.parse(cachedResult), cached: true };
+      return { ...JSON.parse(cachedResult), cached: true, cacheHit: true };
     } else {
       if (context) {
         // Remove properties not useful in Golang and non-serializable objects

@@ -73,8 +73,9 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     };
 
     let data;
+    let cached = false;
     try {
-      ({ data } = (await fetchWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `${this.apiBaseUrl}/chat/completions`,
         {
           method: 'POST',
@@ -96,6 +97,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     try {
       return {
         output: data.choices[0].message.content,
+        ...(cached && { cacheHit: true }),
       };
     } catch (err) {
       return {
@@ -159,8 +161,9 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     };
 
     let data;
+    let cached = false;
     try {
-      ({ data } = (await fetchWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `${this.apiBaseUrl}/completions`,
         {
           method: 'POST',
@@ -182,6 +185,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     try {
       return {
         output: data.choices[0].text,
+        ...(cached && { cacheHit: true }),
       };
     } catch (err) {
       return {

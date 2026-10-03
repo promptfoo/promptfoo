@@ -1,6 +1,7 @@
 import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  extractProviderResponseAttributes,
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
@@ -579,6 +580,36 @@ describe('genaiTracer', () => {
         'tool.output',
         expect.stringContaining('[truncated]'),
       );
+    });
+  });
+
+  describe('extractProviderResponseAttributes', () => {
+    it('keeps coalesced billing usage separate from replay provenance', () => {
+      setGenAIResponseAttributes(
+        mockSpan as any,
+        extractProviderResponseAttributes({
+          cached: true,
+          cacheHit: false,
+          tokenUsage: { prompt: 10, completion: 5, total: 15, cached: 15 },
+        }),
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, false);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        15,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        expect.anything(),
+      );
+    });
+    it.each([
+      { response: { cached: true, cacheHit: false }, expected: false },
+      { response: { cached: false, cacheHit: true }, expected: true },
+      { response: { cached: true }, expected: true },
+      { response: {}, expected: undefined },
+    ])('records cache provenance for $response', ({ response, expected }) => {
+      expect(extractProviderResponseAttributes(response).cacheHit).toBe(expected);
     });
   });
 
