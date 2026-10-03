@@ -29,6 +29,8 @@ vi.mock('python-shell', async () => {
   return {
     PythonShell: class extends EventEmitter {
       childProcess = this;
+      exitCode = null;
+      signalCode = null;
       stderr = new EventEmitter();
       constructor(
         _script: string,

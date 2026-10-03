@@ -79,6 +79,7 @@ export class PythonWorker {
       const readyTimeout = setTimeout(() => {
         startupError = new Error('Worker failed to become ready within timeout');
         // Retain ownership until close, including children that ignore SIGTERM.
+        this.closeStreamsAfterExit(workerProcess);
         workerProcess.kill('SIGKILL');
       }, 30000);
 
@@ -107,6 +108,7 @@ export class PythonWorker {
         clearTimeout(readyTimeout);
         if (!becameReady && !startupError) {
           startupError = err;
+          this.closeStreamsAfterExit(workerProcess);
           workerProcess.kill('SIGKILL');
         }
       });
@@ -145,6 +147,24 @@ export class PythonWorker {
     this.stderrLogger.flush();
   }
 
+  private closeStreamsAfterExit(workerProcess: PythonShell): void {
+    const child = workerProcess.childProcess;
+    const closeStreams = () => {
+      child.stdin?.destroy();
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+    };
+    // A provider subprocess can retain inherited pipes after the wrapper exits.
+    // Wait for the wrapper's actual termination, then release our pipe endpoints
+    // so its close event cannot depend on that subprocess's lifetime.
+    if (child.exitCode !== null || child.signalCode !== null) {
+      closeStreams();
+    } else {
+      child.once('exit', closeStreams);
+      child.once('close', () => child.off('exit', closeStreams));
+    }
+  }
+
   async call(functionName: string, args: unknown[]): Promise<unknown> {
     if (!this.ready) {
       throw new Error('Worker not ready');
@@ -172,6 +192,7 @@ export class PythonWorker {
         const closed = new Promise<void>((resolve) =>
           workerProcess.childProcess.once('close', resolve),
         );
+        this.closeStreamsAfterExit(workerProcess);
         workerProcess.kill('SIGKILL');
         await closed;
         pending.reject(request.signal.reason);
@@ -361,6 +382,7 @@ export class PythonWorker {
     const closed = new Promise<void>((resolve) =>
       workerProcess.childProcess.once('close', resolve),
     );
+    this.closeStreamsAfterExit(workerProcess);
     const killTimeout = setTimeout(() => workerProcess.kill('SIGKILL'), 5000).unref();
     try {
       if (this.pendingRequest) {
