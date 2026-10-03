@@ -1,22 +1,9 @@
 import React from 'react';
 
 import Link from '@docusaurus/Link';
+import { formatTagLabel } from '../../utils/blog';
 import styles from './BlogPostCard.module.css';
 import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
-
-// Format tag label: "red-teaming" → "Red Teaming", "ai-security" → "AI Security"
-function formatTagLabel(label: string): string {
-  const acronyms = ['ai', 'llm', 'owasp', 'mcp', 'rag', 'agi', 'a2a', 'eu'];
-  return label
-    .split('-')
-    .map((word) => {
-      if (acronyms.includes(word.toLowerCase())) {
-        return word.toUpperCase();
-      }
-      return word.charAt(0).toUpperCase() + word.slice(1);
-    })
-    .join(' ');
-}
 
 interface BlogPostCardProps {
   post: PropBlogPostContent;

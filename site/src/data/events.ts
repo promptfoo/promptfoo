@@ -752,10 +752,6 @@ export function getEventsByYear(year: number): Event[] {
   return events.filter((event) => getEventYear(event.startDate) === year);
 }
 
-export function getEventsByType(type: EventType): Event[] {
-  return events.filter((event) => event.type === type);
-}
-
 export function getFeaturedEvent(source: readonly Event[] = events): Event | undefined {
   const upcoming = getUpcomingEvents(source);
   return upcoming.length > 0 ? upcoming[0] : undefined;
