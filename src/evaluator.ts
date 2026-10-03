@@ -33,6 +33,7 @@ import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { GRADERS } from './redteam/graders';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
@@ -67,6 +68,7 @@ import {
   type AssertionOrSet,
   type AssertionType,
   type AtomicTestCase,
+  BaseAssertionTypesSchema,
   type CompletedPrompt,
   type EnvOverrides,
   type EvaluateResult,
@@ -78,6 +80,7 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type RunEvalOptions,
+  SpecialAssertionTypesSchema,
   type TestSuite,
   TestSuiteConfigSchema,
 } from './types/index';
@@ -3549,12 +3552,119 @@ function getAverageLatencyMs(results: EvaluationStoreResult[]) {
   return results.length > 0 ? totalLatencyMs / results.length : 0;
 }
 
+// Provider categories are public; model names, endpoints, and custom IDs may be private.
+const PROVIDER_CATEGORIES = new Set([
+  'a2a',
+  'abliteration',
+  'ai21',
+  'aimlapi',
+  'alibaba',
+  'alicloud',
+  'aliyun',
+  'anthropic',
+  'atlascloud',
+  'azure',
+  'azureopenai',
+  'bam',
+  'bedrock',
+  'bedrock-agent',
+  'browser',
+  'browser-provider',
+  'cerebras',
+  'cloudera',
+  'cloudflare-ai',
+  'cloudflare-gateway',
+  'cohere',
+  'cometapi',
+  'dashscope',
+  'databricks',
+  'deepseek',
+  'docker',
+  'echo',
+  'elevenlabs',
+  'envoy',
+  'exec',
+  'f5',
+  'fal',
+  'file',
+  'fireworks',
+  'github',
+  'golang',
+  'google',
+  'groq',
+  'helicone',
+  'helicone-gateway',
+  'hf',
+  'http',
+  'https',
+  'huggingface',
+  'hyperbolic',
+  'jfrog',
+  'litellm',
+  'llama',
+  'llamaapi',
+  'localai',
+  'mcp',
+  'meta',
+  'minimax',
+  'mistral',
+  'mlflow-gateway',
+  'modelslab',
+  'moonshot',
+  'n8n',
+  'novita',
+  'nscale',
+  'nvidia',
+  'ollama',
+  'openai',
+  'openclaw',
+  'opencode',
+  'openinterpreter',
+  'openrouter',
+  'orcarouter',
+  'package',
+  'palm',
+  'perplexity',
+  'portkey',
+  'promptfoo',
+  'python',
+  'quiverai',
+  'qwak',
+  'replicate',
+  'ruby',
+  'sagemaker',
+  'sequence',
+  'slack',
+  'snowflake',
+  'togetherai',
+  'transformers',
+  'transformers.js',
+  'truefoundry',
+  'vercel',
+  'vertex',
+  'voyage',
+  'watsonx',
+  'webhook',
+  'websocket',
+  'ws',
+  'wss',
+  'xai',
+]);
+
+const TELEMETRY_ASSERTION_TYPES = new Set<string>([
+  'assert-set',
+  ...Object.keys(GRADERS),
+  ...BaseAssertionTypesSchema.options,
+  ...BaseAssertionTypesSchema.options.map((type) => `not-${type}`),
+  ...SpecialAssertionTypesSchema.options,
+]);
+
 function getProviderPrefixes(testSuite: TestSuite) {
   return Array.from(
     new Set(
-      testSuite.providers.map((p) => {
-        const idParts = p.id().split(':');
-        return idParts.length > 1 ? idParts[0] : 'unknown';
+      testSuite.providers.map((provider) => {
+        const prefix = provider.id().split(':', 1)[0].toLowerCase();
+        return PROVIDER_CATEGORIES.has(prefix) ? prefix : 'custom';
       }),
     ),
   );
@@ -5116,7 +5226,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
       providerPrefixes: getProviderPrefixes(testSuite).sort(),
-      assertionTypes: Array.from(assertionTypes).sort(),
+      assertionTypes: Array.from(
+        new Set(
+          Array.from(assertionTypes, (type) =>
+            TELEMETRY_ASSERTION_TYPES.has(type) ? type : 'custom',
+          ),
+        ),
+      ).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
       hasAnyPass: this.stats.successes > 0,
