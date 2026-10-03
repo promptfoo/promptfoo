@@ -157,7 +157,18 @@ Output-only estimates for earlier models:
 
 **Note:** The per-image estimates exclude input tokens. Promptfoo uses returned usage when available. Without usage, GPT Image 2 `auto` quality or custom sizes leave `cost` unset.
 
+## LLM-as-a-Judge Evaluation
+
+Use `promptfooconfig.judge.yaml` to grade generated images with a vision-capable model:
+
+```bash
+PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.judge.yaml --no-cache
+```
+
+This config compares Flare and Sunburst images with `llm-rubric` and a GPT-6 Sol grader. Promptfoo attaches their inline image bytes automatically. Inline media keeps those bytes available to the grader; remote image URLs and stored blob references are not supported for this grading path. See the [image evaluation guide](https://promptfoo.dev/docs/guides/image-evaluation) for details.
+
 ## Documentation
 
+- [Image Evaluation Guide](https://promptfoo.dev/docs/guides/image-evaluation)
 - [OpenAI Image Generation API Documentation](https://developers.openai.com/api/docs/guides/image-generation)
 - [promptfoo OpenAI Provider Documentation](https://promptfoo.dev/docs/providers/openai)

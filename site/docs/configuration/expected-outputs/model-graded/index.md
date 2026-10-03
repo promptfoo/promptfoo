@@ -439,7 +439,11 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 
 ### Image-based rubric prompts
 
-`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-6-sol`.
+`llm-rubric` can grade text about an image or generated image outputs. Use a vision-capable grader such as `openai:gpt-6-sol`.
+
+#### Grading text about a known image
+
+Use an `image_url` block referencing a URL or variable to include a pre-existing image for context:
 
 ```yaml
 defaultTest:
@@ -457,6 +461,28 @@ defaultTest:
         }
       ]
 ```
+
+#### Grading generated image outputs
+
+`llm-rubric` automatically attaches images from `ProviderResponse.images` when their `data` contains a data URI or raw base64 bytes. GPT Image and Gemini image routes return this format. For other `openai:image` compatibility routes, request `config.response_format: b64_json` from an endpoint that supports it. Custom providers must supply inline image data too.
+
+Set `PROMPTFOO_INLINE_MEDIA=true` to preserve those bytes, then select a vision-capable model and write criteria for the image. Remote image URLs and stored blob references are not supported by this grading path; the inline-media setting does not download URLs.
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-6-sol
+tests:
+  - vars:
+      prompt: A cat wearing a top hat
+    assert:
+      - type: llm-rubric
+        value: The image shows a cat wearing a top hat
+```
+
+A custom rubric can stay text-only. Do not put `{{output}}` in an `image_url` block for generated images: during grading, it may be replaced with an attachment placeholder.
+
+See the [image eval guide](/docs/guides/image-evaluation) for a complete provider comparison and custom rubric example.
 
 #### select-best rubric prompt
 

@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Image generation with LLM-as-a-judge evaluation
+
+# Keep image bytes available to the grader instead of storing blob references.
+# Run: PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.judge.yaml --no-cache
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:image:gpt-image-2.5-flare
+    config:
+      size: 1024x1024
+      quality: low
+
+  - id: openai:image:gpt-image-2.5-sunburst
+    config:
+      size: 1024x1024
+      quality: low
+
+defaultTest:
+  options:
+    provider: openai:gpt-6-sol
+
+tests:
+  - vars:
+      prompt: A photorealistic golden retriever puppy playing in autumn leaves
+    assert:
+      - type: llm-rubric
+        value: The image is photorealistic (not cartoon), shows a golden retriever puppy, and includes autumn leaves
+  - vars:
+      prompt: A neon sign that reads "HELLO WORLD" on a dark brick wall
+    assert:
+      - type: llm-rubric
+        value: The image shows a neon sign with legible text "HELLO WORLD" on a brick wall
+  - vars:
+      prompt: An astronaut riding a horse on Mars with Earth visible in the sky
+    assert:
+      - type: llm-rubric
+        value: The image depicts an astronaut on a horse in a Martian landscape, with Earth visible in the sky
