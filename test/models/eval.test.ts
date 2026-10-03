@@ -221,6 +221,28 @@ describe('evaluator', () => {
     });
   });
 
+  it('reloads summaries after appending to an evaluation with loaded results', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    const [existing] = await EvalResult.findManyByEvalId(eval_.id);
+    const appended = new EvalResult({
+      ...existing,
+      id: 'appended-result',
+      testIdx: 1,
+      response: existing.response ?? null,
+    });
+    await eval_.setResults([appended]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(2);
+  });
+
+  it('retains persisted rows when an empty upload chunk follows a loaded summary', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    await eval_.setResults([]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(1);
+    expect(await getCachedResultsCount(eval_.id)).toBe(1);
+  });
+
   describe('fetchResultsBatched', () => {
     it('returns in-memory results in batches for non-persisted evals', async () => {
       const eval_ = new Eval({});
@@ -1776,6 +1798,21 @@ describe('evaluator', () => {
         );
         expect(hasMetric).toBe(true);
       }
+    });
+
+    it('ignores malformed filter entries while applying valid filters', async () => {
+      const validFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'metric',
+        operator: 'equals',
+        value: 'accuracy',
+      });
+      const valid = await evalWithResults.getTablePage({ filters: [validFilter] });
+      const mixed = await evalWithResults.getTablePage({
+        filters: ['{bad json', 'null', '[]', validFilter],
+      });
+      expect(mixed.filteredCount).toBe(valid.filteredCount);
+      expect(mixed.body).toEqual(valid.body);
     });
 
     it('should combine multiple filter types', async () => {

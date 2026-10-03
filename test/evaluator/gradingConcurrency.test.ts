@@ -249,7 +249,7 @@ describeEvaluator('evaluator grading concurrency', () => {
             statusText: 'Forbidden',
           },
         },
-        tokenUsage: createEmptyTokenUsage(),
+        tokenUsage: { ...createEmptyTokenUsage(), prompt: 7, total: 7, numRequests: 1 },
       })),
     };
     const judge: ApiProvider = {
@@ -282,6 +282,9 @@ describeEvaluator('evaluator grading concurrency', () => {
     expect(judge.callApi).toHaveBeenCalledTimes(1);
     expect(summary.results).toHaveLength(1);
     expect(summary.results[0].vars.topic).toBe('alpha');
+    expect(evalRecord.prompts[0].metrics?.testPassCount).toBe(1);
+    expect(evalRecord.prompts[0].metrics?.tokenUsage?.prompt).toBe(7);
+    expect(evalRecord.prompts[0].metrics?.tokenUsage?.numRequests).toBe(1);
   });
 
   it('groups model-graded assert-set children by provider id when maxConcurrency is 1', async () => {
