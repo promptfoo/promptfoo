@@ -48,13 +48,17 @@ The homoglyph strategy works by:
 
 ## Example Scenarios
 
-| Original Character | Homoglyph Replacement | Unicode Name                      |
-| ------------------ | --------------------- | --------------------------------- |
-| a                  | а                     | Cyrillic Small Letter A (U+0430)  |
-| e                  | е                     | Cyrillic Small Letter Ie (U+0435) |
-| o                  | о                     | Cyrillic Small Letter O (U+043E)  |
-| p                  | р                     | Cyrillic Small Letter Er (U+0440) |
-| x                  | х                     | Cyrillic Small Letter Ha (U+0445) |
+| Original Character | Homoglyph Replacement | Unicode Name                                    |
+| ------------------ | --------------------- | ----------------------------------------------- |
+| a                  | а                     | Cyrillic Small Letter A (U+0430)                |
+| e                  | е                     | Cyrillic Small Letter Ie (U+0435)               |
+| o                  | о                     | Cyrillic Small Letter O (U+043E)                |
+| p                  | р                     | Cyrillic Small Letter Er (U+0440)               |
+| x                  | х                     | Cyrillic Small Letter Ha (U+0445)               |
+| ş                  | ș                     | Latin Small Letter S With Comma Below (U+0219)  |
+| ö                  | ӧ                     | Cyrillic Small Letter O With Diaeresis (U+04E7) |
+
+The map also covers the Turkish letters `ç Ç ş Ş ğ Ğ ö Ö ı`. Without them, a Turkish-language prompt keeps its language-specific letters unchanged while the surrounding ASCII is substituted, leaving an obvious untouched signal. Each maps to a precomposed cross-script confusable with a different code point. The Turkish dotless `ı` (U+0131) has no close single-code-point twin; the mathematical italic dotless i is used as the nearest match, though it renders in a math style, so the visual similarity is weaker than the other entries. The letters `ü`, `Ü`, and `İ` are intentionally not mapped: their only visually identical alternatives are canonical (NFD) decompositions that recompose to the original character under NFC normalization, so they would have no effect.
 
 **Examples:**
 

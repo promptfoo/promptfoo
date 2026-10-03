@@ -88,6 +88,37 @@ describe('homoglyph strategy', () => {
     });
   });
 
+  describe('Turkish letter coverage', () => {
+    const turkishLetters = ['ç', 'Ç', 'ş', 'Ş', 'ğ', 'Ğ', 'ö', 'Ö', 'ı'];
+
+    it('maps each Turkish-specific letter to a distinct homoglyph', () => {
+      for (const char of turkishLetters) {
+        const mapped = homoglyphMap[char];
+        expect(mapped, `missing homoglyph for '${char}'`).toBeDefined();
+        expect(mapped, `'${char}' maps to itself`).not.toBe(char);
+        expect(toHomoglyphs(char), `'${char}' left unchanged`).not.toBe(char);
+      }
+    });
+
+    it('transforms a Turkish prompt that previously passed through unchanged', () => {
+      const input = 'Şifreyi çöz ve ışığı aç';
+      const output = toHomoglyphs(input);
+      expect(output).not.toBe(input);
+      // None of the mapped Turkish letters should survive in the output.
+      for (const char of turkishLetters) {
+        expect(output, `'${char}' still present in output`).not.toContain(char);
+      }
+    });
+
+    it('leaves other non-ASCII letters outside the map untouched', () => {
+      // German ß, Spanish ñ, Greek letters, and the Turkish letters that have no
+      // usable homoglyph (ü, Ü, İ) are not in the map and must pass through
+      // unchanged, so behaviour is byte-identical for inputs without mapped letters.
+      const untouched = 'ßñαβγüÜİ';
+      expect(toHomoglyphs(untouched)).toBe(untouched);
+    });
+  });
+
   describe('addHomoglyphs', () => {
     it('should convert text to homoglyphs', () => {
       const injectVar = 'prompt';
