@@ -24,6 +24,54 @@ describe('OpenRouter', () => {
     vi.clearAllMocks();
   });
 
+  describe('streaming settings', () => {
+    beforeEach(() => {
+      mockedFetchWithRetries.mockReset();
+    });
+
+    afterEach(() => {
+      mockedFetchWithRetries.mockReset();
+    });
+
+    it.each([{ stream: true }, { passthrough: { stream: true } }])(
+      'rejects unsupported streaming before fetching: %j',
+      async (config) => {
+        for (const promptOverride of [false, true]) {
+          const provider = new OpenRouterProvider('fixture/model', {
+            config: { apiKey: 'fixture-key', ...(promptOverride ? {} : config) },
+          });
+
+          const result = await provider.callApi('Hello', {
+            vars: {},
+            prompt: { raw: 'Hello', label: 'Hello', config: promptOverride ? config : {} },
+          });
+
+          expect(result.error).toBe(
+            'The openrouter provider does not support streaming. Set stream: false in config and passthrough.',
+          );
+          expect(mockedFetchWithRetries).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    it('allows a prompt to disable the provider streaming setting', async () => {
+      const provider = new OpenRouterProvider('fixture/model', {
+        config: { apiKey: 'fixture-key', stream: true },
+      });
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        Response.json({ choices: [{ message: { content: 'Hello' } }] }),
+      );
+
+      const result = await provider.callApi('Hello', {
+        vars: {},
+        prompt: { raw: 'Hello', label: 'Hello', config: { stream: false } },
+      });
+
+      expect(result.output).toBe('Hello');
+      expect(mockedFetchWithRetries).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('credential selection', () => {
     let restoreEnv: () => void;
 

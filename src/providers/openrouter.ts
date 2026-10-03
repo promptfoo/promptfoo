@@ -143,6 +143,12 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     const { body, config } = prepared;
+    if (config.stream === true || body.stream === true) {
+      return {
+        error:
+          'The openrouter provider does not support streaming. Set stream: false in config and passthrough.',
+      };
+    }
 
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);

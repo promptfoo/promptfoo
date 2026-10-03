@@ -922,6 +922,26 @@ describe('logger', () => {
       vi.clearAllMocks();
     });
 
+    it.each([
+      ['application/json', JSON.stringify({ stream: true })],
+      ['text/event-stream; charset=utf-8', '{}'],
+    ])('does not clone a streamed body (%s)', async (contentType, requestBody) => {
+      const response = new Response('data: fixture\n\n', {
+        headers: { 'content-type': contentType },
+      });
+      const clone = vi.spyOn(response, 'clone');
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody,
+        requestMethod: 'POST',
+        response,
+      });
+      expect(clone).not.toHaveBeenCalled();
+      expect(response.bodyUsed).toBe(false);
+      expect(mockLogger.debug).toHaveBeenCalled();
+      await response.body?.cancel();
+    });
+
     it('should log successful requests as debug', async () => {
       await logger.logRequestResponse({
         url: 'https://api.example.com/test',

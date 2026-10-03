@@ -647,14 +647,6 @@ export function isTransientError(response: Response): boolean {
 export type { FetchOptions } from './types';
 
 /**
- * Decide what to do with a rate-limited response inside `fetchWithRetries`.
- *
- * Throws on hard-quota fail-fast or retry exhaustion (with a structured
- * {@link HttpRateLimitError} for status 429, or a plain `Error` for the soft
- * `X-RateLimit-Remaining=0` 200 case). Otherwise sleeps via
- * {@link handleRateLimit} and returns so the caller can `continue` the loop.
- */
-/**
  * Returns a string form of a {@link RequestInfo} suitable for log output.
  * Strips basic-auth credentials and known sensitive query parameters (api_key,
  * token, password, signature, …) via {@link sanitizeUrl} so providers that
@@ -673,11 +665,8 @@ async function handleRateLimitedResponse(
   maxRetries: number,
   signal?: AbortSignal | null,
 ): Promise<void> {
-  // Only the 429 path produces a structured error. A 200 OK with
-  // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
-  // sleep and retry, but constructing a "Rate limit exceeded: HTTP 200 OK"
-  // error on retry exhaustion would be misleading and pointlessly buffers a
-  // 64 KB body peek on every successful call.
+  // HTTP 429 carries the provider's quota classification. Header-only hints on
+  // other failed responses retain the generic retry error.
   const isHardRateLimit = response.status === 429;
   const safeUrl = urlForLog(url);
 
@@ -688,6 +677,8 @@ async function handleRateLimitedResponse(
   if (isHardRateLimit) {
     const { body, code, type } = await peekRateLimitBody(response);
     rateLimitError = buildHttpRateLimitError(response, body, code, type);
+  } else {
+    void response.body?.cancel().catch(() => undefined);
   }
 
   // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
@@ -762,10 +753,13 @@ export async function fetchWithRetries(
       );
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
+        void response.body?.cancel().catch(() => undefined);
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
-      if (response && isRateLimited(response)) {
+      // A successful completion can exhaust the quota for the next request.
+      // Return its body instead of repeating an already completed request.
+      if ((response.status < 200 || response.status >= 300) && isRateLimited(response)) {
         await handleRateLimitedResponse(response, url, i, maxRetries, signal);
         continue;
       }

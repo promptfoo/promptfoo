@@ -348,6 +348,28 @@ Above 272,000 input tokens, input, cached-input, and cache-write rates double; o
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
 
+### Streaming Chat Completions
+
+Set `stream: true` to receive Chat Completions as a stream:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-6-luna
+    config:
+      stream: true
+```
+
+Promptfoo assembles the response before grading. Structured output, refusals, tool
+callbacks, usage and cost follow the same path as ordinary Chat Completions.
+`passthrough.stream_options` is supported; Promptfoo always requests final usage.
+
+Streams are not stored in Promptfoo's response cache. Use `stream: false` for cached
+responses, audio output or custom tools. Streaming supports function tools.
+Malformed or incomplete streams fail the evaluation.
+Each stream is limited to 32 MiB, each event to 1 MiB, and choices and tools to 128 each.
+The request timeout covers both the HTTP request and reading the stream.
+The separate `openrouter:` provider does not support streaming and rejects `stream: true`.
+
 ### Generating multiple responses
 
 For Chat Completions models that support `n`, pass it through to the API:

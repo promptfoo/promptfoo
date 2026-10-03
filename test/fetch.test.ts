@@ -1526,10 +1526,28 @@ describe('computeRateLimitWaitMs', () => {
 });
 
 describe('fetchWithRetries', () => {
+  it.each(['x-ratelimit-remaining-requests', 'x-ratelimit-remaining-tokens'])(
+    'returns a completed response when %s reaches zero',
+    async (header) => {
+      const response = new Response('completed', { status: 200, headers: { [header]: '0' } });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+      expect(await fetchWithRetries('https://example.com', {}, 1000, 1)).toBe(response);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(await response.text()).toBe('completed');
+    },
+  );
+
   beforeEach(() => {
     vi.mocked(sleep).mockClear();
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    if (vi.isMockFunction(global.fetch)) {
+      vi.mocked(global.fetch).mockReset();
+    }
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
   });
 
   it('should make exactly one attempt when retries is 0', async () => {
@@ -1622,7 +1640,8 @@ describe('fetchWithRetries', () => {
       return false;
     });
 
-    const errorResponse = createMockResponse({
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const errorResponse = new Response(new ReadableStream({ cancel }), {
       status: 502,
       statusText: 'Bad Gateway',
     });
@@ -1638,6 +1657,34 @@ describe('fetchWithRetries', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it.each([0, 1])('releases a header-only rate-limit response with %i retries', async (retries) => {
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const response = new Response(new ReadableStream({ cancel }), {
+      status: 503,
+      headers: { 'x-ratelimit-remaining-requests': '0', 'retry-after': '0.001' },
+    });
+    const success = createMockResponse();
+    global.fetch = vi.fn().mockResolvedValueOnce(response);
+    if (retries) {
+      vi.mocked(global.fetch).mockImplementationOnce(async () => {
+        expect(cancel).toHaveBeenCalledOnce();
+        return success;
+      });
+    }
+
+    const pending = fetchWithRetries('https://example.com', {}, 1000, retries);
+    if (retries) {
+      await expect(pending).resolves.toBe(success);
+    } else {
+      await expect(pending).rejects.toThrow('Rate limited');
+    }
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(global.fetch).toHaveBeenCalledTimes(retries + 1);
   });
 
   it('should handle rate limits with proper backoff', async () => {

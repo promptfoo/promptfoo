@@ -13,6 +13,7 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { fetchProviderRequestWithRetries, readProviderErrorText } from '../fetch';
 import {
   executeProviderFunctionCallback,
   loadProviderCallbackFromFileUrl,
@@ -38,6 +39,7 @@ import {
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
+import { readOpenAiChatStream } from './chatStream';
 import {
   applyGpt6RequestRules,
   getGpt6ChatReasoningEffort,
@@ -721,7 +723,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               data: string;
               transcript: string;
               format?: string;
-            };
+            } | null;
           };
         }
       >;
@@ -736,39 +738,118 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     };
 
     let data: OpenAIChatCompletionResponse;
-    let status: number;
-    let statusText: string;
+    let status = 0;
+    let statusText = 'Error';
     let cached = false;
     let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
     try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        latencyMs,
-        deleteFromCache,
-        headers: responseHeaders,
-      } = await fetchWithCache<OpenAIChatCompletionResponse>(
-        appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(apiKey && !getAuthHeaders ? { Authorization: `Bearer ${apiKey}` } : {}),
-            ...this.getOpenAiRequestHeaders(config.headers),
-          },
-          body: JSON.stringify(body),
-          ...(getAuthHeaders ? { getAuthHeaders } : {}),
-          ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
+      const streaming = config.stream === true || body.stream === true;
+      const timeoutMs = getRequestTimeoutMs();
+      if (streaming && Array.isArray(body.modalities) && body.modalities.includes('audio')) {
+        return {
+          error:
+            'Streaming Chat Completions do not support audio output. Set stream: false when requesting the audio modality.',
+        };
+      }
+      if (
+        streaming &&
+        Array.isArray(body.tools) &&
+        body.tools.some((tool: OpenAI.ChatCompletionTool) => tool.type === 'custom')
+      ) {
+        return {
+          error:
+            'Streaming Chat Completions support function tools only. Set stream: false for custom tools.',
+        };
+      }
+      const requestBody = streaming
+        ? {
+            ...body,
+            stream: true,
+            stream_options: { ...body.stream_options, include_usage: true },
+          }
+        : body;
+      const request = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey && !getAuthHeaders ? { Authorization: `Bearer ${apiKey}` } : {}),
+          ...this.getOpenAiRequestHeaders(config.headers),
         },
-        getRequestTimeoutMs(),
-        'json',
-        this.shouldBustCache(context),
-        this.config.maxRetries,
-      ));
+        body: JSON.stringify(requestBody),
+        ...(getAuthHeaders ? { getAuthHeaders } : {}),
+        ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
+      };
+      const url = appendOpenAiApiPath(this.getApiUrl(), 'chat/completions');
+      if (streaming) {
+        const start = Date.now();
+        const deadline = new AbortController();
+        const transport = new AbortController();
+        const timer = setTimeout(
+          () => deadline.abort(new DOMException('Request timed out', 'TimeoutError')),
+          timeoutMs,
+        );
+        timer.unref();
+        const signal = AbortSignal.any([
+          deadline.signal,
+          transport.signal,
+          ...(callApiOptions?.abortSignal ? [callApiOptions.abortSignal] : []),
+        ]);
+        try {
+          const response = await fetchProviderRequestWithRetries(
+            url,
+            { ...request, signal },
+            timeoutMs,
+            this.config.maxRetries,
+          );
+          status = response.status;
+          statusText = response.statusText;
+          responseHeaders = Object.fromEntries(response.headers?.entries() ?? []);
+          if (response.ok) {
+            data = await readOpenAiChatStream(response, () => transport.abort());
+          } else {
+            const text = await readProviderErrorText(response);
+            try {
+              data = JSON.parse(text);
+            } catch {
+              return {
+                error: `API error: ${status} ${statusText}\n${text}`,
+                metadata: { http: { status, statusText, headers: responseHeaders } },
+              };
+            }
+          }
+          latencyMs = Date.now() - start;
+        } catch (error) {
+          if (deadline.signal.aborted && !callApiOptions?.abortSignal?.aborted) {
+            return {
+              error: `API call timed out after ${timeoutMs}ms`,
+              metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
+            };
+          }
+          throw error;
+        } finally {
+          transport.abort();
+          clearTimeout(timer);
+        }
+      } else {
+        ({
+          data,
+          cached,
+          status,
+          statusText,
+          latencyMs,
+          deleteFromCache,
+          headers: responseHeaders,
+        } = await fetchWithCache<OpenAIChatCompletionResponse>(
+          url,
+          request,
+          timeoutMs,
+          'json',
+          this.shouldBustCache(context),
+          this.config.maxRetries,
+        ));
+      }
 
       const gatewayErrorFormat = this.usesGatewayErrorFormat();
       const policy = getOpenAiPolicyRefusal(data, gatewayErrorFormat);
@@ -801,7 +882,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
       const choiceError =
-        (this.usesOpenRouter() ||
+        (streaming ||
+          this.usesOpenRouter() ||
           (gatewayErrorFormat && getOpenAiGatewayErrorType(data) !== undefined)) &&
         !data?.error
           ? getOpenAiChatChoiceError(data)
@@ -825,7 +907,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
-      if (status < 200 || status >= 300) {
+      if (status < 200 || status >= 300 || (streaming && data?.error)) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
         const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
 
@@ -860,9 +942,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           };
         }
 
+        const cost = streaming ? this.calculateResponseCost(data, config, cached) : undefined;
         return {
           error: errorMessage,
+          ...(streaming && {
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            cached,
+            latencyMs,
+            raw: data,
+          }),
+          ...(cost === undefined ? {} : { cost }),
           metadata: {
+            ...(streaming && this.getProviderResponseMetadata(data)),
             ...(rateLimitKind ? { rateLimitKind } : {}),
             http: {
               status,
@@ -891,8 +982,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         error: `API call error: ${String(err)}`,
         metadata: {
           http: {
-            status: 0,
-            statusText: 'Error',
+            status,
+            statusText,
             headers: responseHeaders ?? {},
           },
         },
