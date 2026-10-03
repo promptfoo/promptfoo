@@ -166,7 +166,7 @@ Custom plugin file fields and plugin config fields are separate. Keep `generator
 
 ## How Grading Works
 
-Each generated prompt becomes a test case with an `llm-rubric` assertion. The rendered `grader` text is the rubric, `metric` controls the result label, and `threshold` controls the minimum passing score if you set one.
+Each generated prompt becomes a test case with an `llm-rubric` assertion. The rendered `grader` text is the rubric, `metric` controls the result label, and `threshold` overrides the `llm-rubric` default minimum passing score of `0.5`.
 
 Custom plugin graders are plain `llm-rubric` assertions. Put plugin-specific grading guidance, examples, and pass/fail rules directly in the `grader` template.
 

@@ -113,6 +113,35 @@ describe('matchesTrajectoryGoalSuccess', () => {
     );
   });
 
+  it('preserves pre-existing pass semantics when no threshold is configured', async () => {
+    const provider = createMockProvider({
+      response: createProviderResponse({
+        output: JSON.stringify({ pass: true, score: 0.1, reason: 'Goal achieved' }),
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }),
+    });
+
+    const grading: GradingConfig = {
+      provider,
+      rubricPrompt: 'Goal={{ goal }}',
+    };
+
+    const result = await matchesTrajectoryGoalSuccess(
+      'Resolve the task',
+      '{"stepCount":1}',
+      'I found the answer.',
+      grading,
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 0.1,
+        reason: 'Goal achieved',
+      }),
+    );
+  });
+
   it('does not allow caller vars to override goal, trajectory, or output', async () => {
     const provider = createMockProvider({
       response: createProviderResponse({
