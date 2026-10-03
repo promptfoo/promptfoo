@@ -566,7 +566,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
+    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
     const apiKeyCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
@@ -767,8 +767,9 @@ export class MistralEmbeddingProvider implements ApiProvider {
       env?: EnvOverrides;
     } = {},
   ) {
-    const { modelName, config, env } = options;
+    const { modelName, config, env, id } = options;
     this.modelName = modelName || 'mistral-embed';
+    this.id = id ? () => id : this.id;
     if (!MistralEmbeddingProvider.MISTRAL_EMBEDDING_MODELS_NAMES.includes(this.modelName)) {
       logger.warn(`Using unknown Mistral embedding model: ${this.modelName}`);
     }
@@ -807,7 +808,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
+    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
     const apiKeyCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar

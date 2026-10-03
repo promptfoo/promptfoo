@@ -39,8 +39,7 @@ function computeHash(data: Buffer): string {
 export class LocalFileSystemProvider implements MediaStorageProvider {
   readonly providerId = 'local';
   private basePath: string;
-  private hashIndexPath: string;
-  private hashIndex: Map<string, string> = new Map();
+  private readonly hashIndex: ReadonlyMap<string, string>;
   private blobProvider?: FilesystemBlobStorageProvider;
 
   private get blobs(): FilesystemBlobStorageProvider {
@@ -57,9 +56,8 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
 
   constructor(config: LocalStorageConfig = {}) {
     this.basePath = config.basePath || path.join(getConfigDirectoryPath(true), MEDIA_SUBDIR);
-    this.hashIndexPath = path.join(this.basePath, HASH_INDEX_FILE);
     this.ensureDirectory();
-    this.loadHashIndex();
+    this.hashIndex = this.loadHashIndex();
   }
 
   /**
@@ -73,32 +71,22 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   }
 
   /**
-   * Load the hash index from disk
+   * Load legacy lookup entries without rewriting the index. New writes use blob paths.
    */
-  private loadHashIndex(): void {
+  private loadHashIndex(): ReadonlyMap<string, string> {
+    const indexPath = path.join(this.basePath, HASH_INDEX_FILE);
     try {
-      if (fs.existsSync(this.hashIndexPath)) {
-        const data = fs.readFileSync(this.hashIndexPath, 'utf8');
+      if (fs.existsSync(indexPath)) {
+        const data = fs.readFileSync(indexPath, 'utf8');
         const parsed = JSON.parse(data);
-        this.hashIndex = new Map(Object.entries(parsed));
-        logger.debug(`[LocalStorage] Loaded hash index with ${this.hashIndex.size} entries`);
+        const index = new Map<string, string>(Object.entries(parsed));
+        logger.debug(`[LocalStorage] Loaded hash index with ${index.size} entries`);
+        return index;
       }
     } catch (error) {
       logger.warn(`[LocalStorage] Failed to load hash index, starting fresh`, { error });
-      this.hashIndex = new Map();
     }
-  }
-
-  /**
-   * Save the hash index to disk
-   */
-  private async saveHashIndex(): Promise<void> {
-    try {
-      const data = JSON.stringify(Object.fromEntries(this.hashIndex), null, 2);
-      await fsPromises.writeFile(this.hashIndexPath, data, 'utf8');
-    } catch (error) {
-      logger.warn(`[LocalStorage] Failed to save hash index`, { error });
-    }
+    return new Map();
   }
 
   /**
@@ -202,15 +190,6 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     const filePath = this.getFilePath(key);
     const metadataPath = `${filePath}.meta.json`;
 
-    // Find and remove from hash index
-    for (const [hash, storedKey] of this.hashIndex.entries()) {
-      if (storedKey === key) {
-        this.hashIndex.delete(hash);
-        break;
-      }
-    }
-    await this.saveHashIndex();
-
     // Delete files (ignore ENOENT errors)
     try {
       await fsPromises.unlink(filePath);
@@ -251,11 +230,6 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     const key = this.hashIndex.get(contentHash);
     if (key && (await this.exists(key))) {
       return key;
-    }
-    // Clean up stale index entry if file doesn't exist
-    if (key) {
-      this.hashIndex.delete(contentHash);
-      await this.saveHashIndex();
     }
     return (await this.blobs.exists(contentHash)) ? `blob/${contentHash}` : null;
   }
