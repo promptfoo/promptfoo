@@ -4,6 +4,8 @@ import './setup';
 
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
+import logger from '../../../../src/logger';
+import { GroqResponsesProvider } from '../../../../src/providers/groq/responses';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 import * as createHash from '../../../../src/util/createHash';
 import { HttpRateLimitError } from '../../../../src/util/fetch/errors';
@@ -3648,5 +3650,133 @@ describe('OpenAiResponsesProvider request building', () => {
     const body = JSON.parse(reqOptions.body);
 
     expect(body.input).toEqual(objectInput);
+  });
+
+  it('should translate max_completion_tokens to max_output_tokens', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: { apiKey: 'test-key', max_completion_tokens: 77 },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(77);
+    expect('max_completion_tokens' in body).toBe(false);
+  });
+
+  it.each([
+    [{ max_completion_tokens: 50 }, 50],
+    [{ max_completion_tokens: 0 }, 0],
+    [{ max_output_tokens: 40, max_completion_tokens: 50 }, 40],
+  ])('resolves prompt token caps before provider aliases: %j', async (promptConfig, expected) => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: { max_output_tokens: 1000, max_completion_tokens: 2000 },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt', {
+      vars: {},
+      prompt: { raw: 'Test prompt', label: 'test', config: promptConfig },
+    });
+
+    expect(body.max_output_tokens).toBe(expected);
+    expect(body).not.toHaveProperty('max_completion_tokens');
+  });
+
+  it('should prefer an explicit max_output_tokens over max_completion_tokens', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: { apiKey: 'test-key', max_completion_tokens: 77, max_output_tokens: 99 },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(99);
+  });
+
+  it('should warn once about dropped Chat Completions-only options', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: {
+        apiKey: 'test-key',
+        seed: 42,
+        stop: ['END'],
+        presence_penalty: 0.5,
+        frequency_penalty: 0.3,
+      },
+    });
+
+    await provider.getOpenAiBody('Test prompt');
+    await provider.getOpenAiBody('Test prompt');
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(expect.any(String), {
+      provider: provider.id(),
+      model: 'gpt-5.6-luna',
+      options: ['frequency_penalty', 'presence_penalty', 'seed', 'stop'],
+    });
+  });
+
+  it('should not warn when no Chat Completions-only options are set', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.getOpenAiBody('Test prompt');
+
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('should warn about penalties that only come from the environment', async () => {
+    setOpenAiEnv({ OPENAI_PRESENCE_PENALTY: '0.5' });
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.getOpenAiBody('Test prompt');
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ options: ['presence_penalty'] }),
+    );
+  });
+
+  it('should not suggest openai:chat for a non-OpenAI Responses provider', async () => {
+    const provider = new GroqResponsesProvider('llama-3.3-70b-versatile', {
+      config: { apiKey: 'test-key', seed: 42 },
+    });
+
+    await provider.getOpenAiBody('Test prompt');
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ options: ['seed'] }),
+    );
+    expect(vi.mocked(logger.warn).mock.calls[0][0]).not.toContain('openai:chat:');
+  });
+  it('does not recommend Chat Completions for a Responses-only model', async () => {
+    const provider = new OpenAiResponsesProvider('o3-pro', {
+      config: { apiKey: 'test-key', seed: 42 },
+    });
+    await provider.getOpenAiBody('Test prompt');
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(logger.warn).mock.calls[0][0]).not.toContain('openai:chat:o3-pro');
+  });
+
+  it('warns when legacy function options would be dropped', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: {
+        apiKey: 'test-key',
+        functions: [{ name: 'lookup', parameters: { type: 'object', properties: {} } }],
+        function_call: { name: 'lookup' },
+      },
+    });
+    const { body } = await provider.getOpenAiBody('Test prompt');
+    expect(body).not.toHaveProperty('functions');
+    expect(body).not.toHaveProperty('function_call');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        options: expect.arrayContaining(['functions', 'function_call']),
+      }),
+    );
   });
 });

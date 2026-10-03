@@ -728,6 +728,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
   private readonly backgroundCacheScope = `provider:${++nextBackgroundProviderScope}`;
+  private chatOnlyOptionsWarningShown = false;
+
+  // These legacy Chat options are not translated by the Responses builder.
+  private static readonly CHAT_ONLY_OPTIONS = [
+    'frequency_penalty',
+    'presence_penalty',
+    'functions',
+    'function_call',
+    'seed',
+    'stop',
+  ] as const;
 
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
@@ -1006,6 +1017,27 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
+  private warnOnceForChatOnlyOptions(config: OpenAiCompletionOptions): void {
+    if (this.chatOnlyOptionsWarningShown) {
+      return;
+    }
+    const dropped = OpenAiResponsesProvider.CHAT_ONLY_OPTIONS.filter(
+      (option) =>
+        config[option] !== undefined ||
+        // The chat provider falls back to these env vars, so an env-only value is dropped here too.
+        (option === 'frequency_penalty' && getEnvString('OPENAI_FREQUENCY_PENALTY')) ||
+        (option === 'presence_penalty' && getEnvString('OPENAI_PRESENCE_PENALTY')),
+    );
+    if (dropped.length === 0) {
+      return;
+    }
+    this.chatOnlyOptionsWarningShown = true;
+    logger.warn(
+      '[OpenAI Responses] Ignoring unsupported Chat Completions options. Use Responses options or a compatible Chat Completions model.',
+      { provider: this.id(), model: this.modelName, options: dropped },
+    );
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -1015,6 +1047,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    this.warnOnceForChatOnlyOptions(config);
 
     // Chat-format content parts are translated to their Responses equivalents so multimodal
     // prompts authored for the chat API work here too (the Responses API rejects
@@ -1046,7 +1079,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const reasoningMaxOutputTokensDefault =
       getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
-      config.max_output_tokens ??
+      context?.prompt?.config?.max_output_tokens ??
+      context?.prompt?.config?.max_completion_tokens ??
+      this.config.max_output_tokens ??
+      this.config.max_completion_tokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
     const gpt6Reasoning = isGPT6Model
@@ -1108,7 +1144,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             type: 'json_schema',
             name: schemaName,
             schema,
-            strict: true,
+            strict: responseFormat.json_schema?.strict ?? responseFormat.strict ?? false,
           },
         };
       } else {

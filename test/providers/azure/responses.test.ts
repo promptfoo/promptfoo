@@ -130,6 +130,24 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
+    it.each([undefined, false])('preserves non-strict response schemas (%s)', async (strict) => {
+      mockMaybeLoadResponseFormatFromExternalFile.mockImplementation((input) => input);
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'loose',
+              strict,
+              schema: { type: 'object', properties: {}, additionalProperties: true },
+            },
+          },
+        },
+      });
+      const body = await provider.getAzureResponsesBody('Return an object');
+      expect(body.text.format.strict).toBe(false);
+    });
+
     it('should handle external response_format file loading (fixed double-loading bug)', async () => {
       const mockSchema = {
         type: 'json_schema',
@@ -158,7 +176,7 @@ describe('AzureResponsesProvider', () => {
         type: 'json_schema',
         name: 'test_schema',
         schema: mockSchema.json_schema.schema,
-        strict: true,
+        strict: false,
       });
     });
 

@@ -119,9 +119,11 @@ Check [OpenAI pricing](https://developers.openai.com/api/docs/pricing) before a 
 <details>
 <summary>Aliases, snapshots, and default models</summary>
 
-The Responses default includes named variants and dated snapshots. Older recognized models keep their model-specific routing; other unknown names fall back to Chat Completions.
+The Responses default includes named variants and dated snapshots, including unrecognized `gpt-` IDs at version 5.6 or newer. Older recognized models keep their model-specific routing; other unknown names fall back to Chat Completions.
 
 Use `openai:chat:<model>` or `openai:responses:<model>` to select the endpoint explicitly, including for a compatible gateway. Existing bare GPT-5.6 configurations with Chat-specific options should either select `openai:chat:gpt-5.6` or switch to Responses options such as `reasoning.effort` and `max_output_tokens`.
+
+Responses maps `max_completion_tokens` to `max_output_tokens`. Prompt-level caps override provider-level caps; within either level, `max_output_tokens` takes precedence. It warns once per provider when Chat-only options are ignored. Replace legacy `functions` and `function_call` with `tools` and `tool_choice`. Options such as `seed`, `stop`, `presence_penalty`, and `frequency_penalty` have no Responses equivalent.
 
 Bare `openai:chat` and `openai:responses` select `gpt-6-sol`. Built-in grading, suggestions, and web search also use `gpt-6-sol`. Specify a model ID to override these defaults. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
 
@@ -503,12 +505,13 @@ config:
   response_format: file://./response-format.json
 ```
 
-Use the nested `json_schema` shape above for Chat Completions or a shared configuration. Responses also accepts the flattened shape below and always sends JSON schemas with `strict: true`:
+Use the nested `json_schema` shape above for Chat Completions or a shared configuration. Chat Completions forwards `strict` as you set it and leaves it off when unset. Promptfoo’s Responses provider always sends `strict`, using `false` when you leave it unset. Either way, a strict schema must set `additionalProperties: false` and list every property in `required`. Responses also accepts the flattened shape below:
 
 ```json title="response-format.json"
 {
   "type": "json_schema",
   "name": "ticket_category",
+  "strict": true,
   "schema": {
     "type": "object",
     "properties": {

@@ -294,6 +294,8 @@ providers:
       response_format: file://./schemas/response-schema.json
 ```
 
+For JSON schema responses, `strict` defaults to `false`. Set `strict: true` to require schema adherence; strict schemas must set `additionalProperties: false` and list every property in `required`.
+
 Example `response-schema.json`:
 
 ```json
@@ -1401,6 +1403,8 @@ Set these under the provider's `config`:
 | `timeoutMs`                           | Deadline for each request attempt (default: `600000` ms)                             |
 | `retryOptions.maxRetries`             | Non-negative integer retry count (default: `2`); other retry options are unsupported |
 | `maxToolIterations`                   | Maximum callback batches (default: `8`; range: `1`–`64`)                             |
+
+For `json_schema` output, omitted `strict` defaults to `false`; set it explicitly to enable strict schema validation.
 
 The runtime ignores `tool_resources`, `frequency_penalty`, `presence_penalty`, `seed`, and `stop` on eval requests. Configure these on the agent in Foundry where supported.
 

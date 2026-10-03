@@ -207,7 +207,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
             type: 'json_schema',
             name: schemaName,
             schema,
-            strict: true,
+            strict: responseFormat.json_schema?.strict ?? responseFormat.strict ?? false,
           },
         };
       } else {

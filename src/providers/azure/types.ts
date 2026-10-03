@@ -85,12 +85,12 @@ export interface AzureCompletionOptions {
         type: 'json_schema';
         json_schema: {
           name: string;
-          strict: boolean;
+          strict?: boolean;
           schema: {
             type: 'object';
             properties: Record<string, any>;
             required?: string[];
-            additionalProperties: false;
+            additionalProperties?: boolean;
             $defs?: Record<string, any>;
           };
         };
