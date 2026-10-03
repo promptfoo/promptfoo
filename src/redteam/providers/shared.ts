@@ -427,14 +427,7 @@ class RedteamProviderManager {
     }
 
     // 3) Try defaultTest config chain (grading-first)
-    const cfg =
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.provider) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider) ||
-      undefined;
+    const cfg = this.getDefaultTestProvider();
 
     if (cfg) {
       const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly, purpose: 'grading' });
@@ -576,9 +569,11 @@ export async function getTargetResponse(
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
-  const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
+  const hasError =
+    (targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error')) ||
+    (!hasOutput && targetRespRaw?.error);
 
-  if (hasError) {
+  if (hasError || hasOutput || targetRespRaw?.conversationEnded) {
     const output = hasOutput
       ? ((typeof targetRespRaw.output === 'string'
           ? targetRespRaw.output
@@ -587,37 +582,7 @@ export async function getTargetResponse(
     return {
       ...(targetRespRaw as ProviderResponse),
       output,
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
-  }
-
-  if (hasOutput) {
-    const output = (
-      typeof targetRespRaw.output === 'string'
-        ? targetRespRaw.output
-        : safeJsonStringify(targetRespRaw.output)
-    ) as string;
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output,
-      tokenUsage,
-    };
-  }
-
-  if (targetRespRaw?.error) {
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output: '',
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
-  }
-
-  if (targetRespRaw?.conversationEnded) {
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output: '',
+      ...(hasError ? { error: targetRespRaw.error } : {}),
       tokenUsage,
     };
   }

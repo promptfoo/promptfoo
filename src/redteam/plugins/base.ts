@@ -30,6 +30,7 @@ import type {
   AssertionValue,
   AtomicTestCase,
   GradingResult,
+  ImageOutput,
   PluginConfig,
   ResultSuggestion,
   TestCase,
@@ -384,6 +385,17 @@ export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
 
+  protected normalizeGradingVars(vars: Record<string, unknown>): Record<string, unknown> {
+    return vars;
+  }
+
+  protected getInputImages(
+    _testVars: Record<string, unknown>,
+    _vars: Record<string, unknown>,
+  ): ImageOutput[] {
+    return [];
+  }
+
   renderRubric(vars: Record<string, any>): string {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 
@@ -467,7 +479,7 @@ export abstract class RedteamGraderBase {
         : undefined;
 
     const vars = {
-      ...test.metadata,
+      ...this.normalizeGradingVars({ ...test.metadata }),
       goal: test.metadata?.goal || prompt,
       prompt,
       entities: test.metadata?.entities ?? [],
@@ -475,13 +487,18 @@ export abstract class RedteamGraderBase {
       testVars: test.vars ?? {},
       // Spread public grading context properties to make them accessible in rubrics.
       // Image payloads/provider internals are intentionally excluded above.
-      ...templateGradingContext,
+      ...this.normalizeGradingVars(templateGradingContext),
       // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
       // This is done after gradingContext so renderedValue properties take precedence,
-      // except for the canonical evaluated output and extracted trace properties below.
-      ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
+      // except for the canonical request, output, and extracted trace properties below.
+      ...this.normalizeGradingVars({
+        ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
+      }),
       value: renderedValue,
       output: llmOutput,
+      // Request evidence must not be replaced by dataset metadata or assertion values.
+      inputPrompt: prompt,
+      inputVars: test.vars ?? {},
       // Extract specific trace properties for convenience (these override any conflicts)
       traceSummary: gradingContext?.traceSummary ?? '',
       traceContext: gradingContext?.traceContext,
@@ -543,9 +560,11 @@ export abstract class RedteamGraderBase {
       graderExamplesString +
       timestampString;
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
+    const inputImages = this.getInputImages(test.vars ?? {}, vars);
 
     if (
       !skipRefusalCheck &&
+      !inputImages.length &&
       !imagesForGrading?.length &&
       (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))
     ) {
@@ -560,7 +579,7 @@ export abstract class RedteamGraderBase {
         ? (cliState.config.defaultTest as TestCase)
         : undefined;
     const hasConfiguredGradingProvider = Boolean(
-      cliState.config?.redteam?.provider || defaultTest?.options?.provider,
+      cliState.config?.redteam?.provider || defaultTest?.provider || defaultTest?.options?.provider,
     );
     const grading = {
       ...test.options,
@@ -572,14 +591,22 @@ export abstract class RedteamGraderBase {
       });
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
+    const mediaOptions = {
+      ...(imagesForGrading?.length
+        ? { providerResponse: { output: llmOutput, images: imagesForGrading } }
+        : {}),
+      ...(inputImages.length ? { inputImages } : {}),
+    };
     const grade = (
-      imagesForGrading?.length
-        ? await matchesLlmRubric(finalRubric, llmOutput, grading, undefined, undefined, {
-            providerResponse: {
-              output: llmOutput,
-              images: imagesForGrading,
-            },
-          })
+      imagesForGrading?.length || inputImages.length
+        ? await matchesLlmRubric(
+            finalRubric,
+            llmOutput,
+            grading,
+            undefined,
+            undefined,
+            mediaOptions,
+          )
         : await matchesLlmRubric(finalRubric, llmOutput, grading)
     ) as GradingResult;
 

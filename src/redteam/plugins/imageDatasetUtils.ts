@@ -1,58 +1,296 @@
-import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
+import { getMimeTypeFromBase64 } from '../../providers/google/util';
+import { parseChatPrompt } from '../../providers/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
+
+/** Preserve actual request context while keeping image payloads out of the rubric. */
+export function getImageDatasetRequestText(
+  prompt: unknown,
+  inputVars: Record<string, unknown> = {},
+  selectedImage?: unknown,
+): string {
+  if (typeof prompt !== 'string') {
+    return '';
+  }
+  // Other input images help identify byte boundaries, but are never attached to the judge.
+  const images = Object.values(Object.getOwnPropertyDescriptors(inputVars))
+    .filter((descriptor) => descriptor.enumerable)
+    .map((descriptor) => descriptor.value)
+    // Only the explicitly selected media may have internal whitespace. Other
+    // variables can contain a whole request beginning with an image URI.
+    .filter((value) => typeof value === 'string' && !/\s/.test(value.trim()));
+  const payloads = [selectedImage, ...images]
+    .flatMap((value) => {
+      if (typeof value !== 'string') {
+        return [];
+      }
+      if (/^\s*data:(?:(?:image|audio|video)\/|application\/pdf(?=;))[^,]*;base64,/i.test(value)) {
+        return [value.slice(value.indexOf(',') + 1).replace(/\s/g, '')];
+      }
+      // Google turns matching raw context variables into native media parts.
+      return getMimeTypeFromBase64(value) ? [value] : [];
+    })
+    .filter((value) => /^[\w+/=-]+$/.test(value))
+    .sort((a, b) => b.length - a.length);
+  const imageBoundaryError =
+    'Image grading cannot distinguish wrapped image data from request text. Use a single-line data URI variable or structured media field.';
+  const redactImages = (text: string) => {
+    const chunks: string[] = [];
+    let end = 0;
+    // Always consume a header through its delimiter or EOF: repeated URI prefixes
+    // must not rescan suffixes. Parameters may contain colons.
+    for (const match of text.matchAll(
+      /data:(?:(?:image|audio|video)\/|application\/pdf(?=;))[^\s,]*(?:[,\s]|$)/gi,
+    )) {
+      if (match.index < end || !/;base64,$/i.test(match[0])) {
+        continue;
+      }
+      const start = match.index + match[0].length;
+      let cursor = start;
+      const known = payloads.some((payload) => {
+        cursor = start;
+        let matched = 0;
+        // Compare known bytes across whitespace without constructing an image-sized regex.
+        while (cursor < text.length && matched < payload.length) {
+          if (/\s/.test(text[cursor])) {
+            cursor++;
+          } else if (text[cursor] === payload[matched]) {
+            matched++;
+            cursor++;
+          } else {
+            break;
+          }
+        }
+        return matched === payload.length && !/[\w+/=-]/.test(text[cursor] ?? '');
+      });
+      if (!known) {
+        cursor = start;
+      }
+      while (cursor < text.length && /[\w+/=-]/.test(text[cursor])) {
+        cursor++;
+      }
+      // Base64 and ordinary words share an alphabet. Without known image bytes,
+      // whitespace cannot tell us where a wrapped payload ends and a query begins.
+      if (!known && (text[cursor] === '\\' || /^\s+[\w+/=-]/.test(text.slice(cursor)))) {
+        throw new Error(imageBoundaryError);
+      }
+      chunks.push(text.slice(end, match.index));
+      end = cursor;
+    }
+    let redacted = [...chunks, text.slice(end)].join('');
+    // Custom request templates can send known image bytes without the URI prefix.
+    if (payloads.includes(redacted.replace(/\s/g, ''))) {
+      return '';
+    }
+    for (const payload of payloads) {
+      redacted = redacted.split(payload).join('');
+    }
+    const remaining = redacted.replace(/\s/g, '');
+    if (payloads.some((payload) => remaining.includes(payload))) {
+      throw new Error(imageBoundaryError);
+    }
+    return redacted.trim();
+  };
+  const jsonContainer = /^\s*(?:\{|\[\s*(?:["[{\]]|-?\d|true\b|false\b|null\b))/;
+  const mediaType =
+    /^(?:image|image_url|input_image|computer_screenshot|audio|input_audio|video|file|input_file|document|base64)$/;
+  const mediaContainerField =
+    /^(?:images?|image_url|input_image|input_audio|inline_?data|file_?data)$/i;
+  const mediaMime = /^(?:(?:image|audio|video)\/|application\/pdf(?:;|$))/i;
+  const messageRole = /^(?:system|developer|user|assistant|model|tool|function)$/;
+  const rejectMalformedMedia = (text: string) => {
+    const yaml = /^\s*- role:/.test(text);
+    if (!yaml && (!jsonContainer.test(text) || !text.includes('{'))) {
+      return;
+    }
+    // JSON property markers require an object, not just bracket-prefixed prose.
+    // A newline already starts another YAML property scan; do not rescan its suffix.
+    const properties = yaml
+      ? /(?:[{,]|\n|^)[^\S\n]*(?:-\s*)?["']?(\w+)["']?\s*:\s*["']?([\w/.-]*)/g
+      : /[{,]\s*["']?(\w+)["']?\s*:\s*["']?([\w/.-]*)/g;
+    const markedMedia = [...text.matchAll(properties)].some(
+      ([, key, value]) =>
+        mediaContainerField.test(key) ||
+        key === 'source' ||
+        (key === 'type' && mediaType.test(value)) ||
+        (['mimeType', 'mime_type', 'media_type'].includes(key) && mediaMime.test(value)),
+    );
+    if (markedMedia) {
+      throw new Error(
+        'Image grading cannot safely read malformed media. Use valid JSON or YAML with a structured media field.',
+      );
+    }
+  };
+  let parsed: unknown;
+  try {
+    parsed = parseChatPrompt<unknown>(prompt, prompt);
+  } catch {
+    // Preserve literal brace-prefixed requests, but never copy malformed native media.
+    rejectMalformedMedia(prompt);
+    return redactImages(prompt);
+  }
+  if (parsed === prompt) {
+    rejectMalformedMedia(prompt);
+  }
+  const nativeToolFields: Record<string, string> = {
+    toolUse: 'input',
+    functionCall: 'args',
+    functionResponse: 'response',
+  };
+  const isBedrockMedia = (field: string, value: unknown) =>
+    ['document', 'video', 'audio'].includes(field) &&
+    value !== null &&
+    typeof value === 'object' &&
+    'source' in value;
+  let hasText = false;
+  const sanitize = (
+    value: unknown,
+    key = '',
+    literalText = false,
+    mediaContainer = false,
+    literalData = false,
+    toolResultContent = false,
+  ): unknown => {
+    if (Array.isArray(value)) {
+      return value
+        .map((part) =>
+          sanitize(part, key, literalText, mediaContainer, literalData, toolResultContent),
+        )
+        .filter((part) => part !== undefined);
+    }
+    if (value && typeof value === 'object') {
+      const object = value as Record<string, unknown>;
+      const media =
+        mediaContainer ||
+        mediaType.test(String(object.type)) ||
+        [object.mimeType, object.mime_type, object.media_type].some(
+          (mime) => typeof mime === 'string' && mediaMime.test(mime),
+        );
+      const nativeMessage = messageRole.test(String(object.role));
+      return Object.fromEntries(
+        Object.entries(object).flatMap(([field, child]) => {
+          const documentText =
+            key === 'source' &&
+            object.type === 'text' &&
+            object.media_type === 'text/plain' &&
+            field === 'data' &&
+            typeof child === 'string';
+          // Encoded payload fields are opaque even when JSON represents their
+          // bytes as Buffer/typed-array objects. Their containers may carry text.
+          if (
+            !literalData &&
+            !documentText &&
+            ((nativeMessage && field === 'images') ||
+              (object.type === 'input_audio' && field === 'audio') ||
+              (['image_url', 'input_image', 'computer_screenshot'].includes(String(object.type)) &&
+                field === 'image_url') ||
+              (media &&
+                /^(?:data|bytes|url|uri|base64|file_?(?:data|uri|url|id)|s3Location)$/i.test(
+                  field,
+                )) ||
+              (key === 'source' && field === 'bytes' && typeof child !== 'number'))
+          ) {
+            return [];
+          }
+          const toolData =
+            literalData ||
+            (object.type === 'tool_use' && field === 'input') ||
+            field === nativeToolFields[key] ||
+            (toolResultContent && field === 'json') ||
+            (field === 'arguments' &&
+              (['function_call', 'code_execution_call'].includes(String(object.type)) ||
+                (['function', 'function_call'].includes(key) &&
+                  typeof object.name === 'string'))) ||
+            (object.type === 'function_result' && field === 'result' && !Array.isArray(child));
+          const toolText =
+            (object.type === 'function_call_output' && field === 'output') ||
+            ((object.type === 'tool_result' || key === 'toolResult') && field === 'content') ||
+            (object.type === 'code_execution_result' && field === 'result');
+          const mediaField =
+            !literalData &&
+            (mediaContainerField.test(field) ||
+              (media && field === 'source') ||
+              (object.type === 'file' && field === 'file') ||
+              isBedrockMedia(field, child));
+          const sanitized = sanitize(
+            child,
+            field,
+            literalText ||
+              documentText ||
+              toolData ||
+              toolText ||
+              (nativeMessage && field === 'parts'),
+            mediaField,
+            toolData,
+            (key === 'toolResult' || object.type === 'tool_result') && field === 'content',
+          );
+          return sanitized === undefined ? [] : [[field, sanitized]];
+        }),
+      );
+    }
+    if (typeof value === 'string') {
+      // A whole URI in a structured media field has an explicit payload boundary,
+      // including when its bytes are wrapped and absent from the input variables.
+      if (
+        mediaContainer &&
+        /^\s*data:(?:(?:image|audio|video)\/|application\/pdf(?=;))[^,]*;base64,[\w+/=\s-]*$/i.test(
+          value,
+        )
+      ) {
+        return undefined;
+      }
+      // These custom envelopes contain serialized requests. Other scalar fields
+      // remain literal text, even when their contents happen to be valid JSON.
+      if (
+        !literalText &&
+        ['payload', 'body', 'request'].includes(key) &&
+        jsonContainer.test(value)
+      ) {
+        try {
+          return sanitize(JSON.parse(value));
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) {
+            throw error;
+          }
+          rejectMalformedMedia(value);
+        }
+      }
+      const text = redactImages(value);
+      const metadata =
+        !literalData &&
+        ((key === 'role' && messageRole.test(text)) ||
+          (key === 'type' &&
+            (mediaType.test(text) || /^(?:text|input_text|output_text)$/.test(text))) ||
+          (['mimeType', 'mime_type', 'media_type'].includes(key) && mediaMime.test(text)));
+      if (text && !metadata) {
+        hasText = true;
+      }
+      return text || undefined;
+    }
+    hasText ||= value !== undefined && value !== null;
+    return value;
+  };
+  const sanitized = sanitize(parsed);
+  return hasText ? (typeof sanitized === 'string' ? sanitized : JSON.stringify(sanitized)) : '';
+}
 
 /**
  * Detect image format from buffer
  */
 function detectImageFormat(buffer: Buffer): string {
-  // Check JPEG signature
-  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xd8) {
-    return 'image/jpeg';
-  }
   // Check PNG signature
-  if (
-    buffer.length >= 8 &&
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47 &&
-    buffer[4] === 0x0d &&
-    buffer[5] === 0x0a &&
-    buffer[6] === 0x1a &&
-    buffer[7] === 0x0a
-  ) {
+  if (buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) {
     return 'image/png';
   }
   // Check GIF signature
-  if (
-    buffer.length >= 6 &&
-    ((buffer[0] === 0x47 &&
-      buffer[1] === 0x49 &&
-      buffer[2] === 0x46 &&
-      buffer[3] === 0x38 &&
-      buffer[4] === 0x37 &&
-      buffer[5] === 0x61) ||
-      (buffer[0] === 0x47 &&
-        buffer[1] === 0x49 &&
-        buffer[2] === 0x46 &&
-        buffer[3] === 0x38 &&
-        buffer[4] === 0x39 &&
-        buffer[5] === 0x61))
-  ) {
+  const gif = buffer.subarray(0, 6);
+  if (gif.equals(Buffer.from('GIF87a')) || gif.equals(Buffer.from('GIF89a'))) {
     return 'image/gif';
   }
   // Check WebP signature
   if (
-    buffer.length >= 12 &&
-    buffer[0] === 0x52 &&
-    buffer[1] === 0x49 &&
-    buffer[2] === 0x46 &&
-    buffer[3] === 0x46 &&
-    buffer[8] === 0x57 &&
-    buffer[9] === 0x45 &&
-    buffer[10] === 0x42 &&
-    buffer[11] === 0x50
+    buffer.subarray(0, 4).equals(Buffer.from('RIFF')) &&
+    buffer.subarray(8, 12).equals(Buffer.from('WEBP'))
   ) {
     return 'image/webp';
   }
@@ -116,69 +354,4 @@ export function fisherYatesShuffle<T>(array: T[]): T[] {
  */
 export function getStringField(field: unknown, defaultValue: string = ''): string {
   return typeof field === 'string' ? field : defaultValue;
-}
-
-/**
- * Base class for image dataset managers with caching
- */
-export abstract class ImageDatasetManager<T> {
-  protected datasetCache: T[] | null = null;
-  protected abstract pluginId: string;
-  protected abstract datasetPath: string;
-  protected abstract fetchLimit: number;
-
-  /**
-   * Ensure the dataset is loaded into cache
-   */
-  protected async ensureDatasetLoaded(): Promise<void> {
-    if (this.datasetCache !== null) {
-      logger.debug(
-        `[${this.pluginId}] Using cached dataset with ${this.datasetCache.length} records`,
-      );
-      return;
-    }
-
-    logger.debug(`[${this.pluginId}] Fetching ${this.fetchLimit} records from dataset`);
-
-    try {
-      const records = await fetchHuggingFaceDataset(this.datasetPath, this.fetchLimit);
-
-      if (!records || records.length === 0) {
-        throw new Error(`No records returned from dataset. Check your Hugging Face API token.`);
-      }
-
-      logger.debug(`[${this.pluginId}] Fetched ${records.length} total records`);
-
-      // Process records - to be implemented by subclass
-      this.datasetCache = await this.processRecords(records);
-
-      logger.debug(`[${this.pluginId}] Cached ${this.datasetCache.length} processed records`);
-    } catch (error) {
-      logger.error(
-        `[${this.pluginId}] Error fetching dataset: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw new Error(
-        `Failed to fetch dataset: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  /**
-   * Process raw records from Hugging Face into the desired format
-   * Must be implemented by subclasses
-   */
-  protected abstract processRecords(records: any[]): Promise<T[]>;
-
-  /**
-   * Get filtered records based on plugin configuration
-   * Must be implemented by subclasses
-   */
-  public abstract getFilteredRecords(limit: number, config?: any): Promise<T[]>;
-
-  /**
-   * Clear the cache - useful for testing
-   */
-  public clearCache(): void {
-    this.datasetCache = null;
-  }
 }

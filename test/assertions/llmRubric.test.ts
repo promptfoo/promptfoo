@@ -130,55 +130,43 @@ describe('handleLlmRubric', () => {
     );
   });
 
-  it('should pass provider response images to the matcher', async () => {
-    const params = {
-      ...defaultParams,
-      renderedValue: 'test rubric',
-      providerResponse: {
-        output: 'test output',
-        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-      },
-    };
-
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
-
-    mockMatchesLlmRubric.mockResolvedValue(expectedResult);
-
-    const result = await handleLlmRubric(params);
-
-    expect(result).toEqual(expectedResult);
-    expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
-      'test rubric',
-      'test output string',
-      undefined,
-      {},
-      params.assertion,
-      { providerResponse: params.providerResponse },
-      undefined,
-    );
-  });
-
-  it('should not pass original provider response images when the assertion output is transformed', async () => {
-    const params = {
-      ...defaultParams,
-      assertion: {
-        type: 'llm-rubric',
-        value: 'test rubric',
-        transform: 'output.text',
-      } as Assertion,
-      renderedValue: 'test rubric',
-      outputString: 'transformed output',
-      providerResponse: {
-        output: {
-          text: 'transformed output',
+  it.each(
+    [
+      {
+        name: 'should pass provider response images to the matcher',
+        overrides: {
+          renderedValue: 'test rubric',
+          providerResponse: {
+            output: 'test output',
+            images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          },
         },
-        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        expectedOutput: 'test output string',
+        includeImages: true,
       },
-    };
+      {
+        name: 'should not pass original provider response images when the assertion output is transformed',
+        overrides: {
+          assertion: {
+            type: 'llm-rubric',
+            value: 'test rubric',
+            transform: 'output.text',
+          } as Assertion,
+          renderedValue: 'test rubric',
+          outputString: 'transformed output',
+          providerResponse: {
+            output: {
+              text: 'transformed output',
+            },
+            images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          },
+        },
+        expectedOutput: 'transformed output',
+        includeImages: false,
+      },
+    ].map((testCase) => [testCase.name, testCase] as const),
+  )('%s', async (_name, { overrides, expectedOutput, includeImages }) => {
+    const params = { ...defaultParams, ...overrides };
 
     const expectedResult: GradingResult = {
       pass: true,
@@ -193,11 +181,11 @@ describe('handleLlmRubric', () => {
     expect(result).toEqual(expectedResult);
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       'test rubric',
-      'transformed output',
+      expectedOutput,
       undefined,
       {},
       params.assertion,
-      undefined,
+      includeImages ? { providerResponse: params.providerResponse } : undefined,
       undefined,
     );
   });

@@ -16,11 +16,6 @@ import { mockProcessEnv } from '../util/utils';
 import type { ProviderTypeMap } from '../../src/types/index';
 
 describe('getRemoteGradingContext', () => {
-  beforeEach(() => {
-    cliState.config = undefined;
-    cliState.selectedProviderConfigs = undefined;
-  });
-
   afterEach(() => {
     cliState.config = undefined;
     cliState.selectedProviderConfigs = undefined;

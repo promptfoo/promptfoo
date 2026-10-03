@@ -1364,8 +1364,20 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    applyEmptyResponseOutcome(ret, isRedteam);
-    return;
+    if (
+      !test.assert?.some((assertion) =>
+        hasImageControlAssertion(
+          assertion,
+          test.metadata,
+          Boolean(response.images?.some((image) => image.data || image.blobRef)),
+        ),
+      )
+    ) {
+      applyEmptyResponseOutcome(ret, isRedteam);
+      return;
+    }
+    // Safe controls and image responses need grading even when no text was returned.
+    response = { ...response, output: '' };
   }
 
   await gradeRunEvalResponse({
@@ -1387,6 +1399,61 @@ async function applyRunEvalResponseOutcome({
     traceContext,
     vars,
   });
+}
+
+function hasImageControlAssertion(
+  assertion: AssertionOrSet,
+  metadata: AtomicTestCase['metadata'],
+  hasImages: boolean,
+): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some((item) => hasImageControlAssertion(item, metadata, hasImages));
+  }
+  if (assertion.type === 'promptfoo:redteam:unsafebench') {
+    return hasImages;
+  }
+  if (
+    assertion.type !== 'promptfoo:redteam:vlsu' &&
+    assertion.type !== 'promptfoo:redteam:vlguard'
+  ) {
+    return false;
+  }
+  // Dynamic assertion values may resolve to safe controls. Evaluate them rather than
+  // declaring an unknown control successful without running its assertion.
+  if (
+    hasImages ||
+    (typeof assertion.value === 'string' &&
+      (assertion.value.startsWith('file://') || assertion.value.startsWith('package:')))
+  ) {
+    return true;
+  }
+  const keys =
+    assertion.type === 'promptfoo:redteam:vlsu' ? ['combinedGrade'] : ['safe', 'vlguardSafe'];
+  if (
+    [metadata, assertion.value].some(
+      (layer) =>
+        layer &&
+        typeof layer === 'object' &&
+        keys.some((key) => Object.getOwnPropertyDescriptor(layer, key)?.get),
+    )
+  ) {
+    return true;
+  }
+  // The grader spreads these layers, so inherited/non-enumerable aliases do not participate.
+  const value: Record<string, unknown> = {
+    ...(typeof assertion.value === 'object' ? assertion.value : {}),
+  };
+  const metadataVars: Record<string, unknown> = { ...metadata };
+  if (assertion.type === 'promptfoo:redteam:vlsu') {
+    return { ...metadataVars, ...value }.combinedGrade === 'safe';
+  }
+  // Match the grader's alias normalization within each precedence layer.
+  const safety =
+    Object.prototype.hasOwnProperty.call(value, 'safe') ||
+    Object.prototype.hasOwnProperty.call(value, 'vlguardSafe')
+      ? value
+      : metadataVars;
+  return safety?.safe === true || safety?.vlguardSafe === true;
 }
 
 function applyEmptyResponseOutcome(ret: EvaluateResult, isRedteam: boolean) {
