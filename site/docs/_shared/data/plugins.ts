@@ -654,6 +654,7 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/ecommerce/',
     name: 'E-commerce Compliance Bypass',
     pluginId: 'ecommerce:compliance-bypass',
+    isRemote: true,
     applicationTypes: {
       rag: true,
       agent: true,
@@ -668,6 +669,7 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/ecommerce/',
     name: 'E-commerce Order Fraud',
     pluginId: 'ecommerce:order-fraud',
+    isRemote: true,
     applicationTypes: {
       rag: true,
       agent: true,
@@ -682,6 +684,7 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/ecommerce/',
     name: 'E-commerce PCI DSS',
     pluginId: 'ecommerce:pci-dss',
+    isRemote: true,
     applicationTypes: {
       rag: true,
       agent: true,
@@ -697,6 +700,7 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/ecommerce/',
     name: 'E-commerce Price Manipulation',
     pluginId: 'ecommerce:price-manipulation',
+    isRemote: true,
     applicationTypes: {
       rag: true,
       agent: true,
@@ -725,6 +729,7 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/ferpa/',
     name: 'FERPA',
     pluginId: 'ferpa',
+    isRemote: true,
     applicationTypes: {
       rag: true,
       agent: true,
@@ -1014,9 +1019,10 @@ export const PLUGINS = [
     category: 'Security and Access Control',
     description: 'Tests creation of malicious code',
     label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
+    link: '/docs/red-team/plugins/malicious-code/',
     name: 'Malicious Code',
     pluginId: 'harmful:cybercrime:malicious-code',
+    isRemote: true,
     applicationTypes: {
       rag: true,
       agent: true,

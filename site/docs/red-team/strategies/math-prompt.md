@@ -12,10 +12,24 @@ The Math Prompt strategy tests an AI system's ability to handle harmful inputs u
 
 Use it in your promptfooconfig.yaml like this:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - math-prompt
 ```
+
+To choose the mathematical concepts used for local generation:
+
+```yaml
+strategies:
+  - id: math-prompt
+    config:
+      mathConcepts:
+        - set theory
+        - group theory
+        - abstract algebra
+```
+
+These are the default concepts. Each concept can produce another test case, so a longer list increases the test count.
 
 ## How It Works
 

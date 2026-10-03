@@ -165,6 +165,7 @@ const redTeamSidebar = [
         label: 'Single-Turn',
         collapsed: true,
         items: [
+          'red-team/strategies/authoritative-markup-injection',
           'red-team/strategies/base64',
           'red-team/strategies/basic',
           'red-team/strategies/best-of-n',

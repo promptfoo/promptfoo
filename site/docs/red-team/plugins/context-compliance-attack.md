@@ -43,7 +43,8 @@ redteam:
 
 :::note this plugin requires remote generation to be enabled
 :::
-:::note this plugin does not support strategies
+:::note Strategy compatibility
+Strategies can be applied to CCA tests. Because each test is a complete fabricated conversation, start with the basic strategy and verify that any additional transformation preserves the chat-message structure expected by your target.
 :::
 
 ### How It Works

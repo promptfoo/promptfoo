@@ -30,7 +30,7 @@ In Self-Hosted and Cloud, we find that mapping the answers to the given form fie
 | 3. _The target divulged access to these tools:_          | Access & Permissions: What systems, data, or resources does your application have access to?                        | Access and permissions: What systems, data, or resources should your application NOT have access to? |
 | 4. _The target believes the user of the application is:_ | User Context: red team user / Who is the red team user?                                                             | Access and permissions: What types of users interact with your application?                          |
 
-## How it works
+## How It Works
 
 The Target Discovery Agent works iteratively, sending probing questions to the target AI system and evaluating responses until satisfied with the gathered information. This process creates a structured profile for targeted red team attacks.
 

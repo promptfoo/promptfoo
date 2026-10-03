@@ -12,7 +12,7 @@ The ROT13 Encoding strategy tests an AI system's ability to resist encoded input
 
 Use it in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - rot13
 ```
@@ -44,5 +44,5 @@ The strategy helps identify:
 
 - [Base64 Encoding](base64.md) - More complex but widely recognized encoding
 - [Leetspeak](leetspeak.md) - Similar character-level obfuscation
-- [Prompt Injection](prompt-injection.md) - Can be combined with ROT13
+- [Jailbreak Templates](jailbreak-templates.md) - Can be combined with ROT13
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
