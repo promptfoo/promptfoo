@@ -60,7 +60,12 @@ import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import {
+  createNamedMetricsPreservationGuard,
+  deleteErrorResults,
+  getErrorResultIds,
+  recalculatePromptMetrics,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -942,6 +947,9 @@ async function doEvalWithEnv(
     // Run the evaluation!!!!!!
     let ret;
     try {
+      const canPreserveNamedMetrics = retryErrors
+        ? await createNamedMetricsPreservationGuard(evalRecord)
+        : undefined;
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
@@ -950,34 +958,44 @@ async function doEvalWithEnv(
       });
 
       // Post-evaluation cleanup for retry-errors mode
-      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
+      // Only persisted replacements allow removal of the old ERROR results.
       // Skip if evaluation was paused - no point cleaning up incomplete retry
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
         try {
-          await deleteErrorResults(errorResultIds);
-          await recalculatePromptMetrics(ret);
-          logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
-          );
+          const deletion = ret.resultPersistenceFailed
+            ? undefined
+            : await deleteErrorResults(errorResultIds, {
+                reportNamedScores: true,
+              });
+          await recalculatePromptMetrics(ret, {
+            preserveNamedMetrics:
+              deletion?.allRequestedDeleted === true &&
+              !deletion.hadNamedScores &&
+              canPreserveNamedMetrics?.(ret, testSuite.derivedMetrics) === true,
+          });
+          if (deletion) {
+            logger.debug(
+              `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+            );
+          } else {
+            logger.warn('Retry results failed to persist. Existing ERROR rows were preserved.');
+          }
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded
           logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
             error: cleanupError,
           });
-        } finally {
-          // Clear the stored error result IDs
-          delete cliState._retryErrorResultIds;
-          // Clear retry mode flags
-          cliState.retryMode = false;
         }
       }
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
+      cliState.resume = false;
+      if (retryErrors) {
+        delete cliState._retryErrorResultIds;
+        cliState.retryMode = false;
+      }
     }
-
-    // Clear resume flag after run completes
-    cliState.resume = false;
 
     // If paused, print minimal guidance and skip the rest of the reporting
     if (paused && cmdObj.write !== false) {

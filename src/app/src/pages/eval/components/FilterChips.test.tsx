@@ -90,6 +90,101 @@ describe('FilterChips', () => {
     expect(screen.getByText('(10/10)')).toBeInTheDocument();
   });
 
+  it.each([
+    {
+      label: 'absent base derived value and comparison assertion',
+      derivedMetricNamesByPrompt: [['quality'], []],
+      baseDerived: true,
+      scores: [undefined, 8],
+      expected: 'quality(8/10)',
+      percentage: '80% pass rate',
+    },
+    {
+      label: 'base assertion and comparison derived value',
+      derivedMetricNamesByPrompt: [[], ['quality']],
+      baseDerived: false,
+      scores: [8, 0.7],
+      expected: 'quality(8.7/—)',
+      percentage: 'Percentage unavailable',
+    },
+    {
+      label: 'base derived value and comparison assertion',
+      derivedMetricNamesByPrompt: [['quality'], []],
+      baseDerived: true,
+      scores: [0.7, 8],
+      expected: 'quality(8.7/—)',
+      percentage: 'Percentage unavailable',
+    },
+  ])('uses column ownership for $label', async (testCase) => {
+    const user = userEvent.setup();
+    vi.mocked(useTableStore).mockReturnValue(
+      createMockStore({
+        config: {
+          redteam: {},
+          derivedMetrics: testCase.baseDerived ? [{ name: 'quality', value: '0.7' }] : [],
+        },
+        derivedMetricNamesByPrompt: testCase.derivedMetricNamesByPrompt,
+        table: {
+          head: {
+            prompts: testCase.scores.map((score) => ({
+              metrics: {
+                namedScores: score === undefined ? {} : { quality: score },
+                namedScoresCount: score === undefined ? {} : { quality: 10 },
+              },
+            })),
+          },
+        },
+      }) as any,
+    );
+
+    renderWithTooltip(<FilterChips />);
+
+    const chip = screen.getByRole('button', { name: testCase.expected });
+    if (testCase.percentage === 'Percentage unavailable') {
+      expect(chip.querySelector('svg')).toBeNull();
+    }
+    await user.hover(chip);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(testCase.percentage);
+  });
+
+  it('does not combine legacy scores with only the modern denominator', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useTableStore).mockReturnValue(
+      createMockStore({
+        table: {
+          head: {
+            prompts: [
+              { metrics: { namedScores: { safety: 8 }, namedScoresCount: { safety: 10 } } },
+              { metrics: { namedScores: { safety: 10 } } },
+            ],
+          },
+        },
+      }) as any,
+    );
+    renderWithTooltip(<FilterChips />);
+    const chip = screen.getByRole('button', { name: 'safety(18/—)' });
+    expect(chip.querySelector('svg')).toBeNull();
+    await user.hover(chip);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Percentage unavailable');
+  });
+
+  it('keeps a zero denominator distinct from an unknown denominator', () => {
+    vi.mocked(useTableStore).mockReturnValue(
+      createMockStore({
+        table: {
+          head: {
+            prompts: [
+              { metrics: { namedScores: { safety: 1 }, namedScoreWeights: { safety: 0 } } },
+            ],
+          },
+        },
+      }) as any,
+    );
+    renderWithTooltip(<FilterChips />);
+    const chip = screen.getByRole('button', { name: 'safety(1/0)' });
+    expect(chip.querySelector('svg')).toBeNull();
+  });
+
   it('applies default styling for inactive chips', () => {
     renderWithTooltip(<FilterChips />);
 

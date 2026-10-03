@@ -523,7 +523,11 @@ These metrics will be shown in the UI:
 
 ![llm eval metrics](/img/docs/named-metrics.png)
 
-Named metric percentages in column headers use each column's own graded assertions, including assertion weights. Results that never reach grading, such as provider errors, do not contribute to the metric total. If an older or imported eval has no recorded metric total, its column header shows the aggregate score without a percentage.
+Named metric percentages use each column's own graded assertions, including assertion weights. Results that never reach grading, such as provider errors, do not contribute to the metric total. Column headers show raw scores for derived metrics and whenever a usable denominator is unavailable. The Custom Metrics dialog shows unavailable percentages as `—`, distinct from a measured 0%.
+
+With filters active, assertion metrics describe matching results across all pages. Derived metrics remain values from the full eval and are labeled `(total)` for each prompt column, including when a derived metric shares a name with an assertion metric. In comparison mode, base columns use filtered assertion metrics while added comparison columns retain labeled eval totals. If filtered metrics cannot be calculated for a column, the table labels its fallback to eval totals.
+
+Older results with complex metric names may lack recoverable assertion counts. Recorded weight totals remain usable; without a reliable denominator, the viewer shows the raw score.
 
 See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics).
 
@@ -661,7 +665,7 @@ derivedMetrics:
 - Debug errors with: `LOG_LEVEL=debug promptfoo eval`
 - No circular dependency protection - order your metrics carefully
 
-Derived metrics appear in all outputs alongside regular metrics - in the web UI metrics column, JSON `namedScores`, and CSV columns.
+Derived metrics appear in the web UI and in prompt-level JSON `metrics.namedScores`. Per-row CSV exports include assertion named metrics, but do not add columns for aggregate-only derived metrics.
 
 See also:
 

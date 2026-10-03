@@ -56,6 +56,7 @@ describe('MetricsTable', () => {
     vi.mocked(useCustomPoliciesMap).mockReturnValue({});
     vi.mocked(useTableStore).mockReturnValue({
       table: mockTableData,
+      filteredMetrics: null,
       config: {
         redteam: {
           plugins: [],
@@ -71,6 +72,43 @@ describe('MetricsTable', () => {
         },
       },
     } as any);
+  });
+
+  it('uses independent derived metric definitions for comparison columns', () => {
+    const prompts = [0.7, 8, 0.9].map((quality, idx) => ({
+      ...mockTableData.head.prompts[0],
+      provider: `provider-${idx}`,
+      metrics: {
+        ...mockTableData.head.prompts[0].metrics!,
+        namedScores: { quality },
+        namedScoresCount: { quality: 10 },
+        namedScoreWeights: { quality: 10 },
+      },
+    }));
+    vi.mocked(useTableStore).mockReturnValue({
+      ...useTableStore(),
+      config: { derivedMetrics: [{ name: 'quality', value: '0.7' }] },
+      derivedMetricNamesByPrompt: [['quality'], [], ['quality']],
+      table: { ...mockTableData, head: { ...mockTableData.head, prompts } },
+    });
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    const row = screen.getByRole('cell', { name: 'quality' }).closest('tr')!;
+    const cells = within(row)
+      .getAllByRole('cell')
+      .map((cell) => cell.textContent);
+    expect(cells.slice(1, 10)).toEqual([
+      '—',
+      '0.7 (total)',
+      '—',
+      '80.00%',
+      '8',
+      '10',
+      '—',
+      '0.9 (total)',
+      '—',
+    ]);
   });
 
   it('should apply the correct metric filter and close the dialog when the filter icon is clicked for a non-policy metric row', async () => {
@@ -130,6 +168,313 @@ describe('MetricsTable', () => {
     expect(dataTable).toBeInTheDocument();
   });
 
+  it('uses filtered named scores and denominators when filters are active', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTableData,
+      filteredMetrics: [
+        {
+          namedScores: { accuracy: 1.5 },
+          namedScoresCount: { accuracy: 2 },
+        },
+      ],
+      config: { redteam: { plugins: [] } },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [], metadata: [] },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    const accuracyRow = (await screen.findByText('accuracy')).closest('tr');
+    expect(accuracyRow).not.toBeNull();
+    expect(within(accuracyRow as HTMLElement).getByText('75.00%')).toBeInTheDocument();
+    expect(within(accuracyRow as HTMLElement).getByText('1.5')).toBeInTheDocument();
+    expect(within(accuracyRow as HTMLElement).getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText('another-metric')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { filteredMetrics: null },
+    { filteredMetrics: [] },
+    { filteredMetrics: [{ namedScores: { accuracy: 1.5 }, namedScoresCount: { accuracy: 2 } }] },
+  ])(
+    'labels derived totals with filtered metrics $filteredMetrics',
+    async ({ filteredMetrics }) => {
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableData,
+        filteredMetrics,
+        config: {
+          redteam: { plugins: [] },
+          derivedMetrics: [{ name: 'another-metric', value: 'accuracy' }],
+        },
+        addFilter: mockAddFilter,
+        filters: {
+          values: {},
+          appliedCount: 1,
+          options: { metric: [], metadata: [] },
+        },
+      } as any);
+
+      render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+      expect(await screen.findByText('0.8 (total)')).toHaveAttribute(
+        'title',
+        'Metric from the unfiltered evaluation: 0.8',
+      );
+    },
+  );
+
+  it.each([true, false])(
+    'displays a derived collision as a raw value with filtered=%s',
+    (filtered) => {
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableData,
+        filteredMetrics: filtered
+          ? [{ namedScores: { 'another-metric': 5 }, namedScoresCount: { 'another-metric': 10 } }]
+          : null,
+        config: { derivedMetrics: [{ name: 'another-metric', value: 'accuracy' }] },
+        addFilter: mockAddFilter,
+        filters: { values: {}, appliedCount: filtered ? 1 : 0 },
+      } as any);
+      render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+      const row = screen.getByText('another-metric').closest('tr')!;
+      expect(
+        within(row)
+          .getAllByRole('cell')
+          .map((cell) => cell.textContent),
+      ).toEqual(['another-metric', '—', '0.8 (total)', '—', '']);
+    },
+  );
+
+  it.each([false, true])(
+    'labels only the derived comparison value with reversed=%s',
+    (reversed) => {
+      const columns = [
+        { score: 0.7, names: ['quality'] },
+        { score: 8, names: [] },
+        { score: undefined, names: ['quality'] },
+      ];
+      if (reversed) {
+        columns.reverse();
+      }
+      vi.mocked(useTableStore).mockReturnValue({
+        table: {
+          head: {
+            vars: [],
+            prompts: columns.map(({ score }, idx) => ({
+              provider: `provider-${idx}`,
+              metrics: {
+                namedScores: score === undefined ? {} : { quality: score },
+                namedScoresCount: { quality: 10 },
+              },
+            })),
+          },
+          body: [],
+        },
+        derivedMetricNamesByPrompt: columns.map(({ names }) => names),
+        filteredMetrics: null,
+        config: {},
+        addFilter: mockAddFilter,
+        filters: { values: {}, appliedCount: 1 },
+      } as any);
+      render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+      const row = screen.getByText('quality').closest('tr')!;
+      const scoreCells = within(row).getAllByRole('cell');
+      expect(columns.map((_, idx) => scoreCells[2 + idx * 3].textContent)).toEqual(
+        columns.map(({ score }) =>
+          score === undefined ? '—' : score === 0.7 ? '0.7 (total)' : '8',
+        ),
+      );
+      expect(within(row).getAllByText(/\(total\)/)).toHaveLength(1);
+      expect(scoreCells[1 + columns.findIndex(({ score }) => score === 8) * 3]).toHaveTextContent(
+        '80.00%',
+      );
+    },
+  );
+
+  it('does not report missing denominators or scores as zero percentages', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        head: {
+          vars: [],
+          prompts: [
+            { provider: 'Legacy', metrics: { namedScores: { accuracy: 100 } } },
+            { provider: 'Missing', metrics: { namedScores: {} } },
+          ],
+        },
+        body: [],
+      },
+      config: {},
+      addFilter: mockAddFilter,
+      filters: { values: {}, appliedCount: 0 },
+    } as any);
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+    const row = screen.getByText('accuracy').closest('tr')!;
+    expect(
+      within(row)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['accuracy', '—', '100', '—', '—', '—', '—', '—', '--', '']);
+  });
+
+  it('preserves finite negative denominators and guards zero denominators', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        ...mockTableData,
+        head: {
+          ...mockTableData.head,
+          prompts: [
+            {
+              ...mockTableData.head.prompts[0],
+              metrics: {
+                ...mockTableData.head.prompts[0].metrics,
+                namedScores: { negative: -1, zero: 1 },
+                namedScoreWeights: { negative: -2, zero: 0 },
+              },
+            },
+          ],
+        },
+      },
+      filteredMetrics: null,
+      config: { redteam: { plugins: [] } },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [], metadata: [] },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    const negativeRow = (await screen.findByText('negative')).closest('tr');
+    const zeroRow = screen.getByText('zero').closest('tr');
+    expect(within(negativeRow as HTMLElement).getByText('50.00%')).toBeInTheDocument();
+    expect(within(zeroRow as HTMLElement).getByText('—')).toBeInTheDocument();
+    expect(within(zeroRow as HTMLElement).getByText('0')).toBeInTheDocument();
+  });
+
+  it('ignores inherited scores for prototype-colliding metric names', async () => {
+    const prototypeScores = Object.fromEntries([['__proto__', 0.8]]);
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        ...mockTableData,
+        head: {
+          ...mockTableData.head,
+          prompts: [
+            {
+              ...mockTableData.head.prompts[0],
+              metrics: {
+                ...mockTableData.head.prompts[0].metrics,
+                namedScores: prototypeScores,
+                namedScoresCount: Object.fromEntries([['__proto__', 1]]),
+              },
+            },
+            {
+              ...mockTableData.head.prompts[0],
+              provider: 'Second Provider',
+              metrics: {
+                ...mockTableData.head.prompts[0].metrics,
+                namedScores: {},
+                namedScoresCount: {},
+              },
+            },
+          ],
+        },
+      },
+      filteredMetrics: null,
+      config: { redteam: { plugins: [] } },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [], metadata: [] },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    const metricRow = (await screen.findByText('__proto__')).closest('tr');
+    expect(metricRow).not.toHaveTextContent('NaN');
+    expect(metricRow).not.toHaveTextContent('[object Object]');
+  });
+
+  it.each([null, []])(
+    'labels total metrics when no filtered columns are available: %s',
+    async (filteredMetrics) => {
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableData,
+        filteredMetrics,
+        config: { redteam: { plugins: [] } },
+        addFilter: mockAddFilter,
+        filters: {
+          values: {},
+          appliedCount: 1,
+          options: { metric: [], metadata: [] },
+        },
+      } as any);
+
+      render(<CustomMetricsDialog open={true} onClose={mockOnClose} isFilteringActive={true} />);
+
+      expect(await screen.findByText('another-metric')).toBeInTheDocument();
+      expect(screen.getByText('0.8 (total)')).toHaveAttribute(
+        'title',
+        'Metric from the unfiltered evaluation: 0.8',
+      );
+    },
+  );
+
+  it.each([6, 0])('uses filtered base metrics with score %s and comparison totals', (score) => {
+    const prompts = [
+      { accuracy: 90, f1: 0.7 },
+      { accuracy: 40, f1: 0.8 },
+    ].map((namedScores, idx) => ({
+      ...mockTableData.head.prompts[0],
+      provider: `provider-${idx}`,
+      metrics: {
+        ...mockTableData.head.prompts[0].metrics!,
+        namedScores,
+        namedScoreWeights: { accuracy: idx === 0 ? 100 : 50, f1: idx === 0 ? 100 : 50 },
+      },
+    }));
+    vi.mocked(useTableStore).mockReturnValue({
+      ...useTableStore(),
+      table: { ...mockTableData, head: { ...mockTableData.head, prompts } },
+      config: { derivedMetrics: [{ name: 'f1', value: '0.7' }] },
+      derivedMetricNamesByPrompt: [['f1'], []],
+      filteredMetrics: [
+        {
+          namedScores: { accuracy: score, f1: 1 },
+          namedScoreWeights: { accuracy: 8, f1: 8 },
+        },
+      ],
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} isFilteringActive={true} />);
+
+    const rowCells = (metric: string) =>
+      within(screen.getByRole('cell', { name: metric }).closest('tr')!)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent)
+        .slice(1, 7);
+    expect(rowCells('accuracy')).toEqual([
+      `${((score / 8) * 100).toFixed(2)}%`,
+      String(score),
+      '8',
+      '80.00%',
+      '40 (total)',
+      '50',
+    ]);
+    expect(rowCells('f1')).toEqual(['—', '0.7 (total)', '—', '1.60%', '0.8 (total)', '50']);
+    expect(screen.getByText('40 (total)')).toHaveAttribute(
+      'title',
+      'Metric from the unfiltered evaluation: 40',
+    );
+  });
+
   it('should label a single prompt group without rendering multi-prompt summary columns', async () => {
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
@@ -137,7 +482,7 @@ describe('MetricsTable', () => {
     expect(screen.getByText('Test Provider')).toBeInTheDocument();
     expect(screen.getByText('Pass')).toBeInTheDocument();
     expect(screen.getByText('Score')).toBeInTheDocument();
-    expect(screen.getByText('Count')).toBeInTheDocument();
+    expect(screen.getByText('Denominator')).toBeInTheDocument();
     expect(screen.queryByText('Summary')).not.toBeInTheDocument();
     expect(screen.queryByText('Spread')).not.toBeInTheDocument();
   });
@@ -229,7 +574,9 @@ describe('MetricsTable', () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('menuitemcheckbox', { name: 'Prompt 2 - Shared Provider - Count' }),
+      screen.getByRole('menuitemcheckbox', {
+        name: 'Prompt 2 - Shared Provider - Denominator',
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('menuitemcheckbox', { name: 'Summary - Avg. Pass' }),

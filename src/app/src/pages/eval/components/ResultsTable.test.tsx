@@ -3292,6 +3292,195 @@ describe('ResultsTable Filtered Metrics Display', () => {
       'Avg Tokens: 130(120 filtered)',
     );
   });
+
+  it.each([
+    { filteredMetrics: null },
+    { filteredMetrics: [{ namedScores: { quality: 1 }, namedScoresCount: { quality: 1 } }] },
+  ])(
+    'preserves per-column derived labels and assertion denominators with incomplete metrics $filteredMetrics',
+    ({ filteredMetrics }) => {
+      const prompts = [0.7, 8].map((quality, idx) => ({
+        ...mockTable.head.prompts[0],
+        provider: `provider-${idx}`,
+        metrics: {
+          ...mockTable.head.prompts[0].metrics,
+          namedScores: { quality },
+          namedScoresCount: { quality: 10 },
+          namedScoreWeights: { quality: 10 },
+        },
+      }));
+      vi.mocked(useTableStore).mockReturnValue({
+        ...useTableStore(),
+        config: { derivedMetrics: [{ name: 'quality', value: '0.7' }] },
+        derivedMetricNamesByPrompt: [['quality'], []],
+        filteredMetrics,
+        table: {
+          ...mockTable,
+          head: { ...mockTable.head, prompts },
+          body: mockTable.body.map((row) => ({
+            ...row,
+            outputs: [row.outputs[0], row.outputs[0]],
+          })),
+        },
+      });
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getAllByTestId('metric-name-quality').map((el) => el.textContent)).toEqual([
+        'quality (total)',
+        'quality (total)',
+      ]);
+
+      expect(screen.getAllByTestId('metric-value-quality').map((el) => el.textContent)).toEqual([
+        '0.70',
+        '80.00% (8.00/10.00)',
+      ]);
+    },
+  );
+
+  it('displays each prompt column with its filtered named metric denominator', () => {
+    const firstPrompt = {
+      ...mockTable.head.prompts[0],
+      metrics: {
+        ...mockTable.head.prompts[0].metrics,
+        namedScores: { accuracy: 90, f1: 0.7 },
+        namedScoreWeights: { accuracy: 100 },
+      },
+    };
+    const secondPrompt = {
+      ...mockTable.head.prompts[0],
+      provider: 'second-provider',
+      metrics: {
+        ...mockTable.head.prompts[0].metrics,
+        namedScores: { accuracy: 40, f1: 0.8 },
+        namedScoreWeights: { accuracy: 50 },
+      },
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      config: { derivedMetrics: [{ name: 'f1', value: 'accuracy' }] },
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        body: mockTable.body.map((row) => ({
+          ...row,
+          outputs: [...row.outputs, row.outputs[0]],
+        })),
+        head: { ...mockTable.head, prompts: [firstPrompt, secondPrompt] },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {
+          filter1: {
+            id: 'filter1',
+            type: 'metric',
+            operator: 'is_defined',
+            value: '',
+            logicOperator: 'or',
+          },
+        },
+        appliedCount: 1,
+        options: { metric: [] },
+      },
+      filteredMetrics: [
+        {
+          namedScores: { accuracy: 1.5, f1: 1.5 },
+          namedScoreWeights: { accuracy: 2, f1: 2 },
+        },
+        {
+          namedScores: { accuracy: 0.5 },
+          namedScoresCount: { accuracy: 2 },
+        },
+      ],
+    } as any);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(
+      screen.getAllByTestId('metric-value-accuracy').map((element) => element.textContent),
+    ).toEqual(['75.00% (1.50/2.00)', '25.00% (0.50/2.00)']);
+    expect(screen.getAllByTestId('metric-value-f1').map((element) => element.textContent)).toEqual([
+      '0.70',
+      '0.80',
+    ]);
+    expect(screen.getAllByTestId('metric-name-f1').map((element) => element.textContent)).toEqual([
+      'f1 (total)',
+      'f1 (total)',
+    ]);
+  });
+
+  it.each([6, 0])('uses filtered base metrics with score %s and comparison totals', (score) => {
+    const prompts = [
+      {
+        ...mockTable.head.prompts[0],
+        metrics: {
+          ...mockTable.head.prompts[0].metrics,
+          namedScores: { accuracy: 90, f1: 0.7 },
+          namedScoreWeights: { accuracy: 100, f1: 100 },
+        },
+      },
+      {
+        ...mockTable.head.prompts[0],
+        provider: 'comparison-provider',
+        metrics: {
+          ...mockTable.head.prompts[0].metrics,
+          namedScores: { accuracy: 40, f1: 0.8 },
+          namedScoreWeights: { accuracy: 50, f1: 50 },
+        },
+      },
+    ];
+    vi.mocked(useTableStore).mockReturnValue({
+      config: { derivedMetrics: [{ name: 'f1', value: '0.7' }] },
+      derivedMetricNamesByPrompt: [['f1'], []],
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        body: mockTable.body.map((row) => ({
+          ...row,
+          outputs: [...row.outputs, row.outputs[0]],
+        })),
+        head: { ...mockTable.head, prompts },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [] },
+      },
+      filteredMetrics: [
+        {
+          namedScores: { accuracy: score, f1: 1 },
+          namedScoreWeights: { accuracy: 8, f1: 8 },
+        },
+      ],
+    } as any);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Filtered named metrics are unavailable for some columns. Those columns show evaluation totals.',
+    );
+
+    expect(
+      screen.getAllByTestId('metric-value-accuracy').map((element) => element.textContent),
+    ).toEqual([
+      `${((score / 8) * 100).toFixed(2)}% (${score.toFixed(2)}/8.00)`,
+      '80.00% (40.00/50.00)',
+    ]);
+    expect(
+      screen.getAllByTestId('metric-name-accuracy').map((element) => element.textContent),
+    ).toEqual(['accuracy', 'accuracy (total)']);
+    expect(screen.getAllByTestId('metric-value-f1').map((element) => element.textContent)).toEqual([
+      '0.70',
+      '1.60% (0.80/50.00)',
+    ]);
+  });
 });
 
 describe('ResultsTable - No Filters Applied', () => {

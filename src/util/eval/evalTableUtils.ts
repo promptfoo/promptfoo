@@ -174,11 +174,9 @@ function collectNamedScoreNamesByPrompt(table: {
  * `updateDerivedMetrics`), so this keeps the streaming column set aligned
  * with what `collectNamedScoreNamesByPrompt` would produce from row outputs.
  *
- * Returns an empty list both for prompts with no per-row contributions
- * (`namedScoresCount: {}` — modern eval with no named metrics configured)
- * and for prompts whose count map is missing entirely (legacy/imported
- * evals). Use `promptNeedsDiscoveryFallback` to distinguish the two: only
- * the latter requires a row-scan pre-pass.
+ * Count maps may omit metrics whose assertion counts cannot be recovered.
+ * Use `promptNeedsDiscoveryFallback` to detect incomplete aggregates and
+ * discover their actual per-row metric names in the row-scan pre-pass.
  */
 function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[][] {
   return collectMetricNamesByPrompt(prompts, (prompt) => {
@@ -191,15 +189,17 @@ function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[
 }
 
 /**
- * True when a prompt's aggregate `metrics.namedScoresCount` is missing/absent,
- * not merely empty. Legacy evals persisted before count tracking shipped, and
- * external imports via `POST /api/eval` that don't backfill the count, both
- * land here. Modern evals always have an object (possibly empty) and skip the
- * discovery pass.
+ * True when aggregate counts cannot identify all possible per-row metrics.
+ * Missing counts can mean an unknown denominator, even when the count map
+ * exists. Scan rows to distinguish these metrics from aggregate-only derived
+ * scores without adding empty CSV columns for the latter.
  */
 function promptNeedsDiscoveryFallback(prompt: Prompt): boolean {
   const metrics = (prompt as CompletedPrompt).metrics;
-  return !metrics || !metrics.namedScoresCount;
+  const counts = metrics?.namedScoresCount;
+  return (
+    !counts || Object.keys(metrics?.namedScores ?? {}).some((name) => !((counts[name] ?? 0) > 0))
+  );
 }
 
 /**
@@ -218,8 +218,8 @@ type DiscoveryAccumulator = {
 /**
  * Scan one batch of `EvalResult` rows for the metric names that will need
  * dedicated `Metric: <name>` columns. Only inspects the prompts in
- * `fallbackPromptIndices` (those whose aggregate `namedScoresCount` is
- * missing/empty), and only touches `namedScores` + `testCase.description` —
+ * `fallbackPromptIndices` (those whose aggregate counts may omit metric names),
+ * and only touches `namedScores` + `testCase.description` —
  * not the full row shape — so the discovery pass stays allocation-light even
  * for very large legacy evals.
  *
@@ -775,8 +775,8 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   // dedicated columns. The pass only inspects `namedScores` keys and
   // `testCase.description`, never the full row, so memory stays
   // O(prompts × distinct metric names). Metric discovery remains limited to
-  // prompts whose aggregate `namedScoresCount` is missing; a present-but-empty
-  // count is authoritative and means "no metric columns."
+  // prompts whose aggregate counts may omit per-row metric names, including
+  // metrics whose counts are unknown after rebuilding legacy results.
   //
   // Note: in the rare case of concurrent writes between the two passes (e.g. a
   // CLI export run while results are still being persisted), a metric that

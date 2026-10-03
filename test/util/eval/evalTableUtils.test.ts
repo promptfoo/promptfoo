@@ -1630,57 +1630,85 @@ describe('evalTableUtils', () => {
       expect(header).not.toContain('Metric: aggregate_only_average');
     });
 
-    it('should produce headers consistent with evalTableToCsv for the same data', async () => {
-      // Locks the docstring invariant that streamEvalCsv (CLI) and evalTableToCsv
-      // (WebUI) produce the same column layout for the same eval data.
-      const sharedPrompt = createCompletedPrompt('Explain {{topic}}', {
-        provider: 'echo',
-        metrics: createPromptMetrics({
-          namedScores: { clarity: 0.9, accuracy: 0.8, derived_avg: 0.85 },
-          namedScoresCount: { clarity: 1, accuracy: 1 },
-        }),
-      });
+    it.each<{
+      label: string;
+      namedScoresCount: Record<string, number>;
+      namedScoreWeights?: Record<string, number>;
+    }>([
+      { label: 'known counts', namedScoresCount: { clarity: 1, accuracy: 1 } },
+      { label: 'unknown denominators', namedScoresCount: {}, namedScoreWeights: {} },
+      {
+        label: 'known weights without counts',
+        namedScoresCount: {},
+        namedScoreWeights: { clarity: 1, accuracy: 1 },
+      },
+      {
+        label: 'partial counts',
+        namedScoresCount: { accuracy: 1 },
+        namedScoreWeights: { accuracy: 1 },
+      },
+    ])(
+      'matches per-row CSV metrics with $label',
+      async ({ namedScoresCount, namedScoreWeights }) => {
+        // Locks the docstring invariant that streamEvalCsv (CLI) and evalTableToCsv
+        // (WebUI) produce the same column layout for the same eval data.
+        const sharedPrompt = createCompletedPrompt('Explain {{topic}}', {
+          provider: 'echo',
+          metrics: createPromptMetrics({
+            namedScores: { clarity: 0.9, accuracy: 0.8, derived_avg: 0.85 },
+            namedScoresCount,
+            namedScoreWeights,
+          }),
+        });
 
-      const cliCsv = await runStreamEvalCsv({
-        vars: ['topic'],
-        prompts: [sharedPrompt],
-        results: [
-          {
-            testIdx: 0,
-            promptIdx: 0,
-            testCase: { vars: { topic: 'gravity' } },
-            response: { output: 'gravity output' },
-            success: true,
-            score: 0.9,
-            namedScores: { clarity: 0.9, accuracy: 0.8 },
-            failureReason: ResultFailureReason.NONE,
-            gradingResult: null,
-            metadata: {},
-          },
-        ],
-      });
+        const cliCsv = await runStreamEvalCsv({
+          vars: ['topic'],
+          prompts: [sharedPrompt],
+          results: [
+            {
+              testIdx: 0,
+              promptIdx: 0,
+              testCase: { vars: { topic: 'gravity' } },
+              response: { output: 'gravity output' },
+              success: true,
+              score: 0.9,
+              namedScores: { clarity: 0.9, accuracy: 0.8 },
+              failureReason: ResultFailureReason.NONE,
+              gradingResult: null,
+              metadata: {},
+            },
+          ],
+        });
 
-      const webCsv = evalTableToCsv({
-        head: { vars: ['topic'], prompts: [sharedPrompt] },
-        body: [
-          {
-            test: { vars: { topic: 'gravity' } },
-            testIdx: 0,
-            vars: ['gravity'],
-            outputs: [
-              {
-                pass: true,
-                text: 'gravity output',
-                score: 0.9,
-                namedScores: { clarity: 0.9, accuracy: 0.8 },
-              } as unknown as EvaluateTableOutput,
-            ],
-          },
-        ],
-      });
+        const webCsv = evalTableToCsv({
+          head: { vars: ['topic'], prompts: [sharedPrompt] },
+          body: [
+            {
+              test: { vars: { topic: 'gravity' } },
+              testIdx: 0,
+              vars: ['gravity'],
+              outputs: [
+                {
+                  pass: true,
+                  text: 'gravity output',
+                  score: 0.9,
+                  namedScores: { clarity: 0.9, accuracy: 0.8 },
+                } as unknown as EvaluateTableOutput,
+              ],
+            },
+          ],
+        });
 
-      expect(cliCsv.split('\n')[0]).toBe(webCsv.split('\n')[0]);
-    });
+        const cliRows = parseCsv(cliCsv) as string[][];
+        expect(cliRows).toEqual(parseCsv(webCsv));
+        expect(cliRows[0].filter((name) => name.startsWith('Metric:'))).toEqual([
+          'Metric: accuracy',
+          'Metric: clarity',
+        ]);
+        expect(cliRows[1][cliRows[0].indexOf('Metric: accuracy')]).toBe('0.80');
+        expect(cliRows[1][cliRows[0].indexOf('Metric: clarity')]).toBe('0.90');
+      },
+    );
 
     it('should keep redteam metadata columns aligned when metric columns are present', async () => {
       const csv = await runStreamEvalCsv({

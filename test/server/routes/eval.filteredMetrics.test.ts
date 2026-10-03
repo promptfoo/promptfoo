@@ -15,7 +15,9 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
+import Eval from '../../../src/models/eval';
 import { createApp } from '../../../src/server/server';
+import { ResultFailureReason } from '../../../src/types/index';
 import EvalFactory from '../../factories/evalFactory';
 
 describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
@@ -243,9 +245,86 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       expect(metrics.namedScoresCount).toHaveProperty('accuracy');
       expect(metrics.namedScoresCount).toHaveProperty('relevance');
     });
+
+    it('should return exact weighted named metric totals and denominators', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'weighted-api-test',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'weighted-api-output',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.ASSERT,
+        success: false,
+        score: 0.75,
+        latencyMs: 100,
+        gradingResult: {
+          pass: false,
+          score: 0.75,
+          reason: 'weighted metric',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'first accuracy assertion',
+              assertion: { type: 'contains', value: 'a', metric: 'accuracy' },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'second accuracy assertion',
+              assertion: { type: 'contains', value: 'b', metric: 'accuracy' },
+            },
+          ],
+          namedScoreWeights: { accuracy: 4 },
+        },
+        namedScores: { accuracy: 0.75 },
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const response = await api
+        .get(`/api/eval/${eval_.id}/table`)
+        .query({ filterMode: 'failures' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.filteredMetrics).not.toBeNull();
+      expect(response.body.filteredMetrics[0]).toMatchObject({
+        namedScores: { accuracy: 3 },
+        namedScoresCount: { accuracy: 2 },
+        namedScoreWeights: { accuracy: 4 },
+      });
+    });
   });
 
   describe('Error handling', () => {
+    it('keeps visible results and reports unavailable metrics when aggregation fails', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3, resultTypes: ['failure'] });
+      const aggregation = vi
+        .spyOn(Eval.prototype, 'getFilteredMetrics')
+        .mockRejectedValue(new Error('Database aggregation failed'));
+      try {
+        const response = await api
+          .get(`/api/eval/${eval_.id}/table`)
+          .query({ filterMode: 'failures' });
+        expect(response.status).toBe(200);
+        expect(response.body.table.body).toHaveLength(3);
+        expect(response.body.filteredCount).toBe(3);
+        expect(response.body.filteredMetrics).toBeNull();
+      } finally {
+        aggregation.mockRestore();
+      }
+    });
+
     it('should handle nonexistent eval gracefully', async () => {
       const response = await api
         .get('/api/eval/nonexistent-id/table')
@@ -372,6 +451,27 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
   });
 
   describe('Comparison mode', () => {
+    it('returns derived metric ownership aligned with every comparison column', async () => {
+      const base = await EvalFactory.create({ numResults: 1 });
+      base.config.derivedMetrics = [{ name: 'quality', value: '1' }];
+      await base.save();
+      const assertionsOnly = await EvalFactory.create({ numResults: 1 });
+      const otherDerived = await EvalFactory.create({ numResults: 1 });
+      otherDerived.config.derivedMetrics = [{ name: 'other', value: '2' }];
+      await otherDerived.save();
+
+      const response = await api.get(`/api/eval/${base.id}/table`).query({
+        comparisonEvalIds: [assertionsOnly.id, otherDerived.id],
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.table.head.prompts).toHaveLength(3);
+      expect(response.body.derivedMetricNamesByPrompt).toEqual([['quality'], [], ['other']]);
+
+      const standalone = await api.get(`/api/eval/${otherDerived.id}/table`);
+      expect(standalone.body.derivedMetricNamesByPrompt).toEqual([['other']]);
+    });
+
     it('should include filteredMetrics for base eval even when comparison evals are present', async () => {
       const eval1 = await EvalFactory.create({
         numResults: 10,
