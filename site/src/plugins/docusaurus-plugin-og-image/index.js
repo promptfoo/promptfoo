@@ -193,14 +193,14 @@ try {
 }
 const SITE_STATS = { ...siteStats, ...generatedStats };
 
-function createBrandHeader(logoBase64) {
+function createBrandHeader(logoBase64, marginBottom = 50) {
   return {
     type: 'div',
     props: {
       style: {
         display: 'flex',
         alignItems: 'center',
-        marginBottom: 50,
+        marginBottom,
       },
       children: [
         logoBase64
@@ -493,40 +493,7 @@ async function generateStoreTemplate() {
                   },
                   children: [
                     // Header (logo + brand)
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          display: 'flex',
-                          alignItems: 'center',
-                          marginBottom: 40,
-                        },
-                        children: [
-                          logoBase64
-                            ? {
-                                type: 'img',
-                                props: {
-                                  src: logoBase64,
-                                  width: 56,
-                                  height: 56,
-                                  style: { marginRight: 16 },
-                                },
-                              }
-                            : null,
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                fontSize: 28,
-                                fontWeight: 600,
-                                color: '#ff7a7a',
-                              },
-                              children: 'promptfoo',
-                            },
-                          },
-                        ].filter(Boolean),
-                      },
-                    },
+                    createBrandHeader(logoBase64, 40),
                     // Main headline
                     {
                       type: 'div',
@@ -575,53 +542,21 @@ async function generateStoreTemplate() {
                           gap: 12,
                           marginTop: 'auto',
                         },
-                        children: [
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                padding: '10px 20px',
-                                borderRadius: 20,
-                                backgroundColor: 'rgba(255, 122, 122, 0.15)',
-                                border: '1px solid rgba(255, 122, 122, 0.3)',
-                                fontSize: 16,
-                                fontWeight: 600,
-                                color: '#ff7a7a',
-                              },
-                              children: 'Apparel',
+                        children: ['Apparel', 'Accessories', 'Swag'].map((label) => ({
+                          type: 'div',
+                          props: {
+                            style: {
+                              padding: '10px 20px',
+                              borderRadius: 20,
+                              backgroundColor: 'rgba(255, 122, 122, 0.15)',
+                              border: '1px solid rgba(255, 122, 122, 0.3)',
+                              fontSize: 16,
+                              fontWeight: 600,
+                              color: '#ff7a7a',
                             },
+                            children: label,
                           },
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                padding: '10px 20px',
-                                borderRadius: 20,
-                                backgroundColor: 'rgba(255, 122, 122, 0.15)',
-                                border: '1px solid rgba(255, 122, 122, 0.3)',
-                                fontSize: 16,
-                                fontWeight: 600,
-                                color: '#ff7a7a',
-                              },
-                              children: 'Accessories',
-                            },
-                          },
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                padding: '10px 20px',
-                                borderRadius: 20,
-                                backgroundColor: 'rgba(255, 122, 122, 0.15)',
-                                border: '1px solid rgba(255, 122, 122, 0.3)',
-                                fontSize: 16,
-                                fontWeight: 600,
-                                color: '#ff7a7a',
-                              },
-                              children: 'Swag',
-                            },
-                          },
-                        ],
+                        })),
                       },
                     },
                   ],
@@ -1479,6 +1414,30 @@ if (require.main === module) {
   runStandaloneTest().catch(console.error);
 }
 
+async function injectOgImageMetaTags(outDir, routePath, imageUrl, siteConfig) {
+  const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
+  try {
+    if (
+      await fs
+        .stat(htmlPath)
+        .then((stat) => stat.isFile())
+        .catch(() => false)
+    ) {
+      let html = await fs.readFile(htmlPath, 'utf8');
+      const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
+      const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
+
+      // Replace all default thumbnails with the generated OG image.
+      if (html.includes(defaultThumbnailUrl)) {
+        html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
+        await fs.writeFile(htmlPath, html);
+      }
+    }
+  } catch (error) {
+    console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
+  }
+}
+
 module.exports = function () {
   return {
     name: 'docusaurus-plugin-og-image',
@@ -1573,28 +1532,7 @@ module.exports = function () {
                 successCount++;
 
                 // Inject meta tags into the HTML for this route
-                const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
-                try {
-                  if (
-                    await fs
-                      .stat(htmlPath)
-                      .then((stat) => stat.isFile())
-                      .catch(() => false)
-                  ) {
-                    let html = await fs.readFile(htmlPath, 'utf8');
-
-                    const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
-                    const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
-
-                    // If HTML contains the default thumbnail URL, replace all instances
-                    if (html.includes(defaultThumbnailUrl)) {
-                      html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
-                      await fs.writeFile(htmlPath, html);
-                    }
-                  }
-                } catch (error) {
-                  console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
-                }
+                await injectOgImageMetaTags(outDir, routePath, imageUrl, siteConfig);
               } else {
                 failureCount++;
               }
@@ -1622,30 +1560,10 @@ module.exports = function () {
 
       // Inject meta tags for special pages (pricing, about, contact, press, store, events, solutions)
       console.log('🔄 Injecting OG image meta tags for special pages...');
-      const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
       for (const { route: routePath } of SPECIAL_PAGES) {
         const imageUrl = generatedImages.get(routePath);
         if (imageUrl) {
-          const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
-          try {
-            if (
-              await fs
-                .stat(htmlPath)
-                .then((stat) => stat.isFile())
-                .catch(() => false)
-            ) {
-              let html = await fs.readFile(htmlPath, 'utf8');
-              const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
-
-              // Replace default thumbnail with custom OG image
-              if (html.includes(defaultThumbnailUrl)) {
-                html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
-                await fs.writeFile(htmlPath, html);
-              }
-            }
-          } catch (error) {
-            console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
-          }
+          await injectOgImageMetaTags(outDir, routePath, imageUrl, siteConfig);
         }
       }
 
