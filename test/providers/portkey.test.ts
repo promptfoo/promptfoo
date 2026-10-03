@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers/index';
 import {
   getPortkeyHeaders,
   PortkeyChatCompletionProvider,
   toKebabCase,
 } from '../../src/providers/portkey';
+
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
 
 describe('toKebabCase', () => {
   it('should convert simple camelCase to kebab-case', () => {
@@ -164,6 +170,7 @@ describe('getPortkeyHeaders', () => {
 describe('PortkeyChatCompletionProvider', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.mocked(fetchWithCache).mockReset();
   });
 
   describe('portkey credential', () => {
@@ -189,6 +196,17 @@ describe('PortkeyChatCompletionProvider', () => {
         env: { PORTKEY_API_KEY: 'pk-override' },
       });
       expect(provider.config.headers).toMatchObject({ 'x-portkey-api-key': 'pk-override' });
+    });
+
+    it.each([
+      { value: '', expected: null },
+      { value: undefined, expected: 'fake-ambient-portkey' },
+    ])('resolves a scoped Portkey key of $value', ({ value, expected }) => {
+      vi.stubEnv('PORTKEY_API_KEY', 'fake-ambient-portkey');
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        env: { PORTKEY_API_KEY: value },
+      });
+      expect(new Headers(provider.config.headers).get('x-portkey-api-key')).toBe(expected);
     });
 
     it('should not copy an environment credential into the persisted config', () => {
@@ -266,6 +284,21 @@ describe('PortkeyChatCompletionProvider', () => {
       ['model catalog slug in the model name', '@bedrock-eu/claude', {}],
       ['model catalog slug in portkeyProvider', 'claude', { portkeyProvider: '@bedrock-eu' }],
       ['legacy virtual key', 'claude', { portkeyVirtualKey: 'bedrock-prod' }],
+      ['bare model name', 'claude-sonnet-4-6', {}],
+      ['slug-shaped model name', 'anthropic-slug/claude-sonnet-4-6', {}],
+      [
+        'model catalog slug in the model name alongside a declared upstream',
+        '@openai-slug/gpt-4o',
+        { portkeyProvider: 'openai' },
+      ],
+      [
+        'virtual key alongside an openai passthrough',
+        'gpt-4o',
+        {
+          portkeyProvider: 'openai',
+          portkeyVirtualKey: 'openai-prod',
+        },
+      ],
     ])(
       'should not leak OPENAI_API_KEY when Portkey holds the credential (%s)',
       (_, model, config) => {
@@ -276,6 +309,271 @@ describe('PortkeyChatCompletionProvider', () => {
         expect(provider.getApiKey()).toBeUndefined();
       },
     );
+
+    it('should not inherit OPENAI_API_KEY for a passthrough to another vendor', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('claude-sonnet-4-6', {
+        config: { portkeyApiKey: 'pk-config-key', portkeyProvider: 'anthropic' },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
+    it('should forward an explicit apiKey for a passthrough to another vendor', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('claude-sonnet-4-6', {
+        config: { portkeyProvider: 'anthropic', apiKey: 'sk-ant-explicit' },
+      });
+      expect(provider.getApiKey()).toBe('sk-ant-explicit');
+    });
+
+    // Provider names arrive from user YAML, where casing is not enforced.
+    it.each([['openai'], ['OpenAI'], ['OPENAI']])(
+      'should inherit OPENAI_API_KEY for an openai passthrough spelled %s',
+      (portkeyProvider) => {
+        vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+        const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+          config: { portkeyProvider },
+        });
+        expect(provider.getApiKey()).toBe('sk-openai');
+      },
+    );
+
+    it('should not throw when portkeyProvider is not a string', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 123 as unknown as string },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
+    it('should prefer the per-provider env override for the openai passthrough bearer', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-process-env');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+        env: { OPENAI_API_KEY: 'sk-override' },
+      });
+      expect(provider.getApiKey()).toBe('sk-override');
+    });
+  });
+
+  it('lets an empty scoped OpenAI key mask the ambient key', () => {
+    vi.stubEnv('OPENAI_API_KEY', 'fake-ambient-openai');
+    const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+      config: { portkeyProvider: 'openai' },
+      env: { OPENAI_API_KEY: '' },
+    });
+    expect(provider.getApiKey()).toBeUndefined();
+  });
+
+  describe('request credential routing', () => {
+    it.each<{
+      name: string;
+      config: NonNullable<ConstructorParameters<typeof PortkeyChatCompletionProvider>[1]['config']>;
+      expected: string | null;
+    }>([
+      { name: 'bare model', config: {}, expected: null },
+      { name: 'non-OpenAI upstream', config: { portkeyProvider: 'anthropic' }, expected: null },
+      {
+        name: 'explicit upstream key',
+        config: { portkeyProvider: 'anthropic', apiKey: 'fake-explicit-upstream' },
+        expected: 'Bearer fake-explicit-upstream',
+      },
+      {
+        name: 'case-insensitive OpenAI upstream',
+        config: { portkeyProvider: 'OpenAI' },
+        expected: 'Bearer fake-ambient-openai',
+      },
+      {
+        name: 'overridden upstream header',
+        config: { portkeyProvider: 'openai', headers: { 'X-Portkey-Provider': 'anthropic' } },
+        expected: null,
+      },
+      {
+        name: 'OpenAI header selector',
+        config: { headers: { 'X-Portkey-Provider': 'OpenAI' } },
+        expected: 'Bearer fake-ambient-openai',
+      },
+      {
+        name: 'virtual key header',
+        config: { portkeyProvider: 'openai', headers: { 'X-Portkey-Virtual-Key': 'fixture' } },
+        expected: null,
+      },
+      {
+        name: 'catalog header',
+        config: { portkeyProvider: 'openai', headers: { 'x-portkey-provider': '@fixture' } },
+        expected: null,
+      },
+    ])('uses the effective route for $name', async ({ config, expected }) => {
+      vi.stubEnv('OPENAI_API_KEY', 'fake-ambient-openai');
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { choices: [{ message: { content: 'Hello' }, finish_reason: 'stop' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        config: { portkeyApiKey: 'fake-portkey', ...config },
+      });
+      expect(await provider.callApi('Hello')).toMatchObject({ output: 'Hello' });
+      const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers);
+      expect(headers.get('authorization')).toBe(expected);
+      expect(headers.get('x-portkey-api-key')).toBe('fake-portkey');
+    });
+
+    it.each([false, true])(
+      'handles a prompt route override with explicit Authorization=%s',
+      async (explicitAuthorization) => {
+        vi.stubEnv('OPENAI_API_KEY', 'fake-ambient-openai');
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { choices: [{ message: { content: 'Hello' }, finish_reason: 'stop' }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = new PortkeyChatCompletionProvider('fixture-model', {
+          config: { portkeyApiKey: 'fake-portkey', portkeyProvider: 'openai' },
+        });
+        const result = await provider.callApi('Hello', {
+          vars: {},
+          prompt: {
+            raw: 'Hello',
+            label: 'fixture',
+            config: {
+              headers: {
+                'x-portkey-provider': 'anthropic',
+                ...(explicitAuthorization ? { authorization: 'Bearer fake-explicit' } : {}),
+              },
+            },
+          },
+        });
+        if (explicitAuthorization) {
+          expect(result).toMatchObject({ output: 'Hello' });
+          const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers);
+          expect(headers.get('authorization')).toBe('Bearer fake-explicit');
+        } else {
+          expect(result.error).toContain(
+            'Portkey prompt headers change upstream credential routing',
+          );
+          expect(fetchWithCache).not.toHaveBeenCalled();
+        }
+      },
+    );
+  });
+
+  describe('prompt header merging', () => {
+    it.each<Record<string, string>>([
+      { 'X-Portkey-Provider': 'anthropic' },
+      { 'X-Portkey-Virtual-Key': 'fixture-virtual-key' },
+      { 'X-Portkey-Provider': '@fixture-catalog' },
+    ])('preserves provider routing headers when adding unrelated prompt headers: %j', (route) => {
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        config: { portkeyApiKey: 'fake-portkey', headers: route },
+      });
+      const headers = new Headers(provider.getOpenAiRequestHeaders({ 'X-Request-Id': 'fixture' }));
+      for (const [name, value] of Object.entries(route)) {
+        expect(headers.get(name)).toBe(value);
+      }
+      expect(headers.get('x-portkey-api-key')).toBe('fake-portkey');
+      expect(headers.get('x-request-id')).toBe('fixture');
+    });
+
+    it.each<{ apiKey: string | undefined; headers: Record<string, string> }>([
+      { apiKey: 'fake-explicit-upstream', headers: { 'X-Portkey-Provider': 'openai' } },
+      { apiKey: undefined, headers: { 'X-Portkey-Provider': 'azure' } },
+      { apiKey: undefined, headers: { 'X-Portkey-Virtual-Key': 'other-fixture-key' } },
+    ])(
+      'rejects changed selectors independently of resolved key values: %j',
+      ({ apiKey, headers }) => {
+        const provider = new PortkeyChatCompletionProvider('fixture-model', {
+          config: { portkeyApiKey: 'fake-portkey', portkeyProvider: 'anthropic', apiKey },
+        });
+        expect(() => provider.getOpenAiRequestHeaders(headers)).toThrow(
+          'Portkey prompt headers change upstream credential routing',
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([undefined, 'https://configured.example'])(
+      'requires prompt authorization for a custom host change from %s',
+      (portkeyCustomHost) => {
+        const provider = new PortkeyChatCompletionProvider('fixture-model', {
+          config: {
+            portkeyApiKey: 'fake-portkey',
+            portkeyProvider: 'openai',
+            apiKey: 'fake-upstream',
+            portkeyCustomHost,
+          },
+        });
+        expect(() =>
+          provider.getOpenAiRequestHeaders({
+            'X-Portkey-Custom-Host': 'https://selected.example',
+          }),
+        ).toThrow('Portkey prompt headers change upstream credential routing');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each<Record<string, string>>([
+      { 'X-Portkey-Provider': 'anthropic' },
+      { 'X-Portkey-Virtual-Key': 'selected-key' },
+      { 'X-Portkey-Custom-Host': 'https://selected.example' },
+    ])('requires prompt authorization despite an inherited bearer: %j', (route) => {
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        config: {
+          portkeyApiKey: 'fake-portkey',
+          portkeyProvider: 'openai',
+          headers: { Authorization: 'Bearer fake-provider' },
+        },
+      });
+      expect(() => provider.getOpenAiRequestHeaders(route)).toThrow(
+        'Portkey prompt headers change upstream credential routing',
+      );
+      const headers = new Headers(
+        provider.getOpenAiRequestHeaders({
+          ...route,
+          authorization: 'Bearer fake-prompt',
+        }),
+      );
+      expect(headers.get('authorization')).toBe('Bearer fake-prompt');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('preserves an unchanged custom host and inherited authorization', () => {
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        config: {
+          portkeyApiKey: 'fake-portkey',
+          portkeyCustomHost: 'https://configured.example',
+          headers: { authorization: 'Bearer fake-provider' },
+        },
+      });
+      const headers = new Headers(
+        provider.getOpenAiRequestHeaders({
+          'X-Portkey-Custom-Host': 'https://configured.example',
+          'X-Request-Id': 'fixture',
+        }),
+      );
+      expect(headers.get('x-portkey-custom-host')).toBe('https://configured.example');
+      expect(headers.get('authorization')).toBe('Bearer fake-provider');
+    });
+
+    it('applies prompt headers case-insensitively without changing the configured route', () => {
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        config: {
+          portkeyApiKey: 'fake-portkey',
+          headers: { 'X-Portkey-Provider': 'OpenAI', 'X-Request-Id': 'provider' },
+        },
+      });
+      const headers = new Headers(
+        provider.getOpenAiRequestHeaders({
+          'x-portkey-provider': 'openai',
+          'x-request-id': 'prompt',
+        }),
+      );
+      expect(headers.get('x-portkey-provider')).toBe('openai');
+      expect(headers.get('x-request-id')).toBe('prompt');
+      expect(new Headers(provider.config.headers).get('x-request-id')).toBe('provider');
+    });
   });
 
   describe('header collisions', () => {
