@@ -31,7 +31,7 @@ export function getImageDatasetRequestText(
   const redactImages = (text: string) => {
     const chunks: string[] = [];
     let end = 0;
-    for (const match of text.matchAll(/data:[^\s,]*;base64,/gi)) {
+    for (const match of text.matchAll(/data:[^\s,:]*;base64,/gi)) {
       if (match.index < end) {
         continue;
       }
@@ -165,10 +165,17 @@ export function getImageDatasetRequestText(
         [undefined, 'text', 'input_text', 'output_text'].some((type) => type === object.type);
       return Object.fromEntries(
         Object.entries(object).flatMap(([field, child]) => {
+          const documentText =
+            key === 'source' &&
+            object.type === 'text' &&
+            object.media_type === 'text/plain' &&
+            field === 'data' &&
+            typeof child === 'string';
           // Encoded payload fields are opaque even when JSON represents their
           // bytes as Buffer/typed-array objects. Their containers may carry text.
           if (
             !literalData &&
+            !documentText &&
             ((media &&
               /^(?:data|bytes|url|uri|base64|file_?(?:data|uri|url|id)|s3Location)$/i.test(
                 field,
@@ -181,14 +188,16 @@ export function getImageDatasetRequestText(
             literalData ||
             (object.type === 'tool_use' && field === 'input') ||
             field === nativeToolFields[key] ||
-            (toolResultContent && field === 'json');
+            (toolResultContent && field === 'json') ||
+            (field === 'arguments' &&
+              (['function_call', 'code_execution_call'].includes(String(object.type)) ||
+                (['function', 'function_call'].includes(key) &&
+                  typeof object.name === 'string'))) ||
+            (object.type === 'function_result' && field === 'result' && !Array.isArray(child));
           const toolText =
-            (object.type === 'function_call' && field === 'arguments') ||
             (object.type === 'function_call_output' && field === 'output') ||
             ((object.type === 'tool_result' || key === 'toolResult') && field === 'content') ||
-            (['function', 'function_call'].includes(key) &&
-              typeof object.name === 'string' &&
-              field === 'arguments');
+            (object.type === 'code_execution_result' && field === 'result');
           const mediaField =
             !literalData &&
             (mediaContainerField.test(field) ||
@@ -198,6 +207,7 @@ export function getImageDatasetRequestText(
             child,
             field,
             literalText ||
+              documentText ||
               toolData ||
               toolText ||
               (nativeMessage && ['content', 'parts'].includes(field)) ||

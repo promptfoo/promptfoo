@@ -990,6 +990,60 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
           function_call: { name: 'describe', arguments: JSON.stringify({ image: actualTask }) },
         },
       ],
+      ...['function_call', 'code_execution_call'].map((type) => [
+        `Interactions ${type} literal arguments`,
+        {
+          type,
+          name: 'describe',
+          arguments: {
+            image: actualTask,
+            code: JSON.stringify({ image: actualTask, attachment: inputImage }),
+            nested: { type: 'image', data: actualTask },
+          },
+        },
+      ]),
+      ...[false, true].map((serialized) => [
+        `Interactions function result ${serialized ? 'string' : 'object'}`,
+        {
+          type: 'function_result',
+          call_id: 'call',
+          result: serialized
+            ? JSON.stringify({ image: actualTask, attachment: inputImage })
+            : { image: actualTask, attachment: inputImage },
+        },
+      ]),
+      [
+        'Interactions code execution result',
+        { type: 'code_execution_result', result: JSON.stringify({ image: actualTask }) },
+      ],
+      [
+        'Interactions multimodal function result',
+        {
+          type: 'function_result',
+          result: [
+            { type: 'text', text: JSON.stringify({ image: actualTask }) },
+            { type: 'image', mime_type: 'image/png', data: nativeImageData },
+          ],
+        },
+      ],
+      [
+        'Ollama object tool arguments',
+        {
+          role: 'assistant',
+          tool_calls: [
+            {
+              function: {
+                name: 'describe',
+                arguments: {
+                  image: actualTask,
+                  nested: { type: 'image', data: actualTask },
+                  attachment: inputImage,
+                },
+              },
+            },
+          ],
+        },
+      ],
       [
         'Chat legacy tool content',
         { role: 'function', name: 'describe', content: JSON.stringify({ image: actualTask }) },
@@ -1090,6 +1144,26 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       }),
       true,
     ],
+    ...[actualTask, JSON.stringify({ image: actualTask, attachment: inputImage })].map(
+      (data, index) =>
+        [
+          `Anthropic plaintext document ${index}`,
+          JSON.stringify([
+            {
+              role: 'user',
+              content: [
+                { type: 'document', source: { type: 'text', media_type: 'text/plain', data } },
+                {
+                  type: 'document',
+                  source: { type: 'base64', media_type: 'application/pdf', data: nativeImageData },
+                },
+              ],
+            },
+          ]),
+          true,
+        ] as const,
+    ),
+    ['repeated data URI prefixes', `${'data:'.repeat(20_000)}${actualTask}`, true],
     [
       'ordinary document scalar',
       JSON.stringify({ document: actualTask, video: actualTask, audio: actualTask }),
