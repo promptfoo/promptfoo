@@ -734,6 +734,108 @@ describe('tokenUsageUtils', () => {
       });
     });
 
+    it.each([false, undefined])('counts unmetered grading when cached is %s', (cached) => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        cached,
+        tokenUsage: createEmptyTokenUsage(),
+      });
+
+      expect(target.assertions).toMatchObject({ total: 0, cached: 0, numRequests: 1 });
+      expect(target.incurredTokenUsage?.assertions ?? target.assertions).toMatchObject({
+        total: 0,
+        numRequests: 1,
+      });
+    });
+
+    it.each([false, undefined])('preserves zero-request failures when cached is %s', (cached) => {
+      const target = createEmptyTokenUsage();
+      const response = {
+        cached,
+        error: 'Fixture rejected before sending a request',
+        tokenUsage: { numRequests: 0 },
+      };
+
+      accumulateGradingResponseTokenUsage(target, response);
+
+      expect(target.assertions).toMatchObject({ total: 0, numRequests: 1 });
+      expect(target.incurredTokenUsage?.assertions).toMatchObject({ total: 0, numRequests: 0 });
+    });
+
+    it.each([
+      { total: 5, numRequests: 0 },
+      { total: 0, numRequests: 0, incurredTokenUsage: { total: 5, numRequests: 1 } },
+    ])('retains reported work when grading fails', (tokenUsage) => {
+      const target = createEmptyTokenUsage();
+      const response = { error: 'Fixture failed after model work', tokenUsage };
+
+      accumulateGradingResponseTokenUsage(target, response);
+
+      expect(target.incurredTokenUsage?.assertions ?? target.assertions).toMatchObject({
+        total: 5,
+        numRequests: 1,
+      });
+    });
+
+    it('keeps earlier incurred work when a later task fails before sending', () => {
+      const target = createEmptyTokenUsage();
+      accumulateGradingResponseTokenUsage(target, { tokenUsage: { total: 5, numRequests: 1 } });
+      const response = {
+        error: 'Fixture rejected before sending a request',
+        tokenUsage: { numRequests: 0 },
+      };
+
+      accumulateGradingResponseTokenUsage(target, response);
+
+      expect(target.assertions).toMatchObject({ total: 5, numRequests: 2 });
+      expect(target.incurredTokenUsage?.assertions).toMatchObject({ total: 5, numRequests: 1 });
+    });
+
+    it('preserves explicitly fresh grading when avoided cached tokens exceed fresh usage', () => {
+      const target = createEmptyTokenUsage();
+      target.incurredTokenUsage = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        cached: false,
+        tokenUsage: { total: 50, prompt: 30, completion: 20, cached: 97, numRequests: 0 },
+      });
+
+      expect(target.assertions).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        cached: 97,
+        numRequests: 1,
+      });
+      expect(target.incurredTokenUsage.assertions).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        numRequests: 1,
+      });
+    });
+
+    it('counts fresh grading after a cached response', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        cached: true,
+        tokenUsage: { total: 25, prompt: 15, completion: 10, cached: 25, numRequests: 0 },
+      });
+      accumulateGradingResponseTokenUsage(target, {
+        cached: false,
+        tokenUsage: createEmptyTokenUsage(),
+      });
+
+      expect(target.assertions).toMatchObject({ total: 25, cached: 25, numRequests: 2 });
+      expect(target.incurredTokenUsage?.assertions).toMatchObject({
+        total: 0,
+        cached: 0,
+        numRequests: 1,
+      });
+    });
+
     it('counts fresh strategy grading tasks normalized to zero requests', () => {
       const target = createEmptyTokenUsage();
 
