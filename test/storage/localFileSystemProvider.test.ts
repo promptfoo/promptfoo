@@ -235,27 +235,37 @@ describe('LocalFileSystemProvider', () => {
     },
   );
 
-  it('propagates failures to delete a legacy sidecar file', async () => {
-    tempDir = createTempDir('promptfoo-media-');
-    const provider = new LocalFileSystemProvider({ basePath: tempDir });
-    const key = 'audio/abcdef123456.wav';
-    const filePath = path.join(tempDir, key);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, 'legacy media');
-    const sidecarPath = `${filePath}.meta.json`;
-    fs.writeFileSync(sidecarPath, 'legacy metadata', 'utf8');
-    const failure = Object.assign(new Error('Access denied'), { code: 'EACCES' });
-    const unlink = fsPromises.unlink;
-    vi.spyOn(fsPromises, 'unlink').mockImplementation(async (filePath) => {
-      if (filePath === sidecarPath) {
-        throw failure;
+  it.each(['direct', 'symlinked'] as const)(
+    'propagates legacy sidecar deletion failures with a %s root',
+    async (rootType) => {
+      tempDir = createTempDir('promptfoo-media-');
+      const mediaPath = path.join(tempDir, 'media');
+      fs.mkdirSync(mediaPath);
+      const basePath = rootType === 'symlinked' ? path.join(tempDir, 'alias') : mediaPath;
+      if (rootType === 'symlinked') {
+        fs.symlinkSync(mediaPath, basePath, 'junction');
       }
-      return unlink(filePath);
-    });
+      const provider = new LocalFileSystemProvider({ basePath });
+      const key = 'audio/abcdef123456.wav';
+      const filePath = path.join(basePath, key);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, 'legacy media');
+      const sidecarPath = `${filePath}.meta.json`;
+      fs.writeFileSync(sidecarPath, 'legacy metadata', 'utf8');
+      const canonicalSidecarPath = fs.realpathSync(sidecarPath);
+      const failure = Object.assign(new Error('Access denied'), { code: 'EACCES' });
+      const unlink = fsPromises.unlink;
+      vi.spyOn(fsPromises, 'unlink').mockImplementation(async (filePath) => {
+        if (filePath === canonicalSidecarPath) {
+          throw failure;
+        }
+        return unlink(filePath);
+      });
 
-    await expect(provider.delete(key)).rejects.toBe(failure);
-    expect(fs.readFileSync(sidecarPath, 'utf8')).toBe('legacy metadata');
-  });
+      await expect(provider.delete(key)).rejects.toBe(failure);
+      expect(fs.readFileSync(sidecarPath, 'utf8')).toBe('legacy metadata');
+    },
+  );
 
   it('keeps existing legacy sidecars until the corresponding media is deleted', async () => {
     tempDir = createTempDir('promptfoo-media-');
