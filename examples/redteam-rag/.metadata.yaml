@@ -1,0 +1,6 @@
+title: 'Red Team an Internal RAG Knowledge Base'
+description: 'Test a RAG-based internal knowledge base for access control bypasses, competitor mentions, and harmful content using multi-turn attack strategies'
+tags:
+  - Red Teaming
+  - RAG
+  - Multi-turn

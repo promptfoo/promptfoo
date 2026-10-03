@@ -1,0 +1,6 @@
+title: 'OpenAI MCP Integration'
+description: 'Connect OpenAI models to remote MCP servers for repository search, authenticated APIs, and approval workflows'
+tags:
+  - MCP
+  - Tool Use
+  - OpenAI
