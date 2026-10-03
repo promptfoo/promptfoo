@@ -2028,24 +2028,265 @@ describe('suite environment loading', () => {
   });
 
   it.each(['json', 'jsonl', 'yaml'])(
-    'loads bare vars paths in array %s rows from the config directory',
+    'resolves array %s vars files and providers from the tests directory, preserving inline vars',
     async (extension) => {
       const configPath = writeConfig('array-root', { tests: [`nested/cases.${extension}`] });
       const base = path.dirname(configPath);
       fs.mkdirSync(path.join(base, 'nested'));
-      fs.writeFileSync(path.join(base, 'vars.yaml'), 'source: root');
-      fs.writeFileSync(path.join(base, 'nested/vars.yaml'), 'source: wrong-shadow');
-      const test = { vars: 'vars.yaml' };
+      fs.writeFileSync(path.join(base, 'vars.yaml'), 'source: wrong-root');
+      fs.writeFileSync(path.join(base, 'nested/vars.yaml'), 'source: nested');
+      const rows = [
+        { vars: 'vars.yaml' },
+        { vars: { doc: 'file://doc.txt' }, provider: 'file://provider.py:call_api' },
+      ];
       fs.writeFileSync(
         path.join(base, `nested/cases.${extension}`),
         extension === 'yaml'
-          ? '- vars: vars.yaml'
-          : JSON.stringify(extension === 'json' ? [test] : test),
+          ? '- vars: vars.yaml\n- vars:\n    doc: file://doc.txt\n  provider: file://provider.py:call_api\n'
+          : extension === 'json'
+            ? JSON.stringify(rows)
+            : rows.map((row) => JSON.stringify(row)).join('\n'),
       );
-      const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
-      expect(testSuite.tests?.[0].vars?.source).toBe('root');
+      const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+      expect(testSuite.tests?.[0].vars?.source).toBe('nested');
+      expect((config.tests as TestCase[])[1].provider).toBe(
+        `file://${path.join(base, 'nested/provider.py')}:call_api`,
+      );
+      // Inline file:// vars stay config-relative, matching prompt rendering.
+      expect(testSuite.tests?.[1].vars?.doc).toBe(`file://${path.join(base, 'doc.txt')}`);
     },
   );
+
+  it.each(['json', 'jsonl', 'yaml'])(
+    'loads %s provider configs from the config directory and their scripts from the tests directory',
+    async (extension) => {
+      const configPath = writeConfig('provider-origin', { tests: [`nested/cases.${extension}`] });
+      const base = path.dirname(configPath);
+      fs.mkdirSync(path.join(base, 'nested'));
+      fs.writeFileSync(path.join(base, 'provider.yaml'), 'id: file://provider.cjs\n');
+      fs.writeFileSync(path.join(base, 'nested/provider.yaml'), 'id: echo\n');
+      fs.writeFileSync(
+        path.join(base, 'provider.cjs'),
+        'module.exports = class { id() { return "wrong-root"; } async callApi() { return { output: "root" }; } };',
+      );
+      fs.writeFileSync(
+        path.join(base, 'nested/provider.cjs'),
+        'module.exports = class { id() { return "nested-provider"; } async callApi() { return { output: "nested" }; } };',
+      );
+      const row = { vars: {}, provider: 'file://provider.yaml' };
+      fs.writeFileSync(
+        path.join(base, `nested/cases.${extension}`),
+        extension === 'yaml'
+          ? '- vars: {}\n  provider: file://provider.yaml\n'
+          : JSON.stringify(extension === 'json' ? [row] : row),
+      );
+
+      const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+
+      expect(isApiProvider(testSuite.tests?.[0].provider) && testSuite.tests[0].provider.id()).toBe(
+        'nested-provider',
+      );
+      expect(resolveTestsWatchPaths([`nested/cases.${extension}`], base)).toContain(
+        path.join(base, 'provider.yaml'),
+      );
+    },
+  );
+
+  it.each([
+    ['yaml', 'array'],
+    ['json', 'array'],
+    ['jsonl', 'array'],
+    ['yaml', 'scalar'],
+    ['yaml', 'glob'],
+    ['json', 'glob'],
+    ['jsonl', 'glob'],
+  ])(
+    'preserves imported %s (%s) row provider directories through saved-config replay',
+    async (extension, form) => {
+      const source = `nested/${form === 'glob' ? 'case*' : 'cases'}.${extension}`;
+      const configPath = writeConfig('provider-paths', {
+        tests: form === 'array' ? [source] : source,
+      });
+      const base = path.dirname(configPath);
+      const nested = path.join(base, 'nested');
+      fs.mkdirSync(nested);
+      const providerModule = (name: string) =>
+        `module.exports = class { constructor(options) { this.options = options; } id() { return this.options.id; } async callApi() { return { output: "${name}", metadata: { basePath: this.options.config.basePath } }; } };`;
+      fs.writeFileSync(path.join(base, 'provider.cjs'), providerModule('wrong-root'));
+      fs.writeFileSync(path.join(nested, 'provider.cjs'), providerModule('nested'));
+      const rows = [
+        { vars: {}, provider: './provider.cjs' },
+        { vars: {}, provider: { id: './provider.cjs', label: 'nested-module' } },
+        { vars: {}, provider: 'python:provider.py:custom_call' },
+        { vars: {}, provider: { id: 'python:provider.py:custom_call' } },
+        { vars: {}, provider: 'file://provider.py:custom_call' },
+        { vars: {}, provider: { id: 'file://provider.py:custom_call' } },
+      ];
+      fs.writeFileSync(
+        path.join(nested, `cases.${extension}`),
+        extension === 'yaml'
+          ? '- vars: {}\n  provider: ./provider.cjs\n- vars: {}\n  provider: { id: ./provider.cjs, label: nested-module }\n- vars: {}\n  provider: python:provider.py:custom_call\n- vars: {}\n  provider: { id: python:provider.py:custom_call }\n- vars: {}\n  provider: file://provider.py:custom_call\n- vars: {}\n  provider: { id: file://provider.py:custom_call }\n'
+          : extension === 'json'
+            ? JSON.stringify(rows)
+            : rows.map((row) => JSON.stringify(row)).join('\n'),
+      );
+      const initial = await resolveConfigs({ config: [configPath] }, {});
+      const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(initial.config)));
+      for (const { testSuite } of [initial, replay]) {
+        for (const test of testSuite.tests!.slice(0, 2)) {
+          expect(isApiProvider(test.provider)).toBe(true);
+          if (isApiProvider(test.provider)) {
+            expect(test.provider.id()).toBe('./provider.cjs');
+            expect(await test.provider.callApi('hello')).toMatchObject({
+              output: 'nested',
+              metadata: { basePath: nested },
+            });
+          }
+        }
+        for (const test of testSuite.tests!.slice(2)) {
+          expect(test.provider).toMatchObject({
+            scriptPath: 'provider.py',
+            functionName: 'custom_call',
+            options: { config: { basePath: nested } },
+          });
+        }
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'replays exported imported providers from long directories (strip metadata: %s)',
+    async (stripMetadata) => {
+      const configPath = writeConfig('exported-provider-origins', {
+        tests: ['nested/cases.yaml'],
+        env: { PROMPTFOO_STRIP_METADATA: String(stripMetadata) },
+      });
+      const base = path.dirname(configPath);
+      const nested = path.join(base, 'nested');
+      fs.mkdirSync(nested);
+      const providerModule = (name: string) =>
+        `module.exports = class { id() { return "./provider.cjs"; } async callApi() { return { output: "${name}" }; } };`;
+      fs.writeFileSync(path.join(base, 'provider.cjs'), providerModule('wrong-root'));
+      fs.writeFileSync(path.join(nested, 'provider.cjs'), providerModule('nested'));
+      fs.writeFileSync(
+        path.join(nested, 'cases.yaml'),
+        '- vars: {}\n  provider: ./provider.cjs\n  metadata: { note: private-note }\n- vars: {}\n  provider: python:provider.py\n',
+      );
+      const initial = await resolveConfigs({ config: [configPath] }, {});
+      const exported = await new Eval(initial.config).toResultsFile();
+      if (stripMetadata) {
+        expect(JSON.stringify(exported.config)).not.toContain('private-note');
+      }
+      const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(exported.config)));
+      const jsProvider = replay.testSuite.tests?.[0].provider;
+      expect(isApiProvider(jsProvider)).toBe(true);
+      if (isApiProvider(jsProvider)) {
+        expect(await jsProvider.callApi('hello')).toMatchObject({ output: 'nested' });
+      }
+      expect(replay.testSuite.tests?.[1].provider).toMatchObject({
+        scriptPath: 'provider.py',
+        options: { config: { basePath: nested } },
+      });
+    },
+  );
+
+  it('retains the directory of a test file named inside an imported tests file', async () => {
+    const configPath = writeConfig('nested-test-reference', { tests: ['nested/cases.yaml'] });
+    const base = path.dirname(configPath);
+    const rowDirectory = path.join(base, 'nested/rows');
+    fs.mkdirSync(rowDirectory, { recursive: true });
+    fs.writeFileSync(path.join(base, 'nested/cases.yaml'), '- rows/case.yaml\n');
+    fs.writeFileSync(
+      path.join(rowDirectory, 'case.yaml'),
+      'vars: values.yaml\nprovider: ./provider.cjs\n',
+    );
+    fs.writeFileSync(path.join(rowDirectory, 'values.yaml'), 'source: referenced-row\n');
+    fs.writeFileSync(
+      path.join(rowDirectory, 'provider.cjs'),
+      'module.exports = class { id() { return "referenced-row"; } async callApi() { return { output: "referenced-row" }; } };',
+    );
+    const initial = await resolveConfigs({ config: [configPath] }, {});
+    fs.rmSync(path.join(rowDirectory, 'case.yaml'));
+    const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(initial.config)));
+    for (const { testSuite } of [initial, replay]) {
+      const test = testSuite.tests![0];
+      expect(test.vars).toEqual({ source: 'referenced-row' });
+      expect(isApiProvider(test.provider)).toBe(true);
+      if (isApiProvider(test.provider)) {
+        expect(await test.provider.callApi('hello')).toEqual({ output: 'referenced-row' });
+      }
+    }
+  });
+
+  it.each(['cjs', 'py'])(
+    'retains the unsupported direct file:// provider.%s form without a function suffix',
+    async (extension) => {
+      const configPath = writeConfig('unsupported-provider', { tests: 'nested/cases.yaml' });
+      const base = path.dirname(configPath);
+      fs.mkdirSync(path.join(base, 'nested'));
+      fs.writeFileSync(
+        path.join(base, `provider.${extension}`),
+        extension === 'cjs' ? 'module.exports = class Provider {};' : 'def call_api(): pass',
+      );
+      fs.writeFileSync(
+        path.join(base, 'nested/cases.yaml'),
+        `- vars: {}\n  provider: file://provider.${extension}\n`,
+      );
+      await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toThrow(
+        'Could not identify provider:',
+      );
+    },
+  );
+
+  it.each(['json', 'jsonl', 'generator', 'path-config'])(
+    'keeps standalone %s row providers relative to the config',
+    async (form) => {
+      const source =
+        form === 'generator'
+          ? 'nested/cases.cjs'
+          : `nested/cases.${form === 'path-config' ? 'json' : form}`;
+      const configPath = writeConfig('standalone-provider', {
+        tests: form === 'path-config' ? { path: source, config: {} } : source,
+      });
+      const base = path.dirname(configPath);
+      fs.mkdirSync(path.join(base, 'nested'));
+      const row = { vars: {}, provider: 'python:provider.py:custom_call' };
+      fs.writeFileSync(
+        path.join(base, source),
+        form === 'generator'
+          ? `module.exports = () => ${JSON.stringify([row])};`
+          : JSON.stringify(form === 'json' || form === 'path-config' ? [row] : row),
+      );
+      const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+      expect(testSuite.tests?.[0].provider).toMatchObject({
+        scriptPath: 'provider.py',
+        functionName: 'custom_call',
+        options: { config: { basePath: base } },
+      });
+    },
+  );
+
+  it('preserves each imported row provider directory when combining configs', async () => {
+    const configPaths = ['first', 'second'].map((name) => {
+      const configPath = writeConfig(name, { tests: 'nested/cases.yaml' });
+      const base = path.dirname(configPath);
+      fs.mkdirSync(path.join(base, 'nested'));
+      fs.writeFileSync(
+        path.join(base, 'nested/cases.yaml'),
+        '- vars: {}\n  provider: python:provider.py:custom_call\n',
+      );
+      return configPath;
+    });
+    const initial = await resolveConfigs({ config: configPaths }, {});
+    const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(initial.config)));
+    for (const { testSuite } of [initial, replay]) {
+      expect(testSuite.tests?.map((test) => test.provider)).toMatchObject(
+        configPaths.map((configPath) => ({
+          options: { config: { basePath: path.join(path.dirname(configPath), 'nested') } },
+        })),
+      );
+    }
+  });
 
   it('expands file references inside vars files relative to the config', async () => {
     cliState.basePath = tempDir;
