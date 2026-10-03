@@ -805,7 +805,7 @@ describe('OpenAICodexAppServerProvider', () => {
       }
     });
 
-    it.each(['.', '""', "''"])(
+    it.each(['.', '""', "''", 'drive-relative'])(
       'preserves native cwd lookup explicitly requested by PATH entry %s',
       async (directory) => {
         mockProcessEnv({ NoDefaultCurrentDirectoryInExePath: '1' });
@@ -815,9 +815,13 @@ describe('OpenAICodexAppServerProvider', () => {
         fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
         process.chdir(nativeBinDir);
         try {
+          const pathEntry =
+            directory === 'drive-relative'
+              ? (path.parse(nativeBinDir).root.match(/^[a-z]:/i)?.[0] ?? '.')
+              : directory;
           const [command] = await getSpawnCall({
             working_dir: cwd,
-            cli_env: { PATH: [directory, npmBinDir].join(path.delimiter) },
+            cli_env: { PATH: [pathEntry, npmBinDir].join(path.delimiter) },
           });
 
           expect(command).toBe('codex');

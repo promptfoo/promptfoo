@@ -848,7 +848,9 @@ function getCodexNpmEntrypoint(env: Record<string, string>): string | undefined 
   const nativeDirectories = searchCwd ? [process.cwd(), ...directories] : directories;
   if (
     nativeDirectories.some((directory) =>
-      ['codex.com', 'codex.exe'].some((file) => fs.existsSync(path.join(directory, file))),
+      ['codex.com', 'codex.exe'].some((file) =>
+        fs.existsSync(path.resolve(process.cwd(), directory, file)),
+      ),
     )
   ) {
     return undefined;
