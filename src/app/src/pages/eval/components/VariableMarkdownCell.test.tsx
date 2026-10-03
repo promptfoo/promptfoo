@@ -2,6 +2,7 @@ import React from 'react';
 
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import * as markdownConfig from './markdown-config';
 import VariableMarkdownCell from './VariableMarkdownCell';
 
 describe('VariableMarkdownCell', () => {
@@ -10,6 +11,62 @@ describe('VariableMarkdownCell', () => {
       render(<VariableMarkdownCell value="Hello, world!" maxTextLength={100} />);
 
       expect(screen.getByText('Hello, world!')).toBeInTheDocument();
+    });
+
+    it('skips ordinary text parsing and parses image syntax once', () => {
+      const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+
+      try {
+        const ordinaryRender = render(
+          <VariableMarkdownCell value={'ordinary text '.repeat(10_000)} maxTextLength={100} />,
+        );
+        expect(extractSpy).not.toHaveBeenCalled();
+        ordinaryRender.unmount();
+
+        render(
+          <VariableMarkdownCell
+            value="![Preview](data:image/png;base64,AA==)"
+            maxTextLength={100}
+          />,
+        );
+        expect(extractSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        extractSpy.mockRestore();
+      }
+    });
+
+    it('preserves literal Markdown around forced data-image previews', () => {
+      const dataUri = 'data:image/png;base64,AA==';
+      const value = [
+        '**literal emphasis**',
+        '[diagnostic]: https://example.com/debug',
+        `![Preview](${dataUri})`,
+        '![Remote](https://attacker.example/collect)',
+      ].join('\n');
+
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={100} dataImagesOnly />,
+      );
+
+      expect(container).toHaveTextContent('**literal emphasis**');
+      expect(container).toHaveTextContent('[diagnostic]: https://example.com/debug');
+      expect(container).toHaveTextContent('![Remote](https://attacker.example/collect)');
+      expect(container.querySelector('strong')).not.toBeInTheDocument();
+      expect(container.querySelector('a')).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', dataUri);
+    });
+
+    it('does not force previews for reference-style data images', () => {
+      const value = ['![Preview][image]', `[image]: data:image/png;base64,${'A'.repeat(200)}`].join(
+        '\n',
+      );
+
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={40} dataImagesOnly />,
+      );
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
     });
 
     it('renders markdown bold text', () => {
