@@ -353,6 +353,7 @@ describe('suite environment loading', () => {
         'id: openai:chat:test-model\nenv:\n  OPENAI_API_KEY: file-key\n',
       );
       const provider = { text: form === 'string' ? providerPath : { id: providerPath } };
+      const originalProvider = structuredClone(provider);
       const suite: TestSuite = {
         providers: await loadApiProviders(['echo']),
         prompts: [{ raw: 'answer', label: 'answer' }],
@@ -372,7 +373,7 @@ describe('suite environment loading', () => {
         expect(new Headers(request?.headers as HeadersInit).get('authorization')).toBe(
           `Bearer ${key}`,
         );
-        expect(suite.tests?.[0].assert?.[0]).toMatchObject({ provider });
+        expect(suite.tests?.[0].assert?.[0].provider).toEqual(originalProvider);
       }
     },
   );
