@@ -92,6 +92,15 @@ describe('llm-rubric audio grading', () => {
     expect(result.metadata?.renderedGradingPrompt).not.toContain(audio.data);
   });
 
+  it.each(['q-_z', 'q__z'])(
+    'rejects URL-safe audio data before calling a grader (%s)',
+    async (data) => {
+      const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5');
+      await expect(grade(provider, { ...audio, data })).rejects.toThrow('valid base64 audio data');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
   it('accepts MP3 and preserves a failing grade', async () => {
     const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5');
     vi.spyOn(provider, 'callApi').mockResolvedValue({

@@ -1260,35 +1260,7 @@ export const BEDROCK_MODEL = {
       _stop?: string[],
       _modelName?: string,
     ) => {
-      let messages;
-      let systemPrompt;
-      try {
-        const parsed = JSON.parse(prompt);
-        if (Array.isArray(parsed)) {
-          messages = parsed
-            .map((msg) => ({
-              role: msg.role,
-              content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
-            }))
-            .filter((msg) => msg.role !== 'system');
-          const systemMessage = parsed.find((msg) => msg.role === 'system');
-          if (systemMessage) {
-            systemPrompt = [{ text: systemMessage.content }];
-          }
-        } else {
-          const { system, extractedMessages } = novaParseMessages(prompt);
-          messages = extractedMessages;
-          if (system) {
-            systemPrompt = [{ text: system }];
-          }
-        }
-      } catch {
-        const { system, extractedMessages } = novaParseMessages(prompt);
-        messages = extractedMessages;
-        if (system) {
-          systemPrompt = [{ text: system }];
-        }
-      }
+      const { system: systemPrompt, extractedMessages: messages } = novaParseMessages(prompt);
 
       const params: any = { messages };
       if (systemPrompt) {
@@ -1347,35 +1319,7 @@ export const BEDROCK_MODEL = {
       _stop?: string[],
       _modelName?: string,
     ) => {
-      let messages;
-      let systemPrompt;
-      try {
-        const parsed = JSON.parse(prompt);
-        if (Array.isArray(parsed)) {
-          messages = parsed
-            .map((msg) => ({
-              role: msg.role,
-              content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
-            }))
-            .filter((msg) => msg.role !== 'system');
-          const systemMessage = parsed.find((msg) => msg.role === 'system');
-          if (systemMessage) {
-            systemPrompt = [{ text: systemMessage.content }];
-          }
-        } else {
-          const { system, extractedMessages } = novaParseMessages(prompt);
-          messages = extractedMessages;
-          if (system) {
-            systemPrompt = [{ text: system }];
-          }
-        }
-      } catch {
-        const { system, extractedMessages } = novaParseMessages(prompt);
-        messages = extractedMessages;
-        if (system) {
-          systemPrompt = [{ text: system }];
-        }
-      }
+      const { system: systemPrompt, extractedMessages: messages } = novaParseMessages(prompt);
 
       const params: any = { messages };
       if (systemPrompt) {

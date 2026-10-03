@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Grade generated bicycle colors
+
+prompts:
+  - 'A {{color}} bicycle leaning against a brick wall'
+
+providers:
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024
+
+defaultTest:
+  options:
+    provider: openai:gpt-4o-mini
+  assert:
+    - type: llm-rubric
+      value: The image shows a predominantly red bicycle.
+
+tests:
+  - vars:
+      color: red
+  - vars:
+      color: blue

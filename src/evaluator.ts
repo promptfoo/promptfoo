@@ -13,6 +13,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { getBlobByHash, isBlobAllowedForShare } from './blobs';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -81,7 +82,7 @@ import {
   type TestSuite,
   TestSuiteConfigSchema,
 } from './types/index';
-import { type ApiProvider, isApiProvider } from './types/providers';
+import { type ApiProvider, type GradingBlobResolver, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
@@ -1455,6 +1456,15 @@ async function gradeRunEvalResponse({
     await flushOtel();
   }
 
+  // Stored bytes require the same eval-owned provenance as sharing.
+  const resolveImageBlob: GradingBlobResolver = async (hash) => {
+    if (!evalId || !(await isBlobAllowedForShare(hash, evalId))) {
+      throw new Error('Image blob is not authorized for this eval.');
+    }
+    const blob = await getBlobByHash(hash);
+    return { data: blob.data, mimeType: blob.metadata.mimeType };
+  };
+
   const assertionProviderResponse = {
     ...processedResponse,
     // Keep generated audio available to graders after persistence replaces its
@@ -1478,6 +1488,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          resolveImageBlob,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, abortSignal);
@@ -1498,6 +1509,7 @@ async function gradeRunEvalResponse({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        resolveImageBlob,
       }),
   );
   applyGradingResult(ret, checkResult);

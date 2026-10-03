@@ -186,6 +186,62 @@ applies to other model-graded assertions that use a text judge; see the
 [model-graded overview](/docs/configuration/expected-outputs/model-graded#openai-compatible-thinking-judges)
 for the full metric list.
 
+## Grading image (multimodal) outputs
+
+`llm-rubric` attaches provider image outputs to the grading request. Use a grader model that accepts
+images, and write the rubric about the image's visible content:
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-4o-mini
+  assert:
+    - type: llm-rubric
+      value: The image shows a red bicycle.
+```
+
+Supported outputs include raw base64, base64url, image data URIs, and Promptfoo blob references.
+The evaluator resolves stored images only when the eval has a classified or imported reference.
+Direct matcher or assertion callers must supply `resolveImageBlob` and enforce their storage access
+rules. Remote HTTP image URLs are rejected.
+
+Image-only output text is replaced with a placeholder; accompanying descriptions remain available
+to the grader. Grading metadata records `renderedGradingPromptImages` and the text prompt without
+reattaching image bytes. Normal media-storage settings still control whether the saved provider
+response contains inline data or blob references.
+
+| Grader family                            | Image format          |
+| ---------------------------------------- | --------------------- |
+| OpenAI chat and compatible APIs          | `image_url`           |
+| OpenAI Responses and compatible APIs     | `input_image`         |
+| Anthropic, Bedrock Claude, Vertex Claude | base64 `image` blocks |
+| Google AI Studio and Vertex Gemini       | `inlineData`          |
+| Bedrock Nova                             | native image blocks   |
+
+The model must support image input; support varies within each provider family. The configured
+grader receives the image bytes. Choosing a local model can keep grading on your infrastructure;
+sharing and other configured network calls have separate controls.
+
+See [the image grading example](https://github.com/promptfoo/promptfoo/tree/main/examples/multimodal-output-grading)
+for a positive and negative color check.
+
+### Image grading limits
+
+These limits apply before a grading request is sent. Set integer counts, bytes, or characters as
+specified below, without unit suffixes such as `MB`.
+
+| Variable                                      | Default                               | Purpose                      |
+| --------------------------------------------- | ------------------------------------- | ---------------------------- |
+| `PROMPTFOO_GRADING_MAX_IMAGES`                | `4`                                   | Images per grading request   |
+| `PROMPTFOO_GRADING_IMAGE_MAX_BYTES`           | `20971520` (20 MiB)                   | Decoded bytes per image      |
+| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES`     | `20971520` (20 MiB)                   | Combined decoded image bytes |
+| `PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS`       | Derived from the per-image byte limit | Raw characters per image     |
+| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS` | Derived from the total byte limit     | Combined raw characters      |
+
+Grader services may impose additional limits that these settings cannot raise. Ordinary
+`llm-rubric` assertions use the configured or default grading provider. Eligible red team evals
+may use Promptfoo's remote grader, which also enforces server-side limits.
+
 ## Customizing the rubric prompt
 
 For more control over the `llm-rubric` evaluation, you can set a custom prompt using the `rubricPrompt` property:
