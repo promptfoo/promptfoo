@@ -709,8 +709,8 @@ describe('runEval', () => {
     expect(redTeamResults[0].error).toBeUndefined();
   });
 
-  describe.each(['vlsu', 'vlguard'] as const)('%s image controls', (plugin) => {
-    it.each([
+  describe.each(['vlsu', 'vlguard', 'unsafebench'] as const)('%s image controls', (plugin) => {
+    const testCases = [
       { name: 'null', response: { output: null }, metadataGrade: 'safe', shouldGrade: true },
       { name: 'omitted', response: {}, metadataGrade: 'safe', shouldGrade: true },
       {
@@ -744,6 +744,31 @@ describe('runEval', () => {
         shouldGrade: false,
       },
       { name: 'unsafe omitted', response: {}, metadataGrade: 'unsafe', shouldGrade: false },
+      {
+        name: 'unsafe null',
+        response: { output: null },
+        metadataGrade: 'unsafe',
+        shouldGrade: false,
+      },
+      {
+        name: 'unsafe empty images',
+        response: { output: null, images: [] },
+        metadataGrade: 'unsafe',
+        shouldGrade: false,
+      },
+      {
+        name: 'unsafe empty image descriptor with companion',
+        response: { output: null, images: [{}] },
+        metadataGrade: 'unsafe',
+        companion: true,
+        shouldGrade: false,
+      },
+      {
+        name: 'unsafe empty image data',
+        response: { images: [{ data: '' }] },
+        metadataGrade: 'unsafe',
+        shouldGrade: false,
+      },
       {
         name: 'dynamic safe file override',
         response: {},
@@ -823,7 +848,44 @@ describe('runEval', () => {
         metadataGrade: 'unsafe',
         shouldGrade: true,
       },
-    ])(
+      {
+        name: 'unsafe null image-only',
+        response: { output: null, images: [{ data: 'aW1hZ2U=', format: 'png' }] },
+        metadataGrade: 'unsafe',
+        shouldGrade: true,
+      },
+      {
+        name: 'nested unsafe image-only',
+        response: { images: [{ data: 'aW1hZ2U=', format: 'png' }] },
+        metadataGrade: 'unsafe',
+        nested: true,
+        shouldGrade: true,
+      },
+      {
+        name: 'unsafe image blob reference',
+        response: {
+          images: [
+            {
+              blobRef: {
+                uri: 'promptfoo://blob/fixture',
+                hash: 'fixture',
+                mimeType: 'image/png',
+                sizeBytes: 1,
+                provider: 'local',
+              },
+            },
+          ],
+        },
+        metadataGrade: 'unsafe',
+        shouldGrade: true,
+      },
+    ];
+    it.each(
+      testCases.filter(
+        ({ metadataGrade, value }) =>
+          plugin !== 'unsafebench' || (metadataGrade === 'unsafe' && value === undefined),
+      ),
+    )(
       'grades $name output through the existing refusal controls',
       async ({
         response,
@@ -886,6 +948,7 @@ describe('runEval', () => {
               vlsuSeverityPattern: 'safe_safe_safe',
               isCompositional: false,
               categoryGuidance: 'Describe the visible shape.',
+              ...(plugin === 'unsafebench' ? { category: 'Violence' } : {}),
             },
             vars: {
               prompt: 'Describe this sunset',

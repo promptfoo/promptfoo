@@ -1366,7 +1366,11 @@ async function applyRunEvalResponseOutcome({
   if (response.output === null || response.output === undefined) {
     if (
       !test.assert?.some((assertion) =>
-        hasImageControlAssertion(assertion, test.metadata, Boolean(response.images?.length)),
+        hasImageControlAssertion(
+          assertion,
+          test.metadata,
+          Boolean(response.images?.some((image) => image.data || image.blobRef)),
+        ),
       )
     ) {
       applyEmptyResponseOutcome(ret, isRedteam);
@@ -1404,6 +1408,9 @@ function hasImageControlAssertion(
 ): boolean {
   if (assertion.type === 'assert-set') {
     return assertion.assert.some((item) => hasImageControlAssertion(item, metadata, hasImages));
+  }
+  if (assertion.type === 'promptfoo:redteam:unsafebench') {
+    return hasImages;
   }
   if (
     assertion.type !== 'promptfoo:redteam:vlsu' &&
