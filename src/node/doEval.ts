@@ -295,6 +295,10 @@ async function doEvalWithEnv(
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
 
+  if (cmdObj.safeMode) {
+    cliState.safeMode = true;
+  }
+
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
