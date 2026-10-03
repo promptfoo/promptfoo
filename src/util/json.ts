@@ -212,6 +212,26 @@ export function convertSlashCommentsToHash(str: string): string {
     .join('\n');
 }
 
+// Mirrors what `convertSlashCommentsToHash` and the YAML parser treat as a
+// line comment: `//` outside a URL scheme, or `#` preceded by whitespace.
+function startsComment(str: string, index: number): boolean {
+  const ch = str[index];
+  if (ch === '#') {
+    return index === 0 || /\s/.test(str[index - 1]);
+  }
+  if (ch !== '/' || str[index + 1] !== '/') {
+    return false;
+  }
+  let tokenStart = 0;
+  for (let k = index - 1; k >= 0; k--) {
+    if (/\s/.test(str[k])) {
+      tokenStart = k + 1;
+      break;
+    }
+  }
+  return !str.slice(tokenStart, index + 2).includes('://');
+}
+
 export function extractJsonObjects(str: string): object[] {
   const jsonObjects: object[] = [];
   const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
@@ -221,14 +241,62 @@ export function extractJsonObjects(str: string): object[] {
       let openBraces = 1;
       let closeBraces = 0;
       let j = i + 1;
+      let inString = false;
+      let inSingleQuoted = false;
+      let inComment = false;
+      let escaped = false;
+      // A quote only opens a scalar at a key/value boundary (also right after
+      // `[`, so a string that's the first array element is tracked); a YAML
+      // plain scalar can contain a bare `"` or `'` mid-value (e.g. `mentions
+      // "admin`, `don't`) that must not be mistaken for the start of a string,
+      // or the real closing `}` gets swallowed as string content and never counted.
+      let atValueStart = true;
 
       // Track braces as we go to detect potential JSON objects
       while (j < Math.min(i + maxJsonLength, str.length) && openBraces > closeBraces) {
-        if (str[j] === '{') {
-          openBraces++;
-        }
-        if (str[j] === '}') {
-          closeBraces++;
+        const ch = str[j];
+        // Ignore braces inside string literals and comments so a `}` there
+        // doesn't prematurely balance the object (e.g. `{"a": "}"}`), and a
+        // quote there doesn't open a string that swallows the real `}`.
+        if (inComment) {
+          inComment = ch !== '\n';
+        } else if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (ch === '\\') {
+            escaped = true;
+          } else if (ch === '"') {
+            inString = false;
+            atValueStart = false;
+          }
+        } else if (inSingleQuoted) {
+          // YAML escapes a quote inside a single-quoted scalar by doubling it.
+          if (ch === "'" && str[j + 1] === "'") {
+            j++;
+          } else if (ch === "'") {
+            inSingleQuoted = false;
+            atValueStart = false;
+          }
+        } else if (ch === '"' && atValueStart) {
+          inString = true;
+        } else if (ch === "'" && atValueStart) {
+          inSingleQuoted = true;
+        } else if (startsComment(str, j)) {
+          inComment = true;
+        } else if (ch === '{' || ch === '[') {
+          if (ch === '{') {
+            openBraces++;
+          }
+          atValueStart = true;
+        } else if (ch === '}' || ch === ']') {
+          if (ch === '}') {
+            closeBraces++;
+          }
+          atValueStart = false;
+        } else if (ch === ':' || ch === ',') {
+          atValueStart = true;
+        } else if (!/\s/.test(ch)) {
+          atValueStart = false;
         }
         j++;
 
