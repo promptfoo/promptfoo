@@ -145,7 +145,9 @@ providers:
 ### OAuth 2.0
 
 OAuth supports the client credentials and password grants. If `tokenUrl` is omitted, promptfoo tries
-OAuth authorization-server metadata discovery from the A2A server URL.
+OAuth authorization-server metadata discovery from the A2A server URL. A discovered token endpoint
+must share that URL's origin, and redirects are rejected; set `tokenUrl` for an identity provider
+on another origin.
 
 ```yaml
 providers:
