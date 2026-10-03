@@ -243,12 +243,14 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 export class GoogleLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
+  protected readonly env?: ProviderOptions['env'];
   protected readonly isVertex: boolean = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(modelName: string, options: ProviderOptions) {
     this.modelName = modelName;
     this.config = options.config || {};
+    this.env = options.env;
   }
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
@@ -307,7 +309,7 @@ export class GoogleLiveProvider implements ApiProvider {
    */
   private async getAccessToken(config: CompletionOptions): Promise<string | undefined> {
     const credentials = loadCredentials(config.credentials);
-    return getGoogleAccessToken(credentials);
+    return getGoogleAccessToken(credentials, this.env);
   }
 
   protected async getConnection(config: CompletionOptions): Promise<{

@@ -3,7 +3,14 @@ import { Readable } from 'node:stream';
 
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  getAwsCredentialProviderOptions,
+  getScopedAwsCredentialConfig,
+  resolveAwsCredentials,
+} from '../awsCredentials';
+import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
+import { getScopedBedrockTokenOptions } from './util';
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
@@ -110,12 +117,23 @@ const DEFAULT_CONFIG = {
 export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private sessions = new Map<string, SessionState>();
   private bedrockClient?: BedrockRuntimeClient;
+  private readonly getClientState = createEnvironmentScopedState(
+    () => ({
+      client: undefined as BedrockRuntimeClient | undefined,
+      initialization: undefined as Promise<BedrockRuntimeClient> | undefined,
+    }),
+    async (state) => {
+      // A construction already in flight still belongs to this invocation.
+      await state.initialization?.catch(() => undefined);
+      state.client?.destroy();
+    },
+  );
   private readonly inferenceConfiguration: typeof DEFAULT_CONFIG.inference;
   config: BedrockAmazonNovaSonicGenerationOptions;
 
   constructor(modelName: string = 'amazon.nova-sonic-v1:0', options: ProviderOptions = {}) {
     super(modelName, options);
-    this.config = options.config;
+    this.config = options.config ?? {};
     const inference: BedrockAmazonNovaSonicGenerationOptions['interfaceConfig'] =
       this.config?.inferenceConfiguration ??
       this.config?.inferenceConfig ??
@@ -132,33 +150,50 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     if (this.bedrockClient) {
       return this.bedrockClient;
     }
-
-    // Use configurable timeouts (defaults: session=300000ms, request=300000ms)
-    const sessionTimeout = this.config?.sessionTimeout ?? 300000;
-    const requestTimeout = this.config?.requestTimeout ?? 300000;
-
-    try {
-      const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
-      const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
-
-      this.bedrockClient = new BedrockRuntimeClient({
-        region: this.getRegion(),
-        requestHandler: new NodeHttp2Handler({
-          requestTimeout,
-          sessionTimeout,
-          disableConcurrentStreams: false,
-          maxConcurrentStreams: 20,
-        }),
-      });
-
-      return this.bedrockClient;
-    } catch (err) {
-      const categorized = categorizeError(err);
-      logger.error(`Error loading AWS SDK packages: ${categorized.message}`, { error: err });
-      throw new Error(
-        'The @aws-sdk/client-bedrock-runtime and @smithy/node-http-handler packages are required for Nova Sonic provider. Please install them: npm install @aws-sdk/client-bedrock-runtime @smithy/node-http-handler',
-      );
+    const state = this.getClientState();
+    if (state.client) {
+      return state.client;
     }
+    return (state.initialization ??= (async () => {
+      // Use configurable timeouts (defaults: session=300000ms, request=300000ms)
+      const sessionTimeout = this.config?.sessionTimeout ?? 300000;
+      const requestTimeout = this.config?.requestTimeout ?? 300000;
+
+      // Sonic historically used SDK discovery, ignoring configured key/profile
+      // and provider-only bearer fields. Its bidirectional command requires IAM
+      // credentials; do not introduce the generic provider's bearer selection.
+      const credentials = await resolveAwsCredentials({}, this.env);
+      const profile = getScopedAwsCredentialConfig({}, this.env)?.profile;
+      try {
+        const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
+        const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
+
+        state.client = new BedrockRuntimeClient({
+          region: this.getRegion(),
+          ...getScopedBedrockTokenOptions(),
+          ...getAwsCredentialProviderOptions(this.env),
+          ...(credentials ? { credentials } : {}),
+          ...(profile === undefined ? {} : { profile }),
+          requestHandler: new NodeHttp2Handler({
+            requestTimeout,
+            sessionTimeout,
+            disableConcurrentStreams: false,
+            maxConcurrentStreams: 20,
+          }),
+        });
+
+        return state.client;
+      } catch (err) {
+        const categorized = categorizeError(err);
+        logger.error(`Error loading AWS SDK packages: ${categorized.message}`, { error: err });
+        throw new Error(
+          'The @aws-sdk/client-bedrock-runtime and @smithy/node-http-handler packages are required for Nova Sonic provider. Please install them: npm install @aws-sdk/client-bedrock-runtime @smithy/node-http-handler',
+        );
+      }
+    })().catch((error) => {
+      state.initialization = undefined;
+      throw error;
+    }));
   }
 
   private createSession(sessionId: string = crypto.randomUUID()): SessionState {

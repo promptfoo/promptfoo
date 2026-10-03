@@ -496,6 +496,19 @@ export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides
   }
 }
 
+/** Merge scoped defaults without letting an unset higher-priority value clear them. */
+export function getMergedEnvOverrides(env?: EnvOverrides): EnvOverrides {
+  const merged: EnvOverrides = {};
+  for (const layer of [getEnvOverrides('file'), getEnvOverrides(), env]) {
+    for (const [key, value] of Object.entries(layer ?? {})) {
+      if (value !== undefined) {
+        merged[key] = value;
+      }
+    }
+  }
+  return merged;
+}
+
 /** Environment inherited by child processes, including invocation-local file values. */
 export function getProcessEnv(): NodeJS.ProcessEnv {
   const fileEnv = getEnvOverrides('file');

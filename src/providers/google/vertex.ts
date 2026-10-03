@@ -2,7 +2,7 @@ import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
-import { getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -26,6 +26,7 @@ import {
   parseMessages,
   resolveClaudeSamplingParams,
 } from '../anthropic/util';
+import { getCredentialCacheNamespace } from '../credentialCache';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
@@ -149,9 +150,17 @@ function getVertexApiHost(
   );
 }
 
-function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): string {
+function getVertexBodyCacheKey(
+  prefix: string,
+  body: unknown,
+  apiHost: string,
+  cacheNamespace?: string,
+): string {
   const serialized = typeof body === 'string' ? body : JSON.stringify(body);
-  return `${prefix}:${createHmac('sha256', 'promptfoo:vertex:cache-key:v1')
+  return `${cacheNamespace ? `${cacheNamespace}:` : ''}${prefix}:${createHmac(
+    'sha256',
+    'promptfoo:vertex:cache-key:v1',
+  )
     .update(apiHost)
     .update('\0')
     .update(serialized)
@@ -165,6 +174,31 @@ function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): 
  * authentication management, and resource cleanup.
  */
 export class VertexChatProvider extends GoogleGenericProvider {
+  private getResponseCacheNamespace(): string | undefined {
+    if (
+      this.config.credentials ||
+      this.config.keyFilename ||
+      this.config.googleAuthOptions?.credentials ||
+      this.config.googleAuthOptions?.authClient ||
+      this.config.googleAuthOptions?.keyFilename ||
+      this.config.googleAuthOptions?.keyFile ||
+      this.config.googleAuthOptions?.apiKey ||
+      this.config.googleAuthOptions?.clientOptions?.apiKey
+    ) {
+      return undefined;
+    }
+    const adc =
+      this.env?.GOOGLE_APPLICATION_CREDENTIALS ??
+      getEnvOverrides()?.GOOGLE_APPLICATION_CREDENTIALS ??
+      getEnvOverrides('file')?.GOOGLE_APPLICATION_CREDENTIALS;
+    return adc === undefined
+      ? undefined
+      : getCredentialCacheNamespace(
+          [adc, this.env?.GOOGLE_CLOUD_QUOTA_PROJECT ?? getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT')],
+          [adc],
+        );
+  }
+
   constructor(modelName: string, options: GoogleProviderOptions = {}) {
     // Force vertex mode for Vertex AI provider
     super(modelName, {
@@ -244,6 +278,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
   async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
     const { client } = await getGoogleClient({
+      env: this.env,
+      projectId: this.config.projectId,
       credentials,
       googleAuthOptions: this.config.googleAuthOptions,
       scopes: this.config.scopes,
@@ -413,6 +449,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       `vertex:claude:${this.modelName}:showThinking=${showThinking}`,
       body,
       apiHost,
+      this.getResponseCacheNamespace(),
     );
 
     let cachedResponse;
@@ -672,7 +709,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     const cache = await getCache();
     const apiHost = this.getApiHost();
-    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost);
+    const cacheKey = getVertexBodyCacheKey(
+      `vertex:${this.modelName}`,
+      body,
+      apiHost,
+      this.getResponseCacheNamespace(),
+    );
 
     let response;
     let cachedResponse;
@@ -991,7 +1033,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     const cache = await getCache();
     const apiHost = this.getApiHost();
-    const cacheKey = getVertexBodyCacheKey(`vertex:palm2:${this.modelName}`, body, apiHost);
+    const cacheKey = getVertexBodyCacheKey(
+      `vertex:palm2:${this.modelName}`,
+      body,
+      apiHost,
+      this.getResponseCacheNamespace(),
+    );
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -1122,7 +1169,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     const cache = await getCache();
     const apiHost = this.getApiHost();
-    const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body, apiHost);
+    const cacheKey = getVertexBodyCacheKey(
+      `vertex:llama:${this.modelName}`,
+      body,
+      apiHost,
+      this.getResponseCacheNamespace(),
+    );
     logger.debug('Preparing to call Llama API', {
       model: this.modelName,
       region: this.getRegion(),
@@ -1271,6 +1323,8 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
     const { client } = await getGoogleClient({
+      env: this.env,
+      projectId: this.config.projectId,
       credentials,
       googleAuthOptions: this.config.googleAuthOptions,
       scopes: this.config.scopes,

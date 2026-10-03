@@ -219,6 +219,9 @@
         "AZURE_API_BASE_URL": {
           "type": "string"
         },
+        "AZURE_AI_PROJECT_URL": {
+          "type": "string"
+        },
         "AZURE_API_HOST": {
           "type": "string"
         },
@@ -226,6 +229,9 @@
           "type": "string"
         },
         "AZURE_AUTHORITY_HOST": {
+          "type": "string"
+        },
+        "AZURE_STORAGE_CONNECTION_STRING": {
           "type": "string"
         },
         "AZURE_CLIENT_ID": {
@@ -349,6 +355,12 @@
           "type": "string"
         },
         "GOOGLE_API_KEY": {
+          "type": "string"
+        },
+        "GOOGLE_APPLICATION_CREDENTIALS": {
+          "type": "string"
+        },
+        "GOOGLE_CLOUD_QUOTA_PROJECT": {
           "type": "string"
         },
         "GOOGLE_CLOUD_PROJECT": {
@@ -634,6 +646,39 @@
           "type": "string"
         },
         "AZURE_CONTENT_SAFETY_API_VERSION": {
+          "type": "string"
+        },
+        "AWS_SHARED_CREDENTIALS_FILE": {
+          "type": "string"
+        },
+        "AWS_CONFIG_FILE": {
+          "type": "string"
+        },
+        "AWS_WEB_IDENTITY_TOKEN_FILE": {
+          "type": "string"
+        },
+        "AWS_ROLE_ARN": {
+          "type": "string"
+        },
+        "AWS_ROLE_SESSION_NAME": {
+          "type": "string"
+        },
+        "AZURE_CLIENT_CERTIFICATE_PATH": {
+          "type": "string"
+        },
+        "AZURE_CLIENT_CERTIFICATE_PASSWORD": {
+          "type": "string"
+        },
+        "AZURE_CLIENT_SEND_CERTIFICATE_CHAIN": {
+          "type": "string"
+        },
+        "AZURE_FEDERATED_TOKEN_FILE": {
+          "type": "string"
+        },
+        "AZURE_USERNAME": {
+          "type": "string"
+        },
+        "AZURE_PASSWORD": {
           "type": "string"
         },
         "AWS_REGION": {

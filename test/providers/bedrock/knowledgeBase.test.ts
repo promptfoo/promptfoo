@@ -971,7 +971,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         secretAccessKey: 'test-secret-key',
         sessionToken: undefined,
       },
-      requestHandler: expect.any(Object), // Still has handler for API key scenario
+      requestHandler: expect.any(Object), // Preserve its HTTP/1.1 transport without injecting a bearer.
     });
   });
 });

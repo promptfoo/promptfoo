@@ -10,6 +10,14 @@ import { createHmac } from 'crypto';
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import {
+  getAwsCredentialCacheNamespace,
+  getAwsCredentialProviderOptions,
+  getScopedAwsCredentialConfig,
+  resolveAwsCredentials,
+} from '../awsCredentials';
+import { getOpaqueCredentialCacheNamespace } from '../credentialCache';
+import { createEnvironmentScopedState } from '../scopedState';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
@@ -98,23 +106,64 @@ export function createBedrockCacheKeyHash({
   config,
   params,
   region,
+  cacheNamespace,
 }: {
   config: BedrockOptions;
   params: unknown;
   region: string;
+  cacheNamespace?: string;
 }) {
   const authFingerprint = hashBedrockCacheValue(createBedrockAuthCacheMetadata({ config }));
 
-  return `${authFingerprint}:${hashBedrockCacheValue({
+  return `${cacheNamespace ? `${cacheNamespace}:` : ''}${authFingerprint}:${hashBedrockCacheValue({
     params,
     region,
   })}`;
 }
 
 export abstract class AwsBedrockGenericProvider {
+  private readonly getSdkState = createEnvironmentScopedState(
+    () => ({
+      cacheNamespace: this.selectResponseCacheNamespace(),
+      client: undefined as BedrockRuntime | undefined,
+      initialization: undefined as Promise<BedrockRuntime> | undefined,
+    }),
+    async (state) => {
+      // A construction already in flight still belongs to this invocation.
+      await state.initialization?.catch(() => undefined);
+      state.client?.destroy();
+    },
+  );
+  protected get responseCacheNamespace(): string | undefined {
+    return this.getSdkState().cacheNamespace;
+  }
+
+  protected selectResponseCacheNamespace(): string | undefined {
+    if (this.config.accessKeyId && this.config.secretAccessKey) {
+      return undefined;
+    }
+    const bearer = this.getApiKey();
+    if (bearer) {
+      // Keep the existing main fingerprint for config/file/ambient bearer tokens.
+      // A provider-only bearer is new here and lacks a safe public identity.
+      return bearer === (this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK'))
+        ? undefined
+        : getOpaqueCredentialCacheNamespace(bearer);
+    }
+    return getAwsCredentialCacheNamespace(this.config, this.env);
+  }
   modelName: string;
   env?: EnvOverrides;
-  bedrock?: BedrockRuntime;
+  private injectedBedrock?: BedrockRuntime;
+  get bedrock(): BedrockRuntime | undefined {
+    return this.injectedBedrock ?? this.getSdkState().client;
+  }
+  set bedrock(client: BedrockRuntime | undefined) {
+    this.injectedBedrock = client || undefined;
+    if (!client) {
+      this.getSdkState.reset();
+    }
+  }
   config: BedrockOptions;
 
   constructor(
@@ -148,76 +197,111 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   protected getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
+    return (
+      this.config.apiKey ||
+      this.env?.AWS_BEARER_TOKEN_BEDROCK ||
+      getEnvString('AWS_BEARER_TOKEN_BEDROCK')
+    );
+  }
+
+  protected getProfile(): string | undefined {
+    return getScopedAwsCredentialConfig(this.config, this.env)?.profile;
   }
 
   async getCredentials(): Promise<
     AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
   > {
-    // 1. Explicit credentials have ABSOLUTE highest priority (as documented)
     if (this.config.accessKeyId && this.config.secretAccessKey) {
-      logger.debug(`Using credentials from config file`);
-      return {
-        accessKeyId: this.config.accessKeyId,
-        secretAccessKey: this.config.secretAccessKey,
-        sessionToken: this.config.sessionToken,
-      };
+      return resolveAwsCredentials(this.config, this.env);
     }
-
-    // 2. API key authentication as second priority
-    const apiKey = this.getApiKey();
-    if (apiKey) {
-      logger.debug(`Using Bedrock API key authentication`);
-      // For Bedrock API keys, we don't need traditional AWS credentials
-      // The API key will be handled in the request headers
+    if (this.getApiKey()) {
       return undefined;
     }
+    return resolveAwsCredentials(this.config, this.env);
+  }
 
-    // 3. SSO profile as third priority
-    if (this.config.profile) {
-      logger.debug(`Using SSO profile: ${this.config.profile}`);
-      try {
-        const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
-        return fromSSO({ profile: this.config.profile });
-      } catch (err) {
-        logger.error(`Error loading @aws-sdk/credential-provider-sso: ${err}`);
-        throw new Error(
-          'The @aws-sdk/credential-provider-sso package is required for SSO profiles. Please install it: npm install @aws-sdk/credential-provider-sso',
-        );
-      }
-    }
+  protected getIamCredentialConfig() {
+    // These SDK paths historically ignored provider-only bearer tokens. A
+    // configured/environment bearer bypassed only the explicit SSO profile;
+    // these clients still discovered IAM credentials independently.
+    return !(this.config.accessKeyId && this.config.secretAccessKey) &&
+      (this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK'))
+      ? { ...this.config, profile: undefined }
+      : this.config;
+  }
 
-    // 4. AWS default credential chain (lowest priority)
-    logger.debug(`No explicit credentials in config, falling back to AWS default chain`);
-    return undefined;
+  /** Keep released IAM discovery for agent-runtime and async media/S3 clients. */
+  protected async getIamCredentialOptions() {
+    const config = this.getIamCredentialConfig();
+    const credentials = await resolveAwsCredentials(config, this.env);
+    const profile = getScopedAwsCredentialConfig(config, this.env)?.profile;
+    return {
+      ...getAwsCredentialProviderOptions(this.env),
+      ...(credentials ? { credentials } : {}),
+      ...(profile === undefined ? {} : { profile }),
+    };
+  }
+
+  protected async getBedrockAuthOptions() {
+    const credentials = await this.getCredentials();
+    const profile = this.getProfile();
+    const apiKey = this.getApiKey();
+    return {
+      ...getAwsCredentialProviderOptions(this.env),
+      ...(credentials ? { credentials } : {}),
+      ...(profile === undefined ? {} : { profile }),
+      // Explicitly represent an invocation's cleared bearer token so SDK
+      // discovery cannot restore the host token. Existing SigV4 paths still win.
+      ...(!credentials &&
+      !apiKey &&
+      getEnvString('AWS_BEARER_TOKEN_BEDROCK') === '' &&
+      process.env.AWS_BEARER_TOKEN_BEDROCK
+        ? { token: { token: '' } }
+        : {}),
+      ...(credentials
+        ? { authSchemePreference: ['sigv4'] }
+        : apiKey
+          ? { token: { token: apiKey }, authSchemePreference: ['httpBearerAuth'] }
+          : credentials || profile
+            ? { authSchemePreference: ['sigv4'] }
+            : {}),
+    };
   }
 
   async getBedrockInstance() {
-    if (!this.bedrock) {
-      const handler = await createBedrockRequestHandler({ apiKey: this.getApiKey() });
+    if (this.bedrock) {
+      return this.bedrock;
+    }
+    const state = this.getSdkState();
+    return (state.initialization ??= (async () => {
+      const authOptions = await this.getBedrockAuthOptions();
+      const handler = await createBedrockRequestHandler({
+        apiKey: 'token' in authOptions ? authOptions.token?.token : undefined,
+      });
 
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
-        const credentials = await this.getCredentials();
-
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           requestHandler: handler,
-          ...(credentials ? { credentials } : {}),
+          ...authOptions,
           ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
         });
 
-        this.bedrock = bedrock;
+        state.client = bedrock;
+        return bedrock;
       } catch (err) {
         logger.error(`Error creating BedrockRuntime: ${err}`);
         throw new Error(
           'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',
         );
       }
-    }
-    return this.bedrock;
+    })().catch((error) => {
+      state.initialization = undefined;
+      throw error;
+    }));
   }
 
   getRegion(): string {

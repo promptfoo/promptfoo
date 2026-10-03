@@ -215,6 +215,7 @@ describe('AwsBedrockGenericProvider', () => {
       retryMode: 'adaptive',
       maxAttempts: 10,
       requestHandler,
+      authSchemePreference: ['sigv4'],
       credentials: {
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
@@ -290,6 +291,8 @@ describe('AwsBedrockGenericProvider', () => {
       retryMode: 'adaptive',
       maxAttempts: 10,
       requestHandler,
+      token: { token: 'test-api-key' },
+      authSchemePreference: ['httpBearerAuth'],
     });
   });
 
@@ -317,6 +320,8 @@ describe('AwsBedrockGenericProvider', () => {
       retryMode: 'adaptive',
       maxAttempts: 10,
       requestHandler,
+      token: { token: 'test-env-api-key' },
+      authSchemePreference: ['httpBearerAuth'],
     });
 
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
