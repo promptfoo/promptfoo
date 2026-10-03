@@ -134,9 +134,23 @@ currently uses them:
 npm run deps:ownership
 ```
 
-The report is intentionally descriptive for now. It gives us the evidence needed
-to move dependencies into future packages without guessing at ownership.
-
 It includes direct, optional, and peer dependency declarations. Peers marked
 optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
 as `peer`. These labels describe the package contract, not what is installed.
+
+The report also checks each workspace and the standalone code-scan action against
+its own manifest. It records source, build, test, and type references, including
+any declarations already emitted into `dist`. Run a build first when auditing
+those generated declarations.
+
+```bash
+npm run deps:ownership -- --json
+npm run deps:ownership -- --check
+```
+
+`--json` includes file and line references, scan coverage, and annotations from
+`architecture/dependency-ownership.json`. `--check` fails on undeclared imports,
+root runtime imports declared only for development, or packages without an
+assigned owner. Invalid annotations fail either mode. Keep annotations tied to
+specific files that explain computed imports, build-only usage, or installed
+assets; an unreferenced declaration alone is not evidence that it can be removed.
