@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mock for execFileAsync - must be hoisted for vi.mock factory
 const { mockExecFileAsync, mockExecFile } = vi.hoisted(() => {
@@ -96,6 +96,10 @@ vi.mock('python-shell', () => ({
 }));
 
 describe('Python Utils', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.useRealTimers();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();
@@ -208,7 +212,10 @@ describe('Python Utils', () => {
       expect(result).toBe('C:\\Python39\\python.exe');
       expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
       // Verify that the non-WindowsApps path was validated
-      expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -263,7 +270,10 @@ describe('Python Utils', () => {
       expect(result).toBe('python');
       expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
       // Verify the final fallback python --version was called
-      expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -335,7 +345,10 @@ describe('Python Utils', () => {
         const result = await pythonUtils.tryPath('/usr/bin/python3');
 
         expect(result).toBe('/usr/bin/python3');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
     });
 
@@ -346,23 +359,22 @@ describe('Python Utils', () => {
         const result = await pythonUtils.tryPath('/usr/bin/nonexistent');
 
         expect(result).toBeNull();
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/nonexistent', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/nonexistent', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
 
-      it('should return null if the command times out', async () => {
-        vi.useFakeTimers();
+      it('should return null when the native subprocess timeout terminates the command', async () => {
+        mockExecFileAsync.mockRejectedValue(
+          Object.assign(new Error('Command failed'), { killed: true }),
+        );
 
-        // Mock execFileAsync to return a promise that never resolves (simulating timeout)
-        mockExecFileAsync.mockImplementation(() => new Promise(() => {}));
-
-        const resultPromise = pythonUtils.tryPath('/usr/bin/python3');
-        await vi.advanceTimersByTimeAsync(2501);
-
-        const result = await resultPromise;
-
-        expect(result).toBeNull();
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version']);
-        vi.useRealTimers();
+        expect(await pythonUtils.tryPath('/usr/bin/python3')).toBeNull();
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
     });
   });
@@ -376,7 +388,10 @@ describe('Python Utils', () => {
 
         expect(result).toBe('python');
         expect(pythonUtils.state.cachedPythonPath).toBe('python');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
 
       it('should return the cached path on subsequent calls', async () => {
@@ -422,7 +437,10 @@ describe('Python Utils', () => {
         await expect(pythonUtils.validatePythonPath('non_existent_program', true)).rejects.toThrow(
           'Python 3 not found. Tried "non_existent_program"',
         );
-        expect(mockExecFileAsync).toHaveBeenCalledWith('non_existent_program', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('non_existent_program', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
 
       it('should throw an error when no valid Python path is found', async () => {
@@ -444,7 +462,10 @@ describe('Python Utils', () => {
         const result = await pythonUtils.validatePythonPath('/custom/python/path', true);
 
         expect(result).toBe('/custom/python/path');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/python/path', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/python/path', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
     });
 
