@@ -24,6 +24,9 @@ interface CliState {
   // Forces remote inference wherever possible
   remote?: boolean;
 
+  // Safe mode: disables dynamic inline JavaScript execution
+  safeMode?: boolean;
+
   // Indicates we're running in web UI mode
   webUI?: boolean;
 

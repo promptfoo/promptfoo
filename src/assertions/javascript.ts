@@ -1,6 +1,7 @@
 import { type GradingResult, isGradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
+import { isSafeMode, SafeModeError } from '../util/safeMode';
 import { normalizeScriptAssertionResult } from './scriptResultNormalization';
 
 import type { AssertionParams } from '../types/index';
@@ -213,6 +214,11 @@ export const handleJavascript = async ({
 
     let result: boolean | number | GradingResult;
     if (typeof valueFromScript === 'undefined') {
+      if (isSafeMode()) {
+        throw new SafeModeError(
+          'Inline JavaScript execution is disabled in safe mode. Please use a file reference instead (e.g. "file://path/to/assertion.js").',
+        );
+      }
       // Multiline assertions use the value as-is (user controls returns)
       // Single-line assertions get processed to handle variable declarations
       const functionBody = renderedValue.includes('\n')
@@ -235,6 +241,14 @@ export const handleJavascript = async ({
 
     return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
+    if (err instanceof SafeModeError) {
+      return {
+        pass: false,
+        score: 0,
+        reason: err.message,
+        assertion: normalizeResultAssertion(undefined, assertion),
+      };
+    }
     return {
       pass: false,
       score: 0,
