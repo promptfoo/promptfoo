@@ -207,6 +207,11 @@ function isImageLikeDataUri(text: string): boolean {
     return false;
   }
 
+  const commaIndex = trimmed.indexOf(',');
+  if (commaIndex === -1 || /\s/.test(trimmed.slice(commaIndex + 1))) {
+    return false;
+  }
+
   const mimeType = trimmed.slice('data:'.length).split(/[;,]/, 1)[0]?.toLowerCase();
   return Boolean(
     mimeType && (mimeType.startsWith('image/') || mimeType === 'application/octet-stream'),
@@ -229,6 +234,32 @@ function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): stri
   }
 
   return undefined;
+}
+
+const EMBEDDED_IMAGE_SOURCE_REGEX =
+  /\b(data:(?:image\/[a-z0-9.+-]+|application\/octet-stream)(?:;[a-z0-9=.+-]+)*,[^\s"'`)<]+|promptfoo:\/\/blob\/[a-f0-9]{32,64}|storageRef:\/?[^\s)'"`<]+)/i;
+
+function getEmbeddedImageSource(text: string): { src: string; remainingText: string } | undefined {
+  if (extractMarkdownImageSources(text).length > 0) {
+    return undefined;
+  }
+
+  const match = text.match(EMBEDDED_IMAGE_SOURCE_REGEX);
+  const candidate = match?.[1];
+  if (!candidate || match.index === undefined) {
+    return undefined;
+  }
+
+  const src = resolveImageSource(candidate);
+  if (!src) {
+    return undefined;
+  }
+
+  return {
+    src,
+    remainingText:
+      `${text.slice(0, match.index)}${text.slice(match.index + candidate.length)}`.trim(),
+  };
 }
 
 function getFailAndPassReasons(output: EvaluateTableOutput): {
@@ -412,6 +443,51 @@ function renderMediaNode({
   return undefined;
 }
 
+function renderEmbeddedImageNode({
+  output,
+  text,
+  renderMarkdown,
+  markdownComponents,
+  toggleLightbox,
+}: {
+  output: EvaluateTableOutput;
+  text: string;
+  renderMarkdown: boolean;
+  markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
+  toggleLightbox: (url?: string) => void;
+}): React.ReactNode | undefined {
+  const embeddedImage = getEmbeddedImageSource(text);
+  if (!embeddedImage) {
+    return undefined;
+  }
+
+  return (
+    <>
+      <img
+        src={embeddedImage.src}
+        alt={output.prompt}
+        style={{ width: '100%', cursor: 'pointer' }}
+        onClick={() => toggleLightbox(embeddedImage.src)}
+      />
+      {embeddedImage.remainingText && (
+        <div style={{ marginTop: '8px' }}>
+          {renderMarkdown ? (
+            <ReactMarkdown
+              remarkPlugins={REMARK_PLUGINS}
+              urlTransform={IDENTITY_URL_TRANSFORM}
+              components={markdownComponents}
+            >
+              {embeddedImage.remainingText}
+            </ReactMarkdown>
+          ) : (
+            embeddedImage.remainingText
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 function renderMarkdownOrJsonNode({
   text,
   normalizedText,
@@ -576,6 +652,16 @@ function renderOutputNode({
     if (searchText && shouldHighlightSearchText && !shouldPreserveFormattedRendering) {
       node = renderHighlightedTextNode(text, searchText) ?? node;
     }
+  }
+
+  if (!node && !showDiffs) {
+    node = renderEmbeddedImageNode({
+      output,
+      text,
+      renderMarkdown,
+      markdownComponents,
+      toggleLightbox,
+    });
   }
 
   if (!node && !showDiffs) {
