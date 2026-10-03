@@ -9,7 +9,8 @@ The `similar` assertion checks if an embedding of the LLM's output
 is semantically similar to the expected value,
 using a configurable similarity or distance metric with a threshold.
 
-By default, embeddings are computed via OpenAI's `text-embedding-3-large` model.
+The default embedding provider follows the [configured credentials](/docs/configuration/expected-outputs/model-graded/#multiple-graders).
+OpenAI's `text-embedding-3-large` takes precedence when an OpenAI API key is available.
 
 Example:
 
@@ -87,7 +88,7 @@ assert:
 
 ## Overriding the provider
 
-By default `similar` will use OpenAI. To specify the model that creates the embeddings, do one of the following:
+To keep the embedding model fixed across environments, set an explicit provider:
 
 1. Use `test.options` or `defaultTest.options` to override the provider across the entire test suite. For example:
 

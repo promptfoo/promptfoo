@@ -377,7 +377,14 @@ complete Qwen, GPT-OSS, and GLM examples.
 
 ### Multiple graders
 
-Some assertions (such as `answer-relevance`) use multiple types of providers. To override both the embedding and text providers separately, you can do something like this:
+Some assertions, such as `answer-relevance`, use both text and embedding providers.
+Promptfoo selects embeddings independently of the text grader, using configured credentials in this order:
+OpenAI, Azure with an explicit embedding deployment, Google AI Studio, Mistral, Voyage, then Google Vertex
+with Application Default Credentials. An Azure chat deployment is not used for embeddings.
+
+If no supported embedding credentials are available, embedding assertions return a configuration error.
+For providers outside this list, configure an embedding override explicitly.
+To choose providers explicitly, set separate `text` and `embedding` overrides:
 
 ```yaml
 defaultTest:
