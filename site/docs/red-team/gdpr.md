@@ -397,7 +397,7 @@ When using this preset:
 GDPR requirements align with and complement other frameworks:
 
 - **ISO 42001**: Privacy & Data Protection domain maps closely to GDPR requirements
-- **OWASP LLM Top 10**: LLM02 (Sensitive Information Disclosure) and LLM07 (System Prompt Leakage) relate to GDPR
+- **OWASP LLM Top 10**: LLM02 (Sensitive Information Disclosure) and LLM08 (Hidden Context Exposure) relate to GDPR
 - **NIST AI RMF**: Privacy considerations in the Map and Manage functions align with GDPR principles
 
 You can combine GDPR testing with these frameworks:

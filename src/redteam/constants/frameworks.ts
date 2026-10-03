@@ -17,17 +17,23 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   gdpr: 'GDPR',
 };
 
+/**
+ * OWASP Top 10 for LLM Applications (2026 edition, published August 4, 2026).
+ * Index is the risk number minus one.
+ *
+ * @see https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/
+ */
 export const OWASP_LLM_TOP_10_NAMES = [
   'Prompt Injection',
   'Sensitive Information Disclosure',
+  'Excessive Agency',
   'Supply Chain',
   'Data and Model Poisoning',
-  'Improper Output Handling',
-  'Excessive Agency',
-  'System Prompt Leakage',
-  'Vector and Embedding Weaknesses',
-  'Misinformation',
   'Unbounded Consumption',
+  'Misinformation',
+  'Hidden Context Exposure',
+  'Vector and Embedding Weaknesses',
+  'Improper Output Handling',
 ];
 
 export const OWASP_API_TOP_10_NAMES = [
@@ -94,12 +100,25 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:03': {
-    // Supply Chain
+    // Excessive Agency (LLM06 in the 2025 edition)
+    plugins: [
+      'excessive-agency',
+      'rbac',
+      'bfla',
+      'bola',
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+    ],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+  },
+  'owasp:llm:04': {
+    // Supply Chain (LLM03 in the 2025 edition)
     plugins: [],
     strategies: [],
   },
-  'owasp:llm:04': {
-    // Data and Model Poisoning
+  'owasp:llm:05': {
+    // Data and Model Poisoning (LLM04 in the 2025 edition)
     plugins: [
       'harmful:misinformation-disinformation',
       'harmful:hate',
@@ -112,28 +131,27 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
-  'owasp:llm:05': {
-    // Improper Output Handling
-    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
-  },
   'owasp:llm:06': {
-    // Excessive Agency
+    // Unbounded Consumption (LLM10 in the 2025 edition)
+    plugins: ['divergent-repetition', 'reasoning-dos'],
+    strategies: [],
+  },
+  'owasp:llm:07': {
+    // Misinformation (LLM09 in the 2025 edition)
     plugins: [
-      'excessive-agency',
-      'rbac',
-      'bfla',
-      'bola',
-      'shell-injection',
-      'sql-injection',
-      'ssrf',
+      'hallucination',
+      'overreliance',
+      'harmful:misinformation-disinformation',
+      'harmful:specialized-advice',
     ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
-  'owasp:llm:07': {
-    // System Prompt Leakage
+  'owasp:llm:08': {
+    // Hidden Context Exposure (broadens LLM07 System Prompt Leakage from the 2025 edition
+    // to cover tool/function schemas and other assembled context)
     plugins: [
       'prompt-extraction',
+      'tool-discovery',
       'rbac',
       'harmful:privacy',
       'pii:api-db',
@@ -143,8 +161,8 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
-  'owasp:llm:08': {
-    // Vector and Embedding Weaknesses
+  'owasp:llm:09': {
+    // Vector and Embedding Weaknesses (LLM08 in the 2025 edition)
     plugins: [
       'cross-session-leak',
       'harmful:privacy',
@@ -155,20 +173,10 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
-  'owasp:llm:09': {
-    // Misinformation
-    plugins: [
-      'hallucination',
-      'overreliance',
-      'harmful:misinformation-disinformation',
-      'harmful:specialized-advice',
-    ],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
-  },
   'owasp:llm:10': {
-    // Unbounded Consumption
-    plugins: ['divergent-repetition', 'reasoning-dos'],
-    strategies: [],
+    // Improper Output Handling (LLM05 in the 2025 edition)
+    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
   },
 };
 
