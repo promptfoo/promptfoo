@@ -302,6 +302,13 @@ interface TableState {
   stats: EvaluateStats | null;
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
+  lastQuery: {
+    evalId: string;
+    options: Pick<
+      FetchEvalOptions,
+      'pageIndex' | 'pageSize' | 'filterMode' | 'searchText' | 'filters'
+    >;
+  } | null;
   isFetching: boolean;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
@@ -631,7 +638,15 @@ export const useTableStore = create<TableState>()(
 
     shouldHighlightSearchText: false,
 
+    lastQuery: null,
+
     fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
+      const { lastQuery } = get();
+      // Socket refreshes repeat the current query without resetting table controls.
+      const query =
+        options.skipLoadingState && lastQuery?.evalId === id
+          ? { ...options, ...lastQuery.options }
+          : options;
       const {
         pageIndex = 0,
         pageSize = 50,
@@ -641,7 +656,7 @@ export const useTableStore = create<TableState>()(
         skipSettingEvalId = false,
         skipLoadingState = false,
         filters = [],
-      } = options;
+      } = query;
 
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
@@ -652,6 +667,10 @@ export const useTableStore = create<TableState>()(
       }
 
       set({
+        lastQuery: {
+          evalId: id,
+          options: { pageIndex, pageSize, filterMode, searchText, filters },
+        },
         isFetching: skipLoadingState ? get().isFetching : true,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation

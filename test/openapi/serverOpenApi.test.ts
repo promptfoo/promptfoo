@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
+import { BLOB_MAX_BASE64_SIZE } from '../../src/blobs';
 import {
   createServerOpenApiDocument,
   createServerOpenApiRegistry,
@@ -81,12 +82,21 @@ describe('server OpenAPI generation', () => {
     const document = createServerOpenApiDocument();
     const paths = document.paths ?? {};
     const addEvalResultsOperation = paths['/api/eval/{id}/results']?.post as any;
+    const addEvalTracesOperation = paths['/api/eval/{id}/traces']?.post as any;
+    const uploadBlobOperation = paths['/api/blobs']?.post as any;
     const createEvalJobOperation = paths['/api/eval/job']?.post as any;
     const evalTableOperation = paths['/api/eval/{id}/table']?.get as any;
     const getMediaOperation = paths['/api/media/{type}/{filename}']?.get as any;
     const getMediaInfoOperation = paths['/api/media/info/{type}/{filename}']?.get as any;
     const getBlobOperation = paths['/api/blobs/{hash}']?.get as any;
     const listBlobLibraryOperation = paths['/api/blobs/library']?.get as any;
+    expect(getBlobOperation.parameters).toContainEqual(
+      expect.objectContaining({
+        in: 'query',
+        name: 'evalId',
+        required: true,
+      }),
+    );
     const modelAuditScanOperation = paths['/api/model-audit/scan']?.post as any;
     const shareResultOperation = paths['/api/results/share']?.post as any;
     const userEmailStatusOperation = paths['/api/user/email/status']?.get as any;
@@ -116,6 +126,46 @@ describe('server OpenAPI generation', () => {
     );
     expect(addEvalResultsOperation?.responses['204']).toEqual(
       expect.objectContaining({ description: 'Results added' }),
+    );
+    expect(addEvalTracesOperation?.responses['204']).toEqual(
+      expect.objectContaining({ description: 'Traces added' }),
+    );
+    expect(addEvalTracesOperation?.responses['409']).toEqual(
+      expect.objectContaining({ description: 'Trace ID already belongs to another evaluation' }),
+    );
+    const addTracesRequestSchema = addEvalTracesOperation?.requestBody?.content?.[
+      'application/json'
+    ]?.schema as any;
+    expect(addTracesRequestSchema?.maxItems).toBe(1_000);
+    expect(addTracesRequestSchema?.items?.properties?.spans?.maxItems).toBe(10_000);
+    expect(addTracesRequestSchema?.description).toContain('20000 spans total');
+    expect(addTracesRequestSchema?.description).toContain(
+      'serialize to at most 1000000 characters',
+    );
+    expect(addTracesRequestSchema?.items?.properties?.testCaseId?.minLength).toBeUndefined();
+    expect(
+      addTracesRequestSchema?.items?.properties?.spans?.items?.properties?.name?.minLength,
+    ).toBeUndefined();
+    const uploadBlobRequestSchema = uploadBlobOperation?.requestBody?.content?.['application/json']
+      ?.schema as any;
+    const uploadBlobResponseSchema = uploadBlobOperation?.responses['200']?.content?.[
+      'application/json'
+    ]?.schema as any;
+    expect(uploadBlobRequestSchema?.required).toEqual(
+      expect.arrayContaining(['data', 'mimeType', 'context']),
+    );
+    expect(uploadBlobRequestSchema?.properties?.context?.required).toContain('evalId');
+    expect(uploadBlobRequestSchema?.properties?.data?.maxLength).toBe(BLOB_MAX_BASE64_SIZE);
+    expect(
+      new RegExp(uploadBlobRequestSchema?.properties?.mimeType?.pattern).test('IMAGE/PNG'),
+    ).toBe(true);
+    expect(
+      new RegExp(uploadBlobResponseSchema?.properties?.ref?.properties?.hash?.pattern).test(
+        'A'.repeat(64),
+      ),
+    ).toBe(true);
+    expect(uploadBlobOperation?.responses['413']).toEqual(
+      expect.objectContaining({ description: 'Blob exceeds maximum size' }),
     );
     expect(
       createEvalJobOperation?.requestBody?.content?.['application/json']?.schema?.required,
@@ -157,7 +207,7 @@ describe('server OpenAPI generation', () => {
     expect(
       listBlobLibraryOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.items?.items?.properties?.hash,
-    ).toEqual(expect.objectContaining({ pattern: '^[a-f0-9]{64}$/i', type: 'string' }));
+    ).toEqual(expect.objectContaining({ pattern: '^[A-Fa-f0-9]{64}$', type: 'string' }));
   });
 
   it('emits representative inline DTO schemas', () => {
@@ -258,6 +308,8 @@ describe('server OpenAPI generation', () => {
       paths['/api/model-audit/scans/{id}']?.get,
       paths['/api/model-audit/scans/{id}']?.delete,
       paths['/api/providers/test']?.post,
+      paths['/api/eval/{id}/traces']?.post,
+      paths['/api/blobs']?.post,
       paths['/api/blobs/{hash}']?.get,
     ];
 

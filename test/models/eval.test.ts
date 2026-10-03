@@ -2,7 +2,14 @@ import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
-import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
+import {
+  blobAssetsTable,
+  blobReferencesTable,
+  evalResultsTable,
+  evalsTable,
+  spansTable,
+  tracesTable,
+} from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -983,6 +990,34 @@ describe('evaluator', () => {
       });
       expect(copiedResult.toEvaluateResult().traceId).toBeUndefined();
       expect(copiedResult.toEvaluateResult().evaluationId).toBeUndefined();
+    });
+
+    it('copies trusted blob references to the copied evaluation', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const hash = 'a'.repeat(64);
+      const db = await getDb();
+      await db.insert(blobAssetsTable).values({
+        hash,
+        mimeType: 'image/png',
+        sizeBytes: 1,
+        provider: 'filesystem',
+      });
+      await db.insert(blobReferencesTable).values({
+        id: crypto.randomUUID(),
+        blobHash: hash,
+        evalId: eval_.id,
+        location: 'response',
+        kind: 'image',
+      });
+
+      const copy = await eval_.copy();
+      const copiedRef = await db
+        .select()
+        .from(blobReferencesTable)
+        .where(eq(blobReferencesTable.evalId, copy.id))
+        .get();
+
+      expect(copiedRef).toMatchObject({ blobHash: hash, evalId: copy.id, kind: 'image' });
     });
   });
 

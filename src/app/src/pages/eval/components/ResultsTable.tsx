@@ -17,7 +17,14 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
-import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
+import {
+  getMediaRefreshKey,
+  markMediaLoadFailed,
+  markMediaLoadSucceeded,
+  normalizeMediaText,
+  resolveAudioSource,
+  resolveImageSource,
+} from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   getIncurredTokenAccounting,
@@ -67,7 +74,7 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
-import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
+import { isBlobRef, isStorageRef } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
@@ -81,63 +88,34 @@ const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
 
-/**
- * Renders an audio player for evaluation outputs that may be stored in different representations.
- *
- * This component accepts either:
- * - A storage/blob reference, which is resolved asynchronously, or
- * - Inline base64/data URL audio content, which is used immediately.
- *
- * @param data Audio payload or reference. Supported inputs:
- *   - storage ref/blob ref string understood by `isStorageRef` / `isBlobRef`
- *   - data URL (`data:audio/...`)
- *   - raw base64 audio data
- * @param format Audio MIME subtype used when constructing inline base64 sources and the `<source>` type.
- * Defaults to `'mp3'`. Typical values include `'mp3'`, `'wav'`, `'ogg'`, and `'webm'`.
- */
-function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
-  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(isStorageRef(data) || isBlobRef(data));
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (isStorageRef(data) || isBlobRef(data)) {
-      setLoading(true);
-      resolveAudioUrl(data, format).then((url) => {
-        if (!cancelled) {
-          setAudioUrl(url);
-          setLoading(false);
-        }
-      });
-    } else {
-      // Inline base64
-      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
-      setAudioUrl(url);
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data, format]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-0.5">
-        <Spinner className="size-4" />
-        <span className="text-xs text-muted-foreground">Loading audio...</span>
-      </div>
-    );
-  }
+function StorageRefAudioPlayer({
+  data,
+  format = 'mp3',
+  evaluationId,
+}: {
+  data: string;
+  format?: string;
+  evaluationId?: string;
+}) {
+  const audioUrl = resolveAudioSource({ format }, data, evaluationId)?.src;
 
   if (!audioUrl) {
     return <span className="text-xs text-destructive">Failed to load audio</span>;
   }
 
   return (
-    <audio controls style={{ maxWidth: '100%', height: '32px' }}>
-      <source src={audioUrl} type={`audio/${format}`} />
+    <audio
+      key={`storage-audio-${getMediaRefreshKey(audioUrl)}`}
+      controls
+      style={{ maxWidth: '100%', height: '32px' }}
+      onLoadedData={(event) => markMediaLoadSucceeded(audioUrl, event.currentTarget)}
+    >
+      <source
+        src={audioUrl}
+        type={`audio/${format}`}
+        data-media-refresh-key={getMediaRefreshKey(audioUrl)}
+        onError={(event) => markMediaLoadFailed(audioUrl, event.currentTarget)}
+      />
       Your browser does not support the audio element.
     </audio>
   );
@@ -300,21 +278,18 @@ function getVariableCellValue({
   varName: string;
   injectVarName: string;
   fallbackValue: string | object;
-}): string | object {
-  let value = fallbackValue;
-
+}): { value: string | object; sourceEvalId?: string } {
   if (varName === injectVarName) {
     for (const output of row.outputs || []) {
       const actualPrompt = getActualPrompt(output?.response);
       if (actualPrompt) {
-        value = actualPrompt;
-        break;
+        return { value: actualPrompt, sourceEvalId: output.sourceEvalId };
       }
     }
   }
 
-  if (value && value !== '') {
-    return value;
+  if (fallbackValue && fallbackValue !== '') {
+    return { value: fallbackValue };
   }
 
   for (const output of row.outputs || []) {
@@ -322,14 +297,15 @@ function getVariableCellValue({
       | Record<string, string>
       | undefined;
     if (transformVars?.[varName]) {
-      return transformVars[varName];
+      return { value: transformVars[varName], sourceEvalId: output.sourceEvalId };
     }
   }
 
-  return value;
+  return { value: fallbackValue };
 }
 
 function renderMediaVariableCell({
+  evaluationId,
   output,
   mediaMetadata,
   value,
@@ -338,6 +314,7 @@ function renderMediaVariableCell({
   maxTextLength,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   output: EvaluateTableOutput | null;
   mediaMetadata?: { path: string; type: string; format?: string };
   value: string | object;
@@ -351,32 +328,55 @@ function renderMediaVariableCell({
   }
 
   const { type: mediaType, format = '' } = mediaMetadata;
-  const normalizedValue = normalizeMediaText(value);
+  const normalizedValue = normalizeMediaText(value, evaluationId);
   const isRefValue = isBlobRef(value) || isStorageRef(value);
   const audioSource =
     mediaType === 'audio'
-      ? resolveAudioSource(isRefValue ? { format, blobRef: value } : { data: value, format })
+      ? resolveAudioSource(
+          isRefValue ? { format, blobRef: value } : { data: value, format },
+          undefined,
+          evaluationId,
+        )
       : null;
   const imageSrc =
-    mediaType === 'image' ? resolveImageSource({ data: value, format, blobRef: value }) : undefined;
+    mediaType === 'image'
+      ? resolveImageSource({ data: value, format, blobRef: value }, evaluationId)
+      : undefined;
+  const videoSrc =
+    normalizedValue.startsWith('data:') ||
+    normalizedValue.startsWith('http') ||
+    normalizedValue.startsWith('/api/')
+      ? normalizedValue
+      : `data:${mediaType}/${format};base64,${value}`;
 
   const mediaElement =
     mediaType === 'audio' && audioSource ? (
-      <audio controls style={{ maxWidth: '100%' }}>
-        <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
+      <audio
+        key={`variable-audio-${getMediaRefreshKey(audioSource.src)}`}
+        controls
+        style={{ maxWidth: '100%' }}
+        onLoadedData={(event) => markMediaLoadSucceeded(audioSource.src, event.currentTarget)}
+      >
+        <source
+          src={audioSource.src}
+          type={audioSource.type || 'audio/mpeg'}
+          data-media-refresh-key={getMediaRefreshKey(audioSource.src)}
+          onError={(event) => markMediaLoadFailed(audioSource.src, event.currentTarget)}
+        />
         Your browser does not support the audio element.
       </audio>
     ) : mediaType === 'video' ? (
-      <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
+      <video
+        key={`variable-video-${getMediaRefreshKey(videoSrc)}`}
+        controls
+        style={{ maxWidth: '100%', maxHeight: '200px' }}
+        onLoadedData={(event) => markMediaLoadSucceeded(videoSrc, event.currentTarget)}
+      >
         <source
-          src={
-            normalizedValue.startsWith('data:') ||
-            normalizedValue.startsWith('http') ||
-            normalizedValue.startsWith('/api/')
-              ? normalizedValue
-              : `data:${mediaType}/${format};base64,${value}`
-          }
+          src={videoSrc}
           type={`video/${format || 'mp4'}`}
+          data-media-refresh-key={getMediaRefreshKey(videoSrc)}
+          onError={(event) => markMediaLoadFailed(videoSrc, event.currentTarget)}
         />
         Your browser does not support the video element.
       </video>
@@ -386,6 +386,7 @@ function renderMediaVariableCell({
         lightboxOpen,
         lightboxImage,
         maxTextLength,
+        mediaRefreshKey: getMediaRefreshKey(imageSrc),
         toggleLightbox,
         alt: 'Input image',
       })
@@ -417,6 +418,7 @@ function renderDecodedVariableCell({
   injectVarName,
   maxTextLength,
   cellContent,
+  evaluationId,
 }: {
   value: string | object;
   varName: string;
@@ -424,6 +426,7 @@ function renderDecodedVariableCell({
   injectVarName: string;
   maxTextLength: number;
   cellContent: React.ReactNode;
+  evaluationId?: string;
 }): React.ReactNode {
   const testMetadata: Record<string, unknown> = row.test?.metadata || {};
   const metadataOriginal =
@@ -458,7 +461,7 @@ function renderDecodedVariableCell({
     <div className="cell" data-capture="true">
       {isAudioContent && typeof value === 'string' ? (
         <div>
-          <StorageRefAudioPlayer data={value} />
+          <StorageRefAudioPlayer data={value} evaluationId={evaluationId} />
         </div>
       ) : isImageContent ? (
         <div>
@@ -485,6 +488,7 @@ function renderDecodedVariableCell({
 }
 
 function renderVariableCell({
+  evaluationId,
   info,
   varName,
   injectVarName,
@@ -494,6 +498,7 @@ function renderVariableCell({
   lightboxImage,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   info: CellContext<EvaluateTableRow, string>;
   varName: string;
   injectVarName: string;
@@ -504,18 +509,21 @@ function renderVariableCell({
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
   const row = info.row.original;
-  let value = getVariableCellValue({
+  const selected = getVariableCellValue({
     row,
     varName,
     injectVarName,
     fallbackValue: info.getValue(),
   });
+  let value = selected.value;
+  evaluationId = selected.sourceEvalId || evaluationId;
 
   const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
   const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
     | Record<string, { path: string; type: string; format?: string }>
     | undefined;
   const mediaCell = renderMediaVariableCell({
+    evaluationId,
     output,
     mediaMetadata: fileMetadata?.[varName],
     value,
@@ -537,7 +545,10 @@ function renderVariableCell({
   }
 
   const cellContent = renderMarkdown ? (
-    <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
+    <VariableMarkdownCell
+      value={normalizeMediaText(value, evaluationId)}
+      maxTextLength={maxTextLength}
+    />
   ) : (
     <TruncatedText text={value} maxLength={maxTextLength} />
   );
@@ -549,6 +560,7 @@ function renderVariableCell({
     injectVarName,
     maxTextLength,
     cellContent,
+    evaluationId,
   });
 }
 
@@ -1324,12 +1336,14 @@ function hasFileMetadataForColumn({
 }
 
 function getImageSourceForCell({
+  evaluationId,
   columnId,
   value,
   row,
   headVars,
   injectVarName,
 }: {
+  evaluationId?: string;
   columnId: string;
   value: unknown;
   row: Row<EvaluateTableRow>;
@@ -1341,16 +1355,22 @@ function getImageSourceForCell({
   }
 
   const varName = getVariableNameForColumn(columnId, headVars);
-  const imageValue = varName
+  if (varName === injectVarName && row.original.test?.metadata?.strategyId === 'audio') {
+    return undefined;
+  }
+
+  const selected = varName
     ? getVariableCellValue({
         row: row.original,
         varName,
         injectVarName,
         fallbackValue: value,
       })
-    : value;
+    : { value };
 
-  return typeof imageValue === 'string' ? resolveImageSource(imageValue) : undefined;
+  return typeof selected.value === 'string'
+    ? resolveImageSource(selected.value, selected.sourceEvalId || evaluationId)
+    : undefined;
 }
 
 function renderImageCellContent({
@@ -1360,6 +1380,7 @@ function renderImageCellContent({
   lightboxOpen,
   lightboxImage,
   maxTextLength,
+  mediaRefreshKey,
   toggleLightbox,
 }: {
   imgSrc: string;
@@ -1368,11 +1389,13 @@ function renderImageCellContent({
   lightboxOpen: boolean;
   lightboxImage: string | null;
   maxTextLength: number;
+  mediaRefreshKey: string;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
   return (
     <>
       <img
+        key={`variable-image-${mediaRefreshKey}`}
         src={imgSrc}
         alt={alt}
         style={{
@@ -1382,10 +1405,17 @@ function renderImageCellContent({
           objectFit: 'contain',
           cursor: 'pointer',
         }}
+        data-media-refresh-key={mediaRefreshKey}
+        onError={(event) => markMediaLoadFailed(imgSrc, event.currentTarget)}
+        onLoad={(event) => markMediaLoadSucceeded(imgSrc, event.currentTarget)}
         onClick={() => toggleLightbox(imgSrc)}
       />
       {lightboxOpen && lightboxImage === imgSrc && (
-        <div className="lightbox" onClick={() => toggleLightbox()}>
+        <div
+          key={`lightbox-${getMediaRefreshKey(lightboxImage)}`}
+          className="lightbox"
+          onClick={() => toggleLightbox()}
+        >
           <img
             src={lightboxImage}
             alt="Lightbox"
@@ -1394,6 +1424,9 @@ function renderImageCellContent({
               maxHeight: '90vh',
               objectFit: 'contain',
             }}
+            data-media-refresh-key={getMediaRefreshKey(lightboxImage)}
+            onError={(event) => markMediaLoadFailed(lightboxImage, event.currentTarget)}
+            onLoad={(event) => markMediaLoadSucceeded(lightboxImage, event.currentTarget)}
           />
         </div>
       )}
@@ -1408,6 +1441,7 @@ function renderImageCellContent({
 }
 
 function renderResultsTableCell({
+  evaluationId,
   cell,
   row,
   headVars,
@@ -1418,6 +1452,7 @@ function renderResultsTableCell({
   lightboxImage,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   cell: Cell<EvaluateTableRow, unknown>;
   row: Row<EvaluateTableRow>;
   headVars: string[];
@@ -1433,8 +1468,11 @@ function renderResultsTableCell({
   const renderedCellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
   const value = cell.getValue();
   const renderedImgSrc =
-    typeof renderedCellContent === 'string' ? resolveImageSource(renderedCellContent) : undefined;
+    typeof renderedCellContent === 'string'
+      ? resolveImageSource(renderedCellContent, evaluationId)
+      : undefined;
   const rawImgSrc = getImageSourceForCell({
+    evaluationId,
     columnId,
     value,
     row,
@@ -1442,6 +1480,7 @@ function renderResultsTableCell({
     injectVarName,
   });
   const imgSrc = renderedImgSrc || rawImgSrc;
+  const mediaRefreshKey = getMediaRefreshKey(imgSrc);
   const cellContent = imgSrc
     ? renderImageCellContent({
         imgSrc,
@@ -1454,6 +1493,7 @@ function renderResultsTableCell({
         lightboxOpen,
         lightboxImage,
         maxTextLength,
+        mediaRefreshKey,
         toggleLightbox,
       })
     : renderedCellContent;
@@ -1476,6 +1516,7 @@ function renderResultsTableCell({
 }
 
 function ResultsTableBodyRow({
+  evaluationId,
   row,
   pageSize,
   headVars,
@@ -1485,6 +1526,7 @@ function ResultsTableBodyRow({
   lightboxImage,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   row: Row<EvaluateTableRow>;
   pageSize: number;
   headVars: string[];
@@ -1505,6 +1547,7 @@ function ResultsTableBodyRow({
         }
 
         return renderResultsTableCell({
+          evaluationId,
           cell,
           row,
           headVars,
@@ -1536,6 +1579,7 @@ interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
   originalRowIndex?: number;
   originalRowPositionIndex?: number;
   originalPromptIndex?: number;
+  sourcePromptIndex?: number;
 }
 
 interface ExtendedEvaluateTableRow extends EvaluateTableRow {
@@ -1786,6 +1830,7 @@ function ResultsTable({
               originalRowIndex: rowIndex,
               originalRowPositionIndex: rowPositionOffset + rowIndex,
               originalPromptIndex: promptIndex,
+              sourcePromptIndex: output.sourcePromptIndex,
             },
       ),
     })) as ExtendedEvaluateTableRow[];
@@ -1825,13 +1870,14 @@ function ResultsTable({
       head.vars.map((varName, idx) =>
         estimateMetadataColumnSize(
           varName,
-          tableBody.map((row) =>
-            getVariableCellValue({
-              row,
-              varName,
-              injectVarName,
-              fallbackValue: row.vars[idx],
-            }),
+          tableBody.map(
+            (row) =>
+              getVariableCellValue({
+                row,
+                varName,
+                injectVarName,
+                fallbackValue: row.vars[idx],
+              }).value,
           ),
         ),
       ),
@@ -2069,6 +2115,7 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) =>
                 renderVariableCell({
+                  evaluationId: evalId || undefined,
                   info,
                   varName,
                   injectVarName,
@@ -2095,6 +2142,7 @@ function ResultsTable({
     lightboxImage,
     injectVarName,
     variableColumnSizes,
+    evalId,
   ]);
 
   // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
@@ -2189,6 +2237,12 @@ function ResultsTable({
             ),
             cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
               const output = getOutput(info.row.index, idx);
+              const sourceEvalId =
+                inComparisonMode &&
+                output?.sourceEvalId &&
+                (output.sourceEvalId === evalId || comparisonEvalIds.includes(output.sourceEvalId))
+                  ? output.sourceEvalId
+                  : undefined;
               return output ? (
                 <ErrorBoundary
                   name={`EvalOutputCell-${info.row.index}-${idx}`}
@@ -2207,7 +2261,8 @@ function ResultsTable({
                     rowPositionIndex={
                       output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
                     }
-                    promptIndex={idx}
+                    promptIndex={output.originalPromptIndex ?? idx}
+                    tracePromptIndex={output.sourcePromptIndex}
                     onRating={handleRating.bind(
                       null,
                       output.originalRowIndex ?? info.row.index,
@@ -2219,8 +2274,12 @@ function ResultsTable({
                     searchText={debouncedSearchText}
                     showStats={showStats}
                     isRedteam={isRedteam}
-                    evaluationId={evalId || undefined}
-                    testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                    evaluationId={sourceEvalId ?? (evalId || undefined)}
+                    testCaseId={
+                      sourceEvalId && sourceEvalId !== evalId
+                        ? output.sourceTestCaseId || output.id
+                        : info.row.original.test?.metadata?.testCaseId || output.id
+                    }
                   />
                 </ErrorBoundary>
               ) : (
@@ -2234,6 +2293,9 @@ function ResultsTable({
     ];
   }, [
     body.length,
+    evalId,
+    inComparisonMode,
+    comparisonEvalIds,
     config?.providers,
     columnHelper,
     failureFilter,
@@ -2535,6 +2597,7 @@ function ResultsTable({
           <tbody>
             {reactTable.getRowModel().rows.map((row) => (
               <ResultsTableBodyRow
+                evaluationId={evalId || undefined}
                 key={row.id}
                 row={row}
                 pageSize={pagination.pageSize}

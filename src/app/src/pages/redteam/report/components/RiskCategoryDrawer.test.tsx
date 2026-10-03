@@ -4,6 +4,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useNavigate } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import type { AtomicTestCase, EvaluateResult, ResultFailureReason } from '@promptfoo/types';
 
@@ -13,7 +14,7 @@ vi.mock('react-router', () => ({
 }));
 
 vi.mock('../../../eval/components/EvalOutputPromptDialog', () => ({
-  default: () => null,
+  default: vi.fn(() => null),
 }));
 
 vi.mock('./PluginStrategyFlow', () => ({
@@ -83,6 +84,18 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
     mockWindowOpen();
+  });
+
+  it('keeps evaluation context when opening result details', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(vi.mocked(EvalOutputPromptDialog).mock.lastCall?.[0]).toMatchObject({
+      open: true,
+      evaluationId: defaultProps.evalId,
+    });
   });
 
   it('should navigate to eval page when clicking View All Logs button', async () => {

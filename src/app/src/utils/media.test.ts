@@ -1124,3 +1124,84 @@ describe('getKindLabel', () => {
     expect(getKindLabel('other')).toBe('File');
   });
 });
+
+describe('evaluation-scoped media URLs', () => {
+  const hash = 'a'.repeat(64);
+  const evalId = 'shared-eval';
+  const expected = `/api/blobs/${hash}?evalId=${evalId}`;
+
+  beforeEach(() => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('uses the displayed evaluation for blob references and embedded API URLs', () => {
+    expect(resolveBlobUri(`promptfoo://blob/${hash}`, evalId)).toBe(expected);
+    expect(resolveBlobUri(`/api/blobs/${hash}?evalId=private-eval`, evalId)).toBe(expected);
+    expect(normalizeMediaText(`![x](promptfoo://blob/${hash})`, evalId)).toBe(`![x](${expected})`);
+    expect(normalizeMediaText(`![x](/api/blobs/${hash}?evalId=private-eval)`, evalId)).toBe(
+      `![x](${expected})`,
+    );
+  });
+
+  it.each(['/promptfoo', 'https://api.example.com/promptfoo'])(
+    'normalizes complete blob URLs once with API base %s',
+    (apiBase) => {
+      vi.mocked(useApiConfig.getState).mockReturnValue(mockState(apiBase));
+      const normalized = `![x](${apiBase}${expected})`;
+      for (const source of [
+        `promptfoo://blob/${hash}`,
+        `/api/blobs/${hash}?evalId=private-eval`,
+        `${apiBase}/api/blobs/${hash}?evalId=private-eval`,
+      ]) {
+        expect(normalizeMediaText(`![x](${source})`, evalId)).toBe(normalized);
+      }
+      expect(normalizeMediaText(normalized, evalId)).toBe(normalized);
+    },
+  );
+
+  it.each(['PROMPTFOO://BLOB/', 'Promptfoo://Blob/'])(
+    'normalizes mixed-case blob prefix %s',
+    (prefix) => {
+      expect(normalizeMediaText(`![x](${prefix}${hash})`, evalId)).toBe(`![x](${expected})`);
+    },
+  );
+
+  it('leaves ordinary paths and external URLs unchanged alongside blob URLs', () => {
+    const plain = '/docs/providers/openai and https://example.com/api/blobs/example';
+    expect(normalizeMediaText(`${plain} ![x](/api/blobs/${hash})`, evalId)).toBe(
+      `${plain} ![x](${expected})`,
+    );
+  });
+
+  it('carries evaluation context through each media kind', () => {
+    const blobRef = { hash };
+    expect(resolveAudioSource({ blobRef }, undefined, evalId)?.src).toBe(expected);
+    expect(resolveImageSource({ blobRef }, evalId)).toBe(expected);
+    expect(
+      resolveVideoSource({ blobRef, thumbnail: `/api/blobs/${hash}?evalId=other` }, evalId),
+    ).toMatchObject({ src: expected, poster: expected });
+  });
+
+  it('scopes absolute blob URLs on the configured API server', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+    const url = `https://api.example.com/api/blobs/${hash}?evalId=private-eval`;
+    expect(resolveVideoSource({ url }, evalId)?.src).toBe(`https://api.example.com${expected}`);
+    expect(normalizeMediaText(`![x](${url})`, evalId)).toBe(
+      `![x](https://api.example.com${expected})`,
+    );
+  });
+
+  it('scopes current-origin absolute blob URLs with a relative API base', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('/promptfoo'));
+    const url = `${window.location.origin}/promptfoo/api/blobs/${hash}?evalId=previous-eval`;
+    const scoped = `/promptfoo${expected}`;
+    expect(resolveBlobUri(url, evalId)).toBe(scoped);
+    expect(resolveImageSource(url, evalId)).toBe(scoped);
+    expect(resolveVideoSource({ url }, evalId)?.src).toBe(scoped);
+    expect(normalizeMediaText(`![x](${url})`, evalId)).toBe(`![x](${scoped})`);
+
+    const external = `https://images.example.test/promptfoo/api/blobs/${hash}`;
+    expect(resolveBlobUri(external, evalId)).toBeUndefined();
+    expect(normalizeMediaText(`![x](${external})`, evalId)).toBe(`![x](${external})`);
+  });
+});

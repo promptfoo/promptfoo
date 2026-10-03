@@ -5,9 +5,17 @@ import logger from '../logger';
 
 import type { BlobStoreResult } from './types';
 
-interface RemoteBlobUploadTarget {
+export interface RemoteBlobUploadTarget {
   url: string;
   authHeaders: Record<string, string>;
+}
+
+export interface RemoteBlobUploadContext {
+  evalId: string;
+  testIdx?: number;
+  promptIdx?: number;
+  location?: string;
+  kind?: string;
 }
 
 function buildRemoteUploadTarget(): RemoteBlobUploadTarget | null {
@@ -38,22 +46,12 @@ export function shouldAttemptRemoteBlobUpload(): boolean {
   return buildRemoteUploadTarget() !== null;
 }
 
-export async function uploadBlobRemote(
+async function uploadBlobToRemoteTarget(
   buffer: Buffer,
   mimeType: string,
-  context?: {
-    evalId?: string;
-    testIdx?: number;
-    promptIdx?: number;
-    location?: string;
-    kind?: string;
-  },
+  context: RemoteBlobUploadContext,
+  target: RemoteBlobUploadTarget,
 ): Promise<BlobStoreResult | null> {
-  const target = buildRemoteUploadTarget();
-  if (!target) {
-    return null;
-  }
-
   try {
     const { fetchWithProxy } = await import('../util/fetch/index');
     const response = await fetchWithProxy(target.url, {
@@ -96,4 +94,18 @@ export async function uploadBlobRemote(
     });
     return null;
   }
+}
+
+export async function uploadBlobRemote(
+  buffer: Buffer,
+  mimeType: string,
+  context: RemoteBlobUploadContext,
+  target?: RemoteBlobUploadTarget,
+): Promise<BlobStoreResult | null> {
+  const uploadTarget = target ?? buildRemoteUploadTarget();
+  if (!uploadTarget) {
+    return null;
+  }
+
+  return uploadBlobToRemoteTarget(buffer, mimeType, context, uploadTarget);
 }

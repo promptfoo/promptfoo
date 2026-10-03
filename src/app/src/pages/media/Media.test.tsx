@@ -62,7 +62,7 @@ const makeItem = (hash: string, description = `Item ${hash}`): MediaItem => ({
   sizeBytes: 1024,
   kind: 'image',
   createdAt: '2025-01-01T00:00:00Z',
-  url: `/api/blobs/${hash}`,
+  url: `/api/blobs/${hash}?evalId=eval-1`,
   context: {
     evalId: 'eval-1',
     evalDescription: description,
@@ -199,6 +199,10 @@ describe('Media page URL state machine', () => {
     await user.click(screen.getByRole('button', { name: 'Download (2)' }));
 
     await screen.findByRole('button', { name: 'Cancel download' });
+    expect(downloadFile).toHaveBeenCalledWith(
+      '/api/blobs/aaa111?evalId=eval-1',
+      expect.any(String),
+    );
     const callsBeforeUnmount = vi.mocked(downloadFile).mock.calls.length;
 
     expect(() => unmount()).not.toThrow();
