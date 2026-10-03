@@ -1035,7 +1035,11 @@ async function doEvalWithEnv(
       }
       accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
     }
-    const generationTokenUsage = evalRecord.getStats().tokenUsage.generation;
+    const evalStats = evalRecord.getStats();
+    const generationTokenUsage = evalStats.tokenUsage.generation;
+    const cachedRows = evalRecord.hasLegacyCachedRowsMetrics()
+      ? await evalRecord.getCachedResponseRowsCount()
+      : (evalStats.cachedRows ?? 0);
     if (generationTokenUsage) {
       tokenUsage.generation = generationTokenUsage;
     }
@@ -1098,6 +1102,7 @@ async function doEvalWithEnv(
       successes,
       failures,
       errors,
+      cachedRows,
       duration,
       maxConcurrency,
       tracker,

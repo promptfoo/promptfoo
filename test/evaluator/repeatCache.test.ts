@@ -122,6 +122,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
       'result-repeat-1-miss-2',
     ]);
     expect(firstSummary.results.map((result) => result.response?.cached)).toEqual([false, false]);
+    expect(firstSummary.stats.cachedRows).toBe(0);
 
     const secondEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, secondEval, { maxConcurrency: 1 });
@@ -133,7 +134,43 @@ describeEvaluator('evaluator repeat cache isolation', () => {
       'result-repeat-1-miss-2',
     ]);
     expect(secondSummary.results.map((result) => result.response?.cached)).toEqual([true, true]);
+    expect(secondSummary.stats.cachedRows).toBe(2);
     expect(await getCache().get('manual-provider-key')).toEqual(baselineResponse);
+  });
+
+  it('counts cached rows in a mixed fresh and cached evaluation', async () => {
+    const provider: ApiProvider = {
+      id: () => 'mixed-cache-provider',
+      callApi: vi.fn().mockImplementation(async (prompt: string) => ({
+        cached: prompt === 'cached prompt',
+        latencyMs: prompt === 'cached prompt' ? 25 : 50,
+        output: prompt,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('cached prompt'), toPrompt('fresh prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results.map((result) => result.response?.cached)).toEqual([true, false]);
+    expect(summary.stats.cachedRows).toBe(1);
+  });
+
+  it('reports zero cached rows when an evaluation has no results', async () => {
+    const evalRecord = await Eval.create({}, [toPrompt('empty evaluation')], {
+      id: randomUUID(),
+    });
+
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.cachedRows).toBe(0);
   });
 
   it('isolates beforeEach extension cache entries by repeat index', async () => {
