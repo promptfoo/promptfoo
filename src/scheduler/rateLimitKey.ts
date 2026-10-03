@@ -14,17 +14,46 @@ export function getRateLimitKey(provider: ApiProvider): string {
   const relevantConfig: Record<string, string> = {};
 
   // Use last 4 chars of API key for differentiation (safe partial identifier)
-  if (config.apiKey && config.apiKey.length > 4) {
+  if (typeof config.apiKey === 'string' && config.apiKey.length > 4) {
     relevantConfig.apiKeyTail = config.apiKey.slice(-4);
   }
-  if (config.apiBaseUrl) {
-    relevantConfig.apiBaseUrl = config.apiBaseUrl;
+
+  // Base URL / custom host differentiation (Ollama, LiteLLM, LocalAI, OpenAI-compatible)
+  const baseUrl = config.apiBaseUrl || config.baseUrl || config.apiHost || config.host;
+  if (typeof baseUrl === 'string' && baseUrl.length > 0) {
+    relevantConfig.baseUrl = baseUrl;
   }
-  if (config.region) {
-    relevantConfig.region = config.region;
+
+  // Region / location differentiation (AWS Bedrock, Google Vertex AI, Azure)
+  const region = config.region || config.location;
+  if (typeof region === 'string' && region.length > 0) {
+    relevantConfig.region = region;
   }
-  if (config.organization) {
-    relevantConfig.organization = config.organization;
+
+  // Organization differentiation (OpenAI, Anthropic)
+  const org = config.organization || config.orgId;
+  if (typeof org === 'string' && org.length > 0) {
+    relevantConfig.organization = org;
+  }
+
+  // Project differentiation (Google Cloud Vertex AI)
+  const project = config.projectId || config.project;
+  if (typeof project === 'string' && project.length > 0) {
+    relevantConfig.projectId = project;
+  }
+
+  // Azure deployment & resource differentiation
+  if (typeof config.deploymentName === 'string' && config.deploymentName.length > 0) {
+    relevantConfig.deploymentName = config.deploymentName;
+  }
+  if (typeof config.resourceName === 'string' && config.resourceName.length > 0) {
+    relevantConfig.resourceName = config.resourceName;
+  }
+
+  // Account differentiation (Cloudflare Workers AI, AWS)
+  const account = config.account || config.accountId;
+  if (typeof account === 'string' && account.length > 0) {
+    relevantConfig.account = account;
   }
 
   // Filter out undefined values and create stable hash
