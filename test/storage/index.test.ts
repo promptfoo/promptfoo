@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isBlobStorageEnabled } from '../../src/blobs/extractor';
 import {
   getMediaStorage,
+  isMediaStorageEnabled,
   LocalFileSystemProvider,
   mediaExists,
   resetMediaStorage,
@@ -53,5 +55,34 @@ describe('media storage provider injection', () => {
     expect(getMediaStorage({ basePath: '/tmp/promptfoo-media-storage-test' })).toBeInstanceOf(
       LocalFileSystemProvider,
     );
+  });
+});
+
+describe('inline media storage toggle', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    [undefined, true],
+    ['', true],
+    ['0', true],
+    ['false', true],
+    ['FALSE', true],
+    ['no', true],
+    ['unsupported', true],
+    [' true ', true],
+    ['1', false],
+    ['true', false],
+    ['TRUE', false],
+    ['TrUe', false],
+    ['yes', false],
+    ['YES', false],
+    ['yup', false],
+    ['YePpErS', false],
+  ] as const)('uses one boolean policy for %s', (value, enabled) => {
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', value);
+    expect(isMediaStorageEnabled()).toBe(enabled);
+    expect(isBlobStorageEnabled()).toBe(enabled);
   });
 });
