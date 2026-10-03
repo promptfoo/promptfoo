@@ -219,6 +219,43 @@ describe('getFinalTest', () => {
     expect(result.provider).toBe(directProvider);
     expect(result.options?.provider).toBe(assertionProvider);
   });
+
+  it('does not throw when test.assert carries a provider with circular internal references', () => {
+    // Regression test for https://github.com/promptfoo/promptfoo/issues/10501.
+    //
+    // evaluator.ts's resolveRuntimeGradingProviderReferences substitutes an
+    // already-instantiated, live ApiProvider into testCase.assert[i].provider
+    // whenever an assertion's judge `provider:` id matches one of the eval's
+    // target provider ids. A live SDK client (e.g. Anthropic's) can contain
+    // genuine internal circular references (e.g. client.messages._client ===
+    // client). getFinalTest deep-clones `test` (including `test.assert`), so
+    // without circular-reference support the clone recurses forever.
+    const circularProvider = createMockProvider('circularProvider') as ApiProvider & {
+      client?: Record<string, unknown>;
+    };
+    const client: Record<string, unknown> = {};
+    client.self = client;
+    circularProvider.client = client;
+
+    const testCase: TestCase = {
+      vars: { var1: 'value1' },
+      assert: [
+        {
+          type: 'llm-rubric',
+          value: 'some rubric',
+          provider: circularProvider,
+        },
+      ],
+    };
+
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'some rubric',
+      provider: circularProvider,
+    };
+
+    expect(() => getFinalTest(testCase, assertion)).not.toThrow();
+  });
 });
 
 describe('loadFromJavaScriptFile', () => {
