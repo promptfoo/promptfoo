@@ -53,14 +53,49 @@ const providers = [
 describe('SDK client lifecycle', () => {
   it('does not take over SIGTERM for standalone SDK-only consumers', () => {
     const source = pathToFileURL(path.resolve('src/providers/bedrock/index.ts')).href;
-    const script = `import { AwsBedrockCompletionProvider } from ${JSON.stringify(source)}; await new AwsBedrockCompletionProvider('fixture').getBedrockInstance(); process.kill(process.pid, 'SIGTERM');`;
-    const child = spawnSync(
-      process.execPath,
-      ['--import', 'tsx', '--input-type=module', '-e', script],
-      { encoding: 'utf8', timeout: 15000 },
-    );
-    expect(child.error).toBeUndefined();
-    expect(child.signal).toBe('SIGTERM');
+    const terminate = `
+      writeSync(1, 'SIGNAL_READY\\n');
+      process.kill(process.pid, 'SIGTERM');
+    `;
+    const run = (initialize: string) =>
+      spawnSync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          '--input-type=module',
+          '-e',
+          `
+          import assert from 'node:assert/strict';
+          import { writeSync } from 'node:fs';
+          const signals = ['SIGTERM', 'SIGINT'];
+          const counts = () => signals.map(signal => process.listenerCount(signal));
+          const before = counts();
+          ${initialize}
+          assert.deepEqual(counts(), before);
+          ${terminate}
+        `,
+        ],
+        { encoding: 'utf8', timeout: 15000 },
+      );
+    // Windows reports self-termination differently from POSIX. Compare the
+    // native outcome and prove initialization succeeded without new listeners.
+    const baseline = run('');
+    const child = run(`
+      const { AwsBedrockCompletionProvider } = await import(${JSON.stringify(source)});
+      const beforeExit = process.listenerCount('beforeExit');
+      await new AwsBedrockCompletionProvider('fixture').getBedrockInstance();
+      assert.equal(process.listenerCount('beforeExit'), beforeExit);
+    `);
+    for (const result of [baseline, child]) {
+      expect(result.error).toBeUndefined();
+      expect(result.stdout, result.stderr).toContain('SIGNAL_READY');
+      expect(result.status === 0 && result.signal === null).toBe(false);
+    }
+    expect({ status: child.status, signal: child.signal }).toEqual({
+      status: baseline.status,
+      signal: baseline.signal,
+    });
   });
 
   const mutableClients = [

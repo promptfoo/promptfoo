@@ -22,6 +22,10 @@ let restore: () => void;
 let authorizations: string[];
 
 beforeEach(() => {
+  // These cases verify credential selection; SDK initialization time must not
+  // consume the polling fixture's deadline on slower CI machines.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-media-credentials-'));
   const credentialsFile = path.join(dir, 'credentials');
   fs.writeFileSync(
@@ -64,6 +68,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   restore();
   fs.rmSync(dir, { recursive: true, force: true });
 });
