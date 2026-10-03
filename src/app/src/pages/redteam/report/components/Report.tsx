@@ -55,10 +55,33 @@ import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
 import { useReportStore } from './store';
 import TestSuites from './TestSuites';
 import ToolsDialog, { Tool } from './ToolsDialog';
+
+function buildStrategyStats(
+  failuresByPlugin: Record<string, TestWithMetadata[]>,
+  passesByPlugin: Record<string, TestWithMetadata[]>,
+): CategoryStats {
+  const stats: CategoryStats = {};
+  for (const [byPlugin, count] of [
+    [failuresByPlugin, 'failCount'],
+    [passesByPlugin, 'pass'],
+  ] as const) {
+    Object.values(byPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId = getStrategyIdFromTest(test);
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
+        }
+        stats[strategyId].total += 1;
+        stats[strategyId][count] += 1;
+      });
+    });
+  }
+  return stats;
+}
 
 function forEachReportResult(
   evalData: ResultsFile,
@@ -304,41 +327,10 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     );
   }, [evalData, selectedPromptIndex]);
 
-  const strategyStats = useMemo(() => {
-    if (!failuresByPlugin || !passesByPlugin) {
-      return {};
-    }
-
-    const stats: CategoryStats = {};
-
-    Object.values(failuresByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId = getStrategyIdFromTest(test);
-
-        if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
-        }
-
-        stats[strategyId].total += 1;
-        stats[strategyId].failCount += 1;
-      });
-    });
-
-    Object.values(passesByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId = getStrategyIdFromTest(test);
-
-        if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
-        }
-
-        stats[strategyId].total += 1;
-        stats[strategyId].pass += 1;
-      });
-    });
-
-    return stats;
-  }, [failuresByPlugin, passesByPlugin]);
+  const strategyStats = useMemo(
+    () => buildStrategyStats(failuresByPlugin, passesByPlugin),
+    [failuresByPlugin, passesByPlugin],
+  );
 
   const availableCategories = useMemo(() => {
     return Object.keys(categoryStats).sort();
@@ -376,9 +368,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
           }
 
           if (selectedStrategies.length > 0) {
-            const strategyId =
-              test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-            if (!selectedStrategies.includes(strategyId)) {
+            if (!selectedStrategies.includes(getStrategyIdFromTest(test))) {
               return false;
             }
           }
@@ -430,39 +420,10 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     return stats;
   }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
-  const filteredStrategyStats = useMemo(() => {
-    const stats: CategoryStats = {};
-
-    Object.values(filteredFailuresByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId =
-          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-
-        if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
-        }
-
-        stats[strategyId].failCount += 1;
-        stats[strategyId].total += 1;
-      });
-    });
-
-    Object.values(filteredPassesByPlugin).forEach((tests) => {
-      tests.forEach((test) => {
-        const strategyId =
-          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-
-        if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
-        }
-
-        stats[strategyId].total += 1;
-        stats[strategyId].pass += 1;
-      });
-    });
-
-    return stats;
-  }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
+  const filteredStrategyStats = useMemo(
+    () => buildStrategyStats(filteredFailuresByPlugin, filteredPassesByPlugin),
+    [filteredFailuresByPlugin, filteredPassesByPlugin],
+  );
 
   const hasActiveFilters =
     selectedCategories.length > 0 ||

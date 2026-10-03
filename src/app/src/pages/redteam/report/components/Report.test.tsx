@@ -46,7 +46,11 @@ vi.mock('./Overview', () => ({
   },
 }));
 vi.mock('@app/components/EnterpriseBanner', () => ({ default: () => null }));
-vi.mock('./StrategyStats', () => ({ default: () => null }));
+vi.mock('./StrategyStats', () => ({
+  default: ({ strategyStats }: { strategyStats: unknown }) => (
+    <pre data-testid="strategy-stats">{JSON.stringify(strategyStats)}</pre>
+  ),
+}));
 vi.mock('./RiskCategories', () => ({
   default: ({
     failuresByPlugin,
@@ -65,6 +69,8 @@ vi.mock('./FrameworkCompliance', () => ({ default: () => null }));
 vi.mock('./ReportDownloadButton', () => ({ default: () => null }));
 vi.mock('./ReportSettingsDialogButton', () => ({ default: () => null }));
 vi.mock('./ToolsDialog', () => ({ default: () => null }));
+
+const readStrategyStats = () => JSON.parse(screen.getByTestId('strategy-stats').textContent!);
 
 describe('Report filtering logic', () => {
   beforeEach(() => {
@@ -103,6 +109,7 @@ describe('Report filtering logic', () => {
       expect(Object.keys(failures)).toHaveLength(2);
       expect(failures.plugin1).toHaveLength(1);
       expect(failures.plugin2).toHaveLength(1);
+      expect(readStrategyStats()).toEqual({ basic: { pass: 0, total: 2, failCount: 2 } });
     });
 
     it('should filter failures by promptIdx when multiple prompts exist', async () => {
@@ -124,6 +131,7 @@ describe('Report filtering logic', () => {
       expect(second.plugin1).toHaveLength(1);
       expect(second.plugin1[0].result.promptIdx).toBe(1);
       expect(second.plugin2).toBeUndefined();
+      expect(readStrategyStats()).toEqual({ basic: { pass: 1, total: 2, failCount: 1 } });
     });
   });
 
@@ -591,7 +599,12 @@ describe('Filter panel regression tests', () => {
     expect(screen.getByText('Risk Categories')).toBeInTheDocument();
     expect(screen.getByText('Strategies')).toBeInTheDocument();
     const search = screen.getByPlaceholderText('Search prompts & outputs');
+    expect(readStrategyStats()).toEqual({ basic: { pass: 1, total: 2, failCount: 1 } });
+    await userEvent.type(search, 'prompt');
+    expect(readStrategyStats()).toEqual({ basic: { pass: 1, total: 2, failCount: 1 } });
+    await userEvent.clear(search);
     await userEvent.type(search, 'missing');
+    expect(readStrategyStats()).toEqual({});
     expect(screen.getByTestId('overview-total')).toHaveTextContent('0');
     await userEvent.clear(search);
     expect(screen.getByTestId('overview-total')).toHaveTextContent('2');
@@ -603,6 +616,7 @@ describe('Filter panel regression tests', () => {
       createComponentMockResult(0, 'harmful:violent-crime', false),
       createComponentMockResult(0, 'pii:direct', true),
     ];
+    results[1].testCase.metadata = { strategyId: 'custom' };
     const evalData = createComponentMockEvalData(1, results);
     mockCallApiResponse({ data: evalData });
 
@@ -655,6 +669,11 @@ describe('Filter panel regression tests', () => {
     // Click "All Strategies" - this would throw an error if value was ""
     const allStrategiesOption = screen.getByRole('option', { name: 'All Strategies' });
     await userEvent.click(allStrategiesOption);
+
+    expect(readStrategyStats()).toEqual({
+      basic: { pass: 0, total: 1, failCount: 1 },
+      custom: { pass: 1, total: 1, failCount: 0 },
+    });
 
     // If we got here without errors, the fix is working
     expect(screen.getByText('Filters')).toBeInTheDocument();
