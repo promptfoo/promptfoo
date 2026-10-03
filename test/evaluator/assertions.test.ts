@@ -15,6 +15,75 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it('runs worker assertions with prepared providers and parent custom scoring', async () => {
+    const scoring = vi.fn(() => ({ pass: true, score: 0.75, reason: 'Parent scoring' }));
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Fixture')],
+      tests: [
+        {
+          provider: mockApiProvider,
+          options: { provider: mockGradingApiProviderPasses },
+          assertScoringFunction: scoring,
+          assert: [
+            { type: 'javascript', executionMode: 'worker', value: 'output === "Test output"' },
+            {
+              type: 'llm-rubric',
+              value: 'A fixture response',
+              provider: mockGradingApiProviderPasses,
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0]).toMatchObject({ success: true, score: 0.75 });
+    expect(summary.results[0].gradingResult?.componentResults).toEqual([
+      expect.objectContaining({ pass: true }),
+      expect.objectContaining({ pass: true }),
+    ]);
+    expect(scoring).toHaveBeenCalledTimes(1);
+    expect(mockGradingApiProviderPasses.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('records external worker cancellation as an evaluation error', async () => {
+    const controller = new AbortController();
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async (prompt) => {
+      if (prompt === 'worker-ready') {
+        controller.abort();
+      }
+      return { output: 'fixture' };
+    });
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Fixture')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'javascript',
+              executionMode: 'worker',
+              value: "context.provider.callApi('worker-ready').then(() => new Promise(() => {}))",
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, abortSignal: controller.signal });
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0]).toMatchObject({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      error: expect.stringContaining('Worker JavaScript assertion aborted'),
+    });
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {
