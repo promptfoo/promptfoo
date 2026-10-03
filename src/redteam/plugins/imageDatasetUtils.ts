@@ -89,10 +89,10 @@ export function getImageDatasetRequestText(
   const mediaMime = /^(?:image|audio|video)\//i;
   const rejectMalformedMedia = (text: string) => {
     const yaml = /^\s*- role:/.test(text);
-    if (!yaml && !jsonContainer.test(text)) {
+    if (!yaml && (!jsonContainer.test(text) || !text.includes('{'))) {
       return;
     }
-    // Match property positions, not prose labels such as "[1] Describe this image: ...".
+    // JSON property markers require an object, not just bracket-prefixed prose.
     const properties = yaml
       ? /(?:[{,]|\n|^)\s*(?:-\s*)?["']?(\w+)["']?\s*:\s*["']?([\w/.-]*)/g
       : /[{,]\s*["']?(\w+)["']?\s*:\s*["']?([\w/.-]*)/g;
@@ -123,10 +123,11 @@ export function getImageDatasetRequestText(
     key = '',
     literalText = false,
     mediaContainer = false,
+    literalData = false,
   ): unknown => {
     if (Array.isArray(value)) {
       return value
-        .map((part) => sanitize(part, key, literalText, mediaContainer))
+        .map((part) => sanitize(part, key, literalText, mediaContainer, literalData))
         .filter((part) => part !== undefined);
     }
     if (value && typeof value === 'object') {
@@ -137,9 +138,15 @@ export function getImageDatasetRequestText(
         [object.mimeType, object.mime_type, object.media_type].some(
           (mime) => typeof mime === 'string' && mediaMime.test(mime),
         );
-      const nativeMessage = ['system', 'developer', 'user', 'assistant', 'model', 'tool'].includes(
-        String(object.role),
-      );
+      const nativeMessage = [
+        'system',
+        'developer',
+        'user',
+        'assistant',
+        'model',
+        'tool',
+        'function',
+      ].includes(String(object.role));
       const nativeTextPart =
         typeof object.text === 'string' &&
         [undefined, 'text', 'input_text', 'output_text'].some((type) => type === object.type);
@@ -148,19 +155,39 @@ export function getImageDatasetRequestText(
           // Encoded payload fields are opaque even when JSON represents their
           // bytes as Buffer/typed-array objects. Their containers may carry text.
           if (
-            (media && /^(?:data|bytes|url|uri|file_data)$/.test(field)) ||
-            (key === 'source' && field === 'bytes' && typeof child !== 'number')
+            !literalData &&
+            ((media &&
+              /^(?:data|bytes|url|uri|base64|file_?(?:data|uri|url|id)|s3Location)$/i.test(
+                field,
+              )) ||
+              (key === 'source' && field === 'bytes' && typeof child !== 'number'))
           ) {
             return [];
           }
-          const mediaField = mediaContainerField.test(field) || (media && field === 'source');
+          const toolData =
+            literalData ||
+            (object.type === 'tool_use' && field === 'input') ||
+            (key === 'functionCall' && field === 'args') ||
+            (key === 'functionResponse' && field === 'response');
+          const toolText =
+            (object.type === 'function_call' && field === 'arguments') ||
+            (object.type === 'function_call_output' && field === 'output') ||
+            (object.type === 'tool_result' && field === 'content') ||
+            (['function', 'function_call'].includes(key) &&
+              typeof object.name === 'string' &&
+              field === 'arguments');
+          const mediaField =
+            !literalData && (mediaContainerField.test(field) || (media && field === 'source'));
           const sanitized = sanitize(
             child,
             field,
             literalText ||
+              toolData ||
+              toolText ||
               (nativeMessage && ['content', 'parts'].includes(field)) ||
               (nativeTextPart && field === 'text'),
             mediaField,
+            toolData,
           );
           return sanitized === undefined ? [] : [[field, sanitized]];
         }),

@@ -585,6 +585,7 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
     ['instruction-delimited plaintext', `[INST] ${actualTask}; image: ${inputImage} [/INST]`, true],
     ['bracket-prefixed plaintext', `[image] ${actualTask}; image: ${inputImage}`, true],
     ['numeric-bracket plaintext', `[1] ${actualTask}; image: ${inputImage} [end]`, true],
+    ['numeric-bracket comma prose', `[1] ${actualTask}, image: ${inputImage} [end]`, true],
     ['multiline bracket plaintext', `[1]\n${actualTask}\nimage: ${inputImage}\n[end]`, true],
     [
       'custom bracket plaintext field',
@@ -880,6 +881,133 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       ]),
       true,
     ],
+    ...[
+      [
+        'Responses tool output',
+        {
+          type: 'function_call_output',
+          call_id: 'call',
+          output: JSON.stringify({
+            image: actualTask,
+            nested: { image: actualTask },
+            attachment: inputImage,
+          }),
+        },
+      ],
+      [
+        'Responses tool arguments',
+        {
+          type: 'function_call',
+          call_id: 'call',
+          name: 'describe',
+          arguments: JSON.stringify({ image: actualTask }),
+        },
+      ],
+      [
+        'Responses tool multimodal output',
+        {
+          type: 'function_call_output',
+          call_id: 'call',
+          output: [
+            { type: 'input_text', text: JSON.stringify({ image: actualTask }) },
+            { type: 'input_image', file_id: nativeImageData },
+          ],
+        },
+      ],
+      [
+        'Chat tool arguments',
+        {
+          role: 'assistant',
+          tool_calls: [
+            {
+              type: 'function',
+              function: { name: 'describe', arguments: JSON.stringify({ image: actualTask }) },
+            },
+          ],
+        },
+      ],
+      [
+        'Chat legacy tool arguments',
+        {
+          role: 'assistant',
+          function_call: { name: 'describe', arguments: JSON.stringify({ image: actualTask }) },
+        },
+      ],
+      [
+        'Chat legacy tool content',
+        { role: 'function', name: 'describe', content: JSON.stringify({ image: actualTask }) },
+      ],
+      [
+        'Anthropic tool result',
+        {
+          type: 'tool_result',
+          tool_use_id: 'tool',
+          content: JSON.stringify({ image: actualTask }),
+        },
+      ],
+      [
+        'Anthropic tool multimodal result',
+        {
+          type: 'tool_result',
+          tool_use_id: 'tool',
+          content: [
+            { type: 'text', text: JSON.stringify({ image: actualTask }) },
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/png', data: nativeImageData },
+            },
+          ],
+        },
+      ],
+      [
+        'Anthropic tool input',
+        {
+          type: 'tool_use',
+          id: 'tool',
+          name: 'describe',
+          input: { image: actualTask, nested: { image: actualTask }, attachment: inputImage },
+        },
+      ],
+      [
+        'Google function arguments',
+        {
+          functionCall: {
+            name: 'describe',
+            args: { image: actualTask, nested: { image: actualTask }, attachment: inputImage },
+          },
+        },
+      ],
+      [
+        'Google function response',
+        {
+          functionResponse: {
+            name: 'describe',
+            response: { image: actualTask, nested: { image: actualTask }, attachment: inputImage },
+            parts: [{ inlineData: { mimeType: 'image/png', data: nativeImageData } }],
+          },
+        },
+      ],
+    ].map(([name, part]) => [name, JSON.stringify([part]), true] as const),
+    ...[
+      { fileData: { mimeType: 'image/png', fileUri: nativeImageData } },
+      { file_data: { mime_type: 'image/png', file_uri: nativeImageData } },
+      { images: [{ base64: nativeImageData }] },
+      { type: 'input_image', file_id: nativeImageData },
+      {
+        type: 'input_file',
+        file_data: nativeImageData,
+        file_id: nativeImageData,
+        file_url: nativeImageData,
+      },
+      { image: { source: { s3Location: { uri: nativeImageData, bucketOwner: nativeImageData } } } },
+    ].flatMap((media, index) => [
+      [
+        `opaque media alias ${index}`,
+        JSON.stringify({ question: actualTask, contents: [media] }),
+        true,
+      ] as const,
+      [`opaque media alias ${index} without text`, JSON.stringify(media), false] as const,
+    ]),
     ['custom image object', JSON.stringify({ image: { data: nativeImageData } }), false],
   ] as const)(
     'uses actual %s text without media or dataset-only instructions',
@@ -919,13 +1047,13 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
         payload.slice(0, 32),
         payload.slice(32),
         nativeImageData,
-        '137',
         'UNSENT_DATASET_TASK',
         'ASSERTION_OVERRIDE_TASK',
         'CONTEXT_OVERRIDE_TASK',
       ]) {
         expect(rubric).not.toContain(excluded);
       }
+      expect(rubric.match(/<UserQuery>([\s\S]*?)<\/UserQuery>/)?.[1] ?? '').not.toContain('137');
       expect(vi.mocked(matchesLlmRubric).mock.calls[0][5]).toEqual({
         inputImages: [{ data: selectedImage.trim() }],
       });
@@ -985,6 +1113,7 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
   });
 
   it.each([
+    ['media object in JSON array', `[1,{"type":"image","data":"${nativeImageData}",`],
     ['type-tagged JSON', `{"type":"image","data":"${nativeImageData}",`],
     ['input_image JSON', `{"input_image":"${nativeImageData}",`],
     ['image_url JSON', `{"image_url":"${nativeImageData}",`],
