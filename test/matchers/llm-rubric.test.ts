@@ -6,9 +6,12 @@ import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureResponsesProvider } from '../../src/providers/azure/responses';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import {
   accumulateAssertionTokenUsage,
   createEmptyAssertions,
@@ -16,7 +19,9 @@ import {
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { mockProcessEnv, TestGrader } from '../util/utils';
 
+import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type { Assertion, GradingConfig } from '../../src/types/index';
+import type { ProviderResponse } from '../../src/types/providers';
 
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
@@ -94,6 +99,39 @@ describe('matchesLlmRubric', () => {
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
     const inputImage = { data: inputData };
     const outputImage = { data: outputData };
+
+    it.each([
+      ['Responses', AzureResponsesProvider, { type: 'input_image', image_url: inputData }],
+      ['Chat', AzureChatCompletionProvider, { type: 'image_url', image_url: { url: inputData } }],
+    ] as const)(
+      'attaches input images to wrapped Azure %s graders',
+      async (_, Provider, imagePart) => {
+        const provider = new Provider('custom-deployment', { config: { apiKey: 'test-key' } });
+        const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Fixture verdict' }),
+        });
+        const execute = vi.fn(async (_provider, call: () => Promise<ProviderResponse>) => call());
+        const wrapped = wrapProviderWithRateLimiting(provider, {
+          execute,
+        } as unknown as RateLimitRegistry);
+
+        await matchesLlmRubric(
+          'Describe the color',
+          'A blue square.',
+          { provider: wrapped },
+          {},
+          undefined,
+          {
+            inputImages: [inputImage],
+          },
+        );
+
+        const messages = JSON.parse(callApi.mock.calls[0][0]);
+        expect(messages.at(-1).content).toContainEqual(imagePart);
+        expect(wrapped.id()).toBe('azure:custom-deployment');
+        expect(execute).toHaveBeenCalledTimes(1);
+      },
+    );
 
     it.each([
       ['openai:gpt-4o', { type: 'image_url', image_url: { url: inputData } }],

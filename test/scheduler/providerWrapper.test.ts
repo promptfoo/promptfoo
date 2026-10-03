@@ -56,7 +56,7 @@ describe('providerWrapper', () => {
       expect(wrappedProvider.config).toEqual({ apiKey: 'test-key' });
     });
 
-    it('should preserve id() method from class prototype', () => {
+    it('should preserve id() and constructor from class prototype', () => {
       // This tests the specific bug where spread operator doesn't copy prototype methods.
       // When a provider is a class instance, id() is on the prototype, not an own property.
       class TestProvider implements ApiProvider {
@@ -72,6 +72,8 @@ describe('providerWrapper', () => {
 
       // Verify that id() works on the wrapped provider
       expect(wrappedProvider.id()).toBe('class-based-provider');
+      expect(wrappedProvider.constructor).toBe(TestProvider);
+      expect(Object.keys(wrappedProvider)).not.toContain('constructor');
     });
 
     it('should not double-wrap already wrapped providers', () => {

@@ -1413,7 +1413,11 @@ function hasImageControlAssertion(
   }
   // Dynamic assertion values may resolve to safe controls. Evaluate them rather than
   // declaring an unknown control successful without running its assertion.
-  if (hasImages || typeof assertion.value === 'string') {
+  if (
+    hasImages ||
+    (typeof assertion.value === 'string' &&
+      (assertion.value.startsWith('file://') || assertion.value.startsWith('package:')))
+  ) {
     return true;
   }
   const keys =

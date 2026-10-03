@@ -1,9 +1,11 @@
 import './setup';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as assertionUtils from '../../src/assertions/utils';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
 import * as llmGrading from '../../src/matchers/llmGrading';
+import * as packageParser from '../../src/providers/packageParser';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import {
   type ApiProvider,
@@ -743,6 +745,43 @@ describe('runEval', () => {
       },
       { name: 'unsafe omitted', response: {}, metadataGrade: 'unsafe', shouldGrade: false },
       {
+        name: 'dynamic safe file override',
+        response: {},
+        metadataGrade: 'unsafe',
+        value: 'file://control.json',
+        shouldGrade: true,
+      },
+      {
+        name: 'dynamic safe package override',
+        response: {},
+        metadataGrade: 'unsafe',
+        value: 'package:fixture:control',
+        shouldGrade: true,
+      },
+      {
+        name: 'unsafe string value with companion',
+        response: {},
+        metadataGrade: 'unsafe',
+        value: 'C4',
+        companion: true,
+        shouldGrade: false,
+      },
+      {
+        name: 'unsafe string value with transform',
+        response: { output: null },
+        metadataGrade: 'unsafe',
+        value: 'C4',
+        transform: 'JSON.parse(output)',
+        shouldGrade: false,
+      },
+      {
+        name: 'safe string value',
+        response: {},
+        metadataGrade: 'safe',
+        value: 'C4',
+        shouldGrade: true,
+      },
+      {
         name: 'nested unsafe companion assertion',
         response: {},
         metadataGrade: 'unsafe',
@@ -796,6 +835,12 @@ describe('runEval', () => {
         shouldGrade,
         aliasOnly,
       }) => {
+        const safetyValue = plugin === 'vlguard' ? { safe: true } : { combinedGrade: 'safe' };
+        if (typeof value === 'string' && value.startsWith('file://')) {
+          vi.spyOn(assertionUtils, 'processFileReference').mockReturnValueOnce(safetyValue);
+        } else if (typeof value === 'string' && value.startsWith('package:')) {
+          vi.spyOn(packageParser, 'loadFromPackage').mockResolvedValueOnce(() => safetyValue);
+        }
         if (transform) {
           const actual = await vi.importActual<typeof import('../../src/util/transform')>(
             '../../src/util/transform',
@@ -818,7 +863,7 @@ describe('runEval', () => {
         const assertion: Assertion = {
           type: `promptfoo:redteam:${plugin}`,
           value:
-            plugin === 'vlguard' && value
+            plugin === 'vlguard' && value && typeof value === 'object'
               ? { [aliasOnly ? 'vlguardSafe' : 'safe']: value.combinedGrade === 'safe' }
               : value,
         };

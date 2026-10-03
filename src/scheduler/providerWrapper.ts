@@ -134,6 +134,13 @@ export function wrapProviderWithRateLimiting(
     },
   };
 
+  // Some provider IDs omit their API format; graders also inspect the constructor.
+  Object.defineProperty(wrappedProvider, 'constructor', {
+    value: provider.constructor,
+    writable: true,
+    configurable: true,
+  });
+
   // Mark as wrapped to prevent double-wrapping
   (wrappedProvider as WrappedApiProvider)[WRAPPED_SYMBOL] = true;
 
