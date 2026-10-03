@@ -128,21 +128,10 @@ describe('cloud utils', () => {
       });
     });
 
-    it('should handle API host without trailing slash', async () => {
-      mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
-
-      const path = 'test/path';
-      const method = 'GET';
-
-      await makeRequest(path, method);
-
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/test/path',
-        expect.any(Object),
-      );
-    });
-
-    it('should handle API host with trailing slash', async () => {
+    it.each([
+      'should handle API host without trailing slash',
+      'should handle API host with trailing slash',
+    ])('%s', async () => {
       mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
 
       const path = 'test/path';

@@ -85,10 +85,6 @@ export function logConfigResolutionError(error: ConfigResolutionError, prefix?: 
   logger[error.logLevel](prefix ? `${prefix}${error.cliMessage}` : error.cliMessage);
 }
 
-function failConfigResolution(message: string, options?: ConfigResolutionErrorOptions): never {
-  throw new ConfigResolutionError(message, options);
-}
-
 function normalizeConfiguredCommandLineOptions(
   commandLineOptions: Partial<CommandLineOptions> | undefined,
   configDescription: string,
@@ -99,7 +95,7 @@ function normalizeConfiguredCommandLineOptions(
 
   const validationResult = CommandLineOptionsSchema.partial().safeParse(commandLineOptions);
   if (!validationResult.success) {
-    failConfigResolution(
+    throw new ConfigResolutionError(
       `Invalid commandLineOptions in ${configDescription}:\n${z.prettifyError(validationResult.error)}`,
     );
   }
@@ -356,73 +352,56 @@ async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
     strategies?: RedteamStrategyObject[];
   };
   const ext = path.parse(configPath).ext;
-  if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
+  const isDeclarative = ext === '.json' || ext === '.yaml' || ext === '.yml';
+  if (isDeclarative) {
     const rawConfig = loadYaml(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
-    const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
-
-    // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
-    // This allows env vars to be used in paths and other config values.
-    // Runtime templates like {{ vars.x }} are preserved for later evaluation.
-    const renderedConfig = renderConfigEnvTemplates(dereferencedConfig as UnifiedConfig);
-    const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
-      renderedConfig.commandLineOptions,
-      `configuration file ${configPath}`,
-    );
-    const normalizedConfig =
-      normalizedCommandLineOptions === undefined
-        ? renderedConfig
-        : { ...renderedConfig, commandLineOptions: normalizedCommandLineOptions };
-
-    // Validator requires `prompts`, but prompts is not actually required for redteam.
-    // We create a relaxed schema for validation that makes prompts optional
-    const UnifiedConfigSchemaWithoutPrompts = TestSuiteConfigSchema.extend({
-      evaluateOptions: EvaluateOptionsSchema.optional(),
-      commandLineOptions: CommandLineOptionsSchema.partial().optional(),
-      providers: ProvidersSchema.optional(),
-      targets: ProvidersSchema.optional(),
-      prompts: TestSuiteConfigSchema.shape.prompts.optional(),
-    }).refine(
-      (data) => {
-        const hasTargets = data.targets !== undefined;
-        const hasProviders = data.providers !== undefined;
-        return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-      },
-      {
-        message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-      },
-    );
-    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(normalizedConfig);
-    if (!validationResult.success) {
-      logger.warn(
-        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
-      );
-    }
-    ret = normalizedConfig;
+    ret = await dereferenceConfig(rawConfig as UnifiedConfig);
   } else if (isJavascriptFile(configPath)) {
     // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
-    const imported = await importModule(configPath);
-
-    // Render environment variable templates for JS configs too.
-    // This ensures consistent behavior across config file types.
-    const renderedConfig = renderConfigEnvTemplates(imported as UnifiedConfig);
-    const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
-      renderedConfig.commandLineOptions,
-      `configuration file ${configPath}`,
-    );
-    const normalizedConfig =
-      normalizedCommandLineOptions === undefined
-        ? renderedConfig
-        : { ...renderedConfig, commandLineOptions: normalizedCommandLineOptions };
-
-    const validationResult = UnifiedConfigSchema.safeParse(normalizedConfig);
-    if (!validationResult.success) {
-      logger.warn(
-        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
-      );
-    }
-    ret = normalizedConfig;
+    ret = await importModule(configPath);
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
+  }
+
+  // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
+  // This allows env vars to be used in paths and other config values.
+  // Runtime templates like {{ vars.x }} are preserved for later evaluation.
+  // JS configs use the same rendering path as declarative configs.
+  // This ensures consistent behavior across config file types.
+  ret = renderConfigEnvTemplates(ret);
+  const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
+    ret.commandLineOptions,
+    `configuration file ${configPath}`,
+  );
+  if (normalizedCommandLineOptions !== undefined) {
+    ret = { ...ret, commandLineOptions: normalizedCommandLineOptions };
+  }
+
+  // Validator requires `prompts`, but prompts is not actually required for redteam.
+  // We create a relaxed schema for validation that makes prompts optional
+  const validationSchema = isDeclarative
+    ? TestSuiteConfigSchema.extend({
+        evaluateOptions: EvaluateOptionsSchema.optional(),
+        commandLineOptions: CommandLineOptionsSchema.partial().optional(),
+        providers: ProvidersSchema.optional(),
+        targets: ProvidersSchema.optional(),
+        prompts: TestSuiteConfigSchema.shape.prompts.optional(),
+      }).refine(
+        (data) => {
+          const hasTargets = data.targets !== undefined;
+          const hasProviders = data.providers !== undefined;
+          return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+        },
+        {
+          message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+        },
+      )
+    : UnifiedConfigSchema;
+  const validationResult = validationSchema.safeParse(ret);
+  if (!validationResult.success) {
+    logger.warn(
+      `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
+    );
   }
 
   if (ret.targets) {
@@ -967,7 +946,7 @@ async function resolveLoadedConfig(
       feature: 'standalone assertions mode',
     });
     if (!cmdObj.modelOutputs) {
-      failConfigResolution('You must provide --model-outputs when using --assertions');
+      throw new ConfigResolutionError('You must provide --model-outputs when using --assertions');
     }
     const modelOutputs = JSON.parse(
       await fsPromises.readFile(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
@@ -1078,13 +1057,13 @@ async function resolveLoadedConfig(
 
       ${chalk.green(promptfooCommand('init'))}
     `;
-    failConfigResolution('No promptfooconfig found', {
+    throw new ConfigResolutionError('No promptfooconfig found', {
       cliMessage,
       logLevel: 'warn',
     });
   }
   if (!hasPrompts) {
-    failConfigResolution('You must provide at least 1 prompt');
+    throw new ConfigResolutionError('You must provide at least 1 prompt');
   }
 
   if (
@@ -1093,7 +1072,9 @@ async function resolveLoadedConfig(
     type !== 'AssertionGeneration' &&
     !hasProviders
   ) {
-    failConfigResolution('You must specify at least 1 provider (for example, openai:gpt-4.1)');
+    throw new ConfigResolutionError(
+      'You must specify at least 1 provider (for example, openai:gpt-4.1)',
+    );
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
@@ -1237,7 +1218,7 @@ async function resolveLoadedConfig(
   if (parsedPrompts.length === 0) {
     const message =
       'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.';
-    failConfigResolution(message);
+    throw new ConfigResolutionError(message);
   }
 
   const defaultTest: TestCase = {

@@ -548,6 +548,22 @@ describe('filterTests', () => {
   });
 
   describe('range filter', () => {
+    it.each([
+      ['\u00a0001 \t: 2\u2028', 1],
+      ['  : 0002  ', 2],
+      ['  01 : \t ', 2],
+      ['0:9007199254740991', 3],
+    ] as const)('preserves range whitespace and numeric bounds: %s', async (range, length) => {
+      expect(await filterTests(mockTestSuite, { range })).toHaveLength(length);
+    });
+
+    it.each(['1 0:2', '0:1e3', '0:9007199254740992', '0:\u0662', ': \t', '1:2:3'])(
+      'rejects malformed range bounds: %s',
+      async (range) => {
+        await expect(filterTests(mockTestSuite, { range })).rejects.toThrow(/--filter-range/);
+      },
+    );
+
     it('should slice tests by zero-based start-inclusive, end-exclusive range', async () => {
       const result = await filterTests(mockTestSuite, { range: '1:3' });
       expect(result).toHaveLength(2);

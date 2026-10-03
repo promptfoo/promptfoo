@@ -26,6 +26,21 @@ import { createMockProvider, createProviderResponse } from '../factories/provide
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
+const createNestedAuthorizationFixture = () => ({
+  transformedRequest: {
+    headers: {
+      Authorization: 'Bearer nested-secret',
+    },
+  },
+});
+
+const createUserTraceMetadataFixture = () => ({
+  __promptfoo: {
+    traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+    retained: 'user-metadata',
+  },
+});
+
 describe('EvalResult', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -317,12 +332,7 @@ describe('EvalResult', () => {
         ...mockEvaluateResult,
         traceId: 'internal-trace',
         evaluationId: 'internal-evaluation',
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       expect(warnSpy).toHaveBeenCalledWith(
@@ -338,12 +348,7 @@ describe('EvalResult', () => {
     it('strips user-supplied reserved trace linkage from untraced rows', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-injected-linkage', {
         ...mockEvaluateResult,
-        metadata: {
-          __promptfoo: {
-            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
-            retained: 'user-metadata',
-          },
-        },
+        metadata: createUserTraceMetadataFixture(),
       });
 
       const retrieved = await EvalResult.findById(result.id);
@@ -1301,13 +1306,7 @@ describe('EvalResult', () => {
     it('should preserve the original response object when response stripping is disabled', () => {
       const response = {
         output: 'provider output',
-        metadata: {
-          transformedRequest: {
-            headers: {
-              Authorization: 'Bearer nested-secret',
-            },
-          },
-        },
+        metadata: createNestedAuthorizationFixture(),
       };
 
       const result = new EvalResult({
@@ -1447,13 +1446,7 @@ describe('EvalResult', () => {
           response: {
             output: 'provider output',
             latencyMs: 42,
-            metadata: {
-              transformedRequest: {
-                headers: {
-                  Authorization: 'Bearer nested-secret',
-                },
-              },
-            },
+            metadata: createNestedAuthorizationFixture(),
           },
           gradingResult: null,
           provider: mockProvider,

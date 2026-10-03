@@ -533,6 +533,7 @@ describe('code-scan-action main', () => {
 
       expect(npmInstall.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
       expectNoActionAuthEnv(npmInstall.options);
+      expect(mocks.core.getIDToken).toHaveBeenCalledWith('promptfoo');
       expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBe('fake-oidc-token');
       expectNoActionAuthEnv(promptfoo.options);
       expect(process.env.GITHUB_OIDC_TOKEN).toBe('stale-oidc-token');

@@ -2,46 +2,62 @@ import { describe, expect, it, vi } from 'vitest';
 import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
 import { createCompletedPrompt } from '../factories/eval';
 
-import type { EvaluateTable, ResultsFile } from '../../src/types/index';
+import type { EvaluateResult, EvaluateTable, ResultsFile } from '../../src/types/index';
+
+// These legacy fixtures intentionally omit unrelated summary/file metadata.
+function createResultsFile(
+  results: EvaluateResult[],
+  overrides: Partial<ResultsFile> = {},
+): ResultsFile {
+  return {
+    version: 4,
+    prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+    results: { results },
+    ...overrides,
+  } as ResultsFile;
+}
+
+function createResult(overrides: Partial<EvaluateResult>): EvaluateResult {
+  return {
+    id: 'test1',
+    testIdx: 0,
+    promptIdx: 0,
+    prompt: {
+      raw: 'test prompt',
+      label: 'Test Prompt',
+    },
+    provider: {
+      id: 'test-provider',
+    },
+    success: true,
+    promptId: 'prompt1',
+    testCase: {},
+    score: 1,
+    latencyMs: 100,
+    namedScores: {},
+    ...overrides,
+  } as EvaluateResult;
+}
 
 describe('convertResultsToTable', () => {
   it('should convert results to table format', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              var1: 'value1',
-              var2: 'value2',
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-              label: 'Test Provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          var1: 'value1',
+          var2: 'value2',
+        },
+        response: {
+          output: 'test output',
+        },
+        provider: {
+          id: 'test-provider',
+          label: 'Test Provider',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const expected: EvaluateTable = {
       head: {
@@ -91,253 +107,136 @@ describe('convertResultsToTable', () => {
   });
 
   it('should handle error responses', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            error: 'Test error',
-            provider: {
-              id: 'test-provider',
-            },
-            success: false,
-            promptId: 'prompt1',
-            testCase: {},
-            vars: {},
-            // @ts-ignore
-            failureReason: 'provider_error',
-            score: 0,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        error: 'Test error',
+        success: false,
+        vars: {},
+        // @ts-ignore
+        failureReason: 'provider_error',
+        score: 0,
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     expect(result.body[0].outputs[0].text).toBe('Test error');
   });
 
   it('should handle null output by falling back to error', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {},
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: null,
-            },
-            error: 'Provider returned null',
-            provider: {
-              id: 'test-provider',
-              label: 'Test Provider',
-            },
-            success: false,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'provider_error',
-            score: 0,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {},
+        response: {
+          output: null,
+        },
+        error: 'Provider returned null',
+        provider: {
+          id: 'test-provider',
+          label: 'Test Provider',
+        },
+        success: false,
+        // @ts-ignore
+        failureReason: 'provider_error',
+        score: 0,
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     expect(result.body[0].outputs[0].text).toBe('Provider returned null');
   });
 
   it('should preserve falsy var values like 0 and false', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              var1: 0,
-              var2: false,
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-              label: 'Test Provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          var1: 0,
+          var2: false,
+        },
+        response: {
+          output: 'test output',
+        },
+        provider: {
+          id: 'test-provider',
+          label: 'Test Provider',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     expect(result.body[0].vars).toEqual(['0', 'false']);
   });
 
   it('should handle assertion results', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            testCase: {
-              assert: [{ type: 'equals', value: 'expected' }],
-            },
-            gradingResult: {
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        response: {
+          output: 'test output',
+        },
+        testCase: {
+          assert: [{ type: 'equals', value: 'expected' }],
+        },
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'Test failed',
+          componentResults: [
+            {
               pass: false,
-              score: 0,
               reason: 'Test failed',
-              componentResults: [
-                {
-                  pass: false,
-                  reason: 'Test failed',
-                  score: 0,
-                },
-              ],
+              score: 0,
             },
-            provider: {
-              id: 'test-provider',
-            },
-            success: false,
-            promptId: 'prompt1',
-            vars: {},
-            // @ts-ignore
-            failureReason: 'assertion_failed',
-            score: 0,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+          ],
+        },
+        success: false,
+        vars: {},
+        // @ts-ignore
+        failureReason: 'assertion_failed',
+        score: 0,
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     expect(result.body[0].outputs[0].text).toBe('test output');
   });
 
   it('should handle redteam final prompts', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              prompt: 'original prompt',
-            },
-            metadata: {
-              redteamFinalPrompt: 'modified prompt',
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          prompt: 'original prompt',
+        },
+        metadata: {
+          redteamFinalPrompt: 'modified prompt',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     expect(result.body[0].vars[0]).toBe('modified prompt');
   });
 
   it('should handle multiple redteam final prompts', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      vars: ['prompt', 'query', 'harmCategory'],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              prompt: 'original prompt',
-              query: 'original query',
-              harmCategory: 'test',
-            },
-            metadata: {
-              redteamFinalPrompt: 'modified prompt',
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
+    const resultsFile: ResultsFile = createResultsFile(
+      [
+        createResult({
+          vars: {
+            prompt: 'original prompt',
+            query: 'original query',
+            harmCategory: 'test',
           },
-        ],
-      },
-    };
+          metadata: {
+            redteamFinalPrompt: 'modified prompt',
+          },
+          // @ts-ignore
+          failureReason: 'none',
+        }),
+      ],
+      { vars: ['prompt', 'query', 'harmCategory'] },
+    );
 
     const result = convertResultsToTable(resultsFile);
     const vars = result.body[0].vars;
@@ -347,45 +246,23 @@ describe('convertResultsToTable', () => {
   });
 
   it('should handle audio responses', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-              audio: {
-                id: 'audio1',
-                expiresAt: 1748995200000, // 2025-06-01
-                data: 'base64data',
-                transcript: 'test transcript',
-                format: 'mp3',
-              },
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            vars: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        response: {
+          output: 'test output',
+          audio: {
+            id: 'audio1',
+            expiresAt: 1748995200000, // 2025-06-01
+            data: 'base64data',
+            transcript: 'test transcript',
+            format: 'mp3',
           },
-        ],
-      },
-    };
+        },
+        vars: {},
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     expect(result.body[0].outputs[0].audio).toEqual({
@@ -398,48 +275,31 @@ describe('convertResultsToTable', () => {
   });
 
   it('should format object and array variables with pretty-printed JSON', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      vars: ['conversation', 'simpleVar', 'objectVar'],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              conversation: [
-                { user: 'How do I work with you?' },
-                { assistant: 'I can help you understand how to work with me.' },
-                { user: 'Tell me more about NDAs' },
-              ],
-              simpleVar: 'This is a simple string',
-              objectVar: { key1: 'value1', key2: 'value2' },
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-              label: 'Test Provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
+    const resultsFile: ResultsFile = createResultsFile(
+      [
+        createResult({
+          vars: {
+            conversation: [
+              { user: 'How do I work with you?' },
+              { assistant: 'I can help you understand how to work with me.' },
+              { user: 'Tell me more about NDAs' },
+            ],
+            simpleVar: 'This is a simple string',
+            objectVar: { key1: 'value1', key2: 'value2' },
           },
-        ],
-      },
-    };
+          response: {
+            output: 'test output',
+          },
+          provider: {
+            id: 'test-provider',
+            label: 'Test Provider',
+          },
+          // @ts-ignore
+          failureReason: 'none',
+        }),
+      ],
+      { vars: ['conversation', 'simpleVar', 'objectVar'] },
+    );
 
     const result = convertResultsToTable(resultsFile);
     const expectedConversation = JSON.stringify(
@@ -465,43 +325,21 @@ describe('convertResultsToTable', () => {
   });
 
   it('should copy sessionId from metadata to vars when vars.sessionId is not present', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'What is AI?',
-            },
-            metadata: {
-              sessionId: 'session-123',
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          question: 'What is AI?',
+        },
+        metadata: {
+          sessionId: 'session-123',
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // sessionId should be copied from metadata to vars
@@ -511,44 +349,22 @@ describe('convertResultsToTable', () => {
   });
 
   it('should not overwrite user-set vars.sessionId with metadata.sessionId', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              sessionId: 'user-session-456',
-              question: 'What is AI?',
-            },
-            metadata: {
-              sessionId: 'provider-session-123',
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          sessionId: 'user-session-456',
+          question: 'What is AI?',
+        },
+        metadata: {
+          sessionId: 'provider-session-123',
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // User-set sessionId should be preserved, not overwritten
@@ -557,44 +373,22 @@ describe('convertResultsToTable', () => {
   });
 
   it('should handle empty vars.sessionId by populating from metadata.sessionId', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              sessionId: '',
-              question: 'What is AI?',
-            },
-            metadata: {
-              sessionId: 'session-789',
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          sessionId: '',
+          question: 'What is AI?',
+        },
+        metadata: {
+          sessionId: 'session-789',
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // Empty sessionId should be populated from metadata
@@ -603,40 +397,18 @@ describe('convertResultsToTable', () => {
   });
 
   it('should not crash when metadata is missing', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'What is AI?',
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          question: 'What is AI?',
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     // Should not throw
     const result = convertResultsToTable(resultsFile);
@@ -644,40 +416,18 @@ describe('convertResultsToTable', () => {
   });
 
   it('should create vars object if missing when populating sessionId from metadata', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            metadata: {
-              sessionId: 'session-abc',
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        metadata: {
+          sessionId: 'session-abc',
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // sessionId should be added even when vars was initially undefined
@@ -687,102 +437,58 @@ describe('convertResultsToTable', () => {
   });
 
   it('should handle multiple results with varying sessionId configurations', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          // Result 0: Only metadata.sessionId (should copy to vars)
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'Question 1',
-            },
-            metadata: {
-              sessionId: 'metadata-session-1',
-            },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'output 1' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-          // Result 1: Only vars.sessionId (should preserve)
-          {
-            id: 'test2',
-            testIdx: 1,
-            promptIdx: 0,
-            vars: {
-              question: 'Question 2',
-              sessionId: 'user-session-2',
-            },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'output 2' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-          // Result 2: Both metadata and vars sessionId (should preserve vars)
-          {
-            id: 'test3',
-            testIdx: 2,
-            promptIdx: 0,
-            vars: {
-              question: 'Question 3',
-              sessionId: 'user-session-3',
-            },
-            metadata: {
-              sessionId: 'metadata-session-3',
-            },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'output 3' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-          // Result 3: Neither metadata nor vars sessionId
-          {
-            id: 'test4',
-            testIdx: 3,
-            promptIdx: 0,
-            vars: {
-              question: 'Question 4',
-            },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'output 4' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      // Result 0: Only metadata.sessionId (should copy to vars)
+      createResult({
+        vars: {
+          question: 'Question 1',
+        },
+        metadata: {
+          sessionId: 'metadata-session-1',
+        },
+        response: { output: 'output 1' },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+      // Result 1: Only vars.sessionId (should preserve)
+      createResult({
+        id: 'test2',
+        testIdx: 1,
+        vars: {
+          question: 'Question 2',
+          sessionId: 'user-session-2',
+        },
+        response: { output: 'output 2' },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+      // Result 2: Both metadata and vars sessionId (should preserve vars)
+      createResult({
+        id: 'test3',
+        testIdx: 2,
+        vars: {
+          question: 'Question 3',
+          sessionId: 'user-session-3',
+        },
+        metadata: {
+          sessionId: 'metadata-session-3',
+        },
+        response: { output: 'output 3' },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+      // Result 3: Neither metadata nor vars sessionId
+      createResult({
+        id: 'test4',
+        testIdx: 3,
+        vars: {
+          question: 'Question 4',
+        },
+        response: { output: 'output 4' },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
 
@@ -804,43 +510,21 @@ describe('convertResultsToTable', () => {
   });
 
   it('should copy sessionIds array from metadata to vars for multi-turn strategies', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'What is AI?',
-            },
-            metadata: {
-              sessionIds: ['session-1', 'session-2', 'session-3'],
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          question: 'What is AI?',
+        },
+        metadata: {
+          sessionIds: ['session-1', 'session-2', 'session-3'],
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // sessionIds array should be joined and copied to vars.sessionId
@@ -850,44 +534,22 @@ describe('convertResultsToTable', () => {
   });
 
   it('should prefer sessionIds array over sessionId when both exist', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'What is AI?',
-            },
-            metadata: {
-              sessionId: 'single-session',
-              sessionIds: ['multi-1', 'multi-2'],
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          question: 'What is AI?',
+        },
+        metadata: {
+          sessionId: 'single-session',
+          sessionIds: ['multi-1', 'multi-2'],
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // sessionIds array should take precedence over sessionId
@@ -896,44 +558,22 @@ describe('convertResultsToTable', () => {
   });
 
   it('should fall back to sessionId when sessionIds is empty array', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'What is AI?',
-            },
-            metadata: {
-              sessionId: 'fallback-session',
-              sessionIds: [],
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          question: 'What is AI?',
+        },
+        metadata: {
+          sessionId: 'fallback-session',
+          sessionIds: [],
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // Empty sessionIds array should fall back to sessionId
@@ -942,43 +582,21 @@ describe('convertResultsToTable', () => {
   });
 
   it('should handle single-element sessionIds array', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'What is AI?',
-            },
-            metadata: {
-              sessionIds: ['only-session'],
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          question: 'What is AI?',
+        },
+        metadata: {
+          sessionIds: ['only-session'],
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // Single-element sessionIds should work without trailing comma
@@ -987,44 +605,22 @@ describe('convertResultsToTable', () => {
   });
 
   it('should ignore non-array sessionIds and fall back to sessionId', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'What is AI?',
-            },
-            metadata: {
-              sessionId: 'fallback-session',
-              sessionIds: 'not-an-array' as unknown as string[],
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          question: 'What is AI?',
+        },
+        metadata: {
+          sessionId: 'fallback-session',
+          sessionIds: 'not-an-array' as unknown as string[],
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // Non-array sessionIds should be ignored, falling back to sessionId
@@ -1033,104 +629,60 @@ describe('convertResultsToTable', () => {
   });
 
   it('should handle multiple results with varying sessionIds array configurations', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          // Result 0: Has sessionIds array (multi-turn)
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'Question 1',
-            },
-            metadata: {
-              sessionIds: ['multi-1a', 'multi-1b', 'multi-1c'],
-            },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'output 1' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-          // Result 1: Has single sessionId (single-turn)
-          {
-            id: 'test2',
-            testIdx: 1,
-            promptIdx: 0,
-            vars: {
-              question: 'Question 2',
-            },
-            metadata: {
-              sessionId: 'single-session-2',
-            },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'output 2' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-          // Result 2: Has both sessionIds and sessionId (sessionIds takes precedence)
-          {
-            id: 'test3',
-            testIdx: 2,
-            promptIdx: 0,
-            vars: {
-              question: 'Question 3',
-            },
-            metadata: {
-              sessionId: 'ignored-session',
-              sessionIds: ['multi-3a', 'multi-3b'],
-            },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'output 3' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-          // Result 3: No sessionId or sessionIds
-          {
-            id: 'test4',
-            testIdx: 3,
-            promptIdx: 0,
-            vars: {
-              question: 'Question 4',
-            },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'output 4' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      // Result 0: Has sessionIds array (multi-turn)
+      createResult({
+        vars: {
+          question: 'Question 1',
+        },
+        metadata: {
+          sessionIds: ['multi-1a', 'multi-1b', 'multi-1c'],
+        },
+        response: { output: 'output 1' },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+      // Result 1: Has single sessionId (single-turn)
+      createResult({
+        id: 'test2',
+        testIdx: 1,
+        vars: {
+          question: 'Question 2',
+        },
+        metadata: {
+          sessionId: 'single-session-2',
+        },
+        response: { output: 'output 2' },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+      // Result 2: Has both sessionIds and sessionId (sessionIds takes precedence)
+      createResult({
+        id: 'test3',
+        testIdx: 2,
+        vars: {
+          question: 'Question 3',
+        },
+        metadata: {
+          sessionId: 'ignored-session',
+          sessionIds: ['multi-3a', 'multi-3b'],
+        },
+        response: { output: 'output 3' },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+      // Result 3: No sessionId or sessionIds
+      createResult({
+        id: 'test4',
+        testIdx: 3,
+        vars: {
+          question: 'Question 4',
+        },
+        response: { output: 'output 4' },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
 
@@ -1152,52 +704,30 @@ describe('convertResultsToTable', () => {
   });
 
   it('should filter out null, undefined, empty strings, and convert non-strings in sessionIds array', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {
-              question: 'What is AI?',
-            },
-            metadata: {
-              // Array with mixed types: valid strings, null, undefined, empty string, number
-              sessionIds: [
-                'session-1',
-                null,
-                undefined,
-                '',
-                'session-2',
-                123,
-                'session-3',
-              ] as unknown as string[],
-            },
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: 'test output',
-            },
-            provider: {
-              id: 'test-provider',
-            },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: {
+          question: 'What is AI?',
+        },
+        metadata: {
+          // Array with mixed types: valid strings, null, undefined, empty string, number
+          sessionIds: [
+            'session-1',
+            null,
+            undefined,
+            '',
+            'session-2',
+            123,
+            'session-3',
+          ] as unknown as string[],
+        },
+        response: {
+          output: 'test output',
+        },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     const result = convertResultsToTable(resultsFile);
     // Should filter out null, undefined, empty strings and convert number to string
@@ -1207,49 +737,27 @@ describe('convertResultsToTable', () => {
   });
 
   it('preserves persisted variable order when loaded results arrive in a different order', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      vars: ['zebra', 'apple', 'mango', 'banana'],
-      results: {
-        results: [
-          {
-            id: 'test2',
-            testIdx: 1,
-            promptIdx: 0,
-            vars: { zebra: 'z-row2', apple: 'a-row2', mango: 'm-row2', banana: 'b-row2' },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'test output' },
-            provider: { id: 'test-provider', label: 'Test Provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: { zebra: 'z-row1', apple: 'a-row1', mango: 'm-row1' },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'test output' },
-            provider: { id: 'test-provider', label: 'Test Provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile(
+      [
+        createResult({
+          id: 'test2',
+          testIdx: 1,
+          vars: { zebra: 'z-row2', apple: 'a-row2', mango: 'm-row2', banana: 'b-row2' },
+          response: { output: 'test output' },
+          provider: { id: 'test-provider', label: 'Test Provider' },
+          // @ts-ignore
+          failureReason: 'none',
+        }),
+        createResult({
+          vars: { zebra: 'z-row1', apple: 'a-row1', mango: 'm-row1' },
+          response: { output: 'test output' },
+          provider: { id: 'test-provider', label: 'Test Provider' },
+          // @ts-ignore
+          failureReason: 'none',
+        }),
+      ],
+      { vars: ['zebra', 'apple', 'mango', 'banana'] },
+    );
 
     const result = convertResultsToTable(resultsFile);
     expect(result.head.vars).toEqual(['zebra', 'apple', 'mango', 'banana']);
@@ -1258,113 +766,57 @@ describe('convertResultsToTable', () => {
   });
 
   it('sorts metadata-only display columns after the persisted variable prefix', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      vars: ['prompt'],
-      results: {
-        results: [
-          {
-            id: 'test2',
-            testIdx: 1,
-            promptIdx: 0,
-            vars: { prompt: 'row2' },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'test output', metadata: { transformDisplayVars: { zebra: 'z' } } },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: { prompt: 'row1' },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'test output', metadata: { transformDisplayVars: { apple: 'a' } } },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile(
+      [
+        createResult({
+          id: 'test2',
+          testIdx: 1,
+          vars: { prompt: 'row2' },
+          response: { output: 'test output', metadata: { transformDisplayVars: { zebra: 'z' } } },
+          // @ts-ignore
+          failureReason: 'none',
+        }),
+        createResult({
+          vars: { prompt: 'row1' },
+          response: { output: 'test output', metadata: { transformDisplayVars: { apple: 'a' } } },
+          // @ts-ignore
+          failureReason: 'none',
+        }),
+      ],
+      { vars: ['prompt'] },
+    );
 
     const result = convertResultsToTable(resultsFile);
     expect(result.head.vars).toEqual(['prompt', 'apple', 'zebra']);
   });
 
   it('keeps alphabetical fallback ordering for legacy result files without persisted vars', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: { zebra: 'z', apple: 'a' },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'test output' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile([
+      createResult({
+        vars: { zebra: 'z', apple: 'a' },
+        response: { output: 'test output' },
+        // @ts-ignore
+        failureReason: 'none',
+      }),
+    ]);
 
     expect(convertResultsToTable(resultsFile).head.vars).toEqual(['apple', 'zebra']);
   });
 
   it('appends runtime-only result.vars keys after the persisted prefix in sorted order', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      vars: ['prompt'],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            // `zeta`/`alpha` are NOT in persistedVars and NOT transformDisplayVars.
-            // They should be appended after `prompt` in alphabetical order.
-            vars: { prompt: 'p1', zeta: 'z1', alpha: 'a1' },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'test output' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile(
+      [
+        createResult({
+          // `zeta`/`alpha` are NOT in persistedVars and NOT transformDisplayVars.
+          // They should be appended after `prompt` in alphabetical order.
+          vars: { prompt: 'p1', zeta: 'z1', alpha: 'a1' },
+          response: { output: 'test output' },
+          // @ts-ignore
+          failureReason: 'none',
+        }),
+      ],
+      { vars: ['prompt'] },
+    );
 
     const result = convertResultsToTable(resultsFile);
     expect(result.head.vars).toEqual(['prompt', 'alpha', 'zeta']);
@@ -1378,37 +830,22 @@ describe('convertResultsToTable', () => {
   ])(
     'does not overwrite a falsy result.vars value (%s) with transformDisplayVars',
     (_label, falsyValue, expectedRendered) => {
-      const resultsFile: ResultsFile = {
-        version: 4,
-        prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-        vars: ['prompt'],
-        results: {
-          results: [
-            {
-              id: 'test1',
-              testIdx: 0,
-              promptIdx: 0,
-              // Falsy value for `prompt` must be preserved, not silently
-              // replaced by transformDisplayVars.prompt.
-              vars: { prompt: falsyValue } as unknown as Record<string, string>,
-              prompt: { raw: 'test prompt', label: 'Test Prompt' },
-              response: {
-                output: 'test output',
-                metadata: { transformDisplayVars: { prompt: 'from-transform' } },
-              },
-              provider: { id: 'test-provider' },
-              success: true,
-              promptId: 'prompt1',
-              testCase: {},
-              // @ts-ignore
-              failureReason: 'none',
-              score: 1,
-              latencyMs: 100,
-              namedScores: {},
+      const resultsFile: ResultsFile = createResultsFile(
+        [
+          createResult({
+            // Falsy value for `prompt` must be preserved, not silently
+            // replaced by transformDisplayVars.prompt.
+            vars: { prompt: falsyValue } as unknown as Record<string, string>,
+            response: {
+              output: 'test output',
+              metadata: { transformDisplayVars: { prompt: 'from-transform' } },
             },
-          ],
-        },
-      };
+            // @ts-ignore
+            failureReason: 'none',
+          }),
+        ],
+        { vars: ['prompt'] },
+      );
 
       const result = convertResultsToTable(resultsFile);
       expect(result.head.vars).toEqual(['prompt']);
@@ -1452,35 +889,20 @@ describe('convertResultsToTable', () => {
     const logger = (await import('../../src/logger')).default;
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
 
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      vars: ['prompt'],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: { prompt: 'original' },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: {
-              output: 'test output',
-              metadata: { transformDisplayVars: { prompt: 'shadowed' } },
-            },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
+    const resultsFile: ResultsFile = createResultsFile(
+      [
+        createResult({
+          vars: { prompt: 'original' },
+          response: {
+            output: 'test output',
+            metadata: { transformDisplayVars: { prompt: 'shadowed' } },
           },
-        ],
-      },
-    };
+          // @ts-ignore
+          failureReason: 'none',
+        }),
+      ],
+      { vars: ['prompt'] },
+    );
 
     const result = convertResultsToTable(resultsFile);
 
@@ -1490,32 +912,17 @@ describe('convertResultsToTable', () => {
   });
 
   it('dedups a corrupt persisted vars list so duplicate header columns are not rendered', () => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      vars: ['prompt', 'prompt', 'foo'],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: { prompt: 'p', foo: 'f' },
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: { output: 'test output' },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+    const resultsFile: ResultsFile = createResultsFile(
+      [
+        createResult({
+          vars: { prompt: 'p', foo: 'f' },
+          response: { output: 'test output' },
+          // @ts-ignore
+          failureReason: 'none',
+        }),
+      ],
+      { vars: ['prompt', 'prompt', 'foo'] },
+    );
 
     const result = convertResultsToTable(resultsFile);
     expect(result.head.vars).toEqual(['prompt', 'foo']);

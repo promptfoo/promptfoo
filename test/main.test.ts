@@ -51,11 +51,6 @@ vi.mock('undici', async () => ({
   getGlobalDispatcher: mockGetGlobalDispatcher,
 }));
 
-// Keep code scan command initialization isolated from these CLI lifecycle tests.
-vi.mock('../src/codeScan', () => ({
-  codeScansCommand: vi.fn(),
-}));
-
 let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
 let isMainModule: typeof import('../src/mainUtils').isMainModule;
 let shouldSkipDefaultConfigLoading: typeof import('../src/mainUtils').shouldSkipDefaultConfigLoading;
