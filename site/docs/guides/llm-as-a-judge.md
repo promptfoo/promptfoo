@@ -779,7 +779,7 @@ pass    pass
 fail    not judged
 ```
 
-Here, `failureReason: 2` denotes an execution error; `metadata.graderError` marks a grader failure. Missing verdicts are also not judged. Exclude these rows from agreement calculations and report their count alongside the number of judged rows. This example uses one rubric assertion per row; with multiple assertions, compare the relevant assertion's verdict rather than the aggregate result.
+Here, `failureReason: 2` denotes an execution error ([`ResultFailureReason.ERROR`](https://github.com/promptfoo/promptfoo/blob/6fb013584d2f0e4a2e9b7848feff2e6110420aae/src/types/index.ts#L380-L387)); `metadata.graderError` marks a grader failure. Missing verdicts are also not judged. Exclude these rows from agreement calculations and report their count alongside the number of judged rows. This example uses one rubric assertion per row; with multiple assertions, compare the relevant assertion's verdict rather than the aggregate result.
 
 Refine rubric wording until agreement is >90%.
 
@@ -790,6 +790,8 @@ Run against holdout examples (that you never tuned on) to check for overfitting:
 ```bash
 npx promptfoo eval -c eval/promptfooconfig.yaml --filter-metadata split=holdout -o holdout-results.json --no-cache
 ```
+
+Apply the jq command from [Step 4](#step-4-run-and-measure-agreement) to `holdout-results.json` as well. Calculate agreement only among judged rows, and report judged and unjudged counts separately for both the development and holdout sets.
 
 If holdout agreement is significantly lower than development agreement, your rubric is overfit.
 
