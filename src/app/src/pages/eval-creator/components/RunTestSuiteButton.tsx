@@ -17,7 +17,7 @@ import {
 } from './setupReadiness';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
-const RunTestSuiteButton = () => {
+const RunTestSuiteButton = ({ disabled = false }: { disabled?: boolean }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { config } = useStore();
@@ -64,6 +64,7 @@ const RunTestSuiteButton = () => {
   const testCount = countTests(tests);
 
   const isDisabled =
+    disabled ||
     isRunning ||
     normalizedProviders.length === 0 ||
     normalizedPrompts.length === 0 ||

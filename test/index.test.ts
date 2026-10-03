@@ -110,6 +110,7 @@ describe('index.ts exports', () => {
     'getInputDescription',
     'getInputType',
     'guardrails',
+    'hasRestrictedProviderOverride',
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',
@@ -121,6 +122,8 @@ describe('index.ts exports', () => {
     'normalizeInputs',
     'ProbeLimitExceededError',
     'redteam',
+    'reconcileProvidersWithCatalog',
+    'validateProviderCatalogConfig',
   ];
 
   const expectedSchemaExports = [

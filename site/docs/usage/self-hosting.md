@@ -472,15 +472,18 @@ spec:
 
 When `ui-providers.yaml` exists:
 
-- Only configured providers shown (replaces default ~600 providers)
-- "Reference Local Provider" button hidden in eval creator
+- The Add Provider dialog shows only configured providers instead of the built-in provider type catalog
+- The "API keys" button is hidden in the eval creator
+- Provider settings become read-only in the UI: "Edit" reopens the catalog and swaps in the entry you pick, rather than opening the configuration editor. Uploaded, edited, or previously saved YAML also uses only configured providers and their administrator-defined settings
 - Configuration is cached - restart required after changes: `docker restart promptfoo_container`
+
+"Add Provider", "Edit", and "Run Eval" are disabled until the catalog loads. If the request fails, a **Retry** link appears next to the provider list. A catalog with no valid entries stays restricted instead of falling back to the built-in provider list.
 
 :::
 
 :::caution Security - Credentials
 
-**DO NOT store API keys in ui-providers.yaml**. Use environment variables with Nunjucks syntax:
+**DO NOT store API keys in ui-providers.yaml**. The catalog is served verbatim to every UI user via `GET /api/providers`, so any literal credential in the file is visible to anyone who can reach the web UI. Use environment variables with Nunjucks syntax:
 
 ```yaml
 # ui-providers.yaml
@@ -543,6 +546,14 @@ docker logs promptfoo_container | grep "Invalid provider"
 ```
 
 Common issues: missing `id` field, invalid provider ID format, YAML syntax errors.
+
+Entries whose `id` is not a non-empty, non-whitespace string are skipped, so quote values that look numeric (`- id: '123'`) to keep them from being parsed as numbers.
+
+:::warning
+
+The restriction fails closed. If **every** entry fails validation, the custom catalog remains active but empty: the built-in provider list stays hidden, and Add Provider, Edit, and Run Eval remain unavailable. After any change to the file, confirm the loaded provider count in the logs or check that `GET /api/providers` returns `hasCustomConfig: true` with the expected providers.
+
+:::
 
 **Config not detected:** Verify file location and permissions:
 
