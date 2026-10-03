@@ -104,6 +104,53 @@ describe('ProviderRateLimitState', () => {
       expect(metrics.failedRequests).toBe(1);
       expect(metrics.completedRequests).toBe(0);
     });
+
+    it('releases a slot exactly once when result finalization fails', async () => {
+      let resolvePending!: (value: string) => void;
+      const pending = state.executeWithRetry(
+        'req-pending',
+        () =>
+          new Promise<string>((resolve) => {
+            resolvePending = resolve;
+          }),
+        {},
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      let finalizedCallCount = 0;
+      await expect(
+        state.executeWithRetry(
+          'req-finalizer-error',
+          async () => {
+            finalizedCallCount++;
+            return { output: 'result' };
+          },
+          {
+            finalizeResult: () => {
+              throw new Error('HTTP 503 in finalizer');
+            },
+          },
+        ),
+      ).rejects.toThrow('HTTP 503 in finalizer');
+
+      expect(finalizedCallCount).toBe(1);
+      expect(state.getMetrics()).toMatchObject({
+        activeRequests: 1,
+        totalRequests: 2,
+        completedRequests: 0,
+        failedRequests: 1,
+      });
+
+      resolvePending('complete');
+      await expect(pending).resolves.toBe('complete');
+      expect(state.getMetrics()).toMatchObject({
+        activeRequests: 0,
+        totalRequests: 2,
+        completedRequests: 1,
+        failedRequests: 1,
+      });
+    });
   });
 
   describe('executeWithRetry - rate limit detection', () => {
@@ -134,6 +181,44 @@ describe('ProviderRateLimitState', () => {
       } catch {}
 
       expect(events.length).toBeGreaterThan(0);
+    });
+
+    it('preserves a structured result when rate-limit retries are exhausted', async () => {
+      const result = await noRetryState.executeWithRetry(
+        'req-structured-rate-limit',
+        async () => ({ error: 'rate limited', status: 429 }),
+        {
+          isRateLimited: (response) => response?.status === 429,
+          finalizeResult: (response) => response,
+        },
+      );
+
+      expect(result).toEqual({ error: 'rate limited', status: 429 });
+      expect(noRetryState.getMetrics().failedRequests).toBe(1);
+    });
+
+    it('retries a transient result and finalizes the terminal response', async () => {
+      let callCount = 0;
+      const promise = state.executeWithRetry(
+        'req-transient-result',
+        async () => {
+          callCount++;
+          return callCount === 1 ? { status: 503 } : { status: 200 };
+        },
+        {
+          isRetryableResult: (response) => response.status === 503,
+          finalizeResult: (response, retryResults) => ({
+            ...response,
+            priorStatuses: retryResults.map(({ status }) => status),
+          }),
+        },
+      );
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(callCount).toBe(2);
+      expect(result).toEqual({ status: 200, priorStatuses: [503] });
     });
 
     it('should detect rate limit error by message', async () => {

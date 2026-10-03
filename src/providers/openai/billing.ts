@@ -1167,6 +1167,7 @@ export function calculateOpenAIUsageCost(
   if (!modelRates) {
     return calculateCustomUsageCost(usage, config, options.cachedResponse);
   }
+
   const rates = applyRegionalProcessingRates(modelName, modelRates, config, options);
 
   if (options.cachedResponse) {

@@ -13,7 +13,8 @@ import {
   getOpenAiChatChoiceError,
   getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
-  getTokenUsage,
+  getTokenUsageWithRequestCount,
+  validateChatCompletionMessage,
 } from './openai/util';
 import { calculateOpenRouterResponseCost, getOpenRouterBillingMetadata } from './openrouterBilling';
 import { getRequestTimeoutMs } from './shared';
@@ -28,6 +29,44 @@ import type {
 } from '../types/providers';
 import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
+
+/**
+ * Classify a choice-level error code arriving in a 200 envelope. The
+ * gateway-level classifiers only see the transport status; a 429 or 5xx
+ * hidden in `choices[0].error.code` would otherwise read as a permanent
+ * failure and the scheduler would not retry it.
+ */
+function getChoiceErrorKind(
+  error: unknown,
+): { rateLimitKind?: 'rate_limit'; retryableErrorKind?: 'transient_availability' } | undefined {
+  const record =
+    error && typeof error === 'object' ? (error as Record<string, unknown>) : undefined;
+  const metadata =
+    record?.metadata && typeof record.metadata === 'object'
+      ? (record.metadata as Record<string, unknown>)
+      : undefined;
+  const errorType = typeof metadata?.error_type === 'string' ? metadata.error_type : undefined;
+  if (errorType && errorType !== 'rate_limit_exceeded') {
+    // A documented provider-side failure that is not a rate limit (e.g.
+    // provider_unavailable): not a rate limit even when the code says 429,
+    // but retryable as a transient upstream hiccup.
+    return { retryableErrorKind: 'transient_availability' };
+  }
+  const code = record?.code;
+  const status =
+    typeof code === 'number'
+      ? code
+      : typeof code === 'string' && /^\d{3}$/.test(code)
+        ? Number(code)
+        : undefined;
+  if (status === 429) {
+    return { rateLimitKind: 'rate_limit' };
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return { retryableErrorKind: 'transient_availability' };
+  }
+  return undefined;
+}
 
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
@@ -207,7 +246,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
                   policy.partialOutput,
                   config.response_format?.type === 'json_schema',
                 ),
-          ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
+          ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
           cached,
           cost: this.calculateResponseCost(data, config),
           isRefusal: true,
@@ -228,15 +267,27 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       if (choiceError) {
         await deleteFromCache?.();
         const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
+        // The gateway classifier (provider_code/error_type aware) wins over
+        // the bare-code fallback: a billing-coded 429 must stay 'quota', not
+        // be flattened to 'rate_limit'.
+        const choiceKind = getChoiceErrorKind(choiceError.error);
         return {
           error: `API error: ${choiceError.error.message}`,
-          ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
+          ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
           cached,
           cost: this.calculateResponseCost(data, config),
           raw: data,
+          finishReason: 'error',
           metadata: {
             ...getOpenRouterBillingMetadata(data),
-            ...(rateLimitKind ? { rateLimitKind } : {}),
+            ...(rateLimitKind
+              ? { rateLimitKind }
+              : choiceKind?.rateLimitKind
+                ? { rateLimitKind: choiceKind.rateLimitKind }
+                : {}),
+            ...(choiceKind?.retryableErrorKind
+              ? { retryableErrorKind: choiceKind.retryableErrorKind }
+              : {}),
             http: { status, statusText, headers: responseHeaders ?? {} },
           },
         };
@@ -272,22 +323,58 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
     // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
     // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
-    if (!data?.choices?.[0]?.message) {
+    if (!Array.isArray(data?.choices) || !data.choices[0]?.message) {
+      // A malformed 200 must not be cached and replayed as if it were the
+      // provider's answer.
+      await deleteFromCache?.();
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
+        tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
+        // error paths can reach here with a null body; no data, no cost
+        cost: data ? this.calculateResponseCost(data, config) : undefined,
+        metadata: data ? getOpenRouterBillingMetadata(data) : undefined,
       };
     }
 
     // Process the response with special handling for Gemini
-    const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+    if (finishReason === 'error') {
+      // A failed generation carries partial output that must not be graded;
+      // the choice-level error object above can be absent on this path.
+      await deleteFromCache?.();
+      return {
+        error: 'API error: OpenRouter provider returned a generation error',
+        tokenUsage: getTokenUsageWithRequestCount(data, cached),
+        cached,
+        cost: this.calculateResponseCost(data, config),
+        metadata: getOpenRouterBillingMetadata(data),
+        finishReason,
+      };
+    }
+    const message = validateChatCompletionMessage(data.choices[0].message, {
+      allowStructuredContent: true,
+      finishReason,
+    });
+    if (!message) {
+      // A malformed 200 must not be cached and replayed as if it were the
+      // provider's answer.
+      await deleteFromCache?.();
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        tokenUsage: getTokenUsageWithRequestCount(data, cached),
+        cached,
+        cost: this.calculateResponseCost(data, config),
+        metadata: getOpenRouterBillingMetadata(data),
+        ...(finishReason && { finishReason }),
+      };
+    }
     if (message.refusal || finishReason === FINISH_REASON_MAP.content_filter) {
       return {
         output: message.content
           ? getOpenAiPartialOutput(message.content, config.response_format?.type === 'json_schema')
           : message.refusal || 'Content filtered by the model provider.',
-        tokenUsage: getTokenUsage(data, cached),
+        tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
         cost: this.calculateResponseCost(data, config),
         isRefusal: true,
@@ -300,11 +387,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     // Prioritize tool calls over content and reasoning
     let output: string | object = '';
-    const hasFunctionCall = !!(message.function_call && message.function_call.name);
-    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
-    if (hasFunctionCall || hasToolCalls) {
+    if (message.functionCall || (message.toolCalls && message.toolCalls.length > 0)) {
       // Tool calls always take priority and never include thinking
-      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
+      output = message.functionCall ?? message.toolCalls!;
+    } else if (message.structuredContent?.length) {
+      // OpenRouter can return content as an array of parts (e.g. Gemini text
+      // plus image); keep the parts intact instead of throwing on .trim().
+      output = message.structuredContent;
     } else if (message.content && message.content.trim()) {
       output = message.content;
       // Add reasoning as thinking content if present and showThinking is enabled
@@ -336,7 +425,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     return {
       output,
-      tokenUsage: getTokenUsage(data, cached),
+      tokenUsage: getTokenUsageWithRequestCount(data, cached),
       cached,
       cost: this.calculateResponseCost(data, config),
       metadata: getOpenRouterBillingMetadata(data),
