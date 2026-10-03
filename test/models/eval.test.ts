@@ -23,7 +23,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -49,6 +49,60 @@ describe('evaluator', () => {
     await runDbMigrations();
   });
 
+  it.each(['create', 'setResults', 'save', 'update'])(
+    'redacts provider credentials at the %s persistence boundary',
+    async (method) => {
+      const result = await EvalResult.createFromEvaluateResult('fixture', createEvaluateResult(), {
+        persist: false,
+      });
+      let evaluation = method === 'create' ? undefined : await Eval.create({}, []);
+      if (evaluation) {
+        result.evalId = evaluation.id;
+      }
+      if (method === 'update') {
+        await result.save();
+      }
+      result.provider = {
+        id: 'fixture',
+        config: { apiKey: 'provider-fixture', region: 'local' },
+      };
+      result.testCase.options = {
+        provider: { id: 'fixture', config: { apiKey: 'grader-fixture' } },
+      };
+      result.prompt.config = { provider: { id: 'fixture', config: { apiKey: 'prompt-fixture' } } };
+      result.prompt.raw = 'x'.repeat(100);
+      result.testCase.vars = {
+        digest: 'abcdef0123456789'.repeat(4),
+        image: Buffer.from('fixture image bytes '.repeat(8)).toString('base64'),
+        apiKey: 'vars-fixture',
+      };
+
+      if (method === 'create') {
+        evaluation = await Eval.create({}, [], { results: [result] });
+      } else if (method === 'setResults') {
+        await evaluation!.setResults([result]);
+      } else {
+        await result.save();
+      }
+
+      const stored = await (await getDb())
+        .select()
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, evaluation!.id))
+        .all();
+      expect(stored).toHaveLength(1);
+      expect(stored[0].provider.config).toEqual({ apiKey: '[REDACTED]', region: 'local' });
+      expect(JSON.stringify(stored)).not.toContain('grader-fixture');
+      expect(JSON.stringify(stored)).not.toContain('prompt-fixture');
+      expect(stored[0].prompt.raw).toBe(result.prompt.raw);
+      expect(stored[0].testCase.vars).toEqual({
+        ...result.testCase.vars,
+        apiKey: '[REDACTED]',
+      });
+      expect(result.provider.config?.apiKey).toBe('provider-fixture');
+    },
+  );
+
   beforeEach(async () => {
     vi.mocked(getAuthor).mockReset();
     vi.mocked(updateSignalFile).mockClear();
@@ -69,6 +123,40 @@ describe('evaluator', () => {
   afterEach(() => {
     vi.resetAllMocks();
   });
+
+  it.each(['create', 'addPrompts', 'save', 'copy'])(
+    'redacts completed-prompt provider IDs at the %s boundary without changing runtime prompts',
+    async (method) => {
+      const prompt = createCompletedPrompt('literal prompt', {
+        provider: 'https://example.test/eval?api_key=fixture-header-id',
+      });
+      const evaluation = await Eval.create({}, [], {
+        completedPrompts: method === 'create' ? [prompt] : [],
+      });
+      let savedId = evaluation.id;
+      if (method === 'addPrompts') {
+        await evaluation.addPrompts([prompt]);
+      } else if (method === 'save' || method === 'copy') {
+        evaluation.prompts = [prompt];
+        if (method === 'save') {
+          await evaluation.save();
+        } else {
+          savedId = (await evaluation.copy()).id;
+        }
+      }
+      const saved = await Eval.findById(savedId);
+      expect(saved?.prompts[0]).toEqual({
+        ...prompt,
+        provider: 'https://example.test/eval?api_key=%5BREDACTED%5D',
+      });
+      const summary = await (method === 'create' ? saved! : evaluation).toEvaluateSummary();
+      expect('prompts' in summary && summary.prompts[0].provider).toBe(
+        'https://example.test/eval?api_key=%5BREDACTED%5D',
+      );
+      expect(evaluation.prompts).toEqual(method === 'create' ? [] : [prompt]);
+      expect(prompt.provider).toContain('fixture-header-id');
+    },
+  );
 
   describe('addPrompts', () => {
     it('should notify watchers when persisted prompt metadata changes', async () => {
@@ -960,17 +1048,25 @@ describe('evaluator', () => {
 
     it('drops trace linkage from copied results without copied trace records', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      await EvalResult.createFromEvaluateResult(
-        eval_.id,
-        createEvaluateResult({
-          traceId: 'copy-source-trace',
-          evaluationId: eval_.id,
-          metadata: {
-            source: 'copy-path',
-            __promptfoo: { retained: 'internal-metadata' },
+      const sourceResult = createEvaluateResult({
+        traceId: 'copy-source-trace',
+        evaluationId: eval_.id,
+        metadata: {
+          source: 'copy-path',
+          __promptfoo: { retained: 'internal-metadata' },
+        },
+      });
+      await EvalResult.createFromEvaluateResult(eval_.id, sourceResult);
+      await (await getDb())
+        .update(evalResultsTable)
+        .set({
+          testCase: {
+            ...sourceResult.testCase,
+            vars: { apiKey: 'legacy-copy-secret' },
           },
-        }),
-      );
+        })
+        .where(eq(evalResultsTable.evalId, eval_.id))
+        .run();
 
       const copy = await eval_.copy();
       const [copiedResult] = await EvalResult.findManyByEvalId(copy.id);
@@ -983,6 +1079,7 @@ describe('evaluator', () => {
       });
       expect(copiedResult.toEvaluateResult().traceId).toBeUndefined();
       expect(copiedResult.toEvaluateResult().evaluationId).toBeUndefined();
+      expect(JSON.stringify(copiedResult.testCase)).not.toContain('legacy-copy-secret');
     });
   });
 
