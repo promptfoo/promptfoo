@@ -83,7 +83,7 @@ export function getImageDatasetRequestText(
   };
   const jsonContainer = /^\s*(?:\{|\[\s*(?:["[{\]]|-?\d|true\b|false\b|null\b))/;
   const mediaType =
-    /^(?:image|image_url|input_image|audio|input_audio|video|file|input_file|base64)$/;
+    /^(?:image|image_url|input_image|audio|input_audio|video|file|input_file|document|base64)$/;
   const mediaContainerField =
     /^(?:images?|image_url|input_image|input_audio|inline_?data|file_?data)$/i;
   const mediaMime = /^(?:image|audio|video)\//i;
@@ -117,6 +117,16 @@ export function getImageDatasetRequestText(
     rejectMalformedMedia(prompt);
     return redactImages(prompt);
   }
+  const nativeToolFields: Record<string, string> = {
+    toolUse: 'input',
+    functionCall: 'args',
+    functionResponse: 'response',
+  };
+  const isBedrockMedia = (field: string, value: unknown) =>
+    ['document', 'video', 'audio'].includes(field) &&
+    value !== null &&
+    typeof value === 'object' &&
+    'source' in value;
   let hasText = false;
   const sanitize = (
     value: unknown,
@@ -124,10 +134,13 @@ export function getImageDatasetRequestText(
     literalText = false,
     mediaContainer = false,
     literalData = false,
+    toolResultContent = false,
   ): unknown => {
     if (Array.isArray(value)) {
       return value
-        .map((part) => sanitize(part, key, literalText, mediaContainer, literalData))
+        .map((part) =>
+          sanitize(part, key, literalText, mediaContainer, literalData, toolResultContent),
+        )
         .filter((part) => part !== undefined);
     }
     if (value && typeof value === 'object') {
@@ -167,17 +180,20 @@ export function getImageDatasetRequestText(
           const toolData =
             literalData ||
             (object.type === 'tool_use' && field === 'input') ||
-            (key === 'functionCall' && field === 'args') ||
-            (key === 'functionResponse' && field === 'response');
+            field === nativeToolFields[key] ||
+            (toolResultContent && field === 'json');
           const toolText =
             (object.type === 'function_call' && field === 'arguments') ||
             (object.type === 'function_call_output' && field === 'output') ||
-            (object.type === 'tool_result' && field === 'content') ||
+            ((object.type === 'tool_result' || key === 'toolResult') && field === 'content') ||
             (['function', 'function_call'].includes(key) &&
               typeof object.name === 'string' &&
               field === 'arguments');
           const mediaField =
-            !literalData && (mediaContainerField.test(field) || (media && field === 'source'));
+            !literalData &&
+            (mediaContainerField.test(field) ||
+              (media && field === 'source') ||
+              isBedrockMedia(field, child));
           const sanitized = sanitize(
             child,
             field,
@@ -188,6 +204,7 @@ export function getImageDatasetRequestText(
               (nativeTextPart && field === 'text'),
             mediaField,
             toolData,
+            (key === 'toolResult' || object.type === 'tool_result') && field === 'content',
           );
           return sanitized === undefined ? [] : [[field, sanitized]];
         }),

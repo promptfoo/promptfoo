@@ -883,6 +883,63 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
     ],
     ...[
       [
+        'Bedrock tool input',
+        {
+          toolUse: {
+            toolUseId: 'tool',
+            name: 'describe',
+            input: {
+              document: 'literal document',
+              video: 'literal video',
+              audio: 'literal audio',
+              nested: { image: actualTask },
+              attachment: inputImage,
+            },
+          },
+        },
+      ],
+      [
+        'Bedrock tool JSON and media result',
+        {
+          toolResult: {
+            toolUseId: 'tool',
+            content: [
+              {
+                json: {
+                  document: 'literal document',
+                  video: 'literal video',
+                  audio: 'literal audio',
+                  nested: { image: actualTask },
+                  attachment: inputImage,
+                },
+              },
+              {
+                text: JSON.stringify({
+                  image: 'Retain literal tool-result text',
+                  attachment: inputImage,
+                }),
+              },
+              { image: { source: { s3Location: { uri: nativeImageData } } } },
+              { document: { source: { s3Location: { uri: nativeImageData } } } },
+              { video: { source: { bytes: nativeImageData } } },
+            ],
+          },
+        },
+      ],
+      [
+        'Bedrock tool text result',
+        {
+          toolResult: {
+            toolUseId: 'tool',
+            content: JSON.stringify({ image: actualTask, attachment: inputImage }),
+          },
+        },
+      ],
+      [
+        'Bedrock typed tool result alias',
+        { type: 'tool_result', tool_use_id: 'tool', content: [{ json: { image: actualTask } }] },
+      ],
+      [
         'Responses tool output',
         {
           type: 'function_call_output',
@@ -1008,6 +1065,36 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       ] as const,
       [`opaque media alias ${index} without text`, JSON.stringify(media), false] as const,
     ]),
+    ...['image', 'document', 'video', 'audio'].map(
+      (kind) =>
+        [
+          `Bedrock ${kind} binary and reference sources`,
+          JSON.stringify({
+            question: actualTask,
+            contents: [
+              { [kind]: { source: { bytes: nativeImageData } } },
+              {
+                [kind]: {
+                  source: { s3Location: { uri: nativeImageData, bucketOwner: nativeImageData } },
+                },
+              },
+            ],
+          }),
+          true,
+        ] as const,
+    ),
+    [
+      'Bedrock textual document source',
+      JSON.stringify({
+        document: { source: { text: actualTask, content: [{ text: actualTask }] } },
+      }),
+      true,
+    ],
+    [
+      'ordinary document scalar',
+      JSON.stringify({ document: actualTask, video: actualTask, audio: actualTask }),
+      true,
+    ],
     ['custom image object', JSON.stringify({ image: { data: nativeImageData } }), false],
   ] as const)(
     'uses actual %s text without media or dataset-only instructions',
