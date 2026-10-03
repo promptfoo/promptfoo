@@ -878,7 +878,7 @@ async function doEvalWithEnv(
         ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
         : new Eval(config, { author, runtimeOptions });
 
-    // Graceful pause support via Ctrl+C (only when writing to database)
+    // CLI cancellation also stops evaluations that do not write to the database.
     const abortController = new AbortController();
     const previousAbortSignal = evaluateOptions.abortSignal;
     evaluateOptions.abortSignal = previousAbortSignal
@@ -886,13 +886,14 @@ async function doEvalWithEnv(
       : abortController.signal;
 
     let paused = false;
-    let sigintHandler: NodeJS.SignalsListener | undefined;
+    let terminationHandler: NodeJS.SignalsListener | undefined;
     let forceExitTimeout: NodeJS.Timeout | undefined;
 
     const cleanupHandler = () => {
-      if (sigintHandler) {
-        process.removeListener('SIGINT', sigintHandler);
-        sigintHandler = undefined;
+      if (terminationHandler) {
+        process.removeListener('SIGINT', terminationHandler);
+        process.removeListener('SIGTERM', terminationHandler);
+        terminationHandler = undefined;
       }
       if (forceExitTimeout) {
         clearTimeout(forceExitTimeout);
@@ -902,15 +903,19 @@ async function doEvalWithEnv(
       evaluateOptions.abortSignal = previousAbortSignal;
     };
 
-    // Pause/resume SIGINT behavior is CLI policy. Reusable callers should own cancellation.
-    if (isCliInvocation && cmdObj.write !== false) {
-      sigintHandler = () => {
-        // Atomic check-and-set to handle rapid successive SIGINTs safely
+    // Termination signals are CLI policy. Reusable callers own cancellation.
+    if (isCliInvocation) {
+      terminationHandler = (signal = 'SIGINT') => {
+        const exitCode = signal === 'SIGTERM' ? 143 : 130;
+        // Atomic check-and-set to handle rapid successive signals safely.
         const wasPaused = paused;
         paused = true;
+        if (cmdObj.write === false) {
+          process.exitCode = exitCode;
+        }
 
         if (wasPaused) {
-          // Second Ctrl+C: immediate force exit
+          // A second termination signal forces an immediate exit.
           // Clear the timeout to avoid resource leak
           if (forceExitTimeout) {
             clearTimeout(forceExitTimeout);
@@ -919,10 +924,16 @@ async function doEvalWithEnv(
           // Skip closeDbIfOpen() - it could block on WAL checkpoint, defeating the escape hatch
           // Database will recover on next run via WAL replay
           logger.warn('Force exiting...');
-          process.exit(130);
+          process.exit(exitCode);
         }
 
-        logger.info(chalk.yellow('Pausing evaluation... Press Ctrl+C again to force exit.'));
+        logger.info(
+          chalk.yellow(
+            cmdObj.write === false
+              ? 'Cancelling evaluation... Send another termination signal to force exit.'
+              : 'Pausing evaluation... Send another termination signal to force exit.',
+          ),
+        );
         abortController.abort();
 
         // Set a timeout for force exit if evaluate() hangs after abort signal
@@ -931,16 +942,17 @@ async function doEvalWithEnv(
         forceExitTimeout = setTimeout(() => {
           // Skip closeDbIfOpen() - could block, defeating the timeout
           logger.warn('Evaluation shutdown timed out, force exiting...');
-          process.exit(130);
+          process.exit(exitCode);
         }, 10000).unref();
       };
 
-      // Use process.on instead of process.once to handle second Ctrl+C
-      process.on('SIGINT', sigintHandler);
+      // Keep the handler for a second signal while cancellation is pending.
+      process.on('SIGINT', terminationHandler);
+      process.on('SIGTERM', terminationHandler);
     }
 
-    // Run the evaluation!!!!!!
     let ret;
+    let cleanupFailure: PromiseRejectedResult | undefined;
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
@@ -972,19 +984,41 @@ async function doEvalWithEnv(
           cliState.retryMode = false;
         }
       }
+
+      // Clear resume flag after run completes
+      cliState.resume = false;
     } finally {
-      cleanupHandler(); // Always cleanup, even if evaluate() throws
+      try {
+        // Providers outside the registry also own resources. Release them before
+        // returning a paused/canceled eval, reporting results, or starting watch.
+        const cleanupResults = await Promise.allSettled(
+          Array.from(new Set(testSuite.providers)).map(async (provider) => {
+            if (isApiProvider(provider)) {
+              await provider.cleanup?.();
+            }
+          }),
+        );
+        // A cleanup failure must not mask an evaluation failure or prevent other
+        // providers from releasing their resources.
+        cleanupFailure = cleanupResults.find((result) => result.status === 'rejected');
+      } finally {
+        cleanupHandler();
+      }
     }
 
-    // Clear resume flag after run completes
-    cliState.resume = false;
-
-    // If paused, print minimal guidance and skip the rest of the reporting
-    if (paused && cmdObj.write !== false) {
-      printBorder();
-      logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
-      logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
-      printBorder();
+    // A cancelled run must not start sharing, output reporting, or watch mode.
+    if (paused) {
+      if (cleanupFailure) {
+        throw cleanupFailure.reason;
+      }
+      if (cmdObj.write !== false) {
+        printBorder();
+        logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
+        logger.info(
+          `» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`,
+        );
+        printBorder();
+      }
       return ret;
     }
 
@@ -1288,18 +1322,11 @@ async function doEvalWithEnv(
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
-    // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
-      }
+    // Preserve completed exports and the existing pass-rate early return before
+    // surfacing a cleanup error. Evaluation errors still take precedence above.
+    if (cleanupFailure) {
+      throw cleanupFailure.reason;
     }
-
     return ret;
   };
 

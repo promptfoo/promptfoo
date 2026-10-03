@@ -1,7 +1,8 @@
+import { getEventListeners } from 'node:events';
 import fs from 'fs';
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mock for execFileAsync - must be hoisted for vi.mock factory
 const { mockExecFileAsync, mockExecFile } = vi.hoisted(() => {
@@ -81,11 +82,31 @@ const { mockPythonShellInstance, MockPythonShell } = vi.hoisted(() => {
   const instance = {
     stdout: { on: vi.fn() },
     stderr: { on: vi.fn() },
+    on: vi.fn(),
+    childProcess: {
+      once: vi.fn(),
+      kill: vi.fn(),
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      stdin: null as { destroy(): void } | null,
+      stdout: null as { destroy(): void } | null,
+      stderr: null as { destroy(): void } | null,
+    },
     end: vi.fn(),
   };
   // Create a proper class that can be used with 'new'
   const MockPythonShell = vi.fn(function (this: typeof instance) {
     Object.assign(this, instance);
+    // PythonShell's end callback follows process exit; native close follows it.
+    this.end = vi.fn((callback: (error: Error | null) => void) =>
+      instance.end((error: Error | null) => {
+        callback(error);
+        const close = instance.childProcess.once.mock.calls.find(
+          ([event]) => event === 'close',
+        )?.[1];
+        close?.();
+      }),
+    );
     return this;
   }) as unknown as typeof import('python-shell').PythonShell;
   return { mockPythonShellInstance: instance, MockPythonShell };
@@ -96,6 +117,10 @@ vi.mock('python-shell', () => ({
 }));
 
 describe('Python Utils', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.useRealTimers();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();
@@ -104,6 +129,14 @@ describe('Python Utils', () => {
     mockPythonShellInstance.stdout.on.mockReset();
     mockPythonShellInstance.stderr.on.mockReset();
     mockPythonShellInstance.end.mockReset();
+    mockPythonShellInstance.on.mockReset();
+    mockPythonShellInstance.childProcess.once.mockReset();
+    mockPythonShellInstance.childProcess.kill.mockReset().mockReturnValue(true);
+    mockPythonShellInstance.childProcess.exitCode = null;
+    mockPythonShellInstance.childProcess.signalCode = null;
+    mockPythonShellInstance.childProcess.stdin = { destroy: vi.fn() };
+    mockPythonShellInstance.childProcess.stdout = { destroy: vi.fn() };
+    mockPythonShellInstance.childProcess.stderr = { destroy: vi.fn() };
     // Set default mock return values
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
@@ -173,10 +206,11 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('/usr/bin/python3.8');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('python3', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'python3',
+        ['-c', 'import sys; print(sys.executable)'],
+        { timeout: 2500, killSignal: 'SIGKILL' },
+      );
 
       // Restore original platform
       Object.defineProperty(process, 'platform', { value: originalPlatform });
@@ -206,9 +240,15 @@ describe('Python Utils', () => {
 
       // Should skip WindowsApps and use the real Python installation
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       // Verify that the non-WindowsApps path was validated
-      expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -232,12 +272,16 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       // Verify py launcher fallback was used
-      expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'py',
+        ['-c', 'import sys; print(sys.executable)'],
+        { timeout: 2500, killSignal: 'SIGKILL' },
+      );
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -261,9 +305,15 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('python');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       // Verify the final fallback python --version was called
-      expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -308,12 +358,16 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       // Verify py launcher fallback was used when where returned empty
-      expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'py',
+        ['-c', 'import sys; print(sys.executable)'],
+        { timeout: 2500, killSignal: 'SIGKILL' },
+      );
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -335,7 +389,10 @@ describe('Python Utils', () => {
         const result = await pythonUtils.tryPath('/usr/bin/python3');
 
         expect(result).toBe('/usr/bin/python3');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
     });
 
@@ -346,23 +403,22 @@ describe('Python Utils', () => {
         const result = await pythonUtils.tryPath('/usr/bin/nonexistent');
 
         expect(result).toBeNull();
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/nonexistent', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/nonexistent', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
 
-      it('should return null if the command times out', async () => {
-        vi.useFakeTimers();
+      it('should return null when the native subprocess timeout terminates the command', async () => {
+        mockExecFileAsync.mockRejectedValue(
+          Object.assign(new Error('Command failed'), { killed: true }),
+        );
 
-        // Mock execFileAsync to return a promise that never resolves (simulating timeout)
-        mockExecFileAsync.mockImplementation(() => new Promise(() => {}));
-
-        const resultPromise = pythonUtils.tryPath('/usr/bin/python3');
-        await vi.advanceTimersByTimeAsync(2501);
-
-        const result = await resultPromise;
-
-        expect(result).toBeNull();
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version']);
-        vi.useRealTimers();
+        expect(await pythonUtils.tryPath('/usr/bin/python3')).toBeNull();
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
     });
   });
@@ -376,7 +432,10 @@ describe('Python Utils', () => {
 
         expect(result).toBe('python');
         expect(pythonUtils.state.cachedPythonPath).toBe('python');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
 
       it('should return the cached path on subsequent calls', async () => {
@@ -422,7 +481,10 @@ describe('Python Utils', () => {
         await expect(pythonUtils.validatePythonPath('non_existent_program', true)).rejects.toThrow(
           'Python 3 not found. Tried "non_existent_program"',
         );
-        expect(mockExecFileAsync).toHaveBeenCalledWith('non_existent_program', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('non_existent_program', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
 
       it('should throw an error when no valid Python path is found', async () => {
@@ -444,7 +506,10 @@ describe('Python Utils', () => {
         const result = await pythonUtils.validatePythonPath('/custom/python/path', true);
 
         expect(result).toBe('/custom/python/path');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/python/path', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/python/path', ['--version'], {
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
       });
     });
 
@@ -518,6 +583,176 @@ describe('Python Utils', () => {
   });
 
   describe('runPython', () => {
+    it('does not spawn or create temporary files when already canceled', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        pythonUtils.runPython('script.py', 'get_config', [], { signal: controller.signal }),
+      ).rejects.toBe(controller.signal.reason);
+      expect(PythonShell).not.toHaveBeenCalled();
+      expect(createSecureTempDirectory).not.toHaveBeenCalled();
+      expect(mockExecFileAsync).not.toHaveBeenCalled();
+    });
+
+    it.each(['validation', 'temporary directory'] as const)(
+      'does not spawn after cancellation during %s creation',
+      async (stage) => {
+        const controller = new AbortController();
+        let resume!: () => void;
+        if (stage === 'validation') {
+          mockExecFileAsync.mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                resume = () => resolve({ stdout: 'Python 3.11.0', stderr: '' });
+              }),
+          );
+        } else {
+          pythonUtils.state.cachedPythonPath = 'python';
+          vi.mocked(createSecureTempDirectory).mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                resume = () => resolve('/tmp/owned-canceled-config');
+              }),
+          );
+        }
+        const running = pythonUtils.runPython('script.py', 'get_config', [], {
+          signal: controller.signal,
+        });
+        const rejected = running.catch((error: Error) => error);
+        await vi.waitFor(() => expect(resume).toBeDefined());
+        controller.abort();
+        resume();
+        // The reason is assigned by abort(), so assert it after awaiting completion.
+        expect(await rejected).toBe(controller.signal.reason);
+        expect(PythonShell).not.toHaveBeenCalled();
+        if (stage === 'temporary directory') {
+          expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/owned-canceled-config');
+        }
+      },
+    );
+
+    it('honors cancellation while reading output from an already closed child', async () => {
+      pythonUtils.state.cachedPythonPath = 'python';
+      const controller = new AbortController();
+      let finishRead!: (value: string) => void;
+      vi.mocked(fs.readFileSync).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRead = resolve;
+          }) as never,
+      );
+      mockPythonShellInstance.end.mockImplementation((callback: (error: Error | null) => void) =>
+        callback(null),
+      );
+      const running = pythonUtils
+        .runPython('script.py', 'get_config', [], { signal: controller.signal })
+        .catch((error: Error) => error);
+      await vi.waitFor(() => expect(finishRead).toBeDefined());
+      controller.abort();
+      finishRead(JSON.stringify({ type: 'final_result', data: 'too late' }));
+      expect(await running).toBe(controller.signal.reason);
+      expect(removeSecureTempDirectory).toHaveBeenCalledOnce();
+    });
+
+    it.each(['running', 'exited', 'kill failed', 'inherited stdio'] as const)(
+      'retires only canceled child-owned pipes and still waits for close (%s)',
+      async (state) => {
+        pythonUtils.state.cachedPythonPath = 'python';
+        const controller = new AbortController();
+        const child = mockPythonShellInstance.childProcess;
+        if (state === 'exited') {
+          child.exitCode = 0;
+        } else if (state === 'kill failed') {
+          child.kill.mockReturnValue(false);
+        } else if (state === 'inherited stdio') {
+          vi.mocked(getEnvBool).mockReturnValue(true);
+          child.stdin = child.stdout = child.stderr = null;
+        }
+        let settled = false;
+        const running = pythonUtils
+          .runPython('script.py', 'get_config', [], { signal: controller.signal })
+          .catch((error: unknown) => error)
+          .finally(() => {
+            settled = true;
+          });
+        await vi.waitFor(() => expect(mockPythonShellInstance.end).toHaveBeenCalledOnce());
+        controller.abort();
+        try {
+          await Promise.resolve();
+          expect(settled).toBe(false);
+          expect(removeSecureTempDirectory).not.toHaveBeenCalled();
+          for (const stream of [child.stdin, child.stdout, child.stderr]) {
+            if (stream) {
+              expect(stream.destroy).toHaveBeenCalledTimes(state === 'kill failed' ? 0 : 1);
+            }
+          }
+          if (state === 'exited') {
+            expect(child.kill).not.toHaveBeenCalled();
+          } else {
+            expect(child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+          }
+          if (state === 'inherited stdio') {
+            expect(PythonShell).toHaveBeenCalledWith(
+              'wrapper.py',
+              expect.objectContaining({ stdio: 'inherit' }),
+            );
+          }
+        } finally {
+          child.once.mock.calls.find(([event]) => event === 'close')?.[1]();
+          await running;
+        }
+        expect(await running).toBe(controller.signal.reason);
+        expect(removeSecureTempDirectory).toHaveBeenCalledOnce();
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      },
+    );
+
+    it.each(['abort', 'spawn error'] as const)(
+      'retains temporary files and waits for native close after %s',
+      async (failure) => {
+        pythonUtils.state.cachedPythonPath = 'python';
+        const controller = new AbortController();
+        let settled = false;
+        const running = pythonUtils
+          .runPython('script.py', 'get_config', [], { signal: controller.signal })
+          .catch((error: Error) => error)
+          .finally(() => {
+            settled = true;
+          });
+        await vi.waitFor(() => expect(mockPythonShellInstance.end).toHaveBeenCalledOnce());
+        const error = Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' });
+        if (failure === 'abort') {
+          controller.abort();
+        }
+        const onError = mockPythonShellInstance.on.mock.calls.find(
+          ([event]) => event === 'error',
+        )?.[1];
+        onError?.(failure === 'abort' ? controller.signal.reason : error);
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        expect(removeSecureTempDirectory).not.toHaveBeenCalled();
+        const onClose = mockPythonShellInstance.childProcess.once.mock.calls.find(
+          ([event]) => event === 'close',
+        )?.[1];
+        onClose?.();
+        const result = await running;
+        if (failure === 'abort') {
+          expect(result).toBe(controller.signal.reason);
+        } else {
+          expect(result).toMatchObject({ message: expect.stringContaining('spawn ENOENT') });
+        }
+        expect(removeSecureTempDirectory).toHaveBeenCalledOnce();
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+        if (failure === 'abort') {
+          expect(mockPythonShellInstance.childProcess.kill).toHaveBeenCalledExactlyOnceWith(
+            'SIGKILL',
+          );
+        } else {
+          expect(mockPythonShellInstance.childProcess.kill).not.toHaveBeenCalled();
+        }
+      },
+    );
+
     it('passes file defaults to one-shot Python calls without changing process.env', async () => {
       const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
       vi.mocked(fs.readFileSync).mockReturnValue(

@@ -1601,19 +1601,64 @@ describe('evalCommand', () => {
     }
   });
 
-  it('should leave SIGINT ownership with reusable callers', async () => {
-    const processOnSpy = vi.spyOn(process, 'on');
-    const mockEvalRecord = new Eval(defaultConfig);
-    vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
+  it.each(['SIGINT', 'SIGTERM'] as const)(
+    'leaves %s ownership with reusable callers',
+    async (signal) => {
+      const processOnSpy = vi.spyOn(process, 'on');
+      const mockEvalRecord = new Eval(defaultConfig);
+      vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
 
-    try {
-      await doEval({ write: true }, defaultConfig, defaultConfigPath, {});
-      const sigintCalls = processOnSpy.mock.calls.filter(([event]) => event === 'SIGINT');
-      expect(sigintCalls).toHaveLength(0);
-    } finally {
-      processOnSpy.mockRestore();
-    }
-  });
+      try {
+        await doEval({ write: true }, defaultConfig, defaultConfigPath, {});
+        const sigintCalls = processOnSpy.mock.calls.filter(([event]) => event === signal);
+        expect(sigintCalls).toHaveLength(0);
+      } finally {
+        processOnSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    ['SIGINT', false],
+    ['SIGTERM', false],
+    ['SIGINT', true],
+    ['SIGTERM', true],
+  ] as const)(
+    'aborts CLI evaluation on %s with write=%s and preserves host listeners',
+    async (signal, write) => {
+      const hostListener = vi.fn();
+      process.on(signal, hostListener);
+      const existingListeners = new Set(process.listeners(signal));
+      const previousExitCode = process.exitCode;
+      process.exitCode = undefined;
+      let observedAbort: boolean | undefined;
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord, options) => {
+        const ownedHandler = process
+          .listeners(signal)
+          .find((listener) => !existingListeners.has(listener));
+        ownedHandler?.(signal);
+        observedAbort = options?.abortSignal?.aborted;
+        return evalRecord as Eval;
+      });
+
+      try {
+        await doEval({ write }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+        expect(observedAbort).toBe(true);
+        expect(process.exitCode).toBe(write ? undefined : signal === 'SIGTERM' ? 143 : 130);
+        expect(process.listeners(signal)).toEqual(Array.from(existingListeners));
+        expect(hostListener).not.toHaveBeenCalled();
+      } finally {
+        for (const listener of process.listeners(signal)) {
+          if (!existingListeners.has(listener)) {
+            process.removeListener(signal, listener);
+          }
+        }
+        process.removeListener(signal, hostListener);
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
 
   it('should pause CLI database evaluations on SIGINT and return the partial eval', async () => {
     let sigintHandler: NodeJS.SignalsListener | undefined;
@@ -1643,11 +1688,139 @@ describe('evalCommand', () => {
     }
   });
 
-  it('should force exit if SIGINT pause shutdown times out', async () => {
-    vi.useFakeTimers();
+  it.each([
+    ['SIGINT', false],
+    ['SIGINT', true],
+    ['SIGTERM', false],
+    ['SIGTERM', true],
+  ] as const)(
+    'does not share, export, or begin watching after %s cancels a no-write evaluation (cleanup fails=%s)',
+    async (signal, cleanupFails) => {
+      let terminationHandler: NodeJS.SignalsListener | undefined;
+      const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
+        if (event === signal) {
+          terminationHandler = listener as NodeJS.SignalsListener;
+        }
+        return process;
+      });
+      let finishCleanup!: () => void;
+      const cleanupError = new Error('cancelled provider cleanup failed');
+      const cleanup = vi.fn(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            finishCleanup = () => (cleanupFails ? reject(cleanupError) : resolve());
+          }),
+      );
+      const provider = {
+        id: () => 'owned-resource',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup,
+      };
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: { prompts: [], providers: [provider] },
+        basePath: path.resolve('/'),
+      });
+      const previousExitCode = process.exitCode;
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
+      chokidarMocks.watch.mockImplementation(() => {
+        throw new Error('A cancelled evaluation must not start a watcher');
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        terminationHandler?.(signal);
+        return evalRecord as Eval;
+      });
+
+      try {
+        let returned = false;
+        const running = doEval(
+          {
+            write: false,
+            watch: true,
+            config: [defaultConfigPath],
+            share: true,
+            output: ['partial.json'],
+          },
+          defaultConfig,
+          defaultConfigPath,
+          { eventSource: 'cli' },
+        ).catch((error: unknown) => error);
+
+        running.then(() => {
+          returned = true;
+        });
+        try {
+          await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
+          expect(returned).toBe(false);
+        } finally {
+          finishCleanup?.();
+          await running;
+        }
+
+        expect(terminationHandler).toBeDefined();
+        expect(chokidarMocks.watch).not.toHaveBeenCalled();
+        expect(createShareableUrl).not.toHaveBeenCalled();
+        expect(writeMultipleOutputs).not.toHaveBeenCalled();
+        if (cleanupFails) {
+          expect(await running).toBe(cleanupError);
+        }
+      } finally {
+        processOnSpy.mockRestore();
+        vi.mocked(isSharingEnabled).mockReset();
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
+
+  it.each([
+    ['SIGINT', true, 130],
+    ['SIGINT', false, 130],
+    ['SIGTERM', true, 143],
+    ['SIGTERM', false, 143],
+  ] as const)(
+    'force exits stalled %s cancellation with write=%s',
+    async (signal, write, exitCode) => {
+      const previousExitCode = process.exitCode;
+      vi.useFakeTimers();
+      let sigintHandler: NodeJS.SignalsListener | undefined;
+      const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
+        if (event === signal) {
+          sigintHandler = listener as NodeJS.SignalsListener;
+        }
+        return process;
+      });
+      const removeListenerSpy = vi.spyOn(process, 'removeListener').mockReturnValue(process);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        sigintHandler?.(signal);
+        await vi.advanceTimersByTimeAsync(10000);
+        return evalRecord as Eval;
+      });
+
+      try {
+        await doEval({ write }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+        expect(exitSpy).toHaveBeenCalledWith(exitCode);
+      } finally {
+        vi.useRealTimers();
+        processOnSpy.mockRestore();
+        removeListenerSpy.mockRestore();
+        exitSpy.mockRestore();
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
+
+  it.each([
+    ['SIGINT', true, 130],
+    ['SIGINT', false, 130],
+    ['SIGTERM', true, 143],
+    ['SIGTERM', false, 143],
+  ] as const)('force exits a repeated %s with write=%s', async (signal, write, exitCode) => {
+    const previousExitCode = process.exitCode;
     let sigintHandler: NodeJS.SignalsListener | undefined;
     const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
-      if (event === 'SIGINT') {
+      if (event === signal) {
         sigintHandler = listener as NodeJS.SignalsListener;
       }
       return process;
@@ -1655,47 +1828,20 @@ describe('evalCommand', () => {
     const removeListenerSpy = vi.spyOn(process, 'removeListener').mockReturnValue(process);
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
     vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
-      sigintHandler?.('SIGINT');
-      await vi.advanceTimersByTimeAsync(10000);
+      sigintHandler?.(signal);
+      sigintHandler?.(signal);
       return evalRecord as Eval;
     });
 
     try {
-      await doEval({ write: true }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+      await doEval({ write }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
 
-      expect(exitSpy).toHaveBeenCalledWith(130);
-    } finally {
-      vi.useRealTimers();
-      processOnSpy.mockRestore();
-      removeListenerSpy.mockRestore();
-      exitSpy.mockRestore();
-    }
-  });
-
-  it('should force exit immediately on a second SIGINT', async () => {
-    let sigintHandler: NodeJS.SignalsListener | undefined;
-    const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
-      if (event === 'SIGINT') {
-        sigintHandler = listener as NodeJS.SignalsListener;
-      }
-      return process;
-    });
-    const removeListenerSpy = vi.spyOn(process, 'removeListener').mockReturnValue(process);
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
-    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
-      sigintHandler?.('SIGINT');
-      sigintHandler?.('SIGINT');
-      return evalRecord as Eval;
-    });
-
-    try {
-      await doEval({ write: true }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
-
-      expect(exitSpy).toHaveBeenCalledWith(130);
+      expect(exitSpy).toHaveBeenCalledWith(exitCode);
     } finally {
       processOnSpy.mockRestore();
       removeListenerSpy.mockRestore();
       exitSpy.mockRestore();
+      process.exitCode = previousExitCode;
     }
   });
 
@@ -2151,8 +2297,125 @@ describe('evalCommand', () => {
     }
   });
 
-  it('should await async provider cleanup after evaluation', async () => {
-    const cleanup = vi.fn().mockResolvedValue(undefined);
+  it.each([false, true])(
+    'cleans every provider and preserves error precedence (evaluation failed=%s)',
+    async (evaluationFailed) => {
+      const previousResume = cliState.resume;
+      let resumedAfter: boolean | undefined;
+      const evaluationError = new Error('evaluation failed first');
+      const cleanupError = new Error('first provider cleanup failed');
+      let finishCleanup!: () => void;
+      const secondCleanup = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finishCleanup = resolve;
+          }),
+      );
+      const firstCleanup = vi.fn(() => {
+        throw cleanupError;
+      });
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [firstCleanup, secondCleanup].map((cleanup, index) => ({
+            id: () => `cleanup-${index}`,
+            callApi: async () => ({ output: 'ok' }),
+            cleanup,
+          })),
+        },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+        cliState.resume = true;
+        if (evaluationFailed) {
+          throw evaluationError;
+        }
+        return record as Eval;
+      });
+      let settled = false;
+      const running = doEval({}, defaultConfig, defaultConfigPath, {})
+        .catch((error: Error) => error)
+        .finally(() => {
+          settled = true;
+        });
+      try {
+        await vi.waitFor(() => expect(secondCleanup).toHaveBeenCalledOnce());
+        expect(settled).toBe(false);
+      } finally {
+        finishCleanup?.();
+        await running;
+        resumedAfter = cliState.resume;
+        cliState.resume = previousResume;
+      }
+      expect(await running).toBe(evaluationFailed ? evaluationError : cleanupError);
+      expect(resumedAfter).toBe(evaluationFailed);
+      expect(firstCleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([false, true])(
+    'exports completed no-write results before reporting cleanup failure (below threshold=%s)',
+    async (belowThreshold) => {
+      const previousExitCode = process.exitCode;
+      const cleanupError = new Error('provider cleanup failed');
+      const cleanup = vi.fn().mockRejectedValue(cleanupError);
+      const provider: ApiProvider = {
+        id: () => 'cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup,
+      };
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: { outputPath: ['completed.json'] } as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [provider],
+        },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+        (record as Eval).prompts = [
+          {
+            metrics: {
+              testPassCount: belowThreshold ? 0 : 1,
+              testFailCount: belowThreshold ? 1 : 0,
+              testErrorCount: 0,
+            },
+          },
+        ] as any;
+        return record as Eval;
+      });
+      try {
+        const result = await doEval(
+          { write: false, share: false, output: ['completed.json'] },
+          defaultConfig,
+          defaultConfigPath,
+          { eventSource: 'cli' },
+        ).catch((error: unknown) => error);
+        if (belowThreshold) {
+          expect(result).toBeInstanceOf(Eval);
+          expect(process.exitCode).toBe(100);
+        } else {
+          expect(result).toBe(cleanupError);
+        }
+        expect(writeMultipleOutputs).toHaveBeenCalledWith(
+          ['completed.json'],
+          expect.any(Eval),
+          null,
+        );
+        expect(cleanup).toHaveBeenCalledOnce();
+      } finally {
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
+
+  it('awaits one cleanup per provider instance after evaluation', async () => {
+    let finishCleanup!: () => void;
+    const closing = new Promise<void>((resolve) => {
+      finishCleanup = resolve;
+    });
+    const cleanup = vi.fn(() => closing);
     const provider = {
       id: () => 'cleanup-provider',
       callApi: async () => ({ output: 'ok' }),
@@ -2162,7 +2425,7 @@ describe('evalCommand', () => {
       config: {} as UnifiedConfig,
       testSuite: {
         prompts: [],
-        providers: [provider],
+        providers: [provider, provider],
       },
       basePath: path.resolve('/'),
     });
@@ -2170,9 +2433,18 @@ describe('evalCommand', () => {
       async (_testSuite, evalRecord) => evalRecord as Eval,
     );
 
-    await doEval({}, defaultConfig, defaultConfigPath, {});
-
-    expect(cleanup).toHaveBeenCalledTimes(1);
+    let settled = false;
+    const running = doEval({}, defaultConfig, defaultConfigPath, {}).finally(() => {
+      settled = true;
+    });
+    try {
+      await vi.waitFor(() => expect(cleanup).toHaveBeenCalled());
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(settled).toBe(false);
+    } finally {
+      finishCleanup?.();
+      await running;
+    }
   });
 
   it('should handle redteam config', async () => {

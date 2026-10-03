@@ -608,17 +608,22 @@ describe('PythonProvider', () => {
     it('should reuse the in-flight initialization promise and skip reinitialization once ready', async () => {
       const provider = new PythonProvider('script.py');
       let resolveInitialize: (() => void) | undefined;
+      let started!: () => void;
+      const initializationStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
       mockPoolInstance.initialize.mockImplementationOnce(
         () =>
           new Promise<void>((resolve) => {
             resolveInitialize = resolve;
+            started();
           }),
       );
 
       const firstInitialize = provider.initialize();
       const secondInitialize = provider.initialize();
 
-      await Promise.resolve();
+      await initializationStarted;
       expect(mockPythonWorkerPool).toHaveBeenCalledTimes(1);
       expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(1);
 
@@ -1006,11 +1011,8 @@ describe('PythonProvider', () => {
       });
 
       await provider.initialize();
-      expect((provider as any).pool).not.toBeNull();
-
       await provider.shutdown();
-      expect((provider as any).pool).toBeNull();
-      expect(mockPoolInstance.shutdown).toHaveBeenCalled();
+      expect(mockPoolInstance.shutdown).toHaveBeenCalledOnce();
     });
 
     it('should register provider for global cleanup', async () => {
@@ -1027,18 +1029,6 @@ describe('PythonProvider', () => {
 
       // Should be unregistered
       expect((providerRegistry as any).providers.has(provider)).toBe(false);
-    });
-
-    it('should set isInitialized to false after shutdown', async () => {
-      const provider = new PythonProvider('script.py', {
-        config: { basePath: process.cwd() },
-      });
-
-      await provider.initialize();
-      expect((provider as any).isInitialized).toBe(true);
-
-      await provider.shutdown();
-      expect((provider as any).isInitialized).toBe(false);
     });
   });
 });

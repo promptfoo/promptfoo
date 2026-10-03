@@ -57,6 +57,8 @@ export class PythonWorkerPool {
       this.workers.push(worker);
     }
 
+    // Report the first failure so the owner can cancel every started worker.
+    // The workers array retains the complete partial pool for that cleanup.
     await Promise.all(initPromises);
     this.isInitialized = true;
     logger.debug(`Python worker pool initialized with ${this.workerCount} workers`);
@@ -122,6 +124,7 @@ export class PythonWorkerPool {
 
   async shutdown(): Promise<void> {
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
+    this.isInitialized = false;
 
     // Reject any queued requests
     for (const req of this.queue) {
@@ -137,7 +140,6 @@ export class PythonWorkerPool {
 
     this.workers = [];
     this.queue = [];
-    this.isInitialized = false;
 
     logger.debug('Python worker pool shutdown complete');
   }

@@ -66,7 +66,10 @@ export const state: {
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
-    const result = await execFileAsync('where', ['python']);
+    const result = await execFileAsync('where', ['python'], {
+      timeout: 2500,
+      killSignal: 'SIGKILL',
+    });
     const output = result.stdout.trim();
 
     // Handle empty output
@@ -109,7 +112,10 @@ async function tryWindowsWhere(): Promise<string | null> {
 async function tryPythonCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
     try {
-      const result = await execFileAsync(cmd, ['-c', 'import sys; print(sys.executable)']);
+      const result = await execFileAsync(cmd, ['-c', 'import sys; print(sys.executable)'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       const executablePath = result.stdout.trim();
       if (executablePath && executablePath !== 'None') {
         // On Windows, ensure .exe suffix if missing (but only for Windows-style paths)
@@ -197,28 +203,18 @@ export async function getSysExecutable(): Promise<string | null> {
  * @returns The validated path if successful, or null if invalid.
  */
 export async function tryPath(path: string): Promise<string | null> {
-  let timeoutId: NodeJS.Timeout | undefined;
-
   try {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Command timed out')), 2500);
+    const result = await execFileAsync(path, ['--version'], {
+      timeout: 2500,
+      killSignal: 'SIGKILL',
     });
 
-    const result = await Promise.race([execFileAsync(path, ['--version']), timeoutPromise]);
-
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-
-    const versionOutput = (result as { stdout: string }).stdout.trim();
+    const versionOutput = result.stdout.trim();
     if (versionOutput.startsWith('Python')) {
       return path;
     }
     return null;
   } catch {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
     return null;
   }
 }
@@ -303,14 +299,16 @@ export async function runPython<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { pythonExecutable?: string } = {},
+  options: { pythonExecutable?: string; signal?: AbortSignal } = {},
 ): Promise<T> {
+  options.signal?.throwIfAborted();
   const absPath = path.resolve(scriptPath);
   const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
   let tempDirectory: string | undefined;
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
+  options.signal?.throwIfAborted();
 
   try {
     tempDirectory = await createSecureTempDirectory('promptfoo-python-');
@@ -330,12 +328,45 @@ export async function runPython<T = unknown>(
       ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
     };
 
+    options.signal?.throwIfAborted();
     logger.debug('[Python] Running script', { scriptPath: absPath, method });
 
     await new Promise<void>((resolve, reject) => {
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
         const stderrLogger = new PythonStderrLogger();
+        const onAbort = () => {
+          const child = pyshell.childProcess;
+          if (child.exitCode !== null || child.signalCode !== null || child.kill('SIGKILL')) {
+            // Descendants can retain inherited pipes after the owned child exits.
+            // Only retire our endpoints; inherited host stdio is null here.
+            child.stdin?.destroy();
+            child.stdout?.destroy();
+            child.stderr?.destroy();
+          }
+        };
+        let processError: Error | undefined;
+        pyshell.on('error', (error) => {
+          processError = error;
+        });
+        // Native close also covers failed spawn and waits for the child and its
+        // stdio to close. Abort/error notification alone does not release ownership.
+        pyshell.childProcess.once('close', () => {
+          options.signal?.removeEventListener('abort', onAbort);
+          stderrLogger.flush();
+          if (options.signal?.aborted) {
+            reject(options.signal.reason);
+          } else if (processError) {
+            reject(processError);
+          } else {
+            resolve();
+          }
+        });
+
+        options.signal?.addEventListener('abort', onAbort, { once: true });
+        if (options.signal?.aborted) {
+          onAbort();
+        }
 
         pyshell.stdout?.on('data', (chunk: Buffer) => {
           logger.debug(chunk.toString('utf-8').trim());
@@ -346,11 +377,8 @@ export async function runPython<T = unknown>(
         });
 
         pyshell.end((err) => {
-          stderrLogger.flush();
           if (err) {
-            reject(err);
-          } else {
-            resolve();
+            processError = err;
           }
         });
       } catch (error) {
@@ -359,6 +387,7 @@ export async function runPython<T = unknown>(
     });
 
     const output = await fs.readFile(outputPath, 'utf-8');
+    options.signal?.throwIfAborted();
     logger.debug('[Python] Script returned a result', { scriptPath: absPath });
 
     let result: { type: 'final_result'; data: T } | undefined;
@@ -377,6 +406,7 @@ export async function runPython<T = unknown>(
 
     return result.data;
   } catch (error) {
+    options.signal?.throwIfAborted();
     const message = `Error running Python script: ${(error as Error).message}\nStack Trace: ${
       (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
       'No Python traceback available'
