@@ -1,6 +1,6 @@
 import logger from '../logger';
 
-import type { CallApiContextParams, ProviderOptions } from '../types/index';
+import type { CallApiContextParams } from '../types/index';
 
 /**
  * Keys on `CallApiContextParams` that cannot be sent to a subprocess script
@@ -54,89 +54,4 @@ export function sanitizeScriptContext(
   }
 
   return sanitizedContext;
-}
-
-export function hasScriptResultProperty(
-  result: any,
-  propertyName: 'output' | 'error' | 'embedding' | 'classification',
-): boolean {
-  return (
-    Boolean(result) &&
-    typeof result === 'object' &&
-    Object.prototype.hasOwnProperty.call(result, propertyName)
-  );
-}
-
-export function hasScriptResultError(result: any): boolean {
-  // Must stay consistent with the validators' own-property checks:
-  // loosening this to `'error' in result` without also loosening validation
-  // would let a script return an error on the prototype chain, pass validation
-  // via an own `output`, and then be cached as a successful result — a
-  // cache-poisoning vector.
-  return (
-    hasScriptResultProperty(result, 'error') &&
-    result.error !== null &&
-    result.error !== undefined &&
-    result.error !== ''
-  );
-}
-
-export function buildScriptArgs(
-  apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
-  prompt: string,
-  optionsWithProcessedConfig: ProviderOptions,
-  sanitizedContext: CallApiContextParams | undefined,
-) {
-  return apiType === 'call_api'
-    ? [prompt, optionsWithProcessedConfig, sanitizedContext]
-    : [prompt, optionsWithProcessedConfig];
-}
-
-export function validateScriptResult(
-  language: 'Python' | 'Ruby',
-  apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
-  functionName: string,
-  result: any,
-): void {
-  let property: 'output' | 'embedding' | 'classification';
-  let expectedType: string;
-  let errorPhrase: string;
-  switch (apiType) {
-    case 'call_api': {
-      // Log result structure for debugging
-      const resultType = result === null ? 'null' : typeof result;
-      const resultKeys =
-        result && typeof result === 'object' ? Object.keys(result).join(',') : 'none';
-      logger.debug(`${language} provider result structure: ${resultType}, keys: ${resultKeys}`);
-      if (hasScriptResultProperty(result, 'output')) {
-        logger.debug(
-          `${language} provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
-        );
-      }
-      property = 'output';
-      expectedType = 'string/object';
-      errorPhrase = 'got:';
-      break;
-    }
-    case 'call_embedding_api':
-      property = 'embedding';
-      expectedType = 'array';
-      errorPhrase = 'got';
-      break;
-    case 'call_classification_api':
-      property = 'classification';
-      expectedType = 'object';
-      errorPhrase = 'of';
-      break;
-    default:
-      throw new Error(`Unsupported apiType: ${apiType}`);
-  }
-
-  if (!hasScriptResultProperty(result, property) && !hasScriptResultProperty(result, 'error')) {
-    throw new Error(
-      `The ${language} script \`${functionName}\` function must return a ${language === 'Python' ? 'dict' : 'hash'} with an own \`${property}\` ${expectedType} or \`error\` string (inherited prototype properties are rejected), instead ${errorPhrase} ${JSON.stringify(
-        result,
-      )}`,
-    );
-  }
 }
