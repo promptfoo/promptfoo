@@ -1,4 +1,3 @@
-import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -24,14 +23,6 @@ export class CometApiImageProvider extends OpenAiImageProvider {
         apiBaseUrl: 'https://api.cometapi.com/v1',
       },
     });
-  }
-
-  getApiKey(): string | undefined {
-    if (this.config?.apiKey) {
-      return this.config.apiKey;
-    }
-    const apiKeyEnvar = this.config.apiKeyEnvar || 'COMETAPI_KEY';
-    return this.env?.[apiKeyEnvar] || getEnvString(apiKeyEnvar);
   }
 
   getApiUrlDefault(): string {
