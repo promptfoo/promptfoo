@@ -2,7 +2,7 @@
 # runs the Docker container, performs a health check to ensure the application
 # is running correctly, and then publishes the image to GitHub Container Registry
 # if all checks pass. This action is triggered by the release-please workflow,
-# published human-created releases, workflow dispatch, pull requests to main that
+# published human-created releases, workflow dispatch, pull requests that
 # modify the Docker/runtime update contract, and matching pushes to main.
 
 name: Test and Publish Multi-arch Docker Image
@@ -32,11 +32,13 @@ on:
     types:
       - published
   pull_request:
-    branches:
-      - main
+    # Include stacked PRs so their final images receive the same runtime checks.
     paths:
       - '.github/workflows/docker.yml'
       - 'Dockerfile'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/testDockerImage.js'
       - 'src/envars.ts'
       - 'src/server/routes/version*.ts'
       - 'src/types/api/version.ts'
@@ -48,6 +50,9 @@ on:
     paths:
       - '.github/workflows/docker.yml'
       - 'Dockerfile'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/testDockerImage.js'
       - 'src/envars.ts'
       - 'src/server/routes/version*.ts'
       - 'src/types/api/version.ts'
@@ -148,6 +153,12 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+
+      - name: Test final-image runtime dependencies
+        run: |
+          docker run --rm --network none -i \
+            -e PROMPTFOO_TEST_PRODUCTION_DEPS=1 \
+            local-test-image:official node --input-type=module < scripts/testDockerImage.js
 
       - name: Run Docker containers for testing
         run: |
