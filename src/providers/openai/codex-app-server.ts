@@ -2786,24 +2786,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return;
     }
 
+    state.items.push(item);
     const completedItem = this.withCommandExecutionOutput(state, item);
-    if (
-      completedItem?.type === 'commandExecution' &&
-      typeof completedItem.id === 'string' &&
-      typeof completedItem.aggregatedOutput === 'string'
-    ) {
-      const existingOutput = state.commandExecutionOutputDeltasByItemId.get(completedItem.id);
-      if (
-        typeof existingOutput !== 'string' ||
-        completedItem.aggregatedOutput.startsWith(existingOutput)
-      ) {
-        state.commandExecutionOutputDeltasByItemId.set(
-          completedItem.id,
-          completedItem.aggregatedOutput,
-        );
-      }
-    }
-    state.items.push(completedItem);
     const itemId = completedItem.id ? String(completedItem.id) : crypto.randomUUID();
     const span =
       state.activeSpans.get(itemId) ??
@@ -2839,17 +2823,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const existing = state.commandExecutionOutputDeltasByItemId.get(params.itemId) ?? '';
     const aggregatedOutput = existing + params.delta;
     state.commandExecutionOutputDeltasByItemId.set(params.itemId, aggregatedOutput);
-
-    const completedItem = state.items.find(
-      (item) => item?.type === 'commandExecution' && String(item.id) === params.itemId,
-    );
-    if (
-      completedItem &&
-      (typeof completedItem.aggregatedOutput !== 'string' ||
-        completedItem.aggregatedOutput === existing)
-    ) {
-      completedItem.aggregatedOutput = aggregatedOutput;
-    }
   }
 
   private withCommandExecutionOutput(state: CodexAppServerTurnState, item: any): any {
@@ -2857,22 +2830,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return item;
     }
 
-    const aggregatedOutput = state.commandExecutionOutputDeltasByItemId.get(item.id);
-    if (typeof aggregatedOutput !== 'string') {
+    // Completed output is authoritative, including an empty string.
+    if (typeof item.aggregatedOutput === 'string') {
       return item;
     }
 
-    if (
-      typeof item.aggregatedOutput === 'string' &&
-      !aggregatedOutput.startsWith(item.aggregatedOutput)
-    ) {
-      return item;
-    }
-
-    return {
-      ...item,
-      aggregatedOutput,
-    };
+    const streamedOutput = state.commandExecutionOutputDeltasByItemId.get(item.id);
+    return typeof streamedOutput === 'string'
+      ? { ...item, aggregatedOutput: streamedOutput }
+      : item;
   }
 
   private async handleServerRequest(
@@ -3247,8 +3213,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     config: CodexAppServerConfig,
   ): ProviderResponse {
     const output = this.getFinalOutput(state);
-    const normalizedItems = state.items.map((item) => this.normalizeItemForMetadata(item));
-    const rawItems = state.items.map((item) => this.normalizeItemForRaw(item));
+    const completedItems = state.items.map((item) => this.withCommandExecutionOutput(state, item));
+    const normalizedItems = completedItems.map((item) => this.normalizeItemForMetadata(item));
+    const rawItems = completedItems.map((item) => this.normalizeItemForRaw(item));
     const rawTokenUsage = this.sanitizeForMetadata(state.rawTokenUsage);
     const raw = {
       finalResponse: output,

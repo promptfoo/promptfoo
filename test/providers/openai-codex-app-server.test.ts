@@ -4981,7 +4981,7 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
-  it('continues completed command output when later deltas extend an existing aggregate', async () => {
+  it('keeps completed command output authoritative when deltas arrive later', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
@@ -5055,7 +5055,7 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'command_execution',
-          aggregated_output: 'line one\nline two',
+          aggregated_output: 'line one\n',
         }),
       ]),
     );
@@ -5063,108 +5063,111 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'commandExecution',
-          aggregatedOutput: 'line one\nline two',
+          aggregatedOutput: 'line one\n',
         }),
       ]),
     );
   });
 
-  it('continues from a completed command aggregate when earlier deltas already exist', async () => {
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
+  it.each([
+    { before: 'a', aggregate: 'ab', after: 'b', expected: 'ab' },
+    { before: 'stream', aggregate: 'sdk', after: ' late', expected: 'sdk' },
+    { before: 'a', aggregate: 'abc', after: 'b', expected: 'abc' },
+    { before: 'abc', aggregate: 'a', after: '', expected: 'a' },
+    { before: 'a', aggregate: '', after: 'b', expected: '' },
+    { before: 'a', aggregate: undefined, after: 'b', expected: 'ab' },
+    { before: 'a', aggregate: 'a', after: '', expected: 'a' },
+  ])(
+    'uses completed output $aggregate with deltas $before + $after',
+    async ({ before, aggregate, after, expected }) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
-
-    const resultPromise = provider.callApi('Run a command with interleaved output');
-
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
-    const threadStart = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/start',
-    );
-    server.send({ id: threadStart.id, result: { thread: { id: 'thr_interleaved_output' } } });
-    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
-    server.send({
-      id: turnStart.id,
-      result: { turn: { id: 'turn_interleaved_output', status: 'inProgress' } },
-    });
-
-    server.send({
-      method: 'item/commandExecution/outputDelta',
-      params: {
-        threadId: 'thr_interleaved_output',
-        turnId: 'turn_interleaved_output',
-        itemId: 'cmd_interleaved_output',
-        delta: 'line one\n',
-      },
-    });
-    server.send({
-      method: 'item/completed',
-      params: {
-        threadId: 'thr_interleaved_output',
-        turnId: 'turn_interleaved_output',
-        item: {
-          type: 'commandExecution',
-          id: 'cmd_interleaved_output',
-          command: 'printf "line one\\nline two\\nline three"',
-          cwd: process.cwd(),
-          status: 'completed',
-          aggregatedOutput: 'line one\nline two\n',
-          exitCode: 0,
-          durationMs: 1,
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          thread_cleanup: 'none',
         },
-      },
-    });
-    server.send({
-      method: 'item/commandExecution/outputDelta',
-      params: {
-        threadId: 'thr_interleaved_output',
-        turnId: 'turn_interleaved_output',
-        itemId: 'cmd_interleaved_output',
-        delta: 'line three',
-      },
-    });
-    server.send({
-      method: 'item/agentMessage/delta',
-      params: {
-        threadId: 'thr_interleaved_output',
-        turnId: 'turn_interleaved_output',
-        itemId: 'msg_interleaved_output',
-        delta: 'Done',
-      },
-    });
-    server.send({
-      method: 'turn/completed',
-      params: {
-        threadId: 'thr_interleaved_output',
-        turn: { id: 'turn_interleaved_output', status: 'completed', items: [], error: null },
-      },
-    });
+      });
 
-    const result = await resultPromise;
-    const raw = JSON.parse(result.raw as string);
-    expect(raw.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'command_execution',
-          aggregated_output: 'line one\nline two\nline three',
-        }),
-      ]),
-    );
-    expect(result.metadata?.codexAppServer.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'commandExecution',
-          aggregatedOutput: 'line one\nline two\nline three',
-        }),
-      ]),
-    );
-  });
+      const resultPromise = provider.callApi('Run a command with interleaved output');
+
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_interleaved_output' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_interleaved_output', status: 'inProgress' } },
+      });
+
+      server.send({
+        method: 'item/commandExecution/outputDelta',
+        params: {
+          threadId: 'thr_interleaved_output',
+          turnId: 'turn_interleaved_output',
+          itemId: 'cmd_interleaved_output',
+          delta: before,
+        },
+      });
+      server.send({
+        method: 'item/completed',
+        params: {
+          threadId: 'thr_interleaved_output',
+          turnId: 'turn_interleaved_output',
+          item: {
+            type: 'commandExecution',
+            id: 'cmd_interleaved_output',
+            command: 'printf "line one\\nline two\\nline three"',
+            cwd: process.cwd(),
+            status: 'completed',
+            aggregatedOutput: aggregate,
+            exitCode: 0,
+            durationMs: 1,
+          },
+        },
+      });
+      server.send({
+        method: 'item/commandExecution/outputDelta',
+        params: {
+          threadId: 'thr_interleaved_output',
+          turnId: 'turn_interleaved_output',
+          itemId: 'cmd_interleaved_output',
+          delta: after,
+        },
+      });
+      server.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_interleaved_output',
+          turnId: 'turn_interleaved_output',
+          itemId: 'msg_interleaved_output',
+          delta: 'Done',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_interleaved_output',
+          turn: { id: 'turn_interleaved_output', status: 'completed', items: [], error: null },
+        },
+      });
+
+      const result = await resultPromise;
+      const raw = JSON.parse(result.raw as string);
+      const rawItem = raw.items.find((item: any) => item.type === 'command_execution');
+      expect(rawItem.aggregated_output).toBe(expected);
+      expect(rawItem).not.toHaveProperty('streamed_output');
+      const metadataItem = result.metadata?.codexAppServer.items.find(
+        (item: any) => item.type === 'commandExecution',
+      );
+      expect(metadataItem.aggregatedOutput).toBe(expected);
+      expect(metadataItem).not.toHaveProperty('streamedOutput');
+    },
+  );
 
   it('emits SDK-compatible raw items for coding-agent verifiers', async () => {
     const server = createMockAppServer();
@@ -5485,10 +5488,20 @@ describe('OpenAICodexAppServerProvider', () => {
           source: 'shell',
           status: 'completed',
           commandActions: [],
-          aggregatedOutput: 'api_key=sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+          aggregatedOutput:
+            'api_key=sk-proj-abcdefghijklmnopqrstuvwxyz123456\npassword=fixture-credential',
           exitCode: 0,
           durationMs: 1,
         },
+      },
+    });
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_sanitize',
+        turnId: 'turn_sanitize',
+        itemId: 'cmd_secret',
+        delta: 'fixture-credential',
       },
     });
     server.send({
@@ -5511,10 +5524,12 @@ describe('OpenAICodexAppServerProvider', () => {
     const result = await resultPromise;
     const metadataJson = JSON.stringify(result.metadata);
     expect(metadataJson).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
+    expect(metadataJson).not.toContain('fixture-credential');
     expect(metadataJson).toContain('[REDACTED]');
 
     const rawJson = result.raw as string;
     expect(rawJson).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
+    expect(rawJson).not.toContain('fixture-credential');
     expect(rawJson).toContain('[REDACTED]');
   });
 
