@@ -48,6 +48,104 @@ afterEach(() => {
 
 // Use real SDK constructors and a local request-handler stub: no credential or model service calls.
 describe('scoped AWS SDK authentication', () => {
+  it.each(['file', 'suite'] as const)(
+    'does not restore a host bearer cleared by the %s environment',
+    async (scope) => {
+      mockProcessEnv({ ...keys('host'), AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
+      const handle = vi
+        .spyOn(NodeHttpHandler.prototype, 'handle')
+        .mockRejectedValue(new Error('Unexpected transport request'));
+      const run = async () => {
+        const provider = new AwsBedrockCompletionProvider('fixture');
+        const client = await provider.getBedrockInstance();
+        try {
+          await expect(
+            client.invokeModel({
+              modelId: 'fixture',
+              body: Buffer.from('{}'),
+              contentType: 'application/json',
+            }),
+          ).rejects.toThrow('token');
+          expect(handle).not.toHaveBeenCalled();
+        } finally {
+          client.destroy();
+        }
+      };
+      const env = { AWS_BEARER_TOKEN_BEDROCK: '' };
+      await (scope === 'file'
+        ? cliState.withEnvFileOverrides(env, run)
+        : cliState.withEnv(env, run));
+    },
+  );
+
+  it.each(['config-keys', 'config-api-key', 'scoped-keys', 'scoped-profile', 'harmless-empty'])(
+    'preserves %s authentication with an empty scoped bearer placeholder',
+    async (mode) => {
+      mockProcessEnv({
+        ...keys('host'),
+        AWS_BEARER_TOKEN_BEDROCK: mode === 'harmless-empty' ? undefined : 'host-bearer',
+      });
+      const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-empty-bearer-'));
+      const file = path.join(dir, 'credentials');
+      fs.writeFileSync(
+        file,
+        '[fixture]\naws_access_key_id=profile-access\naws_secret_access_key=profile-secret\n',
+      );
+      const handle = vi
+        .spyOn(NodeHttpHandler.prototype, 'handle')
+        .mockResolvedValue({ response: { statusCode: 200, headers: {}, body: Buffer.from('{}') } });
+      try {
+        await cliState.withEnvFileOverrides(
+          {
+            AWS_BEARER_TOKEN_BEDROCK: '',
+            ...(mode === 'scoped-keys' ? keys('scoped') : {}),
+            ...(mode === 'scoped-profile'
+              ? { AWS_PROFILE: 'fixture', AWS_SHARED_CREDENTIALS_FILE: file }
+              : {}),
+          },
+          async () => {
+            const config =
+              mode === 'config-keys'
+                ? { accessKeyId: 'configured-access', secretAccessKey: 'configured-secret' }
+                : mode === 'config-api-key'
+                  ? { apiKey: 'configured-bearer' }
+                  : {};
+            const client = await new AwsBedrockCompletionProvider('fixture', {
+              config,
+            }).getBedrockInstance();
+            try {
+              await client.invokeModel({
+                modelId: 'fixture',
+                body: Buffer.from('{}'),
+                contentType: 'application/json',
+              });
+              const authorization = new Headers(handle.mock.calls[0][0].headers).get(
+                'authorization',
+              );
+              if (mode === 'config-api-key') {
+                expect(authorization).toBe('Bearer configured-bearer');
+              } else {
+                const accessKey =
+                  mode === 'config-keys'
+                    ? 'configured-access'
+                    : mode === 'scoped-keys'
+                      ? 'scoped-access'
+                      : mode === 'scoped-profile'
+                        ? 'profile-access'
+                        : 'host-access';
+                expect(authorization).toContain(`Credential=${accessKey}/`);
+              }
+            } finally {
+              client.destroy();
+            }
+          },
+        );
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it.each([
     { AWS_SESSION_TOKEN: '' },
     { AWS_SESSION_TOKEN: ' \t ' },
@@ -80,14 +178,96 @@ describe('scoped AWS SDK authentication', () => {
     },
   );
 
-  it('does not turn empty static masks or incomplete tuples into host discovery', async () => {
+  it.each([
+    { name: 'lone session token', host: {}, env: { AWS_SESSION_TOKEN: 'file-session' } },
+    { name: 'lone access key', host: {}, env: { AWS_ACCESS_KEY_ID: 'file-access' } },
+    { name: 'lone secret key', host: {}, env: { AWS_SECRET_ACCESS_KEY: 'file-secret' } },
+    {
+      name: 'session token with incomplete host keys',
+      host: { AWS_ACCESS_KEY_ID: 'host-access' },
+      env: { AWS_SESSION_TOKEN: 'file-session' },
+    },
+    {
+      name: 'cleared access key with a complete host tuple',
+      host: keys('host'),
+      env: { AWS_ACCESS_KEY_ID: '' },
+    },
+    {
+      name: 'cleared secret key with a complete host tuple',
+      host: keys('host'),
+      env: { AWS_SECRET_ACCESS_KEY: '' },
+    },
+    {
+      name: 'cleared host access key without a secret',
+      host: { AWS_ACCESS_KEY_ID: 'host-access' },
+      env: { AWS_ACCESS_KEY_ID: '' },
+    },
+    {
+      name: 'cleared host secret key without an access key',
+      host: { AWS_SECRET_ACCESS_KEY: 'host-secret' },
+      env: { AWS_SECRET_ACCESS_KEY: '' },
+    },
+  ])('keeps native shared-file discovery for $name', async ({ host, env }) => {
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-incomplete-aws-'));
+    const file = path.join(dir, 'credentials');
+    fs.writeFileSync(
+      file,
+      '[default]\naws_access_key_id=shared-access\naws_secret_access_key=shared-secret\n',
+    );
+    mockProcessEnv({ ...host, AWS_SHARED_CREDENTIALS_FILE: file });
+    try {
+      const provider = new AwsBedrockCompletionProvider('fixture', { env });
+      const client = await provider.getBedrockInstance();
+      try {
+        expect(Reflect.get(client.config, 'profile')).toBe('default');
+        expect((await client.config.credentials()).accessKeyId).toBe('shared-access');
+        expect(process.env.AWS_ACCESS_KEY_ID).toBe(host.AWS_ACCESS_KEY_ID);
+        expect(process.env.AWS_SECRET_ACCESS_KEY).toBe(host.AWS_SECRET_ACCESS_KEY);
+      } finally {
+        client.destroy();
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps incomplete Environment role sources from restoring a cleared host tuple', async () => {
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-incomplete-role-'));
+    const config = path.join(dir, 'config');
+    const credentials = path.join(dir, 'credentials');
+    fs.writeFileSync(credentials, '');
+    fs.writeFileSync(
+      config,
+      '[default]\nrole_arn=arn:aws:iam::123456789012:role/Fixture\ncredential_source=Environment\n',
+    );
     mockProcessEnv(keys('host'));
-    await expect(
-      resolveAwsCredentials({}, { AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '' }),
-    ).rejects.toThrow('incomplete');
-    await expect(
-      resolveAwsCredentials({}, { AWS_ACCESS_KEY_ID: 'file-access', AWS_SECRET_ACCESS_KEY: '' }),
-    ).rejects.toThrow('incomplete');
+    const handle = vi
+      .spyOn(NodeHttpHandler.prototype, 'handle')
+      .mockRejectedValue(new Error('Unexpected STS request'));
+    try {
+      const provider = new AwsBedrockCompletionProvider('fixture', {
+        env: {
+          AWS_ACCESS_KEY_ID: '',
+          AWS_CONFIG_FILE: config,
+          AWS_SHARED_CREDENTIALS_FILE: credentials,
+        },
+      });
+      const client = await provider.getBedrockInstance();
+      try {
+        await expect(client.config.credentials()).rejects.toThrow(
+          'AWS role source credentials are incomplete',
+        );
+        expect(handle).not.toHaveBeenCalled();
+      } finally {
+        client.destroy();
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('clears an optional session token while retaining the complete host keypair', async () => {
+    mockProcessEnv(keys('host'));
     mockProcessEnv({ AWS_SESSION_TOKEN: 'host-session' });
     expect(await resolveAwsCredentials({}, { AWS_SESSION_TOKEN: '' })).toEqual({
       accessKeyId: 'host-access',
@@ -407,9 +587,9 @@ describe('scoped AWS SDK authentication', () => {
     }
   });
 
-  it('preserves Nova Sonic scoped credential validation errors', async () => {
+  it('preserves Nova Sonic validation errors for complete whitespace-only credentials', async () => {
     const provider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
-      env: { AWS_ACCESS_KEY_ID: 'partial' },
+      env: { AWS_ACCESS_KEY_ID: 'fixture-access', AWS_SECRET_ACCESS_KEY: ' \t ' },
     });
     await expect(Reflect.get(provider, 'getBedrockClient').call(provider)).rejects.toThrow(
       'incomplete',

@@ -97,7 +97,8 @@ export function getScopedAwsCredentialConfig(
     return { apiKey: scoped.AWS_BEARER_TOKEN_BEDROCK };
   }
   const profile = scoped.AWS_PROFILE ?? getEnvString('AWS_PROFILE');
-  if (profile === '' && value('AWS_ACCESS_KEY_ID') && value('AWS_SECRET_ACCESS_KEY')) {
+  const hasCompleteKeys = Boolean(value('AWS_ACCESS_KEY_ID') && value('AWS_SECRET_ACCESS_KEY'));
+  if (profile === '' && hasCompleteKeys) {
     return {
       accessKeyId: value('AWS_ACCESS_KEY_ID'),
       secretAccessKey: value('AWS_SECRET_ACCESS_KEY'),
@@ -105,16 +106,26 @@ export function getScopedAwsCredentialConfig(
       profile,
     };
   }
+  // With no selected profile, the SDK tries ambient access keys before files or
+  // web identity. Scoping only those later sources must not select them early
+  // or change the response-cache namespace for the unchanged ambient identity.
+  if (!profile && !hasScopedKeys && hasCompleteKeys) {
+    return undefined;
+  }
   if (profile || !hasScopedKeys) {
     return {
       // The SDK's nested INI loader restores process.env for an empty profile.
-      // Keep fromEnv precedence when keys exist; otherwise select the default
-      // profile that a cleared process-level AWS_PROFILE would have used.
-      profile:
-        profile === '' && !(value('AWS_ACCESS_KEY_ID') && value('AWS_SECRET_ACCESS_KEY'))
-          ? 'default'
-          : profile,
+      // Normalize its implicit default after fromEnv is ruled out so cache
+      // identity tracks both shared files, including an unscoped counterpart.
+      profile: profile || 'default',
     };
+  }
+  if (!hasCompleteKeys) {
+    // The native environment provider skips incomplete tuples and continues
+    // through files, process, web identity, and metadata. Select the default
+    // profile explicitly so a scoped clear cannot restore the host's keypair.
+    // The profile adapter still validates Environment sources used by roles.
+    return { profile: 'default' };
   }
   return {
     accessKeyId: value('AWS_ACCESS_KEY_ID'),

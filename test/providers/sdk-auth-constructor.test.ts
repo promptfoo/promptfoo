@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { ClientSecretCredential, DefaultAzureCredential } from '@azure/identity';
-import { UserRefreshClient } from 'google-auth-library';
+import { GoogleAuth, JWT, UserRefreshClient } from 'google-auth-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { loadApiProvider } from '../../src/providers';
@@ -25,6 +25,101 @@ afterEach(() => {
 });
 
 describe('real cloud SDK credential construction without authentication calls', () => {
+  it.each(['authorized_user', 'service_account'])(
+    'retains explicit SDK options when loading scoped %s ADC',
+    async (type) => {
+      const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-adc-options-'));
+      const file = path.join(dir, 'adc.json');
+      const credentials =
+        type === 'authorized_user'
+          ? {
+              type,
+              client_id: 'fixture-client',
+              client_secret: 'fixture-secret',
+              refresh_token: 'fixture-refresh',
+            }
+          : { type, client_email: 'fixture@example.invalid', private_key: 'fixture-private-key' };
+      fs.writeFileSync(file, JSON.stringify(credentials));
+      // Reuse a real SDK transporter; no token/request method is invoked.
+      const transporter = new UserRefreshClient().transporter;
+      try {
+        const { client } = await GoogleAuthManager.getOAuthClient(
+          {
+            env: { GOOGLE_APPLICATION_CREDENTIALS: file },
+            googleAuthOptions: {
+              universeDomain: 'configured.invalid',
+              clientOptions: {
+                transporter,
+                universeDomain: 'lower.invalid',
+                subject: 'delegate@example.invalid',
+                eagerRefreshThresholdMillis: 120000,
+                forceRefreshOnFailure: true,
+              },
+            },
+          },
+          false,
+        );
+        expect(client).toBeInstanceOf(type === 'authorized_user' ? UserRefreshClient : JWT);
+        expect(client.universeDomain).toBe('configured.invalid');
+        expect(client.transporter).toBe(transporter);
+        expect(client.eagerRefreshThresholdMillis).toBe(120000);
+        expect(client.forceRefreshOnFailure).toBe(true);
+        if (type === 'service_account') {
+          expect(client.subject).toBe('delegate@example.invalid');
+        }
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('does not recover a host ADC project after selecting scoped authorized-user credentials', async () => {
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-adc-project-'));
+    const file = path.join(dir, 'scoped.json');
+    const hostFile = path.join(dir, 'host.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        type: 'authorized_user',
+        client_id: 'scoped-client',
+        client_secret: 'fixture-secret',
+        refresh_token: 'fixture-refresh',
+      }),
+    );
+    fs.writeFileSync(
+      hostFile,
+      JSON.stringify({
+        type: 'service_account',
+        project_id: 'host-project',
+        client_email: 'host@example.invalid',
+        private_key: 'fixture-private-key',
+      }),
+    );
+    mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: hostFile });
+    // Keep unrelated gcloud/metadata discovery offline while exercising the SDK's
+    // real client cache and ADC project-discovery logic.
+    vi.spyOn(Reflect.get(GoogleAuth, 'prototype'), 'getDefaultServiceProjectId').mockResolvedValue(
+      null,
+    );
+    vi.spyOn(Reflect.get(GoogleAuth, 'prototype'), 'getGCEProjectId').mockResolvedValue(null);
+    const hostDiscovery = vi.spyOn(
+      Reflect.get(GoogleAuth, 'prototype'),
+      '_tryGetApplicationCredentialsFromEnvironmentVariable',
+    );
+    try {
+      const { client, projectId } = await GoogleAuthManager.getOAuthClient({
+        env: { GOOGLE_APPLICATION_CREDENTIALS: file },
+      });
+      expect(client).toBeInstanceOf(UserRefreshClient);
+      expect(Reflect.get(client, '_clientId')).toBe('scoped-client');
+      expect(projectId).toBeUndefined();
+      expect(hostDiscovery).not.toHaveBeenCalled();
+      expect(process.env.GOOGLE_APPLICATION_CREDENTIALS).toBe(hostFile);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it.each([undefined, 'configured-options-quota'])(
     'preserves a shared explicit authClient quota across concurrent environments (options=%s)',
     async (quotaProjectId) => {

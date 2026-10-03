@@ -420,7 +420,6 @@ export class GoogleAuthManager {
       authOptions.keyFilename = keyFilename;
     }
 
-    let adcCredentials: unknown;
     // SDK discovery reads process.env, so forward the effective scoped inputs explicitly.
     if (
       !credentials &&
@@ -442,6 +441,7 @@ export class GoogleAuthManager {
       authOptions.keyFilename = scopedFilename ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS');
       if (authOptions.keyFilename) {
         const content = await fs.promises.readFile(authOptions.keyFilename, 'utf8');
+        let adcCredentials: unknown;
         try {
           adcCredentials = JSON.parse(content);
         } catch {
@@ -450,6 +450,18 @@ export class GoogleAuthManager {
             '[Google] GOOGLE_APPLICATION_CREDENTIALS must point to a valid ADC JSON file.',
           );
         }
+        if (
+          !adcCredentials ||
+          typeof adcCredentials !== 'object' ||
+          Array.isArray(adcCredentials)
+        ) {
+          throw new Error(
+            '[Google] GOOGLE_APPLICATION_CREDENTIALS must contain an ADC credential JSON object.',
+          );
+        }
+        // The constructor's credentials path validates fields without the key-file
+        // loader's PEM fallback, and retains SDK client options and project caching.
+        authOptions.credentials = adcCredentials;
       }
     }
     authOptions.projectId =
@@ -484,21 +496,17 @@ export class GoogleAuthManager {
     const processedCredentials = this.loadCredentials(credentials);
 
     let client;
-    if (processedCredentials || adcCredentials !== undefined) {
-      let parsedCredentials = adcCredentials;
-      if (processedCredentials) {
-        try {
-          parsedCredentials = JSON.parse(processedCredentials);
-        } catch (parseError) {
-          const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
-          throw new Error(`[Google] Invalid credentials JSON format: ${errorMsg}`);
-        }
+    if (processedCredentials) {
+      let parsedCredentials;
+      try {
+        parsedCredentials = JSON.parse(processedCredentials);
+      } catch (parseError) {
+        const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
+        throw new Error(`[Google] Invalid credentials JSON format: ${errorMsg}`);
       }
 
       try {
-        // Let the SDK validate credential fields. Its key-file stream loader can
-        // fall back to PEM after JSON validation errors, which ADC must not do.
-        client = await auth.fromJSON(parsedCredentials as Parameters<typeof auth.fromJSON>[0]);
+        client = await auth.fromJSON(parsedCredentials);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         logger.error(`[Google] Could not load credentials: ${errorMsg}`);

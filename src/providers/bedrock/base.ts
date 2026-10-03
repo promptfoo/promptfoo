@@ -228,6 +228,14 @@ export abstract class AwsBedrockGenericProvider {
       ...getAwsCredentialProviderOptions(this.env),
       ...(credentials ? { credentials } : {}),
       ...(profile === undefined ? {} : { profile }),
+      // Explicitly represent an invocation's cleared bearer token so SDK
+      // discovery cannot restore the host token. Existing SigV4 paths still win.
+      ...(!credentials &&
+      !apiKey &&
+      getEnvString('AWS_BEARER_TOKEN_BEDROCK') === '' &&
+      process.env.AWS_BEARER_TOKEN_BEDROCK
+        ? { token: { token: '' } }
+        : {}),
       ...(credentials
         ? { authSchemePreference: ['sigv4'] }
         : apiKey
@@ -246,7 +254,7 @@ export abstract class AwsBedrockGenericProvider {
     return (state.initialization ??= (async () => {
       const authOptions = await this.getBedrockAuthOptions();
       const handler = await createBedrockRequestHandler({
-        apiKey: 'token' in authOptions ? authOptions.token.token : undefined,
+        apiKey: 'token' in authOptions ? authOptions.token?.token : undefined,
       });
 
       try {

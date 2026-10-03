@@ -6,6 +6,7 @@ import path from 'node:path';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { getAwsCredentialCacheNamespace } from '../../src/providers/awsCredentials';
 import { getScopedAwsProfileCredentials } from '../../src/providers/awsProfileCredentials';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { mockProcessEnv } from '../util/utils';
@@ -328,6 +329,23 @@ describe('scoped SSO profile files with the installed AWS SDK', () => {
       });
       expect(await defaultProfile?.()).toMatchObject(assumedCredentials);
       vi.spyOn(NodeHttpHandler.prototype, 'handle').mockImplementation(handle);
+      const filesOnly = {
+        AWS_CONFIG_FILE: configFilepath,
+        AWS_SHARED_CREDENTIALS_FILE: filepath,
+      };
+      const ambient = new AwsBedrockCompletionProvider('fixture', {
+        config: { region: 'us-east-1' },
+        env: filesOnly,
+      });
+      const ambientClient = await ambient.getBedrockInstance();
+      try {
+        expect((await ambientClient.config.credentials()).accessKeyId).toBe('host-access');
+        expect(handle).toHaveBeenCalledTimes(3);
+        expect(getAwsCredentialCacheNamespace({}, filesOnly)).toBeUndefined();
+        expect(Reflect.get(ambient, 'responseCacheNamespace')).toBeUndefined();
+      } finally {
+        ambientClient.destroy();
+      }
       const bedrock = new AwsBedrockCompletionProvider('fixture', {
         config: { region: 'us-east-1' },
         env: {
@@ -343,6 +361,31 @@ describe('scoped SSO profile files with the installed AWS SDK', () => {
         client.destroy();
       }
       expect(handle).toHaveBeenCalledTimes(4);
+      const restoreKeys = mockProcessEnv({
+        AWS_ACCESS_KEY_ID: undefined,
+        AWS_SECRET_ACCESS_KEY: undefined,
+      });
+      const webTokenFile = path.join(dir, 'web-token');
+      fs.writeFileSync(webTokenFile, 'fixture-web-token');
+      try {
+        const ssoBeforeWeb = new AwsBedrockCompletionProvider('fixture', {
+          config: { region: 'us-east-1' },
+          env: {
+            ...filesOnly,
+            AWS_WEB_IDENTITY_TOKEN_FILE: webTokenFile,
+            AWS_ROLE_ARN: 'arn:aws:iam::123456789012:role/WebIdentity',
+          },
+        });
+        const selected = await ssoBeforeWeb.getBedrockInstance();
+        try {
+          expect(await selected.config.credentials()).toMatchObject(assumedCredentials);
+        } finally {
+          selected.destroy();
+        }
+        expect(handle).toHaveBeenCalledTimes(5);
+      } finally {
+        restoreKeys();
+      }
       for (const [request] of handle.mock.calls) {
         expect(request.query).toMatchObject({
           account_id: '123456789012',

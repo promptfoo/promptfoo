@@ -24,6 +24,60 @@ afterEach(() => {
 });
 
 describe('scoped SDK response cache compatibility', () => {
+  it.each(['AWS_CONFIG_FILE', 'AWS_SHARED_CREDENTIALS_FILE'] as const)(
+    'tracks the implicit default profile counterpart when only %s is scoped',
+    async (selector) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-default-counterpart-'));
+      const configFile = path.join(dir, 'config');
+      const credentialsFile = path.join(dir, 'credentials');
+      const selectedFile = selector === 'AWS_CONFIG_FILE' ? configFile : credentialsFile;
+      const counterpartFile = selector === 'AWS_CONFIG_FILE' ? credentialsFile : configFile;
+      fs.writeFileSync(selectedFile, '');
+      const replaceCounterpart = (label: string) => {
+        const next = `${counterpartFile}.next`;
+        fs.writeFileSync(
+          next,
+          `[default]\naws_access_key_id=${label}-access\naws_secret_access_key=fixture-secret\n`,
+        );
+        fs.renameSync(next, counterpartFile);
+      };
+      replaceCounterpart('before');
+      restore = mockProcessEnv({
+        AWS_PROFILE: undefined,
+        AWS_ACCESS_KEY_ID: undefined,
+        AWS_SECRET_ACCESS_KEY: undefined,
+        AWS_SESSION_TOKEN: undefined,
+        AWS_CONFIG_FILE: configFile,
+        AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
+        AWS_EC2_METADATA_DISABLED: 'true',
+      });
+      const env = { [selector]: selectedFile };
+      const firstNamespace = getAwsCredentialCacheNamespace({}, env);
+      const readIdentity = async () => {
+        const provider = new AwsBedrockCompletionProvider('fixture', { env });
+        const client = await provider.getBedrockInstance();
+        try {
+          expect(Reflect.get(client.config, 'profile')).toBe('default');
+          expect(Reflect.get(provider, 'responseCacheNamespace')).toBe(
+            getAwsCredentialCacheNamespace({}, env),
+          );
+          return (await client.config.credentials()).accessKeyId;
+        } finally {
+          client.destroy();
+        }
+      };
+      try {
+        expect(firstNamespace).toBeDefined();
+        expect(await readIdentity()).toBe('before-access');
+        replaceCounterpart('after');
+        expect(await readIdentity()).toBe('after-access');
+        expect(getAwsCredentialCacheNamespace({}, env)).not.toBe(firstNamespace);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('partitions effective static keys when a scoped profile clears the host selector', () => {
     restore = mockProcessEnv({
       AWS_PROFILE: 'host-profile',
