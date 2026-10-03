@@ -55,6 +55,8 @@ export OPENAI_API_KEY=your_api_key_here
 
 If promptfoo starts the OpenCode server for you, you can also set `config.apiKey` together with `config.provider_id` in your provider config.
 
+For servers started by promptfoo, setting `OPENCODE_SERVER_PASSWORD` in the server environment also authenticates the SDK client with that password. Set `OPENCODE_SERVER_USERNAME` to customize the username, which defaults to `opencode`. These variables can come from an env file or provider `env` overrides. See [OpenCode server authentication](https://opencode.ai/docs/server/#authentication).
+
 :::note
 
 If you connect to an existing OpenCode server with `baseUrl`, that server is responsible for authentication, MCP setup, and custom agents. Promptfoo can still send per-request options like `model`, `tools`, `format`, and `workspace`, but it cannot reconfigure the remote server.

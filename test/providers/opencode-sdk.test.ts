@@ -2590,6 +2590,48 @@ describe('OpenCodeSDKProvider', () => {
       });
       expect(mockCreateOpencode).not.toHaveBeenCalled();
     });
+
+    it('does not send local server credentials to an external baseUrl', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: { baseUrl: 'https://opencode.example.test' },
+        env: {
+          OPENCODE_SERVER_PASSWORD: 'local-password',
+          OPENCODE_SERVER_USERNAME: 'local-user',
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockCreateOpencodeClient).toHaveBeenCalledWith({
+        baseUrl: 'https://opencode.example.test',
+      });
+      expect(mockCreateOpencode).not.toHaveBeenCalled();
+    });
+
+    it('closes the owned server if authenticated client construction fails and can retry', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: { max_retries: 0 },
+        env: { OPENCODE_SERVER_PASSWORD: 'local-password' },
+      });
+      mockCreateOpencodeClient.mockImplementation(() => {
+        throw new Error('fixture client construction failure');
+      });
+      try {
+        const failed = await provider.callApi('First prompt');
+        expect(failed.error).toContain('fixture client construction failure');
+        expect(mockServerClose).toHaveBeenCalledTimes(1);
+
+        mockCreateOpencodeClient.mockReturnValue(mockClient);
+        const recovered = await provider.callApi('Second prompt');
+        expect(recovered.error).toBeUndefined();
+        expect(recovered.output).toBe('Test response');
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+      } finally {
+        mockCreateOpencodeClient.mockReturnValue(mockClient);
+        await provider.cleanup();
+      }
+      expect(mockServerClose).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('FS_READONLY_TOOLS constant', () => {

@@ -455,7 +455,10 @@ interface OpenCodeSDKModule {
     config?: Record<string, unknown>;
     env?: Record<string, string>;
   }) => Promise<{ client: OpenCodeClient; server: OpenCodeServer }>;
-  createOpencodeClient: (options: { baseUrl: string }) => OpenCodeClient;
+  createOpencodeClient: (options: {
+    baseUrl: string;
+    headers?: Record<string, string>;
+  }) => OpenCodeClient;
 }
 
 interface LoadedOpenCodeSDKModule extends OpenCodeSDKModule {
@@ -1557,14 +1560,34 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       this.serverHasRepositoryEnv = hasRepositoryEnv(serverEnv);
       const opencode = await spawnWithServerEnv(serverEnv, () => createOpencode(serverOptions));
-      this.client = opencode.client;
       this.server = opencode.server;
+      const authEnv =
+        os.platform() === 'win32'
+          ? Object.fromEntries(
+              Object.entries(serverEnv).map(([key, value]) => [key.toUpperCase(), value]),
+            )
+          : serverEnv;
+      const password = authEnv.OPENCODE_SERVER_PASSWORD;
+      // createOpencode does not authenticate its client when the spawned server
+      // enables Basic auth. Use the same effective credentials as that server.
+      this.client = password
+        ? createOpencodeClient({
+            baseUrl: opencode.server.url,
+            headers: {
+              Authorization: `Basic ${Buffer.from(`${authEnv.OPENCODE_SERVER_USERNAME ?? 'opencode'}:${password}`).toString('base64')}`,
+            },
+          })
+        : opencode.client;
       this.activeTraceparent = desiredTraceparent;
       logger.debug(`OpenCode server started at ${opencode.server.url}`);
     })();
     this.clientInitialization = initialization;
     try {
       await initialization;
+    } catch (error) {
+      // Initialization may fail after the server starts but before its client is ready.
+      await this.closeServer();
+      throw error;
     } finally {
       if (this.clientInitialization === initialization) {
         this.clientInitialization = undefined;

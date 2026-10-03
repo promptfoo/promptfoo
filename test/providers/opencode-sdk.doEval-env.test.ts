@@ -21,16 +21,20 @@ describe.runIf(hasSdk)('OpenCode environment files through doEval', () => {
   let restoreEnv: () => void;
   let startupError: boolean;
   const spawnedEnvs: NodeJS.ProcessEnv[] = [];
+  const authorizations: (string | null)[] = [];
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-opencode-eval-env-'));
     restoreEnv = mockProcessEnv({
       OPENAI_API_KEY: 'host-key',
+      OPENCODE_SERVER_PASSWORD: undefined,
+      OPENCODE_SERVER_USERNAME: undefined,
       OPENCODE_TRACEPARENT: undefined,
       PROMPTFOO_OPENCODE_ENV_PROBE: 'host',
       PROMPTFOO_DISABLE_TELEMETRY: 'true',
     });
     spawnedEnvs.length = 0;
+    authorizations.length = 0;
     startupError = false;
     vi.spyOn(childProcess, 'spawn').mockImplementation(((
       _command,
@@ -62,6 +66,20 @@ describe.runIf(hasSdk)('OpenCode environment files through doEval', () => {
         const url = new URL(request.url);
         expect(url.hostname).toBe('127.0.0.1');
         const env = spawnedEnvs[Number(url.port) - 45001];
+        const serverEnv =
+          os.platform() === 'win32'
+            ? Object.fromEntries(
+                Object.entries(env).map(([key, value]) => [key.toUpperCase(), value]),
+              )
+            : env;
+        const authorization = request.headers.get('authorization');
+        authorizations.push(authorization);
+        if (serverEnv.OPENCODE_SERVER_PASSWORD) {
+          const credentials = `${serverEnv.OPENCODE_SERVER_USERNAME ?? 'opencode'}:${serverEnv.OPENCODE_SERVER_PASSWORD}`;
+          if (authorization !== `Basic ${Buffer.from(credentials).toString('base64')}`) {
+            return Response.json({ error: 'Unauthorized' }, { status: 401 });
+          }
+        }
         let data: unknown;
         if (request.method === 'POST' && url.pathname === '/session') {
           data = { id: 'fixture-session' };
@@ -87,24 +105,39 @@ describe.runIf(hasSdk)('OpenCode environment files through doEval', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  async function runEval(value: string, providerEnv?: Record<string, string>) {
+  async function runEvaluation(
+    value: string,
+    providerEnv?: Record<string, string>,
+    fileEnv: Record<string, string> = {},
+    testCount = 1,
+  ) {
     const envPath = path.join(tempDir, `${value}.env`);
     fs.writeFileSync(
       envPath,
-      `OPENAI_API_KEY=${value}-key\nPROMPTFOO_OPENCODE_ENV_PROBE=${value}\n`,
+      `OPENAI_API_KEY=${value}-key\nPROMPTFOO_OPENCODE_ENV_PROBE=${value}\n` +
+        Object.entries(fileEnv)
+          .map(([key, envValue]) => `${key}=${envValue}\n`)
+          .join(''),
     );
     const evaluation = await doEval(
       { envPath: [envPath], write: false, share: false, table: false, progressBar: false },
       {
         prompts: ['hello'],
         providers: [{ id: 'opencode:sdk', env: providerEnv, config: { tools: { skill: false } } }],
-        tests: [{ vars: {} }],
+        tests: Array.from({ length: testCount }, () => ({ vars: {} })),
       },
       undefined,
-      { eventSource: 'mcp', cache: false },
+      { eventSource: 'mcp', cache: false, maxConcurrency: 1 },
     );
-    const [row] = await evaluation.getResults();
-    return row;
+    return evaluation.getResults();
+  }
+
+  async function runEval(
+    value: string,
+    providerEnv?: Record<string, string>,
+    fileEnv?: Record<string, string>,
+  ) {
+    return (await runEvaluation(value, providerEnv, fileEnv))[0];
   }
 
   it('passes scoped env files to the real SDK spawn and restores the host environment', async () => {
@@ -122,6 +155,100 @@ describe.runIf(hasSdk)('OpenCode environment files through doEval', () => {
     expect(row.success).toBe(true);
     expect(spawnedEnvs[0].OPENAI_API_KEY).toBe('provider-key');
     expect(process.env.OPENAI_API_KEY).toBe('host-key');
+  });
+
+  it.each([undefined, 'configured-user', ''])(
+    'authenticates a reused SDK client with username %s',
+    async (username) => {
+      const fileEnv: Record<string, string> = { OPENCODE_SERVER_PASSWORD: 'fixture:password-π' };
+      if (username !== undefined) {
+        fileEnv.OPENCODE_SERVER_USERNAME = username;
+      }
+      const rows = await runEvaluation('authenticated', undefined, fileEnv, 2);
+      expect(rows.map((row) => row.success)).toEqual([true, true]);
+      expect(rows.map((row) => row.response?.output)).toEqual(['authenticated', 'authenticated']);
+      expect(spawnedEnvs).toHaveLength(1);
+      expect(authorizations).toHaveLength(6);
+      expect(new Set(authorizations)).toEqual(
+        new Set([
+          `Basic ${Buffer.from(`${username ?? 'opencode'}:fixture:password-π`).toString('base64')}`,
+        ]),
+      );
+      expect(process.env.OPENCODE_SERVER_PASSWORD).toBeUndefined();
+      expect(process.env.OPENCODE_SERVER_USERNAME).toBeUndefined();
+    },
+  );
+
+  it.each(['linux', 'win32'] as const)(
+    'uses the winning server credentials on %s',
+    async (platform) => {
+      vi.spyOn(os, 'platform').mockReturnValue(platform);
+      const passwordKey =
+        platform === 'win32' ? 'opencode_server_password' : 'OPENCODE_SERVER_PASSWORD';
+      const usernameKey =
+        platform === 'win32' ? 'OpenCode_Server_Username' : 'OPENCODE_SERVER_USERNAME';
+      const row = await runEval(
+        'auth-override',
+        {
+          [passwordKey]: 'provider-password',
+          [usernameKey]: 'provider-user',
+        },
+        {
+          OPENCODE_SERVER_PASSWORD: 'file-password',
+          OPENCODE_SERVER_USERNAME: 'file-user',
+        },
+      );
+      expect(row.success).toBe(true);
+      expect(new Set(authorizations)).toEqual(
+        new Set([`Basic ${Buffer.from('provider-user:provider-password').toString('base64')}`]),
+      );
+      expect(process.env.OPENCODE_SERVER_PASSWORD).toBeUndefined();
+    },
+  );
+
+  it.each([undefined, ''])(
+    'keeps SDK requests unauthenticated when the server password is %s',
+    async (password) => {
+      const providerEnv: Record<string, string> = {};
+      if (password !== undefined) {
+        providerEnv.OPENCODE_SERVER_PASSWORD = password;
+      }
+      const row = await runEval(
+        'no-auth',
+        providerEnv,
+        password === ''
+          ? {
+              OPENCODE_SERVER_PASSWORD: 'overridden-file-password',
+            }
+          : {},
+      );
+      expect(row.success).toBe(true);
+      expect(authorizations).toEqual([null, null, null]);
+    },
+  );
+
+  it('keeps differently cased POSIX server variables distinct', async () => {
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
+    const row = await runEval('posix-auth', { opencode_server_password: 'not-a-server-password' });
+    expect(row.success).toBe(true);
+    expect(authorizations).toEqual([null, null, null]);
+  });
+
+  it('isolates credentials between overlapping authenticated evaluations', async () => {
+    const rows = await Promise.all(
+      ['first', 'second'].map((value) =>
+        runEval(value, undefined, {
+          OPENCODE_SERVER_PASSWORD: `${value}-password`,
+          OPENCODE_SERVER_USERNAME: `${value}-user`,
+        }),
+      ),
+    );
+    expect(rows.map((row) => row.success)).toEqual([true, true]);
+    expect(rows.map((row) => row.response?.output)).toEqual(['first', 'second']);
+    expect(spawnedEnvs).toHaveLength(2);
+    expect(new Set(authorizations).size).toBe(2);
+    expect(process.env.OPENCODE_SERVER_PASSWORD).toBeUndefined();
+    expect(process.env.OPENCODE_SERVER_USERNAME).toBeUndefined();
   });
 
   it.each([
