@@ -119,6 +119,17 @@ export function throwConfigurationError(message: string): never {
   `);
 }
 
+/** Resolve the served model in config order, preserving its casing for requests and cost. */
+export function resolveAzureModelName(
+  config: { modelName?: string; passthrough?: object } | undefined,
+  deploymentName: string,
+): string {
+  const passthroughModel = (config?.passthrough as { model?: unknown } | undefined)?.model;
+  return typeof passthroughModel === 'string'
+    ? passthroughModel
+    : (config?.modelName ?? deploymentName);
+}
+
 /**
  * Calculate Azure cost based on model name and token usage
  */
@@ -144,7 +155,9 @@ export function calculateAzureCost(
     return undefined;
   }
 
-  const model = AZURE_MODELS.find((entry) => entry.id === modelName);
+  // Use the catalog's casing for auxiliary rate lookups after a case-insensitive match.
+  const lowerModelName = modelName.toLowerCase();
+  const model = AZURE_MODELS.find((entry) => entry.id.toLowerCase() === lowerModelName);
   if (!model) {
     return undefined;
   }
@@ -157,9 +170,9 @@ export function calculateAzureCost(
   const outputCost = longContext?.output ?? model.cost.output;
   const cacheReadCost =
     longContext?.cacheRead ??
-    (longContext ? AZURE_LONG_CONTEXT_CACHE_READ_RATES.get(modelName) : undefined) ??
+    (longContext ? AZURE_LONG_CONTEXT_CACHE_READ_RATES.get(model.id) : undefined) ??
     model.cost.cacheRead ??
-    AZURE_CACHE_READ_RATES.get(modelName) ??
+    AZURE_CACHE_READ_RATES.get(model.id) ??
     inputCost;
   const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
@@ -199,7 +212,7 @@ export function calculateAzureCost(
   const serviceTier = (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
   const priorityMultiplier =
     serviceTier === 'priority'
-      ? (model.cost.priorityMultiplier ?? AZURE_PRIORITY_MULTIPLIERS.get(modelName) ?? 1)
+      ? (model.cost.priorityMultiplier ?? AZURE_PRIORITY_MULTIPLIERS.get(model.id) ?? 1)
       : 1;
 
   return (

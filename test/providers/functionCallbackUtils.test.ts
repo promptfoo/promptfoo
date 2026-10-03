@@ -8,6 +8,7 @@ import logger from '../../src/logger';
 import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
+import type { McpToolCallEntry } from '../../src/providers/mcp/types';
 
 // Mock dependencies
 vi.mock('../../src/cliState', () => ({ default: { basePath: '/test/basePath' } }));
@@ -707,6 +708,54 @@ describe('FunctionCallbackHandler', () => {
       handler = new FunctionCallbackHandler(mockMCPClient as any);
     });
 
+    it.each([false, true])(
+      'records parsed null arguments when the tool fails=%s',
+      async (fails) => {
+        mockMCPClient.getAllTools.mockReturnValue([{ name: 'local_tool' }]);
+        if (fails) {
+          mockMCPClient.callTool.mockRejectedValue(new Error('Fixture tool failure'));
+        } else {
+          mockMCPClient.callTool.mockResolvedValue({ content: 'Fixture result' });
+        }
+        const toolCalls: McpToolCallEntry[] = [];
+
+        await handler.processCall(
+          { id: 'call-null', name: 'local_tool', arguments: 'null' },
+          undefined,
+          undefined,
+          { toolCalls },
+        );
+
+        expect(mockMCPClient.callTool).toHaveBeenCalledWith('local_tool', null);
+        expect(toolCalls).toEqual([
+          {
+            id: 'call-null',
+            name: 'local_tool',
+            input: null,
+            output: fails ? 'Fixture tool failure' : 'Fixture result',
+            is_error: fails,
+          },
+        ]);
+      },
+    );
+
+    it('records raw arguments when JSON parsing fails', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'local_tool' }]);
+      const toolCalls: McpToolCallEntry[] = [];
+
+      await handler.processCall(
+        { name: 'local_tool', arguments: 'invalid JSON' },
+        undefined,
+        undefined,
+        { toolCalls },
+      );
+
+      expect(mockMCPClient.callTool).not.toHaveBeenCalled();
+      expect(toolCalls).toEqual([
+        expect.objectContaining({ name: 'local_tool', input: 'invalid JSON', is_error: true }),
+      ]);
+    });
+
     it('should execute MCP tool when tool name matches available MCP tools', async () => {
       mockMCPClient.getAllTools.mockReturnValue([
         { name: 'list_resources', description: 'List available resources' },
@@ -793,6 +842,36 @@ describe('FunctionCallbackHandler', () => {
         output: 'MCP Tool Error (error_tool): Connection lost',
         isError: true,
       });
+    });
+
+    it('records concurrent MCP tool calls in the order the model requested them', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'slow_tool', description: 'Resolves last' },
+        { name: 'fast_tool', description: 'Resolves first' },
+      ]);
+      const pending = new Map<string, (value: unknown) => void>();
+      mockMCPClient.callTool.mockImplementation(
+        (name: string) => new Promise((resolve) => pending.set(name, resolve)),
+      );
+      const toolCalls: any[] = [];
+
+      const processed = handler.processCalls(
+        [
+          { id: 'call_slow', type: 'function', function: { name: 'slow_tool', arguments: '{}' } },
+          { id: 'call_fast', type: 'function', function: { name: 'fast_tool', arguments: '{}' } },
+        ],
+        undefined,
+        undefined,
+        { toolCalls },
+      );
+
+      // Both tools were started before either resolved; finish them in reverse order.
+      expect([...pending.keys()]).toEqual(['slow_tool', 'fast_tool']);
+      pending.get('fast_tool')!({ content: 'fast' });
+      pending.get('slow_tool')!({ content: 'slow' });
+      await processed;
+
+      expect(toolCalls.map((entry) => entry.name)).toEqual(['slow_tool', 'fast_tool']);
     });
 
     it('should handle invalid JSON arguments in MCP tools', async () => {

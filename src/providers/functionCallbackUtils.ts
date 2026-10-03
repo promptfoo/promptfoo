@@ -15,6 +15,12 @@ import type {
   ToolCall,
 } from './functionCallbackTypes';
 import type { MCPClient } from './mcp/client';
+import type { McpToolCallEntry } from './mcp/types';
+
+/** Optional sink for the MCP tool calls a `processCall(s)` run executed. */
+interface ProcessCallOptions {
+  toolCalls?: McpToolCallEntry[];
+}
 
 /**
  * Resolve a `file://` callback reference through the shared path-traversal guard,
@@ -128,15 +134,23 @@ export class FunctionCallbackHandler {
    * @param call The function call to process (can be various formats)
    * @param callbacks Configuration mapping function names to callbacks
    * @param context Optional context to pass to the callback
+   * @param options Optional sink collecting the MCP tool calls that ran
    * @returns The result of processing
    */
   async processCall(
     call: FunctionCall | ToolCall | any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
+    options?: ProcessCallOptions,
   ): Promise<FunctionCallResult> {
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
+    const callId =
+      typeof call?.call_id === 'string'
+        ? call.call_id
+        : typeof call?.id === 'string'
+          ? call.id
+          : undefined;
 
     // Check if this is an MCP tool first (before checking function callbacks)
     if (this.mcpClient && functionInfo) {
@@ -147,7 +161,12 @@ export class FunctionCallbackHandler {
       }
 
       if (this.mcpToolNames.has(functionInfo.name)) {
-        return await this.executeMcpTool(functionInfo.name, functionInfo.arguments);
+        return await this.executeMcpTool(
+          functionInfo.name,
+          functionInfo.arguments,
+          callId,
+          options?.toolCalls,
+        );
       }
     }
 
@@ -166,11 +185,7 @@ export class FunctionCallbackHandler {
         functionInfo.arguments || '{}',
         callbacks,
         context,
-        typeof call?.call_id === 'string'
-          ? call.call_id
-          : typeof call?.id === 'string'
-            ? call.id
-            : undefined,
+        callId,
       );
       return {
         output: result,
@@ -206,14 +221,14 @@ export class FunctionCallbackHandler {
    * @param calls Array of calls or a single call
    * @param callbacks Configuration mapping function names to callbacks
    * @param context Optional context to pass to callbacks
-   * @param options Processing options
+   * @param options Optional sink collecting the MCP tool calls that ran
    * @returns Processed output in appropriate format
    */
   async processCalls(
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    _options?: { returnRawOnError?: boolean },
+    options?: ProcessCallOptions,
   ): Promise<any> {
     if (!calls) {
       return calls;
@@ -222,9 +237,16 @@ export class FunctionCallbackHandler {
     const isArray = Array.isArray(calls);
     const callsArray = isArray ? calls : [calls];
 
+    // The calls run concurrently, so give each its own bucket and drain them in order:
+    // a shared sink would record MCP calls by latency instead of by the model's call order.
+    const sink = options?.toolCalls;
+    const buckets = sink ? callsArray.map((): McpToolCallEntry[] => []) : undefined;
     const results = await Promise.all(
-      callsArray.map((call) => this.processCall(call, callbacks, context)),
+      callsArray.map((call, index) =>
+        this.processCall(call, callbacks, context, buckets && { toolCalls: buckets[index] }),
+      ),
     );
+    sink?.push(...(buckets?.flat() ?? []));
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
@@ -337,9 +359,21 @@ export class FunctionCallbackHandler {
   }
 
   /**
-   * Executes an MCP tool
+   * Executes an MCP tool, recording it in `toolCalls` when the caller supplied a sink so
+   * the provider can publish it as `metadata.toolCalls`.
    */
-  private async executeMcpTool(toolName: string, args: unknown): Promise<FunctionCallResult> {
+  private async executeMcpTool(
+    toolName: string,
+    args: unknown,
+    callId?: string,
+    toolCalls?: McpToolCallEntry[],
+  ): Promise<FunctionCallResult> {
+    // Preserve raw input only when argument parsing fails.
+    let input = args;
+    const record = (output: unknown, is_error: boolean) => {
+      toolCalls?.push({ id: callId, name: toolName, input, output, is_error });
+    };
+
     try {
       if (!this.mcpClient) {
         throw new Error('MCP client not available');
@@ -348,20 +382,22 @@ export class FunctionCallbackHandler {
       // Parse arguments: support stringified JSON, object, or empty
       const parsedArgs =
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
+      input = parsedArgs;
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (isMcpErrorResult(result)) {
-        return {
-          output: `MCP Tool Error (${toolName}): ${getMcpErrorMessage(result)}`,
-          isError: true,
-        };
+        const errorMessage = getMcpErrorMessage(result);
+        record(errorMessage, true);
+        return { output: `MCP Tool Error (${toolName}): ${errorMessage}`, isError: true };
       }
 
       const content = normalizeMcpToolContent(result?.content);
+      record(content, false);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
+      record(errorMessage, true);
       return {
         output: `MCP Tool Error (${toolName}): ${errorMessage}`,
         isError: true,
