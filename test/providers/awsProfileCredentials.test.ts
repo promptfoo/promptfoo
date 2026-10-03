@@ -3,10 +3,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { fromSSO } from '@aws-sdk/credential-provider-sso';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { getAwsCredentialCacheNamespace } from '../../src/providers/awsCredentials';
+import {
+  getAwsCredentialCacheNamespace,
+  resolveAwsCredentials,
+} from '../../src/providers/awsCredentials';
 import { getScopedAwsProfileCredentials } from '../../src/providers/awsProfileCredentials';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { mockProcessEnv } from '../util/utils';
@@ -274,6 +278,61 @@ describe('scoped AWS profile source credentials', () => {
 });
 
 describe('scoped SSO profile files with the installed AWS SDK', () => {
+  it.each([
+    { accessKeyId: '', secretAccessKey: '' },
+    { sessionToken: '' },
+    { accessKeyId: 'partial' },
+    { secretAccessKey: 'partial', sessionToken: 'leftover' },
+  ])('retains configured SSO fallback with incomplete static fields %j', async (staticConfig) => {
+    const startUrl = 'https://fixture.awsapps.com/start';
+    fs.writeFileSync(
+      configFilepath,
+      `[profile fixture]\nsso_account_id=123456789012\nsso_role_name=FixtureRole\nsso_start_url=${startUrl}\nsso_region=us-east-1\n`,
+    );
+    const cacheDir = path.join(dir, '.aws', 'sso', 'cache');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cacheDir, `${createHash('sha1').update(startUrl).digest('hex')}.json`),
+      JSON.stringify({
+        startUrl,
+        region: 'us-east-1',
+        accessToken: 'fixture-sso-token',
+        expiresAt: expiration.toISOString(),
+      }),
+    );
+    const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from(
+          JSON.stringify({
+            roleCredentials: { ...assumedCredentials, expiration: expiration.getTime() },
+          }),
+        ),
+      },
+    });
+    const native = fromSSO(options());
+    const actual = await resolveAwsCredentials(
+      { profile: 'fixture', ...staticConfig },
+      {
+        AWS_CONFIG_FILE: configFilepath,
+        AWS_SHARED_CREDENTIALS_FILE: filepath,
+      },
+    );
+    expect(typeof actual).toBe('function');
+    expect(await (actual as () => Promise<unknown>)()).toEqual(await native());
+    expect(handle).toHaveBeenCalledTimes(2);
+    const explicit = await resolveAwsCredentials({
+      profile: 'fixture',
+      accessKeyId: 'configured-access',
+      secretAccessKey: 'configured-secret',
+    });
+    expect(explicit).toMatchObject({
+      accessKeyId: 'configured-access',
+      secretAccessKey: 'configured-secret',
+    });
+    expect(handle).toHaveBeenCalledTimes(2);
+  });
   it.each(['legacy', 'session'])(
     'keeps scoped config and credential files for a %s SSO profile and nested role',
     async (kind) => {

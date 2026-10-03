@@ -25,6 +25,170 @@ afterEach(() => {
 });
 
 describe('real cloud SDK credential construction without authentication calls', () => {
+  it.each(
+    [
+      'explicit-json',
+      'sdk-credentials',
+      'sdk-keyfile',
+      'environment-adc',
+      'well-known-adc',
+    ].flatMap((mode) =>
+      ['host-quota', 'empty-host', 'scoped-quota', 'empty-scope'].map((scope) => ({ mode, scope })),
+    ),
+  )('retains native quota precedence for $mode with $scope', async ({ mode, scope }) => {
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-quota-precedence-'));
+    const file = path.join(dir, 'application_default_credentials.json');
+    const json = {
+      type: 'authorized_user',
+      client_id: 'fixture-client',
+      client_secret: 'fixture-secret',
+      refresh_token: 'fixture-refresh',
+      quota_project_id: 'credential-quota',
+    };
+    fs.writeFileSync(file, JSON.stringify(json));
+    mockProcessEnv({
+      GOOGLE_CLOUD_PROJECT: 'fixture-project',
+      GOOGLE_APPLICATION_CREDENTIALS: mode === 'well-known-adc' ? undefined : file,
+      CLOUDSDK_CONFIG: dir,
+      GOOGLE_CLOUD_QUOTA_PROJECT: scope === 'empty-host' ? '' : 'host-quota',
+    });
+    const options =
+      mode === 'explicit-json'
+        ? { credentials: JSON.stringify(json) }
+        : mode === 'sdk-credentials'
+          ? { googleAuthOptions: { credentials: json } }
+          : mode === 'sdk-keyfile'
+            ? { googleAuthOptions: { keyFilename: file } }
+            : {};
+    const scopedQuota =
+      scope === 'scoped-quota' ? 'scoped-quota' : scope === 'empty-scope' ? '' : undefined;
+    try {
+      // Release-equivalent SDK construction with the selected environment value.
+      const restoreQuota =
+        scopedQuota === undefined
+          ? () => {}
+          : mockProcessEnv({ GOOGLE_CLOUD_QUOTA_PROJECT: scopedQuota });
+      let expected;
+      try {
+        const auth = new GoogleAuth(options.googleAuthOptions);
+        expected = mode === 'explicit-json' ? auth.fromJSON(json) : await auth.getClient();
+      } finally {
+        restoreQuota();
+      }
+      const { client } = await cliState.withEnvFileOverrides(
+        scopedQuota === undefined ? {} : { GOOGLE_CLOUD_QUOTA_PROJECT: scopedQuota },
+        () => GoogleAuthManager.getOAuthClient(options, false),
+      );
+      for (const credential of [expected, client]) {
+        credential.credentials = {
+          access_token: 'fixture-token',
+          expiry_date: Date.now() + 3600000,
+        };
+      }
+      expect(client.quotaProjectId).toBe(expected.quotaProjectId);
+      expect((await client.getRequestHeaders()).get('x-goog-user-project')).toBe(
+        (await expected.getRequestHeaders()).get('x-goog-user-project'),
+      );
+      expect(process.env.GOOGLE_CLOUD_QUOTA_PROJECT).toBe(
+        scope === 'empty-host' ? '' : 'host-quota',
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    'AzureCliCredential',
+    ' dev ',
+    'ManagedIdentityCredential',
+    'AzurePowerShellCredential',
+    'WorkloadIdentityCredential',
+  ])('retains the native Azure %s selection with scoped placeholders', async (selector) => {
+    mockProcessEnv({
+      AZURE_TOKEN_CREDENTIALS: selector,
+      AZURE_CLIENT_ID: 'fixture-client',
+      AZURE_TENANT_ID: 'fixture-tenant',
+      AZURE_CLIENT_SECRET: 'fixture-secret',
+    });
+    const expected = new DefaultAzureCredential();
+    const actual = await createAzureCredential({}, { AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: '' });
+    const sources = (credential: unknown) =>
+      Reflect.get(credential as object, '_sources').map(
+        (source: { constructor: { name: string }; credentialName?: string }) =>
+          source.credentialName ?? source.constructor.name,
+      );
+    expect(actual).toBeInstanceOf(DefaultAzureCredential);
+    expect(sources(actual)).toEqual(sources(expected));
+    expect(
+      Reflect.get(actual, '_sources').map((source: { tenantId?: string }) => source.tenantId),
+    ).toEqual(
+      Reflect.get(expected, '_sources').map((source: { tenantId?: string }) => source.tenantId),
+    );
+  });
+
+  it('retains native invalid Azure chain selector validation', async () => {
+    mockProcessEnv({
+      AZURE_TOKEN_CREDENTIALS: 'invalid-selector',
+      AZURE_CLIENT_ID: 'fixture-client',
+      AZURE_TENANT_ID: 'fixture-tenant',
+      AZURE_CLIENT_SECRET: 'fixture-secret',
+    });
+    expect(() => new DefaultAzureCredential()).toThrow('Invalid value for AZURE_TOKEN_CREDENTIALS');
+    await expect(
+      createAzureCredential({}, { AZURE_CLIENT_CERTIFICATE_PASSWORD: '' }),
+    ).rejects.toThrow('Invalid value for AZURE_TOKEN_CREDENTIALS');
+  });
+
+  it.each(['EnvironmentCredential', 'prod'])(
+    'retains the selected Azure %s environment identity',
+    async (selector) => {
+      mockProcessEnv({
+        AZURE_TOKEN_CREDENTIALS: selector,
+        AZURE_CLIENT_ID: 'fixture-client',
+        AZURE_TENANT_ID: 'fixture-tenant',
+        AZURE_CLIENT_SECRET: 'fixture-secret',
+      });
+      const expected = new DefaultAzureCredential();
+      const actual = await createAzureCredential({}, { AZURE_CLIENT_CERTIFICATE_PASSWORD: '' });
+      const nativeEnvironment = Reflect.get(expected, '_sources')[0];
+      expect(actual.constructor).toBe(nativeEnvironment._credential.constructor);
+    },
+  );
+
+  it('does not activate workload identity when Azure selects only environment credentials', async () => {
+    mockProcessEnv({
+      AZURE_TOKEN_CREDENTIALS: 'EnvironmentCredential',
+      AZURE_CLIENT_ID: 'fixture-client',
+      AZURE_TENANT_ID: 'fixture-tenant',
+      AZURE_FEDERATED_TOKEN_FILE: '/fixture/unused-token',
+    });
+    const actual = await createAzureCredential({}, { AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: '' });
+    expect(actual).toBeInstanceOf(DefaultAzureCredential);
+    const sources = Reflect.get(actual, '_sources');
+    expect(sources).toHaveLength(1);
+    expect(sources[0].constructor.name).toBe('EnvironmentCredential');
+    await expect(actual.getToken('fixture-scope')).rejects.toThrow('unavailable');
+  });
+
+  it('forwards scoped workload inputs when Azure explicitly selects workload identity', async () => {
+    mockProcessEnv({
+      AZURE_TOKEN_CREDENTIALS: 'WorkloadIdentityCredential',
+      AZURE_CLIENT_ID: 'host-client',
+      AZURE_TENANT_ID: 'host-tenant',
+      AZURE_CLIENT_SECRET: 'excluded-host-secret',
+    });
+    const credential = await createAzureCredential(
+      {},
+      {
+        AZURE_CLIENT_ID: 'scoped-client',
+        AZURE_TENANT_ID: 'scoped-tenant',
+        AZURE_FEDERATED_TOKEN_FILE: '/fixture/scoped-token',
+      },
+    );
+    expect(credential.constructor.name).toBe('WorkloadIdentityCredential');
+    expect(Reflect.get(credential, 'client').tenantId).toBe('scoped-tenant');
+    expect(Reflect.get(credential, 'federatedTokenFilePath')).toBe('/fixture/scoped-token');
+  });
   it.each(['authorized_user', 'service_account'])(
     'retains explicit SDK options when loading scoped %s ADC',
     async (type) => {

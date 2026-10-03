@@ -146,7 +146,12 @@ export async function resolveAwsCredentials(
     return undefined;
   }
   const { accessKeyId, secretAccessKey, sessionToken, profile } = source;
-  if ([accessKeyId, secretAccessKey, sessionToken].some((value) => value !== undefined)) {
+  // Incomplete configured tuples have always fallen through to config.profile.
+  // Scoped static identities still validate their effective key pair.
+  if (
+    (source !== config || (accessKeyId && secretAccessKey)) &&
+    [accessKeyId, secretAccessKey, sessionToken].some((value) => value !== undefined)
+  ) {
     if (!accessKeyId?.trim() || !secretAccessKey?.trim()) {
       throw new Error(
         'AWS access credentials are incomplete. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY together in the effective environment.',

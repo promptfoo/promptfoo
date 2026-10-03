@@ -420,6 +420,10 @@ export class GoogleAuthManager {
       authOptions.keyFilename = keyFilename;
     }
 
+    const hasConfiguredCredentialSource = Boolean(
+      credentials || authOptions.credentials || authOptions.keyFilename || authOptions.keyFile,
+    );
+
     // SDK discovery reads process.env, so forward the effective scoped inputs explicitly.
     if (
       !credentials &&
@@ -469,10 +473,13 @@ export class GoogleAuthManager {
       authOptions.projectId ??
       env?.GOOGLE_CLOUD_PROJECT ??
       getEnvString('GOOGLE_CLOUD_PROJECT');
-    const quotaProjectId =
-      authOptions.clientOptions?.quotaProjectId ??
-      env?.GOOGLE_CLOUD_QUOTA_PROJECT ??
-      getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT');
+    const environmentQuotaProjectId =
+      env?.GOOGLE_CLOUD_QUOTA_PROJECT ?? getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT');
+    // Explicit credential JSON/key files retain the SDK's quota precedence.
+    // For ADC, an empty environment value falls back to the credential's quota.
+    const quotaProjectId = hasConfiguredCredentialSource
+      ? undefined
+      : (authOptions.clientOptions?.quotaProjectId ?? (environmentQuotaProjectId || undefined));
     if (quotaProjectId !== undefined) {
       authOptions.clientOptions = { ...authOptions.clientOptions, quotaProjectId };
     }
@@ -521,6 +528,19 @@ export class GoogleAuthManager {
     // A caller-supplied authClient already owns its identity and quota settings.
     if (quotaProjectId !== undefined && client !== authOptions.authClient) {
       client.quotaProjectId = quotaProjectId;
+    } else if (
+      !hasConfiguredCredentialSource &&
+      environmentQuotaProjectId === '' &&
+      client !== authOptions.authClient &&
+      process.env.GOOGLE_CLOUD_QUOTA_PROJECT
+    ) {
+      // Ambient ADC discovery may have applied the host quota after loading a
+      // well-known file. Recover that file's quota when this invocation clears it.
+      const credentialJson = auth.jsonContent;
+      client.quotaProjectId =
+        credentialJson && 'quota_project_id' in credentialJson
+          ? credentialJson.quota_project_id
+          : undefined;
     }
 
     // Try to get project ID from Google Auth Library
