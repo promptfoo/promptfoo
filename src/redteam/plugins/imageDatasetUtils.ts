@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { getMimeTypeFromBase64 } from '../../providers/google/util';
 import { parseChatPrompt } from '../../providers/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
 
@@ -19,11 +20,16 @@ export function getImageDatasetRequestText(
     // variables can contain a whole request beginning with an image URI.
     .filter((value) => typeof value === 'string' && !/\s/.test(value.trim()));
   const payloads = [selectedImage, ...images]
-    .filter(
-      (value): value is string =>
-        typeof value === 'string' && /^\s*data:image\/[^,]*;base64,/i.test(value),
-    )
-    .map((value) => value.slice(value.indexOf(',') + 1).replace(/\s/g, ''))
+    .flatMap((value) => {
+      if (typeof value !== 'string') {
+        return [];
+      }
+      if (/^\s*data:(?:image|audio|video)\/[^,]*;base64,/i.test(value)) {
+        return [value.slice(value.indexOf(',') + 1).replace(/\s/g, '')];
+      }
+      // Google turns matching raw context variables into native media parts.
+      return /^(?:image|audio|video)\//.test(getMimeTypeFromBase64(value) ?? '') ? [value] : [];
+    })
     .filter((value) => /^[\w+/=-]+$/.test(value))
     .sort((a, b) => b.length - a.length);
   const imageBoundaryError =
@@ -31,8 +37,10 @@ export function getImageDatasetRequestText(
   const redactImages = (text: string) => {
     const chunks: string[] = [];
     let end = 0;
-    for (const match of text.matchAll(/data:[^\s,:]*;base64,/gi)) {
-      if (match.index < end) {
+    // Always consume a header through its delimiter or EOF: repeated URI prefixes
+    // must not rescan suffixes. Parameters may contain colons.
+    for (const match of text.matchAll(/data:(?:image|audio|video)\/[^\s,]*(?:[,\s]|$)/gi)) {
+      if (match.index < end || !/;base64,$/i.test(match[0])) {
         continue;
       }
       const start = match.index + match[0].length;
@@ -83,7 +91,7 @@ export function getImageDatasetRequestText(
   };
   const jsonContainer = /^\s*(?:\{|\[\s*(?:["[{\]]|-?\d|true\b|false\b|null\b))/;
   const mediaType =
-    /^(?:image|image_url|input_image|audio|input_audio|video|file|input_file|document|base64)$/;
+    /^(?:image|image_url|input_image|computer_screenshot|audio|input_audio|video|file|input_file|document|base64)$/;
   const mediaContainerField =
     /^(?:images?|image_url|input_image|input_audio|inline_?data|file_?data)$/i;
   const mediaMime = /^(?:image|audio|video)\//i;
@@ -176,10 +184,14 @@ export function getImageDatasetRequestText(
           if (
             !literalData &&
             !documentText &&
-            ((media &&
-              /^(?:data|bytes|url|uri|base64|file_?(?:data|uri|url|id)|s3Location)$/i.test(
-                field,
-              )) ||
+            ((nativeMessage && field === 'images') ||
+              (object.type === 'input_audio' && field === 'audio') ||
+              (['image_url', 'input_image', 'computer_screenshot'].includes(String(object.type)) &&
+                field === 'image_url') ||
+              (media &&
+                /^(?:data|bytes|url|uri|base64|file_?(?:data|uri|url|id)|s3Location)$/i.test(
+                  field,
+                )) ||
               (key === 'source' && field === 'bytes' && typeof child !== 'number'))
           ) {
             return [];
@@ -219,9 +231,6 @@ export function getImageDatasetRequestText(
           return sanitized === undefined ? [] : [[field, sanitized]];
         }),
       );
-    }
-    if (mediaContainer) {
-      return undefined;
     }
     if (typeof value === 'string') {
       // HTTP targets may parse JSON stored inside another request field.

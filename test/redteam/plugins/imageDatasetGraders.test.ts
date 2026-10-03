@@ -660,6 +660,53 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       false,
     ],
     ['custom prompt envelope', JSON.stringify({ prompt: actualTask, image: inputImage }), true],
+    ...['image', 'images', 'image_url', 'input_image'].map(
+      (key) => [key + ' literal query', JSON.stringify({ [key]: actualTask }), true] as const,
+    ),
+    ...['text/plain', 'application/json'].flatMap((mime) => {
+      const text = `${actualTask} Compare with data:${mime};base64,Qm9uam91cg==?`;
+      return [
+        [`literal ${mime} data URI`, text, true] as const,
+        [
+          `native ${mime} data URI`,
+          JSON.stringify([{ role: 'user', content: text }]),
+          true,
+        ] as const,
+      ];
+    }),
+    [
+      'media URI with colon parameter',
+      `${actualTask} data:image/png;name=x:y;base64,${nativeImageData}`,
+      true,
+    ],
+    [
+      'native Ollama images',
+      JSON.stringify([{ role: 'user', content: actualTask, images: [nativeImageData] }]),
+      true,
+    ],
+    [
+      'native Realtime audio',
+      JSON.stringify([
+        { type: 'text', text: actualTask },
+        { type: 'input_audio', audio: nativeImageData },
+      ]),
+      true,
+    ],
+    [
+      'native computer screenshot',
+      JSON.stringify([
+        { role: 'user', content: actualTask },
+        {
+          type: 'computer_call_output',
+          output: {
+            type: 'computer_screenshot',
+            image_url: nativeImageData,
+            file_id: nativeImageData,
+          },
+        },
+      ]),
+      true,
+    ],
     [
       'typed-array media bytes',
       JSON.stringify({
@@ -1203,6 +1250,12 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       );
       expect(rubric.includes(actualTask)).toBe(hasText);
       expect(rubric.includes('</UserQuery>')).toBe(hasText);
+      for (const mime of ['text/plain', 'application/json']) {
+        const literal = `data:${mime};base64,Qm9uam91cg==`;
+        if (request.includes(literal)) {
+          expect(rubric).toContain(literal);
+        }
+      }
       for (const excluded of [
         inputImage,
         payload.slice(0, 32),
@@ -1220,6 +1273,24 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       });
     },
   );
+
+  it.each(['Name', 'TWFu'])('retains literal custom image value %s', async (literal) => {
+    const { rubric } = await new Grader().getResult(JSON.stringify({ image: literal }), 'Blue.', {
+      vars: { image: inputImage },
+      metadata: safeMetadata,
+    });
+    expect(rubric).toContain(`<UserQuery>{"image":"${literal}"}</UserQuery>`);
+  });
+
+  it('removes raw media variables that Google converts to inline attachments', async () => {
+    const rawImage = `/9j/${Buffer.from('PRIVATE_JPEG_BYTES').toString('base64')}`;
+    const { rubric } = await new Grader().getResult(`${actualTask}\n${rawImage}`, 'Blue.', {
+      vars: { image: inputImage, otherImage: rawImage },
+      metadata: safeMetadata,
+    });
+    expect(rubric).toContain(actualTask);
+    expect(rubric).not.toContain(rawImage);
+  });
 
   it.each(['plain', 'structured'])(
     'redacts a non-selected wrapped image in %s requests without attaching it',

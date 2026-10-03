@@ -1546,7 +1546,7 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
   return undefined;
 }
 
-function getMimeTypeFromBase64(data: string): string | undefined {
+export function getMimeTypeFromBase64(data: string): string | undefined {
   const parsed = parseDataUrl(data);
   const base64Data = parsed ? parsed.base64Data : data;
 
