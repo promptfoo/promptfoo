@@ -240,6 +240,18 @@ export async function createStreamResponse(
   );
 }
 
+// Close codes that mean the transport died rather than the peer rejecting the
+// message: retrying a fresh connection can succeed. Everything else (protocol
+// or policy violations) keeps failing fast, since the same payload would lose
+// again on a new socket. RFC 6455 section 7.4.
+const TRANSIENT_CLOSE_CODES: ReadonlySet<number> = new Set([1005, 1006, 1012, 1013]);
+const CLOSE_CODE_REASONS: Readonly<Record<number, string>> = {
+  1005: 'no status received',
+  1006: 'abnormal closure, connection dropped without a close frame',
+  1012: 'service restart',
+  1013: 'try again later',
+};
+
 export class WebSocketProvider implements ApiProvider {
   url: string;
   private readonly providerId: string;
@@ -389,6 +401,32 @@ export class WebSocketProvider implements ApiProvider {
         ws.close();
         logger.error(`[WebSocket Provider] Connection failed`);
         reject(getSafeWebSocketError(event));
+      };
+
+      ws.onclose = (event) => {
+        // A peer that closes mid-stream fires no error and completes nothing,
+        // so without this the promise would sit until the request deadline.
+        // Fail fast instead. Our own close() calls settle the promise first,
+        // making this reject a no-op on every path we initiated. Transport-level
+        // and reconnect-inviting codes reject as a connection reset, so the
+        // retry policy fires its backoff right away instead of after the full
+        // deadline; codes that reject the message itself stay permanent.
+        clearTimeout(timeout);
+        if (TRANSIENT_CLOSE_CODES.has(event.code)) {
+          const transient = new Error(
+            `WebSocket closed mid-stream by the peer with code ${event.code} (${
+              CLOSE_CODE_REASONS[event.code] ?? 'abnormal close'
+            })`,
+          ) as NodeJS.ErrnoException;
+          transient.code = 'ECONNRESET';
+          reject(transient);
+          return;
+        }
+        reject(
+          new Error(
+            `WebSocket connection closed before the response completed (code ${event.code ?? 'unknown'})`,
+          ),
+        );
       };
 
       ws.onopen = () => {
