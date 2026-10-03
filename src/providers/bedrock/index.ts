@@ -2982,9 +2982,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         billablePromptTokens,
         tokenUsage.completion,
         tokenUsage.completionDetails?.cacheReadInputTokens ??
-          coerceStrToNum(output.usage?.cache_read_input_tokens),
+          coerceStrToNum(output.usage?.cache_read_input_tokens) ??
+          coerceStrToNum(output.usage?.cacheReadInputTokenCount),
         tokenUsage.completionDetails?.cacheCreationInputTokens ??
-          coerceStrToNum(output.usage?.cache_creation_input_tokens),
+          coerceStrToNum(output.usage?.cache_creation_input_tokens) ??
+          coerceStrToNum(output.usage?.cacheWriteInputTokenCount),
         region,
       );
 

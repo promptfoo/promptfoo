@@ -2914,6 +2914,43 @@ Third line`;
       expect(result.cost).toBeCloseTo(0.018, 4);
     });
 
+    it.each([
+      { model: 'us.openai.gpt-5.6-sol', reads: 0, writes: 0, expected: 0.0154 },
+      { model: 'us.openai.gpt-5.6-sol', reads: 200, writes: 0, expected: undefined },
+      { model: 'us.openai.gpt-5.6-sol', reads: 0, writes: 100, expected: undefined },
+      { model: 'global.openai.gpt-5.6-sol', reads: 0, writes: 0, expected: 0.014 },
+      { model: 'global.openai.gpt-5.6-terra', reads: 0, writes: 0, expected: 0.008 },
+      { model: 'global.openai.gpt-5.6-luna', reads: 0, writes: 0, expected: 0.0008 },
+      { model: 'global.openai.gpt-5.6-sol', reads: 200, writes: 0, expected: undefined },
+      { model: 'global.openai.gpt-5.6-sol', reads: 0, writes: 100, expected: undefined },
+    ])(
+      'prices $model with cache reads=$reads and writes=$writes',
+      async ({ model, reads, writes, expected }) => {
+        const provider = new AwsBedrockConverseProvider(model, {
+          config: { region: 'us-east-1' },
+        });
+        mockSend.mockResolvedValueOnce(
+          createMockConverseResponse('Hello', {
+            usage: {
+              inputTokens: 1000,
+              outputTokens: 500,
+              totalTokens: 1500 + reads + writes,
+              cacheReadInputTokens: reads,
+              cacheWriteInputTokens: writes,
+            },
+          }),
+        );
+        const result = await provider.callApi('Hello');
+        expect(result.output).toBe('Hello');
+        expect(result.error).toBeUndefined();
+        if (expected === undefined) {
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.cost).toBeCloseTo(expected, 10);
+        }
+      },
+    );
+
     it('should calculate cost for Llama models', async () => {
       // Model ID needs to contain 'meta.llama3-3-70b' for pricing lookup
       const provider = new AwsBedrockConverseProvider('meta.llama3-3-70b-instruct-v1:0', {

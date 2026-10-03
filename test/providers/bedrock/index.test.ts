@@ -4049,6 +4049,31 @@ describe('AwsBedrockCompletionProvider', () => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
   });
 
+  it.each([
+    { model: 'global.amazon.nova-2-lite-v1:0', expected: 0.001565 },
+    { model: 'us.amazon.nova-2-lite-v1:0', expected: 0.0017215 },
+  ])('prices Nova 2 Lite InvokeModel usage for $model', async ({ model, expected }) => {
+    const responseJson = JSON.stringify({
+      output: { message: { role: 'assistant', content: [{ text: 'Hello' }] } },
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1800,
+        cacheReadInputTokenCount: 200,
+        cacheWriteInputTokenCount: 100,
+      },
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(new TextEncoder().encode(responseJson), {
+        transformToString: () => responseJson,
+      }),
+    });
+    const provider = new AwsBedrockCompletionProvider(model, { config: { region: 'us-east-1' } });
+    const result = await provider.callApi('Hello');
+    expect(result.output).toBe('Hello');
+    expect(result.cost).toBeCloseTo(expected, 10);
+  });
+
   it('calculates regional pricing for Claude Fable 5 Runtime responses', async () => {
     const responseJson = JSON.stringify({
       content: [{ type: 'text', text: 'ok' }],
