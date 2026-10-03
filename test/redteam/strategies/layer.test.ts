@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { isAttackProvider } from '../../../src/redteam/shared/attackProviders';
+import { Strategies } from '../../../src/redteam/strategies/index';
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
@@ -61,6 +63,7 @@ describe('addLayerTestCases', () => {
         })),
       ),
     },
+    ...Strategies.filter(({ id }) => id !== 'jailbreak' && isAttackProvider(id)),
   ];
 
   const mockLoadStrategy = vi.fn(async (path: string): Promise<Strategy> => {
