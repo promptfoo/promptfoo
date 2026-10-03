@@ -7,9 +7,9 @@ import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import * as pythonUtils from '../../src/python/pythonUtils';
-import { getConfiguredPythonPath, getEnvInt } from '../../src/python/pythonUtils';
+import { getConfiguredPythonPath } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+import { mockProcessEnv } from '../util/utils';
 import type { Mock } from 'vitest';
 
 vi.mock('../../src/logger', () => ({
@@ -96,12 +96,13 @@ vi.mock('../../src/python/workerPool', async (importOriginal) => {
 });
 
 describe('PythonProvider', () => {
+  let restoreEnv: () => void;
   const mockPythonWorkerPool = vi.mocked(PythonWorkerPool);
   const mockGetCache = vi.mocked(getCache);
   const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
   const mockReadFileSync = vi.mocked(fs.readFileSync);
   const mockResolve = vi.mocked(path.resolve);
-  const mockGetEnvInt = vi.mocked(getEnvInt);
+
   const mockGetConfiguredPythonPath = vi.mocked(getConfiguredPythonPath);
   const mockPoolInstance = workerPoolMocks.mockPoolInstance as {
     initialize: Mock;
@@ -122,17 +123,12 @@ describe('PythonProvider', () => {
     mockPoolInstance.shutdown.mockReset();
     mockPoolInstance.shutdown.mockResolvedValue(undefined);
 
-    // Reset getEnvInt mock implementation (clears mockReturnValueOnce queue)
-    mockGetEnvInt.mockReset();
-    mockGetEnvInt.mockReturnValue(undefined);
+    restoreEnv = mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
 
     // Reset getConfiguredPythonPath mock - default to passthrough behavior
     mockGetConfiguredPythonPath.mockReset();
     mockGetConfiguredPythonPath.mockImplementation((configPath) => configPath);
 
-    // Reset Python state to avoid test interference
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
     mockGetCache.mockResolvedValue({
       get: vi.fn(),
       set: vi.fn(),
@@ -146,7 +142,8 @@ describe('PythonProvider', () => {
   });
 
   afterEach(() => {
-    // Ensure cliState is cleaned up after each test
+    restoreEnv();
+    vi.restoreAllMocks();
     cliState.maxConcurrency = undefined;
   });
 
@@ -681,8 +678,8 @@ describe('PythonProvider', () => {
     });
 
     it('should support configurable worker count via environment variable', async () => {
-      // Mock getEnvInt to return 3
-      mockGetEnvInt.mockReturnValueOnce(3);
+      // Configure the worker count through the environment
+      mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: '3' });
 
       const provider = new PythonProvider('script.py');
       await provider.initialize();
@@ -698,8 +695,8 @@ describe('PythonProvider', () => {
     });
 
     it('should prioritize config.workers over environment variable', async () => {
-      // Mock getEnvInt to return 3
-      mockGetEnvInt.mockReturnValueOnce(3);
+      // Configure the worker count through the environment
+      mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: '3' });
 
       const provider = new PythonProvider('script.py', {
         config: {
@@ -709,7 +706,7 @@ describe('PythonProvider', () => {
       });
       await provider.initialize();
 
-      // Verify config takes priority (getEnvInt should not even be called)
+      // Verify config takes priority over the environment
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
         'call_api',
@@ -720,10 +717,6 @@ describe('PythonProvider', () => {
     });
 
     it('should pass pythonExecutable to worker pool', async () => {
-      // Reset mock completely
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       // Mock getConfiguredPythonPath to return the config value
       mockGetConfiguredPythonPath.mockReturnValue('/usr/bin/python3');
 
@@ -735,7 +728,7 @@ describe('PythonProvider', () => {
       });
       await provider.initialize();
 
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/usr/bin/python3');
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/usr/bin/python3', undefined);
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
         'call_api',
@@ -746,10 +739,6 @@ describe('PythonProvider', () => {
     });
 
     it('should use PROMPTFOO_PYTHON when config.pythonExecutable is not set', async () => {
-      // Reset mocks
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       // Mock getConfiguredPythonPath to return the env var value when config is undefined
       mockGetConfiguredPythonPath.mockReturnValue('/venv/bin/python3');
 
@@ -762,7 +751,7 @@ describe('PythonProvider', () => {
       await provider.initialize();
 
       // getConfiguredPythonPath should be called with undefined (no config)
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined);
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined, undefined);
       // Worker pool should receive the env var value from getConfiguredPythonPath
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
@@ -774,10 +763,6 @@ describe('PythonProvider', () => {
     });
 
     it('should prioritize config.pythonExecutable over PROMPTFOO_PYTHON', async () => {
-      // Reset mocks
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       // Mock getConfiguredPythonPath to return the config value (simulating priority)
       mockGetConfiguredPythonPath.mockReturnValue('/config/python3');
 
@@ -790,7 +775,7 @@ describe('PythonProvider', () => {
       await provider.initialize();
 
       // getConfiguredPythonPath should be called with the config value
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/config/python3');
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/config/python3', undefined);
       // Worker pool should receive the config value
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
@@ -802,10 +787,6 @@ describe('PythonProvider', () => {
     });
 
     it('should pass undefined to worker pool when neither config nor env var is set', async () => {
-      // Reset mocks
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       // Mock getConfiguredPythonPath to return undefined (neither config nor env var set)
       mockGetConfiguredPythonPath.mockReturnValue(undefined);
 
@@ -816,7 +797,7 @@ describe('PythonProvider', () => {
       });
       await provider.initialize();
 
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined);
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined, undefined);
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
         'call_api',
@@ -827,10 +808,6 @@ describe('PythonProvider', () => {
     });
 
     it('should pass timeout to worker pool', async () => {
-      // Reset mock completely
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       const provider = new PythonProvider('script.py', {
         config: {
           basePath: process.cwd(),
@@ -850,9 +827,6 @@ describe('PythonProvider', () => {
 
     describe('cliState.maxConcurrency integration', () => {
       it('should use cliState.maxConcurrency when config and env var are not set', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         // Set cliState.maxConcurrency (simulating -j flag)
         cliState.maxConcurrency = 8;
 
@@ -869,8 +843,7 @@ describe('PythonProvider', () => {
       });
 
       it('should prioritize PROMPTFOO_PYTHON_WORKERS over cliState.maxConcurrency', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(3); // PROMPTFOO_PYTHON_WORKERS=3
+        mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: '3' }); // PROMPTFOO_PYTHON_WORKERS=3
 
         // Set cliState.maxConcurrency (simulating -j flag)
         cliState.maxConcurrency = 8;
@@ -889,9 +862,6 @@ describe('PythonProvider', () => {
       });
 
       it('should prioritize config.workers over cliState.maxConcurrency', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         // Set cliState.maxConcurrency (simulating -j flag)
         cliState.maxConcurrency = 8;
 
@@ -914,9 +884,6 @@ describe('PythonProvider', () => {
       });
 
       it('should default to 1 worker when cliState.maxConcurrency is undefined', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         // Ensure cliState.maxConcurrency is undefined (default state)
         cliState.maxConcurrency = undefined;
 
@@ -933,9 +900,6 @@ describe('PythonProvider', () => {
       });
 
       it('should warn and use 1 when cliState.maxConcurrency is invalid (< 1)', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         // Set invalid cliState.maxConcurrency
         cliState.maxConcurrency = 0;
 
@@ -955,9 +919,6 @@ describe('PythonProvider', () => {
       });
 
       it('should warn and use 1 when config.workers is invalid (< 1)', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         const provider = new PythonProvider('script.py', {
           config: {
             basePath: process.cwd(),
@@ -979,8 +940,7 @@ describe('PythonProvider', () => {
       });
 
       it('should warn and use 1 when PROMPTFOO_PYTHON_WORKERS is invalid (< 1)', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(0); // Invalid env var value
+        mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: '0' }); // Invalid env var value
 
         const provider = new PythonProvider('script.py');
         await provider.initialize();
