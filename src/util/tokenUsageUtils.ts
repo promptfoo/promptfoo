@@ -9,12 +9,18 @@ import {
  * Safely extract token usage carried by a thrown value.
  */
 export function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+  try {
+    if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+      return undefined;
+    }
+
+    const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+    return parsedTokenUsage.success && Object.keys(parsedTokenUsage.data).length > 0
+      ? parsedTokenUsage.data
+      : undefined;
+  } catch {
     return undefined;
   }
-
-  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
-  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 /**
@@ -530,7 +536,9 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
   } = parsed.data;
   const hasUsage =
     Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+    Object.values(generationUsage.completionDetails ?? {}).some(
+      (value) => typeof value === 'number' && value !== 0,
+    );
   if (!hasUsage) {
     return false;
   }
