@@ -1003,7 +1003,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         metadata,
       };
     }
-    if (result.error && response.output_text) {
+    if (result.error && response.output_text && !response.output?.length) {
       return { ...result, error: undefined, output: response.output_text, raw: response, metadata };
     }
     return { ...result, metadata };

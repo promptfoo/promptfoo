@@ -7,8 +7,10 @@ import {
   getAuthQueryParams,
   getMcpErrorMessage,
   getOAuthTokenWithExpiry,
+  getThrownMcpErrorMessage,
   isMcpErrorResult,
   isMcpToolNameFilter,
+  joinMcpErrors,
   normalizeMcpToolContent,
   renderAuthVars,
 } from '../../../src/providers/mcp/util';
@@ -36,6 +38,12 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 describe('normalizeMcpToolContent', () => {
+  it.each([
+    { type: 'image', mimeType: 'image/png', data: 'YWJj' },
+    { type: 'audio', mimeType: 'audio/wav', data: 'ZGVm' },
+  ])('preserves $type block metadata', (block) => {
+    expect(JSON.parse(normalizeMcpToolContent([block]))).toEqual(block);
+  });
   it.each([
     { name: 'null', content: null, expected: '' },
     { name: 'undefined', content: undefined, expected: '' },
@@ -90,6 +98,10 @@ describe('normalizeMcpToolContent', () => {
     expect(events).toEqual(['diagnostic', 'serialize']);
   });
 
+  it('decodes Buffer content', () => {
+    expect(normalizeMcpToolContent(Buffer.from('buffered'))).toBe('buffered');
+  });
+
   it('preserves serialization failures for the provider error handler', () => {
     const cyclic: { self?: unknown } = {};
     cyclic.self = cyclic;
@@ -142,6 +154,30 @@ describe('getMcpErrorMessage', () => {
     expect(getMcpErrorMessage({ content: '', isError: true })).toBe(
       'Tool returned an error result',
     );
+  });
+});
+
+describe('joinMcpErrors', () => {
+  it('returns undefined when there are no errors', () => {
+    expect(joinMcpErrors([])).toBeUndefined();
+  });
+
+  it('returns a single error unchanged', () => {
+    expect(joinMcpErrors(['only failure'])).toBe('only failure');
+  });
+
+  it('joins multiple error messages with a separator', () => {
+    expect(joinMcpErrors(['first failed', 'second failed'])).toBe('first failed; second failed');
+  });
+});
+
+describe('getThrownMcpErrorMessage', () => {
+  it('uses a plain thrown object message when present', () => {
+    expect(getThrownMcpErrorMessage({ message: 'connection lost' })).toBe('connection lost');
+  });
+
+  it('serializes thrown objects without message text', () => {
+    expect(getThrownMcpErrorMessage({ code: 'ECONNRESET' })).toBe('{"code":"ECONNRESET"}');
   });
 });
 

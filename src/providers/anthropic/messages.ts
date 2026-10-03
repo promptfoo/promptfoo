@@ -19,7 +19,14 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
-import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
+import {
+  formatMcpToolError,
+  getMcpErrorMessage,
+  getThrownMcpErrorMessage,
+  isMcpErrorResult,
+  joinMcpErrors,
+  normalizeMcpToolContent,
+} from '../mcp/util';
 import { transformToolChoice, transformTools } from '../shared';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
@@ -594,7 +601,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: `MCP Tool Error (${toolUse.name}): ${getMcpErrorMessage(result)}`,
+          content: formatMcpToolError(toolUse.name, getMcpErrorMessage(result)),
           is_error: true,
         };
       }
@@ -608,9 +615,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       return {
         type: 'tool_result',
         tool_use_id: toolUse.id,
-        content: `MCP Tool Error (${toolUse.name}): ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        content: formatMcpToolError(toolUse.name, getThrownMcpErrorMessage(error)),
         is_error: true,
       };
     }
@@ -1126,6 +1131,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const cacheClearGeneration = getCacheClearGeneration();
     const shouldUseResponseCache =
       isCacheEnabled() &&
+      this.mcpClient === null &&
       config.mcp?.enabled !== true &&
       this.shouldCacheResponses() &&
       !this.hasCustomHeaders() &&
@@ -1186,8 +1192,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       });
       const cost = getAnthropicCostFromCalls(this.modelName, config, responses);
 
-      // Only attach the key when a tool actually ran: an always-present empty array
-      // would break downstream filters that test `metadata?.toolCalls?.length > 0`.
       const mcpMetadata = toolCalls.length > 0 ? { toolCalls } : undefined;
 
       if (error) {
@@ -1240,9 +1244,22 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         processedOutputFormat,
         false,
       );
-      return mcpMetadata
-        ? { ...response, metadata: { ...response.metadata, ...mcpMetadata } }
-        : response;
+      const mcpError = joinMcpErrors(
+        toolCalls.filter((call) => call.is_error).map((call) => String(call.output)),
+      );
+      return {
+        ...response,
+        ...(mcpMetadata
+          ? {
+              metadata: {
+                ...response.metadata,
+                ...mcpMetadata,
+                ...(mcpError && { rateLimitRetryable: false }),
+              },
+            }
+          : {}),
+        ...(mcpError ? { error: mcpError } : {}),
+      };
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
