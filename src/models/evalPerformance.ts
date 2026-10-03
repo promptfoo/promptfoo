@@ -1,20 +1,7 @@
 import { sql } from 'drizzle-orm';
-import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import logger from '../logger';
-
-import type { EvalResultsFilterMode } from '../types/index';
-
-/** Result from COUNT queries using db.all() - count is always a number in result array */
-interface CountResult {
-  count: number;
-}
-
-/** Result from queries selecting test_idx column */
-interface TestIndexRow {
-  test_idx: number;
-}
 
 interface CountCacheEntry {
   count: number;
@@ -108,81 +95,4 @@ export function clearCountCache(evalId?: string) {
     distinctCountCache.clear();
     totalRowCountCache.clear();
   }
-}
-
-// Optimized query for test indices without heavy JSON search
-export async function queryTestIndicesOptimized(
-  evalId: string,
-  opts: {
-    offset?: number;
-    limit?: number;
-    filterMode?: EvalResultsFilterMode;
-    searchQuery?: string;
-    filters?: string[];
-  },
-): Promise<{ testIndices: number[]; filteredCount: number }> {
-  const db = await getDb();
-  const offset = opts.offset ?? 0;
-  const limit = opts.limit ?? 50;
-  const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
-
-  // Build base query with efficient filtering
-  let baseQuery = sql`eval_id = ${evalId}`;
-
-  // Add mode filter (these can use indexes)
-  if (mode === 'errors') {
-    baseQuery = sql`${baseQuery} AND failure_reason = ${2}`; // ResultFailureReason.ERROR
-  } else if (mode === 'failures') {
-    baseQuery = sql`${baseQuery} AND success = 0 AND failure_reason != ${2}`;
-  } else if (mode === 'passes') {
-    baseQuery = sql`${baseQuery} AND success = 1`;
-  } else if (mode === 'highlights') {
-    baseQuery = sql`${baseQuery} AND json_extract(grading_result, '$.comment') LIKE '!highlight%'`;
-  } else if (mode === 'user-rated') {
-    // Check if componentResults array contains an entry with assertion.type = 'human'
-    baseQuery = sql`${baseQuery} AND EXISTS (
-      SELECT 1
-      FROM json_each(grading_result, '$.componentResults')
-      WHERE json_extract(value, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
-    )`;
-  }
-
-  // For search queries, only search in response field if no filters
-  // This is a compromise - we search less fields but query is faster
-  let searchCondition = sql`1=1`;
-  if (opts.searchQuery && opts.searchQuery.trim() !== '' && !opts.filters?.length) {
-    // Only search in response field for better performance
-    searchCondition = sql`response LIKE ${`%${opts.searchQuery}%`}`;
-  }
-
-  const whereClause = sql`${baseQuery} AND ${searchCondition}`;
-
-  // Get filtered count using the composite index
-  const countStart = Date.now();
-  const countQuery = sql`
-    SELECT COUNT(DISTINCT test_idx) as count 
-    FROM ${evalResultsTable} 
-    WHERE ${whereClause}
-  `;
-
-  const countResult = await db.all<CountResult>(countQuery);
-  const filteredCount = Number(countResult[0]?.count ?? 0);
-  logger.debug(`Optimized count query took ${Date.now() - countStart}ms`);
-
-  // Get test indices
-  const idxStart = Date.now();
-  const idxQuery = sql`
-    SELECT DISTINCT test_idx 
-    FROM ${evalResultsTable} 
-    WHERE ${whereClause}
-    ORDER BY test_idx 
-    LIMIT ${limit} 
-    OFFSET ${offset}
-  `;
-
-  const rows = await db.all<TestIndexRow>(idxQuery);
-  const testIndices = rows.map((row) => row.test_idx);
-  logger.debug(`Optimized index query took ${Date.now() - idxStart}ms`);
-
-  return { testIndices, filteredCount };
 }

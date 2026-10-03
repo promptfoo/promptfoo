@@ -1,7 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
-import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 import EvalFactory from '../factories/evalFactory';
 
@@ -314,56 +313,7 @@ describe('Highlights Filter Feature', () => {
     });
   });
 
-  describe('evalPerformance.queryTestIndicesOptimized highlights filter', () => {
-    it('should return only highlighted results with optimized query', async () => {
-      const eval_ = await EvalFactory.create({ numResults: 0 });
-
-      // Add test data
-      const results = [
-        { testIdx: 0, comment: '!highlight Performance test' },
-        { testIdx: 1, comment: 'Not highlighted' },
-        { testIdx: 2, comment: '!highlight Another highlight' },
-      ];
-
-      for (const result of results) {
-        await eval_.addResult({
-          description: `test-${result.testIdx}`,
-          promptIdx: 0,
-          testIdx: result.testIdx,
-          testCase: { vars: { test: `value${result.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${result.testIdx}` },
-          response: { output: `Response ${result.testIdx}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: result.comment,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
-      }
-
-      const { testIndices, filteredCount } = await queryTestIndicesOptimized(eval_.id, {
-        filterMode: 'highlights',
-      });
-
-      expect(filteredCount).toBe(2);
-      expect(testIndices).toEqual([0, 2]);
-    });
-
+  describe('Eval.getTablePage highlights filter', () => {
     it('should handle large datasets efficiently', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 
@@ -401,7 +351,7 @@ describe('Highlights Filter Feature', () => {
       }
 
       const startTime = Date.now();
-      const { testIndices, filteredCount } = await queryTestIndicesOptimized(eval_.id, {
+      const { body, filteredCount } = await eval_.getTablePage({
         filterMode: 'highlights',
         limit: 10,
       });
@@ -409,13 +359,13 @@ describe('Highlights Filter Feature', () => {
 
       // Should have 20 highlighted items (0, 5, 10, 15, ...)
       expect(filteredCount).toBe(20);
-      expect(testIndices).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
+      expect(body.map((row) => row.testIdx)).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
 
       // Query should be fast (typically under 100ms for 100 items)
       expect(duration).toBeLessThan(500);
     });
 
-    it('should work with search query in optimized mode', async () => {
+    it('should work with search query through getTablePage', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 
       const testData = [
@@ -457,7 +407,7 @@ describe('Highlights Filter Feature', () => {
       }
 
       // Test 1: With highlights filter and no filters array, search should apply
-      const withSearch = await queryTestIndicesOptimized(eval_.id, {
+      const withSearch = await eval_.getTablePage({
         filterMode: 'highlights',
         searchQuery: 'target',
       });
@@ -465,20 +415,20 @@ describe('Highlights Filter Feature', () => {
       // Search in response field for 'target' AND highlights filter
       // Indices 0 and 3 have both !highlight and 'target' in output
       expect(withSearch.filteredCount).toBe(2);
-      expect(withSearch.testIndices).toEqual([0, 3]);
+      expect(withSearch.body.map((row) => row.testIdx)).toEqual([0, 3]);
 
       // Test 2: With highlights filter but empty filters array, search should still apply
-      const withEmptyFilters = await queryTestIndicesOptimized(eval_.id, {
+      const withEmptyFilters = await eval_.getTablePage({
         filterMode: 'highlights',
         searchQuery: 'target',
         filters: [],
       });
 
       expect(withEmptyFilters.filteredCount).toBe(2);
-      expect(withEmptyFilters.testIndices).toEqual([0, 3]);
+      expect(withEmptyFilters.body.map((row) => row.testIdx)).toEqual([0, 3]);
     });
 
-    it('should handle pagination correctly in optimized mode', async () => {
+    it('should handle pagination correctly through getTablePage', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 
       // Add 15 highlighted results
@@ -514,50 +464,50 @@ describe('Highlights Filter Feature', () => {
       }
 
       // Get three pages
-      const page1 = await queryTestIndicesOptimized(eval_.id, {
+      const page1 = await eval_.getTablePage({
         filterMode: 'highlights',
         offset: 0,
         limit: 5,
       });
 
-      const page2 = await queryTestIndicesOptimized(eval_.id, {
+      const page2 = await eval_.getTablePage({
         filterMode: 'highlights',
         offset: 5,
         limit: 5,
       });
 
-      const page3 = await queryTestIndicesOptimized(eval_.id, {
+      const page3 = await eval_.getTablePage({
         filterMode: 'highlights',
         offset: 10,
         limit: 5,
       });
 
       expect(page1.filteredCount).toBe(15);
-      expect(page1.testIndices).toEqual([0, 1, 2, 3, 4]);
+      expect(page1.body.map((row) => row.testIdx)).toEqual([0, 1, 2, 3, 4]);
 
       expect(page2.filteredCount).toBe(15);
-      expect(page2.testIndices).toEqual([5, 6, 7, 8, 9]);
+      expect(page2.body.map((row) => row.testIdx)).toEqual([5, 6, 7, 8, 9]);
 
       expect(page3.filteredCount).toBe(15);
-      expect(page3.testIndices).toEqual([10, 11, 12, 13, 14]);
+      expect(page3.body.map((row) => row.testIdx)).toEqual([10, 11, 12, 13, 14]);
     });
 
-    it('should handle empty results gracefully in optimized mode', async () => {
+    it('should handle empty results gracefully through getTablePage', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 3,
         resultTypes: ['success', 'failure'],
       });
 
       // No highlights in the default factory data
-      const { testIndices, filteredCount } = await queryTestIndicesOptimized(eval_.id, {
+      const { body, filteredCount } = await eval_.getTablePage({
         filterMode: 'highlights',
       });
 
       expect(filteredCount).toBe(0);
-      expect(testIndices).toEqual([]);
+      expect(body.map((row) => row.testIdx)).toEqual([]);
     });
 
-    it('should verify SQL injection safety in optimized mode', async () => {
+    it('should verify SQL injection safety through getTablePage', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 
       // Add a highlighted result
@@ -592,7 +542,7 @@ describe('Highlights Filter Feature', () => {
 
       // Try SQL injection in search query
       const maliciousSearch = "'; DROP TABLE eval_results; --";
-      const { filteredCount } = await queryTestIndicesOptimized(eval_.id, {
+      const { filteredCount } = await eval_.getTablePage({
         filterMode: 'highlights',
         searchQuery: maliciousSearch,
       });
@@ -603,11 +553,11 @@ describe('Highlights Filter Feature', () => {
       expect(filteredCount).toBe(0); // No results match the malicious search string
 
       // Test that highlights filter alone still works after attempted injection
-      const justHighlights = await queryTestIndicesOptimized(eval_.id, {
+      const justHighlights = await eval_.getTablePage({
         filterMode: 'highlights',
       });
       expect(justHighlights.filteredCount).toBe(1);
-      expect(justHighlights.testIndices).toEqual([0]);
+      expect(justHighlights.body.map((row) => row.testIdx)).toEqual([0]);
     });
   });
 

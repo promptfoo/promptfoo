@@ -56,11 +56,7 @@ import {
   notifyEvaluationChanged,
   notifyEvaluationsDeleted,
 } from './evalMutation';
-import {
-  getCachedResultsCount,
-  getTotalResultRowCount,
-  queryTestIndicesOptimized,
-} from './evalPerformance';
+import { getCachedResultsCount, getTotalResultRowCount } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
   getStripFlags,
@@ -900,20 +896,7 @@ export default class Eval {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
-  /**
-   * CRITICAL: Builds the WHERE SQL clause for filtering results.
-   * This is the single source of truth for all filtering logic.
-   * Used by both queryTestIndices() (pagination) and getFilteredMetrics().
-   *
-   * SECURITY: This method uses Drizzle's sql template strings for parameterized queries
-   * to prevent SQL injection. All user-provided values are passed as parameters,
-   * not interpolated into the SQL string.
-   *
-   * Any changes to filter logic MUST be made here to ensure consistency
-   * between displayed rows and calculated metrics.
-   *
-   * @returns SQL fragment (without "WHERE" keyword) that can be used in queries
-   */
+  /** Shared parameterized predicate for table rows, counts, and filtered metrics. */
   private buildFilterWhereSql(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
@@ -1132,16 +1115,21 @@ export default class Eval {
     if (opts.searchQuery && opts.searchQuery.trim() !== '') {
       const searchPattern = `%${opts.searchQuery}%`;
 
+      // Legacy artifacts can contain malformed JSON. Treat only that artifact as absent.
+      const validJson = (column: SQL) => sql`CASE WHEN json_valid(${column}) THEN ${column} END`;
+      const grading = validJson(sql`grading_result`);
+      const scores = validJson(sql`named_scores`);
+      const metadata = validJson(sql`metadata`);
+      const testCase = validJson(sql`test_case`);
       const searchConditions = [
         sql`response LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
-        sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
-        // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
-        // (trace linkage) so a query can't match on internal data the UI never shows.
-        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
+        sql`json_extract(${grading}, '$.reason') LIKE ${searchPattern}`,
+        sql`json_extract(${grading}, '$.comment') LIKE ${searchPattern}`,
+        sql`json_extract(${scores}, '$') LIKE ${searchPattern}`,
+        // Exclude internal trace links and dataset markers from metadata searches.
+        sql`json_remove(${metadata}, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
+        sql`json_extract(${testCase}, '$.vars') LIKE ${searchPattern}`,
+        sql`json_extract(json_remove(${testCase}, ${`$.metadata.${PROMPTFOO_METADATA_KEY}`}), '$.metadata') LIKE ${searchPattern}`,
       ];
 
       const searchClause = sql.join(searchConditions, sql` OR `);
@@ -1152,12 +1140,6 @@ export default class Eval {
     return sql.join(conditions, sql` AND `);
   }
 
-  /**
-   * Private helper method to build filter conditions and query for test indices.
-   *
-   * SECURITY: Uses parameterized queries via Drizzle's sql template strings
-   * to prevent SQL injection attacks.
-   */
   private async queryTestIndices(opts: {
     offset?: number;
     limit?: number;
@@ -1169,12 +1151,7 @@ export default class Eval {
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
 
-    // CRITICAL: Use single source of truth for WHERE clause (now returns SQL fragment)
-    const whereSql = this.buildFilterWhereSql({
-      filterMode: opts.filterMode,
-      searchQuery: opts.searchQuery,
-      filters: opts.filters,
-    });
+    const whereSql = this.buildFilterWhereSql(opts);
 
     // Get filtered count using parameterized query
     const filteredCountQuery = sql`
@@ -1208,23 +1185,12 @@ export default class Eval {
     return { testIndices, filteredCount };
   }
 
-  /**
-   * CRITICAL: Calculates metrics for filtered results.
-   * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
-   *
-   * SECURITY: Uses parameterized SQL queries to prevent SQL injection.
-   *
-   * This method is called from the API route when filters are active to provide
-   * metrics that accurately reflect the filtered dataset.
-   *
-   * @returns Array of PromptMetrics, one per prompt
-   */
+  /** Calculate metrics for matching results, grouped by prompt. */
   async getFilteredMetrics(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
   }): Promise<import('../types').PromptMetrics[]> {
-    // CRITICAL: Use the SAME WHERE clause as queryTestIndices (now returns SQL fragment)
     const whereSql = this.buildFilterWhereSql(opts);
 
     return calculateFilteredMetrics({
@@ -1260,31 +1226,7 @@ export default class Eval {
       testIndices = opts.testIndices;
       filteredCount = testIndices.length;
     } else {
-      // Use optimized query for simple cases, fall back to original for complex filters
-      const hasComplexFilters = opts.filters && opts.filters.length > 0;
-
-      let queryResult;
-      if (hasComplexFilters) {
-        // Fall back to original query for complex filters
-        logger.debug('Using original query for complex filters');
-        queryResult = await this.queryTestIndices({
-          offset: opts.offset,
-          limit: opts.limit,
-          filterMode: opts.filterMode,
-          searchQuery: opts.searchQuery,
-          filters: opts.filters,
-        });
-      } else {
-        // Use optimized query for better performance
-        logger.debug('Using optimized query for table page');
-        queryResult = await queryTestIndicesOptimized(this.id, {
-          offset: opts.offset,
-          limit: opts.limit,
-          filterMode: opts.filterMode,
-          searchQuery: opts.searchQuery,
-          filters: opts.filters,
-        });
-      }
+      const queryResult = await this.queryTestIndices(opts);
 
       testIndices = queryResult.testIndices;
       filteredCount = queryResult.filteredCount;
