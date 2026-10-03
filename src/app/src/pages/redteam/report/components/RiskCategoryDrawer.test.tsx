@@ -85,6 +85,22 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     mockWindowOpen();
   });
 
+  it.each(
+    [
+      [
+        { type: 'text', text: 'owned multimodal attack' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,aGVsbG8=' } },
+      ],
+      { historic: 'structured content' },
+    ].map((content) => ({ content })),
+  )('renders structured chat content as text without crashing', ({ content }) => {
+    const prompt = JSON.stringify([{ role: 'user', content }]);
+    renderWithProviders(
+      <RiskCategoryDrawer {...defaultProps} failures={[{ ...defaultProps.failures[0], prompt }]} />,
+    );
+    expect(screen.getByText(prompt, { exact: true })).toBeInTheDocument();
+  });
+
   it('should navigate to eval page when clicking View All Logs button', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);

@@ -45,7 +45,7 @@ import {
   type ResultsFile,
   type SharedResults,
 } from '@promptfoo/types';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import { convertResultsToTable, getDisplayVars } from '@promptfoo/util/convertEvalResultsToTable';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -200,8 +200,9 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         }
         // Backwards compatibility for old evals that used 'query' instead of 'prompt'. 2024-12-12
         const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
+        const displayVars = getDisplayVars(result);
         const injectVarValue =
-          result.vars[injectVar]?.toString() || result.vars['query']?.toString();
+          displayVars?.[injectVar]?.toString() || displayVars?.query?.toString();
         failures[pluginId].push({
           prompt: injectVarValue || result.prompt.raw,
           output: result.response?.output,
@@ -249,9 +250,10 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         if (!passes[pluginId]) {
           passes[pluginId] = [];
         }
+        const displayVars = getDisplayVars(result);
         passes[pluginId].push({
           prompt:
-            result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
+            displayVars?.query?.toString() || displayVars?.prompt?.toString() || result.prompt.raw,
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,
