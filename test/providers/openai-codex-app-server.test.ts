@@ -850,10 +850,14 @@ describe('OpenAICodexAppServerProvider', () => {
       }
     });
 
-    it.each(['"', "'"])(
-      'preserves native binaries in PATH entries quoted with %s and containing delimiters',
-      async (quote) => {
-        const nativeBinDir = path.join(npmBinDir, `native${path.delimiter}directory`);
+    it.each([
+      ['"', `native${path.delimiter}directory`],
+      ["'", `native${path.delimiter}directory`],
+      ["'", "O'Brien"],
+    ])(
+      'preserves native binaries in PATH entries quoted with %s and named %s',
+      async (quote, directory) => {
+        const nativeBinDir = path.join(npmBinDir, directory);
         fs.mkdirSync(nativeBinDir);
         fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
 

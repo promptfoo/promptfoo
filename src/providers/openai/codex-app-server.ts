@@ -837,10 +837,12 @@ function getCodexNpmEntrypoint(env: Record<string, string>): string | undefined 
   const searchPath = pathKey
     ? env[pathKey]
     : (Object.entries(process.env).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? '');
-  // libuv accepts either quote style, including PATH delimiters inside quotes.
+  // libuv skips quoted delimiters, then consumes the rest of the PATH component.
   const directories = (
-    searchPath.match(new RegExp(`"[^"]*"|'[^']*'|[^${path.delimiter}]+`, 'g')) ?? []
-  ).map((directory) => directory.replace(/^(["'])(.*)\1$/, '$2'));
+    searchPath.match(
+      new RegExp(`(?:"[^"]*(?:"|$)|'[^']*(?:'|$)|[^${path.delimiter}]+)[^${path.delimiter}]*`, 'g'),
+    ) ?? []
+  ).map((directory) => directory.replace(/^["']|["']$/g, ''));
   // libuv checks the parent process environment when deciding whether to search cwd.
   const searchCwd = !Object.keys(process.env).some(
     (key) => key.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH',
