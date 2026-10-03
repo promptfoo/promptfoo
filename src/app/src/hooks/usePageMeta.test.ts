@@ -2,6 +2,11 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePageMeta } from './usePageMeta';
 
+const createPageMetaFixture = () => ({
+  title: 'Test Page',
+  description: 'Test description',
+});
+
 // Mock meta tag elements
 const createMockMetaElement = (content = '') => ({
   getAttribute: vi.fn().mockReturnValue(content),
@@ -52,12 +57,7 @@ describe('usePageMeta', () => {
   });
 
   it('should set meta description when provided', () => {
-    renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        description: 'Test description',
-      }),
-    );
+    renderHook(() => usePageMeta(createPageMetaFixture()));
 
     expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
   });
@@ -69,28 +69,9 @@ describe('usePageMeta', () => {
   });
 
   it('should set Open Graph description when provided', () => {
-    renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        description: 'Test description',
-      }),
-    );
+    renderHook(() => usePageMeta(createPageMetaFixture()));
 
     expect(mockOgDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
-  });
-
-  it('should set Open Graph image when provided', () => {
-    renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        image: 'https://example.com/image.jpg',
-      }),
-    );
-
-    expect(mockOgImageTag.setAttribute).toHaveBeenCalledWith(
-      'content',
-      'https://example.com/image.jpg',
-    );
   });
 
   it('should handle missing meta tags gracefully', () => {
@@ -105,12 +86,7 @@ describe('usePageMeta', () => {
   });
 
   it('should restore original values on cleanup', () => {
-    const { unmount } = renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        description: 'Test description',
-      }),
-    );
+    const { unmount } = renderHook(() => usePageMeta(createPageMetaFixture()));
 
     // Verify values were set
     expect(document.title).toBe('Test Page | promptfoo');
@@ -161,12 +137,11 @@ describe('usePageMeta', () => {
     expect(mockOgImageTag.setAttribute).not.toHaveBeenCalled();
   });
 
-  it('should set document title, meta description, Open Graph title, Open Graph description, and Open Graph image when all fields are provided', () => {
+  it('should set document title, meta description, Open Graph title, Open Graph description when all fields are provided', () => {
     renderHook(() =>
       usePageMeta({
         title: 'Test Page',
         description: 'Test description',
-        image: 'https://example.com/image.jpg',
       }),
     );
 
@@ -174,10 +149,6 @@ describe('usePageMeta', () => {
     expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
     expect(mockOgTitleTag.setAttribute).toHaveBeenCalledWith('content', 'Test Page | promptfoo');
     expect(mockOgDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
-    expect(mockOgImageTag.setAttribute).toHaveBeenCalledWith(
-      'content',
-      'https://example.com/image.jpg',
-    );
   });
 
   it('should handle missing meta tags during cleanup gracefully', () => {
@@ -224,17 +195,5 @@ describe('usePageMeta', () => {
     expect(document.title).toBe('Test Page | promptfoo');
     expect(mockDescriptionTag.setAttribute).not.toHaveBeenCalled();
     expect(mockOgDescriptionTag.setAttribute).not.toHaveBeenCalled();
-  });
-
-  it('should set Open Graph image when provided an invalid URL', () => {
-    const invalidImageUrl = 'invalid-image-url';
-    renderHook(() =>
-      usePageMeta({
-        title: 'Test Page',
-        image: invalidImageUrl,
-      }),
-    );
-
-    expect(mockOgImageTag.setAttribute).toHaveBeenCalledWith('content', invalidImageUrl);
   });
 });

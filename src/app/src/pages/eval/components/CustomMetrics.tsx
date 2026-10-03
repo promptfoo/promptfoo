@@ -18,7 +18,6 @@ import { useTableStore } from './store';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
-  counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
   /**
    * How many metrics to display before truncating and rendering a "Show more" button.
@@ -34,29 +33,15 @@ interface CustomMetricsProps {
 interface MetricValueProps {
   metric: string;
   score: number;
-  counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
 }
 
-const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) => {
+const MetricValue = ({ metric, score, metricTotals }: MetricValueProps) => {
   if (metricTotals && metricTotals[metric]) {
-    if (metricTotals[metric] === 0) {
-      return <span data-testid={`metric-value-${metric}`}>0%</span>;
-    }
     return (
       <span data-testid={`metric-value-${metric}`}>
         {((score / metricTotals[metric]) * 100).toFixed(2)}% ({score?.toFixed(2) ?? '0'}/
         {metricTotals[metric]?.toFixed(2) ?? '0'})
-      </span>
-    );
-  } else if (counts && counts[metric]) {
-    if (counts[metric] === 0) {
-      return <span data-testid={`metric-value-${metric}`}>0</span>;
-    }
-    return (
-      <span data-testid={`metric-value-${metric}`}>
-        {(score / counts[metric]).toFixed(2)} ({score?.toFixed(2) ?? '0'}/
-        {counts[metric]?.toFixed(2) ?? '0'})
       </span>
     );
   }
@@ -65,7 +50,6 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
 
 const CustomMetrics = ({
   lookup,
-  counts,
   metricTotals,
   truncationCount = 10,
   onShowMore,
@@ -75,7 +59,7 @@ const CustomMetrics = ({
     return null;
   }
 
-  const applyFilterFromMetric = useApplyFilterFromMetric();
+  const handleClick = useApplyFilterFromMetric();
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
@@ -85,8 +69,6 @@ const CustomMetrics = ({
     metricA.localeCompare(metricB),
   );
   const displayMetrics = showAllMetrics ? metrics : metrics.slice(0, truncationCount);
-
-  const handleClick = applyFilterFromMetric;
 
   return (
     <div className="custom-metric-container my-2" data-testid="custom-metrics">
@@ -141,12 +123,7 @@ const CustomMetrics = ({
                     {displayLabel}
                   </span>
                   <span className="metric-value">
-                    <MetricValue
-                      metric={metric}
-                      score={score}
-                      counts={counts}
-                      metricTotals={metricTotals}
-                    />
+                    <MetricValue metric={metric} score={score} metricTotals={metricTotals} />
                   </span>
                 </button>
               </TooltipTrigger>

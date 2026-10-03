@@ -5,50 +5,39 @@ import { render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import PluginStrategyFlow from './PluginStrategyFlow';
 
-vi.mock('recharts', () => ({
-  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="responsive-container">{children}</div>
-  ),
-  Sankey: (props: any) => (
-    <div data-testid="sankey-chart">
-      {props.data.nodes.map((node: any, index: number) => (
-        <div key={index}>
-          <svg>
-            {React.cloneElement(props.node, {
-              x: 0,
-              y: 0,
-              width: 10,
-              height: 10,
-              index,
-              payload: node,
-              containerWidth: 500,
-            })}
-          </svg>
-        </div>
-      ))}
-      {props.data.links.map((_link: any, index: number) => (
-        <div key={index} data-testid="sankey-link"></div>
-      ))}
-      {props.children}
-    </div>
-  ),
-  Tooltip: (props: any) => (
-    <div data-testid="tooltip">
-      {props.content && typeof props.content === 'function'
-        ? props.content({
-            payload: [
-              {
-                value: 1,
-                payload: { source: { name: 'PluginA' }, target: { name: 'StrategyX' }, value: 1 },
-              },
-            ],
-          })
-        : 'Tooltip Content'}
-    </div>
-  ),
-  Layer: ({ children }: { children: React.ReactNode }) => <g>{children}</g>,
-  Rectangle: (props: any) => <rect {...props} />,
-}));
+vi.mock('recharts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('recharts')>();
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: React.ReactElement }) => (
+      <div data-testid="responsive-container">
+        {React.cloneElement(children as React.ReactElement<{ width: number; height: number }>, {
+          width: 500,
+          height: 400,
+        })}
+      </div>
+    ),
+    Sankey: (props: React.ComponentProps<typeof actual.Sankey>) => (
+      <div data-testid="sankey-chart">
+        <actual.Sankey {...props} />
+      </div>
+    ),
+    Tooltip: (props: any) => (
+      <div data-testid="tooltip">
+        {props.content && typeof props.content === 'function'
+          ? props.content({
+              payload: [
+                {
+                  value: 1,
+                  payload: { source: { name: 'PluginA' }, target: { name: 'StrategyX' }, value: 1 },
+                },
+              ],
+            })
+          : 'Tooltip Content'}
+      </div>
+    ),
+  };
+});
 
 interface TestRecord {
   prompt: string;

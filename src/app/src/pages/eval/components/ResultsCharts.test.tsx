@@ -4,6 +4,62 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
 import { useTableStore } from './store';
 
+const createTableWithNamedScores = () => ({
+  head: {
+    prompts: [
+      { provider: 'test-provider-1', metrics: { namedScores: {} } },
+      { provider: 'test-provider-2', metrics: { namedScores: {} } },
+    ],
+    vars: [],
+  },
+  body: [createScoreRow(), createScoreRow(0.6, 'another valid', 0.7, 'another valid')],
+});
+
+const createTableWithMixedResults = () => ({
+  head: createTwoProviderHead(),
+  body: [
+    {
+      outputs: [
+        { score: 0.9, pass: true, text: 'test 1' },
+        { score: 0.8, pass: true, text: 'test 2' },
+      ],
+      vars: [],
+    },
+    {
+      outputs: [
+        { score: 0.7, pass: true, text: 'test 3' },
+        { score: 0.6, pass: false, text: 'test 4' },
+      ],
+      vars: [],
+    },
+  ],
+});
+
+const createScoreRow = (
+  firstScore: number = 0.8,
+  firstText: string = 'valid output',
+  secondScore: number = 0.9,
+  secondText: string = 'valid output',
+) => ({
+  outputs: [
+    { score: firstScore, pass: true, text: firstText },
+    { score: secondScore, pass: true, text: secondText },
+  ],
+  vars: [],
+});
+
+const createTwoProviderHead = () => ({
+  prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+  vars: [],
+});
+
+const createZeroNamedScores = () => ({
+  namedScores: {
+    accuracy: 0,
+    precision: 0,
+  },
+});
+
 // Mock Chart.js
 vi.mock('chart.js', () => {
   const ChartMock = vi.fn().mockImplementation(function () {
@@ -61,31 +117,7 @@ describe('ResultsCharts', () => {
   });
 
   it('renders chart canvases without a close button', () => {
-    const mockTable = {
-      head: {
-        prompts: [
-          { provider: 'test-provider-1', metrics: { namedScores: {} } },
-          { provider: 'test-provider-2', metrics: { namedScores: {} } },
-        ],
-        vars: [],
-      },
-      body: [
-        {
-          outputs: [
-            { score: 0.8, pass: true, text: 'valid output' },
-            { score: 0.9, pass: true, text: 'valid output' },
-          ],
-          vars: [],
-        },
-        {
-          outputs: [
-            { score: 0.6, pass: true, text: 'another valid' },
-            { score: 0.7, pass: true, text: 'another valid' },
-          ],
-          vars: [],
-        },
-      ],
-    };
+    const mockTable = createTableWithNamedScores();
 
     // Calculate scores using the same logic as ResultsView
     const scores = calculateScores(mockTable);
@@ -154,31 +186,7 @@ describe('ResultsCharts', () => {
   });
 
   it('should render without errors in a constrained space', () => {
-    const mockTable = {
-      head: {
-        prompts: [
-          { provider: 'test-provider-1', metrics: { namedScores: {} } },
-          { provider: 'test-provider-2', metrics: { namedScores: {} } },
-        ],
-        vars: [],
-      },
-      body: [
-        {
-          outputs: [
-            { score: 0.8, pass: true, text: 'valid output' },
-            { score: 0.9, pass: true, text: 'valid output' },
-          ],
-          vars: [],
-        },
-        {
-          outputs: [
-            { score: 0.6, pass: true, text: 'another valid' },
-            { score: 0.7, pass: true, text: 'another valid' },
-          ],
-          vars: [],
-        },
-      ],
-    };
+    const mockTable = createTableWithNamedScores();
 
     // Calculate scores using the same logic as ResultsView
     const scores = calculateScores(mockTable);
@@ -207,22 +215,7 @@ describe('ResultsCharts', () => {
         ],
         vars: [],
       },
-      body: [
-        {
-          outputs: [
-            { score: 0.8, pass: true, text: 'valid output' },
-            { score: 0.9, pass: true, text: 'valid output' },
-          ],
-          vars: [],
-        },
-        {
-          outputs: [
-            { score: 0.6, pass: true, text: 'another valid' },
-            { score: 0.7, pass: true, text: 'another valid' },
-          ],
-          vars: [],
-        },
-      ],
+      body: [createScoreRow(), createScoreRow(0.6, 'another valid', 0.7, 'another valid')],
     };
 
     // Calculate scores using the same logic as ResultsView
@@ -291,22 +284,7 @@ describe('ResultsCharts', () => {
         ],
         vars: [],
       },
-      body: [
-        {
-          outputs: [
-            { score: 0.8, pass: true, text: 'valid output' },
-            { score: 0.9, pass: true, text: 'valid output' },
-          ],
-          vars: [],
-        },
-        {
-          outputs: [
-            { score: 0.6, pass: true, text: 'another valid' },
-            { score: 0.7, pass: true, text: 'another valid' },
-          ],
-          vars: [],
-        },
-      ],
+      body: [createScoreRow(), createScoreRow(0.6, 'another valid', 0.7, 'another valid')],
     };
 
     // Calculate scores using the same logic as ResultsView
@@ -329,10 +307,7 @@ describe('ResultsCharts', () => {
   describe('Null Safety and Data Validation', () => {
     it('handles null outputs gracefully', () => {
       const mockTableWithNullOutputs = {
-        head: {
-          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
-          vars: [],
-        },
+        head: createTwoProviderHead(),
         body: [
           {
             outputs: [null, { score: 0.8, pass: true, text: 'valid output' }],
@@ -369,10 +344,7 @@ describe('ResultsCharts', () => {
 
     it('uses the source row when rendering scatter tooltips after filtering points', () => {
       const mockTableWithSkippedRow = {
-        head: {
-          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
-          vars: [],
-        },
+        head: createTwoProviderHead(),
         body: [
           {
             outputs: [
@@ -415,6 +387,11 @@ describe('ResultsCharts', () => {
         | undefined;
 
       expect(scatterData).toEqual([expect.objectContaining({ x: 0.6, y: 0.8, rowIndex: 1 })]);
+      for (const axis of ['x', 'y']) {
+        const callback = scatterConfig!.options!.scales![axis]!.ticks!.callback!;
+        expect(Reflect.apply(callback, {}, [0.125, 0, [0, 1]])).toBe('13');
+        expect(Reflect.apply(callback, {}, [0.125, 1, [0, 1]])).toBe('13%');
+      }
       expect(
         tooltipLabel?.({
           dataIndex: 0,
@@ -424,28 +401,7 @@ describe('ResultsCharts', () => {
     });
 
     it('handles empty recentEvals array gracefully', () => {
-      const mockTable = {
-        head: {
-          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
-          vars: [],
-        },
-        body: [
-          {
-            outputs: [
-              { score: 0.9, pass: true, text: 'test 1' },
-              { score: 0.8, pass: true, text: 'test 2' },
-            ],
-            vars: [],
-          },
-          {
-            outputs: [
-              { score: 0.7, pass: true, text: 'test 3' },
-              { score: 0.6, pass: false, text: 'test 4' },
-            ],
-            vars: [],
-          },
-        ],
-      };
+      const mockTable = createTableWithMixedResults();
 
       // Calculate scores using the same logic as ResultsView
       const scores = mockTable.body
@@ -471,10 +427,7 @@ describe('ResultsCharts', () => {
   describe('Edge Cases', () => {
     it('handles outputs array with missing elements', () => {
       const mockTableMissingOutputs = {
-        head: {
-          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
-          vars: [],
-        },
+        head: createTwoProviderHead(),
         body: [
           {
             outputs: [{ score: 0.9, pass: true, text: 'test 1' }], // Missing second output
@@ -508,10 +461,7 @@ describe('ResultsCharts', () => {
 
     it('handles very large score values', () => {
       const mockTableLargeScores = {
-        head: {
-          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
-          vars: [],
-        },
+        head: createTwoProviderHead(),
         body: [
           {
             outputs: [
@@ -541,10 +491,7 @@ describe('ResultsCharts', () => {
 
     it('handles negative score values', () => {
       const mockTableNegativeScores = {
-        head: {
-          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
-          vars: [],
-        },
+        head: createTwoProviderHead(),
         body: [
           {
             outputs: [
@@ -643,34 +590,16 @@ describe('ResultsCharts', () => {
           prompts: [
             {
               provider: 'test-provider-1',
-              metrics: {
-                namedScores: {
-                  accuracy: 0,
-                  precision: 0,
-                },
-              },
+              metrics: createZeroNamedScores(),
             },
             {
               provider: 'test-provider-2',
-              metrics: {
-                namedScores: {
-                  accuracy: 0,
-                  precision: 0,
-                },
-              },
+              metrics: createZeroNamedScores(),
             },
           ],
           vars: [],
         },
-        body: [
-          {
-            outputs: [
-              { score: 0.7, pass: true, text: 'test 1' },
-              { score: 0.8, pass: true, text: 'test 2' },
-            ],
-            vars: [],
-          },
-        ],
+        body: [createScoreRow(0.7, 'test 1', 0.8, 'test 2')],
       };
 
       const scores = calculateScores(mockTableWithZeroNamedScores);
@@ -727,15 +656,7 @@ describe('ResultsCharts', () => {
           ],
           vars: [],
         },
-        body: [
-          {
-            outputs: [
-              { score: 0.7, pass: true, text: 'test 1' },
-              { score: 0.8, pass: true, text: 'test 2' },
-            ],
-            vars: [],
-          },
-        ],
+        body: [createScoreRow(0.7, 'test 1', 0.8, 'test 2')],
       };
 
       const scores = calculateScores(mockTableWithNegativeNamedScores);
@@ -785,15 +706,7 @@ describe('ResultsCharts', () => {
           ],
           vars: [],
         },
-        body: [
-          {
-            outputs: [
-              { score: 0.7, pass: true, text: 'test 1' },
-              { score: 0.8, pass: true, text: 'test 2' },
-            ],
-            vars: [],
-          },
-        ],
+        body: [createScoreRow(0.7, 'test 1', 0.8, 'test 2')],
       };
 
       const scores = calculateScores(mockTable);
@@ -828,28 +741,7 @@ describe('ResultsCharts', () => {
   });
 
   it('handles empty columnVisibility and includes all prompts', () => {
-    const mockTable = {
-      head: {
-        prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
-        vars: [],
-      },
-      body: [
-        {
-          outputs: [
-            { score: 0.9, pass: true, text: 'test 1' },
-            { score: 0.8, pass: true, text: 'test 2' },
-          ],
-          vars: [],
-        },
-        {
-          outputs: [
-            { score: 0.7, pass: true, text: 'test 3' },
-            { score: 0.6, pass: false, text: 'test 4' },
-          ],
-          vars: [],
-        },
-      ],
-    };
+    const mockTable = createTableWithMixedResults();
 
     // Calculate scores using the same logic as ResultsView
     const scores = calculateScores(mockTable);

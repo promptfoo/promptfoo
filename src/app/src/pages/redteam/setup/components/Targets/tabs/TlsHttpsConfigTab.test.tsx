@@ -4,9 +4,20 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createUnconfiguredProvider } from '../../../../../../tests/factories';
 import TlsHttpsConfigTab from './TlsHttpsConfigTab';
 
 import type { HttpProviderOptions } from '../../../types';
+
+const createTlsTargetFixture = () => ({
+  id: 'http-provider',
+  config: {
+    tls: {
+      enabled: true,
+      rejectUnauthorized: true,
+    },
+  },
+});
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
@@ -36,15 +47,7 @@ describe('TlsHttpsConfigTab', () => {
   describe('TLS Version Selects', () => {
     it('should render TLS version selects without errors when Advanced TLS Options is expanded', async () => {
       const user = userEvent.setup();
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
-      };
+      const selectedTarget: HttpProviderOptions = createTlsTargetFixture();
 
       renderWithProviders(
         <TlsHttpsConfigTab
@@ -64,15 +67,7 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should open minimum TLS version dropdown and show all options including Default', async () => {
       const user = userEvent.setup();
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
-      };
+      const selectedTarget: HttpProviderOptions = createTlsTargetFixture();
 
       renderWithProviders(
         <TlsHttpsConfigTab
@@ -144,15 +139,7 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should call updateCustomTarget with the selected TLS version for minimum version', async () => {
       const user = userEvent.setup();
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
-      };
+      const selectedTarget: HttpProviderOptions = createTlsTargetFixture();
 
       renderWithProviders(
         <TlsHttpsConfigTab
@@ -184,15 +171,7 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should open maximum TLS version dropdown and show all options including Default', async () => {
       const user = userEvent.setup();
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
-      };
+      const selectedTarget: HttpProviderOptions = createTlsTargetFixture();
 
       renderWithProviders(
         <TlsHttpsConfigTab
@@ -265,10 +244,7 @@ describe('TlsHttpsConfigTab', () => {
 
   describe('TLS Enable Toggle', () => {
     it('should render the TLS enable switch', () => {
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {},
-      };
+      const selectedTarget: HttpProviderOptions = createUnconfiguredProvider('http-provider');
 
       renderWithProviders(
         <TlsHttpsConfigTab
@@ -282,10 +258,7 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should enable TLS when switch is toggled on', async () => {
       const user = userEvent.setup();
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {},
-      };
+      const selectedTarget: HttpProviderOptions = createUnconfiguredProvider('http-provider');
 
       renderWithProviders(
         <TlsHttpsConfigTab
@@ -305,15 +278,7 @@ describe('TlsHttpsConfigTab', () => {
 
     it('should disable TLS when switch is toggled off', async () => {
       const user = userEvent.setup();
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
-      };
+      const selectedTarget: HttpProviderOptions = createTlsTargetFixture();
 
       renderWithProviders(
         <TlsHttpsConfigTab
@@ -331,15 +296,7 @@ describe('TlsHttpsConfigTab', () => {
 
   describe('Certificate Type Selection', () => {
     it('should show certificate type dropdown when TLS is enabled', () => {
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
-      };
+      const selectedTarget: HttpProviderOptions = createTlsTargetFixture();
 
       renderWithProviders(
         <TlsHttpsConfigTab

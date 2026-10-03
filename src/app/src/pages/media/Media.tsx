@@ -38,6 +38,12 @@ import { clearExpiredThumbnails } from './hooks/useThumbnailCache';
 
 import type { MediaItem, MediaSort, MediaTypeFilter } from './types';
 
+const errorMessages = {
+  not_found: `Media item not found. It may have been deleted or the link is invalid.`,
+  network_error: `Unable to load media item. Please check your connection and try again.`,
+  server_error: `Server error while loading media item. Please try again later.`,
+};
+
 export default function Media() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -297,11 +303,6 @@ export default function Media() {
             lastResolvedDeepLinkRef.current = hashParam;
           }
           // Map error types to user-friendly messages
-          const errorMessages = {
-            not_found: `Media item not found. It may have been deleted or the link is invalid.`,
-            network_error: `Unable to load media item. Please check your connection and try again.`,
-            server_error: `Server error while loading media item. Please try again later.`,
-          };
           setDeepLinkError(result.error ? errorMessages[result.error] : null);
         }
       });
@@ -463,8 +464,7 @@ export default function Media() {
       // mounted. A user cancel keeps the same controller, so it still resets here; a
       // newer download replaces the controller and owns the state from then on; an
       // unmount clears isMountedRef and nothing is set at all.
-      const supersededByNewerDownload = downloadAbortRef.current?.signal !== signal;
-      if (isMountedRef.current && !supersededByNewerDownload) {
+      if (isMountedRef.current && !(downloadAbortRef.current?.signal !== signal)) {
         setIsDownloading(false);
         setDownloadProgress({ current: 0, total: 0, currentFile: '' });
         // Exit selection mode after download
@@ -670,11 +670,6 @@ export default function Media() {
                             if (result.error === 'not_found') {
                               lastResolvedDeepLinkRef.current = hashParam;
                             }
-                            const errorMessages = {
-                              not_found: `Media item not found. It may have been deleted or the link is invalid.`,
-                              network_error: `Unable to load media item. Please check your connection and try again.`,
-                              server_error: `Server error while loading media item. Please try again later.`,
-                            };
                             setDeepLinkError(result.error ? errorMessages[result.error] : null);
                           }
                         });

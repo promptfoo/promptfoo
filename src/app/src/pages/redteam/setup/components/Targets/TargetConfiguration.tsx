@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { isPlainObject } from '@app/utils/isPlainObject';
 import { AlertTriangle, Info } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
@@ -25,20 +26,10 @@ const requiresPrompt = (target: ProviderOptions) => {
   );
 };
 
-const hasPlainTargetConfig = (target: ProviderOptions): boolean => {
-  const config = target.config as unknown;
-  if (typeof config !== 'object' || config === null) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(config);
-  return prototype === Object.prototype || prototype === null;
-};
-
 export default function TargetConfiguration({ onNext, onBack }: TargetConfigurationProps) {
   const { config, updateConfig, providerType } = useRedTeamConfig();
   const { targetConfigError } = useRedTeamTargetConfigValidation();
   const selectedTarget: ProviderOptions = config.target || DEFAULT_HTTP_TARGET;
-  const [providerError, setProviderError] = useState<string | null>(null);
   const promptRequired = requiresPrompt(selectedTarget);
   const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState<boolean>(false);
@@ -66,15 +57,14 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
   // Handle errors from child components
   const handleError = (error: string | null) => {
     setValidationErrors(error);
-    setProviderError(error);
   };
 
   const isProviderValid = () => {
     return (
       selectedTarget.label &&
-      !providerError &&
+      !validationErrors &&
       !targetConfigError &&
-      hasPlainTargetConfig(selectedTarget)
+      isPlainObject(selectedTarget.config)
     );
   };
 
@@ -82,17 +72,14 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
     if (!selectedTarget.label) {
       return 'Please enter a target label';
     }
-    if (providerError) {
-      return providerError;
+    if (validationErrors) {
+      return validationErrors;
     }
     if (targetConfigError) {
       return targetConfigError;
     }
-    if (!hasPlainTargetConfig(selectedTarget)) {
+    if (!isPlainObject(selectedTarget.config)) {
       return 'Configuration must be a JSON object';
-    }
-    if (validationErrors) {
-      return validationErrors;
     }
     return undefined;
   };

@@ -13,6 +13,13 @@ import type {
   TestCase,
 } from '@promptfoo/types';
 
+function expectEmptyFileError() {
+  expect(showToastMock).toHaveBeenCalledWith(
+    'The file appears to be empty. Please select a YAML file with content.',
+    'error',
+  );
+}
+
 // Mock useToast hook
 const showToastMock = vi.fn();
 vi.mock('@app/hooks/useToast', () => ({
@@ -157,40 +164,10 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(testCasesSectionAfter).toHaveTextContent('Vars:'); // varsList is empty
   });
 
-  it('should reset all fields to their default state when the Reset button is clicked', async () => {
-    // Arrange: Set up initial non-default state in useStore
-    const nonEmptyState = {
-      description: 'Test Description',
-      providers: [{ id: 'provider1', label: 'Provider 1' }] as ProviderOptions[],
-      prompts: ['Test Prompt {{var}}'],
-      tests: [{ vars: { var: 'value' } }] as TestCase[],
-      defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as TestCase,
-      derivedMetrics: [{ name: 'precision', value: 'formula' }] as DerivedMetric[],
-      env: { OPENAI_API_KEY: 'testkey' } as EnvOverrides,
-      evaluateOptions: { maxConcurrency: 5 } as EvaluateOptions,
-      scenarios: [{ description: 'Test Scenario', config: [], tests: [] }] as Scenario[],
-      extensions: ['file://path/to/extension.py:function_name'] as string[],
-    };
-    useStore.getState().updateConfig(nonEmptyState);
-
-    render(<EvaluateTestSuiteCreator />);
-
-    // Act: Click the main "Reset" button to open the dialog
-    const mainResetButton = screen.getByRole('button', { name: 'Reset' });
-    await userEvent.click(mainResetButton);
-
-    // Wait for dialog to appear and find the "Reset" button within the dialog
-    const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
-    const dialogResetButton = within(dialog).getByRole('button', { name: 'Reset' });
-    await userEvent.click(dialogResetButton);
-
-    // Assert: Check if the store state has been reset to default values
-    const currentConfig = useStore.getState().config;
-
-    expect(currentConfig).toEqual(DEFAULT_CONFIG);
-  });
-
-  it('should clear persisted state when the Reset button is clicked', async () => {
+  it.each([
+    'should reset all fields to their default state when the Reset button is clicked',
+    'should clear persisted state when the Reset button is clicked',
+  ])('%s', async () => {
     // Arrange: Set up initial non-default state in useStore
     const nonEmptyState = {
       description: 'Test Description',
@@ -434,12 +411,7 @@ describe('EvaluateTestSuiteCreator', () => {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, mockFile);
 
-    await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith(
-        'The file appears to be empty. Please select a YAML file with content.',
-        'error',
-      );
-    });
+    await waitFor(expectEmptyFileError);
   });
 
   it('should handle whitespace-only YAML files with the empty-file error toast', async () => {
@@ -451,12 +423,7 @@ describe('EvaluateTestSuiteCreator', () => {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, mockFile);
 
-    await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith(
-        'The file appears to be empty. Please select a YAML file with content.',
-        'error',
-      );
-    });
+    await waitFor(expectEmptyFileError);
   });
 
   it('should handle non-object YAML with error toast', async () => {

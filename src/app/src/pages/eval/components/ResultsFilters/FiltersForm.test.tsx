@@ -4,6 +4,34 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from '../store';
 import FiltersForm from './FiltersForm';
 
+const createFilter = (type: 'metadata' | 'severity' | 'plugin') => ({
+  id: 'filter-1' as const,
+  type,
+  operator: 'equals' as const,
+  value: '',
+  sortIndex: 0,
+  logicOperator: 'and' as const,
+});
+
+const createFieldFilter = (value: string, field: string) => ({
+  id: 'filter-1' as const,
+  type: 'metadata' as const,
+  operator: 'equals' as const,
+  value,
+  field,
+  sortIndex: 0,
+  logicOperator: 'and' as const,
+});
+
+const createEmptyFilterOptions = () => ({
+  metric: [],
+  metadata: [],
+  plugin: [],
+  strategy: [],
+  severity: [],
+  policy: [],
+});
+
 vi.mock('../store', () => ({
   useTableStore: vi.fn(),
 }));
@@ -21,14 +49,7 @@ const mockFetchMetadataValues = vi.fn();
 const defaultStoreValue = {
   filters: {
     values: {},
-    options: {
-      metric: [],
-      metadata: [],
-      plugin: [],
-      strategy: [],
-      severity: [],
-      policy: [],
-    },
+    options: createEmptyFilterOptions(),
     appliedCount: 0,
   },
   metadataKeys: [],
@@ -131,15 +152,7 @@ describe('FiltersForm', () => {
   });
 
   it('shows Clear all button when there are filters', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'metadata',
-      operator: 'equals',
-      value: 'test',
-      field: 'key1',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFieldFilter('test', 'key1');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -158,15 +171,7 @@ describe('FiltersForm', () => {
   });
 
   it('calls removeAllFilters when Clear all is clicked', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'metadata',
-      operator: 'equals',
-      value: 'test',
-      field: 'key1',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFieldFilter('test', 'key1');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -186,14 +191,7 @@ describe('FiltersForm', () => {
   });
 
   it('shows loading state for metadata keys', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'metadata',
-      operator: 'equals',
-      value: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFilter('metadata');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -212,14 +210,7 @@ describe('FiltersForm', () => {
   });
 
   it('shows error state for metadata keys', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'metadata',
-      operator: 'equals',
-      value: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFilter('metadata');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -238,14 +229,7 @@ describe('FiltersForm', () => {
   });
 
   it('shows metadata key dropdown when keys are loaded', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'metadata',
-      operator: 'equals',
-      value: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFilter('metadata');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -267,14 +251,7 @@ describe('FiltersForm', () => {
   });
 
   it('renders filter type selector with available options', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'metadata',
-      operator: 'equals',
-      value: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFilter('metadata');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -302,14 +279,7 @@ describe('FiltersForm', () => {
   });
 
   it('shows severity options in value dropdown for severity filter', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'severity',
-      operator: 'equals',
-      value: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFilter('severity');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -340,14 +310,7 @@ describe('FiltersForm', () => {
   });
 
   it('shows plugin options in value dropdown for plugin filter', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'plugin',
-      operator: 'equals',
-      value: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFilter('plugin');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -417,14 +380,7 @@ describe('FiltersForm', () => {
   });
 
   it('calls updateFilter when filter value changes', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'severity',
-      operator: 'equals',
-      value: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFilter('severity');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -527,14 +483,7 @@ describe('FiltersForm', () => {
       ...defaultStoreValue,
       filters: {
         ...defaultStoreValue.filters,
-        options: {
-          metric: [],
-          metadata: [],
-          plugin: [],
-          strategy: [],
-          severity: [],
-          policy: [],
-        },
+        options: createEmptyFilterOptions(),
       },
     } as any);
 
@@ -577,14 +526,7 @@ describe('FiltersForm', () => {
   });
 
   it('calls removeFilter when remove button is clicked', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'metadata',
-      operator: 'equals',
-      value: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFilter('metadata');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -693,14 +635,7 @@ describe('FiltersForm', () => {
   });
 
   it('shows operator options for plugin filter type', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'plugin',
-      operator: 'equals',
-      value: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFilter('plugin');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -770,15 +705,7 @@ describe('FiltersForm', () => {
   });
 
   it('allows manual entry of metadata key when error loading keys', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'metadata',
-      operator: 'equals',
-      value: '',
-      field: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFieldFilter('', '');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,
@@ -807,15 +734,7 @@ describe('FiltersForm', () => {
   });
 
   it('allows manual entry of metadata key when no keys available', async () => {
-    const filter: ResultsFilter = {
-      id: 'filter-1',
-      type: 'metadata',
-      operator: 'equals',
-      value: '',
-      field: '',
-      sortIndex: 0,
-      logicOperator: 'and',
-    };
+    const filter: ResultsFilter = createFieldFilter('', '');
 
     mockedUseTableStore.mockReturnValue({
       ...defaultStoreValue,

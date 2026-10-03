@@ -3,7 +3,6 @@ import React from 'react';
 import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
-import { FilterIcon } from '@app/components/ui/icons';
 import {
   Tooltip,
   TooltipContent,
@@ -17,6 +16,7 @@ import {
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
+import { Filter as FilterIcon } from 'lucide-react';
 import { useApplyFilterFromMetric } from './hooks';
 import { useTableStore } from './store';
 import { getNamedMetricTotal } from './utils';

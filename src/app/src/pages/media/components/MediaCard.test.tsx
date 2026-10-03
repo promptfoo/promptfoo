@@ -9,6 +9,12 @@ import { MediaCard } from './MediaCard';
 
 import type { MediaItem } from '../types';
 
+const createEvalContext = () => ({
+  context: {
+    evalId: 'eval-123',
+  },
+});
+
 // Mock the API utilities
 vi.mock('@app/utils/api', () => ({
   getApiBaseUrl: () => 'http://localhost:3000',
@@ -139,11 +145,7 @@ describe('MediaCard', () => {
     });
 
     it('renders mime type when provider is missing', () => {
-      const item = createMockMediaItem({
-        context: {
-          evalId: 'eval-123',
-        },
-      });
+      const item = createMockMediaItem(createEvalContext());
       renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
       expect(screen.getByText('image/png')).toBeInTheDocument();
@@ -178,11 +180,7 @@ describe('MediaCard', () => {
     });
 
     it('does not render pass/fail indicator when pass is undefined', () => {
-      const item = createMockMediaItem({
-        context: {
-          evalId: 'eval-123',
-        },
-      });
+      const item = createMockMediaItem(createEvalContext());
       renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
       // Should not have percentage text

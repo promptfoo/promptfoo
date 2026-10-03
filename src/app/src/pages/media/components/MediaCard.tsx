@@ -43,8 +43,7 @@ export function MediaCard({
 
   // Build the full media URL including API base for dev mode
   const mediaUrl = useMemo(() => {
-    const baseUrl = getApiBaseUrl();
-    return `${baseUrl}${item.url}`;
+    return `${getApiBaseUrl()}${item.url}`;
   }, [item.url]);
 
   // Use IntersectionObserver to detect when card is visible
@@ -91,16 +90,6 @@ export function MediaCard({
     } else {
       onClick();
     }
-  };
-
-  const handleCheckboxClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onToggleSelection?.(item.hash);
-  };
-
-  const handleDownloadClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    downloadMediaItem(mediaUrl, item.hash, item.mimeType);
   };
 
   return (
@@ -169,7 +158,10 @@ export function MediaCard({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={handleDownloadClick}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  downloadMediaItem(mediaUrl, item.hash, item.mimeType);
+                }}
                 className={cn(
                   'absolute bottom-2 left-2 z-10 flex h-8 w-8 items-center justify-center [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
                   'rounded-md bg-black/60',
@@ -189,7 +181,10 @@ export function MediaCard({
         {isSelectionMode && (
           <button
             type="button"
-            onClick={handleCheckboxClick}
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              onToggleSelection?.(item.hash);
+            }}
             className={cn(
               'absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-md border-2 transition-all',
               isSelected

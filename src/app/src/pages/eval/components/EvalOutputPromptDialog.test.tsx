@@ -1,13 +1,45 @@
 import * as ReactDOM from 'react-dom/client';
 
+import {
+  getCallApiMock,
+  mockCallApiResponse,
+  rejectCallApi,
+  resetCallApiMock,
+} from '@app/tests/apiMocks';
 import { mockClipboard } from '@app/tests/browserMocks';
 import { useTestTimers } from '@app/tests/timers';
+import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCloudConfig } from '../../../tests/factories';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
+
+const createRetrievedCitation = () => ({
+  retrievedReferences: [
+    {
+      content: { text: 'Citation content' },
+      location: { s3Location: { uri: 'https://example.com' } },
+    },
+  ],
+});
+
+const createTrace = () => ({
+  traceId: 'trace-1',
+  testCaseId: 'test-case-id',
+  spans: [{ spanId: 'span-1', name: 'test-span' }],
+});
+
+vi.mock('@app/utils/api');
+
+beforeEach(() => {
+  resetCallApiMock();
+});
+afterEach(() => {
+  resetCallApiMock();
+});
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -35,13 +67,7 @@ const mockOnClose = vi.fn();
 const mockAddFilter = vi.fn();
 const mockResetFilters = vi.fn();
 const mockReplayEvaluation = vi.fn();
-const mockFetchTraces = vi.fn().mockResolvedValue([
-  {
-    traceId: 'trace-1',
-    testCaseId: 'test-case-id',
-    spans: [{ spanId: 'span-1', name: 'test-span' }],
-  },
-]);
+const mockFetchTraces = vi.fn().mockResolvedValue([createTrace()]);
 
 const mockCloudConfig = {
   appUrl: 'https://cloud.example.com',
@@ -246,16 +272,7 @@ describe('EvalOutputPromptDialog', () => {
       ...defaultProps,
       metadata: {
         ...defaultProps.metadata,
-        citations: [
-          {
-            retrievedReferences: [
-              {
-                content: { text: 'Citation content' },
-                location: { s3Location: { uri: 'https://example.com' } },
-              },
-            ],
-          },
-        ],
+        citations: [createRetrievedCitation()],
       },
     };
 
@@ -537,16 +554,7 @@ describe('EvalOutputPromptDialog', () => {
       output: undefined,
       replayOutput: undefined,
       metadata: {
-        citations: [
-          {
-            retrievedReferences: [
-              {
-                content: { text: 'Citation content' },
-                location: { s3Location: { uri: 'https://example.com' } },
-              },
-            ],
-          },
-        ],
+        citations: [createRetrievedCitation()],
       },
     };
 
@@ -828,10 +836,10 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
   });
 
   it('should display replay output when successful', async () => {
-    const customReplay = vi.fn().mockResolvedValue({ output: 'Replayed output text' });
+    mockCallApiResponse({ output: 'Replayed output text' });
     const propsWithReplay = {
       ...defaultProps,
-      onReplay: customReplay,
+      onReplay: replayEvaluation,
     };
 
     renderWithProviders(<EvalOutputPromptDialog {...propsWithReplay} />);
@@ -850,10 +858,10 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
   });
 
   it('should display error when replay fails', async () => {
-    const customReplay = vi.fn().mockResolvedValue({ error: 'Replay failed' });
+    mockCallApiResponse('Replay failed', { ok: false });
     const propsWithReplay = {
       ...defaultProps,
-      onReplay: customReplay,
+      onReplay: replayEvaluation,
     };
 
     renderWithProviders(<EvalOutputPromptDialog {...propsWithReplay} />);
@@ -893,10 +901,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
 
 describe('EvalOutputPromptDialog cloud config', () => {
   it('Should not render policy link if policy is not reusable', async () => {
-    const customCloudConfig = {
-      appUrl: 'https://custom.cloud.com',
-      isEnabled: true,
-    };
+    const customCloudConfig = createCloudConfig('https://custom.cloud.com');
     const propsWithCustomConfig = {
       ...defaultProps,
       cloudConfig: customCloudConfig,
@@ -916,10 +921,7 @@ describe('EvalOutputPromptDialog cloud config', () => {
   });
 
   it('Should render policy link if policyId is a uuid (reusable policy)', async () => {
-    const customCloudConfig = {
-      appUrl: 'https://custom.cloud.com',
-      isEnabled: true,
-    };
+    const customCloudConfig = createCloudConfig('https://custom.cloud.com');
     const propsWithCustomConfig = {
       ...defaultProps,
       cloudConfig: customCloudConfig,
@@ -1098,16 +1100,13 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
   });
 
   it('should show Traces tab when fetchTraces returns trace data', async () => {
+    mockCallApiResponse({
+      traces: [createTrace()],
+    });
     const propsWithTraces = {
       ...defaultProps,
       evaluationId: 'test-eval-id',
-      fetchTraces: vi.fn().mockResolvedValue([
-        {
-          traceId: 'trace-1',
-          testCaseId: 'test-case-id',
-          spans: [{ spanId: 'span-1', name: 'test-span' }],
-        },
-      ]),
+      fetchTraces,
     };
 
     renderWithProviders(<EvalOutputPromptDialog {...propsWithTraces} />);
@@ -1119,19 +1118,29 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
   });
 
   it('should hide Traces tab when fetchTraces returns empty array', async () => {
+    mockCallApiResponse({ traces: [] });
     const propsWithoutTraces = {
       ...defaultProps,
       evaluationId: 'test-eval-id',
-      fetchTraces: vi.fn().mockResolvedValue([]),
+      fetchTraces,
     };
 
-    renderWithProviders(<EvalOutputPromptDialog {...propsWithoutTraces} />);
+    const { rerender, unmount } = renderWithProviders(
+      <EvalOutputPromptDialog {...propsWithoutTraces} />,
+    );
 
     // Wait for component to render and verify no Traces tab
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
     });
     expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+    const request = getCallApiMock().mock.calls[0];
+    expect(request[0]).toBe('/traces/evaluation/test-eval-id');
+    expect(request[1]?.signal?.aborted).toBe(false);
+    rerender(<EvalOutputPromptDialog {...propsWithoutTraces} output="Updated output" />);
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(request[1]?.signal?.aborted).toBe(true);
   });
 
   it('should hide Traces tab when fetchTraces is not provided', () => {
@@ -1158,10 +1167,11 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
   });
 
   it('should hide Traces tab when fetchTraces fails', async () => {
+    rejectCallApi(new Error('Fetch failed'));
     const propsWithFailedFetch = {
       ...defaultProps,
       evaluationId: 'test-eval-id',
-      fetchTraces: vi.fn().mockRejectedValue(new Error('Fetch failed')),
+      fetchTraces,
     };
 
     renderWithProviders(<EvalOutputPromptDialog {...propsWithFailedFetch} />);

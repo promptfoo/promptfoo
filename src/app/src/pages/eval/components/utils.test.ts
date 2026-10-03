@@ -1,6 +1,7 @@
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createGradingResult } from '../../../tests/factories';
 import {
   buildEvalOutputPromptHash,
   buildEvalUrlWithSearchParams,
@@ -14,6 +15,27 @@ import {
   useEvalDetailsHash,
 } from './utils';
 import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
+
+const createAutomatedGradingResultFixture = () => ({
+  pass: true,
+  score: 1,
+  reason: 'Overall rating',
+  componentResults: [
+    {
+      pass: true,
+      score: 1,
+      reason: 'Automated check',
+      assertion: { type: 'javascript' as const },
+    },
+  ],
+});
+
+const createEmptyComponentGradingResultFixture = () => ({
+  pass: true,
+  score: 1,
+  reason: 'Overall rating',
+  componentResults: [],
+});
 
 // Helper to create a base output object with all required properties
 const createBaseOutput = (): EvaluateTableOutput => ({
@@ -221,19 +243,7 @@ describe('hasHumanRating', () => {
   it('should return false when output has no human rating in componentResults', () => {
     const output: EvaluateTableOutput = {
       ...createBaseOutput(),
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'Overall rating',
-        componentResults: [
-          {
-            pass: true,
-            score: 1,
-            reason: 'Automated check',
-            assertion: { type: 'javascript' },
-          },
-        ],
-      },
+      gradingResult: createAutomatedGradingResultFixture(),
     };
 
     expect(hasHumanRating(output)).toBe(false);
@@ -255,11 +265,7 @@ describe('hasHumanRating', () => {
   it('should return false when componentResults is missing', () => {
     const output: EvaluateTableOutput = {
       ...createBaseOutput(),
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'Overall rating',
-      },
+      gradingResult: createGradingResult(true, 1, 'Overall rating'),
     };
 
     expect(hasHumanRating(output)).toBe(false);
@@ -268,12 +274,7 @@ describe('hasHumanRating', () => {
   it('should return false when componentResults is empty', () => {
     const output: EvaluateTableOutput = {
       ...createBaseOutput(),
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'Overall rating',
-        componentResults: [],
-      },
+      gradingResult: createEmptyComponentGradingResultFixture(),
     };
 
     expect(hasHumanRating(output)).toBe(false);
@@ -364,19 +365,7 @@ describe('getHumanRating', () => {
   it('should return undefined when no human rating exists', () => {
     const output: EvaluateTableOutput = {
       ...createBaseOutput(),
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'Overall rating',
-        componentResults: [
-          {
-            pass: true,
-            score: 1,
-            reason: 'Automated check',
-            assertion: { type: 'javascript' },
-          },
-        ],
-      },
+      gradingResult: createAutomatedGradingResultFixture(),
     };
 
     expect(getHumanRating(output)).toBeUndefined();
@@ -398,11 +387,7 @@ describe('getHumanRating', () => {
   it('should return undefined when componentResults is missing', () => {
     const output: EvaluateTableOutput = {
       ...createBaseOutput(),
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'Overall rating',
-      },
+      gradingResult: createGradingResult(true, 1, 'Overall rating'),
     };
 
     expect(getHumanRating(output)).toBeUndefined();
@@ -411,12 +396,7 @@ describe('getHumanRating', () => {
   it('should return undefined when componentResults is empty', () => {
     const output: EvaluateTableOutput = {
       ...createBaseOutput(),
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'Overall rating',
-        componentResults: [],
-      },
+      gradingResult: createEmptyComponentGradingResultFixture(),
     };
 
     expect(getHumanRating(output)).toBeUndefined();

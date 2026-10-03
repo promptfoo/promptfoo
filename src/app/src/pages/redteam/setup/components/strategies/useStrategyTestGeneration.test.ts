@@ -4,6 +4,10 @@ import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 import { useStrategyTestGeneration } from './useStrategyTestGeneration';
 
+const createMetaStrategyOptions = () => ({
+  strategyId: 'jailbreak:meta' as const,
+});
+
 vi.mock('../../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: vi.fn(),
 }));
@@ -49,11 +53,7 @@ describe('useStrategyTestGeneration', () => {
       },
     } as ReturnType<typeof useRedTeamConfig>);
 
-    const { result } = renderHook(() =>
-      useStrategyTestGeneration({
-        strategyId: 'jailbreak:meta',
-      }),
-    );
+    const { result } = renderHook(() => useStrategyTestGeneration(createMetaStrategyOptions()));
 
     await act(async () => {
       await result.current.handleTestCaseGeneration();
@@ -86,11 +86,7 @@ describe('useStrategyTestGeneration', () => {
       },
     } as ReturnType<typeof useRedTeamConfig>);
 
-    const { result } = renderHook(() =>
-      useStrategyTestGeneration({
-        strategyId: 'jailbreak:meta',
-      }),
-    );
+    const { result } = renderHook(() => useStrategyTestGeneration(createMetaStrategyOptions()));
 
     await act(async () => {
       await result.current.handleTestCaseGeneration();
@@ -119,11 +115,7 @@ describe('useStrategyTestGeneration', () => {
       },
     } as ReturnType<typeof useRedTeamConfig>);
 
-    const { result } = renderHook(() =>
-      useStrategyTestGeneration({
-        strategyId: 'jailbreak:meta',
-      }),
-    );
+    const { result } = renderHook(() => useStrategyTestGeneration(createMetaStrategyOptions()));
 
     await act(async () => {
       await result.current.handleTestCaseGeneration();

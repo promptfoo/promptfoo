@@ -1,6 +1,5 @@
 /// <reference types="vitest/config" />
 
-import { fileURLToPath } from 'node:url';
 import os from 'os';
 import path from 'path';
 
@@ -14,8 +13,6 @@ import {
   vendorCodeSplittingGroups,
 } from './vite.shared';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 // Calculate max forks for test parallelization
 const cpuCount = os.cpus().length;
 // Use more cores in CI where performance is critical
@@ -24,38 +21,6 @@ const maxForks = process.env.CI
   : Math.max(cpuCount - 2, 2); // Leave headroom for system locally
 
 const API_PORT = process.env.API_PORT || '15500';
-
-const ignoredTestConsolePatterns = [
-  /^Warning: .*not wrapped in act/,
-  /^An update to .*not wrapped in act/,
-  /^(Warning: )?The current testing environment is not configured to support act/,
-  /^Warning: Received NaN for the `children` attribute/,
-  /^Error checking ModelAudit installation:/,
-  /^Error loading eval:/,
-  /^Failed to fetch datasets:/,
-  /^Error parsing file:/,
-  /^deeply nested key "metrics\.score" returned undefined/,
-  /^Logout failed/,
-  /^Error during logout:/,
-  /^Error fetching user email:/,
-  /^Failed to parse YAML:/,
-  /^Invalid JSON configuration:/,
-  /^Error fetching eval data:/,
-  /^Error fetching metadata keys:/,
-  /^Error parsing CSV:/,
-  /^No worst strategy found for plugin/,
-  /^Failed to delete eval:/,
-  /^EnterpriseBanner: No evalId provided/,
-  /^Error checking cloud status:/,
-  /^Error setting email:/,
-  /^Error checking email status:/,
-  /^Error clearing email:/,
-  /^Error fetching cloud config:/,
-  /^Failed to copy text:/,
-  /^Failed to check share domain:/,
-  /^Failed to generate share URL/,
-  /^Error during target purpose discovery:/,
-];
 
 const showTestConsoleOutput =
   process.env.PROMPTFOO_TEST_SHOW_OUTPUT === 'true' ||
@@ -83,8 +48,8 @@ export default {
   ],
   resolve: {
     alias: {
-      '@app': path.resolve(__dirname, './src'),
-      '@promptfoo': path.resolve(__dirname, '../'),
+      '@app': path.resolve(import.meta.dirname, './src'),
+      '@promptfoo': path.resolve(import.meta.dirname, '../'),
     },
   },
   optimizeDeps: {
@@ -147,7 +112,37 @@ export default {
       if (
         !showTestConsoleOutput &&
         type === 'stderr' &&
-        ignoredTestConsolePatterns.some((pattern) => pattern.test(log.trimStart()))
+        [
+          /^Warning: .*not wrapped in act/,
+          /^An update to .*not wrapped in act/,
+          /^(Warning: )?The current testing environment is not configured to support act/,
+          /^Warning: Received NaN for the `children` attribute/,
+          /^Error checking ModelAudit installation:/,
+          /^Error loading eval:/,
+          /^Failed to fetch datasets:/,
+          /^Error parsing file:/,
+          /^deeply nested key "metrics\.score" returned undefined/,
+          /^Logout failed/,
+          /^Error during logout:/,
+          /^Error fetching user email:/,
+          /^Failed to parse YAML:/,
+          /^Invalid JSON configuration:/,
+          /^Error fetching eval data:/,
+          /^Error fetching metadata keys:/,
+          /^Error parsing CSV:/,
+          /^No worst strategy found for plugin/,
+          /^Failed to delete eval:/,
+          /^EnterpriseBanner: No evalId provided/,
+          /^Error checking cloud status:/,
+          /^Error setting email:/,
+          /^Error checking email status:/,
+          /^Error clearing email:/,
+          /^Error fetching cloud config:/,
+          /^Failed to copy text:/,
+          /^Failed to check share domain:/,
+          /^Failed to generate share URL/,
+          /^Error during target purpose discovery:/,
+        ].some((pattern) => pattern.test(log.trimStart()))
       ) {
         return false;
       }

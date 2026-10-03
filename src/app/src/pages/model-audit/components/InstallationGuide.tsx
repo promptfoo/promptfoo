@@ -3,13 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
-import {
-  CheckCircleIcon,
-  ContentCopyIcon,
-  OpenInNewIcon,
-  WarningIcon,
-} from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import {
+  CheckCircle as CheckCircleIcon,
+  Copy as ContentCopyIcon,
+  ExternalLink as OpenInNewIcon,
+  AlertTriangle as WarningIcon,
+} from 'lucide-react';
 
 interface InstallationGuideProps {
   onRetryCheck: () => void;

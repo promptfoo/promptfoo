@@ -67,45 +67,6 @@ export default function UpdateBanner() {
     }
   }, [copied]);
 
-  const handleCopyCommand = async () => {
-    const command = versionInfo?.updateCommands?.primary;
-
-    if (command) {
-      const onSuccess = () => {
-        setCopied(true);
-      };
-
-      try {
-        await navigator.clipboard.writeText(command);
-        onSuccess();
-      } catch (err) {
-        // Fallback for browsers that don't support clipboard API or when it fails
-        console.error('Failed to copy to clipboard:', err);
-        // Create a temporary textarea element as fallback
-        const textarea = document.createElement('textarea');
-        textarea.value = command;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        try {
-          // execCommand reports rejection via its return value, not by throwing. Without this
-          // check a refused copy would still render the "Copied!" success state.
-          if (!document.execCommand('copy')) {
-            throw new Error('Fallback copy command was rejected');
-          }
-          onSuccess();
-        } catch (fallbackError) {
-          console.error('Fallback copy also failed:', fallbackError);
-          // Show the command in an alert as last resort
-          alert(`Failed to copy. Command: ${command}`);
-        } finally {
-          document.body.removeChild(textarea);
-        }
-      }
-    }
-  };
-
   // Don't show banner if loading, error, no update available, or dismissed
   if (!shouldShowBanner) {
     return null;
@@ -174,7 +135,44 @@ export default function UpdateBanner() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleCopyCommand}
+              onClick={async () => {
+                const command = versionInfo?.updateCommands?.primary;
+
+                if (command) {
+                  const onSuccess = () => {
+                    setCopied(true);
+                  };
+
+                  try {
+                    await navigator.clipboard.writeText(command);
+                    onSuccess();
+                  } catch (err) {
+                    // Fallback for browsers that don't support clipboard API or when it fails
+                    console.error('Failed to copy to clipboard:', err);
+                    // Create a temporary textarea element as fallback
+                    const textarea = document.createElement('textarea');
+                    textarea.value = command;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    try {
+                      // execCommand reports rejection via its return value, not by throwing. Without this
+                      // check a refused copy would still render the "Copied!" success state.
+                      if (!document.execCommand('copy')) {
+                        throw new Error('Fallback copy command was rejected');
+                      }
+                      onSuccess();
+                    } catch (fallbackError) {
+                      console.error('Fallback copy also failed:', fallbackError);
+                      // Show the command in an alert as last resort
+                      alert(`Failed to copy. Command: ${command}`);
+                    } finally {
+                      document.body.removeChild(textarea);
+                    }
+                  }
+                }
+              }}
               title={versionInfo.updateCommands.primary}
               className="gap-1.5 text-xs"
             >

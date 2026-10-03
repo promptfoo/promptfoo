@@ -2,11 +2,16 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Card, CardContent } from '@app/components/ui/card';
-import { CheckCircleIcon, ErrorIcon, RefreshIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
+import {
+  CheckCircle as CheckCircleIcon,
+  XCircle as ErrorIcon,
+  RefreshCw as RefreshIcon,
+  Settings as SettingsIcon,
+} from 'lucide-react';
 import { useNavigate } from 'react-router';
 import AdvancedOptionsDialog from '../model-audit/components/AdvancedOptionsDialog';
 import ConfigurationTab from '../model-audit/components/ConfigurationTab';

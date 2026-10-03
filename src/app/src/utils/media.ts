@@ -41,10 +41,6 @@ export type BlobLike =
       hash?: string;
     };
 
-function normalizePath(path: string): string {
-  return path.replace(/^\//, '');
-}
-
 function withApiBase(apiPath: string): string {
   const base = getApiBaseUrl();
   return base ? `${base}${apiPath}` : apiPath;
@@ -89,8 +85,7 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   }
 
   if (uri.startsWith(STORAGE_REF_PREFIX)) {
-    const path = normalizePath(uri.slice(STORAGE_REF_PREFIX.length));
-    return withApiBase(`/api/media/${path}`);
+    return withApiBase(`/api/media/${uri.slice(STORAGE_REF_PREFIX.length).replace(/^\//, '')}`);
   }
 
   // Only allow safe internal paths and data URIs
@@ -134,10 +129,9 @@ export function resolveAudioSource(
   }
 
   const format = audio?.format || 'mp3';
-  const src = data.startsWith('data:audio') ? data : `data:audio/${format};base64,${data}`;
 
   return {
-    src,
+    src: data.startsWith('data:audio') ? data : `data:audio/${format};base64,${data}`,
     type: `audio/${format}`,
   };
 }
@@ -149,9 +143,6 @@ export function resolveImageSource(
     const blobUrl = resolveBlobUri(image);
     if (blobUrl) {
       return blobUrl;
-    }
-    if (image.startsWith('data:')) {
-      return image;
     }
     // Allow base64-ish payloads that are purely non-whitespace and use common base64/url-safe chars
     // Require a minimum length to avoid misclassifying short strings (e.g., session IDs) as images.
@@ -195,21 +186,20 @@ export function resolveVideoSource(
   }
 
   // Try blob reference first, then storage reference, then URL
-  const src =
-    resolveBlobRef(video.blobRef) ||
-    (video.storageRef?.key
-      ? withApiBase(`/api/media/${normalizePath(video.storageRef.key)}`)
-      : undefined) ||
-    resolveMediaUrl(video.url);
+  let src = resolveBlobRef(video.blobRef);
+  if (!src && video.storageRef?.key) {
+    const path = video.storageRef.key;
+    src = withApiBase(`/api/media/${path.replace(/^\//, '')}`);
+  }
+  src ||= resolveMediaUrl(video.url);
 
   if (!src) {
     return null;
   }
 
-  const format = video.format || 'mp4';
   return {
     src,
-    type: `video/${format}`,
+    type: `video/${video.format || 'mp4'}`,
     poster: resolveMediaUrl(video.thumbnail),
   };
 }
@@ -217,7 +207,9 @@ export function resolveVideoSource(
 export function normalizeMediaText(text: string): string {
   return text
     .replace(BLOB_URI_REGEX, (_match, hash) => withApiBase(`/api/blobs/${hash}`))
-    .replace(STORAGE_REF_REGEX, (_match, path) => withApiBase(`/api/media/${normalizePath(path)}`));
+    .replace(STORAGE_REF_REGEX, (_match, path) =>
+      withApiBase(`/api/media/${path.replace(/^\//, '')}`),
+    );
 }
 
 /**
@@ -228,9 +220,8 @@ export function formatBytes(bytes: number, decimals = 1): string {
     return '0 B';
   }
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${['B', 'KB', 'MB', 'GB', 'TB'][i]}`;
 }
 
 /**
@@ -273,9 +264,7 @@ export function formatCost(cost: number): string {
 export function hashToNumber(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0; // Convert to 32-bit integer
   }
   return Math.abs(hash);
 }
@@ -284,36 +273,24 @@ export function hashToNumber(str: string): number {
 // Media Kind Utilities
 // ============================================================================
 
+const MEDIA_KINDS = new Map<MediaKind, { icon: typeof ImageIcon; label: string }>([
+  ['image', { icon: ImageIcon, label: 'Image' }],
+  ['video', { icon: Video, label: 'Video' }],
+  ['audio', { icon: Music, label: 'Audio' }],
+]);
+
 /**
  * Get the appropriate Lucide icon component for a media kind
  */
 export function getKindIcon(kind: MediaKind): typeof ImageIcon {
-  switch (kind) {
-    case 'image':
-      return ImageIcon;
-    case 'video':
-      return Video;
-    case 'audio':
-      return Music;
-    default:
-      return FileIcon;
-  }
+  return MEDIA_KINDS.get(kind)?.icon ?? FileIcon;
 }
 
 /**
  * Get human-readable label for a media kind
  */
 export function getKindLabel(kind: MediaKind): string {
-  switch (kind) {
-    case 'image':
-      return 'Image';
-    case 'video':
-      return 'Video';
-    case 'audio':
-      return 'Audio';
-    default:
-      return 'File';
-  }
+  return MEDIA_KINDS.get(kind)?.label ?? 'File';
 }
 
 // ============================================================================
@@ -368,6 +345,5 @@ export function downloadFile(url: string, filename: string): void {
  * Convenience wrapper around downloadFile.
  */
 export function downloadMediaItem(url: string, hash: string, mimeType: string): void {
-  const filename = generateMediaFilename(hash, mimeType);
-  downloadFile(url, filename);
+  downloadFile(url, generateMediaFilename(hash, mimeType));
 }

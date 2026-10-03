@@ -3,11 +3,14 @@ import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useUserStore } from './userStore';
 
+const createServerErrorResponseFixture = () => ({
+  ok: false,
+  status: 500,
+});
+
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 const mockedCallApi = callApi as Mock;
@@ -55,10 +58,7 @@ describe('useUserStore', () => {
       {
         name: 'non-200 status code (e.g. 500)',
         mockSetup: () => {
-          mockedCallApi.mockResolvedValue({
-            ok: false,
-            status: 500,
-          });
+          mockedCallApi.mockResolvedValue(createServerErrorResponseFixture());
           return { expectedEmail: null };
         },
       },
@@ -156,25 +156,11 @@ describe('useUserStore', () => {
     });
   });
 
-  describe('setUserId', () => {
-    it('should update the userId state when setUserId is called with a valid userId string', () => {
-      const testUserId = 'test-user-id';
-
-      verifyUserIdState(null);
-
-      act(() => {
-        useUserStore.getState().setUserId(testUserId);
-      });
-
-      verifyUserIdState(testUserId);
-    });
-  });
-
   describe('logout', () => {
     it('should clear user state on successful logout', async () => {
       // Set initial state
       useUserStore.getState().setEmail('test@example.com');
-      useUserStore.getState().setUserId('test-user-id');
+      useUserStore.setState({ userId: 'test-user-id' });
 
       verifyEmailState('test@example.com');
       verifyUserIdState('test-user-id');
@@ -196,12 +182,9 @@ describe('useUserStore', () => {
     it('should clear user state even on logout API failure', async () => {
       // Set initial state
       useUserStore.getState().setEmail('test@example.com');
-      useUserStore.getState().setUserId('test-user-id');
+      useUserStore.setState({ userId: 'test-user-id' });
 
-      mockedCallApi.mockResolvedValue({
-        ok: false,
-        status: 500,
-      });
+      mockedCallApi.mockResolvedValue(createServerErrorResponseFixture());
 
       await act(async () => {
         await useUserStore.getState().logout();
@@ -233,7 +216,7 @@ describe('useUserStore', () => {
     it('should immediately clear user state', () => {
       // Set initial state
       useUserStore.getState().setEmail('test@example.com');
-      useUserStore.getState().setUserId('test-user-id');
+      useUserStore.setState({ userId: 'test-user-id' });
 
       act(() => {
         useUserStore.getState().clearUser();

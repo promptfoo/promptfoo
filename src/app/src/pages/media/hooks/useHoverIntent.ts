@@ -24,27 +24,6 @@ interface UseHoverIntentResult {
 }
 
 /**
- * Detects whether the user has a hover-capable device.
- * Returns false for touch-only devices.
- */
-function hasHoverCapability(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  return window.matchMedia('(hover: hover)').matches;
-}
-
-/**
- * Checks if the user prefers reduced motion.
- */
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-/**
  * Hook for detecting intentional hover with configurable delay.
  * Useful for triggering actions only when user deliberately hovers.
  *
@@ -65,7 +44,21 @@ export function useHoverIntent({
 
   // Check device capabilities and user preferences
   const isEffectivelyEnabled =
-    enabled && hasHoverCapability() && !(respectReducedMotion && prefersReducedMotion());
+    enabled &&
+    /**
+     * Detects whether the user has a hover-capable device.
+     * Returns false for touch-only devices.
+     */
+    typeof window !== 'undefined' &&
+    window.matchMedia('(hover: hover)').matches &&
+    !(
+      respectReducedMotion &&
+      /**
+       * Checks if the user prefers reduced motion.
+       */
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    );
 
   const markIntentional = useCallback(() => {
     timeoutRef.current = undefined;
@@ -82,60 +75,40 @@ export function useHoverIntent({
   // Clear timeout on unmount
   useEffect(() => {
     return () => {
-      if (timeoutRef.current !== undefined) {
-        clearTimeout(timeoutRef.current);
-      }
+      clearTimeout(timeoutRef.current);
     };
   }, []);
 
-  const onMouseEnter = useCallback(() => {
-    if (!isEffectivelyEnabled) {
-      return;
-    }
+  const startHover = useCallback(
+    (keyboard: boolean) => {
+      if (!isEffectivelyEnabled) {
+        return;
+      }
 
-    setIsHovering(true);
-    timeoutRef.current = window.setTimeout(markIntentional, delay);
-  }, [isEffectivelyEnabled, delay, markIntentional]);
+      setIsHovering(true);
+      // For keyboard users, we can be more immediate
+      timeoutRef.current = window.setTimeout(markIntentional, keyboard ? delay / 2 : delay);
+    },
+    [isEffectivelyEnabled, delay, markIntentional],
+  );
 
   const onMouseLeave = useCallback(() => {
     setIsHovering(false);
     setIsIntentional(false);
 
-    if (timeoutRef.current !== undefined) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = undefined;
-    }
-  }, []);
-
-  // Support keyboard focus for accessibility
-  const onFocus = useCallback(() => {
-    if (!isEffectivelyEnabled) {
-      return;
-    }
-
-    setIsHovering(true);
-    // For keyboard users, we can be more immediate
-    timeoutRef.current = window.setTimeout(markIntentional, delay / 2);
-  }, [isEffectivelyEnabled, delay, markIntentional]);
-
-  const onBlur = useCallback(() => {
-    setIsHovering(false);
-    setIsIntentional(false);
-
-    if (timeoutRef.current !== undefined) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = undefined;
-    }
+    clearTimeout(timeoutRef.current);
+    timeoutRef.current = undefined;
   }, []);
 
   return {
     isHovering,
     isIntentional: isEffectivelyEnabled && isIntentional,
     hoverProps: {
-      onMouseEnter,
+      onMouseEnter: useCallback(() => startHover(false), [startHover]),
       onMouseLeave,
-      onFocus,
-      onBlur,
+      // Support keyboard focus for accessibility
+      onFocus: useCallback(() => startHover(true), [startHover]),
+      onBlur: onMouseLeave,
     },
   };
 }

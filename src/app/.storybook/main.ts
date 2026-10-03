@@ -3,8 +3,6 @@ import { fileURLToPath } from 'url';
 
 import type { StorybookConfig } from '@storybook/react-vite';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 /**
  * This function is used to resolve the absolute path of a package.
  * It is needed in projects that use Yarn PnP or are set up within a monorepo.
@@ -29,8 +27,8 @@ const config: StorybookConfig = {
         ...config.resolve,
         alias: {
           ...config.resolve?.alias,
-          '@app': path.resolve(__dirname, '../src'),
-          '@promptfoo': path.resolve(__dirname, '../../'),
+          '@app': path.resolve(import.meta.dirname, '../src'),
+          '@promptfoo': path.resolve(import.meta.dirname, '../../'),
         },
       },
     };

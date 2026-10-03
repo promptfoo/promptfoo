@@ -5,9 +5,16 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { createUnconfiguredProvider } from '../../../../../tests/factories';
 import ProviderTypeSelector from './ProviderTypeSelector';
 
 import type { ProviderOptions } from '../../types';
+
+const createLabeledProvider = (id: string, label: string) => ({
+  id,
+  label,
+  config: {},
+});
 
 const renderWithTooltipProvider = (ui: React.ReactElement) => {
   return render(<TooltipProvider>{ui}</TooltipProvider>);
@@ -91,11 +98,7 @@ describe('ProviderTypeSelector', () => {
   it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createLabeledProvider('http', 'My Test Provider');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector
@@ -159,10 +162,7 @@ describe('ProviderTypeSelector', () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
@@ -244,10 +244,7 @@ describe('ProviderTypeSelector', () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
@@ -295,10 +292,7 @@ describe('ProviderTypeSelector', () => {
   it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', () => {
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     const availableProviderIds = ['http', 'python', 'openai'];
 
@@ -360,10 +354,7 @@ describe('ProviderTypeSelector', () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
@@ -424,11 +415,7 @@ describe('ProviderTypeSelector', () => {
   it("should call setProvider with the correct Go provider configuration when the 'Go' card is selected", async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createLabeledProvider('http', 'My Test Provider');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector
@@ -578,11 +565,7 @@ describe('ProviderTypeSelector', () => {
 
   it('should update the selected provider when the providerType prop changes after initial render', () => {
     const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createLabeledProvider('http', 'My Test Provider');
 
     const { rerender } = renderWithTooltipProvider(
       <ProviderTypeSelector
@@ -618,10 +601,7 @@ describe('ProviderTypeSelector', () => {
 
   it('should handle the case where providerType is set to a value that does not exist in allProviderOptions array without crashing, and default to http', () => {
     const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector
@@ -633,14 +613,10 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
   });
-  it('should call setProvider with the correct configuration when an agentic framework is selected', async () => {
+  const verifyAgentFrameworkSelection = async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createLabeledProvider('http', 'My Test Provider');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector
@@ -673,15 +649,17 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('LangChain')).toBeVisible();
     expect(screen.getByText('Popular framework for LLM applications')).toBeVisible();
-  });
+  };
+
+  it(
+    'should call setProvider with the correct configuration when an agentic framework is selected',
+    verifyAgentFrameworkSelection,
+  );
 
   it('should filter provider options to show only agentic frameworks when the Agent Frameworks category chip is selected', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
@@ -715,10 +693,7 @@ describe('ProviderTypeSelector', () => {
       recordEvent: mockRecordEvent,
     });
 
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
@@ -747,47 +722,10 @@ describe('ProviderTypeSelector', () => {
 
   // Test removed - collapsed view and Change button no longer exist
 
-  it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', async () => {
-    const user = userEvent.setup();
-    const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
-      config: {},
-    };
-
-    renderWithTooltipProvider(
-      <ProviderTypeSelector
-        provider={initialProvider}
-        setProvider={mockSetProvider}
-        providerType="http"
-      />,
-    );
-
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
-
-    // Provider list is always expanded - no Change button needed
-
-    const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
-    expect(langchainProviderCard).toBeInTheDocument();
-
-    if (langchainProviderCard) {
-      await user.click(langchainProviderCard);
-    }
-
-    expect(mockSetProvider).toHaveBeenCalledWith(
-      {
-        id: 'file:///path/to/langchain_agent.py',
-        config: {},
-        label: 'My Test Provider',
-      },
-      'langchain',
-    );
-
-    expect(screen.getByText('LangChain')).toBeVisible();
-    expect(screen.getByText('Popular framework for LLM applications')).toBeVisible();
-  });
+  it(
+    'should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected',
+    verifyAgentFrameworkSelection,
+  );
 
   it('should correctly transform provider configuration when switching from a non-agent provider to an agent provider, preserving the provider label', async () => {
     const user = userEvent.setup();
@@ -847,10 +785,7 @@ describe('ProviderTypeSelector', () => {
       recordEvent: mockRecordEvent,
     });
 
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
@@ -888,10 +823,7 @@ describe('ProviderTypeSelector', () => {
       recordEvent: mockRecordEvent,
     });
 
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
@@ -913,10 +845,7 @@ describe('ProviderTypeSelector', () => {
   it('should reset the tag filter and display all provider options when the "All Tags" chip is clicked', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
@@ -936,11 +865,7 @@ describe('ProviderTypeSelector', () => {
   it('should clear the selectedTag and show all provider options when All filter is clicked', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createLabeledProvider('http', 'My Test Provider');
 
     renderWithTooltipProvider(
       <ProviderTypeSelector
@@ -967,10 +892,7 @@ describe('ProviderTypeSelector', () => {
   it('should filter provider options correctly when availableProviderIds, search term, and tag are all provided', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
-    const initialProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('');
 
     const availableProviderIds = ['langchain', 'autogen', 'http'];
 
@@ -1078,11 +1000,7 @@ describe('ProviderTypeSelector', () => {
     it('should use DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE constant for WebSocket transformResponse value', async () => {
       const user = userEvent.setup();
       const mockSetProvider = vi.fn();
-      const initialProvider: ProviderOptions = {
-        id: 'http',
-        label: 'Test Label',
-        config: {},
-      };
+      const initialProvider: ProviderOptions = createLabeledProvider('http', 'Test Label');
 
       renderWithTooltipProvider(
         <ProviderTypeSelector
@@ -1104,11 +1022,7 @@ describe('ProviderTypeSelector', () => {
     it('should use DEFAULT_WEBSOCKET_TIMEOUT_MS constant for WebSocket timeoutMs value', async () => {
       const user = userEvent.setup();
       const mockSetProvider = vi.fn();
-      const initialProvider: ProviderOptions = {
-        id: 'http',
-        label: 'Test Label',
-        config: {},
-      };
+      const initialProvider: ProviderOptions = createLabeledProvider('http', 'Test Label');
 
       renderWithTooltipProvider(
         <ProviderTypeSelector
@@ -1264,11 +1178,10 @@ describe('ProviderTypeSelector', () => {
     it('should preserve provider label when switching to MCP provider with new defaults', async () => {
       const user = userEvent.setup();
       const mockSetProvider = vi.fn();
-      const initialProvider: ProviderOptions = {
-        id: 'python',
-        label: 'Python Integration',
-        config: {},
-      };
+      const initialProvider: ProviderOptions = createLabeledProvider(
+        'python',
+        'Python Integration',
+      );
 
       renderWithTooltipProvider(
         <ProviderTypeSelector
@@ -1292,11 +1205,10 @@ describe('ProviderTypeSelector', () => {
     it('should use minimal defaults when switching to A2A provider', async () => {
       const user = userEvent.setup();
       const mockSetProvider = vi.fn();
-      const initialProvider: ProviderOptions = {
-        id: 'python',
-        label: 'Python Integration',
-        config: {},
-      };
+      const initialProvider: ProviderOptions = createLabeledProvider(
+        'python',
+        'Python Integration',
+      );
 
       renderWithTooltipProvider(
         <ProviderTypeSelector

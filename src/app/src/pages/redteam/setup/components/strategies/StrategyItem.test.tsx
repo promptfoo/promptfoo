@@ -8,15 +8,19 @@ import { StrategyItem } from './StrategyItem';
 
 import type { StrategyCardData } from './types';
 
+function createApplicationDefinition() {
+  return {
+    purpose: 'Test app',
+  };
+}
+
 // Mock dependencies
 vi.mock('../../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: vi.fn(() => ({
     config: {
       strategies: [],
       plugins: [],
-      applicationDefinition: {
-        purpose: 'Test app',
-      },
+      applicationDefinition: createApplicationDefinition(),
       target: null,
     },
     updateConfig: vi.fn(),
@@ -59,9 +63,7 @@ describe('StrategyItem', () => {
       prompts: ['Test prompt'],
       strategies: [],
       plugins: [],
-      applicationDefinition: {
-        purpose: 'Test app',
-      },
+      applicationDefinition: createApplicationDefinition(),
       entities: [],
       target: null as any,
     };
@@ -114,9 +116,7 @@ describe('StrategyItem', () => {
         prompts: ['Test prompt'],
         strategies: [],
         plugins: [],
-        applicationDefinition: {
-          purpose: 'Test app',
-        },
+        applicationDefinition: createApplicationDefinition(),
         entities: [],
         target: null as any,
       };
@@ -338,9 +338,7 @@ describe('StrategyItem', () => {
         prompts: ['Test prompt'],
         strategies: [],
         plugins: [],
-        applicationDefinition: {
-          purpose: 'Test app',
-        },
+        applicationDefinition: createApplicationDefinition(),
         entities: [],
         target: null as any,
       };

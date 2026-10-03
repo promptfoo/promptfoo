@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { FileIcon, FolderIcon } from '@app/components/ui/icons';
+import { FileText as FileIcon, Folder as FolderIcon } from 'lucide-react';
 import { getIssueFilePath, isCriticalSeverity } from '../utils';
 
 import type { ScanPath, ScanResult } from '../ModelAudit.types';

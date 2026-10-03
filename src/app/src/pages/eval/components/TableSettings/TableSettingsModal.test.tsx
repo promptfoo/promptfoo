@@ -25,22 +25,10 @@ describe('TableSettingsModal', () => {
     onResultsTableZoomChange: mockOnResultsTableZoomChange,
   };
 
-  const mockSettingsState = (hasChanges: boolean) => {
-    vi.mocked(useSettingsState).mockReturnValue({
-      hasChanges,
-      resetToDefaults: mockResetToDefaults,
-      store: {} as any,
-      localMaxTextLength: 500,
-      setLocalMaxTextLength: vi.fn(),
-      handleSliderChange: vi.fn(),
-      handleSliderChangeCommitted: vi.fn(),
-    });
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockSettingsState(false);
+    vi.mocked(useSettingsState).mockReturnValue({ resetToDefaults: mockResetToDefaults });
   });
 
   it("should not render the settings dialog when 'open' is false", () => {
@@ -81,11 +69,6 @@ describe('TableSettingsModal', () => {
     expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 
-  it('should call useSettingsState with the correct initial open state', () => {
-    render(<TableSettingsModal {...defaultProps} />);
-    expect(useSettingsState).toHaveBeenCalledWith(true);
-  });
-
   it('should call onClose when the Done button is clicked', async () => {
     const user = userEvent.setup();
     render(<TableSettingsModal {...defaultProps} />);
@@ -109,18 +92,6 @@ describe('TableSettingsModal', () => {
     const settingsPanel = screen.getByTestId('mock-settings-panel');
     expect(settingsPanel.parentElement).toHaveClass('min-h-0', 'overflow-y-auto');
     expect(screen.getByRole('button', { name: 'Done' }).closest('div')).toHaveClass('shrink-0');
-  });
-
-  it('should call the onClose callback when the modal is closed unexpectedly with unsaved changes', async () => {
-    const user = userEvent.setup();
-    mockSettingsState(true);
-
-    render(<TableSettingsModal {...defaultProps} />);
-
-    const closeButton = screen.getByRole('button', { name: 'Close' });
-    await user.click(closeButton);
-
-    expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
   it('should handle prop changes while the modal is open', async () => {

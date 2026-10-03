@@ -41,6 +41,20 @@ export function AgenticStrategiesGroup({
     }
   };
 
+  const renderStrategy = (strategy: StrategyCardData) => (
+    <StrategyItem
+      key={strategy.id}
+      strategy={strategy}
+      isSelected={selectedIds.includes(strategy.id)}
+      onToggle={onToggle}
+      onConfigClick={onConfigClick}
+      isDisabled={isStrategyDisabled(strategy.id)}
+      isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+      isAuthGated={isStrategyAuthGated ? isStrategyAuthGated(strategy.id) : false}
+      isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
+    />
+  );
+
   return (
     <div className="mb-8">
       {/* Parent header */}
@@ -74,19 +88,7 @@ export function AgenticStrategiesGroup({
               These strategies work only for single-turn evaluations
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {singleTurnStrategies.map((strategy) => (
-                <StrategyItem
-                  key={strategy.id}
-                  strategy={strategy}
-                  isSelected={selectedIds.includes(strategy.id)}
-                  onToggle={onToggle}
-                  onConfigClick={onConfigClick}
-                  isDisabled={isStrategyDisabled(strategy.id)}
-                  isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-                  isAuthGated={isStrategyAuthGated ? isStrategyAuthGated(strategy.id) : false}
-                  isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
-                />
-              ))}
+              {singleTurnStrategies.map(renderStrategy)}
             </div>
           </div>
         )}
@@ -99,19 +101,7 @@ export function AgenticStrategiesGroup({
               These strategies can be used for both single and multi-turn evaluations
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {multiTurnStrategies.map((strategy) => (
-                <StrategyItem
-                  key={strategy.id}
-                  strategy={strategy}
-                  isSelected={selectedIds.includes(strategy.id)}
-                  onToggle={onToggle}
-                  onConfigClick={onConfigClick}
-                  isDisabled={isStrategyDisabled(strategy.id)}
-                  isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-                  isAuthGated={isStrategyAuthGated ? isStrategyAuthGated(strategy.id) : false}
-                  isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
-                />
-              ))}
+              {multiTurnStrategies.map(renderStrategy)}
             </div>
           </div>
         )}

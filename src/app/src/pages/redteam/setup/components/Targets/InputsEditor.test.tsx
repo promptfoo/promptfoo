@@ -4,8 +4,15 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSessionInputs } from '../../../../../tests/factories';
 import InputsEditor from './InputsEditor';
 import type { Inputs } from '@promptfoo/contracts';
+
+const createOrderedInputs = () => ({
+  first: 'First variable',
+  second: 'Second variable',
+  third: 'Third variable',
+});
 
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(<TooltipProvider>{ui}</TooltipProvider>);
@@ -221,10 +228,7 @@ describe('InputsEditor', () => {
       // This test verifies that if duplicate names somehow exist in the derived variables,
       // the error would be displayed. In practice, the Record model prevents this.
       // We test by providing initial inputs with similar names to verify the UI renders correctly.
-      const inputs = {
-        user_id: 'A user ID',
-        session_token: 'A session token',
-      };
+      const inputs = createSessionInputs('A user ID', 'A session token');
 
       renderWithProviders(
         <InputsEditor inputs={inputs} onChange={defaultProps.onChange} compact />,
@@ -337,10 +341,7 @@ describe('InputsEditor', () => {
     });
 
     it('should not show duplicate error for unique names', () => {
-      const inputs = {
-        user_id: 'A user ID',
-        session_token: 'A session token',
-      };
+      const inputs = createSessionInputs('A user ID', 'A session token');
 
       renderWithProviders(<InputsEditor {...defaultProps} inputs={inputs} compact />);
 
@@ -387,11 +388,7 @@ describe('InputsEditor', () => {
     it('should preserve object key order when renaming', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
-      const inputs = {
-        first: 'First variable',
-        second: 'Second variable',
-        third: 'Third variable',
-      };
+      const inputs = createOrderedInputs();
 
       renderWithProviders(<InputsEditor inputs={inputs} onChange={onChange} compact />);
 
@@ -441,11 +438,7 @@ describe('InputsEditor', () => {
     it('should handle renaming last variable while preserving order', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
-      const inputs = {
-        first: 'First variable',
-        second: 'Second variable',
-        third: 'Third variable',
-      };
+      const inputs = createOrderedInputs();
 
       renderWithProviders(<InputsEditor inputs={inputs} onChange={onChange} compact />);
 

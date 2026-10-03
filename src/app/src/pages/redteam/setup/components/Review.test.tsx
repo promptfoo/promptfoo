@@ -1,15 +1,39 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
-import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
+import {
+  checkEmailStatus as checkEmailStatusApi,
+  clearEmail,
+  saveEmail,
+} from '@app/utils/emailVerification';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCodingTarget } from '../../../../tests/factories';
 import Review from './Review';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
+
+function createPreflightRequest(preflightPromise: Promise<void>) {
+  return async (url: string) => {
+    if (url === '/redteam/status') {
+      await preflightPromise;
+      return { ok: true, json: async () => ({ hasRunningJob: false }) } as Response;
+    }
+    if (url === '/redteam/run') {
+      return { ok: true, json: async () => ({ id: 'unexpected-job' }) } as Response;
+    }
+    return { ok: true, json: async () => ({}) } as Response;
+  };
+}
+
+const createConfirmedHttpTarget = () => ({
+  id: 'http',
+  label: 'Confirmed HTTP target',
+  config: { url: 'https://example.test', body: '{{prompt}}' },
+});
 
 // Helper to render with required providers
 let rerenderWithProviders: (ui: React.ReactElement) => void;
@@ -30,10 +54,10 @@ const renderWithProviders = (ui: React.ReactElement) => {
 };
 
 // Mock the dependencies
-vi.mock('@app/hooks/useEmailVerification', () => ({
-  useEmailVerification: vi.fn(() => ({
-    checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-  })),
+vi.mock('@app/utils/emailVerification', () => ({
+  checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+  saveEmail: vi.fn(),
+  clearEmail: vi.fn(),
 }));
 
 vi.mock('@app/hooks/useTelemetry', () => ({
@@ -237,6 +261,15 @@ vi.mock('../hooks/useRedTeamTargetConfigValidation', () => ({
     },
   ),
 }));
+
+function createReleasePreflight(releasePreflight: () => void, preflightPromise: Promise<unknown>) {
+  return async () => {
+    releasePreflight();
+    await preflightPromise;
+    await Promise.resolve();
+    await Promise.resolve();
+  };
+}
 
 describe('Review Component', () => {
   let timers: TestTimers;
@@ -695,7 +728,7 @@ Application Details:
           }
           return { canProceed: true };
         });
-        vi.mocked(useEmailVerification).mockReturnValue({ checkEmailStatus } as any);
+        vi.mocked(checkEmailStatusApi, { partial: true }).mockImplementation(checkEmailStatus);
         vi.mocked(useRedteamJobStore).mockReturnValue({
           jobId: null,
           setJob: mockSetJob,
@@ -739,12 +772,7 @@ Application Details:
         };
         rendered.unmount();
 
-        await act(async () => {
-          releasePreflight();
-          await preflightPromise;
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await act(createReleasePreflight(releasePreflight, preflightPromise));
 
         expect(latestState.config.target.config).toEqual({
           sandbox_mode: 'danger-full-access',
@@ -759,19 +787,11 @@ Application Details:
       const user = userEvent.setup({ delay: null });
       const confirmedConfig = {
         ...defaultConfig,
-        target: {
-          id: 'http',
-          label: 'Confirmed HTTP target',
-          config: { url: 'https://example.test', body: '{{prompt}}' },
-        },
+        target: createConfirmedHttpTarget(),
       };
       const replacementConfig = {
         ...confirmedConfig,
-        target: {
-          id: 'openinterpreter',
-          label: 'Replacement coding target',
-          config: { sandbox_mode: 'danger-full-access' },
-        },
+        target: createCodingTarget('danger-full-access', 'Replacement coding target'),
       };
       let latestState: {
         config: typeof confirmedConfig | typeof replacementConfig;
@@ -790,25 +810,14 @@ Application Details:
       const preflightPromise = new Promise<void>((resolve) => {
         releasePreflight = resolve;
       });
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
       vi.mocked(useRedteamJobStore).mockReturnValue({
         jobId: null,
         setJob: mockSetJob,
         clearJob: mockClearJob,
         _hasHydrated: false,
       });
-      vi.mocked(callApi).mockImplementation(async (url: string) => {
-        if (url === '/redteam/status') {
-          await preflightPromise;
-          return { ok: true, json: async () => ({ hasRunningJob: false }) } as Response;
-        }
-        if (url === '/redteam/run') {
-          return { ok: true, json: async () => ({ id: 'unexpected-job' }) } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
+      vi.mocked(callApi).mockImplementation(createPreflightRequest(preflightPromise));
 
       const rendered = renderWithProviders(
         <Review
@@ -823,12 +832,7 @@ Application Details:
       latestState = { ...latestState, config: replacementConfig };
       rendered.unmount();
 
-      await act(async () => {
-        releasePreflight();
-        await preflightPromise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      await act(createReleasePreflight(releasePreflight, preflightPromise));
 
       expect(mockGetUnifiedConfig).not.toHaveBeenCalledWith(replacementConfig);
       expect(callApi).not.toHaveBeenCalledWith('/redteam/run', expect.anything());
@@ -857,25 +861,14 @@ Application Details:
       const preflightPromise = new Promise<void>((resolve) => {
         releasePreflight = resolve;
       });
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
       vi.mocked(useRedteamJobStore).mockReturnValue({
         jobId: null,
         setJob: mockSetJob,
         clearJob: mockClearJob,
         _hasHydrated: false,
       });
-      vi.mocked(callApi).mockImplementation(async (url: string) => {
-        if (url === '/redteam/status') {
-          await preflightPromise;
-          return { ok: true, json: async () => ({ hasRunningJob: false }) } as Response;
-        }
-        if (url === '/redteam/run') {
-          return { ok: true, json: async () => ({ id: 'unexpected-job' }) } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
+      vi.mocked(callApi).mockImplementation(createPreflightRequest(preflightPromise));
 
       const rendered = renderWithProviders(
         <Review
@@ -889,12 +882,7 @@ Application Details:
 
       confirmedConfig.target.config.url = 'wss://replacement.test/unsafe';
       rendered.unmount();
-      await act(async () => {
-        releasePreflight();
-        await preflightPromise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      await act(createReleasePreflight(releasePreflight, preflightPromise));
 
       expect(mockGetUnifiedConfig).not.toHaveBeenCalledWith(confirmedConfig);
       expect(callApi).not.toHaveBeenCalledWith('/redteam/run', expect.anything());
@@ -906,19 +894,11 @@ Application Details:
       const user = userEvent.setup({ delay: null });
       const confirmedConfig = {
         ...defaultConfig,
-        target: {
-          id: 'http',
-          label: 'Confirmed HTTP target',
-          config: { url: 'https://example.test', body: '{{prompt}}' },
-        },
+        target: createConfirmedHttpTarget(),
       };
       const replacementConfig = {
         ...confirmedConfig,
-        target: {
-          id: 'openinterpreter',
-          label: 'Replacement coding target',
-          config: { sandbox_mode: 'danger-full-access' },
-        },
+        target: createCodingTarget('danger-full-access', 'Replacement coding target'),
       };
       let latestState: {
         config: typeof confirmedConfig | typeof replacementConfig;
@@ -936,11 +916,9 @@ Application Details:
         .fn()
         .mockResolvedValueOnce({ canProceed: false, needsEmail: true })
         .mockResolvedValue({ canProceed: true });
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus,
-        saveEmail: vi.fn().mockResolvedValue({}),
-        clearEmail: vi.fn(),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockImplementation(checkEmailStatus as any);
+      vi.mocked(saveEmail).mockResolvedValue({});
+      vi.mocked(clearEmail).mockReset();
       vi.mocked(useRedteamJobStore).mockReturnValue({
         jobId: null,
         setJob: mockSetJob,
@@ -973,19 +951,11 @@ Application Details:
       const user = userEvent.setup({ delay: null });
       const confirmedConfig = {
         ...defaultConfig,
-        target: {
-          id: 'http',
-          label: 'Confirmed HTTP target',
-          config: { url: 'https://example.test', body: '{{prompt}}' },
-        },
+        target: createConfirmedHttpTarget(),
       };
       const replacementConfig = {
         ...confirmedConfig,
-        target: {
-          id: 'openinterpreter',
-          label: 'Replacement coding target',
-          config: { sandbox_mode: 'danger-full-access' },
-        },
+        target: createCodingTarget('danger-full-access', 'Replacement coding target'),
       };
       let latestState: {
         config: typeof confirmedConfig | typeof replacementConfig;
@@ -999,9 +969,7 @@ Application Details:
         targetConfigDraft: null as string | null,
       };
       mockUseRedTeamConfig.mockImplementation(() => latestState);
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
       vi.mocked(useRedteamJobStore).mockReturnValue({
         jobId: null,
         setJob: mockSetJob,
@@ -1399,9 +1367,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
 
       renderWithProviders(
         <Review
@@ -1436,9 +1402,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
 
       renderWithProviders(
         <Review
@@ -1469,9 +1433,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
 
       renderWithProviders(
         <Review
@@ -1503,9 +1465,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
 
       renderWithProviders(
         <Review
@@ -1545,9 +1505,7 @@ Application Details:
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
 
       renderWithProviders(
         <Review
@@ -1802,16 +1760,6 @@ Application Details:
     });
 
     it('should check for running job on mount', async () => {
-      vi.mocked(callApi).mockImplementation(async (url: string) => {
-        if (url === '/redteam/status') {
-          return {
-            ok: true,
-            json: async () => ({ hasRunningJob: false }),
-          } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
-
       renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
@@ -1974,9 +1922,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
 
       renderWithProviders(
         <Review
@@ -2032,9 +1978,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      vi.mocked(checkEmailStatusApi).mockResolvedValue({ canProceed: true } as any);
 
       renderWithProviders(
         <Review
@@ -2106,16 +2050,6 @@ Application Details:
         setJob: mockSetJob,
         clearJob: mockClearJob,
         _hasHydrated: false,
-      });
-
-      vi.mocked(callApi).mockImplementation(async (url: string) => {
-        if (url === '/redteam/status') {
-          return {
-            ok: true,
-            json: async () => ({ hasRunningJob: false }),
-          } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
       });
 
       renderWithProviders(

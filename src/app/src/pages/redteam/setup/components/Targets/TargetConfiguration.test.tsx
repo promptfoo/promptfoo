@@ -9,6 +9,12 @@ import TargetConfiguration from './TargetConfiguration';
 
 import type { ProviderConfigEditorProps } from './ProviderConfigEditor';
 
+const createProviderConfig = (id: string, label: string) => ({
+  target: { id, label, config: {} },
+  extensions: [],
+  prompts: [],
+});
+
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({
     recordEvent: vi.fn(),
@@ -72,11 +78,7 @@ describe('TargetConfiguration', () => {
     onBackMock = vi.fn();
 
     mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: { id: 'test-provider', label: 'Test Provider', config: {} },
-        extensions: [],
-        prompts: [],
-      },
+      config: createProviderConfig('test-provider', 'Test Provider'),
       updateConfig: mockUpdateConfig,
       providerType: 'http',
       updatePlugins: vi.fn(),
@@ -195,11 +197,7 @@ describe('TargetConfiguration', () => {
 
     it('should render OpenAI configuration when providerType is "openai"', () => {
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          target: { id: 'openai:gpt-4', label: 'OpenAI GPT-4', config: {} },
-          extensions: [],
-          prompts: [],
-        },
+        config: createProviderConfig('openai:gpt-4', 'OpenAI GPT-4'),
         updateConfig: mockUpdateConfig,
         providerType: 'openai',
       });
@@ -232,11 +230,7 @@ describe('TargetConfiguration', () => {
     it('should display error message when provider configuration has errors', async () => {
       const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          target: { id: 'test-provider', label: 'Test Provider', config: {} },
-          extensions: [],
-          prompts: [],
-        },
+        config: createProviderConfig('test-provider', 'Test Provider'),
         updateConfig: mockUpdateConfig,
         providerType: 'http',
       });
@@ -286,11 +280,7 @@ describe('TargetConfiguration', () => {
 
     it('should display documentation link for OpenAI provider', () => {
       mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          target: { id: 'openai:gpt-4', label: 'OpenAI GPT-4', config: {} },
-          extensions: [],
-          prompts: [],
-        },
+        config: createProviderConfig('openai:gpt-4', 'OpenAI GPT-4'),
         updateConfig: mockUpdateConfig,
         providerType: 'openai',
       });
@@ -304,11 +294,7 @@ describe('TargetConfiguration', () => {
 
   it('should not display the documentation alert when providerType is undefined', () => {
     mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: { id: 'test-provider', label: 'Test Provider', config: {} },
-        extensions: [],
-        prompts: [],
-      },
+      config: createProviderConfig('test-provider', 'Test Provider'),
       updateConfig: mockUpdateConfig,
       providerType: undefined,
     });
@@ -323,11 +309,7 @@ describe('TargetConfiguration', () => {
 
   it('should render correctly when providerType is "go"', () => {
     mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: { id: 'test-provider', label: 'Test Provider', config: {} },
-        extensions: [],
-        prompts: [],
-      },
+      config: createProviderConfig('test-provider', 'Test Provider'),
       updateConfig: mockUpdateConfig,
       providerType: 'go',
     });

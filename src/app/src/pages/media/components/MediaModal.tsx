@@ -50,7 +50,6 @@ function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
   const strokeWidth = 4;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress = score * circumference;
   const isPass = score >= 0.5;
   const percentage = Math.round(score * 100);
 
@@ -84,7 +83,7 @@ function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
           stroke="currentColor"
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
-          strokeDashoffset={circumference - progress}
+          strokeDashoffset={circumference - score * circumference}
           strokeLinecap="round"
           className={cn(
             'transition-all duration-500',
@@ -173,7 +172,6 @@ const prefersReducedMotion =
 export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const imageContainerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [expandedGraders, setExpandedGraders] = useState<Set<number>>(new Set());
   const [showDetails, setShowDetails] = useState(false);
@@ -230,8 +228,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
     if (!item) {
       return '';
     }
-    const baseUrl = getApiBaseUrl();
-    return `${baseUrl}${item.url}`;
+    return `${getApiBaseUrl()}${item.url}`;
   }, [item]);
 
   const handleDownload = useCallback(() => {
@@ -294,10 +291,6 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
         return;
       }
 
-      // Space on a focused button should activate the button natively,
-      // not be hijacked by the play/pause shortcut.
-      const isFocusedOnButton = target.tagName === 'BUTTON';
-
       switch (e.key) {
         case 'd':
         case 'D':
@@ -307,7 +300,9 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
           }
           break;
         case ' ':
-          if (!isFocusedOnButton && (item.kind === 'video' || item.kind === 'audio')) {
+          // Space on a focused button should activate the button natively,
+          // not be hijacked by the play/pause shortcut.
+          if (!(target.tagName === 'BUTTON') && (item.kind === 'video' || item.kind === 'audio')) {
             e.preventDefault();
             const mediaEl = item.kind === 'video' ? videoRef.current : audioRef.current;
             if (mediaEl) {
@@ -407,11 +402,9 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
       const clientY = e.clientY;
 
       rafRef.current = requestAnimationFrame(() => {
-        const dx = clientX - dragStartRef.current.x;
-        const dy = clientY - dragStartRef.current.y;
         setPanPosition({
-          x: panStartRef.current.x + dx,
-          y: panStartRef.current.y + dy,
+          x: panStartRef.current.x + (clientX - dragStartRef.current.x),
+          y: panStartRef.current.y + (clientY - dragStartRef.current.y),
         });
         rafRef.current = undefined;
       });
@@ -482,7 +475,6 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
 
             {item.kind === 'image' && (
               <div
-                ref={imageContainerRef}
                 className={cn(
                   'relative w-full h-full flex items-center justify-center',
                   zoomLevel > MEDIA_MIN_ZOOM ? 'cursor-grab' : 'cursor-zoom-in',

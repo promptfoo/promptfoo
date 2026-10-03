@@ -6,6 +6,29 @@ import TargetTypeSelection from './TargetTypeSelection';
 
 import type { ProviderOptions } from '../../types';
 
+function expectTargetChangeEvent() {
+  expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+    feature: 'redteam_config_target_type_changed',
+    target: expect.stringContaining('openai'),
+  });
+}
+
+function createDefaultHttpTarget() {
+  return {
+    id: 'http',
+    label: '',
+    config: {},
+  };
+}
+
+const createTargetConfig = (id: string, label: string) => ({
+  target: {
+    id,
+    label,
+    config: {},
+  },
+});
+
 const mockUpdateConfig = vi.fn();
 const mockUseRedTeamConfig = vi.fn();
 const mockTargetConfigValidation = vi.hoisted(() => ({
@@ -13,11 +36,7 @@ const mockTargetConfigValidation = vi.hoisted(() => ({
 }));
 vi.mock('../../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: () => mockUseRedTeamConfig(),
-  DEFAULT_HTTP_TARGET: {
-    id: 'http',
-    label: '',
-    config: {},
-  },
+  DEFAULT_HTTP_TARGET: createDefaultHttpTarget(),
 }));
 vi.mock('../../hooks/useRedTeamTargetConfigValidation', () => ({
   useRedTeamTargetConfigValidation: () => mockTargetConfigValidation,
@@ -91,11 +110,7 @@ describe('TargetTypeSelection', () => {
     vi.clearAllMocks();
     mockUseRedTeamConfig.mockReturnValue({
       config: {
-        target: {
-          id: 'http',
-          label: '',
-          config: {},
-        },
+        target: createDefaultHttpTarget(),
       },
       updateConfig: mockUpdateConfig,
       providerType: undefined,
@@ -107,13 +122,7 @@ describe('TargetTypeSelection', () => {
     const user = userEvent.setup();
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: {
-          id: '',
-          label: '',
-          config: {},
-        },
-      },
+      config: createTargetConfig('', ''),
       updateConfig: mockUpdateConfig,
       providerType: undefined, // No default selection
       setProviderType: mockSetProviderType,
@@ -138,12 +147,7 @@ describe('TargetTypeSelection', () => {
     const cardElement = openAICard.closest('[role="button"]');
     await user.click(cardElement!);
 
-    await waitFor(() => {
-      expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
-        feature: 'redteam_config_target_type_changed',
-        target: expect.stringContaining('openai'),
-      });
-    });
+    await waitFor(expectTargetChangeEvent);
 
     // Button should now be enabled after selecting a provider
     // Re-query the button since the component re-rendered
@@ -169,11 +173,7 @@ describe('TargetTypeSelection', () => {
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
       config: {
-        target: {
-          id: 'http',
-          label: '',
-          config: {},
-        },
+        target: createDefaultHttpTarget(),
       },
       updateConfig: mockUpdateConfig,
       providerType: undefined,
@@ -191,11 +191,7 @@ describe('TargetTypeSelection', () => {
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
       config: {
-        target: {
-          id: 'http',
-          label: '',
-          config: {},
-        },
+        target: createDefaultHttpTarget(),
       },
       updateConfig: mockUpdateConfig,
       providerType: 'http',
@@ -221,13 +217,7 @@ describe('TargetTypeSelection', () => {
     const user = userEvent.setup();
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: {
-          id: '',
-          label: '',
-          config: {},
-        },
-      },
+      config: createTargetConfig('', ''),
       updateConfig: mockUpdateConfig,
       providerType: undefined, // No default selection
       setProviderType: mockSetProviderType,
@@ -257,12 +247,7 @@ describe('TargetTypeSelection', () => {
       );
     });
 
-    await waitFor(() => {
-      expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
-        feature: 'redteam_config_target_type_changed',
-        target: expect.stringContaining('openai'),
-      });
-    });
+    await waitFor(expectTargetChangeEvent);
   });
 
   it('should disable Next button after entering a target name, selecting a type, and then deleting the target name', async () => {
@@ -298,13 +283,7 @@ describe('TargetTypeSelection', () => {
     // Start with a saved config so the Next button can be enabled
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: {
-          id: 'openai:gpt-4.1',
-          label: 'My Test API',
-          config: {},
-        },
-      },
+      config: createTargetConfig('openai:gpt-4.1', 'My Test API'),
       updateConfig: mockUpdateConfig,
       providerType: 'openai',
       setProviderType: mockSetProviderType,
@@ -338,13 +317,7 @@ describe('TargetTypeSelection', () => {
   it('should display provider list with saved config', async () => {
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: {
-          id: 'openai:gpt-4.1',
-          label: 'My Test API',
-          config: {},
-        },
-      },
+      config: createTargetConfig('openai:gpt-4.1', 'My Test API'),
       updateConfig: mockUpdateConfig,
       providerType: 'openai',
       setProviderType: mockSetProviderType,

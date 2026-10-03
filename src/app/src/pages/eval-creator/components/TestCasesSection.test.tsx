@@ -7,6 +7,12 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TestCasesSection from './TestCasesSection';
 
+const createContainsTestCaseFixture = () => ({
+  description: 'Test 1',
+  vars: { input: 'hello' },
+  assert: [{ type: 'contains', value: 'hi' }],
+});
+
 // Mock the store
 vi.mock('@app/stores/evalConfig');
 
@@ -58,13 +64,7 @@ describe('TestCasesSection', () => {
   });
 
   it('renders existing test cases', () => {
-    const testCases = [
-      {
-        description: 'Test 1',
-        vars: { input: 'hello' },
-        assert: [{ type: 'contains', value: 'hi' }],
-      },
-    ];
+    const testCases = [createContainsTestCaseFixture()];
     (useStore as any).mockReturnValue({
       config: { tests: testCases },
       updateConfig: mockUpdateConfig,
@@ -82,13 +82,7 @@ describe('TestCasesSection', () => {
     const user = userEvent.setup();
     (useStore as any).mockReturnValue({
       config: {
-        tests: [
-          {
-            description: 'Test 1',
-            vars: { input: 'hello' },
-            assert: [{ type: 'contains', value: 'hi' }],
-          },
-        ],
+        tests: [createContainsTestCaseFixture()],
       },
       updateConfig: mockUpdateConfig,
     });

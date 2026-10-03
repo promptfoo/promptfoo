@@ -8,7 +8,6 @@ import {
   makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import logger from '../../../../../logger';
@@ -18,11 +17,9 @@ import type {
   EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateStats,
-  EvaluateSummaryV2,
   EvaluateTable,
   PromptMetrics,
   RedteamPluginObject,
-  ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/react-table';
@@ -111,15 +108,13 @@ async function extractPolicyIdToNameMap(
   );
 
   for (let index = 0; index < policyPlugins.length; index++) {
-    const plugin = policyPlugins[index];
-    const policy = plugin?.config?.policy as Policy;
+    const policy = policyPlugins[index]?.config?.policy as Policy;
     if (isValidPolicyObject(policy)) {
       map[policy.id] = policy.name;
     }
     // Backwards compatibility w/ text-only inline policies.
     else if (policy) {
-      const id = await makeInlinePolicyId(policy);
-      map[id] = makeDefaultPolicyName(index);
+      map[await makeInlinePolicyId(policy)] = makeDefaultPolicyName(index);
     }
   }
 
@@ -146,13 +141,11 @@ async function buildRedteamFilterOptions(
   config?: Partial<UnifiedConfig> | null,
   _table?: EvaluateTable | null,
 ): Promise<{ plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {}> {
-  const isRedteam = Boolean(config?.redteam);
-
   // For non-redteam evaluations, don't provide redteam-specific filter options.
   // Note: This is separate from metadata filtering - if users have metadata fields
   // named "plugin", "strategy", or "severity", they can still filter on them using
   // the metadata filter type (which uses field/value pairs).
-  if (!isRedteam) {
+  if (!Boolean(config?.redteam)) {
     return {};
   }
 
@@ -194,14 +187,13 @@ function computeAvailableSeverities(
   });
 
   // Return sorted array of severity values (in order of criticality)
-  const severityOrder = [
+  return [
     Severity.Critical,
     Severity.High,
     Severity.Medium,
     Severity.Low,
     Severity.Informational,
-  ];
-  return severityOrder.filter((sev) => severities.has(sev));
+  ].filter((sev) => severities.has(sev));
 }
 
 interface FetchEvalOptions {
@@ -270,7 +262,6 @@ interface TableState {
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
-  setTableFromResultsFile: (resultsFile: ResultsFile) => Promise<void>;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
@@ -531,6 +522,14 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
   return Boolean(filter.value);
 };
 
+const clearFilters = (prevState: TableState) => ({
+  filters: {
+    ...prevState.filters,
+    values: {},
+    appliedCount: 0,
+  },
+});
+
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
@@ -557,57 +556,6 @@ export const useTableStore = create<TableState>()(
       }));
     },
 
-    setTableFromResultsFile: async (resultsFile: ResultsFile) => {
-      if (resultsFile.version && resultsFile.version >= 4) {
-        const table = convertResultsToTable(resultsFile);
-
-        // Build async options
-        const [redteamOptions, policyIdToNameMap] = await Promise.all([
-          buildRedteamFilterOptions(resultsFile.config, table),
-          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
-        ]);
-
-        set((prevState) => ({
-          table,
-          version: resultsFile.version,
-          highlightedResultsCount: computeHighlightCount(table),
-          userRatedResultsCount: computeUserRatedCount(table),
-          filters: {
-            ...prevState.filters,
-            options: {
-              metric: computeAvailableMetrics(table),
-              metadata: [],
-              ...redteamOptions,
-            },
-            policyIdToNameMap,
-          },
-        }));
-      } else {
-        const results = resultsFile.results as EvaluateSummaryV2;
-
-        // Build async options
-        const [redteamOptions, policyIdToNameMap] = await Promise.all([
-          buildRedteamFilterOptions(resultsFile.config, results.table),
-          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
-        ]);
-
-        set((prevState) => ({
-          table: results.table,
-          version: resultsFile.version,
-          highlightedResultsCount: computeHighlightCount(results.table),
-          userRatedResultsCount: computeUserRatedCount(results.table),
-          filters: {
-            ...prevState.filters,
-            options: {
-              metric: computeAvailableMetrics(results.table),
-              metadata: [],
-              ...redteamOptions,
-            },
-            policyIdToNameMap,
-          },
-        }));
-      }
-    },
     config: null,
     setConfig: (config: Partial<UnifiedConfig> | null) => set(() => ({ config })),
 
@@ -779,8 +727,6 @@ export const useTableStore = create<TableState>()(
         const existingFilters = Object.values(prevState.filters.values);
         const maxSortIndex =
           existingFilters.length > 0 ? Math.max(...existingFilters.map((f) => f.sortIndex)) : -1;
-        const nextSortIndex = maxSortIndex + 1;
-
         // Inherit logic operator from existing filters (use the one from the filter with sortIndex 1)
         // If no existing filters, default to 'and'
         const inheritedLogicOperator =
@@ -802,7 +748,7 @@ export const useTableStore = create<TableState>()(
                 logicOperator: filter.logicOperator ?? inheritedLogicOperator,
                 // Include field for metadata filters
                 field: filter.field,
-                sortIndex: nextSortIndex,
+                sortIndex: maxSortIndex + 1,
               },
             },
             appliedCount,
@@ -813,8 +759,7 @@ export const useTableStore = create<TableState>()(
 
     removeFilter: (id: ResultsFilter['id']) => {
       set((prevState) => {
-        const target = prevState.filters.values[id];
-        const wasApplied = isFilterApplied(target);
+        const wasApplied = isFilterApplied(prevState.filters.values[id]);
         const appliedCount = prevState.filters.appliedCount - (wasApplied ? 1 : 0);
         const values = { ...prevState.filters.values };
         delete values[id];
@@ -840,29 +785,16 @@ export const useTableStore = create<TableState>()(
     },
 
     removeAllFilters: () => {
-      set((prevState) => ({
-        filters: {
-          ...prevState.filters,
-          values: {},
-          appliedCount: 0,
-        },
-      }));
+      set(clearFilters);
     },
 
     resetFilters: () => {
-      set((prevState) => ({
-        filters: {
-          ...prevState.filters,
-          values: {},
-          appliedCount: 0,
-        },
-      }));
+      set(clearFilters);
     },
 
     updateFilter: (filter: ResultsFilter) => {
       set((prevState) => {
-        const target = prevState.filters.values[filter.id];
-        const targetWasApplied = isFilterApplied(target);
+        const targetWasApplied = isFilterApplied(prevState.filters.values[filter.id]);
         const filterIsApplied = isFilterApplied(filter);
         const appliedCount =
           prevState.filters.appliedCount - (targetWasApplied ? 1 : 0) + (filterIsApplied ? 1 : 0);
@@ -944,14 +876,12 @@ export const useTableStore = create<TableState>()(
         clearTimeout(timeoutId);
 
         if (resp.ok) {
-          const data = await resp.json();
-          const filteredKeys = data.keys.filter(
+          const filteredKeys = (await resp.json()).keys.filter(
             (key: string) => !HIDDEN_METADATA_KEYS.includes(key),
           );
 
           // Check if this request is still current before updating state
-          const latestState = get();
-          if (latestState.currentMetadataKeysRequest === abortController) {
+          if (get().currentMetadataKeysRequest === abortController) {
             set({
               metadataKeys: filteredKeys,
               metadataKeysLoading: false,
@@ -968,8 +898,7 @@ export const useTableStore = create<TableState>()(
 
         if ((error as Error).name === 'AbortError') {
           // Request was aborted - clean up state but don't show error
-          const latestState = get();
-          if (latestState.currentMetadataKeysRequest === abortController) {
+          if (get().currentMetadataKeysRequest === abortController) {
             set({
               metadataKeysLoading: false,
               currentMetadataKeysRequest: null,
@@ -978,8 +907,7 @@ export const useTableStore = create<TableState>()(
         } else {
           // Actual error occurred - only update if this is still the current request
           console.error('Error fetching metadata keys:', error);
-          const latestState = get();
-          if (latestState.currentMetadataKeysRequest === abortController) {
+          if (get().currentMetadataKeysRequest === abortController) {
             set({
               metadataKeysError: true,
               metadataKeysLoading: false,
@@ -998,11 +926,7 @@ export const useTableStore = create<TableState>()(
       }
 
       const currentState = get();
-      const hasCachedValues = Object.prototype.hasOwnProperty.call(
-        currentState.metadataValues,
-        trimmedKey,
-      );
-      if (hasCachedValues) {
+      if (Object.prototype.hasOwnProperty.call(currentState.metadataValues, trimmedKey)) {
         return currentState.metadataValues[trimmedKey];
       }
 

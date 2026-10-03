@@ -13,7 +13,6 @@ const TEST_PROPS = { foo: 'bar' };
 describe('useTelemetry', () => {
   const mockPostHog = {
     capture: vi.fn(),
-    identify: vi.fn(),
   } as any;
 
   beforeEach(() => {
@@ -79,66 +78,6 @@ describe('useTelemetry', () => {
       });
 
       expect(mockPostHog.capture).toHaveBeenCalledWith(TEST_EVENT, {});
-    });
-  });
-
-  describe('identifyUser', () => {
-    it('calls posthog.identify when PostHog is initialized', () => {
-      const { result } = renderHook(() => useTelemetry());
-      const userId = 'user123';
-      const userProps = { name: 'Test User' };
-
-      act(() => {
-        result.current.identifyUser(userId, userProps);
-      });
-
-      expect(mockPostHog.identify).toHaveBeenCalledTimes(1);
-      expect(mockPostHog.identify).toHaveBeenCalledWith(userId, userProps);
-    });
-
-    it('does not call posthog.identify when PostHog is not initialized', () => {
-      vi.mocked(usePostHog).mockReturnValue({
-        posthog: mockPostHog,
-        isInitialized: false,
-      });
-
-      const { result } = renderHook(() => useTelemetry());
-
-      act(() => {
-        result.current.identifyUser('user123');
-      });
-
-      expect(mockPostHog.identify).not.toHaveBeenCalled();
-    });
-
-    it('works with empty user properties', () => {
-      const { result } = renderHook(() => useTelemetry());
-      const userId = 'user123';
-
-      act(() => {
-        result.current.identifyUser(userId);
-      });
-
-      expect(mockPostHog.identify).toHaveBeenCalledWith(userId, {});
-    });
-  });
-
-  describe('isInitialized', () => {
-    it('returns true when PostHog is initialized', () => {
-      const { result } = renderHook(() => useTelemetry());
-
-      expect(result.current.isInitialized).toBe(true);
-    });
-
-    it('returns false when PostHog is not initialized', () => {
-      vi.mocked(usePostHog).mockReturnValue({
-        posthog: mockPostHog,
-        isInitialized: false,
-      });
-
-      const { result } = renderHook(() => useTelemetry());
-
-      expect(result.current.isInitialized).toBe(false);
     });
   });
 });

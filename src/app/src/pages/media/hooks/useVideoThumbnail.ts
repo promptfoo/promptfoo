@@ -46,107 +46,6 @@ const concurrencyQueue = (() => {
 })();
 
 /**
- * Generates a thumbnail from a video URL by capturing a frame.
- * Supports cancellation via AbortSignal to prevent memory leaks.
- */
-async function generateThumbnail(videoUrl: string, signal?: AbortSignal): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // Check if already aborted before starting
-    if (signal?.aborted) {
-      reject(new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-
-    const video = document.createElement('video');
-    let isCleanedUp = false;
-
-    const timeoutId = setTimeout(() => {
-      cleanup();
-      reject(new Error('Thumbnail generation timed out'));
-    }, GENERATION_TIMEOUT);
-
-    const cleanup = () => {
-      if (isCleanedUp) {
-        return;
-      }
-      isCleanedUp = true;
-
-      clearTimeout(timeoutId);
-      signal?.removeEventListener('abort', handleAbort);
-
-      // Remove all event listeners
-      video.onloadeddata = null;
-      video.onseeked = null;
-      video.onerror = null;
-      video.onabort = null;
-
-      // Stop loading and release resources
-      video.pause();
-      video.src = '';
-      video.load();
-      // Remove from DOM if somehow attached (shouldn't be, but defensive)
-      video.remove();
-    };
-
-    const handleAbort = () => {
-      cleanup();
-      reject(new DOMException('Aborted', 'AbortError'));
-    };
-
-    signal?.addEventListener('abort', handleAbort);
-
-    video.crossOrigin = 'anonymous';
-    video.preload = 'metadata';
-    video.muted = true;
-    video.playsInline = true;
-
-    video.onloadeddata = () => {
-      if (isCleanedUp) {
-        return;
-      }
-      // Seek to a frame that's likely not black
-      // Use 0.5s or 10% of duration, whichever is smaller
-      const seekTime = Math.min(THUMBNAIL_SEEK_TIME, video.duration * 0.1);
-      video.currentTime = seekTime;
-    };
-
-    video.onseeked = () => {
-      if (isCleanedUp) {
-        return;
-      }
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          cleanup();
-          reject(new Error('Could not get canvas context'));
-          return;
-        }
-
-        ctx.drawImage(video, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg', THUMBNAIL_QUALITY);
-
-        cleanup();
-        resolve(dataUrl);
-      } catch (err) {
-        cleanup();
-        reject(err);
-      }
-    };
-
-    video.onerror = () => {
-      cleanup();
-      reject(new Error('Failed to load video'));
-    };
-
-    video.src = videoUrl;
-  });
-}
-
-/**
  * Hook to generate and cache video thumbnails.
  *
  * @param videoUrl - Full URL to the video file
@@ -179,7 +78,6 @@ export function useVideoThumbnail(
         if (cached) {
           if (!abortController.signal.aborted) {
             setThumbnailState(cached);
-            setIsLoading(false);
           }
           return;
         }
@@ -193,7 +91,107 @@ export function useVideoThumbnail(
 
         try {
           // Generate new thumbnail with abort support
-          const generated = await generateThumbnail(videoUrl, abortController.signal);
+          /**
+           * Generates a thumbnail from a video URL by capturing a frame.
+           * Supports cancellation via AbortSignal to prevent memory leaks.
+           */
+          const generateThumbnail = async (signal?: AbortSignal): Promise<string> => {
+            return new Promise((resolve, reject) => {
+              // Check if already aborted before starting
+              if (signal?.aborted) {
+                reject(new DOMException('Aborted', 'AbortError'));
+                return;
+              }
+
+              const video = document.createElement('video');
+              let isCleanedUp = false;
+
+              const timeoutId = setTimeout(() => {
+                cleanup();
+                reject(new Error('Thumbnail generation timed out'));
+              }, GENERATION_TIMEOUT);
+
+              const cleanup = () => {
+                if (isCleanedUp) {
+                  return;
+                }
+                isCleanedUp = true;
+
+                clearTimeout(timeoutId);
+                signal?.removeEventListener('abort', handleAbort);
+
+                // Remove all event listeners
+                video.onloadeddata = null;
+                video.onseeked = null;
+                video.onerror = null;
+                video.onabort = null;
+
+                // Stop loading and release resources
+                video.pause();
+                video.src = '';
+                video.load();
+                // Remove from DOM if somehow attached (shouldn't be, but defensive)
+                video.remove();
+              };
+
+              const handleAbort = () => {
+                cleanup();
+                reject(new DOMException('Aborted', 'AbortError'));
+              };
+
+              signal?.addEventListener('abort', handleAbort);
+
+              video.crossOrigin = 'anonymous';
+              video.preload = 'metadata';
+              video.muted = true;
+              video.playsInline = true;
+
+              video.onloadeddata = () => {
+                if (isCleanedUp) {
+                  return;
+                }
+                // Seek to a frame that's likely not black
+                // Use 0.5s or 10% of duration, whichever is smaller
+                video.currentTime = Math.min(THUMBNAIL_SEEK_TIME, video.duration * 0.1);
+              };
+
+              video.onseeked = () => {
+                if (isCleanedUp) {
+                  return;
+                }
+                try {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = video.videoWidth;
+                  canvas.height = video.videoHeight;
+
+                  const ctx = canvas.getContext('2d');
+                  if (!ctx) {
+                    cleanup();
+                    reject(new Error('Could not get canvas context'));
+                    return;
+                  }
+
+                  ctx.drawImage(video, 0, 0);
+                  const dataUrl = canvas.toDataURL('image/jpeg', THUMBNAIL_QUALITY);
+
+                  cleanup();
+                  resolve(dataUrl);
+                } catch (err) {
+                  cleanup();
+                  reject(err);
+                }
+              };
+
+              video.onerror = () => {
+                cleanup();
+                reject(new Error('Failed to load video'));
+              };
+
+              video.src = videoUrl;
+            });
+          };
+
+          const generated = await generateThumbnail(abortController.signal);
           if (!abortController.signal.aborted) {
             setThumbnailState(generated);
             // Cache for future use (don't await - fire and forget)

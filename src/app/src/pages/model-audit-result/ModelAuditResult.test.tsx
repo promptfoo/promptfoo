@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { createRouterModule } from '@app/tests/browserMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -28,10 +29,7 @@ vi.mock('../model-audit/components/ModelAuditSkeleton', () => ({
 const mockNavigate = vi.fn();
 vi.mock('react-router', async () => {
   const actual = await vi.importActual('react-router');
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
+  return createRouterModule(actual, () => () => mockNavigate);
 });
 
 const createMockScan = (id: string, name: string) => ({
@@ -67,17 +65,11 @@ describe('ModelAuditResult', () => {
     historyError: null,
     totalCount: 0,
     pageSize: 25,
-    currentPage: 0,
     sortModel: [{ field: 'createdAt', sort: 'desc' as const }],
-    searchQuery: '',
     fetchHistoricalScans: vi.fn(),
     fetchScanById: mockFetchScanById,
     deleteHistoricalScan: mockDeleteHistoricalScan,
-    setPageSize: vi.fn(),
-    setCurrentPage: vi.fn(),
     setSortModel: vi.fn(),
-    setSearchQuery: vi.fn(),
-    resetFilters: vi.fn(),
   });
 
   beforeEach(() => {

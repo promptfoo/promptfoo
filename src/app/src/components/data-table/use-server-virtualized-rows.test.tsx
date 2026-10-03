@@ -20,6 +20,18 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function createLoadNextRow(result: {
+  current: ReturnType<typeof useServerVirtualizedRows<TestRow>>;
+}) {
+  return async () => {
+    await result.current.serverVirtualization.loadRows({
+      startIndex: 25,
+      endIndex: 25,
+      signal: new AbortController().signal,
+    });
+  };
+}
+
 describe('useServerVirtualizedRows', () => {
   it('indexes seeded rows and skips ranges already covered by the cache', async () => {
     const fetchRows = vi.fn().mockResolvedValue({ rows: [], offset: 0 });
@@ -192,13 +204,7 @@ describe('useServerVirtualizedRows', () => {
       { initialProps: { rows: initialRows } },
     );
 
-    await act(async () => {
-      await result.current.serverVirtualization.loadRows({
-        startIndex: 25,
-        endIndex: 25,
-        signal: new AbortController().signal,
-      });
-    });
+    await act(createLoadNextRow(result));
 
     expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'loaded-25' });
 
@@ -228,13 +234,7 @@ describe('useServerVirtualizedRows', () => {
       { initialProps: { rows: initialRows } },
     );
 
-    await act(async () => {
-      await result.current.serverVirtualization.loadRows({
-        startIndex: 25,
-        endIndex: 25,
-        signal: new AbortController().signal,
-      });
-    });
+    await act(createLoadNextRow(result));
 
     expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'loaded-25' });
 
@@ -245,13 +245,7 @@ describe('useServerVirtualizedRows', () => {
     expect(result.current.serverVirtualization.getRow(25)).toBeUndefined();
     expect(result.current.loadedRowCount).toBe(1);
 
-    await act(async () => {
-      await result.current.serverVirtualization.loadRows({
-        startIndex: 25,
-        endIndex: 25,
-        signal: new AbortController().signal,
-      });
-    });
+    await act(createLoadNextRow(result));
 
     expect(fetchRows).toHaveBeenCalledTimes(2);
     expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'reloaded-25' });
@@ -274,13 +268,7 @@ describe('useServerVirtualizedRows', () => {
       { initialProps: { rows: initialRows, count: 100 } },
     );
 
-    await act(async () => {
-      await result.current.serverVirtualization.loadRows({
-        startIndex: 25,
-        endIndex: 25,
-        signal: new AbortController().signal,
-      });
-    });
+    await act(createLoadNextRow(result));
 
     expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'loaded-25' });
 
@@ -291,13 +279,7 @@ describe('useServerVirtualizedRows', () => {
     expect(result.current.serverVirtualization.getRow(25)).toBeUndefined();
     expect(result.current.loadedRowCount).toBe(2);
 
-    await act(async () => {
-      await result.current.serverVirtualization.loadRows({
-        startIndex: 25,
-        endIndex: 25,
-        signal: new AbortController().signal,
-      });
-    });
+    await act(createLoadNextRow(result));
 
     expect(fetchRows).toHaveBeenCalledTimes(2);
     expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'shifted-25' });
@@ -342,22 +324,18 @@ describe('useServerVirtualizedRows', () => {
       { initialProps: { rowCount: 0, pageSize: 25 } },
     );
 
-    await act(async () => {
+    async function loadFirstEmptyRows() {
       await result.current.serverVirtualization.loadRows({
         startIndex: 0,
         endIndex: 10,
         signal: new AbortController().signal,
       });
-    });
+    }
+
+    await act(loadFirstEmptyRows);
 
     rerender({ rowCount: 10, pageSize: 0 });
-    await act(async () => {
-      await result.current.serverVirtualization.loadRows({
-        startIndex: 0,
-        endIndex: 10,
-        signal: new AbortController().signal,
-      });
-    });
+    await act(loadFirstEmptyRows);
 
     rerender({ rowCount: 10, pageSize: 25 });
     await act(async () => {

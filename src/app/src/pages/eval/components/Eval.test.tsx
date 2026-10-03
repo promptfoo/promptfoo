@@ -9,6 +9,23 @@ import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
 
+const createWeatherFiltersFixture = () => ({
+  values: {
+    filter1: {
+      id: 'filter1',
+      type: 'text',
+      operator: 'contains',
+      value: 'weather',
+    },
+  },
+  appliedCount: 1,
+});
+
+const createEmptyFiltersFixture = () => ({
+  values: {},
+  appliedCount: 0,
+});
+
 const {
   mockNavigate,
   mockShowToast,
@@ -128,6 +145,40 @@ const baseMockResultsViewSettings = {
 }));
 (useTableStore as any).subscribe = vi.fn(() => vi.fn());
 
+function createPinnedEvalRerender(rerender: ReturnType<typeof render>['rerender']) {
+  return async () => {
+    rerender(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+  };
+}
+
+function createNextEvalRerender(rerender: ReturnType<typeof render>['rerender']) {
+  return async () => {
+    rerender(
+      <MemoryRouter>
+        <Eval fetchId="eval-2" />
+      </MemoryRouter>,
+    );
+  };
+}
+
+function createFilterSubscription<T extends (...args: any[]) => void>() {
+  let currentCallback: T | null = null;
+  return {
+    getCallback: () => currentCallback,
+    subscribe: vi.fn((selector: { toString(): string }, callback: T) => {
+      if (selector.toString().includes('filters')) {
+        currentCallback = callback;
+      }
+      return vi.fn(); // unsubscribe function
+    }),
+  };
+}
+
 describe('Eval', () => {
   beforeEach(() => {
     // Clear specific mocks instead of all mocks to preserve getState
@@ -195,13 +246,7 @@ describe('Eval', () => {
 
     expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      rerender(
-        <MemoryRouter>
-          <Eval fetchId="eval-2" />
-        </MemoryRouter>,
-      );
-    });
+    await act(createNextEvalRerender(rerender));
 
     expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(2);
   });
@@ -329,13 +374,7 @@ describe('Eval', () => {
       evalId: 'eval-2',
     };
 
-    await act(async () => {
-      rerender(
-        <MemoryRouter>
-          <Eval fetchId="eval-2" />
-        </MemoryRouter>,
-      );
-    });
+    await act(createNextEvalRerender(rerender));
 
     const secondMountId = getByTestId('results-view').getAttribute('data-mount-id');
     expect(secondMountId).toBeTruthy();
@@ -948,14 +987,7 @@ describe('Eval', () => {
     // Toggling the result filter mode re-renders the component (and changes loadEvalById's
     // identity). The socket must stay mounted instead of tearing down and reconnecting.
     mockFilterMode.current = 'failures';
-    await act(async () => {
-      rerender(
-        <MemoryRouter>
-          <Eval fetchId="selected-eval" />
-        </MemoryRouter>,
-      );
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    await act(createPinnedEvalRerender(rerender));
 
     expect(mockIo.mock.calls.length).toBe(ioCallsAfterMount);
     expect(mockSocketDisconnect.mock.calls.length).toBe(disconnectsAfterMount);
@@ -983,14 +1015,7 @@ describe('Eval', () => {
     const fetchCallsAfterMount = baseMockTableStore.fetchEvalData.mock.calls.length;
 
     mockApiConfig.apiBaseUrl = 'http://other-host';
-    await act(async () => {
-      rerender(
-        <MemoryRouter>
-          <Eval fetchId="selected-eval" />
-        </MemoryRouter>,
-      );
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    await act(createPinnedEvalRerender(rerender));
 
     expect(baseMockTableStore.fetchEvalData.mock.calls.length).toBeGreaterThan(
       fetchCallsAfterMount,
@@ -1063,15 +1088,9 @@ describe('Eval', () => {
   });
 
   it('does not rewrite a details hash on a zero-filter store update', async () => {
-    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
-
     // Mock subscribe to capture the callback and trigger it
-    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
-      if (selector.toString().includes('filters')) {
-        subscriptionCallback = callback;
-      }
-      return vi.fn(); // unsubscribe function
-    });
+    const subscription = createFilterSubscription<(filters: any, previousFilters: any) => void>();
+    (useTableStore as any).subscribe = subscription.subscribe;
 
     const mockFilters = {
       values: {},
@@ -1097,9 +1116,9 @@ describe('Eval', () => {
     });
 
     // Trigger the subscription callback manually
-    if (subscriptionCallback) {
+    if (subscription.getCallback()) {
       await act(async () => {
-        subscriptionCallback!(mockFilters, mockFilters);
+        subscription.getCallback()!(mockFilters, mockFilters);
       });
     }
 
@@ -1107,19 +1126,10 @@ describe('Eval', () => {
   });
 
   it('preserves an initial rowId details deep link on a zero-filter store update', async () => {
-    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
+    const subscription = createFilterSubscription<(filters: any, previousFilters: any) => void>();
+    (useTableStore as any).subscribe = subscription.subscribe;
 
-    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
-      if (selector.toString().includes('filters')) {
-        subscriptionCallback = callback;
-      }
-      return vi.fn();
-    });
-
-    const mockFilters = {
-      values: {},
-      appliedCount: 0,
-    };
+    const mockFilters = createEmptyFiltersFixture();
 
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
@@ -1139,9 +1149,9 @@ describe('Eval', () => {
       await vi.advanceTimersByTimeAsync(10);
     });
 
-    if (subscriptionCallback) {
+    if (subscription.getCallback()) {
       await act(async () => {
-        subscriptionCallback!(mockFilters, mockFilters);
+        subscription.getCallback()!(mockFilters, mockFilters);
       });
     }
 
@@ -1149,31 +1159,15 @@ describe('Eval', () => {
   });
 
   it('clears a stale rowId param when filters are cleared without a filter param', async () => {
-    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
-
     // Mock subscribe to capture the callback and trigger it
-    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
-      if (selector.toString().includes('filters')) {
-        subscriptionCallback = callback;
-      }
-      return vi.fn(); // unsubscribe function
-    });
+    const subscription = createFilterSubscription<(filters: any, previousFilters: any) => void>();
+    (useTableStore as any).subscribe = subscription.subscribe;
 
     const mockFilters = {
       values: {},
       appliedCount: 0, // Filters cleared
     };
-    const previousFilters = {
-      values: {
-        filter1: {
-          id: 'filter1',
-          type: 'text',
-          operator: 'contains',
-          value: 'weather',
-        },
-      },
-      appliedCount: 1,
-    };
+    const previousFilters = createWeatherFiltersFixture();
 
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
@@ -1195,9 +1189,9 @@ describe('Eval', () => {
     });
 
     // Trigger the subscription callback manually
-    if (subscriptionCallback) {
+    if (subscription.getCallback()) {
       await act(async () => {
-        subscriptionCallback!(mockFilters, previousFilters);
+        subscription.getCallback()!(mockFilters, previousFilters);
       });
     }
 
@@ -1215,30 +1209,11 @@ describe('Eval', () => {
   });
 
   it('does not discard an unrelated hash when filters clear without URL filter state', async () => {
-    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
+    const subscription = createFilterSubscription<(filters: any, previousFilters: any) => void>();
+    (useTableStore as any).subscribe = subscription.subscribe;
 
-    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
-      if (selector.toString().includes('filters')) {
-        subscriptionCallback = callback;
-      }
-      return vi.fn();
-    });
-
-    const mockFilters = {
-      values: {},
-      appliedCount: 0,
-    };
-    const previousFilters = {
-      values: {
-        filter1: {
-          id: 'filter1',
-          type: 'text',
-          operator: 'contains',
-          value: 'weather',
-        },
-      },
-      appliedCount: 1,
-    };
+    const mockFilters = createEmptyFiltersFixture();
+    const previousFilters = createWeatherFiltersFixture();
 
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
@@ -1258,9 +1233,9 @@ describe('Eval', () => {
       await vi.advanceTimersByTimeAsync(10);
     });
 
-    if (subscriptionCallback) {
+    if (subscription.getCallback()) {
       await act(async () => {
-        subscriptionCallback!(mockFilters, previousFilters);
+        subscription.getCallback()!(mockFilters, previousFilters);
       });
     }
 
@@ -1269,8 +1244,6 @@ describe('Eval', () => {
   });
 
   it('preserves a details hash while rehydrating filters from the URL', async () => {
-    let subscriptionCallback: ((filters: any) => void) | null = null;
-
     const hydratedFilters = {
       values: {
         filter1: {
@@ -1286,19 +1259,15 @@ describe('Eval', () => {
       appliedCount: 1,
     };
 
-    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
-      if (selector.toString().includes('filters')) {
-        subscriptionCallback = callback;
-      }
-      return vi.fn();
-    });
+    const subscription = createFilterSubscription<(filters: any) => void>();
+    (useTableStore as any).subscribe = subscription.subscribe;
     (useTableStore as any).getState = vi.fn(() => ({
       filters: { values: {} },
       resetFilters: vi.fn(() => {
-        subscriptionCallback?.({ values: {}, appliedCount: 0 });
+        subscription.getCallback()?.({ values: {}, appliedCount: 0 });
       }),
       addFilter: vi.fn(() => {
-        subscriptionCallback?.(hydratedFilters);
+        subscription.getCallback()?.(hydratedFilters);
       }),
     }));
 
@@ -1327,15 +1296,9 @@ describe('Eval', () => {
   });
 
   it('clears the details hash when applying filters', async () => {
-    let subscriptionCallback: ((filters: any) => void) | null = null;
-
     // Mock subscribe to capture the callback and trigger it
-    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
-      if (selector.toString().includes('filters')) {
-        subscriptionCallback = callback;
-      }
-      return vi.fn(); // unsubscribe function
-    });
+    const subscription = createFilterSubscription<(filters: any) => void>();
+    (useTableStore as any).subscribe = subscription.subscribe;
 
     const mockFilters = {
       values: {
@@ -1371,9 +1334,9 @@ describe('Eval', () => {
     });
 
     // Trigger the subscription callback manually
-    if (subscriptionCallback) {
+    if (subscription.getCallback()) {
       await act(async () => {
-        subscriptionCallback!(mockFilters);
+        subscription.getCallback()!(mockFilters);
       });
     }
 

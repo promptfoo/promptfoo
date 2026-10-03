@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { createRouterModule } from '@app/tests/browserMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
@@ -11,10 +12,7 @@ vi.mock('../model-audit/stores');
 const mockNavigate = vi.fn();
 vi.mock('react-router', async () => {
   const actual = await vi.importActual('react-router');
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
+  return createRouterModule(actual, () => () => mockNavigate);
 });
 
 const createMockScan = (id: string, name: string, hasErrors: boolean = false) => ({
@@ -40,8 +38,6 @@ describe('ModelAuditHistory', () => {
   const mockFetchHistoricalScans = vi.fn();
   const mockFetchHistoricalScanRange = vi.fn();
   const mockDeleteHistoricalScan = vi.fn();
-  const mockSetPageSize = vi.fn();
-  const mockSetCurrentPage = vi.fn();
   const mockSetSortModel = vi.fn();
   const mockStartNewScan = vi.fn();
 
@@ -55,18 +51,12 @@ describe('ModelAuditHistory', () => {
     historyError: null,
     totalCount: 0,
     pageSize: 25,
-    currentPage: 0,
     sortModel: [{ field: 'createdAt', sort: 'desc' as const }],
-    searchQuery: '',
     fetchHistoricalScans: mockFetchHistoricalScans,
     fetchHistoricalScanRange: mockFetchHistoricalScanRange,
     fetchScanById: vi.fn(),
     deleteHistoricalScan: mockDeleteHistoricalScan,
-    setPageSize: mockSetPageSize,
-    setCurrentPage: mockSetCurrentPage,
     setSortModel: mockSetSortModel,
-    setSearchQuery: vi.fn(),
-    resetFilters: vi.fn(),
   });
 
   beforeEach(() => {

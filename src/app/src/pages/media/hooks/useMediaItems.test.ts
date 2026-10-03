@@ -2,6 +2,13 @@ import * as api from '@app/utils/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchMediaItemByHash } from './useMediaItems';
 
+const createEmptyMediaResponse = () => ({
+  success: true,
+  data: {
+    items: [],
+  },
+});
+
 vi.mock('@app/utils/api');
 
 describe('fetchMediaItemByHash', () => {
@@ -44,12 +51,7 @@ describe('fetchMediaItemByHash', () => {
   it('should return not_found error when items array is empty', async () => {
     vi.mocked(api.callApi).mockResolvedValue({
       ok: true,
-      json: async () => ({
-        success: true,
-        data: {
-          items: [],
-        },
-      }),
+      json: async () => createEmptyMediaResponse(),
     } as Response);
 
     const result = await fetchMediaItemByHash('nonexistent');
@@ -105,12 +107,7 @@ describe('fetchMediaItemByHash', () => {
   it('should properly encode hash with special characters', async () => {
     vi.mocked(api.callApi).mockResolvedValue({
       ok: true,
-      json: async () => ({
-        success: true,
-        data: {
-          items: [],
-        },
-      }),
+      json: async () => createEmptyMediaResponse(),
     } as Response);
 
     await fetchMediaItemByHash('hash with spaces & special=chars');

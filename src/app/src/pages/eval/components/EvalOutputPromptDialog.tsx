@@ -10,6 +10,7 @@ import {
 } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { getRedteamHistoryMessages } from '@app/utils/redteamHistory';
 import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
@@ -25,15 +26,6 @@ import type { Citation } from './Citations';
 import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
 const subtitleTypographyClassName = 'mb-2 font-medium text-base';
-
-interface RedteamHistoryEntry {
-  prompt?: string;
-  promptAudio?: { data?: string; format?: string };
-  promptImage?: { data?: string; format?: string };
-  output?: string;
-  outputAudio?: { data?: string; format?: string };
-  outputImage?: { data?: string; format?: string };
-}
 
 interface CodeDisplayProps {
   content: string;
@@ -238,11 +230,6 @@ export default function EvalOutputPromptDialog({
     };
   }, [evaluationId, fetchTraces]);
 
-  const copyToClipboard = async (text: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-  };
-
   const copyFieldToClipboard = async (key: string, text: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedFields((prev) => ({ ...prev, [key]: true }));
@@ -250,78 +237,6 @@ export default function EvalOutputPromptDialog({
     setTimeout(() => {
       setCopiedFields((prev) => ({ ...prev, [key]: false }));
     }, 2000);
-  };
-
-  const handleReplay = async () => {
-    if (!evaluationId || !provider) {
-      setReplayError('Missing evaluation ID or provider');
-      return;
-    }
-
-    if (!onReplay) {
-      setReplayError('Replay functionality is not available');
-      return;
-    }
-
-    setReplayLoading(true);
-    setReplayError(null);
-    setReplayOutput(null);
-
-    try {
-      const result = await onReplay({
-        evaluationId,
-        testIndex,
-        prompt: editedPrompt,
-        variables,
-      });
-
-      if (result.error) {
-        setReplayError(result.error);
-      } else if (result.output) {
-        setReplayOutput(result.output);
-      } else {
-        setReplayOutput('(No output returned)');
-      }
-    } catch (error) {
-      setReplayError(error instanceof Error ? error.message : 'An error occurred');
-    } finally {
-      setReplayLoading(false);
-    }
-  };
-
-  const handleMetadataClick = (key: string) => {
-    const now = Date.now();
-    const lastClick = expandedMetadata[key]?.lastClickTime || 0;
-    const isDoubleClick = now - lastClick < 300; // 300ms threshold
-
-    setExpandedMetadata((prev: ExpandedMetadataState) => ({
-      ...prev,
-      [key]: {
-        expanded: !isDoubleClick,
-        lastClickTime: now,
-      },
-    }));
-  };
-
-  const handleApplyFilter = (
-    field: string,
-    value: string,
-    operator: 'equals' | 'contains' = 'equals',
-  ) => {
-    onResetFilters?.();
-    onAddFilter?.({
-      type: 'metadata',
-      operator,
-      value: typeof value === 'string' ? value : JSON.stringify(value),
-      field,
-    });
-    onClose();
-  };
-
-  const handleCancel = () => {
-    setEditedPrompt(prompt);
-    setReplayOutput(null);
-    setReplayError(null);
   };
 
   let parsedMessages: Message[] = [];
@@ -336,28 +251,7 @@ export default function EvalOutputPromptDialog({
     output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
   );
 
-  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
-    | RedteamHistoryEntry[]
-    | unknown[];
-  const redteamHistoryMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
-    .filter((entry): entry is RedteamHistoryEntry => {
-      const e = entry as RedteamHistoryEntry;
-      return Boolean(e?.prompt && e?.output);
-    })
-    .flatMap((entry: RedteamHistoryEntry) => [
-      {
-        role: 'user' as const,
-        content: entry.prompt!,
-        audio: entry.promptAudio,
-        image: entry.promptImage,
-      },
-      {
-        role: 'assistant' as const,
-        content: entry.output!,
-        audio: entry.outputAudio,
-        image: entry.outputImage,
-      },
-    ]);
+  const redteamHistoryMessages = getRedteamHistoryMessages(metadata);
 
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
@@ -469,9 +363,51 @@ export default function EvalOutputPromptDialog({
                 replayError={replayError}
                 onEditModeChange={setEditMode}
                 onPromptChange={setEditedPrompt}
-                onReplay={handleReplay}
-                onCancel={handleCancel}
-                onCopy={() => copyToClipboard(prompt)}
+                onReplay={async () => {
+                  if (!evaluationId || !provider) {
+                    setReplayError('Missing evaluation ID or provider');
+                    return;
+                  }
+
+                  if (!onReplay) {
+                    setReplayError('Replay functionality is not available');
+                    return;
+                  }
+
+                  setReplayLoading(true);
+                  setReplayError(null);
+                  setReplayOutput(null);
+
+                  try {
+                    const result = await onReplay({
+                      evaluationId,
+                      testIndex,
+                      prompt: editedPrompt,
+                      variables,
+                    });
+
+                    if (result.error) {
+                      setReplayError(result.error);
+                    } else if (result.output) {
+                      setReplayOutput(result.output);
+                    } else {
+                      setReplayOutput('(No output returned)');
+                    }
+                  } catch (error) {
+                    setReplayError(error instanceof Error ? error.message : 'An error occurred');
+                  } finally {
+                    setReplayLoading(false);
+                  }
+                }}
+                onCancel={() => {
+                  setEditedPrompt(prompt);
+                  setReplayOutput(null);
+                  setReplayError(null);
+                }}
+                onCopy={async () => {
+                  await navigator.clipboard.writeText(prompt);
+                  setCopied(true);
+                }}
                 copied={copied}
                 hoveredElement={hoveredElement}
                 onMouseEnter={setHoveredElement}
@@ -537,9 +473,33 @@ export default function EvalOutputPromptDialog({
                   metadata={metadata}
                   expandedMetadata={expandedMetadata}
                   copiedFields={copiedFields}
-                  onMetadataClick={handleMetadataClick}
+                  onMetadataClick={(key: string) => {
+                    const now = Date.now();
+                    const isDoubleClick = now - (expandedMetadata[key]?.lastClickTime || 0) < 300; // 300ms threshold
+
+                    setExpandedMetadata((prev: ExpandedMetadataState) => ({
+                      ...prev,
+                      [key]: {
+                        expanded: !isDoubleClick,
+                        lastClickTime: now,
+                      },
+                    }));
+                  }}
                   onCopy={copyFieldToClipboard}
-                  onApplyFilter={handleApplyFilter}
+                  onApplyFilter={(
+                    field: string,
+                    value: string,
+                    operator: 'equals' | 'contains' = 'equals',
+                  ) => {
+                    onResetFilters?.();
+                    onAddFilter?.({
+                      type: 'metadata',
+                      operator,
+                      value: typeof value === 'string' ? value : JSON.stringify(value),
+                      field,
+                    });
+                    onClose();
+                  }}
                   cloudConfig={cloudConfig}
                 />
               </TabsContent>

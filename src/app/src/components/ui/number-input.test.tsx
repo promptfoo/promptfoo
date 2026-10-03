@@ -97,27 +97,25 @@ describe('NumberInput', () => {
     expect(handleChange).not.toHaveBeenCalled();
   });
 
-  it('blocks . key when allowDecimals is false', async () => {
+  const dispatchDecimalKey = (allowDecimals: boolean) => {
     const handleChange = vi.fn();
-    render(<NumberInput allowDecimals={false} onChange={handleChange} />);
+    render(<NumberInput allowDecimals={allowDecimals} onChange={handleChange} />);
     const input = screen.getByRole('spinbutton');
-
-    // Simulate keyDown event for '.' - should be prevented
     const event = new KeyboardEvent('keydown', { key: '.', bubbles: true });
     const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
     input.dispatchEvent(event);
+    return preventDefaultSpy;
+  };
+
+  it('blocks . key when allowDecimals is false', async () => {
+    // Simulate keyDown event for '.' - should be prevented
+    const preventDefaultSpy = dispatchDecimalKey(false);
     expect(preventDefaultSpy).toHaveBeenCalled();
   });
 
   it('allows . key when allowDecimals is true', async () => {
-    const handleChange = vi.fn();
-    render(<NumberInput allowDecimals={true} onChange={handleChange} />);
-    const input = screen.getByRole('spinbutton');
-
     // Simulate keyDown event for '.' - should NOT be prevented
-    const event = new KeyboardEvent('keydown', { key: '.', bubbles: true });
-    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-    input.dispatchEvent(event);
+    const preventDefaultSpy = dispatchDecimalKey(true);
     expect(preventDefaultSpy).not.toHaveBeenCalled();
   });
 

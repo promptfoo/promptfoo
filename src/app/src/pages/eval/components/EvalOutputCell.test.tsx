@@ -14,6 +14,32 @@ import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCe
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
+const createPartialRelevanceResultFixture = () => ({
+  assertion: {
+    metric: 'relevance',
+    type: 'similar' as const,
+    value: 'another value',
+  },
+  pass: false,
+  reason: 'Partial match',
+  score: 0.6,
+});
+
+const createCommentedGradingResultFixture = () => ({
+  comment: 'Initial comment',
+  componentResults: [],
+  pass: true,
+  reason: 'Test reason',
+  score: 0.8,
+});
+
+const createPassingGradingResultFixture = () => ({
+  componentResults: [],
+  pass: true,
+  reason: 'Test passed',
+  score: 1.0,
+});
+
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
   default: vi.fn(({ gradingResults, metadata, onClose }) => (
@@ -102,6 +128,21 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
   showDiffs: boolean;
 }
 
+function expectHighlightedCell(container: HTMLElement) {
+  const cellElement = container.querySelector('.cell');
+  expect(cellElement).toBeInTheDocument();
+
+  // Check that the cell has highlight background but NOT text color (to avoid pill conflicts)
+  expect(cellElement).toHaveStyle({
+    backgroundColor: 'var(--cell-highlight-color)',
+  });
+
+  // The cell should NOT have text color applied directly to prevent pill text issues
+  expect(cellElement).not.toHaveStyle({
+    color: 'var(--cell-highlight-text-color)',
+  });
+}
+
 describe('EvalOutputCell', () => {
   const mockOnRating = vi.fn();
   let timers: TestTimers | undefined;
@@ -137,16 +178,7 @@ describe('EvalOutputCell', () => {
             reason: 'Perfect match',
             score: 1.0,
           },
-          {
-            assertion: {
-              metric: 'relevance',
-              type: 'similar',
-              value: 'another value',
-            },
-            pass: false,
-            reason: 'Partial match',
-            score: 0.6,
-          },
+          createPartialRelevanceResultFixture(),
         ],
         pass: true,
         reason: 'Test reason',
@@ -426,13 +458,7 @@ describe('EvalOutputCell', () => {
       ...defaultProps,
       output: {
         ...defaultProps.output,
-        gradingResult: {
-          comment: 'Initial comment',
-          componentResults: [],
-          pass: true,
-          reason: 'Test reason',
-          score: 0.8,
-        },
+        gradingResult: createCommentedGradingResultFixture(),
       },
     };
 
@@ -1457,16 +1483,7 @@ describe('EvalOutputCell search highlighting boundary conditions', () => {
             reason: 'Perfect match',
             score: 1.0,
           },
-          {
-            assertion: {
-              metric: 'relevance',
-              type: 'similar',
-              value: 'another value',
-            },
-            pass: false,
-            reason: 'Partial match',
-            score: 0.6,
-          },
+          createPartialRelevanceResultFixture(),
         ],
         pass: true,
         reason: 'Test reason',
@@ -1564,16 +1581,7 @@ describe('EvalOutputCell with prettified JSON', () => {
             reason: 'Perfect match',
             score: 1.0,
           },
-          {
-            assertion: {
-              metric: 'relevance',
-              type: 'similar',
-              value: 'another value',
-            },
-            pass: false,
-            reason: 'Partial match',
-            score: 0.6,
-          },
+          createPartialRelevanceResultFixture(),
         ],
         pass: true,
         reason: 'Test reason',
@@ -1717,18 +1725,7 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     const props = createPropsWithComment('!highlight This cell should be highlighted');
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
 
-    const cellElement = container.querySelector('.cell');
-    expect(cellElement).toBeInTheDocument();
-
-    // Check that the cell has highlight background but NOT text color (to avoid pill conflicts)
-    expect(cellElement).toHaveStyle({
-      backgroundColor: 'var(--cell-highlight-color)',
-    });
-
-    // The cell should NOT have text color applied directly to prevent pill text issues
-    expect(cellElement).not.toHaveStyle({
-      color: 'var(--cell-highlight-text-color)',
-    });
+    expectHighlightedCell(container);
   });
 
   it('does not apply highlight styling when comment does not start with !highlight', () => {
@@ -2037,18 +2034,7 @@ describe('EvalOutputCell cell highlighting styling', () => {
     const props = createPropsWithComment('!highlight This cell should be highlighted');
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
 
-    const cellElement = container.querySelector('.cell');
-    expect(cellElement).toBeInTheDocument();
-
-    // Check that the cell has highlight background but NO text color override
-    expect(cellElement).toHaveStyle({
-      backgroundColor: 'var(--cell-highlight-color)',
-    });
-
-    // The cell itself should NOT have the highlight text color applied directly
-    expect(cellElement).not.toHaveStyle({
-      color: 'var(--cell-highlight-text-color)',
-    });
+    expectHighlightedCell(container);
   });
 
   it('applies text color only to content areas when highlighted', () => {
@@ -2713,13 +2699,7 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
     onRating: mockOnRating,
     output: {
       cost: 0,
-      gradingResult: {
-        comment: 'Initial comment',
-        componentResults: [],
-        pass: true,
-        reason: 'Test reason',
-        score: 0.8,
-      },
+      gradingResult: createCommentedGradingResultFixture(),
       id: 'test-id',
       latencyMs: 100,
       namedScores: {},
@@ -2987,12 +2967,7 @@ describe('EvalOutputCell inline image lightbox', () => {
       onRating: mockOnRating,
       output: {
         cost: 0,
-        gradingResult: {
-          componentResults: [],
-          pass: true,
-          reason: 'Test passed',
-          score: 1.0,
-        },
+        gradingResult: createPassingGradingResultFixture(),
         id: 'test-id',
         latencyMs: 100,
         namedScores: {},
@@ -3047,12 +3022,7 @@ describe('EvalOutputCell inline image lightbox', () => {
       onRating: mockOnRating,
       output: {
         cost: 0,
-        gradingResult: {
-          componentResults: [],
-          pass: true,
-          reason: 'Test passed',
-          score: 1.0,
-        },
+        gradingResult: createPassingGradingResultFixture(),
         id: 'test-id',
         latencyMs: 100,
         namedScores: {},

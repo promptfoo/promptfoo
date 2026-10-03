@@ -9,6 +9,10 @@ import Overview from './Overview';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 
+const createFailingCategoryStats = () => ({
+  plugin1: { pass: 0, total: 1 },
+});
+
 vi.mock('@promptfoo/redteam/plugins/policy/utils', () => ({
   isValidPolicyObject: vi.fn((policy: unknown) => {
     return typeof policy === 'object' && policy !== null && 'id' in policy;
@@ -286,9 +290,7 @@ describe('Overview', () => {
 
   it('should handle click on severity cards with null ref gracefully', async () => {
     const user = userEvent.setup();
-    const categoryStats = {
-      plugin1: { pass: 0, total: 1 },
-    };
+    const categoryStats = createFailingCategoryStats();
 
     const plugins: RedteamPluginObject[] = [{ id: 'plugin1', severity: Severity.High }];
 
@@ -307,9 +309,7 @@ describe('Overview', () => {
 
   it('should pass navigateToIssues callback to SeverityCard and trigger scroll on click', async () => {
     const user = userEvent.setup();
-    const categoryStats = {
-      plugin1: { pass: 0, total: 1 },
-    };
+    const categoryStats = createFailingCategoryStats();
 
     const plugins: RedteamPluginObject[] = [{ id: 'plugin1', severity: Severity.Critical }];
 
@@ -365,9 +365,7 @@ describe('Overview', () => {
       setSeverityFilter: mockSetSeverityFilter,
     });
 
-    const categoryStats = {
-      plugin1: { pass: 0, total: 1 },
-    };
+    const categoryStats = createFailingCategoryStats();
 
     const plugins: RedteamPluginObject[] = [{ id: 'plugin1', severity: Severity.Critical }];
 
@@ -397,9 +395,7 @@ describe('Overview', () => {
       setSeverityFilter: mockSetSeverityFilter,
     });
 
-    const categoryStats = {
-      plugin1: { pass: 0, total: 1 },
-    };
+    const categoryStats = createFailingCategoryStats();
 
     const plugins: RedteamPluginObject[] = [{ id: 'plugin1', severity: Severity.Critical }];
 

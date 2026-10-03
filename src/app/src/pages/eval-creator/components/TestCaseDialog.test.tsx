@@ -17,6 +17,16 @@ vi.mock('./AssertsForm', () => ({
 const mockVarsForm = vi.mocked(VarsForm);
 const mockAssertsForm = vi.mocked(AssertsForm);
 
+function createAddTestFields(testVars: Record<string, string>, testAsserts: Assertion[]) {
+  return () => {
+    const varsFormProps = mockVarsForm.mock.calls[0][0];
+    varsFormProps.onAdd(testVars);
+
+    const assertsFormProps = mockAssertsForm.mock.calls[0][0];
+    assertsFormProps.onAdd(testAsserts);
+  };
+}
+
 describe('TestCaseForm', () => {
   const onAdd = vi.fn();
   const onCancel = vi.fn();
@@ -82,13 +92,7 @@ describe('TestCaseForm', () => {
     const testVars = { var1: 'value1', var2: 'value2' };
     const testAsserts: Assertion[] = [{ type: 'equals', value: 'expected value' }];
 
-    act(() => {
-      const varsFormProps = mockVarsForm.mock.calls[0][0];
-      varsFormProps.onAdd(testVars);
-
-      const assertsFormProps = mockAssertsForm.mock.calls[0][0];
-      assertsFormProps.onAdd(testAsserts);
-    });
+    act(createAddTestFields(testVars, testAsserts));
 
     const addButton = screen.getByRole('button', { name: 'Add Test Case' });
     await userEvent.click(addButton);
@@ -112,13 +116,7 @@ describe('TestCaseForm', () => {
     const testVars = { var1: 'value1', var2: 'value2' };
     const testAsserts: Assertion[] = [{ type: 'equals', value: 'expected value' }];
 
-    act(() => {
-      const varsFormProps = mockVarsForm.mock.calls[0][0];
-      varsFormProps.onAdd(testVars);
-
-      const assertsFormProps = mockAssertsForm.mock.calls[0][0];
-      assertsFormProps.onAdd(testAsserts);
-    });
+    act(createAddTestFields(testVars, testAsserts));
 
     const addAnotherButton = screen.getByRole('button', { name: 'Add Another' });
     await userEvent.click(addAnotherButton);
@@ -235,13 +233,7 @@ describe('TestCaseForm', () => {
     const testVars = { var1: 'updated value 1', var2: 'updated value 2' };
     const testAsserts: Assertion[] = [{ type: 'contains', value: 'updated expected value' }];
 
-    act(() => {
-      const varsFormProps = mockVarsForm.mock.calls[0][0];
-      varsFormProps.onAdd(testVars);
-
-      const assertsFormProps = mockAssertsForm.mock.calls[0][0];
-      assertsFormProps.onAdd(testAsserts);
-    });
+    act(createAddTestFields(testVars, testAsserts));
 
     await act(async () => {
       onCancel();

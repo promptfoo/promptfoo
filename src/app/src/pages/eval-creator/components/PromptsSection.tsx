@@ -10,11 +10,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
+import {
+  Copy as ContentCopyIcon,
+  Trash2 as DeleteIcon,
+  Edit as EditIcon,
+  Upload as UploadIcon,
+} from 'lucide-react';
 import PromptDialog from './PromptDialog';
 
 interface PromptsSectionProps {

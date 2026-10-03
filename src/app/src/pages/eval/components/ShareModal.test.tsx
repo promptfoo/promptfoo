@@ -5,6 +5,11 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareModal from './ShareModal';
 
+const createDomain = (domain: string = 'localhost:3000') => ({
+  domain,
+  isCloudEnabled: false,
+});
+
 // Mock the API utility
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
@@ -27,12 +32,7 @@ describe('ShareModal', () => {
     mockClipboard();
     mockDocumentExecCommand();
     // Mock successful domain check by default
-    mockCallApi.mockResolvedValue(
-      Response.json({
-        domain: 'localhost:3000',
-        isCloudEnabled: false,
-      }),
-    );
+    mockCallApi.mockResolvedValue(Response.json(createDomain()));
   });
 
   it('does not render when closed', () => {
@@ -50,12 +50,7 @@ describe('ShareModal', () => {
   });
 
   it('displays signup prompt when cloud is not enabled', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json({
-        domain: 'promptfoo.app',
-        isCloudEnabled: false,
-      }),
-    );
+    mockCallApi.mockResolvedValue(Response.json(createDomain('promptfoo.app')));
 
     render(<ShareModal {...defaultProps} />);
 
@@ -158,12 +153,7 @@ describe('ShareModal', () => {
   });
 
   it('opens external link when "Take me there" is clicked', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json({
-        domain: 'promptfoo.app',
-        isCloudEnabled: false,
-      }),
-    );
+    mockCallApi.mockResolvedValue(Response.json(createDomain('promptfoo.app')));
 
     const mockOpen = mockWindowOpen();
 
@@ -266,14 +256,7 @@ describe('ShareModal', () => {
     const testUrl2 = 'https://promptfoo.app/eval/test-id-2';
 
     // Must return a fresh Response for each call since Response body can only be consumed once
-    mockCallApi.mockImplementation(() =>
-      Promise.resolve(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: false,
-        }),
-      ),
-    );
+    mockCallApi.mockImplementation(() => Promise.resolve(Response.json(createDomain())));
 
     mockOnShare.mockImplementation(async (id: string) => {
       if (id === 'test-eval-id-1') {

@@ -6,6 +6,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { EvaluationPanel } from './EvaluationPanel';
 import type { GradingResult } from '@promptfoo/types';
 
+const createGradingResult = (reason: string, type: 'llm-rubric' | 'contains', value: string) => ({
+  pass: true,
+  score: 1,
+  reason,
+  assertion: {
+    type,
+    value,
+  },
+});
+
+const createGreetingAssertion = () => ({
+  type: 'contains' as const,
+  value: 'Hello world',
+});
+
 describe('EvaluationPanel', () => {
   describe('copy feedback', () => {
     const gradingResults: GradingResult[] = [
@@ -91,15 +106,7 @@ describe('EvaluationPanel', () => {
 
   it('renders assertion results table when gradingResults are provided', () => {
     const gradingResults: GradingResult[] = [
-      {
-        pass: true,
-        score: 1,
-        reason: 'Test passed',
-        assertion: {
-          type: 'llm-rubric',
-          value: 'test rubric',
-        },
-      },
+      createGradingResult('Test passed', 'llm-rubric', 'test rubric'),
     ];
 
     const { container } = render(<EvaluationPanel gradingResults={gradingResults} />);
@@ -168,10 +175,7 @@ describe('EvaluationPanel', () => {
         pass: true,
         score: 1,
         reason: 'Null rendered',
-        assertion: {
-          type: 'contains',
-          value: 'Hello world',
-        },
+        assertion: createGreetingAssertion(),
         metadata: {
           renderedAssertionValue: null as unknown as string,
         },
@@ -191,10 +195,7 @@ describe('EvaluationPanel', () => {
         pass: true,
         score: 1,
         reason: 'No template delta',
-        assertion: {
-          type: 'contains',
-          value: 'Hello world',
-        },
+        assertion: createGreetingAssertion(),
         metadata: {
           renderedAssertionValue: 'Hello world',
         },
@@ -234,15 +235,7 @@ describe('EvaluationPanel', () => {
 
   it('does not render grading prompts section when no renderedGradingPrompt', () => {
     const gradingResults: GradingResult[] = [
-      {
-        pass: true,
-        score: 1,
-        reason: 'Test passed',
-        assertion: {
-          type: 'llm-rubric',
-          value: 'test rubric',
-        },
-      },
+      createGradingResult('Test passed', 'llm-rubric', 'test rubric'),
     ];
 
     render(<EvaluationPanel gradingResults={gradingResults} />);
@@ -364,15 +357,7 @@ describe('EvaluationPanel', () => {
           value: 'google_docs/batch_update',
         },
       },
-      {
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: {
-          type: 'contains',
-          value: 'google_docs/create_document',
-        },
-      },
+      createGradingResult('Assertion passed', 'contains', 'google_docs/create_document'),
     ];
 
     const gradingResults: GradingResult[] = [
@@ -469,15 +454,7 @@ describe('EvaluationPanel', () => {
         score: 1,
         reason: 'All assertions passed',
         componentResults: [
-          {
-            pass: true,
-            score: 1,
-            reason: 'Assertion passed',
-            assertion: {
-              type: 'contains',
-              value: 'google_docs/create_document',
-            },
-          },
+          createGradingResult('Assertion passed', 'contains', 'google_docs/create_document'),
         ],
         metadata: {
           assertionSet: {

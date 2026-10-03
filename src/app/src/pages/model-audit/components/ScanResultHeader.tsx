@@ -1,11 +1,16 @@
 import type { ReactNode } from 'react';
 
 import { CopyButton } from '@app/components/ui/copy-button';
-import { CheckCircleIcon, ErrorIcon, FolderIcon, WarningIcon } from '@app/components/ui/icons';
 import { Separator } from '@app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { formatDataGridDate } from '@app/utils/date';
+import {
+  CheckCircle as CheckCircleIcon,
+  XCircle as ErrorIcon,
+  Folder as FolderIcon,
+  AlertTriangle as WarningIcon,
+} from 'lucide-react';
 import SeverityScorecard from './SeverityScorecard';
 
 import type { SeverityCounts } from '../hooks';

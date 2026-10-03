@@ -10,6 +10,8 @@ import {
 } from '@tanstack/react-table';
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { createValueFilter } from '../../tests/factories';
+import { operatorFilterFn } from './data-table-filter';
 
 interface TestRow {
   id: string;
@@ -17,60 +19,6 @@ interface TestRow {
   severity: string;
   description: string;
 }
-
-// Import the filter function from data-table.tsx
-// Since it's not exported, we'll recreate it here
-const operatorFilterFn = (
-  row: { getValue: (columnId: string) => unknown },
-  columnId: string,
-  filterValue: unknown,
-): boolean => {
-  if (!filterValue || typeof filterValue !== 'object') {
-    return true;
-  }
-
-  const { operator, value } = filterValue as { operator: string; value: string | string[] };
-
-  const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
-  if (!hasValue) {
-    return true;
-  }
-
-  const cellValue = row.getValue(columnId);
-  const cellString = String(cellValue ?? '').toLowerCase();
-
-  switch (operator) {
-    case 'contains': {
-      const filterString = String(value).toLowerCase();
-      return cellString.includes(filterString);
-    }
-    case 'equals': {
-      const filterString = String(value).toLowerCase();
-      return cellString === filterString;
-    }
-    case 'startsWith': {
-      const filterString = String(value).toLowerCase();
-      return cellString.startsWith(filterString);
-    }
-    case 'endsWith': {
-      const filterString = String(value).toLowerCase();
-      return cellString.endsWith(filterString);
-    }
-    case 'notEquals': {
-      const filterString = String(value).toLowerCase();
-      return cellString !== filterString;
-    }
-    case 'isAny': {
-      if (!Array.isArray(value)) {
-        return false;
-      }
-      const filterValues = value.map((v) => String(v).toLowerCase());
-      return filterValues.includes(cellString);
-    }
-    default:
-      return cellString.includes(String(value).toLowerCase());
-  }
-};
 
 describe('DataTable - Multiple Filters Logic', () => {
   const testData: TestRow[] = [
@@ -106,39 +54,38 @@ describe('DataTable - Multiple Filters Logic', () => {
     },
   ];
 
-  it('should apply multiple filters with AND logic - Type contains XSS AND Severity equals Critical', () => {
-    const { result } = renderHook(() => {
-      const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  function useTestTable() {
+    const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
 
-      const table = useReactTable({
-        data: testData,
-        columns,
-        defaultColumn: {
-          filterFn: operatorFilterFn,
-        },
-        filterFns: {
-          operator: operatorFilterFn,
-        },
-        state: {
-          columnFilters,
-        },
-        onColumnFiltersChange: setColumnFilters,
-        getCoreRowModel: getCoreRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-      });
-
-      return { table, setColumnFilters };
+    const table = useReactTable({
+      data: testData,
+      columns,
+      defaultColumn: {
+        filterFn: operatorFilterFn,
+      },
+      filterFns: {
+        operator: operatorFilterFn,
+      },
+      state: {
+        columnFilters,
+      },
+      onColumnFiltersChange: setColumnFilters,
+      getCoreRowModel: getCoreRowModel(),
+      getFilteredRowModel: getFilteredRowModel(),
     });
+
+    return { table };
+  }
+
+  it('should apply multiple filters with AND logic - Type contains XSS AND Severity equals Critical', () => {
+    const { result } = renderHook(useTestTable);
 
     // Initially, all 5 rows should be visible
     expect(result.current.table.getRowModel().rows).toHaveLength(5);
 
     // Apply first filter: Type contains "XSS"
     act(() => {
-      result.current.table.getColumn('type')?.setFilterValue({
-        operator: 'contains',
-        value: 'XSS',
-      });
+      result.current.table.getColumn('type')?.setFilterValue(createValueFilter('XSS'));
     });
 
     // After first filter, should show 2 rows (rows with XSS)
@@ -149,10 +96,9 @@ describe('DataTable - Multiple Filters Logic', () => {
 
     // Apply second filter: Severity equals "Critical"
     act(() => {
-      result.current.table.getColumn('severity')?.setFilterValue({
-        operator: 'equals',
-        value: 'Critical',
-      });
+      result.current.table
+        .getColumn('severity')
+        ?.setFilterValue(createValueFilter('Critical', 'equals'));
     });
 
     // CRITICAL TEST: With both filters applied (Type contains "XSS" AND Severity equals "Critical"),
@@ -165,35 +111,11 @@ describe('DataTable - Multiple Filters Logic', () => {
   });
 
   it('should apply multiple text-based filters - Type contains SQL AND Description contains login', () => {
-    const { result } = renderHook(() => {
-      const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-
-      const table = useReactTable({
-        data: testData,
-        columns,
-        defaultColumn: {
-          filterFn: operatorFilterFn,
-        },
-        filterFns: {
-          operator: operatorFilterFn,
-        },
-        state: {
-          columnFilters,
-        },
-        onColumnFiltersChange: setColumnFilters,
-        getCoreRowModel: getCoreRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-      });
-
-      return { table };
-    });
+    const { result } = renderHook(useTestTable);
 
     // Apply first filter: Type contains "SQL"
     act(() => {
-      result.current.table.getColumn('type')?.setFilterValue({
-        operator: 'contains',
-        value: 'SQL',
-      });
+      result.current.table.getColumn('type')?.setFilterValue(createValueFilter('SQL'));
     });
 
     // Should show 2 rows (SQL Injection rows)
@@ -201,10 +123,7 @@ describe('DataTable - Multiple Filters Logic', () => {
 
     // Apply second filter: Description contains "login"
     act(() => {
-      result.current.table.getColumn('description')?.setFilterValue({
-        operator: 'contains',
-        value: 'login',
-      });
+      result.current.table.getColumn('description')?.setFilterValue(createValueFilter('login'));
     });
 
     // CRITICAL TEST: With both filters (Type contains "SQL" AND Description contains "login"),
@@ -217,40 +136,15 @@ describe('DataTable - Multiple Filters Logic', () => {
   });
 
   it('should maintain all filters when one is removed', () => {
-    const { result } = renderHook(() => {
-      const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-
-      const table = useReactTable({
-        data: testData,
-        columns,
-        defaultColumn: {
-          filterFn: operatorFilterFn,
-        },
-        filterFns: {
-          operator: operatorFilterFn,
-        },
-        state: {
-          columnFilters,
-        },
-        onColumnFiltersChange: setColumnFilters,
-        getCoreRowModel: getCoreRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-      });
-
-      return { table };
-    });
+    const { result } = renderHook(useTestTable);
 
     // Apply three filters
     act(() => {
-      result.current.table.getColumn('type')?.setFilterValue({
-        operator: 'contains',
-        value: 'XSS',
-      });
+      result.current.table.getColumn('type')?.setFilterValue(createValueFilter('XSS'));
 
-      result.current.table.getColumn('severity')?.setFilterValue({
-        operator: 'equals',
-        value: 'Critical',
-      });
+      result.current.table
+        .getColumn('severity')
+        ?.setFilterValue(createValueFilter('Critical', 'equals'));
 
       result.current.table.getColumn('description')?.setFilterValue({
         operator: 'contains',
@@ -278,28 +172,7 @@ describe('DataTable - Multiple Filters Logic', () => {
   });
 
   it('should handle isAny operator with multiple values', () => {
-    const { result } = renderHook(() => {
-      const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-
-      const table = useReactTable({
-        data: testData,
-        columns,
-        defaultColumn: {
-          filterFn: operatorFilterFn,
-        },
-        filterFns: {
-          operator: operatorFilterFn,
-        },
-        state: {
-          columnFilters,
-        },
-        onColumnFiltersChange: setColumnFilters,
-        getCoreRowModel: getCoreRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-      });
-
-      return { table };
-    });
+    const { result } = renderHook(useTestTable);
 
     // Apply isAny filter on severity: Critical OR High
     act(() => {
@@ -314,10 +187,7 @@ describe('DataTable - Multiple Filters Logic', () => {
 
     // Add second filter: Type contains "SQL"
     act(() => {
-      result.current.table.getColumn('type')?.setFilterValue({
-        operator: 'contains',
-        value: 'SQL',
-      });
+      result.current.table.getColumn('type')?.setFilterValue(createValueFilter('SQL'));
     });
 
     // Should show 2 rows: SQL Injection rows that are Critical or High
@@ -328,36 +198,12 @@ describe('DataTable - Multiple Filters Logic', () => {
   });
 
   it('should preserve existing filters when changing a new filters column', () => {
-    const { result } = renderHook(() => {
-      const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-
-      const table = useReactTable({
-        data: testData,
-        columns,
-        defaultColumn: {
-          filterFn: operatorFilterFn,
-        },
-        filterFns: {
-          operator: operatorFilterFn,
-        },
-        state: {
-          columnFilters,
-        },
-        onColumnFiltersChange: setColumnFilters,
-        getCoreRowModel: getCoreRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-      });
-
-      return { table };
-    });
+    const { result } = renderHook(useTestTable);
 
     // SCENARIO: Reproducing the bug reported in TestSuites.tsx
     // 1. Add Filter 1: Type contains "SQL"
     act(() => {
-      result.current.table.getColumn('type')?.setFilterValue({
-        operator: 'contains',
-        value: 'SQL',
-      });
+      result.current.table.getColumn('type')?.setFilterValue(createValueFilter('SQL'));
     });
 
     // Verify first filter works
@@ -394,19 +240,15 @@ describe('DataTable - Multiple Filters Logic', () => {
     // Let me verify the fix works at the TanStack Table level:
     // Apply Filter 1 on type
     act(() => {
-      result.current.table.getColumn('type')?.setFilterValue({
-        operator: 'contains',
-        value: 'SQL',
-      });
+      result.current.table.getColumn('type')?.setFilterValue(createValueFilter('SQL'));
     });
     expect(result.current.table.getRowModel().rows).toHaveLength(2);
 
     // Add Filter 2 on severity
     act(() => {
-      result.current.table.getColumn('severity')?.setFilterValue({
-        operator: 'equals',
-        value: 'Critical',
-      });
+      result.current.table
+        .getColumn('severity')
+        ?.setFilterValue(createValueFilter('Critical', 'equals'));
     });
     expect(result.current.table.getRowModel().rows).toHaveLength(1); // Row 2 only
 
@@ -423,53 +265,25 @@ describe('DataTable - Multiple Filters Logic', () => {
   });
 
   it('should correctly apply three simultaneous filters', () => {
-    const { result } = renderHook(() => {
-      const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-
-      const table = useReactTable({
-        data: testData,
-        columns,
-        defaultColumn: {
-          filterFn: operatorFilterFn,
-        },
-        filterFns: {
-          operator: operatorFilterFn,
-        },
-        state: {
-          columnFilters,
-        },
-        onColumnFiltersChange: setColumnFilters,
-        getCoreRowModel: getCoreRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-      });
-
-      return { table };
-    });
+    const { result } = renderHook(useTestTable);
 
     // Apply first filter
     act(() => {
-      result.current.table.getColumn('type')?.setFilterValue({
-        operator: 'contains',
-        value: 'SQL',
-      });
+      result.current.table.getColumn('type')?.setFilterValue(createValueFilter('SQL'));
     });
     expect(result.current.table.getRowModel().rows).toHaveLength(2); // Rows 2 and 5
 
     // Apply second filter
     act(() => {
-      result.current.table.getColumn('severity')?.setFilterValue({
-        operator: 'equals',
-        value: 'Critical',
-      });
+      result.current.table
+        .getColumn('severity')
+        ?.setFilterValue(createValueFilter('Critical', 'equals'));
     });
     expect(result.current.table.getRowModel().rows).toHaveLength(1); // Row 2 only
 
     // Apply third filter
     act(() => {
-      result.current.table.getColumn('description')?.setFilterValue({
-        operator: 'contains',
-        value: 'login',
-      });
+      result.current.table.getColumn('description')?.setFilterValue(createValueFilter('login'));
     });
     expect(result.current.table.getRowModel().rows).toHaveLength(1); // Still row 2
 

@@ -104,27 +104,19 @@ const interpolateColor = (ratio: number) => {
     green: { r: 0x2e, g: 0x7d, b: 0x32 }, // #2e7d32
   };
 
-  if (ratio <= 0.5) {
-    // Interpolate from red to yellow
-    const t = ratio * 2; // normalize to 0-1 range
-    return `#${Math.round(colors.red.r + (colors.yellow.r - colors.red.r) * t)
-      .toString(16)
-      .padStart(2, '0')}${Math.round(colors.red.g + (colors.yellow.g - colors.red.g) * t)
-      .toString(16)
-      .padStart(2, '0')}${Math.round(colors.red.b + (colors.yellow.b - colors.red.b) * t)
-      .toString(16)
-      .padStart(2, '0')}`;
-  } else {
-    // Interpolate from yellow to green
-    const t = (ratio - 0.5) * 2; // normalize to 0-1 range
-    return `#${Math.round(colors.yellow.r + (colors.green.r - colors.yellow.r) * t)
-      .toString(16)
-      .padStart(2, '0')}${Math.round(colors.yellow.g + (colors.green.g - colors.yellow.g) * t)
-      .toString(16)
-      .padStart(2, '0')}${Math.round(colors.yellow.b + (colors.green.b - colors.yellow.b) * t)
-      .toString(16)
-      .padStart(2, '0')}`;
-  }
+  // Interpolate from red to yellow, then yellow to green.
+  // Normalize each half to the 0-1 range.
+  const [from, to, t] =
+    ratio <= 0.5
+      ? ([colors.red, colors.yellow, ratio * 2] as const)
+      : ([colors.yellow, colors.green, (ratio - 0.5) * 2] as const);
+  return `#${(['r', 'g', 'b'] as const)
+    .map((channel) =>
+      Math.round(from[channel] + (to[channel] - from[channel]) * t)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
 };
 
 const CustomLink = (props: SankeyLinkOptions) => {
@@ -195,26 +187,9 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
     const plugins = Object.keys(linkCounts);
     const strategies = Array.from(new Set(plugins.flatMap((p) => Object.keys(linkCounts[p]))));
 
-    const totalPasses = strategies.reduce((acc, s) => {
-      let strategyPasses = 0;
-      for (const p of plugins) {
-        if (linkCounts[p][s]) {
-          strategyPasses += linkCounts[p][s].pass;
-        }
-      }
-      return acc + strategyPasses;
-    }, 0);
+    const strategyCounts: { name: string; pass: number; fail: number }[] = [];
 
-    const totalFails = strategies.reduce((acc, s) => {
-      let strategyFails = 0;
-      for (const p of plugins) {
-        if (linkCounts[p][s]) {
-          strategyFails += linkCounts[p][s].fail;
-        }
-      }
-      return acc + strategyFails;
-    }, 0);
-
+    // Recharts derives node values from links.
     // Build nodes array with labels
     const nodes = [
       // Plugin nodes
@@ -226,31 +201,31 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
         const totalPasses = Object.values(linkCounts[p]).reduce((acc, curr) => acc + curr.pass, 0);
         return {
           name: p,
-          displayName: p,
           passRatio: totalTests > 0 ? totalPasses / totalTests : 0,
-          value: totalTests,
         };
       }),
       // Strategy nodes
       ...strategies.map((s) => {
         let totalPass = 0;
         let totalTests = 0;
+        let totalFail = 0;
+        // Sum up passes/fails for this strategy across all plugins
         for (const p of plugins) {
           if (linkCounts[p][s]) {
             totalPass += linkCounts[p][s].pass;
             totalTests += linkCounts[p][s].pass + linkCounts[p][s].fail;
+            totalFail += linkCounts[p][s].fail;
           }
         }
+        strategyCounts.push({ name: s, pass: totalPass, fail: totalFail });
         return {
           name: s,
-          displayName: s,
           passRatio: totalTests > 0 ? totalPass / totalTests : 0,
-          value: totalTests,
         };
       }),
       // Outcome nodes
-      { name: 'Pass', displayName: 'Pass', passRatio: 1, value: totalPasses },
-      { name: 'Fail', displayName: 'Fail', passRatio: 0, value: totalFails },
+      { name: 'Pass', passRatio: 1 },
+      { name: 'Fail', passRatio: 0 },
     ];
 
     // Create indices for looking up node positions
@@ -287,18 +262,7 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
     }
 
     // Strategy -> Outcome links
-    for (const s of strategies) {
-      let totalPass = 0;
-      let totalFail = 0;
-
-      // Sum up passes/fails for this strategy across all plugins
-      for (const p of plugins) {
-        if (linkCounts[p][s]) {
-          totalPass += linkCounts[p][s].pass;
-          totalFail += linkCounts[p][s].fail;
-        }
-      }
-
+    for (const { name: s, pass: totalPass, fail: totalFail } of strategyCounts) {
       if (totalPass > 0) {
         links.push({
           source: strategyIndex[s],

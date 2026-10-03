@@ -1,14 +1,31 @@
 import React from 'react';
 
+import { createTargetOverwriteSetItem } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCodingTarget, createUnconfiguredProvider } from '../../../../../tests/factories';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import ProviderConfigEditor from './ProviderConfigEditor';
 
 import type { ProviderOptions } from '../../types';
+
+const createHttpProviderFixture = () => ({
+  id: 'http',
+  config: {
+    url: 'https://api.example.com/chat',
+    body: {
+      messages: [{ role: 'user', content: '{{prompt}}' }],
+    },
+  },
+});
+
+const createMcpServerConfigFixture = () => ({
+  enabled: true,
+  servers: [{ name: 'server-1', command: 'npx', args: ['mcp-server'] }],
+});
 
 const mockA2AConfigState = vi.hoisted(() => ({
   advancedConfigError: null as string | null,
@@ -195,15 +212,7 @@ describe('ProviderConfigEditor', () => {
       const mockOnValidate = vi.fn();
       let validateFn: (() => boolean) | null = null;
 
-      const validHttpProvider: ProviderOptions = {
-        id: 'http',
-        config: {
-          url: 'https://api.example.com/chat',
-          body: {
-            messages: [{ role: 'user', content: '{{prompt}}' }],
-          },
-        },
-      };
+      const validHttpProvider: ProviderOptions = createHttpProviderFixture();
 
       renderWithProviders(
         <ProviderConfigEditor
@@ -262,10 +271,7 @@ describe('ProviderConfigEditor', () => {
       const mockOnValidate = vi.fn();
       let validateFn: (() => boolean) | null = null;
 
-      const validGoProvider: ProviderOptions = {
-        id: 'go-provider',
-        config: {},
-      };
+      const validGoProvider: ProviderOptions = createUnconfiguredProvider('go-provider');
 
       renderWithProviders(
         <ProviderConfigEditor
@@ -600,10 +606,8 @@ describe('ProviderConfigEditor', () => {
       const mockOnValidate = vi.fn();
       let validateFn: (() => boolean) | null = null;
 
-      const validAgentProvider: ProviderOptions = {
-        id: 'file://path/to/agent.py',
-        config: {},
-      };
+      const validAgentProvider: ProviderOptions =
+        createUnconfiguredProvider('file://path/to/agent.py');
 
       renderWithProviders(
         <ProviderConfigEditor
@@ -1036,10 +1040,7 @@ describe('ProviderConfigEditor', () => {
     const mockSetError = vi.fn();
     const mockOnValidate = vi.fn();
 
-    const emptyProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const emptyProvider: ProviderOptions = createUnconfiguredProvider('');
 
     const { container } = renderWithProviders(
       <ProviderConfigEditor
@@ -1093,10 +1094,7 @@ describe('ProviderConfigEditor', () => {
     const mockSetError = vi.fn();
     const mockOnValidate = vi.fn();
 
-    const goProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const goProvider: ProviderOptions = createUnconfiguredProvider('');
 
     const { getByTestId } = renderWithProviders(
       <ProviderConfigEditor
@@ -1122,10 +1120,7 @@ describe('ProviderConfigEditor', () => {
     const mockOnValidate = vi.fn();
     let validateFn: (() => boolean) | null = null;
 
-    const validGoProvider: ProviderOptions = {
-      id: 'go-provider',
-      config: {},
-    };
+    const validGoProvider: ProviderOptions = createUnconfiguredProvider('go-provider');
 
     act(() => {
       useRedTeamConfig.getState().updateConfig('target', validGoProvider);
@@ -1258,10 +1253,7 @@ describe('ProviderConfigEditor', () => {
     // Use vi.fn() to capture the validator - this works better with React Compiler
     const captureValidator = vi.fn();
 
-    const initialProvider: ProviderOptions = {
-      id: 'file://path/to/agent.py',
-      config: {},
-    };
+    const initialProvider: ProviderOptions = createUnconfiguredProvider('file://path/to/agent.py');
 
     act(() => {
       useRedTeamConfig.getState().updateConfig('target', initialProvider);
@@ -1301,15 +1293,7 @@ describe('ProviderConfigEditor', () => {
       expect(screen.getByTestId('http-config')).toBeInTheDocument();
     });
 
-    const updatedProvider: ProviderOptions = {
-      id: 'http',
-      config: {
-        url: 'https://api.example.com/chat',
-        body: {
-          messages: [{ role: 'user', content: '{{prompt}}' }],
-        },
-      },
-    };
+    const updatedProvider: ProviderOptions = createHttpProviderFixture();
 
     act(() => {
       useRedTeamConfig.getState().updateConfig('target', updatedProvider);
@@ -1341,10 +1325,7 @@ describe('ProviderConfigEditor', () => {
     const mockOnValidate = vi.fn();
     let validateFn: (() => boolean) | null = null;
 
-    const emptyProvider: ProviderOptions = {
-      id: '',
-      config: {},
-    };
+    const emptyProvider: ProviderOptions = createUnconfiguredProvider('');
 
     const { getByTestId } = renderWithProviders(
       <ProviderConfigEditor
@@ -1546,11 +1527,7 @@ describe('ProviderConfigEditor', () => {
   });
 
   it('keeps a corrected Open Interpreter edit blocked when its persisted target is overwritten before the clear', () => {
-    const staleTarget = {
-      id: 'openinterpreter',
-      label: 'Coding target',
-      config: { sandbox_mode: 'danger-full-access' },
-    };
+    const staleTarget = createCodingTarget('danger-full-access');
     useRedTeamConfig.getState().setFullConfig({
       ...useRedTeamConfig.getState().config,
       target: staleTarget,
@@ -1568,21 +1545,10 @@ describe('ProviderConfigEditor', () => {
       screen.getByTestId('invalidate-custom-config').click();
     });
     const originalSetItem = Storage.prototype.setItem;
-    let raced = false;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      const result = originalSetItem.call(this, key, value);
-      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
-        raced = true;
-        const overwrittenConfig = JSON.parse(value);
-        overwrittenConfig.state.config.target = staleTarget;
-        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
-      }
-      return result;
-    });
+    const overwrite = createTargetOverwriteSetItem(originalSetItem, staleTarget);
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(overwrite.implementation);
     try {
       act(() => {
         screen.getByTestId('correct-custom-config').click();
@@ -1591,7 +1557,7 @@ describe('ProviderConfigEditor', () => {
       setItem.mockRestore();
     }
 
-    expect(raced).toBe(true);
+    expect(overwrite.state.raced).toBe(true);
     expect(
       JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
     ).toEqual({ sandbox_mode: 'danger-full-access' });
@@ -1609,11 +1575,7 @@ describe('ProviderConfigEditor', () => {
   });
 
   it('keeps a provider-type replacement blocked when its persisted target is overwritten before the clear', () => {
-    const staleTarget = {
-      id: 'openinterpreter',
-      label: 'Coding target',
-      config: { sandbox_mode: 'danger-full-access' },
-    };
+    const staleTarget = createCodingTarget('danger-full-access');
     const correctedTarget = { id: 'openai:gpt-4o', label: 'Foundation target', config: {} };
     useRedTeamConfig.getState().setFullConfig({
       ...useRedTeamConfig.getState().config,
@@ -1632,21 +1594,10 @@ describe('ProviderConfigEditor', () => {
       screen.getByTestId('invalidate-custom-config').click();
     });
     const originalSetItem = Storage.prototype.setItem;
-    let raced = false;
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      const result = originalSetItem.call(this, key, value);
-      if (!raced && this === window.localStorage && key === 'redTeamConfig') {
-        raced = true;
-        const overwrittenConfig = JSON.parse(value);
-        overwrittenConfig.state.config.target = staleTarget;
-        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
-      }
-      return result;
-    });
+    const overwrite = createTargetOverwriteSetItem(originalSetItem, staleTarget);
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(overwrite.implementation);
     try {
       act(() => {
         useRedTeamConfig.getState().updateConfig('target', correctedTarget);
@@ -1663,7 +1614,7 @@ describe('ProviderConfigEditor', () => {
       setItem.mockRestore();
     }
 
-    expect(raced).toBe(true);
+    expect(overwrite.state.raced).toBe(true);
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
       'Invalid JSON configuration',
     );
@@ -1804,10 +1755,7 @@ describe('ProviderConfigEditor', () => {
         provider={{
           id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
           config: {
-            mcp: {
-              enabled: true,
-              servers: [{ name: 'server-1', command: 'npx', args: ['mcp-server'] }],
-            },
+            mcp: createMcpServerConfigFixture(),
           },
         }}
         setProvider={mockSetProvider}
@@ -1829,10 +1777,7 @@ describe('ProviderConfigEditor', () => {
 
   it('should preserve Bedrock MCP config when provider is already using InvokeModel id format', () => {
     const mockSetProvider = vi.fn();
-    const mcpConfig = {
-      enabled: true,
-      servers: [{ name: 'server-1', command: 'npx', args: ['mcp-server'] }],
-    };
+    const mcpConfig = createMcpServerConfigFixture();
 
     renderWithProviders(
       <ProviderConfigEditor

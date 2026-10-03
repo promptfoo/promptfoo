@@ -600,12 +600,6 @@ thead {
   transition: margin-top 0.2s ease-out;
 }
 
-/* Ensure the header cells have a solid background */
-.results-table th {
-  background: rgb(250 250 249); /* zinc-50 */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
 /* Keep body rows on the separate-border grid, while the detached sticky-header
  * table manages its own edge styling without doubling lines in the results body. */
 .results-table {

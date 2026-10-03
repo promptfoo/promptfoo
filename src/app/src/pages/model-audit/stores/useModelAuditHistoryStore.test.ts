@@ -1,7 +1,11 @@
 import { callApi } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditHistoryStore } from './useModelAuditHistoryStore';
+
+const createFailedResponseFixture = () => ({
+  ok: false,
+});
 
 vi.mock('@app/utils/api');
 
@@ -26,7 +30,7 @@ const createMockScan = (id: string, name: string) => ({
 
 describe('useModelAuditHistoryStore', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     // Reset store state between tests
     useModelAuditHistoryStore.setState({
       historicalScans: [],
@@ -34,10 +38,12 @@ describe('useModelAuditHistoryStore', () => {
       historyError: null,
       totalCount: 0,
       pageSize: 25,
-      currentPage: 0,
       sortModel: [{ field: 'createdAt', sort: 'desc' }],
-      searchQuery: '',
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('fetchHistoricalScans', () => {
@@ -55,6 +61,10 @@ describe('useModelAuditHistoryStore', () => {
         await result.current.fetchHistoricalScans();
       });
 
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/model-audit/scans?limit=25&offset=0&sort=createdAt&order=desc',
+        { signal: undefined },
+      );
       await waitFor(() => {
         expect(result.current.historicalScans).toHaveLength(2);
         expect(result.current.totalCount).toBe(2);
@@ -63,9 +73,7 @@ describe('useModelAuditHistoryStore', () => {
     });
 
     it('should handle fetch error', async () => {
-      mockCallApi.mockResolvedValueOnce({
-        ok: false,
-      } as Response);
+      mockCallApi.mockResolvedValueOnce(createFailedResponseFixture() as Response);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -93,53 +101,97 @@ describe('useModelAuditHistoryStore', () => {
       // Should not set error for abort
       expect(result.current.historyError).toBeNull();
     });
+  });
 
-    it('should include search query in request', async () => {
-      mockCallApi.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ scans: [], total: 0 }),
-      } as Response);
+  describe('fetchHistoricalScanRange', () => {
+    it.each([
+      {
+        sortModel: [],
+        startIndex: 25,
+        endIndex: 49,
+        query: 'limit=25&offset=25&sort=createdAt&order=desc',
+      },
+      {
+        sortModel: [{ field: 'name' as const, sort: 'asc' as const }],
+        startIndex: 5,
+        endIndex: 9,
+        query: 'limit=5&offset=5&sort=name&order=asc',
+      },
+      {
+        sortModel: [],
+        startIndex: -5,
+        endIndex: -1,
+        query: 'limit=1&offset=0&sort=createdAt&order=desc',
+      },
+    ])(
+      'requests $query without replacing the initial rows',
+      async ({ sortModel, startIndex, endIndex, query }) => {
+        const store = useModelAuditHistoryStore.getState();
+        const initialScans = [createMockScan('initial', 'Initial scan')];
+        const scans = [createMockScan('range', 'Range scan')];
+        const signal = new AbortController().signal;
+        useModelAuditHistoryStore.setState({
+          historicalScans: initialScans,
+          historyError: 'Previous error',
+        });
+        store.setSortModel(sortModel);
+        mockCallApi.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ scans, total: 50 }),
+        } as Response);
 
-      const { result } = renderHook(() => useModelAuditHistoryStore());
+        await expect(
+          store.fetchHistoricalScanRange({ startIndex, endIndex }, signal),
+        ).resolves.toEqual({
+          scans,
+          offset: Math.max(0, startIndex),
+          total: 50,
+        });
+        expect(mockCallApi).toHaveBeenCalledWith(`/model-audit/scans?${query}`, { signal });
+        expect(useModelAuditHistoryStore.getState()).toMatchObject({
+          historicalScans: initialScans,
+          totalCount: 50,
+          historyError: null,
+          isLoadingHistory: false,
+          sortModel,
+        });
+      },
+    );
 
-      act(() => {
-        result.current.setSearchQuery('test query');
-      });
+    it.each([
+      { error: new Error('Offline'), historyError: 'Offline' },
+      {
+        error: Object.assign(new Error('Aborted'), { name: 'AbortError' }),
+        historyError: 'Previous error',
+      },
+      { error: 'Offline', historyError: 'Failed to fetch history' },
+    ])(
+      'propagates $error and preserves the appropriate error state',
+      async ({ error, historyError }) => {
+        useModelAuditHistoryStore.setState({ historyError: 'Previous error', totalCount: 10 });
+        mockCallApi.mockRejectedValueOnce(error);
+        await expect(
+          useModelAuditHistoryStore
+            .getState()
+            .fetchHistoricalScanRange({ startIndex: 0, endIndex: 24 }),
+        ).rejects.toBe(error);
+        expect(useModelAuditHistoryStore.getState()).toMatchObject({
+          historyError,
+          totalCount: 10,
+          isLoadingHistory: false,
+        });
+      },
+    );
 
-      await act(async () => {
-        await result.current.fetchHistoricalScans();
-      });
-
-      expect(mockCallApi).toHaveBeenCalledWith(
-        expect.stringContaining('search=test+query'),
-        expect.any(Object),
-      );
-    });
-
-    it('should include pagination params in request', async () => {
-      mockCallApi.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ scans: [], total: 0 }),
-      } as Response);
-
-      const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setPageSize(50);
-        result.current.setCurrentPage(2);
-      });
-
-      await act(async () => {
-        await result.current.fetchHistoricalScans();
-      });
-
-      expect(mockCallApi).toHaveBeenCalledWith(
-        expect.stringContaining('limit=50'),
-        expect.any(Object),
-      );
-      expect(mockCallApi).toHaveBeenCalledWith(
-        expect.stringContaining('offset=100'),
-        expect.any(Object),
+    it('rejects unsuccessful responses', async () => {
+      mockCallApi.mockResolvedValueOnce({ ok: false } as Response);
+      await expect(
+        useModelAuditHistoryStore
+          .getState()
+          .fetchHistoricalScanRange({ startIndex: 0, endIndex: 24 }),
+      ).rejects.toThrow('Failed to fetch historical scans');
+      expect(useModelAuditHistoryStore.getState().historyError).toBe(
+        'Failed to fetch historical scans',
       );
     });
   });
@@ -245,9 +297,7 @@ describe('useModelAuditHistoryStore', () => {
         totalCount: 2,
       });
 
-      mockCallApi.mockResolvedValueOnce({
-        ok: false,
-      } as Response);
+      mockCallApi.mockResolvedValueOnce(createFailedResponseFixture() as Response);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -282,9 +332,7 @@ describe('useModelAuditHistoryStore', () => {
         totalCount: 3,
       });
 
-      mockCallApi.mockResolvedValueOnce({
-        ok: false,
-      } as Response);
+      mockCallApi.mockResolvedValueOnce(createFailedResponseFixture() as Response);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
@@ -300,82 +348,13 @@ describe('useModelAuditHistoryStore', () => {
     });
   });
 
-  describe('pagination and filtering', () => {
-    it('should set page size and reset page', () => {
-      const { result } = renderHook(() => useModelAuditHistoryStore());
+  it('should set sort model', () => {
+    const { result } = renderHook(() => useModelAuditHistoryStore());
 
-      act(() => {
-        result.current.setCurrentPage(5);
-      });
-
-      expect(result.current.currentPage).toBe(5);
-
-      act(() => {
-        result.current.setPageSize(50);
-      });
-
-      expect(result.current.pageSize).toBe(50);
-      expect(result.current.currentPage).toBe(0); // Reset to first page
+    act(() => {
+      result.current.setSortModel([{ field: 'name', sort: 'asc' }]);
     });
 
-    it('should set current page', () => {
-      const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setCurrentPage(3);
-      });
-
-      expect(result.current.currentPage).toBe(3);
-    });
-
-    it('should set sort model and reset page', () => {
-      const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setCurrentPage(5);
-      });
-
-      act(() => {
-        result.current.setSortModel([{ field: 'name', sort: 'asc' }]);
-      });
-
-      expect(result.current.sortModel).toEqual([{ field: 'name', sort: 'asc' }]);
-      expect(result.current.currentPage).toBe(0); // Reset to first page
-    });
-
-    it('should set search query and reset page', () => {
-      const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setCurrentPage(5);
-      });
-
-      act(() => {
-        result.current.setSearchQuery('test');
-      });
-
-      expect(result.current.searchQuery).toBe('test');
-      expect(result.current.currentPage).toBe(0); // Reset to first page
-    });
-
-    it('should reset all filters', () => {
-      const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setPageSize(100);
-        result.current.setCurrentPage(5);
-        result.current.setSortModel([{ field: 'name', sort: 'asc' }]);
-        result.current.setSearchQuery('test');
-      });
-
-      act(() => {
-        result.current.resetFilters();
-      });
-
-      expect(result.current.pageSize).toBe(25);
-      expect(result.current.currentPage).toBe(0);
-      expect(result.current.sortModel).toEqual([{ field: 'createdAt', sort: 'desc' }]);
-      expect(result.current.searchQuery).toBe('');
-    });
+    expect(result.current.sortModel).toEqual([{ field: 'name', sort: 'asc' }]);
   });
 });

@@ -28,24 +28,6 @@ interface UseVersionCheckResult {
 const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
 const RETRY_DELAY_MS = 5 * 60 * 1000;
 
-// localStorage throws in Safari private mode and when storage is disabled or full. Dismissal
-// persistence is best-effort; a failure must never break the version check.
-function safeLocalStorageGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeLocalStorageSet(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Ignore: the in-memory dismissal state still updates for this session.
-  }
-}
-
 export function useVersionCheck(): UseVersionCheckResult {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,7 +52,14 @@ export function useVersionCheck(): UseVersionCheckResult {
 
         setVersionInfo(data);
         setError(null);
-        setDismissed(safeLocalStorageGet(STORAGE_KEY) === data.latestVersion);
+        let dismissedVersion: string | null = null;
+        try {
+          dismissedVersion = localStorage.getItem(STORAGE_KEY);
+        } catch {
+          // localStorage throws in Safari private mode and when storage is disabled or full. Dismissal
+          // persistence is best-effort; a failure must never break the version check.
+        }
+        setDismissed(dismissedVersion === data.latestVersion);
       } catch (err) {
         if (!active) {
           return;
@@ -99,18 +88,21 @@ export function useVersionCheck(): UseVersionCheckResult {
     };
   }, []);
 
-  const dismiss = () => {
-    if (versionInfo?.latestVersion) {
-      safeLocalStorageSet(STORAGE_KEY, versionInfo.latestVersion);
-      setDismissed(true);
-    }
-  };
-
   return {
     versionInfo,
     loading,
     error,
     dismissed,
-    dismiss,
+    dismiss: () => {
+      if (versionInfo?.latestVersion) {
+        const latestVersion = versionInfo.latestVersion;
+        try {
+          localStorage.setItem(STORAGE_KEY, latestVersion);
+        } catch {
+          // Ignore: the in-memory dismissal state still updates for this session.
+        }
+        setDismissed(true);
+      }
+    },
   };
 }

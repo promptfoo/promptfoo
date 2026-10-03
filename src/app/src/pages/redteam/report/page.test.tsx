@@ -1,6 +1,5 @@
-import React from 'react';
-
 import { useUserStore } from '@app/stores/userStore';
+import { createRouterModule } from '@app/tests/browserMocks';
 import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate, useSearchParams } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,16 +17,9 @@ vi.mock('./components/ReportIndex', () => ({
   default: () => <div>ReportIndex Component</div>,
 }));
 
-vi.mock('@app/contexts/UserContext', () => ({
-  UserProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
 vi.mock('react-router', async () => {
   const actual = await vi.importActual('react-router');
-  return {
-    ...actual,
-    useNavigate: vi.fn(),
-  };
+  return createRouterModule(actual, () => vi.fn());
 });
 
 /**

@@ -7,6 +7,13 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import YamlEditorComponent from './YamlEditor';
 
+const createTestSuiteFixture = () => ({
+  description: 'Test suite',
+  providers: [{ id: 'test-provider' }],
+  prompts: ['test prompt'],
+  tests: [{ description: 'test case' }],
+});
+
 vi.mock('react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
@@ -28,12 +35,7 @@ vi.mock('@app/hooks/useToast', () => ({
   }),
 }));
 
-const mockGetTestSuite = vi.fn().mockReturnValue({
-  description: 'Test suite',
-  providers: [{ id: 'test-provider' }],
-  prompts: ['test prompt'],
-  tests: [{ description: 'test case' }],
-});
+const mockGetTestSuite = vi.fn().mockReturnValue(createTestSuiteFixture());
 const mockUpdateConfig = vi.fn();
 
 vi.mock('@app/stores/evalConfig', () => ({
@@ -59,22 +61,6 @@ vi.mock('react-simple-code-editor', () => ({
   ),
 }));
 
-vi.mock('@mui/icons-material/ContentCopy', () => ({
-  default: () => <span data-testid="copy-icon">Copy</span>,
-}));
-
-vi.mock('@mui/icons-material/Edit', () => ({
-  default: () => <span data-testid="edit-icon">Edit</span>,
-}));
-
-vi.mock('@mui/icons-material/Save', () => ({
-  default: () => <span data-testid="save-icon">Save</span>,
-}));
-
-vi.mock('@mui/icons-material/Upload', () => ({
-  default: () => <span data-testid="upload-icon">Upload</span>,
-}));
-
 describe('YamlEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,12 +69,7 @@ describe('YamlEditor', () => {
     mockObjectUrl('blob:yaml-editor-test');
 
     // Reset mock to default return value
-    mockGetTestSuite.mockReturnValue({
-      description: 'Test suite',
-      providers: [{ id: 'test-provider' }],
-      prompts: ['test prompt'],
-      tests: [{ description: 'test case' }],
-    });
+    mockGetTestSuite.mockReturnValue(createTestSuiteFixture());
   });
 
   afterEach(() => {

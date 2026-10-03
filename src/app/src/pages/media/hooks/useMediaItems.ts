@@ -181,21 +181,16 @@ export async function fetchMediaItemByHash(hash: string): Promise<FetchMediaItem
   try {
     const response = await callApi(`/blobs/library?hash=${encodeURIComponent(hash)}&limit=1`);
 
-    if (!response.ok) {
-      return { item: null, error: 'server_error' };
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        if (!data.data.items.length) {
+          return { item: null, error: 'not_found' };
+        }
+        return { item: data.data.items[0], error: null };
+      }
     }
-
-    const data = await response.json();
-
-    if (!data.success) {
-      return { item: null, error: 'server_error' };
-    }
-
-    if (!data.data.items.length) {
-      return { item: null, error: 'not_found' };
-    }
-
-    return { item: data.data.items[0], error: null };
+    return { item: null, error: 'server_error' };
   } catch {
     return { item: null, error: 'network_error' };
   }

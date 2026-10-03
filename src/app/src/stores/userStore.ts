@@ -7,7 +7,6 @@ interface UserState {
   isLoading: boolean;
   authVersion: number;
   setEmail: (email: string) => void;
-  setUserId: (userId: string) => void;
   fetchEmail: () => Promise<void>;
   fetchUserId: () => Promise<void>;
   logout: () => Promise<void>;
@@ -21,7 +20,6 @@ export const useUserStore = create<UserState>((set, getState) => ({
   authVersion: 0,
   // The same email can authenticate with different cloud credentials or organizations.
   setEmail: (email: string) => set((state) => ({ email, authVersion: state.authVersion + 1 })),
-  setUserId: (userId: string) => set({ userId }),
   fetchEmail: async () => {
     if (getState().email) {
       set({ isLoading: false });
@@ -29,12 +27,10 @@ export const useUserStore = create<UserState>((set, getState) => ({
     }
     try {
       const response = await callApi('/user/email', { cache: 'no-store' });
-      if (response.ok) {
-        const data = await response.json();
-        set({ email: data.email, isLoading: false });
-      } else {
+      if (!response.ok) {
         throw new Error('Failed to fetch user email');
       }
+      set({ email: (await response.json()).email, isLoading: false });
     } catch (error) {
       console.error('Error fetching user email:', error);
       set({ email: null, isLoading: false });
@@ -45,8 +41,7 @@ export const useUserStore = create<UserState>((set, getState) => ({
       return;
     }
     try {
-      const userId = await fetchUserId();
-      set({ userId: userId || null });
+      set({ userId: (await fetchUserId()) || null });
     } catch (error) {
       console.error('Error fetching user ID:', error);
       set({ userId: null });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { isPlainObject } from '@app/utils/isPlainObject';
 import deepEqual from 'fast-deep-equal';
 import { AlertTriangle } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
@@ -62,14 +63,6 @@ const isRestoredTargetConfigDraft = (
   } catch {
     return false;
   }
-};
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
 };
 
 const getStructuredProvider = (provider: ProviderOptions): ProviderOptions =>

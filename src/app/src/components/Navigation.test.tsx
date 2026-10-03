@@ -8,17 +8,19 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Navigation from './Navigation';
 
+const createNoRetryQueryOptions = () => ({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
+
 const LEGACY_MODEL_AUDIT_HISTORY_ROUTE = `${MODEL_AUDIT_ROUTES.ROOT}/history`;
 
 // Helper function to render Navigation with all required providers
 const renderNavigation = (routerProps: { initialEntries?: string[] } = {}) => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-      },
-    },
-  });
+  const queryClient = new QueryClient(createNoRetryQueryOptions());
 
   return render(
     <TooltipProvider delayDuration={0}>
@@ -32,13 +34,7 @@ const renderNavigation = (routerProps: { initialEntries?: string[] } = {}) => {
 };
 
 const renderWithModal = () => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-      },
-    },
-  });
+  const queryClient = new QueryClient(createNoRetryQueryOptions());
 
   const Modal = () => (
     <div

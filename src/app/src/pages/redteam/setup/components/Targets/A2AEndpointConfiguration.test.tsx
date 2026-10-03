@@ -4,9 +4,17 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render as rtlRender, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { createUnconfiguredProvider } from '../../../../../tests/factories';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
+
+const createA2ATarget = (url: string = 'https://agent.example.com/a2a') => ({
+  id: 'a2a',
+  config: {
+    url,
+  },
+});
 
 vi.mock('react-simple-code-editor', () => ({
   default: ({ highlight, placeholder, value, onValueChange }: any) => {
@@ -86,12 +94,7 @@ const renderA2AConfiguration = (
 describe('A2AEndpointConfiguration', () => {
   it('should render friendly A2A connection, auth, and advanced fields', async () => {
     const user = userEvent.setup();
-    const { updateSpy } = renderA2AConfiguration({
-      id: 'a2a',
-      config: {
-        url: '',
-      },
-    });
+    const { updateSpy } = renderA2AConfiguration(createA2ATarget(''));
 
     const agentCardUrlInput = screen.getByLabelText(/Agent Card URL/i);
     const endpointUrlInput = screen.getByLabelText(/A2A Endpoint URL/i);
@@ -156,12 +159,7 @@ describe('A2AEndpointConfiguration', () => {
   });
 
   it('should use an expression-style transformResponse in the advanced config placeholder', () => {
-    renderA2AConfiguration({
-      id: 'a2a',
-      config: {
-        url: '',
-      },
-    });
+    renderA2AConfiguration(createA2ATarget(''));
 
     const placeholder = screen.getByTestId('code-editor').getAttribute('placeholder') ?? '';
 
@@ -173,10 +171,7 @@ describe('A2AEndpointConfiguration', () => {
 
   it('should configure basic and API key auth fields', async () => {
     const user = userEvent.setup();
-    const { updateSpy } = renderA2AConfiguration({
-      id: 'a2a',
-      config: {},
-    });
+    const { updateSpy } = renderA2AConfiguration(createUnconfiguredProvider('a2a'));
 
     await user.click(screen.getByLabelText(/Authentication Type/i));
     await user.click(screen.getByRole('option', { name: 'Basic Auth' }));
@@ -245,10 +240,7 @@ describe('A2AEndpointConfiguration', () => {
 
   it('should configure OAuth auth fields and clear auth when no auth is selected', async () => {
     const user = userEvent.setup();
-    const { updateSpy } = renderA2AConfiguration({
-      id: 'a2a',
-      config: {},
-    });
+    const { updateSpy } = renderA2AConfiguration(createUnconfiguredProvider('a2a'));
 
     await user.click(screen.getByLabelText(/Authentication Type/i));
     await user.click(screen.getByRole('option', { name: 'OAuth 2.0' }));
@@ -402,12 +394,7 @@ describe('A2AEndpointConfiguration', () => {
 
   it('should format advanced JSON and keep structured fields when formatting succeeds', async () => {
     const user = userEvent.setup();
-    const { setRawConfigJsonSpy, updateSpy } = renderA2AConfiguration({
-      id: 'a2a',
-      config: {
-        url: 'https://agent.example.com/a2a',
-      },
-    });
+    const { setRawConfigJsonSpy, updateSpy } = renderA2AConfiguration(createA2ATarget());
 
     const editor = screen.getByTestId('code-editor');
     await user.clear(editor);
@@ -430,12 +417,7 @@ describe('A2AEndpointConfiguration', () => {
 
   it('should require advanced configuration to be a JSON object', async () => {
     const user = userEvent.setup();
-    const { onAdvancedConfigErrorChangeSpy, updateSpy } = renderA2AConfiguration({
-      id: 'a2a',
-      config: {
-        url: 'https://agent.example.com/a2a',
-      },
-    });
+    const { onAdvancedConfigErrorChangeSpy, updateSpy } = renderA2AConfiguration(createA2ATarget());
 
     updateSpy.mockClear();
     onAdvancedConfigErrorChangeSpy.mockClear();
@@ -455,12 +437,7 @@ describe('A2AEndpointConfiguration', () => {
 
   it('should show body errors and disable JSON formatting while they are present', () => {
     renderA2AConfiguration(
-      {
-        id: 'a2a',
-        config: {
-          url: 'https://agent.example.com/a2a',
-        },
-      },
+      createA2ATarget(),
       '{"mode":"send"}',
       'Request body must contain {{prompt}}',
     );

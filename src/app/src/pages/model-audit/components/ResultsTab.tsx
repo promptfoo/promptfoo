@@ -4,15 +4,6 @@ import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import {
-  CheckCircleIcon,
-  CodeIcon,
-  DownloadIcon,
-  ErrorIcon,
-  FileIcon,
-  InfoIcon,
-  WarningIcon,
-} from '@app/components/ui/icons';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -22,6 +13,15 @@ import {
 import { Separator } from '@app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
+import {
+  CheckCircle as CheckCircleIcon,
+  Code as CodeIcon,
+  Download as DownloadIcon,
+  XCircle as ErrorIcon,
+  FileText as FileIcon,
+  Info as InfoIcon,
+  AlertTriangle as WarningIcon,
+} from 'lucide-react';
 import {
   getIssueFilePath,
   getSeverityLabel,

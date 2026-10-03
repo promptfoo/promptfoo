@@ -14,6 +14,29 @@ import {
 import { useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
 
+const createMetrics = (testPassCount: number, testFailCount: number) => ({
+  testPassCount,
+  testFailCount,
+});
+
+const createFifteenTestCostMetricsFixture = () => ({
+  testPassCount: 10,
+  testFailCount: 5,
+  cost: 1.5,
+  totalLatencyMs: 200,
+});
+
+const createThirtyTestCostMetricsFixture = () => ({
+  testPassCount: 20,
+  testFailCount: 10,
+  cost: 2.5,
+  totalLatencyMs: 300,
+});
+
+const createNullTableStateFixture = () => ({
+  table: null,
+});
+
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),
 }));
@@ -125,9 +148,7 @@ describe('usePassingTestCounts', () => {
   });
 
   it('should return an empty array when the table is not defined in the store', () => {
-    mockedUseTableStore.mockReturnValue({
-      table: null,
-    });
+    mockedUseTableStore.mockReturnValue(createNullTableStateFixture());
 
     const { result } = renderHook(() => usePassingTestCounts());
 
@@ -356,19 +377,13 @@ describe('useTestCounts', () => {
             raw: 'Test prompt 1',
             label: 'Test prompt 1',
             provider: 'test-provider-1',
-            metrics: {
-              testPassCount: 10,
-              testFailCount: 5,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(10, 5) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 20,
-              testFailCount: 10,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(20, 10) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 3',
@@ -450,9 +465,7 @@ describe('useTestCounts', () => {
   });
 
   it('should return an empty array when the table is not defined', () => {
-    mockedUseTableStore.mockReturnValue({
-      table: null,
-    });
+    mockedUseTableStore.mockReturnValue(createNullTableStateFixture());
 
     const { result } = renderHook(() => useTestCounts());
 
@@ -473,10 +486,7 @@ describe('useTestCounts', () => {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 20,
-              testFailCount: 10,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(20, 10) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
         ],
         vars: [],
@@ -557,19 +567,13 @@ describe('useTestCounts', () => {
             raw: 'Test prompt 1',
             label: 'Test prompt 1',
             provider: 'test-provider-1',
-            metrics: {
-              testPassCount: 10,
-              testFailCount: 5,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(10, 5) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 20,
-              testFailCount: 10,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(20, 10) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
         ],
         vars: [],
@@ -591,19 +595,13 @@ describe('useTestCounts', () => {
             raw: 'Test prompt 1',
             label: 'Test prompt 1',
             provider: 'test-provider-1',
-            metrics: {
-              testPassCount: 10,
-              testFailCount: 5,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(10, 5) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 20,
-              testFailCount: 10,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(20, 10) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
         ],
         vars: [],
@@ -629,19 +627,13 @@ describe('useTestCounts', () => {
             raw: 'Test prompt 1',
             label: 'Test prompt 1',
             provider: 'test-provider-1',
-            metrics: {
-              testPassCount: 10,
-              testFailCount: 5,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(10, 5) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 20,
-              testFailCount: 10,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(20, 10) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 3',
@@ -686,19 +678,13 @@ describe('useTestCounts', () => {
             raw: 'Test prompt 1',
             label: 'Test prompt 1',
             provider: 'test-provider-1',
-            metrics: {
-              testPassCount: 10,
-              testFailCount: 5,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(10, 5) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 20,
-              testFailCount: 10,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(20, 10) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 3',
@@ -792,10 +778,7 @@ describe('usePassRates', () => {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 5,
-              testFailCount: 5,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(5, 5) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 3',
@@ -843,19 +826,13 @@ describe('usePassRates', () => {
             raw: 'Test prompt 1',
             label: 'Test prompt 1',
             provider: 'test-provider-1',
-            metrics: {
-              testPassCount: 0,
-              testFailCount: 0,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(0, 0) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 5,
-              testFailCount: 5,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(5, 5) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
         ],
         vars: [],
@@ -876,9 +853,7 @@ describe('usePassRates', () => {
   });
 
   it('should return an empty array when the table is undefined', () => {
-    mockedUseTableStore.mockReturnValue({
-      table: null,
-    });
+    mockedUseTableStore.mockReturnValue(createNullTableStateFixture());
 
     const { result } = renderHook(() => usePassRates());
 
@@ -902,10 +877,7 @@ describe('usePassRates', () => {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 5,
-              testFailCount: 5,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics: createMetrics(5, 5) as EvaluateTable['head']['prompts'][number]['metrics'],
           },
         ],
         vars: [],
@@ -944,12 +916,7 @@ describe('usePassRates', () => {
       body: [],
     };
 
-    const filteredMetrics = [
-      {
-        testPassCount: 0,
-        testFailCount: 0,
-      },
-    ];
+    const filteredMetrics = [createMetrics(0, 0)];
 
     mockedUseTableStore.mockReturnValue({
       table: mockTable,
@@ -1187,23 +1154,15 @@ describe('useMetricsGetter', () => {
             raw: 'Test prompt 1',
             label: 'Test prompt 1',
             provider: 'test-provider-1',
-            metrics: {
-              testPassCount: 10,
-              testFailCount: 5,
-              cost: 1.5,
-              totalLatencyMs: 200,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics:
+              createFifteenTestCostMetricsFixture() as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 20,
-              testFailCount: 10,
-              cost: 2.5,
-              totalLatencyMs: 300,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics:
+              createThirtyTestCostMetricsFixture() as EvaluateTable['head']['prompts'][number]['metrics'],
           },
         ],
         vars: [],
@@ -1385,23 +1344,15 @@ describe('useMetricsGetter', () => {
             raw: 'Test prompt 1',
             label: 'Test prompt 1',
             provider: 'test-provider-1',
-            metrics: {
-              testPassCount: 10,
-              testFailCount: 5,
-              cost: 1.5,
-              totalLatencyMs: 200,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics:
+              createFifteenTestCostMetricsFixture() as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 20,
-              testFailCount: 10,
-              cost: 2.5,
-              totalLatencyMs: 300,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics:
+              createThirtyTestCostMetricsFixture() as EvaluateTable['head']['prompts'][number]['metrics'],
           },
         ],
         vars: [],
@@ -1449,23 +1400,15 @@ describe('useMetricsGetter', () => {
             raw: 'Test prompt 1',
             label: 'Test prompt 1',
             provider: 'test-provider-1',
-            metrics: {
-              testPassCount: 10,
-              testFailCount: 5,
-              cost: 1.5,
-              totalLatencyMs: 200,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics:
+              createFifteenTestCostMetricsFixture() as EvaluateTable['head']['prompts'][number]['metrics'],
           },
           {
             raw: 'Test prompt 2',
             label: 'Test prompt 2',
             provider: 'test-provider-2',
-            metrics: {
-              testPassCount: 20,
-              testFailCount: 10,
-              cost: 2.5,
-              totalLatencyMs: 300,
-            } as EvaluateTable['head']['prompts'][number]['metrics'],
+            metrics:
+              createThirtyTestCostMetricsFixture() as EvaluateTable['head']['prompts'][number]['metrics'],
           },
         ],
         vars: [],
@@ -1590,7 +1533,7 @@ describe('useApplyFilterFromMetric', () => {
     expect(mockAddFilter).not.toHaveBeenCalled();
   });
 
-  it('should add a metric filter when called with a non-policy metric string', () => {
+  const verifyMetricFilterAddition = () => {
     const mockAddFilter = vi.fn();
     mockedIsPolicyMetric.mockReturnValue(false);
     mockedUseTableStore.mockReturnValue({
@@ -1614,7 +1557,12 @@ describe('useApplyFilterFromMetric', () => {
       field: metricName,
       logicOperator: 'or',
     });
-  });
+  };
+
+  it(
+    'should add a metric filter when called with a non-policy metric string',
+    verifyMetricFilterAddition,
+  );
 
   it('should add a policy filter with type policy, operator equals, value set to the deserialized policy ID, field undefined, and logicOperator or when called with a policy metric string', () => {
     const mockAddFilter = vi.fn();
@@ -1741,29 +1689,5 @@ describe('useApplyFilterFromMetric', () => {
     );
   });
 
-  it('should add a filter when filters?.values is an empty object', () => {
-    const mockAddFilter = vi.fn();
-    mockedIsPolicyMetric.mockReturnValue(false);
-    mockedUseTableStore.mockReturnValue({
-      filters: { values: {} },
-      addFilter: mockAddFilter,
-    } as any);
-
-    const { result } = renderHook(() => useApplyFilterFromMetric());
-    const applyFilterCallback = result.current;
-
-    const metricName = 'latency';
-    act(() => {
-      applyFilterCallback(metricName);
-    });
-
-    expect(mockAddFilter).toHaveBeenCalledTimes(1);
-    expect(mockAddFilter).toHaveBeenCalledWith({
-      type: 'metric',
-      operator: 'is_defined',
-      value: '',
-      field: metricName,
-      logicOperator: 'or',
-    });
-  });
+  it('should add a filter when filters?.values is an empty object', verifyMetricFilterAddition);
 });

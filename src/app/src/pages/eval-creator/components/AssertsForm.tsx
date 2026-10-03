@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
-import { DeleteIcon } from '@app/components/ui/icons';
 import { Label } from '@app/components/ui/label';
 import {
   Select,
@@ -13,6 +12,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
+import { Trash2 as DeleteIcon } from 'lucide-react';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {

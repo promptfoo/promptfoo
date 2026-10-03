@@ -5,6 +5,11 @@ import { DataTable } from './data-table';
 import { useServerVirtualizedRows } from './use-server-virtualized-rows';
 import type { ColumnDef } from '@tanstack/react-table';
 
+const createColumn = (accessorKey: string, header: string) => ({
+  accessorKey,
+  header,
+});
+
 interface TestRow {
   id: string;
   name: string;
@@ -17,10 +22,7 @@ interface HeaderFilterRow {
 }
 
 const headerFilterColumns: ColumnDef<HeaderFilterRow>[] = [
-  {
-    accessorKey: 'name',
-    header: 'Name',
-  },
+  createColumn('name', 'Name'),
   {
     accessorKey: 'status',
     header: 'Status',
@@ -51,16 +53,7 @@ const openHeaderFilterPopover = async (columnHeader: string, user = userEvent.se
 };
 
 describe('DataTable', () => {
-  const columns: ColumnDef<TestRow>[] = [
-    {
-      accessorKey: 'id',
-      header: 'ID',
-    },
-    {
-      accessorKey: 'name',
-      header: 'Name',
-    },
-  ];
+  const columns: ColumnDef<TestRow>[] = [createColumn('id', 'ID'), createColumn('name', 'Name')];
 
   it('should render empty state with custom toolbar actions when data is empty and toolbarActions are provided', () => {
     const toolbarActions = <button data-testid="custom-action">Add Item</button>;
@@ -201,16 +194,7 @@ describe('DataTable', () => {
       {
         id: 'identity',
         header: 'Identity',
-        columns: [
-          {
-            accessorKey: 'id',
-            header: 'ID',
-          },
-          {
-            accessorKey: 'name',
-            header: 'Name',
-          },
-        ],
+        columns: [createColumn('id', 'ID'), createColumn('name', 'Name')],
       },
     ];
 

@@ -3,17 +3,6 @@
  */
 
 /**
- * Validates that a duration value is a finite positive number.
- * Use this to guard against NaN, Infinity, negative numbers, or non-number types.
- *
- * @param ms - The value to validate
- * @returns True if the value is a valid duration (finite number >= 0)
- */
-export function isValidDuration(ms: unknown): ms is number {
-  return typeof ms === 'number' && Number.isFinite(ms) && ms >= 0;
-}
-
-/**
  * Formats a duration in milliseconds to a human-readable string.
  * Returns null for invalid inputs (NaN, Infinity, negative, non-number).
  *
@@ -29,7 +18,7 @@ export function isValidDuration(ms: unknown): ms is number {
  * formatDuration(-1000)    // null
  */
 export function formatDuration(ms: number): string | null {
-  if (!isValidDuration(ms)) {
+  if (!(typeof ms === 'number' && Number.isFinite(ms) && ms >= 0)) {
     return null;
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { Badge } from '@app/components/ui/badge';
@@ -60,6 +60,41 @@ import { useReportStore } from './store';
 import TestSuites from './TestSuites';
 import ToolsDialog, { Tool } from './ToolsDialog';
 
+function forEachReportResult(
+  evalData: ResultsFile,
+  selectedPromptIndex: number,
+  kind: 'failures' | 'passes',
+  onResult: (result: EvaluateResult, pluginId: string) => void,
+) {
+  const prompts =
+    (evalData.version >= 4
+      ? evalData.prompts
+      : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+  const selectedPrompt = prompts[selectedPromptIndex];
+
+  evalData?.results.results.forEach((result) => {
+    // Filter by selected target/provider if multiple targets exist
+    if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
+      return;
+    }
+
+    const pluginId = getPluginIdFromResult(result);
+    if (!pluginId) {
+      console.warn(`Could not get ${kind} for plugin ${pluginId}`);
+      return;
+    }
+
+    // Exclude results with errors from being counted as results
+    // TODO: Errors which arise while grading may be mis-classified as ResultFailureReason.ASSERT
+    // and leak past this check. Check `result.gradingResult.reason` for errors e.g. "API call error: *".
+    if (result.error && result.failureReason === ResultFailureReason.ERROR) {
+      return;
+    }
+
+    onResult(result, pluginId);
+  });
+}
+
 interface ReportProps {
   /** When provided, uses this evalId instead of reading from URL search params. */
   evalId?: string;
@@ -97,8 +132,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       const resp = await callApi(`/results/${id}`, {
         cache: 'no-store',
       });
-      const body = (await resp.json()) as SharedResults;
-      setEvalData(body.data);
+      setEvalData(((await resp.json()) as SharedResults).data);
 
       // Track funnel event for report viewed
       recordEvent('funnel', {
@@ -165,35 +199,11 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       return {};
     }
 
-    const prompts =
-      (evalData.version >= 4
-        ? evalData.prompts
-        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
-    const selectedPrompt = prompts[selectedPromptIndex];
-
     const failures: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
-    evalData?.results.results.forEach((result) => {
-      // Filter by selected target/provider if multiple targets exist
-      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
-        return;
-      }
-
-      const pluginId = getPluginIdFromResult(result);
-      if (!pluginId) {
-        console.warn(`Could not get failures for plugin ${pluginId}`);
-        return;
-      }
-
-      // Exclude results with errors from being counted as failures
-      // TODO: Errors which arise while grading may be mis-classified as ResultFailureReason.ASSERT
-      // and leak past this check. Check `result.gradingResult.reason` for errors e.g. "API call error: *".
-      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
-        return;
-      }
-
+    forEachReportResult(evalData, selectedPromptIndex, 'failures', (result, pluginId) => {
       if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
@@ -218,33 +228,11 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       return {};
     }
 
-    const prompts =
-      (evalData.version >= 4
-        ? evalData.prompts
-        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
-    const selectedPrompt = prompts[selectedPromptIndex];
-
     const passes: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
-    evalData?.results.results.forEach((result) => {
-      // Filter by selected target/provider if multiple targets exist
-      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
-        return;
-      }
-
-      const pluginId = getPluginIdFromResult(result);
-      if (!pluginId) {
-        console.warn(`Could not get passes for plugin ${pluginId}`);
-        return;
-      }
-
-      // Exclude results with errors from being counted
-      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
-        return;
-      }
-
+    forEachReportResult(evalData, selectedPromptIndex, 'passes', (result, pluginId) => {
       if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
@@ -360,95 +348,63 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     return Object.keys(strategyStats).sort();
   }, [strategyStats]);
 
-  const filteredFailuresByPlugin = useMemo(() => {
-    if (!failuresByPlugin) {
-      return {} as typeof failuresByPlugin;
-    }
-
-    const filtered: typeof failuresByPlugin = {};
-
-    Object.entries(failuresByPlugin).forEach(([pluginId, tests]) => {
-      if (selectedCategories.length > 0 && !selectedCategories.includes(pluginId)) {
-        return;
+  const filterReportTests = useCallback(
+    (testsByPlugin: typeof failuresByPlugin, excludedStatus: 'pass' | 'fail') => {
+      if (!testsByPlugin) {
+        return {} as typeof failuresByPlugin;
       }
 
-      if (statusFilter === 'pass') {
-        return;
-      }
+      const filtered: typeof failuresByPlugin = {};
 
-      const filteredTests = tests.filter((test) => {
-        if (searchQuery) {
-          const searchLower = searchQuery.toLowerCase();
-          const promptMatches = test.prompt?.toLowerCase().includes(searchLower);
-          const outputMatches = test.output?.toLowerCase().includes(searchLower);
-          if (!promptMatches && !outputMatches) {
-            return false;
-          }
+      Object.entries(testsByPlugin).forEach(([pluginId, tests]) => {
+        if (selectedCategories.length > 0 && !selectedCategories.includes(pluginId)) {
+          return;
         }
 
-        if (selectedStrategies.length > 0) {
-          const strategyId =
-            test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-          if (!selectedStrategies.includes(strategyId)) {
-            return false;
-          }
+        if (statusFilter === excludedStatus) {
+          return;
         }
 
-        return true;
+        const filteredTests = tests.filter((test) => {
+          if (searchQuery) {
+            const searchLower = searchQuery.toLowerCase();
+            const promptMatches = test.prompt?.toLowerCase().includes(searchLower);
+            const outputMatches = test.output?.toLowerCase().includes(searchLower);
+            if (!promptMatches && !outputMatches) {
+              return false;
+            }
+          }
+
+          if (selectedStrategies.length > 0) {
+            const strategyId =
+              test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+            if (!selectedStrategies.includes(strategyId)) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+
+        if (filteredTests.length > 0) {
+          filtered[pluginId] = filteredTests;
+        }
       });
 
-      if (filteredTests.length > 0) {
-        filtered[pluginId] = filteredTests;
-      }
-    });
+      return filtered;
+    },
+    [selectedCategories, selectedStrategies, statusFilter, searchQuery],
+  );
 
-    return filtered;
-  }, [failuresByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
+  const filteredFailuresByPlugin = useMemo(
+    () => filterReportTests(failuresByPlugin, 'pass'),
+    [failuresByPlugin, filterReportTests],
+  );
 
-  const filteredPassesByPlugin = useMemo(() => {
-    if (!passesByPlugin) {
-      return {} as typeof passesByPlugin;
-    }
-
-    const filtered: typeof passesByPlugin = {};
-
-    Object.entries(passesByPlugin).forEach(([pluginId, tests]) => {
-      if (selectedCategories.length > 0 && !selectedCategories.includes(pluginId)) {
-        return;
-      }
-
-      if (statusFilter === 'fail') {
-        return;
-      }
-
-      const filteredTests = tests.filter((test) => {
-        if (searchQuery) {
-          const searchLower = searchQuery.toLowerCase();
-          const promptMatches = test.prompt?.toLowerCase().includes(searchLower);
-          const outputMatches = test.output?.toLowerCase().includes(searchLower);
-          if (!promptMatches && !outputMatches) {
-            return false;
-          }
-        }
-
-        if (selectedStrategies.length > 0) {
-          const strategyId =
-            test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
-          if (!selectedStrategies.includes(strategyId)) {
-            return false;
-          }
-        }
-
-        return true;
-      });
-
-      if (filteredTests.length > 0) {
-        filtered[pluginId] = filteredTests;
-      }
-    });
-
-    return filtered;
-  }, [passesByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
+  const filteredPassesByPlugin = useMemo(
+    () => filterReportTests(passesByPlugin, 'fail'),
+    [passesByPlugin, filterReportTests],
+  );
 
   /**
    * Recalculates category (plugin) stats given the filtered failures and passes.
@@ -682,7 +638,6 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   const targetTokens = getTokenUsageTotal(selectedTokenUsage);
   const attackerTokens = getTokenUsageTotal(selectedTokenUsage?.attacker);
   const gradingTokens = getTokenUsageTotal(selectedTokenUsage?.assertions);
-  const selectedTargetTokens = targetTokens + attackerTokens + gradingTokens;
   const scanTokenUsage = evalData.results.stats?.tokenUsage;
   const generationTokens = getTokenUsageTotal(scanTokenUsage?.generation);
   const generationRequests = scanTokenUsage?.generation?.numRequests ?? 0;
@@ -839,7 +794,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                             <>
                               <span>
                                 <strong>Selected Target Subtotal:</strong>{' '}
-                                {selectedTargetTokens.toLocaleString()}
+                                {(targetTokens + attackerTokens + gradingTokens).toLocaleString()}
                               </span>
                               <span>
                                 <strong>Generation Tokens (scan-wide):</strong>{' '}

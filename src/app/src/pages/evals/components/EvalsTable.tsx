@@ -11,13 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { DeleteIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import invariant from '@promptfoo/util/invariant';
+import { Trash2 as DeleteIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';

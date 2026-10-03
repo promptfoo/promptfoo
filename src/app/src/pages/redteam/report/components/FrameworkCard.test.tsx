@@ -7,6 +7,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
 import { type CategoryStats } from './FrameworkComplianceUtils';
 
+const createFrameworkStats = () => ({
+  'excessive-agency': { pass: 10, total: 10, failCount: 0 },
+  'pii:direct': { pass: 9, total: 10, failCount: 1 },
+});
+
 // Mock react-router
 vi.mock('react-router', () => ({
   useNavigate: vi.fn(),
@@ -28,10 +33,7 @@ describe('FrameworkCard', () => {
     framework: 'nist:ai:measure',
     isCompliant: true,
     frameworkSeverity: Severity.Low,
-    categoryStats: {
-      'excessive-agency': { pass: 10, total: 10, failCount: 0 },
-      'pii:direct': { pass: 9, total: 10, failCount: 1 },
-    },
+    categoryStats: createFrameworkStats(),
     pluginPassRateThreshold: 0.8,
     nonCompliantPlugins: [],
     showUntestedPlugins: true,
@@ -50,10 +52,7 @@ describe('FrameworkCard', () => {
     renderFrameworkCard({
       isCompliant: true,
       nonCompliantPlugins: [],
-      categoryStats: {
-        'excessive-agency': { pass: 10, total: 10, failCount: 0 },
-        'pii:direct': { pass: 9, total: 10, failCount: 1 },
-      },
+      categoryStats: createFrameworkStats(),
     });
 
     const cardElement = screen.getByText('NIST AI RMF').closest('.framework-item');

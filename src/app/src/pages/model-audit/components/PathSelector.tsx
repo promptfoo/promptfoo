@@ -5,26 +5,26 @@ import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import { HelperText } from '@app/components/ui/helper-text';
-import {
-  ClearIcon,
-  CloudIcon,
-  CloudUploadIcon,
-  ComputerIcon,
-  DeleteIcon,
-  FileIcon,
-  FolderIcon,
-  FolderOpenIcon,
-  GitHubIcon,
-  LockIcon,
-  StorageIcon,
-  UploadIcon,
-} from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
+import {
+  X as ClearIcon,
+  Cloud as CloudIcon,
+  CloudUpload as CloudUploadIcon,
+  Monitor as ComputerIcon,
+  Trash2 as DeleteIcon,
+  FileText as FileIcon,
+  Folder as FolderIcon,
+  FolderOpen as FolderOpenIcon,
+  GitBranch as GitHubIcon,
+  Lock as LockIcon,
+  Database as StorageIcon,
+  Upload as UploadIcon,
+} from 'lucide-react';
 import { useModelAuditConfigStore } from '../stores';
 
 import type { ScanPath } from '../ModelAudit.types';

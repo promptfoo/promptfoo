@@ -10,10 +10,7 @@ interface State {
 }
 
 class MarkdownErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false };
-  }
+  state: Readonly<State> = { hasError: false };
 
   static getDerivedStateFromError() {
     return { hasError: true };

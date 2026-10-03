@@ -18,9 +18,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
-import { ArrowBackIcon, DeleteIcon, DownloadIcon, MoreVertIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
+import {
+  ArrowLeft as ArrowBackIcon,
+  Trash2 as DeleteIcon,
+  Download as DownloadIcon,
+  MoreVertical as MoreVertIcon,
+} from 'lucide-react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router';
 import { ResultPageSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';

@@ -28,7 +28,7 @@ export function useCustomPoliciesMap(
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: using pluginsKey for deep comparison to prevent infinite loops
   useEffect(() => {
-    async function buildPoliciesMap() {
+    const buildPoliciesMap = async () => {
       const policyPlugins = plugins.filter(
         (plugin) => typeof plugin !== 'string' && plugin.id === 'policy',
       );
@@ -36,8 +36,7 @@ export function useCustomPoliciesMap(
       const map: Record<PolicyObject['id'], PolicyObject> = {};
 
       for (let index = 0; index < policyPlugins.length; index++) {
-        const plugin = policyPlugins[index];
-        const policy = plugin?.config?.policy;
+        const policy = policyPlugins[index]?.config?.policy;
         if (policy) {
           if (isValidPolicyObject(policy)) {
             map[policy.id] = policy;
@@ -55,7 +54,7 @@ export function useCustomPoliciesMap(
       }
 
       setPoliciesMap(map);
-    }
+    };
 
     buildPoliciesMap();
     // eslint-disable-next-line react-hooks/exhaustive-deps

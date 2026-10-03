@@ -1,52 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import { formatToolsAsJSDocs } from './discovery';
 
-interface Tool {
-  name: string;
-  description: string;
-  arguments?: Array<{
-    name: string;
-    description: string;
-    type: string;
-  }>;
-}
+const createWeatherToolFixture = () => ({
+  name: 'getWeather',
+  description: 'Fetches the current weather for a given location.',
+  arguments: [
+    {
+      name: 'location',
+      description: 'The city and state, e.g. San Francisco, CA',
+      type: 'string',
+    },
+    {
+      name: 'unit',
+      description: 'The temperature unit, "celsius" or "fahrenheit"',
+      type: 'string',
+    },
+  ],
+});
+
+const createEmailToolFixture = () => ({
+  name: 'sendEmail',
+  description: 'Sends an email to a recipient.',
+  arguments: [
+    {
+      name: 'recipient',
+      description: 'The email address of the recipient.',
+      type: 'string',
+    },
+    {
+      name: 'subject',
+      description: 'The subject of the email.',
+      type: 'string',
+    },
+  ],
+});
 
 describe('formatToolsAsJSDocs', () => {
   it('should return a formatted JSDoc string for each Tool in the array when given an array of valid Tool objects with arguments', () => {
-    const tools: Tool[] = [
-      {
-        name: 'getWeather',
-        description: 'Fetches the current weather for a given location.',
-        arguments: [
-          {
-            name: 'location',
-            description: 'The city and state, e.g. San Francisco, CA',
-            type: 'string',
-          },
-          {
-            name: 'unit',
-            description: 'The temperature unit, "celsius" or "fahrenheit"',
-            type: 'string',
-          },
-        ],
-      },
-      {
-        name: 'sendEmail',
-        description: 'Sends an email to a recipient.',
-        arguments: [
-          {
-            name: 'recipient',
-            description: 'The email address of the recipient.',
-            type: 'string',
-          },
-          {
-            name: 'subject',
-            description: 'The subject of the email.',
-            type: 'string',
-          },
-        ],
-      },
-    ];
+    const tools = [createWeatherToolFixture(), createEmailToolFixture()];
 
     const expectedJSDoc = `/**
  * Fetches the current weather for a given location.
@@ -68,7 +59,7 @@ sendEmail(recipient: string, subject: string)`;
   });
 
   it('should return a JSDoc string with only the description and a parameterless function signature when a Tool has no arguments', () => {
-    const tools: Tool[] = [
+    const tools = [
       {
         name: 'getCurrentTime',
         description: 'Returns the current time.',
@@ -86,42 +77,7 @@ getCurrentTime()`;
   });
 
   it('should ignore null values in the input array and only generate JSDoc comments for valid Tool objects', () => {
-    const tools: (Tool | null)[] = [
-      {
-        name: 'getWeather',
-        description: 'Fetches the current weather for a given location.',
-        arguments: [
-          {
-            name: 'location',
-            description: 'The city and state, e.g. San Francisco, CA',
-            type: 'string',
-          },
-          {
-            name: 'unit',
-            description: 'The temperature unit, "celsius" or "fahrenheit"',
-            type: 'string',
-          },
-        ],
-      },
-      null,
-      {
-        name: 'sendEmail',
-        description: 'Sends an email to a recipient.',
-        arguments: [
-          {
-            name: 'recipient',
-            description: 'The email address of the recipient.',
-            type: 'string',
-          },
-          {
-            name: 'subject',
-            description: 'The subject of the email.',
-            type: 'string',
-          },
-        ],
-      },
-      null,
-    ];
+    const tools = [createWeatherToolFixture(), null, createEmailToolFixture(), null];
 
     const expectedJSDoc = `/**
  * Fetches the current weather for a given location.
@@ -143,7 +99,7 @@ sendEmail(recipient: string, subject: string)`;
   });
 
   it('should handle malformed Tool objects (missing name or description) without throwing an error', () => {
-    const tools: (Tool | null)[] = [
+    const tools = [
       {
         description: 'Missing name',
       } as any,
@@ -178,7 +134,7 @@ tool1()`;
   });
 
   it('should handle tools with descriptions or argument descriptions containing JSDoc special characters like "*/"', () => {
-    const tools: Tool[] = [
+    const tools = [
       {
         name: 'testTool',
         description: 'This is a test tool with a special character: */',
@@ -203,7 +159,7 @@ testTool(testArg: string)`;
   });
 
   it('should handle tools with malformed argument properties without throwing an error', () => {
-    const tools: Tool[] = [
+    const tools = [
       {
         name: 'badTool',
         description: 'A tool with bad arguments',
@@ -238,13 +194,13 @@ testTool(testArg: string)`;
       type: 'string',
     }));
 
-    const tool: Tool = {
+    const tool = {
       name: longString,
       description: longString,
       arguments: manyArguments,
     };
 
-    const tools: Tool[] = [tool];
+    const tools = [tool];
 
     const result = formatToolsAsJSDocs(tools);
 
@@ -253,7 +209,7 @@ testTool(testArg: string)`;
   });
 
   it('should handle tools with arguments that have the same name', () => {
-    const tools: Tool[] = [
+    const tools = [
       {
         name: 'processData',
         description: 'Processes data with potentially conflicting parameters.',
@@ -284,7 +240,7 @@ processData(input: string, input: number)`;
   });
 
   it('should handle tools with empty strings for name or description properties', () => {
-    const tools: Tool[] = [
+    const tools = [
       {
         name: '',
         description: '',

@@ -6,6 +6,10 @@ import FrameworkCompliance from './FrameworkCompliance';
 import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 
+const createPassingBolaStatsFixture = () => ({
+  bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+});
+
 vi.mock('./store');
 vi.mock('./FrameworkCard');
 vi.mock('./FrameworkCsvExporter');
@@ -180,9 +184,7 @@ describe('FrameworkCompliance', () => {
   });
 
   it('should filter frameworks based on config', () => {
-    const categoryStats = {
-      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
-    };
+    const categoryStats = createPassingBolaStatsFixture();
     const config = {
       redteam: {
         frameworks: ['owasp:llm', 'owasp:api'],
@@ -206,9 +208,7 @@ describe('FrameworkCompliance', () => {
   });
 
   it('should show all frameworks when no config.redteam.frameworks is provided', () => {
-    const categoryStats = {
-      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
-    };
+    const categoryStats = createPassingBolaStatsFixture();
 
     renderFrameworkCompliance(categoryStats, 0.9, undefined);
 
@@ -218,9 +218,7 @@ describe('FrameworkCompliance', () => {
   });
 
   it('should pass frameworksToShow to CSVExporter', () => {
-    const categoryStats = {
-      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
-    };
+    const categoryStats = createPassingBolaStatsFixture();
     const config = {
       redteam: {
         frameworks: ['owasp:llm'],
@@ -239,9 +237,7 @@ describe('FrameworkCompliance', () => {
   });
 
   it('should pass showUntestedPlugins from the store to FrameworkCard', () => {
-    const categoryStats = {
-      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
-    };
+    const categoryStats = createPassingBolaStatsFixture();
 
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.9,

@@ -12,18 +12,6 @@ interface UseDataTableServerSortingOptions<TSortField extends string> {
   allowedFields?: ReadonlySet<TSortField> | readonly TSortField[];
 }
 
-function isAllowedSortField<TSortField extends string>(
-  field: string,
-  allowedFields?: ReadonlySet<TSortField>,
-): field is TSortField {
-  // Undefined means "allow all"; an explicitly empty allowlist intentionally blocks all fields.
-  if (!allowedFields) {
-    return true;
-  }
-
-  return allowedFields.has(field as TSortField);
-}
-
 export function useDataTableServerSorting<TSortField extends string>({
   sortModel,
   setSortModel,
@@ -39,13 +27,14 @@ export function useDataTableServerSorting<TSortField extends string>({
   const onSortingChange = (nextSorting: SortingState) => {
     const nextSort = nextSorting[0];
     const nextSortField = nextSort?.id ?? defaultSortField;
-    if (!isAllowedSortField(nextSortField, allowedFieldSet)) {
+    // Undefined means "allow all"; an explicitly empty allowlist intentionally blocks all fields.
+    if (allowedFieldSet && !allowedFieldSet.has(nextSortField as TSortField)) {
       return;
     }
 
     setSortModel([
       {
-        field: nextSortField,
+        field: nextSortField as TSortField,
         sort: nextSort?.desc === false ? 'asc' : 'desc',
       },
     ]);

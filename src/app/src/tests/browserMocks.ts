@@ -219,26 +219,18 @@ function createMockWindowLocationUrl(value: MockWindowLocationValue) {
   }
 
   const nextUrl = new URL(window.location.href);
-  if (value.protocol !== undefined) {
-    nextUrl.protocol = value.protocol;
-  }
-  if (value.host !== undefined) {
-    nextUrl.host = value.host;
-  }
-  if (value.hostname !== undefined) {
-    nextUrl.hostname = value.hostname;
-  }
-  if (value.port !== undefined) {
-    nextUrl.port = value.port;
-  }
-  if (value.pathname !== undefined) {
-    nextUrl.pathname = value.pathname;
-  }
-  if (value.search !== undefined) {
-    nextUrl.search = value.search;
-  }
-  if (value.hash !== undefined) {
-    nextUrl.hash = value.hash;
+  for (const key of [
+    'protocol',
+    'host',
+    'hostname',
+    'port',
+    'pathname',
+    'search',
+    'hash',
+  ] as const) {
+    if (value[key] !== undefined) {
+      nextUrl[key] = value[key];
+    }
   }
 
   return nextUrl;
@@ -269,4 +261,47 @@ export function mockWindowOpen() {
     'open',
     vi.fn(() => null),
   );
+}
+
+export function createQuotaExceededSetItem(
+  originalSetItem: Storage['setItem'],
+  storageKey: string,
+) {
+  return function (this: Storage, key: string, value: string) {
+    if (this === window.localStorage && key === storageKey) {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    }
+    return originalSetItem.call(this, key, value);
+  };
+}
+
+export function mockLocalStorageQuotaExceeded(storageKey: string) {
+  const originalSetItem = Storage.prototype.setItem;
+  return vi
+    .spyOn(Storage.prototype, 'setItem')
+    .mockImplementation(createQuotaExceededSetItem(originalSetItem, storageKey));
+}
+
+export function createRouterModule(actual: object, createNavigate: () => unknown) {
+  return { ...actual, useNavigate: createNavigate() };
+}
+
+export function createTargetOverwriteSetItem(
+  originalSetItem: Storage['setItem'],
+  staleTarget: unknown,
+) {
+  const state = { raced: false };
+  return {
+    state,
+    implementation: function (this: Storage, key: string, value: string) {
+      const result = originalSetItem.call(this, key, value);
+      if (!state.raced && this === window.localStorage && key === 'redTeamConfig') {
+        state.raced = true;
+        const overwrittenConfig = JSON.parse(value);
+        overwrittenConfig.state.config.target = staleTarget;
+        originalSetItem.call(this, key, JSON.stringify(overwrittenConfig));
+      }
+      return result;
+    },
+  };
 }

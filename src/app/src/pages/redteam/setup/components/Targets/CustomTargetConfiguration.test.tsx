@@ -4,6 +4,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { createUnconfiguredProvider } from '../../../../../tests/factories';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -175,10 +176,7 @@ describe('CustomTargetConfiguration', () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();
       const mockSetRawConfigJson = vi.fn();
-      const selectedTarget: ProviderOptions = {
-        id: '',
-        config: {},
-      };
+      const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
 
       render(
         <CustomTargetConfiguration
@@ -202,10 +200,7 @@ describe('CustomTargetConfiguration', () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();
       const mockSetRawConfigJson = vi.fn();
-      const selectedTarget: ProviderOptions = {
-        id: '',
-        config: {},
-      };
+      const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
 
       render(
         <CustomTargetConfiguration
@@ -229,10 +224,7 @@ describe('CustomTargetConfiguration', () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();
       const mockSetRawConfigJson = vi.fn();
-      const selectedTarget: ProviderOptions = {
-        id: '',
-        config: {},
-      };
+      const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
 
       render(
         <CustomTargetConfiguration
@@ -256,10 +248,7 @@ describe('CustomTargetConfiguration', () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();
       const mockSetRawConfigJson = vi.fn();
-      const selectedTarget: ProviderOptions = {
-        id: '',
-        config: {},
-      };
+      const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
 
       render(
         <CustomTargetConfiguration
@@ -283,10 +272,7 @@ describe('CustomTargetConfiguration', () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();
       const mockSetRawConfigJson = vi.fn();
-      const selectedTarget: ProviderOptions = {
-        id: '',
-        config: {},
-      };
+      const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
 
       render(
         <CustomTargetConfiguration
@@ -332,10 +318,7 @@ describe('CustomTargetConfiguration', () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();
       const mockSetRawConfigJson = vi.fn();
-      const selectedTarget: ProviderOptions = {
-        id: '',
-        config: {},
-      };
+      const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
 
       render(
         <CustomTargetConfiguration
@@ -359,10 +342,7 @@ describe('CustomTargetConfiguration', () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();
       const mockSetRawConfigJson = vi.fn();
-      const selectedTarget: ProviderOptions = {
-        id: '',
-        config: {},
-      };
+      const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
 
       render(
         <CustomTargetConfiguration
@@ -389,10 +369,7 @@ describe('CustomTargetConfiguration', () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();
       const mockSetRawConfigJson = vi.fn();
-      const selectedTarget: ProviderOptions = {
-        id: '',
-        config: {},
-      };
+      const selectedTarget: ProviderOptions = createUnconfiguredProvider('');
 
       render(
         <CustomTargetConfiguration
