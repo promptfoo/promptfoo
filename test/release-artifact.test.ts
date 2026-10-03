@@ -166,7 +166,7 @@ describe('exact artifact release', () => {
     expect(workflow.jobs.build.steps.some((step) => step.run?.includes('package-artifact'))).toBe(
       false,
     );
-    const mirror = workflow.jobs['publish-code-scan-action'];
+    const mirror = workflow.jobs['build-code-scan-action-release'];
     expect(mirror.if).toContain("needs.build.result == 'success'");
     expect(mirror.if).not.toContain('needs.build-npm');
     expect(mirror.if).not.toContain('needs.publish-npm.result');

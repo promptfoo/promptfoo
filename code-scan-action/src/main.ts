@@ -514,22 +514,12 @@ function resolveInstalledPromptfooEntrypoint(installDir: string): string {
   return canonicalEntrypoint;
 }
 
-async function installPromptfooCli(promptfooVersion: string): Promise<string> {
+async function installPromptfooCli(promptfooVersion: string, installDir: string): Promise<string> {
   const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
 
-  // npm reads its registry (and other config) from both env vars and user/global
-  // .npmrc files. A PR-controlled step running before this action can poison either:
-  // set npm_config_registry via $GITHUB_ENV, or write `registry=https://attacker/` to
-  // $HOME/.npmrc — redirecting this exact install to an attacker registry whose
-  // promptfoo tarball then runs as the scanner. Close both channels for the install:
-  //  - strip every npm_config_*/NPM_CONFIG_* env var, and
-  //  - point --userconfig/--globalconfig at fresh empty files so no on-disk .npmrc is
-  //    consulted (two distinct paths: npm rejects loading one file as both).
-  // The pinned version therefore resolves from the explicitly selected public registry.
-  // This deliberately bypasses runner-admin npm mirrors configured via env or .npmrc
-  // for this one install (the SaaS scan already requires public egress); the scan
-  // subprocess keeps workflow-provided npm config because its nested npx (MCP)
-  // invocations rely on it.
+  // Isolate npm configuration from the checkout and runner. Separate empty user
+  // and global config paths prevent npm from reading either config file.
+  // Keep workflow npm settings available to the scanner's nested npx calls.
   const env = createSubprocessEnv();
   // The isolated install always uses the public registry; inherited private-registry
   // credentials are unnecessary here but remain available to the scanner's nested npx.
@@ -540,7 +530,6 @@ async function installPromptfooCli(promptfooVersion: string): Promise<string> {
       delete env[key];
     }
   }
-  const installDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-install-'));
   const emptyUserConfig = path.join(installDir, 'user');
   const emptyGlobalConfig = path.join(installDir, 'global');
   const npmCliPath = resolveNpmCliPath();
@@ -573,45 +562,55 @@ async function runPromptfooScan(
   oidcToken: string | undefined,
   promptfooVersion: string,
 ): Promise<ScanResponse> {
-  const promptfooEntrypoint = await installPromptfooCli(promptfooVersion);
+  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
+  const installDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-install-'));
+  try {
+    const promptfooEntrypoint = await installPromptfooCli(promptfooVersion, installDir);
 
-  core.info('🚀 Running promptfoo code-scans run...');
+    core.info('🚀 Running promptfoo code-scans run...');
 
-  let scanOutput = '';
-  let scanError = '';
-  const scanEnv = createScanEnv(oidcToken);
+    let scanOutput = '';
+    let scanError = '';
+    const scanEnv = createScanEnv(oidcToken);
 
-  const exitCode = await exec.exec(process.execPath, [promptfooEntrypoint, ...cliArgs], {
-    env: scanEnv,
-    listeners: {
-      stdout: (data: Buffer) => {
-        scanOutput += data.toString();
+    const exitCode = await exec.exec(process.execPath, [promptfooEntrypoint, ...cliArgs], {
+      env: scanEnv,
+      listeners: {
+        stdout: (data: Buffer) => {
+          scanOutput += data.toString();
+        },
+        stderr: (data: Buffer) => {
+          scanError += data.toString();
+        },
       },
-      stderr: (data: Buffer) => {
-        scanError += data.toString();
-      },
-    },
-    ignoreReturnCode: true,
-  });
+      ignoreReturnCode: true,
+    });
 
-  if (exitCode === 0) {
-    core.info('✅ Scan completed successfully');
-    return parseScanOutput(scanOutput);
+    if (exitCode === 0) {
+      core.info('✅ Scan completed successfully');
+      return parseScanOutput(scanOutput);
+    }
+
+    // Keep compatibility with CLI releases that reported an authorized fork skip as text
+    // while the action and CLI roll out independently.
+    if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
+      return {
+        success: true,
+        comments: [],
+        skipReason: FORK_PR_AUTH_SKIP_REASON,
+      };
+    }
+
+    core.error(`CLI exited with code ${exitCode}`);
+    core.error(`Error output: ${scanError}`);
+    throw new Error(`Code scan failed with exit code ${exitCode}`);
+  } finally {
+    try {
+      fs.rmSync(installDir, { recursive: true, force: true });
+    } catch (error) {
+      core.warning(`Failed to remove temporary Promptfoo CLI install: ${formatError(error)}`);
+    }
   }
-
-  // Keep compatibility with CLI releases that reported an authorized fork skip as text
-  // while the action and CLI roll out independently.
-  if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
-    return {
-      success: true,
-      comments: [],
-      skipReason: FORK_PR_AUTH_SKIP_REASON,
-    };
-  }
-
-  core.error(`CLI exited with code ${exitCode}`);
-  core.error(`Error output: ${scanError}`);
-  throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
 function getScanResponse(
