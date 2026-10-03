@@ -43,6 +43,24 @@ describe('isProviderResponseRateLimited', () => {
       expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
     });
 
+    it.each([
+      'HTTP 429: Too Many Requests',
+      '429 Too Many Requests',
+      'Request failed with status code 429.',
+      'API error (429)',
+      '{"error":{"code":429}}',
+    ])('should detect a standalone 429 in result.error: %s', (error) => {
+      expect(isProviderResponseRateLimited({ output: '', error }, undefined)).toBe(true);
+    });
+
+    it.each([
+      'HTTP 400: prompt is too long: 204291 tokens > 200000 maximum',
+      'API error: 500 Internal Server Error (request_id: req_a4290f)',
+      'Invalid value for max_tokens: 4290',
+    ])('should not treat 429 inside a longer token as a rate limit: %s', (error) => {
+      expect(isProviderResponseRateLimited({ output: '', error }, undefined)).toBe(false);
+    });
+
     it('should handle undefined result.error gracefully', () => {
       const result: ProviderResponse = {
         output: 'success',
@@ -55,6 +73,11 @@ describe('isProviderResponseRateLimited', () => {
     it('should detect 429 in error.message', () => {
       const error = new Error('Request failed with status 429');
       expect(isProviderResponseRateLimited(undefined, error)).toBe(true);
+    });
+
+    it('should not treat 429 inside a longer number in error.message as a rate limit', () => {
+      const error = new Error('prompt is too long: 204291 tokens > 200000 maximum');
+      expect(isProviderResponseRateLimited(undefined, error)).toBe(false);
     });
 
     it('should detect "rate limit" in error.message (case insensitive)', () => {
