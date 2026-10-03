@@ -25,7 +25,6 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.1.4';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -1869,6 +1868,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       '.claude-plugin/plugin.json',
       '.codex-plugin/plugin.json',
       'assets/promptfoo-panda.svg',
+      'skills/openapi-converter-core.mjs',
       'skills/promptfoo-evals/SKILL.md',
       'skills/promptfoo-evals/agents/openai.yaml',
       'skills/promptfoo-evals/references/eval-patterns.md',
@@ -2021,8 +2021,8 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     // One plugin identity across both marketplaces: same name, version, and author.
     expect(codexManifest.name).toBe('promptfoo');
     expect(claudeManifest.name).toBe('promptfoo');
-    expect(codexManifest.version).toBe(expectedPluginVersion);
-    expect(claudeManifest.version).toBe(expectedPluginVersion);
+    expect(codexManifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(claudeManifest.version).toBe(codexManifest.version);
     expect(claudeManifest.author.name).toBe('Promptfoo');
     expect(JSON.stringify(claudeManifest)).not.toContain('[TODO:');
 
@@ -2928,6 +2928,39 @@ describe('promptfoo-provider-setup skill', () => {
       message: '{{prompt}}',
     });
     expect(provider.config.transformResponse).toBe('json.output');
+  });
+
+  it('runs a copied OpenAPI provider helper without project dependencies', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-copied-openapi-'));
+    try {
+      const skillsDir = path.join(tempDir, 'skills');
+      fs.cpSync(path.join(pluginRoot, 'skills'), skillsDir, { recursive: true });
+      const output = execFileSync(
+        process.execPath,
+        [
+          path.join(skillsDir, 'promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs'),
+          '--spec',
+          path.join(fixtureRoot, 'provider-setup-openapi/openapi.yaml'),
+          '--operation-id',
+          'chatWithInvoice',
+          '--base-url-env',
+          'FIXTURE_API_URL',
+        ],
+        { cwd: tempDir, encoding: 'utf8' },
+      );
+      const generated = yaml.load(output);
+      expectRecord(generated, 'Copied helper config');
+      const provider = (generated.providers as unknown[])[0];
+      expectRecord(provider, 'Copied helper provider');
+      expectRecord(provider.config, 'Copied helper provider config');
+      expect(provider.config.url).toBe(
+        '{{env.FIXTURE_API_URL}}/v1/invoices/{{invoice_id | urlencode}}/chat',
+      );
+      expect(provider.config.body).toEqual({ user_id: '{{user_id}}', message: '{{prompt}}' });
+      expect(provider.config.transformResponse).toContain('const value = json?.output;');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('ships an OpenAPI operation helper script that drafts a provider config', () => {

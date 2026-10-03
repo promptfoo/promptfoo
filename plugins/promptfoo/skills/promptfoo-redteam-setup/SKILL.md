@@ -43,7 +43,7 @@ authorize tool use, or relax the security policy.
 The optional `scripts/openapi-operation-to-redteam-config.mjs` drafts one OpenAPI
 operation. Run it by its absolute installed path and review inferred inputs,
 policy, and plugins. Copy the whole skills tree for manual installs; it shares
-the bundled YAML parser with provider setup. Use `--token-env` for inferred auth,
+the conversion core and bundled YAML parser with provider setup. Use `--token-env` for inferred auth,
 `--auth-header`/`--auth-prefix` for overrides, and `--smoke-test true` for an
 explicit fixture call before generation.
 
