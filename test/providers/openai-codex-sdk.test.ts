@@ -12,9 +12,96 @@ import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
+import { createInputOutputUsage } from '../factories/literalFixtures';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
+
+const createCodexOptions = () => ({
+  env: { OPENAI_API_KEY: 'test-api-key' },
+});
+
+const createStreamingCodexOptions = () => ({
+  config: { enable_streaming: true },
+  env: { OPENAI_API_KEY: 'test-api-key' },
+});
+
+const createUncachedTokenUsage = () => ({
+  input_tokens: 1000,
+  cached_input_tokens: 0,
+  output_tokens: 500,
+});
+
+const createCachedTokenUsage = () => ({
+  input_tokens: 2000,
+  cached_input_tokens: 500,
+  output_tokens: 1000,
+});
+
+const createConversationPrompt = () => ({
+  raw: '{{request}}',
+  label: 'conversation',
+  config: {},
+});
+
+const createPersistentThreadOptions = () => ({
+  config: { persist_threads: true },
+  env: { OPENAI_API_KEY: 'test-api-key' },
+});
+
+const createModelOptions = (model: string) => ({
+  config: { model },
+  env: { OPENAI_API_KEY: 'test-api-key' },
+});
+
+const createTracedCodexOptions = () => ({
+  config: { deep_tracing: true },
+  env: { OPENAI_API_KEY: 'test-api-key' },
+});
+
+const createUnrestrictedResumedThreadOptions = () => ({
+  config: {
+    thread_id: 'existing-thread-123',
+    persist_threads: true,
+    sandbox_mode: 'danger-full-access' as const,
+    approval_policy: 'never' as const,
+  },
+  env: { OPENAI_API_KEY: 'test-api-key' },
+});
+
+const createRestrictedPromptContext = () => ({
+  prompt: {
+    raw: 'Restricted prompt',
+    config: {
+      sandbox_mode: 'read-only' as const,
+      approval_policy: 'on-request' as const,
+    },
+  },
+});
+
+const createCommandStartedEvent = () => ({
+  type: 'item.started',
+  item: { id: 'item-1', type: 'command_execution', command: 'ls' },
+});
+
+const createRecallRequestVars = () => ({
+  request: 'What did I ask you to remember?',
+});
+
+const createResumedThreadOptions = () => ({
+  config: { thread_id: 'existing-thread-123' },
+  env: { OPENAI_API_KEY: 'test-api-key' },
+});
+
+const createAgentMessageCompletedEvent = () => ({
+  type: 'item.completed',
+  item: { id: 'item-1', type: 'agent_message', text: 'Part 1' },
+});
+
+const createTurnCompletedEvent = () => ({
+  type: 'turn.completed',
+  usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 20 },
+});
 
 const mockRun = vi.fn();
 const mockRunStreamed = vi.fn();
@@ -349,6 +436,18 @@ describe('OpenAICodexSDKProvider', () => {
   });
 
   describe('callApi', () => {
+    const createGpt54CostCheck = () => async () => {
+      mockRun.mockResolvedValue(createMockResponse('Response', createUncachedTokenUsage()));
+
+      const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.4'));
+
+      const result = await provider.callApi('Test prompt');
+
+      // gpt-5.4: $2.5/1M input, $15/1M output
+      // Cost = (1000 * 2.5/1000000) + (500 * 15/1000000) = 0.0025 + 0.0075 = 0.01
+      expect(result.cost).toBeCloseTo(0.01, 6);
+    };
+
     describe('basic functionality', () => {
       it('should successfully call API with simple prompt', async () => {
         mockRun.mockResolvedValue(
@@ -359,9 +458,7 @@ describe('OpenAICodexSDKProvider', () => {
           }),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result).toEqual({
@@ -395,9 +492,7 @@ describe('OpenAICodexSDKProvider', () => {
           }),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.tokenUsage).toEqual({
@@ -413,9 +508,7 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should pass structured text and local image prompt inputs to the SDK', async () => {
         mockRun.mockResolvedValue(createMockResponse('Image-aware response'));
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const prompt = JSON.stringify([
           { type: 'text', text: 'Describe this screenshot' },
           { type: 'local_image', path: '/tmp/screenshot.png' },
@@ -435,9 +528,7 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should preserve ordinary JSON prompts that do not match the Codex input schema', async () => {
         mockRun.mockResolvedValue(createMockResponse('JSON response'));
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const prompt = JSON.stringify([{ role: 'user', content: 'Keep this as text JSON' }]);
 
         const result = await provider.callApi(prompt);
@@ -448,9 +539,7 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should preserve JSON text arrays with extra object fields as plain text prompts', async () => {
         mockRun.mockResolvedValue(createMockResponse('Text JSON response'));
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const prompt = JSON.stringify([{ type: 'text', text: 'hello', id: 123 }]);
 
         const result = await provider.callApi(prompt);
@@ -461,9 +550,7 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should preserve JSON local_image arrays with extra object fields as plain text prompts', async () => {
         mockRun.mockResolvedValue(createMockResponse('Image JSON response'));
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const prompt = JSON.stringify([
           { type: 'local_image', path: '/tmp/screenshot.png', mimeType: 'image/png' },
         ]);
@@ -478,9 +565,7 @@ describe('OpenAICodexSDKProvider', () => {
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(new Error('Network error'));
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe('Error calling OpenAI Codex SDK: Network error');
@@ -493,9 +578,7 @@ describe('OpenAICodexSDKProvider', () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(new Error('Unable to read /tmp/tpm/output.json'));
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe(
@@ -512,9 +595,7 @@ describe('OpenAICodexSDKProvider', () => {
           ),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
@@ -537,9 +618,7 @@ describe('OpenAICodexSDKProvider', () => {
           ),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.metadata).toEqual({
@@ -560,9 +639,7 @@ describe('OpenAICodexSDKProvider', () => {
           ),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
@@ -587,9 +664,7 @@ describe('OpenAICodexSDKProvider', () => {
           }),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
@@ -610,9 +685,7 @@ describe('OpenAICodexSDKProvider', () => {
           ),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
@@ -625,9 +698,7 @@ describe('OpenAICodexSDKProvider', () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(new Error('You have no credits remaining ...'));
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.metadata?.rateLimitKind).toBe('quota');
@@ -637,9 +708,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should ignore non-provider prompt config keys merged from test options', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         const result = await provider.callApi('Test prompt', {
           prompt: {
@@ -697,9 +766,7 @@ describe('OpenAICodexSDKProvider', () => {
           return packageName === '@openai/codex-sdk' ? '@openai/codex-sdk' : null;
         });
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -732,9 +799,7 @@ describe('OpenAICodexSDKProvider', () => {
           return null;
         });
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -772,9 +837,7 @@ describe('OpenAICodexSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Use the token-skill skill');
 
         expect(result.metadata).toEqual({
@@ -802,9 +865,7 @@ describe('OpenAICodexSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Use the token-skill skill');
 
         expect(result.metadata).toEqual({
@@ -870,9 +931,7 @@ describe('OpenAICodexSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Read all skills');
 
         expect(result.metadata).toBeUndefined();
@@ -892,9 +951,7 @@ describe('OpenAICodexSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Read another repo skill');
 
         expect(result.metadata).toBeUndefined();
@@ -915,9 +972,7 @@ describe('OpenAICodexSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('List the available files');
 
         expect(result.metadata).toBeUndefined();
@@ -942,9 +997,7 @@ describe('OpenAICodexSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('What is 2 + 2?');
 
         expect(result.metadata).toBeUndefined();
@@ -1005,9 +1058,7 @@ describe('OpenAICodexSDKProvider', () => {
         );
 
         try {
-          const provider = new OpenAICodexSDKProvider({
-            env: { OPENAI_API_KEY: 'test-api-key' },
-          });
+          const provider = new OpenAICodexSDKProvider(createCodexOptions());
           const result = await provider.callApi('Use the profile skill');
 
           expect(result.metadata).toEqual({
@@ -1053,9 +1104,7 @@ describe('OpenAICodexSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Use the token-skill skill');
 
         expect(result.metadata).toEqual({
@@ -1084,9 +1133,7 @@ describe('OpenAICodexSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Read the unrelated SKILL file');
 
         expect(result.metadata).toBeUndefined();
@@ -1107,9 +1154,7 @@ describe('OpenAICodexSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
         const result = await provider.callApi('Read the unrelated hidden Codex skill file');
 
         expect(result.metadata).toBeUndefined();
@@ -1200,9 +1245,7 @@ describe('OpenAICodexSDKProvider', () => {
         existsSyncSpy.mockReturnValue(false);
         const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/path/to/non-git-cwd');
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -1328,9 +1371,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should create ephemeral threads by default', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         await provider.callApi('Test prompt');
         expect(mockStartThread).toHaveBeenCalledTimes(1);
@@ -1410,10 +1451,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should reuse threads when persist_threads is true', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { persist_threads: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createPersistentThreadOptions());
 
         await provider.callApi('First prompt');
         expect(mockStartThread).toHaveBeenCalledTimes(1);
@@ -1426,28 +1464,17 @@ describe('OpenAICodexSDKProvider', () => {
       it('should reuse persisted threads by prompt template when rendered vars change', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { persist_threads: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createPersistentThreadOptions());
 
         await provider.callApi('Create a User class', {
-          prompt: {
-            raw: '{{request}}',
-            label: 'conversation',
-            config: {},
-          },
+          prompt: createConversationPrompt(),
           vars: {
             request: 'Create a User class',
           },
         });
 
         await provider.callApi('Add a validateEmail method', {
-          prompt: {
-            raw: '{{request}}',
-            label: 'conversation',
-            config: {},
-          },
+          prompt: createConversationPrompt(),
           vars: {
             request: 'Add a validateEmail method',
           },
@@ -1464,17 +1491,10 @@ describe('OpenAICodexSDKProvider', () => {
           .mockImplementationOnce(() => firstRun.promise)
           .mockResolvedValueOnce(createMockResponse('Second response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { persist_threads: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createPersistentThreadOptions());
 
         const firstCall = provider.callApi('Remember BLUE-OTTER-19', {
-          prompt: {
-            raw: '{{request}}',
-            label: 'conversation',
-            config: {},
-          },
+          prompt: createConversationPrompt(),
           vars: {
             request: 'Remember BLUE-OTTER-19',
           },
@@ -1485,14 +1505,8 @@ describe('OpenAICodexSDKProvider', () => {
         });
 
         const secondCall = provider.callApi('What did I ask you to remember?', {
-          prompt: {
-            raw: '{{request}}',
-            label: 'conversation',
-            config: {},
-          },
-          vars: {
-            request: 'What did I ask you to remember?',
-          },
+          prompt: createConversationPrompt(),
+          vars: createRecallRequestVars(),
         });
 
         await Promise.resolve();
@@ -1515,17 +1529,10 @@ describe('OpenAICodexSDKProvider', () => {
           .mockImplementationOnce(() => firstRun.promise)
           .mockResolvedValueOnce(createMockResponse('Third response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { persist_threads: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createPersistentThreadOptions());
 
         const firstCall = provider.callApi('Remember BLUE-OTTER-19', {
-          prompt: {
-            raw: '{{request}}',
-            label: 'conversation',
-            config: {},
-          },
+          prompt: createConversationPrompt(),
           vars: {
             request: 'Remember BLUE-OTTER-19',
           },
@@ -1539,14 +1546,8 @@ describe('OpenAICodexSDKProvider', () => {
         const secondCall = provider.callApi(
           'What did I ask you to remember?',
           {
-            prompt: {
-              raw: '{{request}}',
-              label: 'conversation',
-              config: {},
-            },
-            vars: {
-              request: 'What did I ask you to remember?',
-            },
+            prompt: createConversationPrompt(),
+            vars: createRecallRequestVars(),
           },
           { abortSignal: abortController.signal },
         );
@@ -1557,14 +1558,8 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockRun).toHaveBeenCalledTimes(1);
 
         const thirdCall = provider.callApi('What did I ask you to remember?', {
-          prompt: {
-            raw: '{{request}}',
-            label: 'conversation',
-            config: {},
-          },
-          vars: {
-            request: 'What did I ask you to remember?',
-          },
+          prompt: createConversationPrompt(),
+          vars: createRecallRequestVars(),
         });
 
         await Promise.resolve();
@@ -1583,10 +1578,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should resume thread when thread_id is provided', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { thread_id: 'existing-thread-123' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createResumedThreadOptions());
 
         await provider.callApi('Test prompt');
 
@@ -1620,10 +1612,7 @@ describe('OpenAICodexSDKProvider', () => {
             resumeThread: vi.fn().mockReturnValue(secondThread),
           };
         });
-        const provider = new OpenAICodexSDKProvider({
-          config: { thread_id: 'existing-thread-123' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createResumedThreadOptions());
 
         const firstCall = provider.callApi('First', {
           prompt: { config: { cli_config: { profile: 'first' } } },
@@ -1670,26 +1659,10 @@ describe('OpenAICodexSDKProvider', () => {
       it('should not reuse an explicit thread cache entry across authority changes', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: {
-            thread_id: 'existing-thread-123',
-            persist_threads: true,
-            sandbox_mode: 'danger-full-access',
-            approval_policy: 'never',
-          },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createUnrestrictedResumedThreadOptions());
 
         await provider.callApi('Broad prompt');
-        await provider.callApi('Restricted prompt', {
-          prompt: {
-            raw: 'Restricted prompt',
-            config: {
-              sandbox_mode: 'read-only',
-              approval_policy: 'on-request',
-            },
-          },
-        } as any);
+        await provider.callApi('Restricted prompt', createRestrictedPromptContext() as any);
 
         expect(mockResumeThread).toHaveBeenNthCalledWith(1, 'existing-thread-123', {
           skipGitRepoCheck: false,
@@ -1708,26 +1681,10 @@ describe('OpenAICodexSDKProvider', () => {
       it('should evict stale explicit thread cache entries when options change', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: {
-            thread_id: 'existing-thread-123',
-            persist_threads: true,
-            sandbox_mode: 'danger-full-access',
-            approval_policy: 'never',
-          },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createUnrestrictedResumedThreadOptions());
 
         await provider.callApi('Broad prompt');
-        await provider.callApi('Restricted prompt', {
-          prompt: {
-            raw: 'Restricted prompt',
-            config: {
-              sandbox_mode: 'read-only',
-              approval_policy: 'on-request',
-            },
-          },
-        } as any);
+        await provider.callApi('Restricted prompt', createRestrictedPromptContext() as any);
         await provider.callApi('Broad prompt again');
 
         expect(mockResumeThread).toHaveBeenCalledTimes(3);
@@ -1951,18 +1908,9 @@ describe('OpenAICodexSDKProvider', () => {
 
     describe('cost calculation', () => {
       it('should calculate cost for gpt-5.1-codex model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 1000,
-            cached_input_tokens: 0,
-            output_tokens: 500,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createUncachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.1-codex' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.1-codex'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -1972,13 +1920,7 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should calculate cost for gpt-5.1-codex-mini model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 2000,
-            cached_input_tokens: 500,
-            output_tokens: 1000,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createCachedTokenUsage()));
 
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.1-codex-mini' },
@@ -1995,13 +1937,7 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should calculate cost for gpt-5-codex-mini model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 2000,
-            cached_input_tokens: 500,
-            output_tokens: 1000,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createCachedTokenUsage()));
 
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5-codex-mini' },
@@ -2015,12 +1951,7 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should return undefined cost when model pricing not found', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 100,
-            output_tokens: 50,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createInputOutputUsage(100, 50)));
 
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'unknown-model' },
@@ -2033,16 +1964,9 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should return undefined cost when no model specified', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 100,
-            output_tokens: 50,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createInputOutputUsage(100, 50)));
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -2052,10 +1976,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should return undefined cost when no usage data', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.1-codex' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.1-codex'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -2066,10 +1987,7 @@ describe('OpenAICodexSDKProvider', () => {
     describe('streaming', () => {
       it('should handle streaming events', async () => {
         const mockEvents = async function* () {
-          yield {
-            type: 'item.completed',
-            item: { id: 'item-1', type: 'agent_message', text: 'Part 1' },
-          };
+          yield createAgentMessageCompletedEvent();
           yield {
             type: 'item.completed',
             item: { id: 'item-2', type: 'agent_message', text: 'Part 2' },
@@ -2087,10 +2005,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -2108,19 +2023,13 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should abort streaming on signal', async () => {
         const mockEvents = async function* () {
-          yield {
-            type: 'item.completed',
-            item: { id: 'item-1', type: 'agent_message', text: 'Part 1' },
-          };
+          yield createAgentMessageCompletedEvent();
           // Abort will happen here
         };
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
 
         const abortController = new AbortController();
         abortController.abort();
@@ -2146,10 +2055,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.metadata).toEqual({
@@ -2182,10 +2088,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBeUndefined();
@@ -2205,10 +2108,7 @@ describe('OpenAICodexSDKProvider', () => {
           };
         };
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -2230,10 +2130,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
@@ -2256,10 +2153,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
@@ -2367,9 +2261,7 @@ describe('OpenAICodexSDKProvider', () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         const result = await provider.callApi('Test prompt', {
           prompt: {
@@ -2392,9 +2284,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should create separate Codex instances for prompt-level base_url overrides', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         await provider.callApi('Test prompt', {
           prompt: {
@@ -2429,9 +2319,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should handle pre-aborted signal', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         const abortController = new AbortController();
         abortController.abort();
@@ -2450,9 +2338,7 @@ describe('OpenAICodexSDKProvider', () => {
         abortError.name = 'AbortError';
         mockRun.mockRejectedValue(abortError);
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         const result = await provider.callApi('Test prompt', undefined, {
           abortSignal: new AbortController().signal,
@@ -2471,9 +2357,7 @@ describe('OpenAICodexSDKProvider', () => {
         mockProcessEnv({ PROMPTFOO_TEST_EXISTING: 'present' });
 
         try {
-          const provider = new OpenAICodexSDKProvider({
-            env: { OPENAI_API_KEY: 'test-api-key' },
-          });
+          const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
           await provider.callApi('Test prompt');
 
@@ -2643,10 +2527,7 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('routes native Codex spans to the receiver configured for the active eval', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
-        const provider = new OpenAICodexSDKProvider({
-          config: { deep_tracing: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createTracedCodexOptions());
 
         await cliState.withRequestTracingConfig(
           { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
@@ -2679,10 +2560,7 @@ describe('OpenAICodexSDKProvider', () => {
         'matches Codex SDK tracing protocol to receiver formats %j',
         async (acceptFormats, protocol, exporterProtocol) => {
           mockRun.mockResolvedValue(createMockResponse('Response'));
-          const provider = new OpenAICodexSDKProvider({
-            config: { deep_tracing: true },
-            env: { OPENAI_API_KEY: 'test-api-key' },
-          });
+          const provider = new OpenAICodexSDKProvider(createTracedCodexOptions());
 
           await cliState.withRequestTracingConfig(
             {
@@ -2723,10 +2601,7 @@ describe('OpenAICodexSDKProvider', () => {
         mockGetTraceparent.mockReturnValue(`00-${activeTraceId}-${activeSpanId}-01`);
         const evaluatorTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
         const evaluatorSpanId = '00f067aa0ba902b7';
-        const provider = new OpenAICodexSDKProvider({
-          config: { deep_tracing: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createTracedCodexOptions());
 
         await provider.callApi('Test prompt', {
           traceparent: `00-${evaluatorTraceId}-${evaluatorSpanId}-01`,
@@ -2755,10 +2630,7 @@ describe('OpenAICodexSDKProvider', () => {
           mockGetTraceparent.mockReturnValue(active);
           const traceId = '4bf92f3577b34da6a3ce929d0e0e4736';
           const spanId = '00f067aa0ba902b7';
-          const provider = new OpenAICodexSDKProvider({
-            config: { deep_tracing: true },
-            env: { OPENAI_API_KEY: 'test-api-key' },
-          });
+          const provider = new OpenAICodexSDKProvider(createTracedCodexOptions());
 
           await provider.callApi('Test prompt', {
             traceparent: `00-${traceId}-${spanId}-01`,
@@ -2802,12 +2674,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should pass model to startThread', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: {
-            model: 'gpt-5.2',
-          },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.2'));
 
         await provider.callApi('Test prompt');
 
@@ -2821,9 +2688,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should not include model in startThread if not specified', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         await provider.callApi('Test prompt');
 
@@ -2894,9 +2759,7 @@ describe('OpenAICodexSDKProvider', () => {
         };
         attachedProvider.self = attachedProvider;
 
-        const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
         await expect(
           provider.callApi('Test prompt', {
@@ -3134,9 +2997,7 @@ describe('OpenAICodexSDKProvider', () => {
         mockProcessEnv({ CODEX_HOME: '/tmp/process-codex-home' });
 
         try {
-          const provider = new OpenAICodexSDKProvider({
-            env: { OPENAI_API_KEY: 'test-api-key' },
-          });
+          const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
           await provider.callApi('Test prompt');
 
@@ -3271,13 +3132,7 @@ describe('OpenAICodexSDKProvider', () => {
       ])(
         'should calculate %s cost without cache-write tokens',
         async (model, input, cachedInput, output) => {
-          mockRun.mockResolvedValue(
-            createMockResponse('Response', {
-              input_tokens: 2000,
-              cached_input_tokens: 500,
-              output_tokens: 1000,
-            }),
-          );
+          mockRun.mockResolvedValue(createMockResponse('Response', createCachedTokenUsage()));
 
           const provider = new OpenAICodexSDKProvider({
             config: {
@@ -3297,34 +3152,19 @@ describe('OpenAICodexSDKProvider', () => {
       );
 
       it('should recognize gpt-5.5 as a known model', () => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.5' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.5'));
         expect(provider.config.model).toBe('gpt-5.5');
       });
 
       it('should recognize gpt-5.5-pro as a known model', () => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.5-pro' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.5-pro'));
         expect(provider.config.model).toBe('gpt-5.5-pro');
       });
 
       it('should calculate cost for gpt-5.5 model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 1000,
-            cached_input_tokens: 0,
-            output_tokens: 500,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createUncachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.5' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.5'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3334,18 +3174,9 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should calculate cost for gpt-5.5 model with cached input tokens', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 2000,
-            cached_input_tokens: 500,
-            output_tokens: 1000,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createCachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.5' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.5'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3357,18 +3188,9 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should calculate cost for gpt-5.5-pro model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 1000,
-            cached_input_tokens: 0,
-            output_tokens: 500,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createUncachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.5-pro' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.5-pro'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3378,18 +3200,9 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should calculate cost for gpt-5.5-pro model without cache discount', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 2000,
-            cached_input_tokens: 500,
-            output_tokens: 1000,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createCachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.5-pro' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.5-pro'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3401,55 +3214,21 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should recognize gpt-5.4 as a known model', () => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.4' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.4'));
         expect(provider.config.model).toBe('gpt-5.4');
       });
 
       it('should recognize gpt-5.4-pro as a known model', () => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.4-pro' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.4-pro'));
         expect(provider.config.model).toBe('gpt-5.4-pro');
       });
 
-      it('should calculate cost for gpt-5.4 model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 1000,
-            cached_input_tokens: 0,
-            output_tokens: 500,
-          }),
-        );
-
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.4' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
-
-        const result = await provider.callApi('Test prompt');
-
-        // gpt-5.4: $2.5/1M input, $15/1M output
-        // Cost = (1000 * 2.5/1000000) + (500 * 15/1000000) = 0.0025 + 0.0075 = 0.01
-        expect(result.cost).toBeCloseTo(0.01, 6);
-      });
+      it('should calculate cost for gpt-5.4 model', createGpt54CostCheck());
 
       it('should calculate cost for gpt-5.4 model with cached input tokens', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 2000,
-            cached_input_tokens: 500,
-            output_tokens: 1000,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createCachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.4' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.4'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3461,18 +3240,9 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should calculate cost for gpt-5.4-pro model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 1000,
-            cached_input_tokens: 0,
-            output_tokens: 500,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createUncachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.4-pro' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.4-pro'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3482,18 +3252,9 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should calculate cost for gpt-5.4-pro model without cache discount', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 2000,
-            cached_input_tokens: 500,
-            output_tokens: 1000,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createCachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.4-pro' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.4-pro'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3505,34 +3266,19 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should allow an explicitly configured model outside the advertised catalog', () => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.2-codex' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.2-codex'));
         expect(provider.config.model).toBe('gpt-5.2-codex');
       });
 
       it('should recognize gpt-5.3-codex as a known model', () => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.3-codex' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.3-codex'));
         expect(provider.config.model).toBe('gpt-5.3-codex');
       });
 
       it('should calculate cost for gpt-5.2-codex model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 1000,
-            cached_input_tokens: 0,
-            output_tokens: 500,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createUncachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.2-codex' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.2-codex'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3542,18 +3288,9 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should calculate cost for gpt-5.2 model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 1000,
-            cached_input_tokens: 0,
-            output_tokens: 500,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createUncachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.2' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.2'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3563,26 +3300,14 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should recognize gpt-5.3-codex-spark as a known model', () => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.3-codex-spark' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.3-codex-spark'));
         expect(provider.config.model).toBe('gpt-5.3-codex-spark');
       });
 
       it('should calculate cost for gpt-5.3-codex model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 1000,
-            cached_input_tokens: 0,
-            output_tokens: 500,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createUncachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.3-codex' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.3-codex'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3592,18 +3317,9 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should leave cost unset for the Codex-only gpt-5.3-codex-spark model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 2000,
-            cached_input_tokens: 500,
-            output_tokens: 1000,
-          }),
-        );
+        mockRun.mockResolvedValue(createMockResponse('Response', createCachedTokenUsage()));
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.3-codex-spark' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.3-codex-spark'));
 
         const result = await provider.callApi('Test prompt');
 
@@ -3613,42 +3329,34 @@ describe('OpenAICodexSDKProvider', () => {
 
     describe('GPT-5.4 models', () => {
       it('should recognize gpt-5.4 as a known model', () => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.4' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createModelOptions('gpt-5.4'));
         expect(provider.config.model).toBe('gpt-5.4');
       });
 
-      it('should calculate cost for gpt-5.4 model', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 1000,
-            cached_input_tokens: 0,
-            output_tokens: 500,
-          }),
-        );
-
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.4' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
-
-        const result = await provider.callApi('Test prompt');
-
-        // gpt-5.4: $2.5/1M input, $15/1M output
-        // Cost = (1000 * 2.5/1000000) + (500 * 15/1000000) = 0.0025 + 0.0075 = 0.01
-        expect(result.cost).toBeCloseTo(0.01, 6);
-      });
+      it('should calculate cost for gpt-5.4 model', createGpt54CostCheck());
     });
 
     describe('streaming events', () => {
+      const createCodexSpanRunner =
+        () =>
+        (...args: any[]) => {
+          const fn = args[args.length - 1];
+          return fn({
+            end: () => undefined,
+            setAttribute: () => undefined,
+            setAttributes: () => undefined,
+            setStatus: () => undefined,
+            addEvent: () => undefined,
+            recordException: () => undefined,
+            spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+            isRecording: () => true,
+            updateName: () => undefined,
+          });
+        };
+
       it('should handle item.updated events', async () => {
         const mockEvents = async function* () {
-          yield {
-            type: 'item.started',
-            item: { id: 'item-1', type: 'command_execution', command: 'ls' },
-          };
+          yield createCommandStartedEvent();
           yield {
             type: 'item.updated',
             item: { id: 'item-1', type: 'command_execution', command: 'ls', status: 'in_progress' },
@@ -3661,18 +3369,12 @@ describe('OpenAICodexSDKProvider', () => {
               text: 'Done',
             },
           };
-          yield {
-            type: 'turn.completed',
-            usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 20 },
-          };
+          yield createTurnCompletedEvent();
         };
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -3690,10 +3392,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -3710,10 +3409,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -3751,43 +3447,21 @@ describe('OpenAICodexSDKProvider', () => {
               ReturnType<typeof opentelemetry.trace.getTracer>['startSpan']
             >;
           },
-          startActiveSpan: (...args: any[]) => {
-            const fn = args[args.length - 1];
-            return fn({
-              end: () => undefined,
-              setAttribute: () => undefined,
-              setAttributes: () => undefined,
-              setStatus: () => undefined,
-              addEvent: () => undefined,
-              recordException: () => undefined,
-              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
-              isRecording: () => true,
-              updateName: () => undefined,
-            });
-          },
+          startActiveSpan: createCodexSpanRunner(),
         } as unknown as ReturnType<typeof opentelemetry.trace.getTracer>);
 
         const mockEvents = async function* () {
-          yield {
-            type: 'item.started',
-            item: { id: 'item-1', type: 'command_execution', command: 'ls' },
-          };
+          yield createCommandStartedEvent();
           yield {
             type: 'item.completed',
             item: { id: 'item-1', type: 'agent_message', text: 'Hi' },
           };
-          yield {
-            type: 'turn.completed',
-            usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 20 },
-          };
+          yield createTurnCompletedEvent();
         };
 
         mockRunStreamed.mockResolvedValue({ events: mockEvents() });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
 
         const result = await provider.callApi('Test prompt');
         expect(result.error).toBeUndefined();
@@ -3842,20 +3516,7 @@ describe('OpenAICodexSDKProvider', () => {
               ReturnType<typeof opentelemetry.trace.getTracer>['startSpan']
             >;
           },
-          startActiveSpan: (...args: any[]) => {
-            const fn = args[args.length - 1];
-            return fn({
-              end: () => undefined,
-              setAttribute: () => undefined,
-              setAttributes: () => undefined,
-              setStatus: () => undefined,
-              addEvent: () => undefined,
-              recordException: () => undefined,
-              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
-              isRecording: () => true,
-              updateName: () => undefined,
-            });
-          },
+          startActiveSpan: createCodexSpanRunner(),
         } as unknown as ReturnType<typeof opentelemetry.trace.getTracer>);
         return { emitted, spy };
       };
@@ -3868,10 +3529,7 @@ describe('OpenAICodexSDKProvider', () => {
           })(),
         });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
         const result = await provider.callApi('Test prompt');
         expect(result.error).toContain('Codex turn failed: Model overloaded');
 
@@ -3890,10 +3548,7 @@ describe('OpenAICodexSDKProvider', () => {
           })(),
         });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
         const result = await provider.callApi('Test prompt');
         expect(result.error).toContain('Codex stream ended after error: Stream transport failed');
 
@@ -3910,17 +3565,11 @@ describe('OpenAICodexSDKProvider', () => {
         mockRunStreamed.mockResolvedValue({
           events: (async function* () {
             yield { type: 'turn.started' };
-            yield {
-              type: 'item.started',
-              item: { id: 'item-1', type: 'command_execution', command: 'ls' },
-            };
+            yield createCommandStartedEvent();
           })(),
         });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
         await provider.callApi('Test prompt');
 
         const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
@@ -3948,10 +3597,7 @@ describe('OpenAICodexSDKProvider', () => {
           })(),
         });
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { enable_streaming: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenAICodexSDKProvider(createStreamingCodexOptions());
         await provider.callApi('Test prompt');
 
         const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
@@ -3974,9 +3620,7 @@ describe('OpenAICodexSDKProvider', () => {
 
   describe('trace attribute helpers', () => {
     it('should serialize MCP tool input for tracing', () => {
-      const provider = new OpenAICodexSDKProvider({
-        env: { OPENAI_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
       expect(
         (provider as any).getAttributesForItem({
@@ -4012,9 +3656,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should redact sensitive MCP tool input before tracing', () => {
-      const provider = new OpenAICodexSDKProvider({
-        env: { OPENAI_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenAICodexSDKProvider(createCodexOptions());
       const fakeEmail = ['user', 'example.com'].join('@');
       const fakeApiKey = ['sk', 'secret-value'].join('-');
       const fakeAuthHeader = ['Bearer', 'secret-token'].join(' ');
@@ -4064,9 +3706,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should redact sensitive command, output, message, and reasoning text before tracing', () => {
-      const provider = new OpenAICodexSDKProvider({
-        env: { OPENAI_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenAICodexSDKProvider(createCodexOptions());
       const fakeEmail = ['user', 'example.com'].join('@');
       const fakeApiKey = ['sk', 'x'.repeat(32)].join('-');
       const fakeBearerToken = ['Bearer', 'token'.repeat(12)].join(' ');
@@ -4114,9 +3754,7 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     it('should attach inferred skill attributes to Codex command spans', () => {
-      const provider = new OpenAICodexSDKProvider({
-        env: { OPENAI_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
       expect(
         (provider as any).getAttributesForItem(
@@ -4189,10 +3827,7 @@ describe('OpenAICodexSDKProvider', () => {
     it('should clear threads map', async () => {
       mockRun.mockResolvedValue(createMockResponse('Response'));
 
-      const provider = new OpenAICodexSDKProvider({
-        config: { persist_threads: true },
-        env: { OPENAI_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenAICodexSDKProvider(createPersistentThreadOptions());
 
       // Create a persisted thread
       await provider.callApi('Test prompt');
@@ -4209,9 +3844,7 @@ describe('OpenAICodexSDKProvider', () => {
 
     it('should keep the provider registered during cleanup and unregister it on shutdown', async () => {
       const unregisterSpy = vi.spyOn(providerRegistry, 'unregister');
-      const provider = new OpenAICodexSDKProvider({
-        env: { OPENAI_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenAICodexSDKProvider(createCodexOptions());
 
       await provider.cleanup();
       expect(unregisterSpy).not.toHaveBeenCalled();
@@ -4232,10 +3865,7 @@ describe('OpenAICodexSDKProvider', () => {
         };
       });
 
-      const provider = new OpenAICodexSDKProvider({
-        config: { persist_threads: true },
-        env: { OPENAI_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenAICodexSDKProvider(createPersistentThreadOptions());
 
       await provider.callApi('Test prompt');
       await provider.shutdown();

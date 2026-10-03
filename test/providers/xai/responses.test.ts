@@ -1,7 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { XAIResponsesProvider } from '../../../src/providers/xai/responses';
+import {
+  createApiKeyOptions,
+  createResponseMessage,
+  createStreamingOptions,
+} from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
+
+const createPricedTokenUsage = () => ({
+  input_tokens: 10,
+  output_tokens: 5,
+  total_tokens: 15,
+  cost_in_usd_ticks: 12_500_000_000,
+});
+
+const createCachedTokenUsage = () => ({
+  input_tokens: 10,
+  output_tokens: 5,
+  total_tokens: 15,
+  input_tokens_details: {
+    cached_tokens: 8,
+  },
+});
+
+const createFileSearchTool = () => ({
+  type: 'file_search',
+  vector_store_ids: ['collection_123'],
+  max_num_results: 3,
+});
 
 const mockMaybeLoadToolsFromExternalFile = vi.hoisted(() => vi.fn());
 
@@ -12,13 +40,7 @@ const DEFAULT_TEST_MODEL = 'grok-4.3';
 const createMockResponseData = (model: string = DEFAULT_TEST_MODEL) => ({
   id: 'resp_123',
   model,
-  output: [
-    {
-      type: 'message',
-      role: 'assistant',
-      content: [{ type: 'output_text', text: 'hello' }],
-    },
-  ],
+  output: [createResponseMessage('hello')],
   usage: {
     input_tokens: 10,
     output_tokens: 5,
@@ -70,12 +92,7 @@ describe('XAIResponsesProvider', () => {
     mockFetchWithProxy.mockReset();
     // Default passthrough: return whatever tools array is passed in
     mockMaybeLoadToolsFromExternalFile.mockImplementation((tools: any) => Promise.resolve(tools));
-    mockFetchWithCache.mockResolvedValue({
-      data: createMockResponseData(),
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockFetchWithCache.mockResolvedValue(createMockFetchResponse(createMockResponseData()));
   });
 
   afterEach(() => {
@@ -83,14 +100,7 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('calls maybeLoadToolsFromExternalFile when tools are configured', async () => {
-    const tools = [
-      { type: 'code_execution' },
-      {
-        type: 'file_search',
-        vector_store_ids: ['collection_123'],
-        max_num_results: 3,
-      },
-    ];
+    const tools = [{ type: 'code_execution' }, createFileSearchTool()];
     const provider = new XAIResponsesProvider('grok-4.3', {
       config: {
         apiKey: 'test-key',
@@ -112,11 +122,7 @@ describe('XAIResponsesProvider', () => {
         apiKey: 'test-key',
         tools: [
           { type: 'code_execution' },
-          {
-            type: 'file_search',
-            vector_store_ids: ['collection_123'],
-            max_num_results: 3,
-          },
+          createFileSearchTool(),
           {
             type: 'collections_search',
             collection_ids: ['collection_456'],
@@ -179,12 +185,9 @@ describe('XAIResponsesProvider', () => {
   it.each(['low', 'medium', 'high', 'xhigh'] as const)(
     'sends Grok 4.7 Responses reasoning effort %s',
     async (effort) => {
-      mockFetchWithCache.mockResolvedValue({
-        data: createMockResponseData('grok-4.7'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse(createMockResponseData('grok-4.7')),
+      );
       const provider = new XAIResponsesProvider('grok-4.7', {
         config: {
           apiKey: 'test-key',
@@ -289,8 +292,8 @@ describe('XAIResponsesProvider', () => {
   it('retains encrypted Grok 4.7 reasoning without requesting include and uses US fallback pricing', async () => {
     const encrypted = { type: 'reasoning', summary: [], encrypted_content: 'opaque-test-payload' };
     const data = createMockResponseData('grok-4.7');
-    mockFetchWithCache.mockResolvedValue({
-      data: {
+    mockFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         ...data,
         output: [encrypted, ...data.output],
         usage: {
@@ -300,11 +303,8 @@ describe('XAIResponsesProvider', () => {
           input_tokens_details: { cached_tokens: 800 },
           output_tokens_details: { reasoning_tokens: 20 },
         },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
     const provider = new XAIResponsesProvider('grok-4.7', {
       config: { apiKey: 'test-key', region: 'us' },
     });
@@ -318,12 +318,9 @@ describe('XAIResponsesProvider', () => {
     expect(result.tokenUsage).toMatchObject({ completionDetails: { reasoning: 20 } });
     expect(result.cost).toBeCloseTo(0.00418, 10);
 
-    mockFetchWithCache.mockResolvedValue({
-      data: { ...data, usage: { ...data.usage, cost_in_usd_ticks: 123_000 } },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({ ...data, usage: { ...data.usage, cost_in_usd_ticks: 123_000 } }),
+    );
     expect((await provider.callApi('billed cost')).cost).toBeCloseTo(0.0000123, 10);
   });
 
@@ -380,15 +377,12 @@ describe('XAIResponsesProvider', () => {
         config: { apiKey: 'test-key', region: 'us', passthrough: { model: sent } },
       });
       const data = createMockResponseData(sent);
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           ...data,
           usage: { input_tokens: 1_000, output_tokens: 1_000, total_tokens: 2_000 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
       const result = await provider.callApi('hello');
       expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe(sent);
       expect(result.cost).toBeCloseTo(cost, 10);
@@ -462,32 +456,16 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('uses the exact billed xAI cost when the API returns cost ticks', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         id: 'resp_123',
         model: 'grok-4.3',
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'hello' }],
-          },
-        ],
-        usage: {
-          input_tokens: 10,
-          output_tokens: 5,
-          total_tokens: 15,
-          cost_in_usd_ticks: 12_500_000_000,
-        },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+        output: [createResponseMessage('hello')],
+        usage: createPricedTokenUsage(),
+      }),
+    );
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createApiKeyOptions());
 
     const result = await provider.callApi('hello');
 
@@ -495,20 +473,12 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('honors explicit custom cost overrides when the API also returns cost ticks', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         ...createMockResponseData('grok-4.5'),
-        usage: {
-          input_tokens: 10,
-          output_tokens: 5,
-          total_tokens: 15,
-          cost_in_usd_ticks: 12_500_000_000,
-        },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+        usage: createPricedTokenUsage(),
+      }),
+    );
 
     const provider = new XAIResponsesProvider('grok-4.5', {
       config: { apiKey: 'test-key', cost: 0.001 },
@@ -523,21 +493,14 @@ describe('XAIResponsesProvider', () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
         ...createMockResponseData('grok-4.5'),
-        usage: {
-          input_tokens: 10,
-          output_tokens: 5,
-          total_tokens: 15,
-          cost_in_usd_ticks: 12_500_000_000,
-        },
+        usage: createPricedTokenUsage(),
       },
       cached: true,
       status: 200,
       statusText: 'OK',
     });
 
-    const provider = new XAIResponsesProvider('grok-4.5', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new XAIResponsesProvider('grok-4.5', createApiKeyOptions());
 
     const result = await provider.callApi('hello');
 
@@ -546,19 +509,14 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('leaves cost unknown when neither usage ticks nor fallback token counts are available', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         ...createMockResponseData('unknown-model'),
         usage: undefined,
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
-    const provider = new XAIResponsesProvider('unknown-model', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new XAIResponsesProvider('unknown-model', createApiKeyOptions());
 
     const result = await provider.callApi('hello');
 
@@ -566,16 +524,11 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('uses fallback pricing for Grok 4.20 responses', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: createMockResponseData('grok-4.20'),
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse(createMockResponseData('grok-4.20')),
+    );
 
-    const provider = new XAIResponsesProvider('grok-4.20', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new XAIResponsesProvider('grok-4.20', createApiKeyOptions());
 
     const result = await provider.callApi('hello');
 
@@ -583,8 +536,8 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('prefers billed cost ticks over calculated cost when reasoning tokens are present', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         ...createMockResponseData(),
         id: 'resp_124',
         output: [
@@ -603,15 +556,10 @@ describe('XAIResponsesProvider', () => {
           },
           cost_in_usd_ticks: 12_500_000_000,
         },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
-    const provider = new XAIResponsesProvider(DEFAULT_TEST_MODEL, {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new XAIResponsesProvider(DEFAULT_TEST_MODEL, createApiKeyOptions());
 
     const result = await provider.callApi('hello');
 
@@ -619,17 +567,11 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('falls back to calculated xAI pricing when cost ticks are absent', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         id: 'resp_124',
         model: 'grok-4.3',
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'hello' }],
-          },
-        ],
+        output: [createResponseMessage('hello')],
         usage: {
           input_tokens: 10,
           output_tokens: 5,
@@ -638,15 +580,10 @@ describe('XAIResponsesProvider', () => {
             reasoning_tokens: 3,
           },
         },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createApiKeyOptions());
 
     const result = await provider.callApi('hello');
 
@@ -657,34 +594,16 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('applies cache-read pricing when cost ticks are absent', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         id: 'resp_cached',
         model: 'grok-4.3',
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'hello' }],
-          },
-        ],
-        usage: {
-          input_tokens: 10,
-          output_tokens: 5,
-          total_tokens: 15,
-          input_tokens_details: {
-            cached_tokens: 8,
-          },
-        },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+        output: [createResponseMessage('hello')],
+        usage: createCachedTokenUsage(),
+      }),
+    );
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createApiKeyOptions());
 
     const result = await provider.callApi('hello');
 
@@ -694,28 +613,14 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('honors explicit cache-read pricing overrides', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         id: 'resp_cached_override',
         model: 'grok-4.3',
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'hello' }],
-          },
-        ],
-        usage: {
-          input_tokens: 10,
-          output_tokens: 5,
-          total_tokens: 15,
-          input_tokens_details: { cached_tokens: 8 },
-        },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+        output: [createResponseMessage('hello')],
+        usage: createCachedTokenUsage(),
+      }),
+    );
 
     const provider = new XAIResponsesProvider('grok-4.3', {
       config: {
@@ -733,17 +638,11 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('keeps fallback xAI pricing when input tokens are zero', async () => {
-    mockFetchWithCache.mockResolvedValueOnce({
-      data: {
+    mockFetchWithCache.mockResolvedValueOnce(
+      createMockFetchResponse({
         id: 'resp_zero_input',
         model: 'grok-4.3',
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'hello' }],
-          },
-        ],
+        output: [createResponseMessage('hello')],
         usage: {
           input_tokens: 0,
           output_tokens: 5,
@@ -752,15 +651,10 @@ describe('XAIResponsesProvider', () => {
             reasoning_tokens: 3,
           },
         },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createApiKeyOptions());
 
     const result = await provider.callApi('hello');
 
@@ -787,9 +681,7 @@ describe('XAIResponsesProvider', () => {
       ),
     });
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createStreamingOptions());
 
     const result = await provider.callApi('hello');
 
@@ -830,9 +722,7 @@ describe('XAIResponsesProvider', () => {
       ),
     });
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createStreamingOptions());
 
     const result = await provider.callApi('hello');
 
@@ -859,9 +749,7 @@ describe('XAIResponsesProvider', () => {
       ),
     });
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createStreamingOptions());
 
     const result = await provider.callApi('hello');
 
@@ -884,9 +772,7 @@ describe('XAIResponsesProvider', () => {
       ),
     });
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createStreamingOptions());
 
     const result = await provider.callApi('hello');
 
@@ -911,9 +797,7 @@ describe('XAIResponsesProvider', () => {
       ),
     });
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createStreamingOptions());
 
     const result = await provider.callApi('hello');
 
@@ -984,9 +868,7 @@ describe('XAIResponsesProvider', () => {
       ),
     });
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createStreamingOptions());
 
     const result = await provider.callApi('hello');
 
@@ -1006,9 +888,7 @@ describe('XAIResponsesProvider', () => {
         ].join('\n'),
       ),
     });
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createStreamingOptions());
 
     const result = await provider.callApi('hello');
 
@@ -1033,9 +913,7 @@ describe('XAIResponsesProvider', () => {
       ),
     });
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createStreamingOptions());
 
     const result = await provider.callApi('hello');
 
@@ -1089,9 +967,7 @@ describe('XAIResponsesProvider', () => {
       body: createSSEStream(['data: not-json', '', 'data: [DONE]', ''].join('\n')),
     });
 
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
-    });
+    const provider = new XAIResponsesProvider('grok-4.3', createStreamingOptions());
 
     const result = await provider.callApi('hello');
 

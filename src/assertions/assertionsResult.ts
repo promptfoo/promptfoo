@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { getEnvBool } from '../envars';
 import { isGradingResult } from '../types/index';
+import { addCompletionDetails } from '../util/tokenUsageUtils';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
@@ -90,20 +91,10 @@ function accumulateNormalizedAssertionTokenUsage(
   }
 
   if (update.completionDetails) {
-    const currentDetails = target.completionDetails;
-    const incomingDetails = update.completionDetails;
-    target.completionDetails = {
-      reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
-      acceptedPrediction:
-        (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
-      rejectedPrediction:
-        (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
-      cacheReadInputTokens:
-        (currentDetails?.cacheReadInputTokens ?? 0) + (incomingDetails.cacheReadInputTokens ?? 0),
-      cacheCreationInputTokens:
-        (currentDetails?.cacheCreationInputTokens ?? 0) +
-        (incomingDetails.cacheCreationInputTokens ?? 0),
-    };
+    target.completionDetails = addCompletionDetails(
+      target.completionDetails,
+      update.completionDetails!,
+    );
   }
 
   if (trackIncurredUsage && target.incurredTokenUsage) {

@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { MlflowGatewayChatCompletionProvider } from '../../src/providers/mlflow-gateway';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
+
+const createGatewayConfig = () => ({
+  config: { gatewayUrl: 'http://localhost:5000' },
+});
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
@@ -35,9 +40,7 @@ describe('MlflowGatewayChatCompletionProvider', () => {
   });
 
   it('should construct with explicit gatewayUrl', () => {
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.config.apiBaseUrl).toBe('http://localhost:5000/gateway/mlflow/v1');
   });
 
@@ -102,9 +105,7 @@ describe('MlflowGatewayChatCompletionProvider', () => {
   });
 
   it('should default apiKeyEnvar to MLFLOW_GATEWAY_API_KEY', () => {
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.config.apiKeyEnvar).toBe('MLFLOW_GATEWAY_API_KEY');
   });
 
@@ -116,9 +117,7 @@ describe('MlflowGatewayChatCompletionProvider', () => {
   });
 
   it('should default apiKeyRequired to false', () => {
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.config.apiKeyRequired).toBe(false);
   });
 
@@ -141,16 +140,18 @@ describe('MlflowGatewayChatCompletionProvider', () => {
   });
 
   it('should preserve the model name', () => {
-    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider(
+      'my-chat-endpoint',
+      createGatewayConfig(),
+    );
     expect(provider.modelName).toBe('my-chat-endpoint');
   });
 
   it('should use namespaced provider id by default', () => {
-    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider(
+      'my-chat-endpoint',
+      createGatewayConfig(),
+    );
     expect(provider.id()).toBe('mlflow-gateway:my-chat-endpoint');
   });
 
@@ -172,9 +173,7 @@ describe('MlflowGatewayChatCompletionProvider', () => {
 
   it('should read the API key from MLFLOW_GATEWAY_API_KEY', () => {
     mockProcessEnv({ MLFLOW_GATEWAY_API_KEY: 'mlflow-token' });
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.getApiKey()).toBe('mlflow-token');
   });
 
@@ -208,24 +207,18 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     // Regression test: forwarding a user's OPENAI_API_KEY as a Bearer token to
     // an MLflow gateway URL would leak their cloud OpenAI credentials.
     mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-secret' });
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.getApiKey()).toBeUndefined();
   });
 
   it('should NOT forward OPENAI_ORGANIZATION to MLflow Gateway', () => {
     mockProcessEnv({ OPENAI_ORGANIZATION: 'org-openai-secret' });
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.getOrganization()).toBeUndefined();
   });
 
   it('should NOT require an API key by default', () => {
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.requiresApiKey()).toBe(false);
   });
 
@@ -242,25 +235,19 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     // OPENAI_API_HOST over apiBaseUrl. We must not inherit that fallback,
     // or mlflow-gateway:* requests would silently go to the wrong service.
     mockProcessEnv({ OPENAI_API_HOST: 'evil.example.com' });
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.getApiUrl()).toBe('http://localhost:5000/gateway/mlflow/v1');
   });
 
   it('should NOT route to OPENAI_API_BASE_URL when set in env', () => {
     mockProcessEnv({ OPENAI_API_BASE_URL: 'http://other-service.example.com/v1' });
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.getApiUrl()).toBe('http://localhost:5000/gateway/mlflow/v1');
   });
 
   it('should NOT route to OPENAI_BASE_URL when set in env', () => {
     mockProcessEnv({ OPENAI_BASE_URL: 'http://other-service.example.com/v1' });
-    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', createGatewayConfig());
     expect(provider.getApiUrl()).toBe('http://localhost:5000/gateway/mlflow/v1');
   });
 
@@ -270,19 +257,17 @@ describe('MlflowGatewayChatCompletionProvider', () => {
       OPENAI_ORGANIZATION: 'org-openai-secret',
       OPENAI_API_HOST: 'evil.example.com',
     });
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: {
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({
         choices: [{ message: { content: 'gateway output' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 4, completion_tokens: 3, total_tokens: 7 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
 
-    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider(
+      'my-chat-endpoint',
+      createGatewayConfig(),
+    );
     const result = await provider.callApi('Hello gateway');
 
     expect(fetchWithCache).toHaveBeenCalledWith(
@@ -303,12 +288,9 @@ describe('MlflowGatewayChatCompletionProvider', () => {
   });
 
   it('should send explicitly configured authorization headers to secured gateways', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { choices: [{ message: { content: 'authenticated output' } }] },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({ choices: [{ message: { content: 'authenticated output' } }] }),
+    );
 
     const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
       config: {
@@ -333,9 +315,10 @@ describe('MlflowGatewayChatCompletionProvider', () => {
       statusText: 'Unauthorized',
     } as never);
 
-    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000' },
-    });
+    const provider = new MlflowGatewayChatCompletionProvider(
+      'my-chat-endpoint',
+      createGatewayConfig(),
+    );
     const result = await provider.callApi('Hello gateway');
 
     expect(result.error).toContain('API error: 401 Unauthorized');

@@ -4,7 +4,7 @@ import path from 'path';
 import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
-import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { cleanupAndUnregister, resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import {
   cliState,
@@ -298,12 +298,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     }
   }
 
-  async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+  shutdown(): Promise<void> {
+    return cleanupAndUnregister(this);
   }
 
   async callApi(

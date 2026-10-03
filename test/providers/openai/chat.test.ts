@@ -1,3 +1,5 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../../factories/logger'));
+
 import path from 'path';
 
 import { trace } from '@opentelemetry/api';
@@ -12,27 +14,78 @@ import { createLiteLLMProvider } from '../../../src/providers/litellm';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { OpenRouterProvider } from '../../../src/providers/openrouter';
 import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
+import { createApiKeyOptions, createTemperatureOptions } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockChatResponse, createMockFetchResponse } from '../mockProviderResponses';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
 import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
-vi.mock('../../../src/cache', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    fetchWithCache: vi.fn(),
-    enableCache: vi.fn(),
-    disableCache: vi.fn(),
-  };
+const { createOpenAiCacheFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
+
+const createExternalToolResponse = () => ({
+  choices: [
+    {
+      message: {
+        content: null,
+        tool_calls: [
+          {
+            function: {
+              name: 'external_function',
+              arguments: '{"param": "test_value"}',
+            },
+          },
+        ],
+      },
+    },
+  ],
+  usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
 });
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
+
+const createExternalFunctionTool = () => ({
+  type: 'function' as const,
+  function: {
+    name: 'external_function',
+    description: 'An external function',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        param: { type: 'string' as const },
+      },
+      required: ['param'],
+    },
   },
-}));
+});
+
+const createUncachedChatResponse = () => ({
+  data: {
+    choices: [{ message: { content: 'Test output' } }],
+    usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+  },
+  cached: false,
+  status: 200,
+  statusText: 'OK',
+  severity: 'info',
+});
+
+const createOpenRouterOptions = () => ({
+  config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+});
+
+const createCachedChatUsage = () => ({
+  prompt_tokens: 2_000,
+  completion_tokens: 1_000,
+  total_tokens: 3_000,
+  prompt_tokens_details: { cached_tokens: 500 },
+});
+
+const createCurrentAnswerResponse = () => ({
+  choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
+  usage: { prompt_tokens: 1_000, completion_tokens: 1_000, total_tokens: 2_000 },
+});
+
+vi.mock('../../../src/cache', createOpenAiCacheFactory());
+vi.mock('../../../src/logger', () => createLoggerModule());
 vi.mock('../../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -69,6 +122,20 @@ function gradeProviderRefusal(response: ProviderResponse, inverse = false) {
   });
 }
 
+const createMockReasoningResponse = () =>
+  createMockFetchResponse({
+    choices: [
+      {
+        message: {
+          content: 'The final answer is 9.11 is greater than 9.8.',
+          reasoning_content:
+            'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
+        },
+      },
+    ],
+    usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+  });
+
 describe('OpenAI Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -92,6 +159,26 @@ describe('OpenAI Provider', () => {
   });
 
   describe('OpenAiChatCompletionProvider', () => {
+    const createAttributeRecorder =
+      (attributes: Record<string, unknown>[]) =>
+      (
+        _name: string,
+        options: { attributes?: Record<string, unknown> },
+        _context: unknown,
+        callback: any,
+      ) => {
+        const span = { ...options.attributes };
+        attributes.push(span);
+        return callback({
+          setAttribute: (key: string, value: unknown) => {
+            span[key] = value;
+          },
+          setStatus: vi.fn(),
+          recordException: vi.fn(),
+          end: vi.fn(),
+        });
+      };
+
     beforeEach(() => {
       vi.clearAllMocks();
     });
@@ -188,9 +275,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should reject a per-prompt Codex-only chat model override before dispatch', async () => {
-      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', createApiKeyOptions());
 
       await expect(
         provider.getOpenAiBody('Test prompt', {
@@ -201,15 +286,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should call API successfully', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -245,8 +322,8 @@ describe('OpenAI Provider', () => {
           });
         },
       } as any);
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Test output' } }],
           usage: {
             total_tokens: 10,
@@ -254,11 +331,8 @@ describe('OpenAI Provider', () => {
             completion_tokens: 5,
             prompt_tokens_details: { cached_tokens: 2, cache_write_tokens: 3 },
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       try {
         const provider = new OpenAiChatCompletionProvider('gpt-5.6');
@@ -279,31 +353,14 @@ describe('OpenAI Provider', () => {
     it.each(['gpt-6-sol', 'gpt-6-luna'])(
       'sends LiteLLM token budgets and records the effective native Chat token cap for %s',
       async (model) => {
-        mockFetchWithCache.mockResolvedValue({
-          data: { choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }] },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
+          }),
+        );
         const attributes: Record<string, unknown>[] = [];
         const tracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
-          startActiveSpan: (
-            _name: string,
-            options: { attributes?: Record<string, unknown> },
-            _context: unknown,
-            callback: any,
-          ) => {
-            const span = { ...options.attributes };
-            attributes.push(span);
-            return callback({
-              setAttribute: (key: string, value: unknown) => {
-                span[key] = value;
-              },
-              setStatus: vi.fn(),
-              recordException: vi.fn(),
-              end: vi.fn(),
-            });
-          },
+          startActiveSpan: createAttributeRecorder(attributes),
         } as any);
         try {
           const sampling = { reasoning_effort: 'none' as const, temperature: 0.4, top_p: 0.8 };
@@ -370,31 +427,14 @@ describe('OpenAI Provider', () => {
     );
 
     it('traces the token field actually sent for earlier OpenAI Chat models', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: { choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
+        }),
+      );
       const attributes: Record<string, unknown>[] = [];
       const tracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
-        startActiveSpan: (
-          _name: string,
-          options: { attributes?: Record<string, unknown> },
-          _context: unknown,
-          callback: any,
-        ) => {
-          const span = { ...options.attributes };
-          attributes.push(span);
-          return callback({
-            setAttribute: (key: string, value: unknown) => {
-              span[key] = value;
-            },
-            setStatus: vi.fn(),
-            recordException: vi.fn(),
-            end: vi.fn(),
-          });
-        },
+        startActiveSpan: createAttributeRecorder(attributes),
       } as any);
       try {
         const prompt = { raw: 'Say ready.', label: 'ready' };
@@ -450,9 +490,7 @@ describe('OpenAI Provider', () => {
         for (const policyCode of ['bio_policy', 'cyber_policy']) {
           for (const [provider, body] of [
             [
-              new OpenAiChatCompletionProvider(`openai/${model}`, {
-                config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
-              }),
+              new OpenAiChatCompletionProvider(`openai/${model}`, createOpenRouterOptions()),
               {
                 error: {
                   code: 403,
@@ -494,76 +532,69 @@ describe('OpenAI Provider', () => {
             expect(gradeProviderRefusal(result, true)).toMatchObject({ pass: false, score: 0 });
           }
 
-          mockFetchWithCache.mockResolvedValueOnce({
-            data: { error: { code: policyCode, message } },
-            cached: false,
-            status: 403,
-            statusText: 'Forbidden',
-          });
+          mockFetchWithCache.mockResolvedValueOnce(
+            createMockFetchResponse(
+              { error: { code: policyCode, message } },
+              { status: 403, statusText: 'Forbidden' },
+            ),
+          );
           const native = await new OpenAiChatCompletionProvider(model).callApi('A benign prompt');
           expect(native.error).toContain(policyCode);
           expect(native.isRefusal).toBeUndefined();
           expect(native.guardrails).toBeUndefined();
         }
 
-        const dedicated = new OpenRouterProvider(`openai/${model}`, {
-          config: { apiKey: 'test-key' },
-        });
+        const dedicated = new OpenRouterProvider(`openai/${model}`, createApiKeyOptions());
         for (const provider of [
           new OpenAiChatCompletionProvider(model),
-          new OpenAiChatCompletionProvider(`openai/${model}`, {
-            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
-          }),
+          new OpenAiChatCompletionProvider(`openai/${model}`, createOpenRouterOptions()),
           dedicated,
         ]) {
           const revocation =
             'Your organization’s access to these models has been temporarily revoked.';
-          mockFetchWithCache.mockResolvedValueOnce({
-            data: {
-              error: {
-                code: 'cyber_policy',
-                message: revocation,
-                metadata: { error_type: 'refusal', provider_code: 'cyber_policy' },
+          mockFetchWithCache.mockResolvedValueOnce(
+            createMockFetchResponse(
+              {
+                error: {
+                  code: 'cyber_policy',
+                  message: revocation,
+                  metadata: { error_type: 'refusal', provider_code: 'cyber_policy' },
+                },
               },
-            },
-            cached: false,
-            status: 403,
-            statusText: 'Forbidden',
-          });
+              { status: 403, statusText: 'Forbidden' },
+            ),
+          );
           const result = await provider.callApi('A benign prompt');
           expect(result.error).toContain(revocation);
           expect(result.isRefusal).toBeUndefined();
           expect(result.guardrails).toBeUndefined();
         }
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: {
-            error: {
-              code: 403,
-              message: 'Unauthorized',
-              metadata: { error_type: 'authentication', provider_code: 'invalid_api_key' },
+        mockFetchWithCache.mockResolvedValueOnce(
+          createMockFetchResponse(
+            {
+              error: {
+                code: 403,
+                message: 'Unauthorized',
+                metadata: { error_type: 'authentication', provider_code: 'invalid_api_key' },
+              },
             },
-          },
-          cached: false,
-          status: 403,
-          statusText: 'Forbidden',
-        });
+            { status: 403, statusText: 'Forbidden' },
+          ),
+        );
         const denied = await dedicated.callApi('A test prompt');
         expect(denied.error).toContain('Unauthorized');
         expect(denied.isRefusal).toBeUndefined();
 
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: {
+        mockFetchWithCache.mockResolvedValueOnce(
+          createMockFetchResponse({
             choices: [
               {
                 message: { content: null, refusal: 'I cannot help with that.' },
                 finish_reason: 'content_filter',
               },
             ],
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+          }),
+        );
         const modelRefusal = await dedicated.callApi('A test prompt');
         expect(modelRefusal).toMatchObject({
           output: 'I cannot help with that.',
@@ -572,12 +603,11 @@ describe('OpenAI Provider', () => {
         });
         expect(modelRefusal.error).toBeUndefined();
 
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: { choices: [{ message: { content: null }, finish_reason: 'content_filter' }] },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        mockFetchWithCache.mockResolvedValueOnce(
+          createMockFetchResponse({
+            choices: [{ message: { content: null }, finish_reason: 'content_filter' }],
+          }),
+        );
         const textless = await dedicated.callApi('A test prompt');
         expect(textless).toMatchObject({ isRefusal: true, guardrails: { flagged: true } });
         expect(gradeProviderRefusal(textless)).toMatchObject({ pass: true, score: 1 });
@@ -590,18 +620,11 @@ describe('OpenAI Provider', () => {
       async (model) => {
         const partial = 'The answer starts here: 42.';
         const refusal = 'The gateway declined to complete the response.';
-        const provider = new OpenRouterProvider(`openai/${model}`, {
-          config: { apiKey: 'test-key' },
-        });
+        const provider = new OpenRouterProvider(`openai/${model}`, createApiKeyOptions());
         const completed = {
           choices: [{ message: { content: partial, refusal }, finish_reason: 'content_filter' }],
         };
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: completed,
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(completed));
         const completedResult = await provider.callApi('A test prompt');
         expect(completedResult).toMatchObject({
           output: partial,
@@ -616,9 +639,7 @@ describe('OpenAI Provider', () => {
       'recognizes OpenRouter refusals within partial Chat choices and preserves technical errors for %s',
       async (model) => {
         const providers = [
-          new OpenAiChatCompletionProvider(`openai/${model}`, {
-            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
-          }),
+          new OpenAiChatCompletionProvider(`openai/${model}`, createOpenRouterOptions()),
           new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
         ];
         const partial = 'The answer starts here: 42.';
@@ -636,12 +657,7 @@ describe('OpenAI Provider', () => {
         for (const provider of providers) {
           for (const content of [partial, '', null]) {
             const data = { choices: [selected(content, declined, 'refusal')], usage };
-            mockFetchWithCache.mockResolvedValueOnce({
-              data,
-              cached: false,
-              status: 200,
-              statusText: 'OK',
-            });
+            mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(data));
             const result = await provider.callApi('A test prompt');
             expect(result).toMatchObject({
               output: content || declined,
@@ -661,12 +677,7 @@ describe('OpenAI Provider', () => {
             ['Your organization access was revoked.', 'refusal'],
           ]) {
             const data = { choices: [selected(partial, message, errorType)], usage };
-            mockFetchWithCache.mockResolvedValueOnce({
-              data,
-              cached: false,
-              status: 200,
-              statusText: 'OK',
-            });
+            mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(data));
             const result = await provider.callApi('A test prompt');
             expect(result.error).toContain(message);
             expect(result.raw).toEqual(data);
@@ -680,24 +691,14 @@ describe('OpenAI Provider', () => {
             ],
             usage,
           };
-          mockFetchWithCache.mockResolvedValueOnce({
-            data: normal,
-            cached: false,
-            status: 200,
-            statusText: 'OK',
-          });
+          mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(normal));
           const result = await provider.callApi('A test prompt');
           expect(result.output).toBe(partial);
           expect(result.isRefusal).not.toBe(true);
         }
 
         const unrelated = { choices: [selected(partial, declined, 'refusal')], usage };
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: unrelated,
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(unrelated));
         const native = await new OpenAiChatCompletionProvider(model).callApi('A test prompt');
         expect(native.output).toBe(partial);
         expect(native.isRefusal).not.toBe(true);
@@ -792,17 +793,17 @@ describe('OpenAI Provider', () => {
             );
           }
 
-          mockFetchWithCache.mockResolvedValueOnce({
-            data: {
-              error: {
-                message: 'Insufficient credits',
-                metadata: { provider_code: 'credit_balance_exhausted' },
+          mockFetchWithCache.mockResolvedValueOnce(
+            createMockFetchResponse(
+              {
+                error: {
+                  message: 'Insufficient credits',
+                  metadata: { provider_code: 'credit_balance_exhausted' },
+                },
               },
-            },
-            cached: false,
-            status: 429,
-            statusText: 'Too Many Requests',
-          });
+              { status: 429, statusText: 'Too Many Requests' },
+            ),
+          );
           const quotaWithoutMarker = await provider.callApi('A benign test prompt');
           expect(quotaWithoutMarker.metadata?.rateLimitKind).toBe('quota');
           expect(isProviderResponseRateLimited(quotaWithoutMarker, undefined)).toBe(false);
@@ -812,12 +813,7 @@ describe('OpenAI Provider', () => {
             ['{"answer":', '{"answer":'],
           ] as const) {
             const data = choiceError('The response was declined.', 'refusal', undefined, content);
-            mockFetchWithCache.mockResolvedValueOnce({
-              data,
-              cached: false,
-              status: 200,
-              statusText: 'OK',
-            });
+            mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(data));
             const result = await provider.callApi('A benign test prompt');
             expect(result.output).toEqual(expected);
             expect(result.isRefusal).toBe(true);
@@ -832,12 +828,7 @@ describe('OpenAI Provider', () => {
                   },
                 ],
               };
-              mockFetchWithCache.mockResolvedValueOnce({
-                data: completed,
-                cached: false,
-                status: 200,
-                statusText: 'OK',
-              });
+              mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(completed));
               const finished = await provider.callApi('A benign test prompt');
               expect(finished.output).toEqual(expected);
               expect(finished.isRefusal).toBe(true);
@@ -852,9 +843,7 @@ describe('OpenAI Provider', () => {
       'evicts OpenRouter Chat choice outages so the next identical request can recover for %s',
       async (model) => {
         for (const provider of [
-          new OpenAiChatCompletionProvider(`openai/${model}`, {
-            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
-          }),
+          new OpenAiChatCompletionProvider(`openai/${model}`, createOpenRouterOptions()),
           new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
         ]) {
           const broken = {
@@ -901,9 +890,7 @@ describe('OpenAI Provider', () => {
       'grades explicit OpenRouter content blocks and distinguishes account revocation from refusal text for %s',
       async (model) => {
         const providers = [
-          new OpenAiChatCompletionProvider(`openai/${model}`, {
-            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
-          }),
+          new OpenAiChatCompletionProvider(`openai/${model}`, createOpenRouterOptions()),
           new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
         ];
         const partial = 'Partial text';
@@ -976,9 +963,7 @@ describe('OpenAI Provider', () => {
         const generic = new OpenAiChatCompletionProvider(`openai/${model}`, {
           config: { apiBaseUrl: 'https://proxy.example.test/openrouter/api/v1' },
         });
-        const dedicated = new OpenRouterProvider(`openai/${model}`, {
-          config: { apiKey: 'test-key' },
-        });
+        const dedicated = new OpenRouterProvider(`openai/${model}`, createApiKeyOptions());
         for (const provider of [generic, dedicated]) {
           for (const [status, errorType, refused] of [
             [400, 'invalid_request', false],
@@ -1006,22 +991,14 @@ describe('OpenAI Provider', () => {
               expect(result.error).toContain('Request rejected');
             }
           }
-          mockFetchWithCache.mockResolvedValueOnce({
-            data: null,
-            cached: false,
-            status: 401,
-            statusText: 'Unauthorized',
-          });
+          mockFetchWithCache.mockResolvedValueOnce(
+            createMockFetchResponse(null, { status: 401, statusText: 'Unauthorized' }),
+          );
           const unauthorized = await provider.callApi('A benign test prompt');
           expect(unauthorized.error).toContain('401 Unauthorized');
           expect(unauthorized.isRefusal).toBeUndefined();
         }
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: null,
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(null));
         const malformed = await dedicated.callApi('A benign test prompt');
         expect(malformed.error).toContain('Malformed response data: null');
         expect(malformed.isRefusal).toBeUndefined();
@@ -1039,12 +1016,7 @@ describe('OpenAI Provider', () => {
           [{}, undefined],
           [{ inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, 0.0023],
         ] as const) {
-          mockFetchWithCache.mockResolvedValueOnce({
-            data,
-            cached: false,
-            status: 200,
-            statusText: 'OK',
-          });
+          mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(data));
           const provider = new CloudflareGatewayOpenAiProvider('azure-openai', model, {
             config: {
               apiKey: 'test-key',
@@ -1067,15 +1039,7 @@ describe('OpenAI Provider', () => {
     );
 
     it('should send a case-variant originator override on the wire instead of the default', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -1125,15 +1089,10 @@ describe('OpenAI Provider', () => {
         { message: { content: 'Second response' }, index: 1 },
         { message: { content: 'Third response' }, index: 2 },
       ];
-      const mockResponse = {
-        data: {
-          choices: mockChoices,
-          usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({
+        choices: mockChoices,
+        usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -1148,15 +1107,10 @@ describe('OpenAI Provider', () => {
     });
 
     it('should not include choices in metadata when n = 1', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Single response' }, index: 0 }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({
+        choices: [{ message: { content: 'Single response' }, index: 0 }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -1194,9 +1148,10 @@ describe('OpenAI Provider', () => {
         new HttpRateLimitError({ status: 429, code: 'credit_balance_exhausted' }),
       );
 
-      const result = await new OpenRouterProvider('openai/gpt-6-luna', {
-        config: { apiKey: 'test-key' },
-      }).callApi('Say ready.');
+      const result = await new OpenRouterProvider(
+        'openai/gpt-6-luna',
+        createApiKeyOptions(),
+      ).callApi('Say ready.');
 
       expect(result.error).toContain('Quota exceeded');
       expect(result.metadata?.rateLimitKind).toBe('quota');
@@ -1226,15 +1181,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle caching correctly', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output 2' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse('Test output 2');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -1264,15 +1211,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle disabled cache correctly', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -1305,15 +1244,7 @@ describe('OpenAI Provider', () => {
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', { config });
       const prompt = 'Test prompt';
 
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       await provider.callApi(prompt);
@@ -1342,22 +1273,14 @@ describe('OpenAI Provider', () => {
             },
           },
         ];
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: {
+        mockFetchWithCache.mockResolvedValueOnce(
+          createMockFetchResponse({
             choices: [
               { message: { content: 'Current answer', annotations }, finish_reason: 'stop' },
             ],
-            usage: {
-              prompt_tokens: 2_000,
-              completion_tokens: 1_000,
-              total_tokens: 3_000,
-              prompt_tokens_details: { cached_tokens: 500 },
-            },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+            usage: createCachedChatUsage(),
+          }),
+        );
 
         const provider = new OpenAiChatCompletionProvider(model, {
           config: {
@@ -1392,15 +1315,12 @@ describe('OpenAI Provider', () => {
     ])(
       'should include token rates and the Chat Completions search fee for routed model %s',
       async (model, cost) => {
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: {
+        mockFetchWithCache.mockResolvedValueOnce(
+          createMockFetchResponse({
             choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
             usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+          }),
+        );
 
         const result = await new OpenAiChatCompletionProvider(model, {
           config: { apiBaseUrl: 'https://gateway.example/v1' },
@@ -1464,8 +1384,8 @@ describe('OpenAI Provider', () => {
           });
         }
 
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: {
+        mockFetchWithCache.mockResolvedValueOnce(
+          createMockFetchResponse({
             choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
             usage: {
               prompt_tokens: 1_000,
@@ -1473,11 +1393,8 @@ describe('OpenAI Provider', () => {
               total_tokens: 2_000,
               cost: 9,
             },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+          }),
+        );
         const similarHost = await new OpenAiChatCompletionProvider(`openai/${model}`, {
           config: { apiBaseUrl: 'https://openrouter.ai.example/api/v1' },
         }).callApi('Say ready.');
@@ -1487,15 +1404,9 @@ describe('OpenAI Provider', () => {
     );
 
     it('should build and bill a Chat search request using the effective passthrough model', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
-          usage: { prompt_tokens: 1_000, completion_tokens: 1_000, total_tokens: 2_000 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse(createCurrentAnswerResponse()),
+      );
       const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { passthrough: { model: 'gpt-5-search-api' } },
       });
@@ -1510,15 +1421,9 @@ describe('OpenAI Provider', () => {
     });
 
     it('should bill a routed Chat search passthrough model using its OpenAI token rates', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
-          choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],
-          usage: { prompt_tokens: 1_000, completion_tokens: 1_000, total_tokens: 2_000 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse(createCurrentAnswerResponse()),
+      );
       const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: {
           apiBaseUrl: 'https://gateway.example/v1',
@@ -1532,20 +1437,12 @@ describe('OpenAI Provider', () => {
     });
 
     it('should price a fine-tuned Chat Completions model from the API usage ledger', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Fine-tuned answer' }, finish_reason: 'stop' }],
-          usage: {
-            prompt_tokens: 2_000,
-            completion_tokens: 1_000,
-            total_tokens: 3_000,
-            prompt_tokens_details: { cached_tokens: 500 },
-          },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+          usage: createCachedChatUsage(),
+        }),
+      );
 
       const result = await new OpenAiChatCompletionProvider(
         'ft:gpt-4.1-mini-2025-04-14:company::model',
@@ -1556,15 +1453,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle structured output correctly', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: '{"name": "John", "age": 30}' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse('{"name": "John", "age": 30}');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -1597,20 +1486,15 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle model refusals correctly', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: { refusal: 'Content policy violation' },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: { refusal: 'Content policy violation' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -1627,8 +1511,8 @@ describe('OpenAI Provider', () => {
 
     it('should detect refusals in 400 API error with invalid_prompt code', async () => {
       // Mock a 400 error response with invalid_prompt error code
-      const mockErrorResponse = {
-        data: {
+      const mockErrorResponse = createMockFetchResponse(
+        {
           error: {
             message:
               "Invalid prompt: we've limited access to this content for safety reasons. This type of information may be used to benefit or to harm people. We are continuously refining our work in this area, and you can read more about our approach in our blog post (https://openai.com/index/preparing-for-future-ai-capabilities-in-biology) and Model Spec (https://openai.com/index/introducing-the-model-spec).",
@@ -1637,10 +1521,8 @@ describe('OpenAI Provider', () => {
             code: 'invalid_prompt',
           },
         },
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      };
+        { status: 400, statusText: 'Bad Request' },
+      );
       mockFetchWithCache.mockResolvedValue(mockErrorResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -1669,20 +1551,15 @@ describe('OpenAI Provider', () => {
 
     it('should detect content_filter finish_reason and set guardrails', async () => {
       // Mock a response with content_filter finish reason
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: { content: null },
-              finish_reason: 'content_filter',
-            },
-          ],
-          usage: { total_tokens: 10, prompt_tokens: 10, completion_tokens: 0 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: { content: null },
+            finish_reason: 'content_filter',
+          },
+        ],
+        usage: { total_tokens: 10, prompt_tokens: 10, completion_tokens: 0 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -1703,8 +1580,8 @@ describe('OpenAI Provider', () => {
 
     it('should still treat non-refusal 400 errors as errors', async () => {
       // Mock a 400 error that is NOT a refusal (e.g., invalid request format)
-      const mockErrorResponse = {
-        data: {
+      const mockErrorResponse = createMockFetchResponse(
+        {
           error: {
             message: "Invalid request: 'messages' field is required",
             type: 'invalid_request_error',
@@ -1712,10 +1589,8 @@ describe('OpenAI Provider', () => {
             code: null,
           },
         },
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      };
+        { status: 400, statusText: 'Bad Request' },
+      );
       mockFetchWithCache.mockResolvedValue(mockErrorResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -1731,15 +1606,10 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle empty function tool callbacks array correctly', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output', tool_calls: [] } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({
+        choices: [{ message: { content: 'Test output', tool_calls: [] } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -1753,23 +1623,18 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle OpenAI reasoning field with separate content correctly', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                reasoning:
-                  'First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.',
-                content: 'The answer is 9.11 is greater than 9.8.',
-              },
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              reasoning:
+                'First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.',
+              content: 'The answer is 9.11 is greater than 9.8.',
             },
-          ],
-          usage: { total_tokens: 25, prompt_tokens: 12, completion_tokens: 13 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 25, prompt_tokens: 12, completion_tokens: 13 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-oss-20b');
@@ -1784,22 +1649,17 @@ describe('OpenAI Provider', () => {
     });
 
     it('should hide OpenAI reasoning field when showThinking is false', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                reasoning: 'Let me think through this problem step by step...',
-                content: 'The final answer is 42.',
-              },
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              reasoning: 'Let me think through this problem step by step...',
+              content: 'The final answer is 42.',
             },
-          ],
-          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-oss-20b', {
@@ -1815,23 +1675,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle DeepSeek reasoning model content correctly', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: 'The final answer is 9.11 is greater than 9.8.',
-                reasoning_content:
-                  'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
-              },
-            },
-          ],
-          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockReasoningResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('deepseek-reasoner');
@@ -1848,23 +1692,7 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
     });
 
     it('should hide reasoning content when showThinking is false', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: 'The final answer is 9.11 is greater than 9.8.',
-                reasoning_content:
-                  'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
-              },
-            },
-          ],
-          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockReasoningResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('deepseek-reasoner', {
@@ -1881,42 +1709,21 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
 
     it('should handle multi-round conversations with DeepSeek reasoning model', async () => {
       // Round 1 response
-      const mockResponse1 = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: 'The final answer is 9.11 is greater than 9.8.',
-                reasoning_content:
-                  'Let me compare 9.11 and 9.8:\n9.11 > 9.8 because 11 > 8 in the decimal places.\nTherefore, 9.11 is greater than 9.8.',
-              },
-            },
-          ],
-          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse1 = createMockReasoningResponse();
 
       // Round 2 response
-      const mockResponse2 = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: 'There are 2 "r"s in the word "strawberry".',
-                reasoning_content:
-                  'Let me count the occurrences of the letter "r" in "strawberry":\nThe word is spelled s-t-r-a-w-b-e-r-r-y.\nI can see that the letter "r" appears twice: once in "str" and once in "rry".\nTherefore, there are 2 occurrences of the letter "r" in "strawberry".',
-              },
+      const mockResponse2 = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              content: 'There are 2 "r"s in the word "strawberry".',
+              reasoning_content:
+                'Let me count the occurrences of the letter "r" in "strawberry":\nThe word is spelled s-t-r-a-w-b-e-r-r-y.\nI can see that the letter "r" appears twice: once in "str" and once in "rry".\nTherefore, there are 2 occurrences of the letter "r" in "strawberry".',
             },
-          ],
-          usage: { total_tokens: 25, prompt_tokens: 15, completion_tokens: 10 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 25, prompt_tokens: 15, completion_tokens: 10 },
+      });
 
       mockFetchWithCache.mockResolvedValueOnce(mockResponse1).mockResolvedValueOnce(mockResponse2);
 
@@ -1950,29 +1757,24 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle function tool callbacks correctly', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: null,
-                tool_calls: [
-                  {
-                    function: {
-                      name: 'get_weather',
-                      arguments: '{"location":"New York"}',
-                    },
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  function: {
+                    name: 'get_weather',
+                    arguments: '{"location":"New York"}',
                   },
-                ],
-              },
+                },
+              ],
             },
-          ],
-          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const mockWeatherFunction = vi.fn().mockResolvedValue('Sunny, 25°C');
@@ -2029,29 +1831,24 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     ])(
       'should surface MCP tool error results in chat tool callbacks ($label)',
       async ({ callToolResult, expectedOutput }) => {
-        const mockResponse = {
-          data: {
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'read_file',
-                        arguments: '{"path":"../../../etc/passwd"}',
-                      },
+        const mockResponse = createMockFetchResponse({
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'read_file',
+                      arguments: '{"path":"../../../etc/passwd"}',
                     },
-                  ],
-                },
+                  },
+                ],
               },
-            ],
-            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        });
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -2071,8 +1868,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     );
 
     it('publishes executed MCP tool calls as metadata.toolCalls', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           choices: [
             {
               message: {
@@ -2087,11 +1884,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
             },
           ],
           usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
       (provider as any).mcpClient = {
@@ -2113,8 +1907,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('records a failed MCP tool call, and the raw arguments when they will not parse', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           choices: [
             {
               message: {
@@ -2126,11 +1920,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
             },
           ],
           usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
       (provider as any).mcpClient = {
@@ -2148,15 +1939,12 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('omits metadata.toolCalls when no MCP tool ran', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Hello' } }],
           usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
       const result = await provider.callApi('Say hi');
@@ -2165,35 +1953,30 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle multiple function tool calls', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: null,
-                tool_calls: [
-                  {
-                    function: {
-                      name: 'addNumbers',
-                      arguments: '{"a":5,"b":6}',
-                    },
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  function: {
+                    name: 'addNumbers',
+                    arguments: '{"a":5,"b":6}',
                   },
-                  {
-                    function: {
-                      name: 'multiplyNumbers',
-                      arguments: '{"x":2,"y":3}',
-                    },
+                },
+                {
+                  function: {
+                    name: 'multiplyNumbers',
+                    arguments: '{"x":2,"y":3}',
                   },
-                ],
-              },
+                },
+              ],
             },
-          ],
-          usage: { total_tokens: 15, prompt_tokens: 7, completion_tokens: 8 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 15, prompt_tokens: 7, completion_tokens: 8 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -2251,25 +2034,20 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle errors in function tool callbacks', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: null,
-                function_call: {
-                  name: 'errorFunction',
-                  arguments: '{}',
-                },
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              content: null,
+              function_call: {
+                name: 'errorFunction',
+                arguments: '{}',
               },
             },
-          ],
-          usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -2303,28 +2081,23 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle undefined message content with tool calls', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                tool_calls: [
-                  {
-                    function: {
-                      name: 'testFunction',
-                      arguments: '{"param": "value"}',
-                    },
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              tool_calls: [
+                {
+                  function: {
+                    name: 'testFunction',
+                    arguments: '{"param": "value"}',
                   },
-                ],
-              },
+                },
+              ],
             },
-          ],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -2372,29 +2145,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
 
       it('should load and execute external function callbacks from file', async () => {
-        const mockResponse = {
-          data: {
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'external_function',
-                        arguments: '{"param": "test_value"}',
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+        const mockResponse = createMockFetchResponse(createExternalToolResponse());
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         // Mock the external function
@@ -2405,22 +2156,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
           config: {
-            tools: [
-              {
-                type: 'function',
-                function: {
-                  name: 'external_function',
-                  description: 'An external function',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      param: { type: 'string' },
-                    },
-                    required: ['param'],
-                  },
-                },
-              },
-            ],
+            tools: [createExternalFunctionTool()],
             functionToolCallbacks: {
               external_function: 'file://test/callbacks.js:testFunction',
             },
@@ -2439,29 +2175,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
 
       it('should load external function callbacks from Windows-style file paths', async () => {
-        const mockResponse = {
-          data: {
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'external_function',
-                        arguments: '{"param": "test_value"}',
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+        const mockResponse = createMockFetchResponse(createExternalToolResponse());
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         const mockExternalFunction = vi.fn().mockResolvedValue('External function result');
@@ -2475,22 +2189,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         cliState.basePath = 'C:/';
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
           config: {
-            tools: [
-              {
-                type: 'function',
-                function: {
-                  name: 'external_function',
-                  description: 'An external function',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      param: { type: 'string' },
-                    },
-                    required: ['param'],
-                  },
-                },
-              },
-            ],
+            tools: [createExternalFunctionTool()],
             functionToolCallbacks: {
               external_function: 'file://C:/test/callbacks.js:testFunction',
             },
@@ -2509,29 +2208,24 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
 
       it('rejects path traversal attempts in external function refs', async () => {
-        const mockResponse = {
-          data: {
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'evil_function',
-                        arguments: '{}',
-                      },
+        const mockResponse = createMockFetchResponse({
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'evil_function',
+                      arguments: '{}',
                     },
-                  ],
-                },
+                  },
+                ],
               },
-            ],
-            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+            },
+          ],
+          usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+        });
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -2568,29 +2262,24 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         ]);
       });
       it('should cache external functions and not reload them on subsequent calls', async () => {
-        const mockResponse = {
-          data: {
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'cached_function',
-                        arguments: '{"value": 123}',
-                      },
+        const mockResponse = createMockFetchResponse({
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'cached_function',
+                      arguments: '{"value": 123}',
                     },
-                  ],
-                },
+                  },
+                ],
               },
-            ],
-            usage: { total_tokens: 12, prompt_tokens: 8, completion_tokens: 4 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+            },
+          ],
+          usage: { total_tokens: 12, prompt_tokens: 8, completion_tokens: 4 },
+        });
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         const mockCachedFunction = vi.fn().mockResolvedValue('Cached result');
@@ -2639,29 +2328,24 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
 
       it('should handle errors in external function loading gracefully', async () => {
-        const mockResponse = {
-          data: {
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'error_function',
-                        arguments: '{"test": "data"}',
-                      },
+        const mockResponse = createMockFetchResponse({
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'error_function',
+                      arguments: '{"test": "data"}',
                     },
-                  ],
-                },
+                  },
+                ],
               },
-            ],
-            usage: { total_tokens: 10, prompt_tokens: 6, completion_tokens: 4 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+            },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 6, completion_tokens: 4 },
+        });
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         // Mock import module to throw an error
@@ -2708,29 +2392,24 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
 
       it('should handle errors in external function execution gracefully', async () => {
-        const mockResponse = {
-          data: {
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'failing_function',
-                        arguments: '{"input": "test"}',
-                      },
+        const mockResponse = createMockFetchResponse({
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'failing_function',
+                      arguments: '{"input": "test"}',
                     },
-                  ],
-                },
+                  },
+                ],
               },
-            ],
-            usage: { total_tokens: 8, prompt_tokens: 5, completion_tokens: 3 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+            },
+          ],
+          usage: { total_tokens: 8, prompt_tokens: 5, completion_tokens: 3 },
+        });
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         // Mock a function that throws during execution
@@ -2782,29 +2461,24 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
 
       it('should handle file reference parsing correctly', async () => {
-        const mockResponse = {
-          data: {
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'parsed_function',
-                        arguments: '{"data": "parsing_test"}',
-                      },
+        const mockResponse = createMockFetchResponse({
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'parsed_function',
+                      arguments: '{"data": "parsing_test"}',
                     },
-                  ],
-                },
+                  },
+                ],
               },
-            ],
-            usage: { total_tokens: 14, prompt_tokens: 9, completion_tokens: 5 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+            },
+          ],
+          usage: { total_tokens: 14, prompt_tokens: 9, completion_tokens: 5 },
+        });
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         const mockParsedFunction = vi.fn().mockResolvedValue('Parsed successfully');
@@ -2844,35 +2518,30 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
 
       it('should handle mixed inline and external function callbacks', async () => {
-        const mockResponse = {
-          data: {
-            choices: [
-              {
-                message: {
-                  content: null,
-                  tool_calls: [
-                    {
-                      function: {
-                        name: 'inline_function',
-                        arguments: '{"inline": "test"}',
-                      },
+        const mockResponse = createMockFetchResponse({
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'inline_function',
+                      arguments: '{"inline": "test"}',
                     },
-                    {
-                      function: {
-                        name: 'external_function',
-                        arguments: '{"external": "test"}',
-                      },
+                  },
+                  {
+                    function: {
+                      name: 'external_function',
+                      arguments: '{"external": "test"}',
                     },
-                  ],
-                },
+                  },
+                ],
               },
-            ],
-            usage: { total_tokens: 20, prompt_tokens: 12, completion_tokens: 8 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 12, completion_tokens: 8 },
+        });
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         const mockInlineFunction = vi.fn().mockResolvedValue('Inline result');
@@ -2953,15 +2622,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         },
       });
 
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: '{"key2": "value2"}' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse('{"key2": "value2"}');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const result = await provider.callApi('Test prompt', {
@@ -2993,15 +2654,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         },
       });
 
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: '{"key1": "value1"}' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse('{"key1": "value1"}');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const result = await provider.callApi('Test prompt', {
@@ -3020,16 +2673,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should call API with basic chat completion', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        severity: 'info',
-      };
+      const mockResponse = createUncachedChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -3084,16 +2728,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle disabled cache correctly for chat completion', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        severity: 'info',
-      };
+      const mockResponse = createUncachedChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -3226,21 +2861,11 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should respect temperature settings based on model type', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test regular model with temperature
-      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', {
-        config: { temperature: 0.7 },
-      });
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', createTemperatureOptions());
       await regularProvider.callApi('Test prompt');
       const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const regularBody = JSON.parse(regularCall[1].body);
@@ -3248,9 +2873,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Test O1 model (should omit temperature)
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
-        config: { temperature: 0.7 },
-      });
+      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', createTemperatureOptions());
       await o1Provider.callApi('Test prompt');
       const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const o1Body = JSON.parse(o1Call[1].body);
@@ -3258,15 +2881,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should correctly send temperature: 0 in the request body', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
@@ -3283,15 +2898,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should correctly send max_tokens: 0 in the request body when explicitly set', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test that max_tokens: 0 is correctly sent (not filtered out by falsy check)
@@ -3309,15 +2916,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle max tokens settings based on model type', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test regular model with max_tokens
@@ -3365,15 +2964,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should strip max_tokens from passthrough for GPT-5 models', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
@@ -3388,15 +2979,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should strip max_tokens from passthrough for reasoning models', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('o3', {
@@ -3411,15 +2994,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should preserve max_tokens in passthrough for regular models', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o', {
@@ -3481,15 +3056,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle reasoning_effort for reasoning models', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test O1 model with reasoning_effort
@@ -3527,15 +3094,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     );
 
     it('should handle o4-mini with reasoning_effort and service_tier', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test response' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse('Test response');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test O4-mini model with reasoning_effort
@@ -3552,15 +3111,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle user, metadata, and store parameters', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test response' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse('Test response');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o', {
@@ -3584,15 +3135,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle enhanced reasoning interface for o-series models', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test response' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse('Test response');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
@@ -3612,27 +3155,22 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle audio responses correctly', async () => {
-      const mockAudioResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                audio: {
-                  id: 'audio-id-123',
-                  expires_at: '2023-12-31T23:59:59Z',
-                  data: 'base64audiodata',
-                  transcript: 'This is the audio transcript',
-                  format: 'mp3',
-                },
+      const mockAudioResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              audio: {
+                id: 'audio-id-123',
+                expires_at: '2023-12-31T23:59:59Z',
+                data: 'base64audiodata',
+                transcript: 'This is the audio transcript',
+                format: 'mp3',
               },
             },
-          ],
-          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+      });
       mockFetchWithCache.mockResolvedValue(mockAudioResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -3651,26 +3189,21 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle audio responses without transcript', async () => {
-      const mockAudioResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                audio: {
-                  id: 'audio-id-456',
-                  expires_at: '2023-12-31T23:59:59Z',
-                  data: 'base64audiodata',
-                  format: 'wav',
-                },
+      const mockAudioResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              audio: {
+                id: 'audio-id-456',
+                expires_at: '2023-12-31T23:59:59Z',
+                data: 'base64audiodata',
+                format: 'wav',
               },
             },
-          ],
-          usage: { total_tokens: 12, prompt_tokens: 8, completion_tokens: 4 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 12, prompt_tokens: 8, completion_tokens: 4 },
+      });
       mockFetchWithCache.mockResolvedValue(mockAudioResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -3689,26 +3222,21 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should use default wav format when not specified', async () => {
-      const mockAudioResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                audio: {
-                  id: 'audio-id-789',
-                  expires_at: '2023-12-31T23:59:59Z',
-                  data: 'base64audiodata',
-                  transcript: 'Audio without format specified',
-                },
+      const mockAudioResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              audio: {
+                id: 'audio-id-789',
+                expires_at: '2023-12-31T23:59:59Z',
+                data: 'base64audiodata',
+                transcript: 'Audio without format specified',
               },
             },
-          ],
-          usage: { total_tokens: 18, prompt_tokens: 12, completion_tokens: 6 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 18, prompt_tokens: 12, completion_tokens: 6 },
+      });
       mockFetchWithCache.mockResolvedValue(mockAudioResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -3758,27 +3286,22 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     );
 
     it('should handle cached audio responses correctly', async () => {
-      const mockAudioResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                audio: {
-                  id: 'audio-id-cached',
-                  expires_at: '2023-12-31T23:59:59Z',
-                  data: 'base64audiodatacached',
-                  transcript: 'This is a cached audio response',
-                  format: 'mp3',
-                },
+      const mockAudioResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: {
+              audio: {
+                id: 'audio-id-cached',
+                expires_at: '2023-12-31T23:59:59Z',
+                data: 'base64audiodatacached',
+                transcript: 'This is a cached audio response',
+                format: 'mp3',
               },
             },
-          ],
-          usage: { total_tokens: 20, prompt_tokens: 15, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+          },
+        ],
+        usage: { total_tokens: 20, prompt_tokens: 15, completion_tokens: 5 },
+      });
       mockFetchWithCache.mockResolvedValue(mockAudioResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -3827,15 +3350,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
 
       // Mock a non-audio response (model doesn't support audio format)
-      const mockTextResponse = {
-        data: {
-          choices: [{ message: { content: 'Model responded with text instead of audio' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockTextResponse = createMockChatResponse('Model responded with text instead of audio');
       mockFetchWithCache.mockResolvedValue(mockTextResponse);
 
       // Call the API with audio format requested
@@ -3853,20 +3368,15 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should surface a normalised finishReason', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: { content: 'done' },
-              finish_reason: 'function_call', // This should be normalized to 'tool_calls'
-            },
-          ],
-          usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: { content: 'done' },
+            finish_reason: 'function_call', // This should be normalized to 'tool_calls'
+          },
+        ],
+        usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -3876,20 +3386,15 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should handle case normalization in finishReason', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: { content: 'done' },
-              finish_reason: 'LENGTH', // Uppercase should be normalized to lowercase
-            },
-          ],
-          usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: { content: 'done' },
+            finish_reason: 'LENGTH', // Uppercase should be normalized to lowercase
+          },
+        ],
+        usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -3899,20 +3404,15 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should exclude finishReason when normalization returns undefined', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: { content: 'done' },
-              finish_reason: '', // Empty string should be excluded
-            },
-          ],
-          usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse({
+        choices: [
+          {
+            message: { content: 'done' },
+            finish_reason: '', // Empty string should be excluded
+          },
+        ],
+        usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
+      });
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -4027,15 +3527,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         }
       }
 
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'DeepSeek response' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockChatResponse('DeepSeek response');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new DeepSeekProvider('deepseek-chat');
@@ -4044,32 +3536,11 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.output).toBe('DeepSeek response');
     });
 
-    it('should log generic API call message using getApiUrl', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
-      mockFetchWithCache.mockResolvedValue(mockResponse);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-      await provider.callApi('Test prompt');
-    });
-
-    it('should log generic completions API response message', async () => {
-      const mockResponse = {
-        data: {
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+    it.each([
+      'should log generic API call message using getApiUrl',
+      'should log generic completions API response message',
+    ])('%s', async () => {
+      const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -4163,15 +3634,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(provider.requiresApiKey()).toBe(false);
 
         // Mock successful API response
-        const mockResponse = {
-          data: {
-            choices: [{ message: { content: 'Response without auth' } }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
+        const mockResponse = createMockChatResponse('Response without auth');
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         // Call the API

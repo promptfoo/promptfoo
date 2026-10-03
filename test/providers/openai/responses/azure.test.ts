@@ -1,3 +1,4 @@
+import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -7,14 +8,20 @@ import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 import { setOpenAiEnv } from './setup';
 
+const createSamplingConfig = () => ({
+  apiKey: 'test-key',
+  reasoning_effort: 'medium' as const,
+  temperature: 0.7,
+});
+
 describe('OpenAiResponsesProvider Azure custom deployments', () => {
   describe('Azure custom deployment detection', () => {
     const AZURE_BASE_URL = 'https://my-resource.openai.azure.com/openai/v1';
     const AZURE_MODEL = 'my-company-gpt-54-prod';
 
     function mockAzureSuccessResponse(): void {
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           id: 'resp_abc123',
           status: 'completed',
           model: AZURE_MODEL,
@@ -26,11 +33,8 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
             },
           ],
           usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
     }
 
     function getRequestBody(): Record<string, any> {
@@ -145,11 +149,7 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
       setOpenAiEnv({ OPENAI_API_BASE_URL: AZURE_BASE_URL });
 
       const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
-        config: {
-          apiKey: 'test-key',
-          reasoning_effort: 'medium',
-          temperature: 0.7,
-        },
+        config: createSamplingConfig(),
       });
 
       const { body } = await provider.getOpenAiBody('Test prompt');
@@ -160,11 +160,7 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
 
     it('should detect Azure deployment via provider env overrides', async () => {
       const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
-        config: {
-          apiKey: 'test-key',
-          reasoning_effort: 'medium',
-          temperature: 0.7,
-        },
+        config: createSamplingConfig(),
         env: {
           OPENAI_API_HOST: 'my-resource.openai.azure.com',
         },

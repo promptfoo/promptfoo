@@ -2,6 +2,7 @@ import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
+import { serializeProvider } from '../serialization';
 import {
   clampCachedTokens,
   getOpenAIChatOutputLimitFromEnv,
@@ -122,13 +123,26 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   };
 };
 
+function modelsWithCost(
+  models: { id: string; aliases: string[] }[],
+  cost: Omit<XAIModelCost, 'longContext'>,
+) {
+  return models.map(({ id, aliases }) => ({ id, cost: { ...cost }, aliases }));
+}
+
 // Pricing here is sourced from xAI's `/v1/language-models/<id>` endpoint, which
 // reports USD cents per 100M tokens (equivalent to $1e-10 per-token increments).
 // Response billing uses the same scale in `usage.cost_in_usd_ticks`.
 export const XAI_CHAT_MODELS: XAIModel[] = [
   // Grok 4.7 (500K context): https://docs.x.ai/developers/release-notes
-  {
-    id: 'grok-4.7',
+  ...[
+    'grok-4.7',
+    // Grok 4.6 Models (500K context).
+    // xAI publishes no aliases for this id — `grok-4.6-latest` 404s on
+    // /v1/language-models — so none are listed here.
+    'grok-4.6',
+  ].map((id) => ({
+    id,
     cost: {
       input: 2.0 / 1e6,
       output: 6.0 / 1e6,
@@ -140,24 +154,7 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
         cache_read: 1.0 / 1e6,
       },
     },
-  },
-  // Grok 4.6 Models (500K context).
-  // xAI publishes no aliases for this id — `grok-4.6-latest` 404s on
-  // /v1/language-models — so none are listed here.
-  {
-    id: 'grok-4.6',
-    cost: {
-      input: 2.0 / 1e6,
-      output: 6.0 / 1e6,
-      cache_read: 0.5 / 1e6,
-      longContext: {
-        threshold: 200_000,
-        input: 4.0 / 1e6,
-        output: 12.0 / 1e6,
-        cache_read: 1.0 / 1e6,
-      },
-    },
-  },
+  })),
   // Grok 4.5 Models (500K context)
   {
     id: 'grok-4.5',
@@ -178,94 +175,76 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
     aliases: ['grok-4.5-latest', 'grok-build-latest'],
   },
   // Grok 4.20 Models
-  {
-    id: 'grok-4.20-0309-reasoning',
-    cost: {
-      input: 1.25 / 1e6,
-      output: 2.5 / 1e6,
-      cache_read: 0.2 / 1e6,
-    },
-    aliases: [
-      'grok-4.20',
-      'grok-4.20-reasoning',
-      'grok-4.20-reasoning-latest',
-      'grok-4.20-0309',
-      'grok-4.20-beta',
-      'grok-4.20-beta-0309',
-      'grok-4.20-beta-0309-reasoning',
-      'grok-4.20-beta-latest',
-      'grok-4.20-beta-latest-reasoning',
-      'grok-4.20-beta-reasoning',
-      'grok-4.20-experimental-beta-0304',
-      'grok-4.20-experimental-beta-0304-reasoning',
-      'grok-4.20-experimental-beta-latest',
-      'grok-4.20-experimental-beta-reasoning-latest',
-      'grok-4.20-reasoning-gv2',
+  ...modelsWithCost(
+    [
+      {
+        id: 'grok-4.20-0309-reasoning',
+        aliases: [
+          'grok-4.20',
+          'grok-4.20-reasoning',
+          'grok-4.20-reasoning-latest',
+          'grok-4.20-0309',
+          'grok-4.20-beta',
+          'grok-4.20-beta-0309',
+          'grok-4.20-beta-0309-reasoning',
+          'grok-4.20-beta-latest',
+          'grok-4.20-beta-latest-reasoning',
+          'grok-4.20-beta-reasoning',
+          'grok-4.20-experimental-beta-0304',
+          'grok-4.20-experimental-beta-0304-reasoning',
+          'grok-4.20-experimental-beta-latest',
+          'grok-4.20-experimental-beta-reasoning-latest',
+          'grok-4.20-reasoning-gv2',
+        ],
+      },
+      {
+        id: 'grok-4.20-0309-non-reasoning',
+        aliases: [
+          'grok-4.20-non-reasoning',
+          'grok-4.20-non-reasoning-latest',
+          'grok-4.20-beta-non-reasoning',
+          'grok-4.20-beta-latest-non-reasoning',
+          'grok-4.20-beta-0309-non-reasoning',
+          'grok-4.20-experimental-beta-0304-non-reasoning',
+          'grok-4.20-experimental-beta-non-reasoning-latest',
+          'grok-4.20-non-reasoning-gv2',
+        ],
+      },
+      {
+        id: 'grok-4.20-multi-agent-0309',
+        aliases: [
+          'grok-4.20-multi-agent',
+          'grok-4.20-multi-agent-latest',
+          'grok-4.20-multi-agent-beta-latest',
+          'grok-4.20-multi-agent-beta-0309',
+          'grok-4.20-multi-agent-experimental-beta-0304',
+          'grok-4.20-multi-agent-experimental-beta-latest',
+        ],
+      },
+      // Grok 4.3 Models
+      { id: 'grok-4.3', aliases: ['grok-4.3-latest', 'grok-latest'] },
     ],
-  },
-  {
-    id: 'grok-4.20-0309-non-reasoning',
-    cost: {
+    {
       input: 1.25 / 1e6,
       output: 2.5 / 1e6,
       cache_read: 0.2 / 1e6,
     },
-    aliases: [
-      'grok-4.20-non-reasoning',
-      'grok-4.20-non-reasoning-latest',
-      'grok-4.20-beta-non-reasoning',
-      'grok-4.20-beta-latest-non-reasoning',
-      'grok-4.20-beta-0309-non-reasoning',
-      'grok-4.20-experimental-beta-0304-non-reasoning',
-      'grok-4.20-experimental-beta-non-reasoning-latest',
-      'grok-4.20-non-reasoning-gv2',
-    ],
-  },
-  {
-    id: 'grok-4.20-multi-agent-0309',
-    cost: {
-      input: 1.25 / 1e6,
-      output: 2.5 / 1e6,
-      cache_read: 0.2 / 1e6,
-    },
-    aliases: [
-      'grok-4.20-multi-agent',
-      'grok-4.20-multi-agent-latest',
-      'grok-4.20-multi-agent-beta-latest',
-      'grok-4.20-multi-agent-beta-0309',
-      'grok-4.20-multi-agent-experimental-beta-0304',
-      'grok-4.20-multi-agent-experimental-beta-latest',
-    ],
-  },
-  // Grok 4.3 Models
-  {
-    id: 'grok-4.3',
-    cost: {
-      input: 1.25 / 1e6,
-      output: 2.5 / 1e6,
-      cache_read: 0.2 / 1e6,
-    },
-    aliases: ['grok-4.3-latest', 'grok-latest'],
-  },
+  ),
   // Grok 4.1 Fast Models (2M context window)
-  {
-    id: 'grok-4-1-fast-reasoning',
-    cost: {
+  ...modelsWithCost(
+    [
+      {
+        id: 'grok-4-1-fast-reasoning',
+        aliases: ['grok-4-1-fast', 'grok-4-1-fast-latest', 'grok-4-1-fast-reasoning-latest'],
+      },
+      { id: 'grok-4-1-fast-non-reasoning', aliases: ['grok-4-1-fast-non-reasoning-latest'] },
+    ],
+    {
       input: 0.2 / 1e6,
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
-    aliases: ['grok-4-1-fast', 'grok-4-1-fast-latest', 'grok-4-1-fast-reasoning-latest'],
-  },
-  {
-    id: 'grok-4-1-fast-non-reasoning',
-    cost: {
-      input: 0.2 / 1e6,
-      output: 0.5 / 1e6,
-      cache_read: 0.05 / 1e6,
-    },
-    aliases: ['grok-4-1-fast-non-reasoning-latest'],
-  },
+  ),
   // Grok Build Models
   {
     id: 'grok-build-0.1',
@@ -283,103 +262,64 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
     aliases: ['grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'],
   },
   // Grok-4 Fast Models (2M context window)
-  {
-    id: 'grok-4-fast-reasoning',
-    cost: {
+  ...modelsWithCost(
+    [
+      {
+        id: 'grok-4-fast-reasoning',
+        aliases: ['grok-4-fast', 'grok-4-fast-latest', 'grok-4-fast-reasoning-latest'],
+      },
+      { id: 'grok-4-fast-non-reasoning', aliases: ['grok-4-fast-non-reasoning-latest'] },
+    ],
+    {
       input: 0.2 / 1e6,
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
-    aliases: ['grok-4-fast', 'grok-4-fast-latest', 'grok-4-fast-reasoning-latest'],
-  },
-  {
-    id: 'grok-4-fast-non-reasoning',
-    cost: {
-      input: 0.2 / 1e6,
-      output: 0.5 / 1e6,
-      cache_read: 0.05 / 1e6,
-    },
-    aliases: ['grok-4-fast-non-reasoning-latest'],
-  },
+  ),
   // Grok-4 Models
-  {
-    id: 'grok-4-0709',
-    cost: {
+  ...modelsWithCost(
+    [
+      { id: 'grok-4-0709', aliases: ['grok-4', 'grok-4-latest'] },
+      // Grok-3 Models
+      { id: 'grok-3-beta', aliases: ['grok-3', 'grok-3-latest'] },
+      { id: 'grok-3-fast-beta', aliases: ['grok-3-fast', 'grok-3-fast-latest'] },
+    ],
+    {
       input: 3.0 / 1e6,
       output: 15.0 / 1e6,
       cache_read: 0.75 / 1e6,
     },
-    aliases: ['grok-4', 'grok-4-latest'],
-  },
-  // Grok-3 Models
-  {
-    id: 'grok-3-beta',
-    cost: {
-      input: 3.0 / 1e6,
-      output: 15.0 / 1e6,
-      cache_read: 0.75 / 1e6,
-    },
-    aliases: ['grok-3', 'grok-3-latest'],
-  },
-  {
-    id: 'grok-3-fast-beta',
-    cost: {
-      input: 3.0 / 1e6,
-      output: 15.0 / 1e6,
-      cache_read: 0.75 / 1e6,
-    },
-    aliases: ['grok-3-fast', 'grok-3-fast-latest'],
-  },
-  {
-    id: 'grok-3-mini-beta',
-    cost: {
+  ),
+  ...modelsWithCost(
+    [
+      { id: 'grok-3-mini-beta', aliases: ['grok-3-mini', 'grok-3-mini-latest'] },
+      { id: 'grok-3-mini-fast-beta', aliases: ['grok-3-mini-fast', 'grok-3-mini-fast-latest'] },
+    ],
+    {
       input: 0.3 / 1e6,
       output: 0.5 / 1e6,
       cache_read: 0.075 / 1e6,
     },
-    aliases: ['grok-3-mini', 'grok-3-mini-latest'],
-  },
-  {
-    id: 'grok-3-mini-fast-beta',
-    cost: {
-      input: 0.3 / 1e6,
-      output: 0.5 / 1e6,
-      cache_read: 0.075 / 1e6,
-    },
-    aliases: ['grok-3-mini-fast', 'grok-3-mini-fast-latest'],
-  },
+  ),
   // Grok-2 Models
-  {
-    id: 'grok-2-1212',
-    cost: {
+  ...modelsWithCost(
+    [
+      { id: 'grok-2-1212', aliases: ['grok-2', 'grok-2-latest'] },
+      { id: 'grok-2-vision-1212', aliases: ['grok-2-vision', 'grok-2-vision-latest'] },
+    ],
+    {
       input: 2.0 / 1e6,
       output: 10.0 / 1e6,
     },
-    aliases: ['grok-2', 'grok-2-latest'],
-  },
-  {
-    id: 'grok-2-vision-1212',
-    cost: {
-      input: 2.0 / 1e6,
-      output: 10.0 / 1e6,
-    },
-    aliases: ['grok-2-vision', 'grok-2-vision-latest'],
-  },
+  ),
   // Legacy models
-  {
-    id: 'grok-beta',
+  ...['grok-beta', 'grok-vision-beta'].map((id) => ({
+    id,
     cost: {
       input: 5.0 / 1e6,
       output: 15.0 / 1e6,
     },
-  },
-  {
-    id: 'grok-vision-beta',
-    cost: {
-      input: 5.0 / 1e6,
-      output: 15.0 / 1e6,
-    },
-  },
+  })),
 ];
 
 // xAI's May 15, 2026 (12:00 PM PT) retirement email confirms the following
@@ -964,14 +904,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'xai',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'xai', () => this.apiKey);
   }
 
   protected calculateResponseCost(

@@ -5,12 +5,14 @@ import {
   failApiCall,
   formatOpenAiError,
   getTokenUsage,
+  OPENAI_BILLING_MODELS,
   OPENAI_CHAT_MODELS,
   OPENAI_CODEX_ONLY_MODELS,
   OPENAI_COMPLETION_MODELS,
   OPENAI_DEEP_RESEARCH_MODELS,
   OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
+  OPENAI_TRANSCRIPTION_MODELS,
   OPENAI_TTS_MODELS,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
@@ -351,10 +353,12 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 0.5 + 500 * 1.5) / 1e6, 6);
   });
 
-  it('should calculate cost correctly for o4-mini', () => {
+  const verifyO4MiniCost = () => {
     const cost = calculateOpenAICost('o4-mini', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 1.1 + 500 * 4.4) / 1e6, 6);
-  });
+  };
+
+  it('should calculate cost correctly for o4-mini', verifyO4MiniCost);
 
   it('should calculate cost correctly for codex-mini-latest', () => {
     const cost = calculateOpenAICost('codex-mini-latest', {}, 1000, 500);
@@ -895,10 +899,7 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo(0.0075); // 2.5/1M * 1000 + 10/1M * 500
   });
 
-  it('should calculate cost correctly for o4-mini (responses model)', () => {
-    const cost = calculateOpenAICost('o4-mini', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 1.1 + 500 * 4.4) / 1e6, 6);
-  });
+  it('should calculate cost correctly for o4-mini (responses model)', verifyO4MiniCost);
 
   it('should calculate cost correctly for o3-deep-research', () => {
     const cost = calculateOpenAICost('o3-deep-research', {}, 1000, 500);
@@ -997,6 +998,18 @@ describe('formatOpenAiError', () => {
 });
 
 describe('OpenAI model catalogs', () => {
+  it('keeps transcription prices independent across model aliases', () => {
+    const costs = OPENAI_TRANSCRIPTION_MODELS.map(({ cost }) => cost);
+    expect(new Set(costs).size).toBe(costs.length);
+  });
+
+  it('keeps mutable prices independent across model aliases', () => {
+    const costs = OPENAI_BILLING_MODELS.flatMap(({ cost }) => (cost ? [cost] : []));
+    expect(new Set(costs).size).toBe(costs.length);
+    const longContextCosts = costs.flatMap(({ longContext }) => (longContext ? [longContext] : []));
+    expect(new Set(longContextCosts).size).toBe(longContextCosts.length);
+  });
+
   const activeModels = [
     ...OPENAI_CHAT_MODELS,
     ...OPENAI_RESPONSES_ONLY_MODELS,

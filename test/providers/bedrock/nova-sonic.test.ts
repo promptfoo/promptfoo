@@ -6,6 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { categorizeError, NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
 
+const createEndTurnEvent = () => ({
+  event: {
+    contentEnd: {
+      stopReason: 'END_TURN',
+    },
+  },
+});
+
 vi.mock('@smithy/node-http-handler', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -111,13 +119,7 @@ const standardTextResponse = [
       },
     },
   },
-  {
-    event: {
-      contentEnd: {
-        stopReason: 'END_TURN',
-      },
-    },
-  },
+  createEndTurnEvent(),
 ];
 
 const _audioResponse = [
@@ -136,13 +138,7 @@ const _audioResponse = [
       },
     },
   },
-  {
-    event: {
-      contentEnd: {
-        stopReason: 'END_TURN',
-      },
-    },
-  },
+  createEndTurnEvent(),
 ];
 
 const functionCallResponse = [

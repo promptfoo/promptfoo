@@ -4,6 +4,25 @@ import { fetchWithCache } from '../../../src/cache';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { GoogleInteractionsProvider } from '../../../src/providers/google/interactions';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
+import { createMockFetchResponse } from '../mockProviderResponses';
+
+const createCompletedVideoResponse = () => ({
+  data: {
+    status: 'completed',
+    steps: [createVideoModelOutput('dmlkZW8=')],
+  },
+  cached: false,
+});
+
+const createVideoModelOutput = (data: string) => ({
+  type: 'model_output',
+  content: [{ type: 'video', mime_type: 'video/mp4', data }],
+});
+
+const createHostOverrideEnv = () => ({
+  GOOGLE_API_HOST: 'process-google.example',
+  PALM_API_HOST: 'process-palm.example',
+});
 
 vi.mock('../../../src/cache', () => ({ fetchWithCache: vi.fn() }));
 vi.mock('../../../src/blobs', () => ({ storeBlob: vi.fn() }));
@@ -48,10 +67,7 @@ describe('GoogleInteractionsProvider', () => {
           id: 'interaction-1',
           status: 'completed',
           steps: [
-            {
-              type: 'model_output',
-              content: [{ type: 'video', mime_type: 'video/mp4', data: 'b2xk' }],
-            },
+            createVideoModelOutput('b2xk'),
             {
               type: 'model_output',
               content: [{ type: 'video', mime_type: 'video/webm', data: 'dmlkZW8=' }],
@@ -241,18 +257,7 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it('normalizes native Gemini chat parts for the Omni Interactions API', async () => {
-    mockFetchWithCache.mockResolvedValue({
-      data: {
-        status: 'completed',
-        steps: [
-          {
-            type: 'model_output',
-            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
-          },
-        ],
-      },
-      cached: false,
-    } as any);
+    mockFetchWithCache.mockResolvedValue(createCompletedVideoResponse() as any);
     const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
       config: { apiKey: 'test-key' },
     });
@@ -288,18 +293,7 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it('unwraps native Gemini prompt envelopes for the Omni Interactions API', async () => {
-    mockFetchWithCache.mockResolvedValue({
-      data: {
-        status: 'completed',
-        steps: [
-          {
-            type: 'model_output',
-            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
-          },
-        ],
-      },
-      cached: false,
-    } as any);
+    mockFetchWithCache.mockResolvedValue(createCompletedVideoResponse() as any);
     const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
       config: { apiKey: 'test-key' },
     });
@@ -321,12 +315,7 @@ describe('GoogleInteractionsProvider', () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
-        steps: [
-          {
-            type: 'model_output',
-            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
-          },
-        ],
+        steps: [createVideoModelOutput('dmlkZW8=')],
         usage: {
           total_input_tokens: 1_000,
           total_tool_use_tokens: 100,
@@ -557,12 +546,7 @@ describe('GoogleInteractionsProvider', () => {
         data: {
           id: 'interaction-pending',
           status: 'completed',
-          steps: [
-            {
-              type: 'model_output',
-              content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
-            },
-          ],
+          steps: [createVideoModelOutput('dmlkZW8=')],
         },
         cached: false,
       } as any);
@@ -595,10 +579,7 @@ describe('GoogleInteractionsProvider', () => {
       data: {
         status: 'completed',
         steps: [
-          {
-            type: 'model_output',
-            content: [{ type: 'video', mime_type: 'video/mp4', data: 'b2xk' }],
-          },
+          createVideoModelOutput('b2xk'),
           { type: 'user_input', content: [{ type: 'text', text: 'make it rainy' }] },
           { type: 'model_output', error: { message: 'video generation failed' } },
         ],
@@ -741,12 +722,7 @@ describe('GoogleInteractionsProvider', () => {
       data: {
         status: 'completed',
         usage: { total_input_tokens: 100, total_output_tokens: 600 },
-        steps: [
-          {
-            type: 'model_output',
-            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
-          },
-        ],
+        steps: [createVideoModelOutput('dmlkZW8=')],
       },
       cached: false,
     } as any);
@@ -873,18 +849,7 @@ describe('GoogleInteractionsProvider', () => {
   it.each([{ tools: [] }, { passthrough: { tools: [] } }])(
     'allows an empty Omni tools list: %j',
     async (toolConfig) => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          status: 'completed',
-          steps: [
-            {
-              type: 'model_output',
-              content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
-            },
-          ],
-        },
-        cached: false,
-      } as any);
+      mockFetchWithCache.mockResolvedValue(createCompletedVideoResponse() as any);
       const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
         config: { apiKey: 'test-key', ...toolConfig },
       });
@@ -1051,26 +1016,17 @@ describe('GoogleInteractionsProvider', () => {
   it.each([
     {
       env: { GOOGLE_API_HOST: 'scoped-google.example', PALM_API_HOST: 'scoped-palm.example' },
-      processEnv: {
-        GOOGLE_API_HOST: 'process-google.example',
-        PALM_API_HOST: 'process-palm.example',
-      },
+      processEnv: createHostOverrideEnv(),
       endpoint: 'https://scoped-google.example/v1beta/interactions',
     },
     {
       env: { PALM_API_HOST: 'http://scoped-palm.example/proxy/' },
-      processEnv: {
-        GOOGLE_API_HOST: 'process-google.example',
-        PALM_API_HOST: 'process-palm.example',
-      },
+      processEnv: createHostOverrideEnv(),
       endpoint: 'http://scoped-palm.example/proxy/v1beta/interactions',
     },
     {
       env: {},
-      processEnv: {
-        GOOGLE_API_HOST: 'process-google.example',
-        PALM_API_HOST: 'process-palm.example',
-      },
+      processEnv: createHostOverrideEnv(),
       endpoint: 'https://process-google.example/v1beta/interactions',
     },
     {
@@ -1192,12 +1148,12 @@ describe('GoogleInteractionsProvider', () => {
   it.each(['gemini-omni-flash-preview', 'gemini-omni-1.1-flash'])(
     'surfaces gateway errors for %s without a Google-shaped error body',
     async (modelName) => {
-      mockFetchWithCache.mockResolvedValue({
-        data: { message: 'Service Unavailable' },
-        cached: false,
-        status: 503,
-        statusText: 'Service Unavailable',
-      } as any);
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse(
+          { message: 'Service Unavailable' },
+          { status: 503, statusText: 'Service Unavailable' },
+        ) as any,
+      );
       const provider = new GoogleInteractionsProvider(modelName, {
         config: { apiKey: 'test-key' },
       });
@@ -1210,18 +1166,12 @@ describe('GoogleInteractionsProvider', () => {
 
   it('surfaces polling gateway errors without a Google-shaped error body', async () => {
     mockFetchWithCache
-      .mockResolvedValueOnce({
-        data: { id: 'interaction-pending', status: 'in_progress' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      } as any)
-      .mockResolvedValueOnce({
-        data: {},
-        cached: false,
-        status: 502,
-        statusText: 'Bad Gateway',
-      } as any);
+      .mockResolvedValueOnce(
+        createMockFetchResponse({ id: 'interaction-pending', status: 'in_progress' }) as any,
+      )
+      .mockResolvedValueOnce(
+        createMockFetchResponse({}, { status: 502, statusText: 'Bad Gateway' }) as any,
+      );
     const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
       config: { apiKey: 'test-key', timeoutMs: 1_000 },
     });

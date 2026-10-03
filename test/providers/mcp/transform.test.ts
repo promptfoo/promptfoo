@@ -15,6 +15,29 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { MCPTool } from '../../../src/providers/mcp/types';
 import type { OpenAiTool } from '../../../src/providers/openai/util';
 
+const createStringParameterProperties = () => ({
+  param: { type: 'string' as const },
+});
+
+const createStrictEmptyInputSchema = () => ({
+  type: 'object' as const,
+  properties: {},
+  additionalProperties: false,
+  $schema: 'http://json-schema.org/draft-07/schema#',
+});
+
+const createCollidingServerNames = () => ({
+  servers: [
+    { name: 'tools.local', command: 'first' },
+    { name: 'tools_local', command: 'second' },
+  ],
+});
+
+const createExpectedEmptyParameters = () => ({
+  type: 'object' as const,
+  properties: {},
+});
+
 describe('transformMCPToolsToOpenAi', () => {
   it('should transform MCP tools to OpenAI format', () => {
     const mcpTools: MCPTool[] = [
@@ -72,10 +95,7 @@ describe('transformMCPToolsToOpenAi', () => {
         function: {
           name: 'simple_tool',
           description: 'A simple tool',
-          parameters: {
-            type: 'object',
-            properties: {},
-          },
+          parameters: createExpectedEmptyParameters(),
         },
       },
     ];
@@ -99,10 +119,7 @@ describe('transformMCPToolsToOpenAi', () => {
         function: {
           name: 'empty_tool',
           description: 'A tool with empty schema',
-          parameters: {
-            type: 'object',
-            properties: {},
-          },
+          parameters: createExpectedEmptyParameters(),
         },
       },
     ];
@@ -147,9 +164,7 @@ describe('transformMCPToolsToOpenAi', () => {
         inputSchema: {
           $schema: 'http://json-schema.org/draft-07/schema#',
           type: 'object',
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
         },
       },
     ];
@@ -190,12 +205,7 @@ describe('transformMCPToolsToOpenAi', () => {
       {
         name: 'mcp_sdk_tool',
         description: 'Tool with MCP SDK generated schema',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-          $schema: 'http://json-schema.org/draft-07/schema#',
-        },
+        inputSchema: createStrictEmptyInputSchema(),
       },
     ];
 
@@ -215,9 +225,7 @@ describe('transformMCPToolsToOpenAi', () => {
         name: 'tool_empty_required',
         description: 'Tool with empty required array',
         inputSchema: {
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
           required: [],
         },
       },
@@ -364,15 +372,7 @@ describe('transformMCPConfigToClaudeCode', () => {
         ],
       },
     ],
-    [
-      'names differing only in punctuation',
-      {
-        servers: [
-          { name: 'tools.local', command: 'first' },
-          { name: 'tools_local', command: 'second' },
-        ],
-      },
-    ],
+    ['names differing only in punctuation', createCollidingServerNames()],
     [
       'an explicit name and a normalized URL',
       {
@@ -425,12 +425,7 @@ describe('transformMCPConfigToClaudeCode', () => {
       config: {
         apiKey: 'test-key',
         cache_mcp: true,
-        mcp: {
-          servers: [
-            { name: 'tools.local', command: 'first' },
-            { name: 'tools_local', command: 'second' },
-          ],
-        },
+        mcp: createCollidingServerNames(),
       },
     });
 
@@ -642,9 +637,7 @@ describe('transformMCPToolsToAnthropic', () => {
         name: 'test_tool',
         description: 'A test tool',
         inputSchema: {
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
           required: ['param'],
         },
       },
@@ -676,9 +669,7 @@ describe('transformMCPToolsToAnthropic', () => {
         inputSchema: {
           $schema: 'http://json-schema.org/draft-07/schema#',
           type: 'object',
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
         },
       },
     ];
@@ -698,12 +689,7 @@ describe('transformMCPToolsToAnthropic', () => {
       {
         name: 'no_input_tool',
         description: 'Tool with no input parameters',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-          $schema: 'http://json-schema.org/draft-07/schema#',
-        },
+        inputSchema: createStrictEmptyInputSchema(),
       },
     ];
 
@@ -724,9 +710,7 @@ describe('transformMCPToolsToGoogle', () => {
         name: 'test_tool',
         description: 'A test tool',
         inputSchema: {
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
           required: ['param'],
         },
       },
@@ -747,9 +731,7 @@ describe('transformMCPToolsToGoogle', () => {
         description: 'A test tool',
         inputSchema: {
           $schema: 'http://json-schema.org/draft-07/schema#',
-          properties: {
-            param: { type: 'string' },
-          },
+          properties: createStringParameterProperties(),
         },
       },
     ];

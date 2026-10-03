@@ -7,6 +7,7 @@ import { RubyProvider } from '../../src/providers/rubyCompletion';
 import * as rubyUtils from '../../src/ruby/rubyUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
 import * as fileReference from '../../src/util/fileReference';
+import { createBasePathOptions } from '../factories/literalFixtures';
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
@@ -120,34 +121,22 @@ describe('RubyProvider', () => {
 
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
-      const provider = new RubyProvider('script.rb', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new RubyProvider('script.rb', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with ruby: syntax', () => {
-      const provider = new RubyProvider('ruby:script.rb', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new RubyProvider('ruby:script.rb', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix', () => {
-      const provider = new RubyProvider('file://script.rb', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new RubyProvider('file://script.rb', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix and function name', () => {
-      const provider = new RubyProvider('file://script.rb:function_name', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new RubyProvider('file://script.rb:function_name', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
   });

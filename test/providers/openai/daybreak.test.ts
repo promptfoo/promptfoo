@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { createUnsetOpenAiGenerationEnv } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 
 describe.each([
@@ -10,12 +11,7 @@ describe.each([
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({
-      OPENAI_MAX_TOKENS: undefined,
-      OPENAI_MAX_COMPLETION_TOKENS: undefined,
-      OPENAI_TEMPERATURE: undefined,
-      OPENAI_TOP_P: undefined,
-    });
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
   });
 
   afterEach(() => {

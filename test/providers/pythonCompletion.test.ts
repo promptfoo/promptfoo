@@ -10,16 +10,14 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { getConfiguredPythonPath, getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+import { createBasePathOptions } from '../factories/literalFixtures';
 import type { Mock } from 'vitest';
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
-}));
+const { createFsModuleFactory, createWarningOrderedLoggerFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
+
+vi.mock('../../src/logger', createWarningOrderedLoggerFactory());
 
 vi.mock('../../src/python/pythonUtils');
 vi.mock('../../src/cache');
@@ -30,17 +28,7 @@ const fsMocks = vi.hoisted(() => ({
   mkdirSync: vi.fn(),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      ...fsMocks,
-    },
-    ...fsMocks,
-  };
-});
+vi.mock('fs', createFsModuleFactory(fsMocks));
 vi.mock('fs/promises', () => ({
   default: {
     readFile: fsMocks.readFileSync,
@@ -152,34 +140,25 @@ describe('PythonProvider', () => {
 
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
-      const provider = new PythonProvider('script.py', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider('script.py', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with python: syntax', () => {
-      const provider = new PythonProvider('python:script.py', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider('python:script.py', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix', () => {
-      const provider = new PythonProvider('file://script.py', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider('file://script.py', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix and function name', () => {
-      const provider = new PythonProvider('file://script.py:function_name', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider(
+        'file://script.py:function_name',
+        createBasePathOptions(),
+      );
       expect(provider.id()).toBe('testId');
     });
   });

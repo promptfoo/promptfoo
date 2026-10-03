@@ -2,6 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, fetchWithCache } from '../../src/cache';
 import { SnowflakeCortexProvider } from '../../src/providers/snowflake';
 import { mockProcessEnv } from '../util/utils';
+import { createMockFetchResponse } from './mockProviderResponses';
+
+const createAccountConfig = () => ({
+  config: {
+    accountIdentifier: 'myorg-myaccount',
+    apiKey: 'test-key',
+  },
+});
 
 vi.mock('../../src/cache', async (importOriginal) => {
   return {
@@ -26,12 +34,7 @@ describe('Snowflake Cortex Provider', () => {
 
   describe('initialization', () => {
     it('should initialize with accountIdentifier from config', () => {
-      const provider = new SnowflakeCortexProvider('mistral-large2', {
-        config: {
-          accountIdentifier: 'myorg-myaccount',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new SnowflakeCortexProvider('mistral-large2', createAccountConfig());
 
       expect(provider.modelName).toBe('mistral-large2');
       expect(provider.id()).toBe('snowflake:mistral-large2');
@@ -101,12 +104,7 @@ describe('Snowflake Cortex Provider', () => {
     });
 
     it('should call Snowflake Cortex API with correct endpoint', async () => {
-      const provider = new SnowflakeCortexProvider('mistral-large2', {
-        config: {
-          accountIdentifier: 'myorg-myaccount',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new SnowflakeCortexProvider('mistral-large2', createAccountConfig());
 
       const mockResponse = {
         choices: [
@@ -118,12 +116,7 @@ describe('Snowflake Cortex Provider', () => {
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       const result = await provider.callApi('Test prompt');
 
@@ -157,31 +150,18 @@ describe('Snowflake Cortex Provider', () => {
     });
 
     it('should handle API errors', async () => {
-      const provider = new SnowflakeCortexProvider('mistral-large2', {
-        config: {
-          accountIdentifier: 'myorg-myaccount',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new SnowflakeCortexProvider('mistral-large2', createAccountConfig());
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: 'API error',
-        cached: false,
-        status: 400,
-        statusText: 'Bad Request',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse('API error', { status: 400, statusText: 'Bad Request' }),
+      );
 
       const result = await provider.callApi('Test prompt');
       expect(result.error).toContain('400 Bad Request');
     });
 
     it('should handle network errors', async () => {
-      const provider = new SnowflakeCortexProvider('mistral-large2', {
-        config: {
-          accountIdentifier: 'myorg-myaccount',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new SnowflakeCortexProvider('mistral-large2', createAccountConfig());
 
       mockFetchWithCache.mockRejectedValueOnce(new Error('Network error'));
 
@@ -190,12 +170,7 @@ describe('Snowflake Cortex Provider', () => {
     });
 
     it('should handle tool calls', async () => {
-      const provider = new SnowflakeCortexProvider('claude-3-5-sonnet', {
-        config: {
-          accountIdentifier: 'myorg-myaccount',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new SnowflakeCortexProvider('claude-3-5-sonnet', createAccountConfig());
 
       const mockResponse = {
         choices: [
@@ -216,12 +191,7 @@ describe('Snowflake Cortex Provider', () => {
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse(mockResponse));
 
       const result = await provider.callApi('Test prompt');
       expect(result.output).toEqual([
@@ -234,12 +204,7 @@ describe('Snowflake Cortex Provider', () => {
     });
 
     it('returns a clean error instead of crashing on an empty choices array', async () => {
-      const provider = new SnowflakeCortexProvider('mistral-large2', {
-        config: {
-          accountIdentifier: 'myorg-myaccount',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new SnowflakeCortexProvider('mistral-large2', createAccountConfig());
 
       // A 200 response with an empty `choices` array (soft moderation block,
       // upstream hiccup, or n>1 edge cases). Before the fix this made
@@ -262,21 +227,13 @@ describe('Snowflake Cortex Provider', () => {
     });
 
     it('returns a clean error instead of crashing when the response has no choices field', async () => {
-      const provider = new SnowflakeCortexProvider('mistral-large2', {
-        config: {
-          accountIdentifier: 'myorg-myaccount',
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new SnowflakeCortexProvider('mistral-large2', createAccountConfig());
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const result = await provider.callApi('Test prompt');
       expect(result.error).toContain('Malformed response data');

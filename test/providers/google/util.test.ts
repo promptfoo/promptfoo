@@ -1,16 +1,28 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../../factories/logger'));
+
 import * as fs from 'fs';
 
 import * as nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createChatMessage } from '../../factories/literalFixtures';
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+const createTextParts = (
+  text: string = 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+) => ({
+  role: 'user',
+  parts: [
+    {
+      text,
+    },
+  ],
+});
+
+const createFunctionCallOutput = () => ({
+  name: 'testFunction',
+  args: '{"param1": "test"}',
+});
+
+vi.mock('../../../src/logger', () => createLoggerModule());
 
 import logger from '../../../src/logger';
 import { GOOGLE_MODELS } from '../../../src/providers/google/shared';
@@ -42,6 +54,8 @@ import {
 } from '../../../src/providers/google/util';
 
 import type { Tool } from '../../../src/providers/google/types';
+
+const { createEmptyGlobFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
 
 // Create a comprehensive mock for Google Auth Library
 // This prevents the real library from reading ~/.config/gcloud/ or environment
@@ -86,18 +100,7 @@ function resetGoogleAuthMock() {
 // Mock both the module and dynamic imports
 vi.mock('google-auth-library', () => googleAuthMock);
 
-vi.mock('glob', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    globSync: vi.fn().mockReturnValue([]),
-
-    hasMagic: (path: string) => {
-      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
-      // This mimics glob's actual behavior where backslash paths return false
-      return /[*?[\]{}]/.test(path) && !path.includes('\\');
-    },
-  };
-});
+vi.mock('glob', createEmptyGlobFactory());
 
 vi.mock('fs', async (importOriginal) => {
   return {
@@ -138,6 +141,14 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 describe('util', () => {
+  it('keeps mutable prices independent across model aliases', () => {
+    const costs = GOOGLE_MODELS.flatMap(({ cost }) => (cost ? [cost] : []));
+    expect(new Set(costs).size).toBe(costs.length);
+    const tiers = GOOGLE_MODELS.flatMap(({ tieredCost }) => (tieredCost ? [tieredCost] : []));
+    expect(new Set(tiers).size).toBe(tiers.length);
+    expect(new Set(tiers.map(({ above }) => above)).size).toBe(tiers.length);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     resetGoogleAuthMock();
@@ -263,10 +274,7 @@ describe('util', () => {
     it('should validate Vertex/AIS format function call', () => {
       const output = [
         {
-          functionCall: {
-            name: 'testFunction',
-            args: '{"param1": "test"}',
-          },
+          functionCall: createFunctionCallOutput(),
         },
       ];
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
@@ -275,12 +283,7 @@ describe('util', () => {
     it('should validate Live format function call', () => {
       const output = {
         toolCall: {
-          functionCalls: [
-            {
-              name: 'testFunction',
-              args: '{"param1": "test"}',
-            },
-          ],
+          functionCalls: [createFunctionCallOutput()],
         },
       };
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
@@ -328,29 +331,20 @@ describe('util', () => {
       },
     );
 
-    it('should validate empty function args', () => {
-      const output = [
-        {
-          functionCall: {
-            name: 'emptyFunction',
-            args: '{}',
+    it.each(['should validate empty function args', 'should validate function with no parameters'])(
+      '%s',
+      () => {
+        const output = [
+          {
+            functionCall: {
+              name: 'emptyFunction',
+              args: '{}',
+            },
           },
-        },
-      ];
-      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
-    });
-
-    it('should validate function with no parameters', () => {
-      const output = [
-        {
-          functionCall: {
-            name: 'emptyFunction',
-            args: '{}',
-          },
-        },
-      ];
-      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
-    });
+        ];
+        expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+      },
+    );
 
     it('should throw error for invalid function call format', () => {
       const output = {
@@ -751,12 +745,7 @@ describe('util', () => {
     });
 
     it('should return unmodified content if it matches GeminiFormat', () => {
-      const input = [
-        {
-          role: 'user',
-          parts: [{ text: 'Hello, Gemini!' }],
-        },
-      ];
+      const input = [createTextParts('Hello, Gemini!')];
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
         contents: input,
@@ -916,10 +905,7 @@ describe('util', () => {
 
     it('should handle OpenAI chat format with content as an array of objects', () => {
       const input = [
-        {
-          role: 'system',
-          content: 'You are a helpful AI assistant.',
-        },
+        createChatMessage('system', 'You are a helpful AI assistant.'),
         {
           role: 'user',
           content: [
@@ -953,10 +939,7 @@ describe('util', () => {
 
     it('should handle string content', () => {
       const input = [
-        {
-          role: 'system',
-          content: 'You are a helpful AI assistant.',
-        },
+        createChatMessage('system', 'You are a helpful AI assistant.'),
         {
           role: 'user',
           content: 'What is {{thing}}?',
@@ -1064,12 +1047,7 @@ describe('util', () => {
     it('should handle valid GeminiFormat array with system_instruction field', () => {
       const input = {
         system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: 'Hello, Gemini!' }],
-          },
-        ],
+        contents: [createTextParts('Hello, Gemini!')],
       };
 
       const result = maybeCoerceToGeminiFormat(input);
@@ -1419,16 +1397,7 @@ describe('util', () => {
         '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=';
 
       it('should preserve text formatting when no images are present', () => {
-        const prompt = JSON.stringify([
-          {
-            role: 'user',
-            parts: [
-              {
-                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
-              },
-            ],
-          },
-        ]);
+        const prompt = JSON.stringify([createTextParts()]);
 
         const contextVars = {
           someVar: 'not an image',
@@ -1449,16 +1418,7 @@ describe('util', () => {
       });
 
       it('should preserve text formatting when no context variables are provided', () => {
-        const prompt = JSON.stringify([
-          {
-            role: 'user',
-            parts: [
-              {
-                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
-              },
-            ],
-          },
-        ]);
+        const prompt = JSON.stringify([createTextParts()]);
 
         const { contents } = geminiFormatAndSystemInstructions(prompt);
 

@@ -8,7 +8,12 @@ import {
   cleanAssistantResponse,
   OpenAiChatKitProvider,
 } from '../../../src/providers/openai/chatkit';
+import { createApiKeyOptions } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
+
+const createUnpooledChatKitOptions = () => ({
+  config: { apiKey: 'test-key', usePool: false },
+});
 
 const playwrightMetadata = vi.hoisted(() => ({ version: '1.63.0' }));
 vi.mock('playwright/package.json', () => ({ default: playwrightMetadata }));
@@ -172,9 +177,7 @@ describe('OpenAiChatKitProvider', () => {
 
   describe('constructor', () => {
     it('should create provider with workflow ID', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test123', createApiKeyOptions());
 
       expect(provider.id()).toBe('openai:chatkit:wf_test123');
     });
@@ -202,9 +205,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should use default timeout of 120000ms', () => {
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createApiKeyOptions());
 
       // Access private config via any
       expect((provider as any).chatKitConfig.timeout).toBe(120000);
@@ -222,9 +223,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should default headless to true', () => {
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createApiKeyOptions());
 
       expect((provider as any).chatKitConfig.headless).toBe(true);
     });
@@ -243,9 +242,7 @@ describe('OpenAiChatKitProvider', () => {
 
   describe('toString', () => {
     it('should return descriptive string', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test123', createApiKeyOptions());
 
       expect(provider.toString()).toBe('[OpenAI ChatKit Provider wf_test123]');
     });
@@ -254,9 +251,7 @@ describe('OpenAiChatKitProvider', () => {
   describe('callApi', () => {
     it('does not allocate a server for an incompatible SDK in standalone mode', async () => {
       playwrightMetadata.version = '1.62.0';
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key', usePool: false },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createUnpooledChatKitOptions());
       const result = await provider.callApi('test prompt');
       expect(result.error).toContain('installed playwright package (1.62.0) is incompatible');
       expect(http.createServer).not.toHaveBeenCalled();
@@ -265,9 +260,7 @@ describe('OpenAiChatKitProvider', () => {
     it('closes its server when the browser binary is absent in standalone mode', async () => {
       const { chromium } = await import('playwright');
       vi.mocked(chromium.launch).mockRejectedValueOnce(new Error("Executable doesn't exist"));
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key', usePool: false },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createUnpooledChatKitOptions());
       const result = await provider.callApi('test prompt');
       expect(result.error).toContain('npx playwright install chromium');
       const server = vi.mocked(http.createServer).mock.results[0].value;
@@ -339,9 +332,7 @@ describe('OpenAiChatKitProvider', () => {
     it('closes unfinished HTTP requests before completing cleanup', async () => {
       const { createServer } = await vi.importActual<typeof http>('http');
       const server = createServer((_request, response) => response.end('ChatKit fixture'));
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createApiKeyOptions());
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
       const address = server.address() as { port: number };
       const connected = once(server, 'connection');
@@ -366,9 +357,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('releases every resource and resets state when browser closes fail', async () => {
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createApiKeyOptions());
       await (provider as any).initialize();
       const { context, browser, server } = provider as any;
       context.close.mockRejectedValue(new Error('Context disconnected'));
@@ -392,9 +381,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it.each(['callback', 'throw'])('resets state when server close fails via %s', async (mode) => {
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createApiKeyOptions());
       await (provider as any).initialize();
       const server = (provider as any).server;
       server.close.mockImplementation((callback?: (error?: Error) => void) => {
@@ -413,9 +400,7 @@ describe('OpenAiChatKitProvider', () => {
 
     it('waits for server closure and allows a fresh retry', async () => {
       const { browser, server } = resetBrowserMocks();
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key', usePool: false },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createUnpooledChatKitOptions());
       await (provider as any).initialize();
       let finishClose: () => void = () => {};
       const closing = new Promise<void>((resolve) => {
@@ -443,9 +428,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should close browser resources', async () => {
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createApiKeyOptions());
 
       // Initialize first (will use mocked playwright)
       await (provider as any).initialize();
@@ -462,9 +445,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should handle cleanup when not initialized', async () => {
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createApiKeyOptions());
 
       // Should not throw when cleaning up uninitialized provider
       await expect(provider.cleanup()).resolves.toBeUndefined();
@@ -473,9 +454,7 @@ describe('OpenAiChatKitProvider', () => {
 
   describe('HTML template generation', () => {
     it('should include responding state tracking in window.__state', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test123', createApiKeyOptions());
 
       const html = getGeneratedHTML(provider);
 
@@ -486,9 +465,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should have chatkit.response.start event listener', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test123', createApiKeyOptions());
 
       const html = getGeneratedHTML(provider);
 
@@ -497,9 +474,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should have chatkit.response.end event listener', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test123', createApiKeyOptions());
 
       const html = getGeneratedHTML(provider);
 
@@ -512,9 +487,7 @@ describe('OpenAiChatKitProvider', () => {
     it('should reject invalid workflowId format', () => {
       // The validateWorkflowId function in the source code rejects invalid formats
       // This gets triggered during HTML generation, not during construction
-      const provider = new OpenAiChatKitProvider('invalid-workflow', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('invalid-workflow', createApiKeyOptions());
 
       // The validation happens when HTML is generated, which we can test via the helper
       // Invalid workflow ID should not match the expected pattern
@@ -522,9 +495,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should accept valid workflowId format', () => {
-      const provider = new OpenAiChatKitProvider('wf_abc123XYZ', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_abc123XYZ', createApiKeyOptions());
 
       expect((provider as any).chatKitConfig.workflowId).toBe('wf_abc123XYZ');
     });
@@ -562,13 +533,9 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should use consistent default userId across instances', () => {
-      const provider1 = new OpenAiChatKitProvider('wf_test1', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider1 = new OpenAiChatKitProvider('wf_test1', createApiKeyOptions());
 
-      const provider2 = new OpenAiChatKitProvider('wf_test2', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider2 = new OpenAiChatKitProvider('wf_test2', createApiKeyOptions());
 
       // Both should have the same default userId for template consistency
       expect((provider1 as any).chatKitConfig.userId).toBe((provider2 as any).chatKitConfig.userId);
@@ -644,9 +611,7 @@ describe('OpenAiChatKitProvider', () => {
 
   describe('approval handling configuration', () => {
     it('should default approvalHandling to auto-approve', () => {
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createApiKeyOptions());
 
       expect((provider as any).chatKitConfig.approvalHandling).toBe('auto-approve');
     });
@@ -674,9 +639,7 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should default maxApprovals to 5', () => {
-      const provider = new OpenAiChatKitProvider('wf_test', {
-        config: { apiKey: 'test-key' },
-      });
+      const provider = new OpenAiChatKitProvider('wf_test', createApiKeyOptions());
 
       expect((provider as any).chatKitConfig.maxApprovals).toBe(5);
     });

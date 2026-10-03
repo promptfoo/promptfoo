@@ -10,8 +10,32 @@ import {
   XAI_CHAT_MODELS,
 } from '../../../src/providers/xai/chat';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
 
 import type { ProviderOptions } from '../../../src/types/providers';
+
+const createPromptSamplingConfig = () => ({
+  prompt: {
+    config: {
+      reasoning_effort: 'medium',
+      presence_penalty: 0.5,
+      frequency_penalty: 0.7,
+      stop: ['\\n'],
+      temperature: 0.8,
+    },
+  },
+});
+
+const createApiKeyOptions = () => ({
+  apiKey: 'test-key',
+});
+
+const createBilledTokenUsage = () => ({
+  prompt_tokens: 100,
+  completion_tokens: 10,
+  total_tokens: 110,
+  cost_in_usd_ticks: 123_456_789,
+});
 
 // Mock only external dependencies - NOT the OpenAiChatCompletionProvider class
 vi.mock('../../../src/logger');
@@ -27,18 +51,22 @@ vi.mock('../../../src/cache', async (importOriginal) => {
 });
 
 describe('xAI Chat Provider', () => {
+  it('keeps mutable prices independent across model aliases', () => {
+    const costs = XAI_CHAT_MODELS.map(({ cost }) => cost);
+    expect(new Set(costs).size).toBe(costs.length);
+    const longContextCosts = costs.flatMap(({ longContext }) => (longContext ? [longContext] : []));
+    expect(new Set(longContextCosts).size).toBe(longContextCosts.length);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Default mock for fetchWithCache - successful response
-    mockFetchWithCache.mockResolvedValue({
-      data: {
+    mockFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         choices: [{ message: { content: 'Mock response' } }],
         usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
   });
 
   afterEach(() => {
@@ -671,12 +699,10 @@ describe('xAI Chat Provider', () => {
         prompt_tokens_details: { cached_tokens: 800 },
         completion_tokens_details: { reasoning_tokens: 20 },
       };
-      const response = {
-        data: { choices: [{ message: { content: 'result' } }], usage },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const response = createMockFetchResponse({
+        choices: [{ message: { content: 'result' } }],
+        usage,
+      });
       mockFetchWithCache.mockResolvedValue(response);
       expect((await provider.callApi('estimate')).cost).toBeCloseTo(0.004312, 10);
       expect(mockFetchWithCache.mock.calls[0][0]).toBe('https://us.api.x.ai/v1/chat/completions');
@@ -697,15 +723,12 @@ describe('xAI Chat Provider', () => {
         const provider = createXAIProvider(`xai:${configured}`, {
           config: { config: { apiKey: 'test-key', region: 'us', passthrough: { model: sent } } },
         });
-        mockFetchWithCache.mockResolvedValue({
-          data: {
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
             choices: [{ message: { content: 'result' } }],
             usage: { prompt_tokens: 1_000, completion_tokens: 1_000, total_tokens: 2_000 },
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+          }),
+        );
         const result = await provider.callApi('hello');
         expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe(sent);
         expect(result.cost).toBeCloseTo(cost, 10);
@@ -722,17 +745,7 @@ describe('xAI Chat Provider', () => {
       // Verified live 2026-08-31: grok-4.6 accepts reasoning_effort low/medium/high
       // (not none) and rejects presence_penalty, frequency_penalty, and stop.
       const provider = createXAIProvider('xai:grok-4.6') as any;
-      const result = await provider.getOpenAiBody('test prompt', {
-        prompt: {
-          config: {
-            reasoning_effort: 'medium',
-            presence_penalty: 0.5,
-            frequency_penalty: 0.7,
-            stop: ['\\n'],
-            temperature: 0.8,
-          },
-        },
-      });
+      const result = await provider.getOpenAiBody('test prompt', createPromptSamplingConfig());
 
       expect(result.body.reasoning_effort).toBe('medium');
       expect(result.body.presence_penalty).toBeUndefined();
@@ -769,17 +782,7 @@ describe('xAI Chat Provider', () => {
       // (not none) and rejects presence_penalty, frequency_penalty, and stop.
       for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
         const provider = createXAIProvider(`xai:${modelName}`) as any;
-        const result = await provider.getOpenAiBody('test prompt', {
-          prompt: {
-            config: {
-              reasoning_effort: 'medium',
-              presence_penalty: 0.5,
-              frequency_penalty: 0.7,
-              stop: ['\\n'],
-              temperature: 0.8,
-            },
-          },
-        });
+        const result = await provider.getOpenAiBody('test prompt', createPromptSamplingConfig());
 
         expect(provider.supportsReasoningEffort()).toBe(true);
         expect(result.body.reasoning_effort).toBe('medium');
@@ -1521,9 +1524,7 @@ describe('xAI Chat Provider', () => {
       mockFetchWithCache.mockRejectedValueOnce(new Error('Network timeout'));
 
       const provider = createXAIProvider('xai:grok-4', {
-        config: {
-          apiKey: 'test-key',
-        } as any,
+        config: createApiKeyOptions() as any,
       });
 
       const result = await provider.callApi('test prompt');
@@ -1544,9 +1545,7 @@ describe('xAI Chat Provider', () => {
       });
 
       const provider = createXAIProvider('xai:grok-4', {
-        config: {
-          apiKey: 'test-key',
-        } as any,
+        config: createApiKeyOptions() as any,
       });
 
       const result = await provider.callApi('test prompt');
@@ -1567,9 +1566,7 @@ describe('xAI Chat Provider', () => {
       });
 
       const provider = createXAIProvider('xai:grok-4', {
-        config: {
-          apiKey: 'test-key',
-        } as any,
+        config: createApiKeyOptions() as any,
       });
 
       const result = await provider.callApi('test prompt');
@@ -1579,22 +1576,15 @@ describe('xAI Chat Provider', () => {
     });
 
     it('should pass through successful responses', async () => {
-      const successResponse = {
-        data: {
-          choices: [{ message: { content: 'Test response' } }],
-          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const successResponse = createMockFetchResponse({
+        choices: [{ message: { content: 'Test response' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      });
 
       mockFetchWithCache.mockResolvedValueOnce(successResponse);
 
       const provider = createXAIProvider('xai:grok-4', {
-        config: {
-          apiKey: 'test-key',
-        } as any,
+        config: createApiKeyOptions() as any,
       });
 
       const result = await provider.callApi('test prompt');
@@ -1604,20 +1594,15 @@ describe('xAI Chat Provider', () => {
     });
 
     it('should include token usage in response', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Response with tokens' } }],
           usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-4', {
-        config: {
-          apiKey: 'test-key',
-        } as any,
+        config: createApiKeyOptions() as any,
       });
 
       const result = await provider.callApi('test prompt');
@@ -1630,20 +1615,15 @@ describe('xAI Chat Provider', () => {
     });
 
     it('should calculate cost for successful responses', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Test response' } }],
           usage: { prompt_tokens: 1000, completion_tokens: 500, total_tokens: 1500 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-4', {
-        config: {
-          apiKey: 'test-key',
-        } as any,
+        config: createApiKeyOptions() as any,
       });
 
       const result = await provider.callApi('test prompt');
@@ -1654,8 +1634,8 @@ describe('xAI Chat Provider', () => {
     });
 
     it('should apply cache-read pricing from normalized token usage', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Cached response' } }],
           usage: {
             prompt_tokens: 1000,
@@ -1663,11 +1643,8 @@ describe('xAI Chat Provider', () => {
             total_tokens: 1500,
             prompt_tokens_details: { cached_tokens: 800 },
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-4-0709', {
         config: {
@@ -1687,14 +1664,11 @@ describe('xAI Chat Provider', () => {
     });
 
     it('should leave cost undefined when usage is missing', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Response without usage' } }],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-4-0709', {
         config: { apiKey: 'test-key' } as any,
@@ -1707,8 +1681,8 @@ describe('xAI Chat Provider', () => {
     });
 
     it('adds reasoning tokens on top of completion tokens for chat completions', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'reasoned answer' } }],
           usage: {
             prompt_tokens: 500,
@@ -1721,11 +1695,8 @@ describe('xAI Chat Provider', () => {
             total_tokens: 1200,
             completion_tokens_details: { reasoning_tokens: 200 },
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-3-mini-beta', {
         config: { apiKey: 'test-key' } as any,
@@ -1742,8 +1713,8 @@ describe('xAI Chat Provider', () => {
     it('reproduces the live-verified grok-4.5 chat completion cost when ticks are absent', async () => {
       // Real grok-4.5 response captured 2026-08-31; the API reported
       // usage.cost_in_usd_ticks = 87_232_000 → $0.0087232.
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: '4' } }],
           usage: {
             prompt_tokens: 4511,
@@ -1752,11 +1723,8 @@ describe('xAI Chat Provider', () => {
             prompt_tokens_details: { cached_tokens: 384 },
             completion_tokens_details: { reasoning_tokens: 58 },
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-4.5', {
         config: { apiKey: 'test-key' } as any,
@@ -1771,8 +1739,8 @@ describe('xAI Chat Provider', () => {
     it('reproduces the live-verified grok-4.6 chat completion cost when ticks are absent', async () => {
       // Real grok-4.6 response captured 2026-08-31; the API reported
       // usage.cost_in_usd_ticks = 42_000_000 → $0.0042.
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: '4' } }],
           usage: {
             prompt_tokens: 4653,
@@ -1781,11 +1749,8 @@ describe('xAI Chat Provider', () => {
             prompt_tokens_details: { cached_tokens: 4608 },
             completion_tokens_details: { reasoning_tokens: 300 },
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-4.6', {
         config: { apiKey: 'test-key' } as any,
@@ -1798,20 +1763,12 @@ describe('xAI Chat Provider', () => {
     });
 
     it('prefers xAI exact billed ticks over catalog estimates for chat completions', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'priority response' } }],
-          usage: {
-            prompt_tokens: 100,
-            completion_tokens: 10,
-            total_tokens: 110,
-            cost_in_usd_ticks: 123_456_789,
-          },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+          usage: createBilledTokenUsage(),
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-4.5', {
         config: { apiKey: 'test-key' } as any,
@@ -1825,25 +1782,17 @@ describe('xAI Chat Provider', () => {
     });
 
     it('preserves exact billed ticks on refusal responses', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [
             {
               message: { content: null, refusal: 'I cannot help with that.' },
               finish_reason: 'stop',
             },
           ],
-          usage: {
-            prompt_tokens: 100,
-            completion_tokens: 10,
-            total_tokens: 110,
-            cost_in_usd_ticks: 123_456_789,
-          },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+          usage: createBilledTokenUsage(),
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-4.5', {
         config: { apiKey: 'test-key' } as any,
@@ -1862,12 +1811,7 @@ describe('xAI Chat Provider', () => {
             code: 'invalid_prompt',
             message: 'The prompt was rejected by the safety system.',
           },
-          usage: {
-            prompt_tokens: 100,
-            completion_tokens: 10,
-            total_tokens: 110,
-            cost_in_usd_ticks: 123_456_789,
-          },
+          usage: createBilledTokenUsage(),
         },
         cached: false,
         status: 400,
@@ -1888,8 +1832,8 @@ describe('xAI Chat Provider', () => {
     });
 
     it('honors explicit custom cost overrides instead of reported ticks', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: {
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse({
           choices: [{ message: { content: 'custom-priced response' } }],
           usage: {
             prompt_tokens: 10,
@@ -1897,11 +1841,8 @@ describe('xAI Chat Provider', () => {
             total_tokens: 15,
             cost_in_usd_ticks: 123_456_789,
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = createXAIProvider('xai:grok-4.5', {
         config: {

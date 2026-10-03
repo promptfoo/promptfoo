@@ -5,6 +5,7 @@ import path from 'path';
 import { z } from 'zod';
 import cliState from '../cliState';
 import { renderVarsInObject } from '../util/render';
+import { cleanupAndUnregister } from './agentic-utils';
 import {
   CodexAppServerConfigSchema,
   OpenAICodexAppServerProvider,
@@ -671,12 +672,8 @@ export class OpenInterpreterProvider implements ApiProvider {
     }
   }
 
-  async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+  shutdown(): Promise<void> {
+    return cleanupAndUnregister(this);
   }
 
   private removeTemporaryHome(): void {

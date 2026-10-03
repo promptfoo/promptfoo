@@ -12,7 +12,10 @@ export interface ScriptLabels {
   language: string;
 }
 
-function appendToReason(reason: string, suffix: AssertionParams['assertion']['value']): string {
+export function appendToReason(
+  reason: string,
+  suffix: AssertionParams['assertion']['value'],
+): string {
   return typeof suffix === 'string' && suffix ? `${reason}\n${suffix}` : reason;
 }
 
@@ -125,18 +128,13 @@ export function normalizeScriptResult(
   }
 
   if (typeof result === 'string' && result.startsWith('{')) {
-    let parsed: unknown;
+    let parsed: object;
     try {
       parsed = JSON.parse(result);
     } catch (err) {
       throw new Error(`Invalid JSON: ${err} when parsing result: ${result}`);
     }
 
-    if (typeof parsed !== 'object' || parsed === null) {
-      throw new Error(
-        `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
-      );
-    }
     return normalizeScriptObjectResult(assertion, parsed, inverse, labels, reasonSuffix);
   }
 

@@ -149,22 +149,14 @@ const pendingPipelines = new Map<string, Promise<Pipeline>>();
 // Track if cleanup has been registered
 let cleanupRegistered = false;
 
-function getPipelineCacheKey(
-  task: string,
-  model: string,
-  options: TransformersBaseOptions,
-): string {
-  const device = options.device || 'auto';
-  const dtype = options.dtype || 'auto';
-  return `${task}:${model}:${device}:${dtype}`;
-}
-
 async function getOrCreatePipeline(
   task: string,
   model: string,
   options: TransformersBaseOptions,
 ): Promise<Pipeline> {
-  const cacheKey = getPipelineCacheKey(task, model, options);
+  const device = options.device || 'auto';
+  const dtype = options.dtype || 'auto';
+  const cacheKey = `${task}:${model}:${device}:${dtype}`;
 
   // Return cached pipeline
   if (pipelineCache.has(cacheKey)) {
@@ -187,8 +179,7 @@ async function getOrCreatePipeline(
     ) => Promise<Pipeline>;
 
     // The shared loader validates the optional SDK before initializing its pipelines.
-    const transformers = (await loadTransformers()) as { pipeline: PipelineFn };
-    const pipelineFn = transformers.pipeline;
+    const pipelineFn = ((await loadTransformers()) as { pipeline: PipelineFn }).pipeline;
 
     const pipelineOptions: Record<string, unknown> = {
       progress_callback: (progress: {
@@ -211,23 +202,17 @@ async function getOrCreatePipeline(
     };
 
     // Apply options
-    if (options.device) {
-      pipelineOptions.device = options.device;
-    }
-    if (options.dtype) {
-      pipelineOptions.dtype = options.dtype;
-    }
-    if (options.cacheDir) {
-      pipelineOptions.cache_dir = options.cacheDir;
-    }
-    if (options.localFilesOnly) {
-      pipelineOptions.local_files_only = true;
-    }
-    if (options.revision) {
-      pipelineOptions.revision = options.revision;
-    }
-    if (options.sessionOptions) {
-      pipelineOptions.session_options = options.sessionOptions;
+    for (const [source, target] of [
+      ['device', 'device'],
+      ['dtype', 'dtype'],
+      ['cacheDir', 'cache_dir'],
+      ['localFilesOnly', 'local_files_only'],
+      ['revision', 'revision'],
+      ['sessionOptions', 'session_options'],
+    ] as const) {
+      if (options[source]) {
+        pipelineOptions[target] = source === 'localFilesOnly' ? true : options[source];
+      }
     }
 
     logger.debug(`[Transformers] Loading pipeline: ${task}:${model}`, {
@@ -237,9 +222,8 @@ async function getOrCreatePipeline(
 
     const startTime = Date.now();
     const pipe = await pipelineFn(task, model, pipelineOptions);
-    const loadTime = Date.now() - startTime;
 
-    logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
+    logger.debug(`[Transformers] Pipeline loaded in ${Date.now() - startTime}ms: ${cacheKey}`);
 
     pipelineCache.set(cacheKey, pipe);
     pendingPipelines.delete(cacheKey);
@@ -299,6 +283,29 @@ function ensureCleanupRegistered(): void {
       logger.debug('[Transformers] All pipelines disposed');
     },
   });
+}
+
+function handleTransformersError(
+  error: Error,
+  provider: { modelName: string },
+  kind: 'embedding' | 'generation',
+): { error: string } {
+  // Check for model not found
+  if (error.message?.includes('Could not locate file')) {
+    return {
+      error:
+        `Model not found: ${provider.modelName}. ` +
+        'Make sure the model exists on HuggingFace Hub and has ONNX weights available. ' +
+        'Browse models at: https://huggingface.co/models?library=transformers.js',
+    };
+  }
+
+  logger.error(`[Transformers] ${kind === 'embedding' ? 'Embedding' : 'Generation'} error:`, {
+    error: error.message,
+  });
+  return {
+    error: `Transformers.js ${kind} error: ${error.message}`,
+  };
 }
 
 /**
@@ -384,22 +391,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
         latencyMs,
       };
     } catch (err) {
-      const error = err as Error;
-
-      // Check for model not found
-      if (error.message?.includes('Could not locate file')) {
-        return {
-          error:
-            `Model not found: ${this.modelName}. ` +
-            'Make sure the model exists on HuggingFace Hub and has ONNX weights available. ' +
-            'Browse models at: https://huggingface.co/models?library=transformers.js',
-        };
-      }
-
-      logger.error(`[Transformers] Embedding error:`, { error: error.message });
-      return {
-        error: `Transformers.js embedding error: ${error.message}`,
-      };
+      return handleTransformersError(err as Error, this, 'embedding');
     }
   }
 }
@@ -451,26 +443,18 @@ export class TransformersTextGenerationProvider implements ApiProvider {
       };
 
       // Only include defined options
-      if (this.config.temperature !== undefined) {
-        generationOptions.temperature = this.config.temperature;
-      }
-      if (this.config.topK !== undefined) {
-        generationOptions.top_k = this.config.topK;
-      }
-      if (this.config.topP !== undefined) {
-        generationOptions.top_p = this.config.topP;
-      }
-      if (this.config.doSample !== undefined) {
-        generationOptions.do_sample = this.config.doSample;
-      }
-      if (this.config.repetitionPenalty !== undefined) {
-        generationOptions.repetition_penalty = this.config.repetitionPenalty;
-      }
-      if (this.config.noRepeatNgramSize !== undefined) {
-        generationOptions.no_repeat_ngram_size = this.config.noRepeatNgramSize;
-      }
-      if (this.config.numBeams !== undefined) {
-        generationOptions.num_beams = this.config.numBeams;
+      for (const [source, target] of [
+        ['temperature', 'temperature'],
+        ['topK', 'top_k'],
+        ['topP', 'top_p'],
+        ['doSample', 'do_sample'],
+        ['repetitionPenalty', 'repetition_penalty'],
+        ['noRepeatNgramSize', 'no_repeat_ngram_size'],
+        ['numBeams', 'num_beams'],
+      ] as const) {
+        if (this.config[source] !== undefined) {
+          generationOptions[target] = this.config[source];
+        }
       }
 
       logger.debug(`[Transformers] Generating text for prompt (length: ${prompt.length})`, {
@@ -500,8 +484,7 @@ export class TransformersTextGenerationProvider implements ApiProvider {
         output = rawOutput;
       } else if (Array.isArray(rawOutput)) {
         // Get the last message content (the assistant's response)
-        const lastMessage = rawOutput[rawOutput.length - 1];
-        output = lastMessage?.content || JSON.stringify(rawOutput);
+        output = rawOutput[rawOutput.length - 1]?.content || JSON.stringify(rawOutput);
       } else {
         output = JSON.stringify(rawOutput);
       }
@@ -515,21 +498,7 @@ export class TransformersTextGenerationProvider implements ApiProvider {
         latencyMs,
       };
     } catch (err) {
-      const error = err as Error;
-
-      if (error.message?.includes('Could not locate file')) {
-        return {
-          error:
-            `Model not found: ${this.modelName}. ` +
-            'Make sure the model exists on HuggingFace Hub and has ONNX weights available. ' +
-            'Browse models at: https://huggingface.co/models?library=transformers.js',
-        };
-      }
-
-      logger.error(`[Transformers] Generation error:`, { error: error.message });
-      return {
-        error: `Transformers.js generation error: ${error.message}`,
-      };
+      return handleTransformersError(err as Error, this, 'generation');
     }
   }
 }

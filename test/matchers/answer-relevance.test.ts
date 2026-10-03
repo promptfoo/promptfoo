@@ -6,6 +6,7 @@ import {
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+import { createEmbeddingResult } from '../factories/literalFixtures';
 
 import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -22,10 +23,9 @@ describe('matchesAnswerRelevance', () => {
       output: 'foobar',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
-      embedding: [1, 0, 0],
-      tokenUsage: { total: 5, prompt: 2, completion: 3 },
-    });
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue(
+      createEmbeddingResult(1, 0),
+    );
   });
 
   afterEach(() => {
@@ -47,10 +47,7 @@ describe('matchesAnswerRelevance', () => {
 
     const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation(function (this: OpenAiEmbeddingProvider) {
-      return Promise.resolve({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      });
+      return Promise.resolve(createEmbeddingResult(1, 0));
     });
 
     await expect(matchesAnswerRelevance(input, output, threshold)).resolves.toEqual({
@@ -130,10 +127,7 @@ describe('matchesAnswerRelevance', () => {
     const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation((text) => {
       if (text.includes('Input text')) {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text.includes('Different output')) {
         return Promise.resolve({
           embedding: [0, 1, 0],
@@ -246,10 +240,7 @@ describe('matchesAnswerRelevance', () => {
     // Mock embeddings with varying similarities
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === input) {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text.includes('capital') && text.includes('France')) {
         // Similar questions get high similarity
         return Promise.resolve({

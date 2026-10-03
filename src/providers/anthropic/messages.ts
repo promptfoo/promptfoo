@@ -6,7 +6,7 @@ import {
   getScopedCacheKey,
   isCacheEnabled,
 } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, parseEnvFloat } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -90,14 +90,6 @@ async function finalMessageWithStreamedStopDetails(
   return finalMessage.stop_details == null && streamedStopDetails != null
     ? { ...finalMessage, stop_details: streamedStopDetails }
     : finalMessage;
-}
-
-function parseEnvFloat(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  const parsed = Number.parseFloat(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
 }
 
 function normalizeHeadersForCacheKey(headers: Record<string, string>) {

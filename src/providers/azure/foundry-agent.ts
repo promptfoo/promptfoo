@@ -11,18 +11,13 @@ import {
   HttpRateLimitError,
 } from '../../util/fetch/errors';
 import {
-  CallbackPathTraversalError,
-  loadCallbackFromFileUrl,
-  wrapError,
-} from '../../util/functions/loadFunction';
-import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
 import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
-import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { FunctionCallbackHandler, loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import {
@@ -402,15 +397,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  private async loadExternalFunction(fileRef: string): Promise<Function> {
-    try {
-      return await loadCallbackFromFileUrl(fileRef);
-    } catch (error) {
-      if (error instanceof CallbackPathTraversalError) {
-        throw error;
-      }
-      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
-    }
+  private loadExternalFunction(fileRef: string): Promise<Function> {
+    return loadProviderCallbackFromFileUrl(fileRef);
   }
 
   private async executeFunctionCallback(

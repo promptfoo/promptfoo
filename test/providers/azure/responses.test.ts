@@ -2,8 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
+import { createInputOutputUsage, createTemperatureOptions } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
 import type { MockedFunction } from 'vitest';
+
+const createCachedTokenResponse = () => ({
+  output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] }],
+  usage: {
+    input_tokens: 2_000,
+    input_tokens_details: { cached_tokens: 500 },
+    output_tokens: 1_000,
+  },
+});
+
+const createOmitDefaultsConfig = () => ({
+  config: { omitDefaults: true },
+});
 
 // Mock external dependencies
 vi.mock('../../../src/cache');
@@ -200,9 +215,7 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should not include temperature for reasoning models', async () => {
-      const provider = new AzureResponsesProvider('o1-preview', {
-        config: { temperature: 0.7 },
-      });
+      const provider = new AzureResponsesProvider('o1-preview', createTemperatureOptions());
 
       const body = await provider.getAzureResponsesBody('Hello world');
 
@@ -210,9 +223,7 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should include temperature for non-reasoning models', async () => {
-      const provider = new AzureResponsesProvider('gpt-4.1-test', {
-        config: { temperature: 0.7 },
-      });
+      const provider = new AzureResponsesProvider('gpt-4.1-test', createTemperatureOptions());
 
       const body = await provider.getAzureResponsesBody('Hello world');
 
@@ -233,9 +244,7 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should omit default temperature and max_output_tokens when omitDefaults is true', async () => {
-      const provider = new AzureResponsesProvider('gpt-4.1-test', {
-        config: { omitDefaults: true },
-      });
+      const provider = new AzureResponsesProvider('gpt-4.1-test', createOmitDefaultsConfig());
 
       const body = await provider.getAzureResponsesBody('Hello world');
 
@@ -249,9 +258,7 @@ describe('AzureResponsesProvider', () => {
       mockProcessEnv({ OPENAI_TEMPERATURE: '0.5' });
       mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
 
-      const provider = new AzureResponsesProvider('gpt-4.1-test', {
-        config: { omitDefaults: true },
-      });
+      const provider = new AzureResponsesProvider('gpt-4.1-test', createOmitDefaultsConfig());
 
       const body = await provider.getAzureResponsesBody('Hello world');
 
@@ -265,9 +272,7 @@ describe('AzureResponsesProvider', () => {
       mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: '4096' });
       mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
 
-      const provider = new AzureResponsesProvider('o1-preview', {
-        config: { omitDefaults: true },
-      });
+      const provider = new AzureResponsesProvider('o1-preview', createOmitDefaultsConfig());
 
       const body = await provider.getAzureResponsesBody('Hello world');
 
@@ -278,9 +283,7 @@ describe('AzureResponsesProvider', () => {
     it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
       mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
 
-      const provider = new AzureResponsesProvider('o1-preview', {
-        config: { omitDefaults: true },
-      });
+      const provider = new AzureResponsesProvider('o1-preview', createOmitDefaultsConfig());
 
       const body = await provider.getAzureResponsesBody('Hello world');
 
@@ -309,9 +312,7 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should omit default max_output_tokens when omitDefaults is true for reasoning models', async () => {
-      const provider = new AzureResponsesProvider('o1-preview', {
-        config: { omitDefaults: true },
-      });
+      const provider = new AzureResponsesProvider('o1-preview', createOmitDefaultsConfig());
 
       const body = await provider.getAzureResponsesBody('Hello world');
 
@@ -425,18 +426,10 @@ describe('AzureResponsesProvider', () => {
             ],
           },
         ],
-        usage: {
-          input_tokens: 10,
-          output_tokens: 8,
-        },
+        usage: createInputOutputUsage(10, 8),
       };
 
-      mockFetchWithCache.mockResolvedValue({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(mockResponse));
 
       const provider = new AzureResponsesProvider('gpt-4.1-test');
 
@@ -466,12 +459,7 @@ describe('AzureResponsesProvider', () => {
         ],
         usage: { input_tokens: 1000, output_tokens: 500 },
       };
-      mockFetchWithCache.mockResolvedValue({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(mockResponse));
 
       const provider = new AzureResponsesProvider('gpt-4.1');
       vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
@@ -486,21 +474,7 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('applies the cached-input rate from Responses usage details', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          output: [
-            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
-          ],
-          usage: {
-            input_tokens: 2_000,
-            input_tokens_details: { cached_tokens: 500 },
-            output_tokens: 1_000,
-          },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(createCachedTokenResponse()));
 
       const provider = new AzureResponsesProvider('gpt-5.6');
       vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
@@ -542,21 +516,7 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('applies priority pricing after Responses flattens passthrough fields', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          output: [
-            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
-          ],
-          usage: {
-            input_tokens: 2_000,
-            input_tokens_details: { cached_tokens: 500 },
-            output_tokens: 1_000,
-          },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(createCachedTokenResponse()));
       const provider = new AzureResponsesProvider('gpt-5.6-sol', {
         config: { passthrough: { service_tier: 'priority' } },
       });
@@ -570,8 +530,8 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('prices image-token usage from Azure Responses details', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           output: [
             { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] },
           ],
@@ -580,11 +540,8 @@ describe('AzureResponsesProvider', () => {
             input_tokens_details: { image_tokens: 400 },
             output_tokens: 0,
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
       const provider = new AzureResponsesProvider('gpt-image-1');
       vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
         (provider as any).authHeaders = { 'api-key': 'test-key' };
@@ -623,18 +580,10 @@ describe('AzureResponsesProvider', () => {
             ],
           },
         ],
-        usage: {
-          input_tokens: 10,
-          output_tokens: 8,
-        },
+        usage: createInputOutputUsage(10, 8),
       };
 
-      mockFetchWithCache.mockResolvedValue({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValue(createMockFetchResponse(mockResponse));
 
       const provider = new AzureResponsesProvider('gpt-4.1-test');
       const result = await provider.callApi('Hello');
@@ -677,8 +626,8 @@ describe('AzureResponsesProvider', () => {
     it('should handle deep research model timeout', async () => {
       const provider = new AzureResponsesProvider('o3-deep-research-test');
 
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           output: [
             {
               type: 'message',
@@ -686,11 +635,8 @@ describe('AzureResponsesProvider', () => {
               content: [{ type: 'output_text', text: 'Research complete' }],
             },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       await provider.callApi('Research question');
 
@@ -706,8 +652,8 @@ describe('AzureResponsesProvider', () => {
     it('should construct correct Azure URL format', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
 
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           output: [
             {
               type: 'message',
@@ -715,11 +661,8 @@ describe('AzureResponsesProvider', () => {
               content: [{ type: 'output_text', text: 'response' }],
             },
           ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       await provider.callApi('Hello');
 

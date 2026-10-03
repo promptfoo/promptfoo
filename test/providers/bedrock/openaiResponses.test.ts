@@ -19,6 +19,7 @@ import {
 import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
@@ -45,8 +46,8 @@ describe('bedrock openaiResponses helper', () => {
     });
     vi.mocked(fetchWithCache)
       .mockReset()
-      .mockResolvedValue({
-        data: {
+      .mockResolvedValue(
+        createMockFetchResponse({
           id: 'resp_123',
           model: 'xai.grok-4.3',
           output: [
@@ -57,11 +58,8 @@ describe('bedrock openaiResponses helper', () => {
             },
           ],
           usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
   });
 
   afterEach(() => {
