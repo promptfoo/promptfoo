@@ -1,5 +1,6 @@
 import { act, StrictMode } from 'react';
 
+import useApiConfig from '@app/stores/apiConfig';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
@@ -734,6 +735,121 @@ describe('ResultsTable Metrics Display', () => {
       expect(audioSource).toHaveAttribute('src', 'data:audio/wav;base64,base64-audio');
       expect(audioSource).toHaveAttribute('type', 'audio/wav');
       expect(screen.getByText('/path/to/input.wav (audio/wav)')).toBeInTheDocument();
+    });
+
+    describe('audio strategy variables', () => {
+      beforeEach(() => {
+        vi.stubEnv('VITE_PUBLIC_BASENAME', '');
+        vi.spyOn(useApiConfig, 'getState').mockReturnValue({
+          ...useApiConfig.getState(),
+          apiBaseUrl: '',
+        });
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllEnvs();
+      });
+
+      it.each([
+        ['blob', 'promptfoo://blob/audio-hash', '/api/blobs/audio-hash'],
+        ['storage', 'storageRef:audio/sample.mp3', '/api/media/audio/sample.mp3'],
+        ['raw base64', 'YWJj', 'data:audio/mp3;base64,YWJj'],
+        ['audio data URL', 'data:audio/wav;base64,YWJj', 'data:audio/wav;base64,YWJj'],
+        [
+          'other data URL',
+          'data:application/octet-stream;base64,YWJj',
+          'data:application/octet-stream;base64,YWJj',
+        ],
+        [
+          'HTTP URL',
+          'http://example.com/audio.mp3',
+          'data:audio/mp3;base64,http://example.com/audio.mp3',
+        ],
+        [
+          'HTTPS URL',
+          'https://example.com/audio.mp3',
+          'data:audio/mp3;base64,https://example.com/audio.mp3',
+        ],
+        [
+          'protocol-relative URL',
+          '//example.com/audio.mp3',
+          'data:audio/mp3;base64,//example.com/audio.mp3',
+        ],
+        [
+          'API path',
+          '/api/media/audio/sample.mp3',
+          'data:audio/mp3;base64,/api/media/audio/sample.mp3',
+        ],
+        ['file path', 'file://sample.mp3', 'data:audio/mp3;base64,file://sample.mp3'],
+        ['empty inline value', '', 'data:audio/mp3;base64,'],
+        ['empty blob reference', 'promptfoo://blob/', null],
+        ['empty storage reference', 'storageRef:', null],
+        ['slash-only storage reference', 'storageRef:/', null],
+        ['multiple-slash storage reference', 'storageRef:////', null],
+        [
+          'multiple leading slashes',
+          'storageRef:////audio/sample.mp3',
+          '/api/media/audio/sample.mp3',
+        ],
+        ['storage leading slash', 'storageRef:/audio/sample.mp3', '/api/media/audio/sample.mp3'],
+        [
+          'proxy basename',
+          'storageRef:audio/sample.mp3',
+          '/promptfoo/api/media/audio/sample.mp3',
+          '',
+          '/promptfoo',
+        ],
+        [
+          'trailing API slash',
+          'promptfoo://blob/audio-hash',
+          'https://api.example.test/promptfoo/api/blobs/audio-hash',
+          'https://api.example.test/promptfoo/',
+        ],
+      ])(
+        'preserves %s routing and decoded text',
+        async (_label, value, expected, apiBaseUrl = '', basename = '') => {
+          vi.stubEnv('VITE_PUBLIC_BASENAME', basename);
+          vi.mocked(useApiConfig.getState).mockReturnValue({
+            ...useApiConfig.getState(),
+            apiBaseUrl: apiBaseUrl ?? '',
+          });
+          vi.mocked(useTableStore).mockReturnValue({
+            ...useTableStore(),
+            table: {
+              head: { prompts: [{}], vars: ['prompt'] },
+              body: [
+                {
+                  outputs: [
+                    {
+                      pass: true,
+                      score: 1,
+                      text: 'test output',
+                      metadata: {
+                        [FILE_METADATA_KEY]: { prompt: { path: 'input.txt', type: 'text' } },
+                      },
+                    },
+                  ],
+                  test: { metadata: { strategyId: 'audio', originalText: 'decoded audio prompt' } },
+                  vars: [value],
+                },
+              ],
+            },
+          });
+
+          const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+          if (expected === null) {
+            expect(await screen.findByText('Failed to load audio')).toBeInTheDocument();
+            expect(container.querySelector('audio source')).toBeNull();
+          } else {
+            await waitFor(() => {
+              expect(container.querySelector('audio source')).toHaveAttribute('src', expected);
+            });
+            expect(container.querySelector('audio source')).toHaveAttribute('type', 'audio/mp3');
+          }
+          expect(screen.getByText('decoded audio prompt')).toBeInTheDocument();
+        },
+      );
     });
 
     it('does not render file:// audio variables as invalid base64 audio', () => {
