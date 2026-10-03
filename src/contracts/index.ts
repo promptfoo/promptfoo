@@ -38,3 +38,8 @@ export * from './shared.js';
 export * from './transform.js';
 export * from './validators/prompts.js';
 export * from './validators/shared.js';
+export {
+  traceErrorSpansConfigError,
+  traceSpanCountBoundsError,
+  traceSpanDurationConfigError,
+} from './validators/traceAssertionConfig.js';
