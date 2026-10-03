@@ -592,7 +592,7 @@ describe('OpenAICodexAppServerProvider', () => {
     let entrypoint: string;
 
     beforeEach(() => {
-      npmBinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-npm-'));
+      npmBinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo codex & npm-'));
       entrypoint = path.join(npmBinDir, 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
       fs.mkdirSync(path.dirname(entrypoint), { recursive: true });
       fs.writeFileSync(entrypoint, '');
@@ -613,48 +613,54 @@ describe('OpenAICodexAppServerProvider', () => {
       return mocks.spawn.mock.calls[0];
     }
 
-    it.each([
-      ['the npm codex.cmd shim on PATH', () => ({ cli_env: { PATH: npmBinDir } })],
-      [
-        'a codex.cmd codex_path_override',
-        () => ({ codex_path_override: path.join(npmBinDir, 'codex.cmd') }),
-      ],
-      [
-        'a bare codex.cmd codex_path_override',
-        () => ({ codex_path_override: 'codex.cmd', cli_env: { PATH: npmBinDir } }),
-      ],
-    ])('runs the @openai/codex entrypoint with Node for %s', async (_label, getConfig) => {
-      const [command, args] = await getSpawnCall(getConfig());
+    it.each(['global', '.bin', '.BIN'])(
+      'runs a %s npm installation with Node',
+      async (directory) => {
+        const binDirectory =
+          directory === 'global' ? npmBinDir : path.join(npmBinDir, 'node_modules', directory);
+        fs.mkdirSync(binDirectory, { recursive: true });
+        fs.writeFileSync(path.join(binDirectory, 'codex.cmd'), '');
+
+        const [command, args, options] = await getSpawnCall({ cli_env: { PATH: binDirectory } });
+
+        expect(command).toBe(process.execPath);
+        expect(args).toEqual([entrypoint, 'app-server', '--listen', 'stdio://']);
+        expect(options).toEqual({
+          env: expect.objectContaining({ PATH: binDirectory }),
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+      },
+    );
+
+    it('passes shell metacharacters literally to Node without a shell', async () => {
+      const value = 'spaces & | < > ^ %PATH% "quotes"';
+      const [command, args, options] = await getSpawnCall({
+        cli_env: { PATH: npmBinDir },
+        cli_config: { model: value },
+      });
 
       expect(command).toBe(process.execPath);
-      expect(args).toEqual([entrypoint, 'app-server', '--listen', 'stdio://']);
+      expect(args).toEqual([
+        entrypoint,
+        'app-server',
+        '--listen',
+        'stdio://',
+        '-c',
+        `model=${JSON.stringify(value)}`,
+      ]);
+      expect(options.shell).toBeUndefined();
     });
 
     it.each([
-      ['PATH', '.bin'],
-      ['override', '.bin'],
-      ['PATH', '.BIN'],
-      ['override', '.BIN'],
-    ])('runs a project-local npm shim via %s with %s', async (source, directory) => {
-      const localBinDir = path.join(npmBinDir, 'node_modules', directory);
-      fs.mkdirSync(localBinDir, { recursive: true });
-      fs.writeFileSync(path.join(localBinDir, 'codex.cmd'), '');
-
-      const [command, args] = await getSpawnCall(
-        source === 'PATH'
-          ? { cli_env: { PATH: localBinDir } }
-          : { codex_path_override: path.join(localBinDir, 'codex.cmd') },
-      );
-
-      expect(command).toBe(process.execPath);
-      expect(args).toEqual([entrypoint, 'app-server', '--listen', 'stdio://']);
-    });
-
-    it.each([
+      ['a bare Codex command', () => 'codex'],
+      ['a bare Codex shim', () => 'codex.cmd'],
+      ['a custom Codex wrapper', () => path.join(npmBinDir, 'codex.cmd')],
       ['a bare interpreter command', () => 'interpreter'],
-      ['an interpreter.cmd path', () => path.join(npmBinDir, 'interpreter.cmd')],
-    ])('preserves %s when Codex is installed alongside it', async (_label, getCommand) => {
-      fs.writeFileSync(path.join(npmBinDir, 'interpreter.cmd'), '');
+      ['an interpreter wrapper', () => path.join(npmBinDir, 'interpreter.cmd')],
+      ['a native executable', () => path.join(npmBinDir, 'codex.exe')],
+    ])('preserves %s supplied as an explicit override', async (_label, getCommand) => {
+      // A custom wrapper can set environment variables before launching its adjacent npm package.
+      fs.writeFileSync(path.join(npmBinDir, 'codex.cmd'), '@set CUSTOM_CODEX_ENV=enabled');
       const command = getCommand();
 
       const [spawnCommand, args] = await getSpawnCall({
@@ -674,19 +680,50 @@ describe('OpenAICodexAppServerProvider', () => {
       expect(command).toBe('codex');
     });
 
-    it('spawns a native codex.exe that precedes the npm shim on PATH', async () => {
+    it.each([
+      ['cwd', 'codex.exe'],
+      ['cwd', 'codex.com'],
+      ['earlier PATH', 'codex.exe'],
+      ['later PATH', 'codex.exe'],
+      ['relative PATH', 'codex.exe'],
+      ['quoted PATH', 'codex.exe'],
+    ])('preserves a native %s %s ahead of npm discovery', async (location, executable) => {
+      const cwd = process.cwd();
       const nativeBinDir = path.join(npmBinDir, 'native');
       fs.mkdirSync(nativeBinDir);
-      fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+      fs.writeFileSync(path.join(nativeBinDir, executable), '');
+      let searchPath = npmBinDir;
+      if (location === 'cwd') {
+        process.chdir(nativeBinDir);
+      } else {
+        if (location === 'relative PATH') {
+          process.chdir(npmBinDir);
+        }
+        const nativePath =
+          location === 'relative PATH'
+            ? 'native'
+            : location === 'quoted PATH'
+              ? `"${nativeBinDir}"`
+              : nativeBinDir;
+        searchPath =
+          location === 'earlier PATH'
+            ? [nativePath, npmBinDir].join(path.delimiter)
+            : [npmBinDir, nativePath].join(path.delimiter);
+      }
+      try {
+        const [command, args] = await getSpawnCall({
+          working_dir: cwd,
+          cli_env: { PATH: searchPath },
+        });
 
-      const [command] = await getSpawnCall({
-        cli_env: { PATH: [nativeBinDir, npmBinDir].join(path.delimiter) },
-      });
-
-      expect(command).toBe('codex');
+        expect(command).toBe('codex');
+        expect(args).toEqual(['app-server', '--listen', 'stdio://']);
+      } finally {
+        process.chdir(cwd);
+      }
     });
 
-    it('ignores relative PATH entries that would resolve against the cwd', async () => {
+    it('ignores relative PATH entries that would discover npm in the cwd', async () => {
       const cwd = process.cwd();
       process.chdir(npmBinDir);
       try {

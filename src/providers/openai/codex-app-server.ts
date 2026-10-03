@@ -828,41 +828,32 @@ function createAbortError(message: string): Error {
   return error;
 }
 
-/**
- * Windows cannot spawn npm's `codex.cmd` shim directly.
- * Run its JavaScript entrypoint with the current Node binary.
- */
-function resolveCodexLaunch(
-  command: string,
-  args: string[],
-  env: Record<string, string>,
-): { command: string; args: string[] } {
-  const commandName = path.basename(command).toLowerCase();
-  if (process.platform !== 'win32' || !['codex', 'codex.cmd'].includes(commandName)) {
-    return { command, args };
+/** Find npm's entrypoint only when Windows cannot launch a native Codex binary. */
+function getCodexNpmEntrypoint(env: Record<string, string>): string | undefined {
+  const directories = (env.PATH ?? env.Path ?? '')
+    .split(path.delimiter)
+    .map((directory) => directory.replace(/^"(.*)"$/, '$1'));
+  // Node searches the cwd and all of PATH for native binaries, ignoring .cmd shims.
+  if (
+    [process.cwd(), ...directories].some((directory) =>
+      ['codex.com', 'codex.exe'].some((file) => fs.existsSync(path.join(directory, file))),
+    )
+  ) {
+    return undefined;
   }
-  const extensions = commandName === 'codex.cmd' ? [''] : ['.com', '.exe', '.cmd'];
-  // Skip relative PATH entries to avoid looking up an npm shim in the current directory.
-  const resolved =
-    path.basename(command) === command
-      ? (env.PATH ?? env.Path ?? '')
-          .split(path.delimiter)
-          .filter((dir) => path.isAbsolute(dir))
-          .flatMap((dir) => extensions.map((ext) => path.join(dir, command + ext)))
-          .find((candidate) => fs.existsSync(candidate))
-      : command;
-  if (!resolved?.toLowerCase().endsWith('.cmd')) {
-    return { command, args };
+  // Only discover npm installations on absolute PATH entries, never in the workspace.
+  const binDirectory = directories.find(
+    (directory) => path.isAbsolute(directory) && fs.existsSync(path.join(directory, 'codex.cmd')),
+  );
+  if (!binDirectory) {
+    return undefined;
   }
-  const binDirectory = path.dirname(resolved);
   const nodeModulesDirectory =
     path.basename(binDirectory).toLowerCase() === '.bin'
       ? path.dirname(binDirectory)
       : path.join(binDirectory, 'node_modules');
   const entrypoint = path.join(nodeModulesDirectory, '@openai', 'codex', 'bin', 'codex.js');
-  return fs.existsSync(entrypoint)
-    ? { command: process.execPath, args: [entrypoint, ...args] }
-    : { command, args };
+  return fs.existsSync(entrypoint) ? entrypoint : undefined;
 }
 
 class CodexAppServerConnection {
@@ -880,8 +871,7 @@ class CodexAppServerConnection {
 
   constructor(private readonly options: AppServerConnectionOptions) {
     this.instanceId = options.connectionInstanceId;
-    const { command, args } = resolveCodexLaunch(options.command, options.args, options.env);
-    this.process = spawn(command, args, {
+    this.process = spawn(options.command, options.args, {
       env: options.env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -1788,10 +1778,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     config: CodexAppServerConfig,
   ): Promise<CodexAppServerConnection> {
     const connectionInstanceId = `${connectionKey}:${crypto.randomUUID()}`;
+    const entrypoint =
+      process.platform === 'win32' && config.codex_path_override === undefined
+        ? getCodexNpmEntrypoint(env)
+        : undefined;
+    const args = this.buildAppServerArgs(config, env);
     const connection = new CodexAppServerConnection({
       connectionInstanceId,
-      command: config.codex_path_override ?? 'codex',
-      args: this.buildAppServerArgs(config, env),
+      command: config.codex_path_override ?? (entrypoint ? process.execPath : 'codex'),
+      args: entrypoint ? [entrypoint, ...args] : args,
       env,
       requestTimeoutMs: this.getRequestTimeoutMs(config),
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,
