@@ -5109,7 +5109,7 @@ describe('ResultsTable default column sizing', () => {
   const mockTable = {
     body: [
       {
-        outputs: [{ pass: true, score: 1, text: 'test output' }],
+        outputs: [{ pass: true, score: 1, text: 'test output', metadata: {} }],
         test: {},
         vars: [
           'ok',
@@ -5164,6 +5164,40 @@ describe('ResultsTable default column sizing', () => {
     }));
   });
 
+  it.each(['variable', 'transform'])(
+    'keeps expanded %s text open when zoom changes',
+    async (kind) => {
+      const text = 'Detailed ordinary evaluation text. '.repeat(12);
+      const table = {
+        ...mockTable,
+        head: { ...mockTable.head, vars: kind === 'variable' ? ['detail'] : [] },
+        body: [
+          {
+            ...mockTable.body[0],
+            vars: kind === 'variable' ? [text] : [],
+            outputs: [
+              {
+                ...mockTable.body[0].outputs[0],
+                metadata: kind === 'transform' ? { transformDisplayVars: { __detail: text } } : {},
+              },
+            ],
+          },
+        ],
+      };
+      const state = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({ ...state, table });
+      const user = userEvent.setup();
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      await user.click(screen.getByText('...'));
+      const collapseControl = screen.getByText('Show less');
+
+      rerender(<ResultsTable {...defaultProps} zoom={1.25} />);
+
+      expect(screen.getByText('Show less')).toBe(collapseControl);
+    },
+  );
+
   it('gives larger metadata columns more initial width than compact metadata columns', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
@@ -5189,6 +5223,283 @@ describe('ResultsTable default column sizing', () => {
     expect(largeMetadataWidth).toBeGreaterThan(compactMetadataWidth);
     expect(largeMetadataWidth).toBeLessThanOrEqual(360);
     expect(outputWidth).toBe(480);
+  });
+
+  it('resamples metadata widths when search changes the result set', () => {
+    let table = mockTable;
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const initialHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const initialWidth = Number.parseFloat(initialHeader?.style.width || '0');
+
+    table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          vars: ['ok', 'compact'],
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} debouncedSearchText="compact" zoom={1.01} />);
+
+    const filteredHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const filteredWidth = Number.parseFloat(filteredHeader?.style.width || '0');
+
+    expect(initialHeader).not.toBeNull();
+    expect(filteredHeader).not.toBeNull();
+    expect(filteredWidth).toBeLessThan(initialWidth);
+  });
+
+  it.each(['search', 'eval'])(
+    'waits for new rows when %s changes before a same-count response',
+    (change) => {
+      const makeTable = (value: string) => ({
+        ...mockTable,
+        body: [
+          {
+            ...mockTable.body[0],
+            test: { description: value },
+            vars: ['ok', value],
+            outputs: [
+              {
+                ...mockTable.body[0].outputs[0],
+                metadata: { transformDisplayVars: { __late: value } },
+              },
+            ],
+          },
+        ],
+      });
+      let table = makeTable('Long metadata value '.repeat(30));
+      let evalId = 'first-eval';
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId,
+        setTable: vi.fn(),
+        table,
+        version: 4,
+        fetchEvalData: vi.fn(),
+        isFetching: false,
+        filteredResultsCount: 1,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      const widths = () =>
+        ['large_metadata', 'Description', 'late'].map((label) =>
+          Number.parseFloat(screen.getByText(label).closest('th')!.style.width),
+        );
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      const originalWidths = widths();
+      const props = { ...defaultProps, debouncedSearchText: change === 'search' ? 'compact' : '' };
+      if (change === 'eval') {
+        evalId = 'second-eval';
+      }
+      rerender(<ResultsTable {...props} zoom={1.01} />);
+      table = makeTable('compact');
+      rerender(<ResultsTable {...props} zoom={1.02} />);
+      const freshWidths = widths();
+      freshWidths.forEach((width, index) => expect(width).toBeLessThan(originalWidths[index]));
+
+      table = makeTable('A later page with long metadata '.repeat(30));
+      rerender(<ResultsTable {...props} zoom={1.03} />);
+      expect(widths()).toEqual(freshWidths);
+    },
+  );
+
+  it.each(['search', 'filter'])(
+    'sizes the matching rows when overlapping %s responses have the same count',
+    (change) => {
+      const makeTable = (value: string) => ({
+        ...mockTable,
+        body: [
+          {
+            ...mockTable.body[0],
+            test: { description: value },
+            vars: ['ok', value],
+            outputs: [
+              {
+                ...mockTable.body[0].outputs[0],
+                metadata: { transformDisplayVars: { __late: value } },
+              },
+            ],
+          },
+        ],
+      });
+      let table = makeTable('initial');
+      let tableResultSetKey = 'initial';
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table,
+        tableResultSetKey,
+        version: 4,
+        fetchEvalData: vi.fn(),
+        isFetching: false,
+        filteredResultsCount: 1,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      const widths = () =>
+        ['large_metadata', 'Description', 'late'].map((label) =>
+          Number.parseFloat(screen.getByText(label).closest('th')!.style.width),
+        );
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      const firstProps = {
+        ...defaultProps,
+        debouncedSearchText: change === 'search' ? 'first' : '',
+        filterMode: change === 'filter' ? ('failures' as const) : ('all' as const),
+      };
+      const secondProps = {
+        ...defaultProps,
+        debouncedSearchText: change === 'search' ? 'second' : '',
+        filterMode: change === 'filter' ? ('errors' as const) : ('all' as const),
+      };
+      rerender(<ResultsTable {...firstProps} />);
+      rerender(<ResultsTable {...secondProps} />);
+
+      // The first response arrives after the controls have already advanced.
+      table = makeTable('Long metadata value '.repeat(30));
+      tableResultSetKey = 'first';
+      rerender(<ResultsTable {...secondProps} zoom={1.01} />);
+      const firstWidths = widths();
+
+      table = makeTable('compact');
+      tableResultSetKey = 'second';
+      rerender(<ResultsTable {...secondProps} zoom={1.02} />);
+      const secondWidths = widths();
+      secondWidths.forEach((width, index) => expect(width).toBeLessThan(firstWidths[index]));
+
+      table = makeTable('A later page with long metadata '.repeat(30));
+      rerender(<ResultsTable {...secondProps} zoom={1.03} />);
+      expect(widths()).toEqual(secondWidths);
+    },
+  );
+
+  it('resamples metadata widths when live result growth changes the visible row count', () => {
+    let table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          vars: ['ok', 'compact'],
+        },
+      ],
+    };
+    let filteredResultsCount = 1;
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const initialHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const initialWidth = Number.parseFloat(initialHeader?.style.width || '0');
+
+    table = mockTable;
+    filteredResultsCount = 2;
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const updatedHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const updatedWidth = Number.parseFloat(updatedHeader?.style.width || '0');
+
+    expect(initialHeader).not.toBeNull();
+    expect(updatedHeader).not.toBeNull();
+    expect(updatedWidth).toBeGreaterThan(initialWidth);
+  });
+
+  it('resamples metadata widths when a background refresh replaces the same rows', () => {
+    let table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          test: { description: 'short' },
+          vars: ['ok', 'compact'],
+        },
+      ],
+    };
+    let tableRefreshVersion = 0;
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      tableRefreshVersion,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const initialHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const initialWidth = Number.parseFloat(initialHeader?.style.width || '0');
+    const initialDescriptionHeader = screen
+      .getByText('Description')
+      .closest('th') as HTMLElement | null;
+    const initialDescriptionWidth = Number.parseFloat(initialDescriptionHeader?.style.width || '0');
+
+    table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          test: { description: 'Completed result description '.repeat(20) },
+        },
+      ],
+    };
+    tableRefreshVersion = 1;
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const updatedHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const updatedWidth = Number.parseFloat(updatedHeader?.style.width || '0');
+    const updatedDescriptionHeader = screen
+      .getByText('Description')
+      .closest('th') as HTMLElement | null;
+    const updatedDescriptionWidth = Number.parseFloat(updatedDescriptionHeader?.style.width || '0');
+
+    expect(initialHeader).not.toBeNull();
+    expect(initialDescriptionHeader).not.toBeNull();
+    expect(updatedHeader).not.toBeNull();
+    expect(updatedDescriptionHeader).not.toBeNull();
+    expect(updatedWidth).toBeGreaterThan(initialWidth);
+    expect(updatedDescriptionWidth).toBeGreaterThan(initialDescriptionWidth);
   });
 
   it('renders matching header and body colgroups for the computed widths', () => {
@@ -5262,5 +5573,182 @@ describe('ResultsTable default column sizing', () => {
     expect(promptHeader).not.toBeNull();
     expect(promptWidth).toBeGreaterThan(160);
     expect(promptWidth).toBeLessThanOrEqual(360);
+  });
+
+  it('keeps declared variable widths stable when values first appear on a later page', () => {
+    let table = {
+      ...mockTable,
+      body: [{ ...mockTable.body[0], vars: ['ok', ''] }],
+    };
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const firstPageHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const firstPageWidth = Number.parseFloat(firstPageHeader?.style.width || '0');
+
+    table = {
+      ...table,
+      body: [
+        {
+          ...table.body[0],
+          vars: ['ok', 'Later page variable value '.repeat(20)],
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const laterPageHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const laterPageWidth = Number.parseFloat(laterPageHeader?.style.width || '0');
+
+    expect(firstPageHeader).not.toBeNull();
+    expect(laterPageHeader).not.toBeNull();
+    expect(laterPageWidth).toBe(firstPageWidth);
+  });
+
+  it('sizes description columns from current rows when the stable sample has no descriptions', () => {
+    let table = mockTable;
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          test: { description: 'Later page description '.repeat(20) },
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const descriptionHeader = screen.getByText('Description').closest('th') as HTMLElement | null;
+    const descriptionWidth = Number.parseFloat(descriptionHeader?.style.width || '0');
+
+    expect(descriptionHeader).not.toBeNull();
+    expect(descriptionWidth).toBeGreaterThan(160);
+
+    table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          test: { description: 'short' },
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.02} />);
+
+    const nextPageHeader = screen.getByText('Description').closest('th') as HTMLElement | null;
+    expect(Number.parseFloat(nextPageHeader?.style.width || '0')).toBe(descriptionWidth);
+  });
+
+  it('sizes transform columns from current rows when the stable sample lacks their keys', () => {
+    let table = {
+      ...mockTable,
+      head: { ...mockTable.head, vars: [] },
+    };
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    table = {
+      ...table,
+      body: [
+        {
+          ...table.body[0],
+          outputs: [
+            {
+              pass: true,
+              score: 1,
+              text: 'test output',
+              metadata: {
+                transformDisplayVars: {
+                  __late: 'Later page transform value '.repeat(20),
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const transformHeader = screen.getByText('late').closest('th') as HTMLElement | null;
+    const transformWidth = Number.parseFloat(transformHeader?.style.width || '0');
+
+    expect(transformHeader).not.toBeNull();
+    expect(transformWidth).toBeGreaterThan(160);
+
+    table = {
+      ...table,
+      body: [
+        {
+          ...table.body[0],
+          outputs: [
+            {
+              pass: true,
+              score: 1,
+              text: 'test output',
+              metadata: {
+                transformDisplayVars: {
+                  __late: 'short',
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.02} />);
+
+    const nextPageHeader = screen.getByText('late').closest('th') as HTMLElement | null;
+    expect(Number.parseFloat(nextPageHeader?.style.width || '0')).toBe(transformWidth);
   });
 });

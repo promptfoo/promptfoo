@@ -203,6 +203,45 @@ function estimateMetadataColumnSize(header: string, values: unknown[]): number {
   );
 }
 
+function useStableColumnSizes(
+  resultSetKey: string,
+  rows: ExtendedEvaluateTableRow[],
+  currentSizes: Record<string, number>,
+): Record<string, number> {
+  const previous = useRef({ resultSetKey, rows });
+  const [cached, setCached] = React.useState<{
+    resultSetKey: string;
+    sizes: Record<string, number> | null;
+  }>(() => ({ resultSetKey, sizes: rows.length > 0 ? currentSizes : null }));
+
+  useEffect(() => {
+    const keyChanged = previous.current.resultSetKey !== resultSetKey;
+    const rowsChanged = previous.current.rows !== rows;
+    previous.current = { resultSetKey, rows };
+
+    setCached((current) => {
+      if (keyChanged) {
+        // Controls can change before their response arrives. Do not cache the old rows.
+        return { resultSetKey, sizes: rowsChanged && rows.length > 0 ? currentSizes : null };
+      }
+      if (rows.length === 0 || (!current.sizes && !rowsChanged)) {
+        return current;
+      }
+      const sizes = { ...currentSizes, ...current.sizes };
+      return current.sizes && Object.keys(sizes).length === Object.keys(current.sizes).length
+        ? current
+        : { resultSetKey, sizes };
+    });
+  }, [resultSetKey, rows, currentSizes]);
+
+  // Preserve known widths across pages; size newly discovered columns when they appear.
+  return React.useMemo(
+    () =>
+      cached.resultSetKey === resultSetKey ? { ...currentSizes, ...cached.sizes } : currentSizes,
+    [cached, currentSizes, resultSetKey],
+  );
+}
+
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
   if (output == null) {
     return output;
@@ -1667,6 +1706,8 @@ function ResultsTable({
     evalId,
     table,
     setTable,
+    tableRefreshVersion,
+    tableResultSetKey,
     config,
     version,
     filteredResultsCount,
@@ -1820,49 +1861,114 @@ function ResultsTable({
 
   const injectVarName = config?.redteam?.injectVar || 'prompt';
 
-  const variableColumnSizes = React.useMemo(
-    () =>
-      head.vars.map((varName, idx) =>
-        estimateMetadataColumnSize(
-          varName,
-          tableBody.map((row) =>
-            getVariableCellValue({
-              row,
-              varName,
-              injectVarName,
-              fallbackValue: row.vars[idx],
-            }),
-          ),
-        ),
-      ),
-    [head.vars, injectVarName, tableBody],
-  );
+  // Use the same applied filters for fetches and width-cache resets.
+  const appliedFiltersString = React.useMemo(() => {
+    const appliedFilters = Object.values(filters.values)
+      .filter((filter) => {
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        if (filter.type === 'metric' && filter.operator === 'is_defined') {
+          return Boolean(filter.field);
+        }
+        if (filter.type === 'metric') {
+          return Boolean(filter.value && filter.field);
+        }
+        return Boolean(filter.value);
+      })
+      .sort((a, b) => a.sortIndex - b.sortIndex);
+    return JSON.stringify(
+      appliedFilters.map((f) => ({
+        type: f.type,
+        operator: f.operator,
+        value: f.value,
+        field: f.field,
+        logicOperator: f.logicOperator,
+        sortIndex: f.sortIndex,
+      })),
+    );
+  }, [filters.values]);
 
-  const transformDisplayVarColumnSizes = React.useMemo(() => {
-    return Object.fromEntries(
-      transformDisplayVarKeys.map((varName) => [
+  // Reset default widths for new result sets, while keeping page changes stable.
+  const columnSizingKey = React.useMemo(
+    () =>
+      JSON.stringify({
+        evalId,
+        pageSize: pagination.pageSize,
+        filteredResultsCount,
+        filterMode,
+        searchText: debouncedSearchText,
+        filters: appliedFiltersString,
+        comparisonEvalIds,
+        tableRefreshVersion,
+        tableResultSetKey,
+      }),
+    [
+      evalId,
+      pagination.pageSize,
+      filteredResultsCount,
+      filterMode,
+      debouncedSearchText,
+      appliedFiltersString,
+      comparisonEvalIds,
+      tableRefreshVersion,
+      tableResultSetKey,
+    ],
+  );
+  const currentColumnSizes = React.useMemo(() => {
+    const sizes: Record<string, number> = {};
+    for (const [idx, varName] of head.vars.entries()) {
+      sizes[`variable:${varName}`] = estimateMetadataColumnSize(
         varName,
-        estimateMetadataColumnSize(
-          varName.replace(/^__/, ''),
-          tableBody.map((row) => {
-            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
-              | Record<string, string>
-              | undefined;
-            return transformVars?.[varName] || '';
+        tableBody.map((row) =>
+          getVariableCellValue({
+            row,
+            varName,
+            injectVarName,
+            fallbackValue: row.vars[idx],
           }),
         ),
-      ]),
-    ) as Record<string, number>;
-  }, [tableBody, transformDisplayVarKeys]);
-
-  const descriptionColumnSize = React.useMemo(
-    () =>
-      estimateMetadataColumnSize(
+      );
+    }
+    for (const varName of transformDisplayVarKeys) {
+      sizes[`transform:${varName}`] = estimateMetadataColumnSize(
+        varName.replace(/^__/, ''),
+        tableBody.map((row) => {
+          const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
+            | Record<string, string>
+            | undefined;
+          return transformVars?.[varName] || '';
+        }),
+      );
+    }
+    if (hasDescriptionColumn) {
+      sizes.description = estimateMetadataColumnSize(
         'Description',
-        hasDescriptionColumn ? body.map((row) => row.test.description || '') : [],
-      ),
-    [body, hasDescriptionColumn],
+        tableBody.map((row) => row.test.description || ''),
+      );
+    }
+    return sizes;
+  }, [head.vars, tableBody, injectVarName, transformDisplayVarKeys, hasDescriptionColumn]);
+  const stableColumnSizes = useStableColumnSizes(columnSizingKey, tableBody, currentColumnSizes);
+  const variableColumnSizes = React.useMemo(
+    () => head.vars.map((varName) => stableColumnSizes[`variable:${varName}`]),
+    [head.vars, stableColumnSizes],
   );
+  const transformDisplayVarColumnSizes = React.useMemo(
+    () =>
+      Object.fromEntries(
+        transformDisplayVarKeys.map((varName) => [
+          varName,
+          stableColumnSizes[`transform:${varName}`],
+        ]),
+      ),
+    [stableColumnSizes, transformDisplayVarKeys],
+  );
+  const descriptionColumnSize =
+    stableColumnSizes.description ?? estimateMetadataColumnSize('Description', []);
 
   const parseQueryParams = (queryString: string) => {
     return Object.fromEntries(new URLSearchParams(queryString));
@@ -1887,43 +1993,6 @@ function ResultsTable({
 
     navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
   }, [navigate]);
-
-  // Create a stable reference for applied filters to avoid unnecessary re-renders
-  const appliedFiltersString = React.useMemo(() => {
-    const appliedFilters = Object.values(filters.values)
-      .filter((filter) => {
-        // For metadata filters with exists operator, only field is required
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        // For other metadata operators, both field and value are required
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For metric filters with is_defined operator, only field is required
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        // For metric filters with comparison operators, both field and value are required
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For non-metadata/non-metric filters, value is required
-        return Boolean(filter.value);
-      })
-      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
-    // Create a stable string representation of applied filters
-    return JSON.stringify(
-      appliedFilters.map((f) => ({
-        type: f.type,
-        operator: f.operator,
-        value: f.value,
-        field: f.field,
-        logicOperator: f.logicOperator,
-        sortIndex: f.sortIndex, // Include sortIndex for complete representation
-      })),
-    );
-  }, [filters.values]);
 
   const isFilteringActive =
     Boolean(debouncedSearchText) || filterMode !== 'all' || filters.appliedCount > 0;
