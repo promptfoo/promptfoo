@@ -327,6 +327,9 @@ describe('Providers Routes', () => {
             'Add response transform to extract text field',
             'Update headers to include authentication',
           ],
+          configuration_change_suggestion: {
+            transformResponse: 'json.response',
+          },
         },
       };
 
@@ -349,6 +352,9 @@ describe('Providers Routes', () => {
             'Add response transform to extract text field',
             'Update headers to include authentication',
           ],
+          configuration_change_suggestion: {
+            transformResponse: 'json.response',
+          },
         },
         providerResponse: { output: 'Response' },
         transformedRequest: undefined,
