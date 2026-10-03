@@ -18,6 +18,13 @@ vi.mock('@azure/identity', () => ({
   WorkloadIdentityCredential: vi.fn(),
   ClientCertificateCredential: vi.fn(),
 }));
+vi.mock('../../src/util/azureWorkloadIdentity', () => ({
+  createScopedAzureWorkloadCredential: async (
+    identity: typeof import('@azure/identity'),
+    _native: unknown,
+    options: import('@azure/identity').WorkloadIdentityCredentialOptions,
+  ) => new identity.WorkloadIdentityCredential(options),
+}));
 vi.mock('@azure/storage-blob', () => ({ BlobServiceClient: sdk.blob }));
 let restore: () => void;
 const principal = (label: string) => ({
@@ -325,7 +332,7 @@ describe('Azure identity modes without client secrets', () => {
       tokenFilePath: '/fixture/token',
       authorityHost: undefined,
     });
-    expect(DefaultAzureCredential).not.toHaveBeenCalled();
+    expect(DefaultAzureCredential).toHaveBeenCalledOnce();
   });
   it('forwards a scoped client certificate with the existing environment auth precedence', async () => {
     await cliState.withEnvFileOverrides(

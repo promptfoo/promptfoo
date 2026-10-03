@@ -337,6 +337,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       'AZURE_CLIENT_CERTIFICATE_PASSWORD',
       'AZURE_CLIENT_SEND_CERTIFICATE_CHAIN',
       'AZURE_AUTHORITY_HOST',
+      'AZURE_USERNAME',
+      'AZURE_PASSWORD',
     ];
     const hasConfiguredIdentity = [
       this.config.azureClientId,
@@ -346,10 +348,23 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     if (!hasConfiguredIdentity && !names.some((name) => env[name] !== undefined)) {
       return undefined;
     }
+    const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
+    const usernameIdentity =
+      (!selector || ['prod', 'environmentcredential'].includes(selector)) &&
+      !(
+        this.config.azureClientSecret ??
+        env.AZURE_CLIENT_SECRET ??
+        getEnvString('AZURE_CLIENT_SECRET')
+      ) &&
+      !(env.AZURE_CLIENT_CERTIFICATE_PATH ?? getEnvString('AZURE_CLIENT_CERTIFICATE_PATH')) &&
+      (env.AZURE_PASSWORD ?? getEnvString('AZURE_PASSWORD'))
+        ? (env.AZURE_USERNAME ?? getEnvString('AZURE_USERNAME'))
+        : undefined;
     return getCredentialCacheNamespace(
       [
         this.config.azureClientId ?? env.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID'),
         this.config.azureTenantId ?? env.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'),
+        usernameIdentity,
         this.config.azureAuthorityHost ??
           env.AZURE_AUTHORITY_HOST ??
           getEnvString('AZURE_AUTHORITY_HOST'),

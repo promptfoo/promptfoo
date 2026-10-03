@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { NodeHttpHandler } from '@smithy/node-http-handler';
+import { NodeHttp2Handler, NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -390,33 +390,85 @@ describe('scoped AWS SDK authentication', () => {
     },
   );
 
-  it.each(['config', 'provider'])(
-    'keeps explicit key-pair signing ahead of a %s bearer through the real HTTP handler',
-    async (source) => {
+  it.each(
+    ['runtime', 'knowledge-base'].flatMap((kind) =>
+      ['config', 'provider', 'file', 'ambient'].flatMap((source) =>
+        [false, true].map((configuredKeys) => ({ kind, source, configuredKeys })),
+      ),
+    ),
+  )(
+    'preserves $kind auth with $source bearer and configured keys=$configuredKeys through the real handler',
+    async ({ kind, source, configuredKeys }) => {
+      mockProcessEnv({
+        ...keys('host'),
+        ...(source === 'ambient' ? { AWS_BEARER_TOKEN_BEDROCK: 'lower-bearer' } : {}),
+      });
       const handle = vi.spyOn(NodeHttpHandler.prototype, 'handle').mockResolvedValue({
         response: { statusCode: 200, headers: {}, body: new TextEncoder().encode('{}') },
       });
-      const provider = new AwsBedrockCompletionProvider('fixture', {
-        config: {
-          accessKeyId: 'explicit-access',
-          secretAccessKey: 'explicit-secret',
-          ...(source === 'config' ? { apiKey: 'lower-bearer' } : {}),
+      vi.spyOn(NodeHttp2Handler.prototype, 'handle').mockImplementation(handle);
+      await cliState.withEnvFileOverrides(
+        source === 'file' ? { AWS_BEARER_TOKEN_BEDROCK: 'lower-bearer' } : undefined,
+        async () => {
+          const options = {
+            config: {
+              knowledgeBaseId: 'fixture-kb',
+              ...(configuredKeys
+                ? { accessKeyId: 'explicit-access', secretAccessKey: 'explicit-secret' }
+                : {}),
+              ...(source === 'config' ? { apiKey: 'lower-bearer' } : {}),
+            },
+            env: source === 'provider' ? { AWS_BEARER_TOKEN_BEDROCK: 'lower-bearer' } : undefined,
+          };
+          if (kind === 'runtime') {
+            const client = await new AwsBedrockCompletionProvider(
+              'fixture',
+              options,
+            ).getBedrockInstance();
+            try {
+              await client.invokeModel({
+                modelId: 'fixture',
+                body: new TextEncoder().encode('{}'),
+                contentType: 'application/json',
+              });
+            } finally {
+              client.destroy();
+            }
+          } else {
+            const { RetrieveAndGenerateCommand } = await import(
+              '@aws-sdk/client-bedrock-agent-runtime'
+            );
+            const client = await new AwsBedrockKnowledgeBaseProvider(
+              'fixture',
+              options,
+            ).getKnowledgeBaseClient();
+            try {
+              await client.send(
+                new RetrieveAndGenerateCommand({
+                  input: { text: 'fixture' },
+                  retrieveAndGenerateConfiguration: {
+                    type: 'KNOWLEDGE_BASE',
+                    knowledgeBaseConfiguration: {
+                      knowledgeBaseId: 'fixture-kb',
+                      modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/fixture',
+                    },
+                  },
+                }),
+              );
+            } finally {
+              client.destroy();
+            }
+          }
+          expect(handle).toHaveBeenCalledOnce();
+          const authorization = new Headers(handle.mock.calls[0][0].headers).get('authorization');
+          if (configuredKeys) {
+            expect(authorization).toContain('Credential=explicit-access/');
+            expect(authorization).not.toContain('Bearer');
+          } else {
+            expect(authorization).toContain('Bearer lower-bearer');
+          }
         },
-        env: source === 'provider' ? { AWS_BEARER_TOKEN_BEDROCK: 'lower-bearer' } : undefined,
-      });
-      const client = await provider.getBedrockInstance();
-      try {
-        await client.invokeModel({
-          modelId: 'fixture',
-          body: new TextEncoder().encode('{}'),
-          contentType: 'application/json',
-        });
-        const authorization = new Headers(handle.mock.calls[0][0].headers).get('authorization');
-        expect(authorization).toContain('Credential=explicit-access/');
-        expect(authorization).not.toContain('Bearer');
-      } finally {
-        client.destroy();
-      }
+      );
     },
   );
 

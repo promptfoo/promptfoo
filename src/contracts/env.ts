@@ -169,6 +169,8 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_CLIENT_CERTIFICATE_PASSWORD: z.string().optional(),
   AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: z.string().optional(),
   AZURE_FEDERATED_TOKEN_FILE: z.string().optional(),
+  AZURE_USERNAME: z.string().optional(),
+  AZURE_PASSWORD: z.string().optional(),
   AWS_REGION: z.string().optional(),
   AWS_DEFAULT_REGION: z.string().optional(),
   AWS_SAGEMAKER_MAX_TOKENS: z.string().optional(),

@@ -148,10 +148,15 @@ export class AwsBedrockKnowledgeBaseProvider
     }
     const state = this.getClientState();
     return (state.initialization ??= (async () => {
-      // The Agent Runtime SDK uses SigV4; a custom handler is only needed for proxies.
+      // Keep the existing HTTP/proxy selection while honoring explicit-key
+      // priority at the handler that runs after SDK signing.
       const apiKey = this.getApiKey();
       const handler =
-        apiKey || hasProxyEnv() ? await createBedrockRequestHandler({ apiKey }) : undefined;
+        apiKey || hasProxyEnv()
+          ? await createBedrockRequestHandler({
+              apiKey: this.config.accessKeyId && this.config.secretAccessKey ? undefined : apiKey,
+            })
+          : undefined;
 
       const credentials = await this.getCredentials();
       try {

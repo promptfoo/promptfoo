@@ -14,6 +14,7 @@ import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
 import { getAwsCredentialProviderOptions, resolveAwsCredentials } from '../awsCredentials';
 import { AwsBedrockGenericProvider } from './base';
+import { getScopedBedrockTokenOptions } from './util';
 
 import type { BlobRef } from '../../blobs';
 import type { EnvOverrides } from '../../types/env';
@@ -203,6 +204,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
+        ...getScopedBedrockTokenOptions(),
         ...getAwsCredentialProviderOptions(this.env),
         ...(credentials ? { credentials } : {}),
         ...(this.getProfile() === undefined ? {} : { profile: this.getProfile() }),
@@ -248,6 +250,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
+        ...getScopedBedrockTokenOptions(),
         ...getAwsCredentialProviderOptions(this.env),
         ...(credentials ? { credentials } : {}),
         ...(this.getProfile() === undefined ? {} : { profile: this.getProfile() }),

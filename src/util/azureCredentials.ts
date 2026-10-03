@@ -1,4 +1,5 @@
 import { getEnvOverrides, getEnvString } from '../envars';
+import { createScopedAzureWorkloadCredential } from './azureWorkloadIdentity';
 import type { TokenCredential } from '@azure/identity';
 
 import type { EnvOverrides } from '../types/env';
@@ -25,6 +26,8 @@ export async function createAzureCredential(
     'AZURE_CLIENT_CERTIFICATE_PASSWORD',
     'AZURE_CLIENT_SEND_CERTIFICATE_CHAIN',
     'AZURE_FEDERATED_TOKEN_FILE',
+    'AZURE_USERNAME',
+    'AZURE_PASSWORD',
   ];
   const selectedAuthorityHost =
     config.azureAuthorityHost ?? env?.AZURE_AUTHORITY_HOST ?? getEnvString('AZURE_AUTHORITY_HOST');
@@ -102,14 +105,41 @@ export async function createAzureCredential(
     );
   }
   const tokenFilePath = value('AZURE_FEDERATED_TOKEN_FILE');
-  if (includesWorkload && tokenFilePath && clientId && tenantId) {
-    rejectHostMasks({ AZURE_CLIENT_ID: clientId, AZURE_TENANT_ID: tenantId });
-    return new identity.WorkloadIdentityCredential({
-      clientId,
+  const username = value('AZURE_USERNAME');
+  const password = value('AZURE_PASSWORD');
+  if (includesEnvironment && username && password && clientId && tenantId) {
+    const credential = new identity.UsernamePasswordCredential(
       tenantId,
-      tokenFilePath,
-      authorityHost,
-    });
+      clientId,
+      username,
+      password,
+      {
+        authorityHost,
+      },
+    );
+    return {
+      async getToken(scopes, options) {
+        try {
+          return await credential.getToken(scopes, options);
+        } catch (error) {
+          // EnvironmentCredential treats errors from this mode as fatal; do
+          // not let workload/developer discovery silently choose another user.
+          throw new identity.AuthenticationError(400, {
+            error: 'EnvironmentCredential authentication failed.',
+            error_description: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+    };
+  }
+  if ((includesWorkload || includesManaged) && tokenFilePath && clientId && tenantId) {
+    rejectHostMasks({ AZURE_CLIENT_ID: clientId, AZURE_TENANT_ID: tenantId });
+    return createScopedAzureWorkloadCredential(
+      identity,
+      defaultCredential(),
+      { clientId, tenantId, tokenFilePath, authorityHost },
+      selector,
+    );
   }
   // Reject only masks that could restore a usable ambient mode. Partial host
   // settings cannot select that identity and must retain ordinary SDK fallback.
@@ -134,6 +164,8 @@ export async function createAzureCredential(
       ? {
           AZURE_CLIENT_SECRET: clientSecret,
           AZURE_CLIENT_CERTIFICATE_PATH: certificatePath,
+          AZURE_USERNAME: username,
+          AZURE_PASSWORD: password,
         }
       : {}),
     ...(hostWorkloadAvailable ? { AZURE_FEDERATED_TOKEN_FILE: tokenFilePath } : {}),

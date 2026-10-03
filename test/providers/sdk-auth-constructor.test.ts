@@ -237,7 +237,9 @@ describe('real cloud SDK credential construction without authentication calls', 
         restoreSelected();
       }
       const actual = await createAzureCredential({}, selected);
-      expect(actual.constructor).toBe(expected.constructor);
+      const selectedCredential =
+        mode === 'AZURE_FEDERATED_TOKEN_FILE' ? Reflect.get(actual, '_sources')[0] : actual;
+      expect(selectedCredential.constructor).toBe(expected.constructor);
     },
   );
   it.each(
@@ -400,9 +402,10 @@ describe('real cloud SDK credential construction without authentication calls', 
         AZURE_FEDERATED_TOKEN_FILE: '/fixture/scoped-token',
       },
     );
-    expect(credential.constructor.name).toBe('WorkloadIdentityCredential');
-    expect(Reflect.get(credential, 'client').tenantId).toBe('scoped-tenant');
-    expect(Reflect.get(credential, 'federatedTokenFilePath')).toBe('/fixture/scoped-token');
+    const selectedCredential = Reflect.get(credential, '_sources')[0];
+    expect(selectedCredential.constructor.name).toBe('WorkloadIdentityCredential');
+    expect(Reflect.get(selectedCredential, 'client').tenantId).toBe('scoped-tenant');
+    expect(Reflect.get(selectedCredential, 'federatedTokenFilePath')).toBe('/fixture/scoped-token');
   });
   it.each(['authorized_user', 'service_account'])(
     'retains explicit SDK options when loading scoped %s ADC',
