@@ -513,12 +513,13 @@ interface ProgressData {
   metrics: {
     testPassCount: number;
     testFailCount: number;
+    testErrorCount?: number;
     score: number;
   };
 }
 
-function getPassRate(metrics: ProgressData['metrics']): number {
-  const totalTests = metrics.testPassCount + metrics.testFailCount;
+export function getPassRate(metrics: ProgressData['metrics']): number {
+  const totalTests = metrics.testPassCount + metrics.testFailCount + (metrics.testErrorCount ?? 0);
   return totalTests === 0 ? 0 : (metrics.testPassCount / totalTests) * 100;
 }
 
