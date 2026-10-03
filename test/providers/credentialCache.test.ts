@@ -24,6 +24,32 @@ afterEach(() => {
 });
 
 describe('scoped SDK response cache compatibility', () => {
+  it('tracks role-source availability without fingerprinting secret or optional session values', () => {
+    restore = mockProcessEnv({ AWS_SECRET_ACCESS_KEY: undefined, AWS_SESSION_TOKEN: undefined });
+    const env = { AWS_PROFILE: 'fixture', AWS_ACCESS_KEY_ID: 'source-access' };
+    const namespace = (secret: string | undefined, session?: string) =>
+      getAwsCredentialCacheNamespace(
+        {},
+        { ...env, AWS_SECRET_ACCESS_KEY: secret, AWS_SESSION_TOKEN: session },
+      );
+    const available = namespace('first-secret');
+    const unavailable = namespace(undefined);
+    const invalid = namespace(' \t ');
+    expect(new Set([available, unavailable, invalid]).size).toBe(3);
+    expect(namespace('second-secret')).toBe(available);
+    expect(namespace('first-secret', '')).toBe(available);
+    expect(namespace('first-secret', ' \t ')).toBe(available);
+    expect(namespace('')).toBe(unavailable);
+    expect(getAwsCredentialCacheNamespace({}, env)).toBe(unavailable);
+    cliState.withEnvFileOverrides({ AWS_SECRET_ACCESS_KEY: 'file-secret' }, () => {
+      expect(namespace(undefined)).toBe(available);
+      expect(namespace('')).toBe(unavailable);
+    });
+    mockProcessEnv({ AWS_SECRET_ACCESS_KEY: 'host-secret' });
+    expect(namespace(undefined)).toBe(available);
+    expect(namespace('')).toBe(unavailable);
+  });
+
   it.each(['AWS_CONFIG_FILE', 'AWS_SHARED_CREDENTIALS_FILE'] as const)(
     'tracks the implicit default profile counterpart when only %s is scoped',
     async (selector) => {

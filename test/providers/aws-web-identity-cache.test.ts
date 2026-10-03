@@ -46,7 +46,11 @@ beforeEach(() => {
   const handle = async (request: HttpRequest) => {
     if (request.hostname.startsWith('sts.')) {
       const params = new URLSearchParams(String(request.body));
-      expect(params.get('Action')).toBe('AssumeRoleWithWebIdentity');
+      const action = params.get('Action');
+      expect(['AssumeRole', 'AssumeRoleWithWebIdentity']).toContain(action);
+      if (action === 'AssumeRole') {
+        expect(request.headers.authorization).toContain('Credential=source-access/');
+      }
       const role = params.get('RoleArn')!;
       assumedRoles.push(role);
       if (role === roles.denied) {
@@ -66,10 +70,10 @@ beforeEach(() => {
           statusCode: 200,
           headers: { 'content-type': 'text/xml' },
           body: Buffer.from(
-            '<AssumeRoleWithWebIdentityResponse><AssumeRoleWithWebIdentityResult><Credentials>' +
+            `<${action}Response><${action}Result><Credentials>` +
               `<AccessKeyId>${accessKey}</AccessKeyId><SecretAccessKey>fixture-secret</SecretAccessKey>` +
               '<SessionToken>fixture-session</SessionToken><Expiration>2100-01-01T00:00:00Z</Expiration>' +
-              '</Credentials></AssumeRoleWithWebIdentityResult></AssumeRoleWithWebIdentityResponse>',
+              `</Credentials></${action}Result></${action}Response>`,
           ),
         },
       };
@@ -99,6 +103,68 @@ afterEach(() => {
 });
 
 describe('AWS web identity response cache isolation', () => {
+  it.each(
+    ['completion', 'embedding'].flatMap((kind) =>
+      ['missing', 'undefined', 'empty', 'whitespace'].map((secretState) => ({ kind, secretState })),
+    ),
+  )(
+    'separates $kind profile and fallback identities when the source secret becomes $secretState',
+    async ({ kind, secretState }) => {
+      const profileFile = path.join(dir, 'profile');
+      fs.writeFileSync(
+        profileFile,
+        `[profile fixture]\nrole_arn=${roles.second}\ncredential_source=Environment\n`,
+      );
+      const invoke = async (secret: string | undefined, includeSecret = true) => {
+        const options = {
+          config: { region: 'us-east-1', modelType: 'custom' as const },
+          env: {
+            AWS_PROFILE: 'fixture',
+            AWS_CONFIG_FILE: profileFile,
+            AWS_ACCESS_KEY_ID: 'source-access',
+            AWS_WEB_IDENTITY_TOKEN_FILE: tokenFile,
+            ...(includeSecret ? { AWS_SECRET_ACCESS_KEY: secret } : {}),
+          },
+        };
+        const provider =
+          kind === 'completion'
+            ? new SageMakerCompletionProvider('same-endpoint', options)
+            : new SageMakerEmbeddingProvider('same-endpoint', options);
+        const client = await provider.getSageMakerRuntimeInstance();
+        try {
+          return kind === 'completion'
+            ? await provider.callApi('same input')
+            : await (provider as SageMakerEmbeddingProvider).callEmbeddingApi('same input');
+        } finally {
+          client.destroy();
+        }
+      };
+      await withCacheEnabled(true, async () => {
+        expect(await invoke('source-secret')).toMatchObject(
+          kind === 'completion' ? { output: 'second-access' } : { embedding: [2] },
+        );
+        expect(await invoke('another-valid-secret')).toMatchObject({ cached: true });
+        const secretValues: Record<string, string | undefined> = { empty: '', whitespace: ' \t ' };
+        const secret = secretValues[secretState];
+        const fallback = await invoke(secret, secretState !== 'missing');
+        expect(fallback.cached).not.toBe(true);
+        if (secretState === 'whitespace') {
+          expect(fallback.error).toContain('AWS role source credentials are incomplete');
+          expect(assumedRoles).toEqual([roles.second]);
+          expect(endpointKeys).toEqual(['second-access']);
+        } else {
+          expect(fallback).toMatchObject(
+            kind === 'completion' ? { output: 'first-access' } : { embedding: [1] },
+          );
+          expect(await invoke(secret, secretState !== 'missing')).toMatchObject({ cached: true });
+          expect(assumedRoles).toEqual([roles.second, roles.first]);
+          expect(endpointKeys).toEqual(['second-access', 'first-access']);
+        }
+        expect(await invoke('source-secret')).toMatchObject({ cached: true });
+      });
+    },
+  );
+
   it.each(
     ['completion', 'embedding'].flatMap((kind) =>
       ['second', 'denied'].flatMap((next) =>

@@ -344,20 +344,22 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       this.config.azureClientId,
       this.config.azureTenantId,
       this.config.azureClientSecret,
+      this.config.azureAuthorityHost,
     ].some((value) => value !== undefined);
     if (!hasConfiguredIdentity && !names.some((name) => env[name] !== undefined)) {
       return undefined;
     }
     const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
+    const clientSecret =
+      this.config.azureClientSecret ??
+      env.AZURE_CLIENT_SECRET ??
+      getEnvString('AZURE_CLIENT_SECRET');
+    const password = env.AZURE_PASSWORD ?? getEnvString('AZURE_PASSWORD');
     const usernameIdentity =
       (!selector || ['prod', 'environmentcredential'].includes(selector)) &&
-      !(
-        this.config.azureClientSecret ??
-        env.AZURE_CLIENT_SECRET ??
-        getEnvString('AZURE_CLIENT_SECRET')
-      ) &&
+      !clientSecret &&
       !(env.AZURE_CLIENT_CERTIFICATE_PATH ?? getEnvString('AZURE_CLIENT_CERTIFICATE_PATH')) &&
-      (env.AZURE_PASSWORD ?? getEnvString('AZURE_PASSWORD'))
+      password
         ? (env.AZURE_USERNAME ?? getEnvString('AZURE_USERNAME'))
         : undefined;
     return getCredentialCacheNamespace(
@@ -368,6 +370,15 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         this.config.azureAuthorityHost ??
           env.AZURE_AUTHORITY_HOST ??
           getEnvString('AZURE_AUTHORITY_HOST'),
+        // Availability changes can select a different native fallback identity.
+        // Partition those paths without persisting secrets or their fingerprints.
+        selector,
+        clientSecret
+          ? clientSecret.trim()
+            ? 'secret-present'
+            : 'secret-invalid'
+          : 'secret-absent',
+        password ? 'password-present' : 'password-absent',
       ],
       ['AZURE_FEDERATED_TOKEN_FILE', 'AZURE_CLIENT_CERTIFICATE_PATH']
         .map((name) => env[name] ?? getEnvString(name))

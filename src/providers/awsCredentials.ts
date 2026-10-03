@@ -204,6 +204,19 @@ export function getAwsCredentialCacheNamespace(
     )
       ? (scoped.AWS_ACCESS_KEY_ID ?? getEnvString('AWS_ACCESS_KEY_ID'))
       : undefined;
+  // A selected profile can use Environment credentials or fall through when
+  // their key pair is unavailable. Partition that choice without persisting a
+  // secret or its hash; whitespace-only selected keys instead fail terminally.
+  const sourceAccessKey = scoped.AWS_ACCESS_KEY_ID ?? getEnvString('AWS_ACCESS_KEY_ID');
+  const sourceSecretKey = scoped.AWS_SECRET_ACCESS_KEY ?? getEnvString('AWS_SECRET_ACCESS_KEY');
+  const profileSourceAvailability =
+    source !== config && source.profile
+      ? !sourceAccessKey || !sourceSecretKey
+        ? 'source-unavailable'
+        : !sourceAccessKey.trim() || !sourceSecretKey.trim()
+          ? 'source-invalid'
+          : 'source-available'
+      : undefined;
   // A scoped profile can fall through to the SDK's ambient web-identity link.
   // Include its public selectors and file revision in this new scoped namespace.
   const webIdentityTokenFile =
@@ -228,7 +241,14 @@ export function getAwsCredentialCacheNamespace(
     );
   }
   return getCredentialCacheNamespace(
-    [source.accessKeyId, source.profile, roleArn, roleSessionName, profileSourceAccessKey],
+    [
+      source.accessKeyId,
+      source.profile,
+      roleArn,
+      roleSessionName,
+      profileSourceAccessKey,
+      ...(profileSourceAvailability ? [profileSourceAvailability] : []),
+    ],
     [...new Set(files.filter((file): file is string => file !== undefined))],
   );
 }
