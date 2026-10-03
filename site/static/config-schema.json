@@ -675,6 +675,12 @@
         "AZURE_FEDERATED_TOKEN_FILE": {
           "type": "string"
         },
+        "AZURE_USERNAME": {
+          "type": "string"
+        },
+        "AZURE_PASSWORD": {
+          "type": "string"
+        },
         "AWS_REGION": {
           "type": "string"
         },
