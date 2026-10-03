@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
 
+import { setUserEmail } from '../../../src/globalConfig/accounts';
 import Eval, { EvalQueries } from '../../../src/models/eval';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
@@ -63,6 +64,19 @@ describe('Eval Routes - Zod Validation', () => {
   });
 
   describe('PATCH /api/eval/:id/author', () => {
+    it('clears the author without changing the account email', async () => {
+      const mockEval = { id: 'test-id', author: 'old@example.com', save: mockSave };
+      mockFindById.mockResolvedValue(mockEval);
+      mockSave.mockResolvedValue(undefined);
+
+      const response = await api.patch('/api/eval/test-id/author').send({ author: '' });
+
+      expect(response.status).toBe(200);
+      expect(mockEval.author).toBeNull();
+      expect(mockSave).toHaveBeenCalledOnce();
+      expect(setUserEmail).not.toHaveBeenCalled();
+    });
+
     it('should return 400 when body is empty', async () => {
       const response = await api.patch('/api/eval/test-id/author').send({});
 
