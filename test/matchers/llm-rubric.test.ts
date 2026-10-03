@@ -2484,6 +2484,80 @@ Evaluate the response
     });
   });
 
+  it.each([
+    { output: 'status: complete', blobBacked: false },
+    { output: '', blobBacked: false },
+    { output: 'status: complete', blobBacked: true },
+  ])(
+    'sends the audio transcript to the remote grader for $output (blob: $blobBacked)',
+    async ({ output, blobBacked }) => {
+      const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      cliState.config = { redteam: {} };
+      const audio = {
+        ...(blobBacked
+          ? {
+              blobRef: {
+                hash: 'a'.repeat(64),
+                uri: `promptfoo://blob/${'a'.repeat(64)}`,
+                provider: 'filesystem',
+                mimeType: 'audio/wav',
+                sizeBytes: 12,
+              },
+            }
+          : { data: 'UklGRgAAAABXQVZF' }),
+        format: 'wav',
+        transcript: 'Hello.',
+      };
+
+      await matchesLlmRubric('Contains hello', output, {}, {}, undefined, {
+        providerResponse: { output, audio },
+      });
+
+      expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+        expect.objectContaining({ output: 'Hello.' }),
+      );
+    },
+  );
+
+  it.each([
+    { output: '', blobBacked: false },
+    { output: '   ', blobBacked: false },
+    { output: '[Audio output]', blobBacked: false },
+    { output: '', blobBacked: true },
+    { output: 'Generated 42 characters of speech', blobBacked: true },
+    { output: 'Generated 42 characters of speech (streaming)', blobBacked: false },
+  ])(
+    'rejects output $output without evidence before remote grading (blob: $blobBacked)',
+    async ({ output, blobBacked }) => {
+      const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      cliState.config = { redteam: {} };
+      const audio = {
+        ...(blobBacked
+          ? {
+              blobRef: {
+                hash: 'a'.repeat(64),
+                uri: `promptfoo://blob/${'a'.repeat(64)}`,
+                provider: 'filesystem',
+                mimeType: 'audio/wav',
+                sizeBytes: 12,
+              },
+            }
+          : { data: 'UklGRgAAAABXQVZF' }),
+        format: 'wav',
+        transcript: '   ',
+      };
+
+      await expect(
+        matchesLlmRubric('Contains hello', output, {}, {}, undefined, {
+          providerResponse: { output, audio },
+        }),
+      ).rejects.toThrow('no transcript or usable text');
+      expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    },
+  );
+
   it('should call remote with image outputs when multimodal grading is remote-eligible', async () => {
     const rubric = 'Does the image match?';
     const llmOutput = 'Generated image';

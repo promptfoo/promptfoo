@@ -38,6 +38,8 @@ const DEFAULT_GRADING_IMAGE_MAX_RAW_CHARS =
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS =
   Math.ceil(DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES / 3) * 4 +
   DEFAULT_GRADING_MAX_IMAGES * DATA_URI_METADATA_MAX_CHARS;
+/** Stands in for an audio-only output, which has no text a grader could read. */
+export const ATTACHED_AUDIO_OUTPUT_PLACEHOLDER = '[Audio output]';
 const MULTIMODAL_GRADING_INSTRUCTION =
   'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.';
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
@@ -709,6 +711,31 @@ function appendMediaToChatPrompt(
   ]);
 }
 
+/** Select text evidence when the grader cannot receive the audio. */
+export function getAudioGradingFallback<T>(
+  output: T,
+  audio: NonNullable<ProviderResponse['audio']>,
+  grader: string,
+): T | string {
+  const evidence = audio.transcript?.trim() ? audio.transcript : output;
+  if (
+    evidence == null ||
+    (typeof evidence === 'string' &&
+      (!evidence.trim() ||
+        evidence.trim() === ATTACHED_AUDIO_OUTPUT_PLACEHOLDER ||
+        (!audio.transcript?.trim() &&
+          /^Generated \d+ characters of speech(?: \(streaming\))?$/.test(evidence.trim()))))
+  ) {
+    throw new Error(
+      `${grader} cannot listen to audio output and the output has no transcript or usable text. Grade with an audio-capable provider such as openai:chat:gpt-audio-1.5.`,
+    );
+  }
+  logger.warn('[Grading] Grader cannot listen to audio; grading the text output instead', {
+    grader,
+  });
+  return evidence;
+}
+
 function buildAudioGradingPart(
   audio: NonNullable<ProviderResponse['audio']>,
   provider: ApiProvider,
@@ -867,8 +894,6 @@ export async function runJsonGradingPrompt({
   audio?: ProviderResponse['audio'];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
-  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
-
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
     defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
@@ -878,6 +903,13 @@ export async function runJsonGradingPrompt({
     defaultProvider,
     checkName,
   );
+  if (audio && finalProvider.getAudioInputFormat?.() !== 'openai') {
+    vars = {
+      ...vars,
+      output: getAudioGradingFallback(vars.output, audio, `Grading provider ${finalProvider.id()}`),
+    };
+  }
+  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
   const {
     prompt: providerPrompt,
     imageCount,
@@ -889,7 +921,7 @@ export async function runJsonGradingPrompt({
     label,
     vars,
     providerCallContext,
-    providerPromptConfig,
+    audioAttached ? { ...providerPromptConfig, modalities: ['text'] } : providerPromptConfig,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {

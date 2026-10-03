@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiLiveProvider } from '../../src/providers/openai/live';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
@@ -177,6 +178,167 @@ describe('llm-rubric audio grading', () => {
       expect(result.metadata).not.toHaveProperty('renderedGradingPromptAudio');
     },
   );
+
+  it('requests a text-only grade so the audio grader does not answer in speech', async () => {
+    await grade(new OpenAiChatCompletionProvider('gpt-audio-1.5'));
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+    expect(body.modalities).toEqual(['text']);
+  });
+
+  it.each([new OpenAiChatCompletionProvider('gpt-4.1'), new OpenAiResponsesProvider('gpt-5.6')])(
+    'warns when a text grader drops the audio ($modelName)',
+    async (provider) => {
+      const warn = vi.spyOn(logger, 'warn');
+      const call = vi
+        .spyOn(provider, 'callApi')
+        .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+      expect(await grade(provider)).toMatchObject({ pass: true });
+      expect(JSON.parse(call.mock.calls[0][0])[1].content).toBe(
+        'Grade Hello. for The speaker sounds calm.',
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('grading the text output instead'),
+        expect.anything(),
+      );
+    },
+  );
+
+  it.each([new OpenAiChatCompletionProvider('gpt-4.1'), new OpenAiResponsesProvider('gpt-5.6')])(
+    'grades the text output of a transcript-less target ($modelName)',
+    async (provider) => {
+      const call = vi
+        .spyOn(provider, 'callApi')
+        .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+      expect(await grade(provider, { data: audio.data, format: 'wav' })).toMatchObject({
+        pass: true,
+      });
+      expect(JSON.parse(call.mock.calls[0][0])[1].content).toBe(
+        'Grade Hello. for The speaker sounds calm.',
+      );
+    },
+  );
+
+  it.each([new OpenAiChatCompletionProvider('gpt-4.1'), new OpenAiResponsesProvider('gpt-5.6')])(
+    'fails instead of grading an audio placeholder ($modelName)',
+    async (provider) => {
+      const call = vi.spyOn(provider, 'callApi');
+      await expect(
+        grade(provider, { ...audio, transcript: undefined }, {
+          output: audio.data,
+          outputString: audio.data,
+          providerResponse: {
+            output: audio.data,
+            isBase64: true,
+            audio: { ...audio, transcript: undefined },
+          },
+        } as Partial<AssertionParams>),
+      ).rejects.toThrow('cannot listen to audio output and the output has no transcript');
+      expect(call).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['status: complete', '', '   '])(
+    'uses the transcript when the separate output is %j',
+    async (output) => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+      const call = vi
+        .spyOn(provider, 'callApi')
+        .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+      await grade(provider, audio, { output, outputString: output });
+      expect(JSON.parse(call.mock.calls[0][0])[1].content).toBe(
+        'Grade Hello. for The speaker sounds calm.',
+      );
+      expect(call.mock.calls[0][1]?.vars.output).toBe('Hello.');
+    },
+  );
+
+  it.each([
+    { output: '', transcript: undefined },
+    { output: '   ', transcript: undefined },
+    { output: '', transcript: '   ' },
+    { output: '  [Audio output]  ', transcript: undefined },
+  ])('rejects missing text evidence: %j', async ({ output, transcript }) => {
+    const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+    const call = vi.spyOn(provider, 'callApi');
+    await expect(
+      grade(provider, { ...audio, transcript }, { output, outputString: output }),
+    ).rejects.toThrow('no transcript or usable text');
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it('accepts a transcript that quotes a text-to-speech status message', async () => {
+    const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+    const call = vi
+      .spyOn(provider, 'callApi')
+      .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+    const transcript = 'Generated 42 characters of speech';
+    await grade(provider, { ...audio, transcript });
+    expect(call.mock.calls[0][1]?.vars.output).toBe(transcript);
+  });
+
+  it('uses a blob-backed transcript as text evidence', async () => {
+    const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+    const call = vi
+      .spyOn(provider, 'callApi')
+      .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+    await grade(
+      provider,
+      {
+        transcript: 'Hello.',
+        blobRef: {
+          hash: 'a'.repeat(64),
+          uri: `promptfoo://blob/${'a'.repeat(64)}`,
+          provider: 'filesystem',
+          mimeType: 'audio/wav',
+          sizeBytes: 12,
+        },
+      },
+      { output: 'status: complete', outputString: 'status: complete' },
+    );
+    expect(call.mock.calls[0][1]?.vars.output).toBe('Hello.');
+  });
+
+  it.each([
+    '',
+    'Generated 42 characters of speech',
+    'Generated 42 characters of speech (streaming)',
+  ])('rejects non-content audio output %j with a text grader', async (output) => {
+    const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+    const call = vi.spyOn(provider, 'callApi');
+    await expect(
+      grade(
+        provider,
+        {
+          blobRef: {
+            hash: 'a'.repeat(64),
+            uri: `promptfoo://blob/${'a'.repeat(64)}`,
+            provider: 'filesystem',
+            mimeType: 'audio/wav',
+            sizeBytes: 12,
+          },
+        },
+        { output, outputString: output },
+      ),
+    ).rejects.toThrow('no transcript or usable text');
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it('keeps the existing audio format hook for custom graders', async () => {
+    const callApi = vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+      output: '{"pass":true,"score":1}',
+    });
+    const provider: ApiProvider = {
+      id: () => 'custom-audio-grader',
+      getAudioInputFormat: () => 'openai',
+      callApi,
+    };
+    await grade(provider);
+    expect(JSON.parse(callApi.mock.calls[0][0])[1].content).toContainEqual({
+      type: 'input_audio',
+      input_audio: { data: audio.data, format: 'wav' },
+    });
+    expect(callApi.mock.calls[0][1]?.prompt.config?.modalities).toEqual(['text']);
+  });
 
   it('does not attach original audio after an assertion transform', async () => {
     const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5');

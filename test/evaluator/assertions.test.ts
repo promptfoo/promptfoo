@@ -63,6 +63,76 @@ describeEvaluator('evaluator assertions', () => {
     },
   );
 
+  it.each(['', '   '])('errors for audio-only output %j with a text grader', async (output) => {
+    vi.mocked(mockApiProvider.callApi).mockResolvedValue({
+      output,
+      audio: { data: Buffer.alloc(2048, 1).toString('base64'), format: 'wav' },
+    });
+    const grader: ApiProvider = {
+      id: () => 'text-grader',
+      callApi: vi.fn().mockResolvedValue({ output: '{"pass":true,"score":1}' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Say hello')],
+      tests: [
+        { assert: [{ type: 'llm-rubric', value: 'The speaker sounds calm.', provider: grader }] },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0]).toMatchObject({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      error: expect.stringContaining('no transcript or usable text'),
+    });
+    expect(grader.callApi).not.toHaveBeenCalled();
+  });
+
+  it.each(['provider', 'test', 'postprocess'] as const)(
+    'grades the explicit %s transform instead of the original audio transcript',
+    async (level) => {
+      const target: ApiProvider = {
+        id: () => 'transformed-audio-target',
+        ...(level === 'provider' && { transform: 'JSON.parse(output).value' }),
+        callApi: vi.fn().mockResolvedValue({
+          output: '{"value":"redacted"}',
+          audio: {
+            data: Buffer.alloc(2048, 1).toString('base64'),
+            format: 'wav',
+            transcript: 'Original transcript.',
+          },
+        }),
+      };
+      const grader: ApiProvider = {
+        id: () => 'text-grader',
+        callApi: vi.fn().mockResolvedValue({ output: '{"pass":true,"score":1}' }),
+      };
+      const testSuite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('Say hello')],
+        tests: [
+          {
+            options:
+              level === 'provider'
+                ? {}
+                : { [level === 'test' ? 'transform' : 'postprocess']: 'JSON.parse(output).value' },
+            assert: [{ type: 'llm-rubric', value: 'The output is redacted.', provider: grader }],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results[0].success).toBe(true);
+      expect(summary.results[0].response?.output).toBe('redacted');
+      expect(vi.mocked(grader.callApi).mock.calls[0][1]?.vars.output).toBe('redacted');
+      expect(vi.mocked(grader.callApi).mock.calls[0][0]).not.toContain('Original transcript.');
+    },
+  );
+
   it('runs different audio graders serially at maxConcurrency 1', async () => {
     vi.mocked(mockApiProvider.callApi).mockResolvedValue({
       output: 'Hello.',
