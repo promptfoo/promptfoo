@@ -1952,6 +1952,29 @@ describe('loadTestsFromGlob', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No test files found'));
   });
 
+  it("loads a row's vars files and Python provider from its tests file directory", async () => {
+    const configDir = path.resolve('fixture-config');
+    const testsFile = path.join(configDir, 'tests', 'cases.yaml');
+    const varsFile = path.join(configDir, 'vars', 'extra.yaml');
+    vi.mocked(fs.existsSync).mockImplementation((file) => file === testsFile);
+    vi.mocked(globSync).mockImplementation((pattern) =>
+      pattern === path.join(configDir, 'vars', '*.yaml') ? [varsFile] : [],
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((file) =>
+      file === varsFile
+        ? 'topic: nested'
+        : '- vars: ../vars/*.yaml\n  provider: python:provider.py\n',
+    );
+
+    const [test] = await loadTestsFromGlob('tests/cases.yaml', configDir);
+
+    expect(test.vars).toEqual({ topic: 'nested' });
+    expect(loadApiProvider).toHaveBeenCalledWith(
+      'python:provider.py',
+      expect.objectContaining({ basePath: path.dirname(testsFile) }),
+    );
+  });
+
   it('should handle Hugging Face dataset URLs', async () => {
     const mockDataset: TestCase[] = [
       {
