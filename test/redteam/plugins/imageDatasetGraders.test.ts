@@ -660,6 +660,35 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       false,
     ],
     ['custom prompt envelope', JSON.stringify({ prompt: actualTask, image: inputImage }), true],
+    ...['role', 'type', 'mimeType', 'mime_type', 'media_type'].map(
+      (key) =>
+        [
+          `custom task in ${key}`,
+          JSON.stringify({ [key]: actualTask, image: inputImage }),
+          true,
+        ] as const,
+    ),
+    ...[
+      'prompt',
+      'question',
+      'text',
+      'instructions',
+      'query',
+      'message',
+      'content',
+      'image',
+      'customTask',
+    ].map(
+      (key) =>
+        [
+          `literal JSON in custom ${key}`,
+          JSON.stringify({
+            image: inputImage,
+            [key]: JSON.stringify({ type: 'image', data: actualTask }),
+          }),
+          true,
+        ] as const,
+    ),
     ...['image', 'images', 'image_url', 'input_image'].map(
       (key) => [key + ' literal query', JSON.stringify({ [key]: actualTask }), true] as const,
     ),
@@ -1151,6 +1180,8 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       { file_data: { mime_type: 'image/png', file_uri: nativeImageData } },
       { images: [{ base64: nativeImageData }] },
       { type: 'input_image', file_id: nativeImageData },
+      { type: 'file', file: { file_data: nativeImageData, file_id: nativeImageData } },
+      { mimeType: 'application/pdf', data: nativeImageData },
       {
         type: 'input_file',
         file_data: nativeImageData,
@@ -1285,20 +1316,25 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
     expect(rubric).toContain(`<UserQuery>{"image":"${literal}"}</UserQuery>`);
   });
 
-  it('removes raw media variables that Google converts to inline attachments', async () => {
-    const rawImage = `/9j/${Buffer.from('PRIVATE_JPEG_BYTES').toString('base64')}`;
-    const { rubric } = await new Grader().getResult(
-      `${actualTask}\n${rawImage}`,
-      'Blue.',
-      { vars: { image: inputImage, otherImage: rawImage }, metadata: safeMetadata },
-      undefined,
-      undefined,
-    );
-    expect(rubric).toContain(actualTask);
-    expect(rubric).not.toContain(rawImage);
-  });
+  it.each([
+    `/9j/${Buffer.from('PRIVATE_JPEG_BYTES').toString('base64')}`,
+    Buffer.from('%PDF-1.7\nPRIVATE_PDF_BYTES\n%%EOF').toString('base64'),
+  ])(
+    'removes raw media variables that Google converts to inline attachments: %s',
+    async (rawImage) => {
+      const { rubric } = await new Grader().getResult(
+        `${actualTask}\n${rawImage}`,
+        'Blue.',
+        { vars: { image: inputImage, otherImage: rawImage }, metadata: safeMetadata },
+        undefined,
+        undefined,
+      );
+      expect(rubric).toContain(actualTask);
+      expect(rubric).not.toContain(rawImage);
+    },
+  );
 
-  it.each(['plain', 'structured'])(
+  it.each(['plain', 'structured', 'structured unknown'])(
     'redacts a non-selected wrapped image in %s requests without attaching it',
     async (format) => {
       const otherImage = 'data:image/png;base64,QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=';
@@ -1312,7 +1348,11 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
         'Blue.',
         {
           vars: Object.defineProperty(
-            { image: inputImage, otherImage, qaPrompt: request },
+            {
+              image: inputImage,
+              ...(format !== 'structured unknown' && { otherImage }),
+              qaPrompt: request,
+            },
             'unused',
             {
               enumerable: true,

@@ -24,11 +24,11 @@ export function getImageDatasetRequestText(
       if (typeof value !== 'string') {
         return [];
       }
-      if (/^\s*data:(?:image|audio|video)\/[^,]*;base64,/i.test(value)) {
+      if (/^\s*data:(?:(?:image|audio|video)\/|application\/pdf(?=;))[^,]*;base64,/i.test(value)) {
         return [value.slice(value.indexOf(',') + 1).replace(/\s/g, '')];
       }
       // Google turns matching raw context variables into native media parts.
-      return /^(?:image|audio|video)\//.test(getMimeTypeFromBase64(value) ?? '') ? [value] : [];
+      return getMimeTypeFromBase64(value) ? [value] : [];
     })
     .filter((value) => /^[\w+/=-]+$/.test(value))
     .sort((a, b) => b.length - a.length);
@@ -39,7 +39,9 @@ export function getImageDatasetRequestText(
     let end = 0;
     // Always consume a header through its delimiter or EOF: repeated URI prefixes
     // must not rescan suffixes. Parameters may contain colons.
-    for (const match of text.matchAll(/data:(?:image|audio|video)\/[^\s,]*(?:[,\s]|$)/gi)) {
+    for (const match of text.matchAll(
+      /data:(?:(?:image|audio|video)\/|application\/pdf(?=;))[^\s,]*(?:[,\s]|$)/gi,
+    )) {
       if (match.index < end || !/;base64,$/i.test(match[0])) {
         continue;
       }
@@ -94,7 +96,8 @@ export function getImageDatasetRequestText(
     /^(?:image|image_url|input_image|computer_screenshot|audio|input_audio|video|file|input_file|document|base64)$/;
   const mediaContainerField =
     /^(?:images?|image_url|input_image|input_audio|inline_?data|file_?data)$/i;
-  const mediaMime = /^(?:image|audio|video)\//i;
+  const mediaMime = /^(?:(?:image|audio|video)\/|application\/pdf(?:;|$))/i;
+  const messageRole = /^(?:system|developer|user|assistant|model|tool|function)$/;
   const rejectMalformedMedia = (text: string) => {
     const yaml = /^\s*- role:/.test(text);
     if (!yaml && (!jsonContainer.test(text) || !text.includes('{'))) {
@@ -124,6 +127,9 @@ export function getImageDatasetRequestText(
     // Preserve literal brace-prefixed requests, but never copy malformed native media.
     rejectMalformedMedia(prompt);
     return redactImages(prompt);
+  }
+  if (parsed === prompt) {
+    rejectMalformedMedia(prompt);
   }
   const nativeToolFields: Record<string, string> = {
     toolUse: 'input',
@@ -159,18 +165,7 @@ export function getImageDatasetRequestText(
         [object.mimeType, object.mime_type, object.media_type].some(
           (mime) => typeof mime === 'string' && mediaMime.test(mime),
         );
-      const nativeMessage = [
-        'system',
-        'developer',
-        'user',
-        'assistant',
-        'model',
-        'tool',
-        'function',
-      ].includes(String(object.role));
-      const nativeTextPart =
-        typeof object.text === 'string' &&
-        [undefined, 'text', 'input_text', 'output_text'].some((type) => type === object.type);
+      const nativeMessage = messageRole.test(String(object.role));
       return Object.fromEntries(
         Object.entries(object).flatMap(([field, child]) => {
           const documentText =
@@ -214,6 +209,7 @@ export function getImageDatasetRequestText(
             !literalData &&
             (mediaContainerField.test(field) ||
               (media && field === 'source') ||
+              (object.type === 'file' && field === 'file') ||
               isBedrockMedia(field, child));
           const sanitized = sanitize(
             child,
@@ -222,8 +218,7 @@ export function getImageDatasetRequestText(
               documentText ||
               toolData ||
               toolText ||
-              (nativeMessage && ['content', 'parts'].includes(field)) ||
-              (nativeTextPart && field === 'text'),
+              (nativeMessage && field === 'parts'),
             mediaField,
             toolData,
             (key === 'toolResult' || object.type === 'tool_result') && field === 'content',
@@ -233,8 +228,23 @@ export function getImageDatasetRequestText(
       );
     }
     if (typeof value === 'string') {
-      // HTTP targets may parse JSON stored inside another request field.
-      if (!literalText && jsonContainer.test(value)) {
+      // A whole URI in a structured media field has an explicit payload boundary,
+      // including when its bytes are wrapped and absent from the input variables.
+      if (
+        mediaContainer &&
+        /^\s*data:(?:(?:image|audio|video)\/|application\/pdf(?=;))[^,]*;base64,[\w+/=\s-]*$/i.test(
+          value,
+        )
+      ) {
+        return undefined;
+      }
+      // These custom envelopes contain serialized requests. Other scalar fields
+      // remain literal text, even when their contents happen to be valid JSON.
+      if (
+        !literalText &&
+        ['payload', 'body', 'request'].includes(key) &&
+        jsonContainer.test(value)
+      ) {
         try {
           return sanitize(JSON.parse(value));
         } catch (error) {
@@ -245,7 +255,13 @@ export function getImageDatasetRequestText(
         }
       }
       const text = redactImages(value);
-      if (text && !['role', 'type', 'mimeType', 'mime_type', 'media_type'].includes(key)) {
+      const metadata =
+        !literalData &&
+        ((key === 'role' && messageRole.test(text)) ||
+          (key === 'type' &&
+            (mediaType.test(text) || /^(?:text|input_text|output_text)$/.test(text))) ||
+          (['mimeType', 'mime_type', 'media_type'].includes(key) && mediaMime.test(text)));
+      if (text && !metadata) {
         hasText = true;
       }
       return text || undefined;
