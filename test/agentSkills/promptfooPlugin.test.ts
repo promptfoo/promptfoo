@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -25,7 +25,6 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.1.4';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -1875,6 +1874,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       'skills/promptfoo-provider-setup/SKILL.md',
       'skills/promptfoo-provider-setup/agents/openai.yaml',
       'skills/promptfoo-provider-setup/references/provider-patterns.md',
+      'skills/promptfoo-provider-setup/scripts/openapi-helpers.mjs',
       'skills/promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
       'skills/promptfoo-provider-setup/scripts/response-contract.mjs',
       'skills/promptfoo-provider-setup/scripts/vendor/LICENSE',
@@ -2021,8 +2021,8 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     // One plugin identity across both marketplaces: same name, version, and author.
     expect(codexManifest.name).toBe('promptfoo');
     expect(claudeManifest.name).toBe('promptfoo');
-    expect(codexManifest.version).toBe(expectedPluginVersion);
-    expect(claudeManifest.version).toBe(expectedPluginVersion);
+    expect(codexManifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(claudeManifest.version).toBe(codexManifest.version);
     expect(claudeManifest.author.name).toBe('Promptfoo');
     expect(JSON.stringify(claudeManifest)).not.toContain('[TODO:');
 
@@ -2929,6 +2929,67 @@ describe('promptfoo-provider-setup skill', () => {
     });
     expect(provider.config.transformResponse).toBe('json.output');
   });
+
+  it.each([
+    ['promptfoo-provider-setup', 'openapi-operation-to-config.mjs', 'providers', '{{prompt}}'],
+    [
+      'promptfoo-redteam-setup',
+      'openapi-operation-to-redteam-config.mjs',
+      'targets',
+      '{{message}}',
+    ],
+  ])(
+    'runs the %s OpenAPI helper from a standalone plugin bundle',
+    (skill, filename, key, message) => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-bundle-'));
+      try {
+        const bundle = path.join(tempDir, 'promptfoo');
+        fs.cpSync(pluginRoot, bundle, { recursive: true });
+        const script = path.join(bundle, 'skills', skill, 'scripts', filename);
+        const spec = path.join(tempDir, 'openapi.yaml');
+        fs.copyFileSync(path.join(fixtureRoot, 'provider-setup-openapi', 'openapi.yaml'), spec);
+        const args = [
+          '--spec',
+          spec,
+          '--operation-id',
+          'chatWithInvoice',
+          '--base-url-env',
+          'FIXTURE_API_BASE',
+        ];
+        const result = spawnSync(process.execPath, [script, ...args], {
+          cwd: tempDir,
+          encoding: 'utf8',
+        });
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe('');
+        const config = yaml.load(result.stdout);
+        expectRecord(config, 'Standalone OpenAPI config');
+        const target = (config[key] as unknown[])[0];
+        expectRecord(target, 'Standalone OpenAPI target');
+        expectRecord(target.config, 'Standalone OpenAPI target config');
+        expect(target.config.body).toEqual({ user_id: '{{user_id}}', message });
+
+        const invalid = spawnSync(process.execPath, [script, '--spec'], {
+          cwd: tempDir,
+          encoding: 'utf8',
+        });
+        expect(invalid.status).toBe(1);
+        expect(invalid.stdout).toBe('');
+        expect(invalid.stderr).toContain('Invalid argument near --spec\nUsage:');
+        expect(invalid.stderr).not.toContain('OpenApiInputError');
+
+        const missing = spawnSync(process.execPath, [script, ...args, '--spec', 'missing.yaml'], {
+          cwd: tempDir,
+          encoding: 'utf8',
+        });
+        expect(missing.status).toBe(1);
+        expect(missing.stderr).toContain('ENOENT');
+        expect(missing.stderr).not.toContain('Usage:');
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('ships an OpenAPI operation helper script that drafts a provider config', () => {
     const output = execFileSync(
