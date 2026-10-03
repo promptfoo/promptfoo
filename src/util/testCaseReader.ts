@@ -545,18 +545,21 @@ async function readTestWithEnv(
   }
 
   if (loadProviders && testCase.provider && typeof testCase.provider !== 'function') {
-    // Load provider - resolve paths relative to the test case's location
-    if (typeof testCase.provider === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider, {
-        basePath: effectiveBasePath,
-        env,
-      });
-    } else if (typeof testCase.provider.id === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider.id, {
-        options: testCase.provider as ProviderOptions,
-        basePath: effectiveBasePath,
-        env,
-      });
+    // Inherit the suite environment without turning it into an explicit override
+    // of defaults in a provider file. Resolve paths relative to the test case.
+    const provider = testCase.provider;
+    if (typeof provider === 'string') {
+      testCase.provider = await cliState.withEnv(env, () =>
+        loadApiProvider(provider, { basePath: effectiveBasePath }),
+      );
+    } else if (typeof provider.id === 'string') {
+      const providerPath = provider.id;
+      testCase.provider = await cliState.withEnv(env, () =>
+        loadApiProvider(providerPath, {
+          options: provider as ProviderOptions,
+          basePath: effectiveBasePath,
+        }),
+      );
     }
   }
 

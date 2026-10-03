@@ -36,7 +36,7 @@ import {
 } from '../../../src/util/testCaseReader';
 import { mockProcessEnv } from '../utils';
 
-import type { TestCase, UnifiedConfig } from '../../../src/types/index';
+import type { TestCase, TestSuite, UnifiedConfig } from '../../../src/types/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
@@ -286,7 +286,7 @@ describe('suite environment loading', () => {
   );
 
   it.each(['assertion', 'typed', 'options', 'test'] as const)(
-    'uses the provider file credentials for a %s provider',
+    'preserves environment precedence for a %s provider',
     async (location) => {
       const providerPath = `file://${path.join(tempDir, 'provider.yaml')}`;
       fs.writeFileSync(
@@ -329,7 +329,7 @@ describe('suite environment loading', () => {
       const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(url).toBe('https://file.example/v1/chat/completions');
       expect(new Headers(request?.headers as HeadersInit).get('authorization')).toBe(
-        'Bearer file-key',
+        location === 'test' ? 'Bearer file-key' : 'Bearer suite-key',
       );
     },
   );
@@ -343,6 +343,39 @@ describe('suite environment loading', () => {
     );
     expect(cliState.config?.env?.OPENAI_API_KEY).toBe('previous-key');
   });
+
+  it.each(['string', 'options'] as const)(
+    'refreshes %s typed grader credentials when a resolved suite is reused',
+    async (form) => {
+      const providerPath = `file://${path.join(tempDir, 'grader.yaml')}`;
+      fs.writeFileSync(
+        providerPath.slice('file://'.length),
+        'id: openai:chat:test-model\nenv:\n  OPENAI_API_KEY: file-key\n',
+      );
+      const provider = { text: form === 'string' ? providerPath : { id: providerPath } };
+      const suite: TestSuite = {
+        providers: await loadApiProviders(['echo']),
+        prompts: [{ raw: 'answer', label: 'answer' }],
+        tests: [{ assert: [{ type: 'llm-rubric', value: 'Correct', provider }] }],
+      };
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { choices: [{ message: { content: '{"pass":true,"score":1,"reason":"ok"}' } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      for (const key of ['first-key', 'second-key']) {
+        suite.env = { OPENAI_API_KEY: key };
+        const result = await evaluateResolved(suite, new Eval({}), { cache: false });
+        expect((await result.getResults())[0].success).toBe(true);
+        const [, request] = vi.mocked(fetchWithCache).mock.lastCall!;
+        expect(new Headers(request?.headers as HeadersInit).get('authorization')).toBe(
+          `Bearer ${key}`,
+        );
+        expect(suite.tests?.[0].assert?.[0]).toMatchObject({ provider });
+      }
+    },
+  );
 
   it.each(['sdk', 'resolved', 'cloud'] as const)(
     'isolates config and selected targets during overlapping %s evaluations',
@@ -1838,7 +1871,7 @@ describe('suite environment loading', () => {
       await cliState.withEnv({ OPENAI_API_KEY: 'later-key' }, () => provider.callApi('Hello'));
       const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(new Headers(request?.headers as HeadersInit).get('authorization')).toBe(
-        `Bearer ${form === 'file' ? 'file' : 'suite'}-key`,
+        'Bearer suite-key',
       );
     },
   );
