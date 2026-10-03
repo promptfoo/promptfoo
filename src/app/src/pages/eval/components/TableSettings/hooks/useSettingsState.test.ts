@@ -18,6 +18,10 @@ function createMockStore() {
     setWordBreak: vi.fn(),
     showInferenceDetails: true,
     setShowInferenceDetails: vi.fn(),
+    costDisplayUnit: 'dollars',
+    setCostDisplayUnit: vi.fn(),
+    showRunsPerCostUnit: false,
+    setShowRunsPerCostUnit: vi.fn(),
     renderMarkdown: true,
     setRenderMarkdown: vi.fn(),
     prettifyJson: true,
@@ -83,6 +87,20 @@ describe('useSettingsState', () => {
     expect(result.current.hasChanges).toBe(true);
   });
 
+  it('should track cost display changes', () => {
+    const { result, rerender } = renderHook(({ isOpen }) => useSettingsState(isOpen), {
+      initialProps: { isOpen: true },
+    });
+
+    act(() => {
+      mockStore.costDisplayUnit = 'cents';
+      mockStore.showRunsPerCostUnit = true;
+    });
+
+    rerender({ isOpen: false });
+    expect(result.current.hasChanges).toBe(true);
+  });
+
   it('should handle slider changes', () => {
     const { result } = renderHook(() => useSettingsState(false));
 
@@ -119,6 +137,8 @@ describe('useSettingsState', () => {
     expect(mockStore.setShowPassReasons).toHaveBeenCalledWith(false);
     expect(mockStore.setShowMetricPills).toHaveBeenCalledWith(true);
     expect(mockStore.setShowInferenceDetails).toHaveBeenCalledWith(true);
+    expect(mockStore.setCostDisplayUnit).toHaveBeenCalledWith('dollars');
+    expect(mockStore.setShowRunsPerCostUnit).toHaveBeenCalledWith(false);
     expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(500);
     expect(mockStore.setMaxImageWidth).toHaveBeenCalledWith(500);
     expect(mockStore.setMaxImageHeight).toHaveBeenCalledWith(300);

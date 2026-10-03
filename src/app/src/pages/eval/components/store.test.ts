@@ -4,7 +4,7 @@ import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { type ResultsFilter, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import type {
   EvalTableDTO,
   EvaluateTable,
@@ -57,6 +57,32 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
 }
 
 const HUMAN_ASSERTION_TYPE = 'human';
+
+describe('useResultsViewSettingsStore cost display settings', () => {
+  beforeEach(() => {
+    act(() => {
+      useResultsViewSettingsStore.setState({
+        costDisplayUnit: 'dollars',
+        showRunsPerCostUnit: false,
+      });
+    });
+  });
+
+  it('defaults to dollars with runs per cost unit hidden', () => {
+    expect(useResultsViewSettingsStore.getState().costDisplayUnit).toBe('dollars');
+    expect(useResultsViewSettingsStore.getState().showRunsPerCostUnit).toBe(false);
+  });
+
+  it('updates cost display settings', () => {
+    act(() => {
+      useResultsViewSettingsStore.getState().setCostDisplayUnit('cents');
+      useResultsViewSettingsStore.getState().setShowRunsPerCostUnit(true);
+    });
+
+    expect(useResultsViewSettingsStore.getState().costDisplayUnit).toBe('cents');
+    expect(useResultsViewSettingsStore.getState().showRunsPerCostUnit).toBe(true);
+  });
+});
 
 function createMockOutput(hasHumanRating: boolean): EvaluateTableOutput {
   const output: EvaluateTableOutput = {
