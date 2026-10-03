@@ -13,6 +13,8 @@ import {
 import { mockProcessEnv } from '../util/utils';
 import type { MockedFunction } from 'vitest';
 
+import type { CallApiContextParams } from '../../src/types/providers';
+
 vi.mock('child_process', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -185,6 +187,52 @@ describe('ScriptCompletionProvider', () => {
       digest: vi.fn().mockReturnValue('default-hash'),
     } as unknown as crypto.Hash;
     createHashMock.mockReturnValue(mockHashUpdate);
+  });
+
+  it.each([false, true])('preserves reused caller context (frozen: %s)', async (frozen) => {
+    const originalProvider = { id: () => 'original', callApi: vi.fn() };
+    Object.assign(originalProvider, { self: originalProvider });
+    const context: CallApiContextParams = {
+      prompt: { raw: 'hello', label: 'greeting' },
+      vars: { name: 'Ada' },
+      evaluationId: 'context-eval',
+      getCache: vi.fn(),
+      logger: { debug: vi.fn() } as unknown as CallApiContextParams['logger'],
+      filters: { upper: (value: string) => value.toUpperCase() },
+      originalProvider,
+    };
+    const originalContext = { ...context };
+    if (frozen) {
+      Object.freeze(context);
+    }
+    const serializedContexts: unknown[] = [];
+    vi.mocked(execFile).mockImplementation(function (_cmd, args, _options, callback) {
+      serializedContexts.push(JSON.parse((args as string[]).at(-1)!));
+      if (typeof callback === 'function') {
+        callback(null, 'ok', '');
+      }
+      return { stdin: { end: vi.fn() } } as any;
+    });
+
+    for (const prompt of ['first turn', 'second turn']) {
+      await expect(provider.callApi(prompt, context)).resolves.toEqual({ output: 'ok' });
+      expect(Object.keys(context)).toEqual(Object.keys(originalContext));
+      for (const key of [
+        'prompt',
+        'vars',
+        'evaluationId',
+        'getCache',
+        'logger',
+        'filters',
+        'originalProvider',
+      ] as const) {
+        expect(context[key]).toBe(originalContext[key]);
+      }
+    }
+    expect(serializedContexts).toEqual([
+      { prompt: context.prompt, vars: context.vars, evaluationId: 'context-eval' },
+      { prompt: context.prompt, vars: context.vars, evaluationId: 'context-eval' },
+    ]);
   });
 
   it('should return the correct id', () => {

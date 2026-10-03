@@ -7,6 +7,7 @@ import { getProcessEnv } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -93,16 +94,11 @@ export class ScriptCompletionProvider implements ApiProvider {
     return new Promise<ProviderResponse>((resolve, reject) => {
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
-      // Remove properties not useful in shell scripts and non-serializable objects
-      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-      delete context?.getCache;
-      delete context?.logger;
-      delete context?.filters; // NunjucksFilterMap contains functions
-      delete context?.originalProvider; // ApiProvider object with methods
+      const sanitizedContext = sanitizeScriptContext('ScriptCompletionProvider', context);
       const scriptArgs = scriptParts.concat([
         prompt,
         safeJsonStringify(this.options || {}) as string,
-        safeJsonStringify(context || {}) as string,
+        safeJsonStringify(sanitizedContext || {}) as string,
       ]);
       const options = {
         ...(this.options?.config.basePath && { cwd: this.options.config.basePath }),
