@@ -894,8 +894,13 @@ async function prepareCombinedConfig(
       if (!prev && !curr.defaultTest) {
         return undefined;
       }
-      // Otherwise merge objects
-      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      // Otherwise merge objects. Each inline default is prepared in its own directory first,
+      // like any other row, so that file vars from another config's directory do not resolve
+      // from the suite's.
+      const currDefaultTest =
+        typeof curr.defaultTest === 'object'
+          ? (makeTestAbsolute(basePath, curr.defaultTest) as Partial<TestCase>)
+          : {};
       const prevObj = typeof prev === 'object' ? prev : {};
       return {
         ...prevObj,

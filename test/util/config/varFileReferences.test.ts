@@ -96,6 +96,37 @@ describe('file:// var references in loaded configs', () => {
     );
   });
 
+  it("pins the file vars of another config's inline default test and merges it with the suite's", async () => {
+    const first = writeProject('first', {
+      defaultTest: { vars: { shared: 'file://docs/a.txt' } },
+      tests: [{ vars: { q: 'one' } }],
+    });
+    const second = writeProject('second', {
+      defaultTest: { vars: { doc: 'file://docs/a.txt', meta: { source: 'file://docs/a.txt' } } },
+      tests: [],
+    });
+
+    const { testSuite, basePath } = await resolve({
+      config: [path.join(first, 'promptfooconfig.json'), path.join(second, 'promptfooconfig.json')],
+    });
+
+    // The default test applies to every row, and the evaluation resolves its vars from the
+    // first config's directory. The second config's reference must keep naming its own file.
+    expect(basePath).toBe(first);
+    const defaultTest = testSuite.defaultTest as TestCase;
+    expect(defaultTest.vars).toEqual({
+      shared: 'file://docs/a.txt',
+      doc: `file://${path.join(second, 'docs', 'a.txt')}`,
+      meta: { source: 'file://docs/a.txt' },
+    });
+    const [vars] = cliState.withBasePath(first, () =>
+      generateVarCombinations(defaultTest.vars ?? {}),
+    );
+    expect(fs.readFileSync(String(vars.doc).slice('file://'.length), 'utf8')).toBe(
+      'doc from second\n',
+    );
+  });
+
   it('pins only the file vars of rows from another config, leaving nested values as data', async () => {
     const first = writeProject('first', { tests: [] });
     const second = writeProject('second', {
