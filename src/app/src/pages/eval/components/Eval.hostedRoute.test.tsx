@@ -1,4 +1,4 @@
-import { callApi } from '@app/utils/api';
+import { createMockResponse, getCallApiMock } from '@app/tests/apiMocks';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -70,19 +70,19 @@ describe('Eval on the hosted root route', () => {
   });
 
   it.each([
-    ['a list of evals', { ok: true, json: async () => ({ data: [{ evalId: 'latest-eval' }] }) }],
-    ['no evals', { ok: true, json: async () => ({ data: [] }) }],
-    ['an error', { ok: false }],
+    ['a list of evals', () => createMockResponse({ data: [{ evalId: 'latest-eval' }] })],
+    ['no evals', () => createMockResponse({ data: [] })],
+    ['an error', () => createMockResponse({}, { ok: false, status: 500 })],
   ])(
     'leaves a route that replaced it alone when the recent evals arrive with %s',
-    async (_name, response) => {
-      let respond!: (response: unknown) => void;
-      vi.mocked(callApi).mockImplementation((url: string) =>
+    async (_name, createResponse) => {
+      let respond!: (response: Response) => void;
+      getCallApiMock().mockImplementation((url: string) =>
         url === '/results'
-          ? new Promise((resolve) => {
-              respond = resolve as (response: unknown) => void;
+          ? new Promise<Response>((resolve) => {
+              respond = resolve;
             })
-          : Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response),
+          : Promise.resolve(createMockResponse({ data: [] })),
       );
 
       const { container, queryByText } = render(
@@ -105,7 +105,7 @@ describe('Eval on the hosted root route', () => {
       setTable.mockClear();
 
       await act(async () => {
-        respondToRootRoute(response);
+        respondToRootRoute(createResponse());
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
