@@ -2372,6 +2372,144 @@ describe('agent workspaces', () => {
       },
     );
 
+    it.each(['abort', 'timeout'] as const)(
+      'stops new-file verification on %s and removes its scratch repository',
+      async (kind) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const controller = new AbortController();
+        const workspace = await create(source, 'git', controller.signal);
+        for (let i = 0; i < 3; i++) {
+          write(path.join(workspace.dir, `new-${i}.txt`), 'new file\n');
+        }
+        const start = performance.now();
+        const now = vi.spyOn(performance, 'now').mockReturnValue(start);
+        const original = fs.promises.lstat;
+        let examined = 0;
+        const lstat = vi.spyOn(fs.promises, 'lstat').mockImplementation(async (...args) => {
+          const result = await original(...args);
+          if (String(args[0]).startsWith(path.join(workspace.dir, 'new-'))) {
+            examined++;
+            if (kind === 'abort') {
+              controller.abort();
+            } else {
+              now.mockReturnValue(start + 30_001);
+            }
+          }
+          return result;
+        });
+        try {
+          if (kind === 'abort') {
+            await expect(workspace.metadata()).rejects.toMatchObject({ name: 'AbortError' });
+          } else {
+            const metadata = await workspace.metadata();
+            expect(metadata.workspaceDiffError).toContain('file verification exceeded 30000 ms');
+            expect(metadata.workspaceDiff).toBeUndefined();
+          }
+          expect(examined).toBe(1);
+          expect(fs.readdirSync(path.dirname(workspace.dir))).toEqual(['workspace']);
+        } finally {
+          lstat.mockRestore();
+          now.mockRestore();
+        }
+      },
+    );
+
+    it('bounds empty-directory classification by path depth rather than repository count', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source, 'git');
+      const count = 16;
+      for (let i = 0; i < count; i++) {
+        const nested = path.join(workspace.dir, `repo-${i}`);
+        makeRepository(nested);
+        fs.mkdirSync(path.join(nested, 'empty'));
+      }
+      const original = String.prototype.startsWith;
+      let comparisons = 0;
+      const startsWith = vi.spyOn(String.prototype, 'startsWith').mockImplementation(function (
+        this: string,
+        search,
+        position,
+      ) {
+        if (/^repo-\d+\/$/.test(search)) {
+          comparisons++;
+        }
+        return original.call(this, search, position);
+      });
+      try {
+        const metadata = await workspace.metadata();
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('repo-0');
+        expect(comparisons).toBeLessThanOrEqual(4 * count);
+      } finally {
+        startsWith.mockRestore();
+      }
+    });
+
+    it.each([
+      'ignored-fifo',
+      'ignored-socket',
+      'unignored-fifo',
+      'raw-alias',
+      'raw-baseline',
+      'tracked-fifo',
+    ] as const)(
+      'uses exact pathname identities for omitted Unicode special files (%s)',
+      async (kind) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        const name = 'policy\uFFFD.sock';
+        const rawName = Buffer.concat([
+          Buffer.from('policy'),
+          Buffer.from([0xff]),
+          Buffer.from('.sock'),
+        ]);
+        makeRepository(source, { '.gitignore': kind === 'unignored-fifo' ? '' : `${name}\n` });
+        if (kind === 'raw-baseline') {
+          fs.writeFileSync(Buffer.concat([Buffer.from(`${source}/`), rawName]), 'original\n');
+          git(source, 'add', '--all');
+          git(source, 'commit', '-qm', 'track raw file');
+        } else if (kind === 'tracked-fifo') {
+          write(path.join(source, name), 'original\n');
+          git(source, 'add', '--force', name);
+          git(source, 'commit', '-qm', 'track ignored Unicode file');
+        }
+        const workspace = await create(source, 'git');
+        const file = path.join(workspace.dir, name);
+        if (kind === 'tracked-fifo') {
+          fs.unlinkSync(file);
+        }
+        let close: (() => Promise<void>) | undefined;
+        if (kind === 'ignored-socket') {
+          close = await listenIn(workspace.dir, name);
+        } else {
+          execFileSync('mkfifo', [file]);
+        }
+        if (kind === 'raw-alias') {
+          const temporary = path.join(workspace.dir, 'raw-pipe');
+          execFileSync('mkfifo', [temporary]);
+          fs.renameSync(temporary, Buffer.concat([Buffer.from(`${workspace.dir}/`), rawName]));
+        }
+        try {
+          const metadata = await workspace.metadata();
+          const incomplete = ['unignored-fifo', 'raw-alias', 'tracked-fifo'].includes(kind);
+          expect(metadata.workspaceDiffError).toBeUndefined();
+          expect(metadata.workspaceDiffIncomplete).toBe(incomplete ? true : undefined);
+          if (incomplete) {
+            expect(metadata.workspaceDiff).toContain('policy\\u{fffd}.sock');
+          } else {
+            expect(metadata.workspaceDiff).toBe('');
+          }
+        } finally {
+          await close?.();
+        }
+      },
+    );
+
     it('ends traversal at the Git deadline and closes open directory handles', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);

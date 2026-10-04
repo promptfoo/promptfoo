@@ -294,12 +294,17 @@ async function findPathsGitLeavesOut(
   ignoredDirectories: ReadonlySet<string> = new Set(),
   baselinePaths: ReadonlySet<string> = new Set(),
 ): Promise<{
-  leftOut: string[];
+  leftOut: { file: string; raw: string }[];
   reserved: string[];
   directories: string[];
   timedOut?: true;
 }> {
-  const leftOut: string[] = [];
+  const leftOut: { file: string; raw: string }[] = [];
+  const omit = (file: string, raw: string, directory = false) =>
+    leftOut.push({
+      file: directory ? `${file}/` : file,
+      raw: directory ? `${raw}/` : raw,
+    });
   const reserved: string[] = [];
   const directories: string[] = [];
   // Match Git's per-operation deadline. A pending OS call cannot be interrupted, but no
@@ -348,7 +353,7 @@ async function findPathsGitLeavesOut(
         const entryPath = `${directory}${name}`;
         const rawEntryPath = `${rawDirectory}${entry.name.toString('latin1')}`;
         if (!canSearch) {
-          leftOut.push(entry.isDirectory() ? `${entryPath}/` : entryPath);
+          omit(entryPath, rawEntryPath, entry.isDirectory());
           continue;
         }
         // Not every filesystem reports entry types. Ask using the exact pathname bytes.
@@ -369,7 +374,7 @@ async function findPathsGitLeavesOut(
           // Git updates baseline paths by their original bytes. New raw paths and special
           // replacements remain unexamined. A distinct directory with a colliding display
           // name must not borrow the baseline's coverage of its children.
-          leftOut.push(stat?.isDirectory() ? `${entryPath}/` : entryPath);
+          omit(entryPath, rawEntryPath, stat?.isDirectory());
           continue;
         }
         // Git compares the name without regard to case on file systems that do.
@@ -379,12 +384,12 @@ async function findPathsGitLeavesOut(
             reserved.push(reservedPath);
           } else if (name !== '.git') {
             // Beside the workspace's own `.git`, on a file system that tells them apart.
-            leftOut.push(reservedPath);
+            omit(entryPath, rawEntryPath, stat?.isDirectory());
           }
         } else if (stat?.isDirectory()) {
           pending.push({ directory: `${entryPath}/`, rawDirectory: `${rawEntryPath}/` });
         } else if (!stat?.isFile() && !stat?.isSymbolicLink()) {
-          leftOut.push(entryPath);
+          omit(entryPath, rawEntryPath);
         }
       }
     } catch (error) {
@@ -393,7 +398,7 @@ async function findPathsGitLeavesOut(
         throw error;
       }
       // The directory was just listed, so failure to examine it leaves its contents unknown.
-      leftOut.push(directory);
+      omit(directory, rawDirectory);
     }
   }
   return { leftOut, reserved, directories };
@@ -919,10 +924,8 @@ async function getWorkspaceDiff(
       .toString('utf8')
       .split('\0')
       .filter(Boolean);
-    const referenced = [...baseline, ...ignoredTracked.split('\0').filter(Boolean)];
     // Git can list untracked subtree roots without walking them. Prune only roots ignored
     // by the committed rules, and keep any containing a tracked or explicitly staged path.
-    const protectedDirectories = getCoveredDirectories(referenced.map((file) => `${file}/`));
     const protectedRawDirectories = getCoveredDirectories(
       [...baselinePaths, ...rawIgnoredTracked.split('\0').filter(Boolean)].map(
         (file) => `${file}/`,
@@ -962,7 +965,7 @@ async function getWorkspaceDiff(
     if (found.timedOut) {
       notes.push(`[diff incomplete: workspace traversal exceeded ${GIT_TIMEOUT_MS} ms]`);
     }
-    let leftOut = found.leftOut;
+    let leftOut = found.leftOut.map(({ file }) => file);
     // A reserved path cannot be tracked, so the directory that holds it decides whether it
     // is ignored.
     let reserved = found.reserved.map((file) => ({
@@ -979,11 +982,12 @@ async function getWorkspaceDiff(
       ...leftOut,
       ...found.reserved,
     ]);
-    const repositoryRoots = untracked.filter((file) => file.endsWith('/'));
+    const repositoryRoots = new Set(untracked.filter((file) => file.endsWith('/')));
     const withoutFiles = new Set(
       found.directories.filter(
         (directory) =>
-          !covered.has(directory) && !repositoryRoots.some((root) => directory.startsWith(root)),
+          !covered.has(directory) &&
+          ![...getCoveredDirectories([directory])].some((parent) => repositoryRoots.has(parent)),
       ),
     );
     let emptyDirectories = [...withoutFiles].filter(
@@ -1001,7 +1005,19 @@ async function getWorkspaceDiff(
     ]) {
       queries.set(file, toIgnoreQuery(file));
     }
-    const asked = [...new Set(queries.values())].filter((query) => query !== undefined);
+    const omittedQueries = found.leftOut.map(({ file, raw }) => ({
+      file,
+      raw,
+      query:
+        Buffer.from(file).toString('latin1') === raw
+          ? file.startsWith(':')
+            ? `./${file}`
+            : file
+          : toIgnoreQuery(file),
+    }));
+    const asked = [
+      ...new Set([...queries.values(), ...omittedQueries.map(({ query }) => query)]),
+    ].filter((query) => query !== undefined);
     const ignoredQueries = await getIgnoredQueries(asked);
     const isIgnored = (file: string) => {
       const query = queries.get(file);
@@ -1018,10 +1034,14 @@ async function getWorkspaceDiff(
     // An ignored path is still part of the diff when the cloned commit tracks it or the agent
     // added it to its index. What replaced a directory, such as a FIFO, stands for the files
     // that were below it.
-    leftOut = leftOut.filter(
-      (file) =>
-        !isIgnored(file) || protectedDirectories.has(file.endsWith('/') ? file : `${file}/`),
-    );
+    leftOut = omittedQueries
+      .filter(
+        ({ raw, query }) =>
+          query === undefined ||
+          !ignoredQueries.has(query) ||
+          protectedRawDirectories.has(raw.endsWith('/') ? raw : `${raw}/`),
+      )
+      .map(({ file }) => file);
     // Existing files are handled by add --update, including valid UTF-8 names containing
     // the replacement character. The scanner still reports any colliding raw-byte paths.
     const exactIgnoreQueries = new Map<string, string>();
@@ -1035,13 +1055,22 @@ async function getWorkspaceDiff(
     // can be listed but not searched. Those are named below instead of being added. Git has
     // just listed them, so one that cannot be found is not gone: its name has bytes that are
     // not valid text and did not survive being read as text.
+    const verificationDeadline = performance.now() + GIT_TIMEOUT_MS;
+    const checkVerification = () => {
+      signal?.throwIfAborted();
+      if (performance.now() >= verificationDeadline) {
+        throw new Error(`workspace file verification exceeded ${GIT_TIMEOUT_MS} ms`);
+      }
+    };
     for (const file of newFiles) {
+      checkVerification();
       // Valid UTF-8 siblings can still be staged. The byte-aware scanner independently
       // reports any raw path that only happens to share this decoded name.
       const examined = await fs.lstat(path.join(dir, file)).then(
         () => true,
         () => false,
       );
+      checkVerification();
       if (!examined) {
         newFiles.delete(file);
         unverified.push(file);
