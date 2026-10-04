@@ -1426,6 +1426,103 @@ describe('agent workspaces', () => {
       }
     });
 
+    it.each([
+      ['a directory', (target: string) => write(path.join(target, 'policy.txt'), 'hidden\n')],
+      ['a file', (target: string) => write(target, 'hidden\n')],
+    ])(
+      'marks the diff incomplete when the agent hides content in %s called .git',
+      async (_kind, hide) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const workspace = await create(source);
+        write(path.join(workspace.dir, 'notes', 'new.txt'), 'new file\n');
+        // Git never lists what a path called .git holds, whether or not it is a repository.
+        hide(path.join(workspace.dir, 'notes', '.git'));
+
+        const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+        expect(workspaceDiff).toContain('+++ b/notes/new.txt');
+        expect(workspaceDiff).not.toContain('hidden');
+        expect(workspaceDiffIncomplete).toBe(true);
+        expect(workspaceDiff).toMatch(
+          /\[diff incomplete: 1 changed path\(s\) could not be included: notes\/\.git\/?\]$/,
+        );
+      },
+    );
+
+    it('does not report a .git directory under a path the commit ignores', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'node_modules/\n' });
+      const workspace = await create(source);
+      // Packages installed from a repository bring their own .git directory along.
+      write(path.join(workspace.dir, 'node_modules', 'pkg', '.git', 'HEAD'), 'ref: x\n');
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiff).toBe('');
+      expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+    });
+
+    it('names an ignored file of the cloned commit that the agent replaced with a fifo', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      write(path.join(source, '.gitignore'), 'policy.txt\n');
+      write(path.join(source, 'policy.txt'), 'policy: ok\n');
+      makeRepository(source);
+      git(source, 'add', '--force', 'policy.txt');
+      git(source, 'commit', '-q', '-m', 'track an ignored file');
+      const workspace = await create(source);
+      // The ignore rule must not excuse a path that the cloned commit tracks.
+      git(workspace.dir, 'rm', '-q', '--cached', 'policy.txt');
+      fs.rmSync(path.join(workspace.dir, 'policy.txt'));
+      execFileSync('mkfifo', [path.join(workspace.dir, 'policy.txt')]);
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiffIncomplete).toBe(true);
+      expect(workspaceDiff).toBe(
+        '[diff incomplete: 1 changed path(s) could not be included: policy.txt]',
+      );
+    });
+
+    it('names an ignored directory made unreadable after the agent added a file in it', async () => {
+      if (!canMakeUnreadable) {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'tmp/\n' });
+      const workspace = await create(source);
+      // The agent's index says that tmp/policy.txt is part of its work, and nothing in the
+      // unreadable directory can be compared with it.
+      const hidden = path.join(workspace.dir, 'tmp');
+      write(path.join(hidden, 'policy.txt'), 'added by the agent\n');
+      git(workspace.dir, 'add', '--force', 'tmp/policy.txt');
+      fs.chmodSync(hidden, 0o000);
+
+      try {
+        const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+        expect(workspaceDiffIncomplete).toBe(true);
+        expect(workspaceDiff).toBe(
+          '[diff incomplete: 1 changed path(s) could not be included: tmp/]',
+        );
+      } finally {
+        fs.chmodSync(hidden, 0o700);
+      }
+    });
+
+    it('stops listing the workspace when the call is cancelled', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const controller = new AbortController();
+      const workspace = await create(source, undefined, controller.signal);
+      controller.abort(new Error('cancelled'));
+
+      await expect(workspace.metadata()).rejects.toThrow('cancelled');
+    });
+
     it('marks the diff incomplete when the agent commits to a repository it created', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);

@@ -209,29 +209,42 @@ async function addReadablePaths(
 }
 
 /**
- * Paths in the workspace that Git leaves out of a diff without saying so: entries that are
- * neither files, directories nor links, such as FIFOs and sockets, and directories that
- * cannot be read. Paths use forward slashes, and directories end with one, as in Git's output.
+ * Paths in the workspace that Git leaves out of a diff without saying so. Paths use forward
+ * slashes, and directories end with one, as in Git's output.
  *
- * Entries are only listed, never opened. `.git` directories are Git's own.
+ * - `leftOut`: entries that are neither files, directories nor links, such as FIFOs and
+ *   sockets, and directories that cannot be read.
+ * - `reserved`: anything called `.git` below the top level. Git never lists what such a
+ *   path holds, whether or not it is a repository.
+ *
+ * Entries are only listed, never opened. The top-level `.git` is the workspace's own.
  */
-async function findPathsGitLeavesOut(dir: string, signal?: AbortSignal): Promise<string[]> {
+async function findPathsGitLeavesOut(
+  dir: string,
+  signal?: AbortSignal,
+): Promise<{ leftOut: string[]; reserved: string[] }> {
   const leftOut: string[] = [];
+  const reserved: string[] = [];
   const pending = [''];
   for (let directory = pending.pop(); directory !== undefined; directory = pending.pop()) {
     signal?.throwIfAborted();
     try {
       for await (const entry of await fs.opendir(path.join(dir, directory))) {
+        signal?.throwIfAborted();
         const entryPath = `${directory}${entry.name}`;
-        if (entry.isDirectory()) {
-          if (entry.name !== '.git') {
-            pending.push(`${entryPath}/`);
+        // Git compares the name without regard to case on file systems that do.
+        if (entry.name.toLowerCase() === '.git') {
+          if (directory !== '') {
+            reserved.push(entry.isDirectory() ? `${entryPath}/` : entryPath);
           }
+        } else if (entry.isDirectory()) {
+          pending.push(`${entryPath}/`);
         } else if (!entry.isFile() && !entry.isSymbolicLink()) {
           leftOut.push(entryPath);
         }
       }
     } catch (error) {
+      signal?.throwIfAborted();
       if (directory === '') {
         throw error;
       }
@@ -243,7 +256,7 @@ async function findPathsGitLeavesOut(dir: string, signal?: AbortSignal): Promise
       }
     }
   }
-  return leftOut;
+  return { leftOut, reserved };
 }
 
 class UnsupportedGitAttributesError extends Error {}
@@ -688,14 +701,21 @@ async function getWorkspaceDiff(
     const untracked = (await git(['ls-files', '-z', '--others'], { env, signal }))
       .split('\0')
       .filter(Boolean);
-    // Git lists neither special files nor the contents of directories it cannot read, so an
-    // agent could keep a change out of the diff with `mkfifo` or `chmod`. They are looked
-    // for separately and reported below.
-    let leftOut = await findPathsGitLeavesOut(dir, signal);
-    if (untracked.length + leftOut.length > 0) {
+    // Git lists neither special files, nor the contents of directories it cannot read, nor
+    // anything below a path called `.git`. An agent could keep a change out of the diff with
+    // `mkfifo`, `chmod` or `mkdir`, so these are looked for separately and reported below.
+    const found = await findPathsGitLeavesOut(dir, signal);
+    let leftOut = found.leftOut;
+    // A reserved path cannot be tracked, so the directory that holds it decides whether it
+    // is ignored.
+    let reserved = found.reserved.map((file) => ({
+      file,
+      parent: file.slice(0, file.toLowerCase().lastIndexOf('/.git') + 1),
+    }));
+    if (untracked.length + leftOut.length + reserved.length > 0) {
       const ignored = await git(['check-ignore', '--no-index', '-z', '--stdin'], {
         env: ignoreEnv,
-        input: `${[...untracked, ...leftOut].join('\0')}\0`,
+        input: `${[...untracked, ...leftOut, ...reserved.map((entry) => entry.parent)].join('\0')}\0`,
         signal,
       }).catch((error: unknown) => {
         if (error instanceof Error && 'code' in error && error.code === 1) {
@@ -709,7 +729,22 @@ async function getWorkspaceDiff(
           newFiles.add(file);
         }
       }
-      leftOut = leftOut.filter((file) => !ignoredFiles.has(file));
+      reserved = reserved.filter((entry) => !ignoredFiles.has(entry.parent));
+      if (leftOut.some((file) => ignoredFiles.has(file))) {
+        // An ignored path is still part of the diff when the cloned commit tracks it or the
+        // agent added it to its index. The scratch index holds the cloned commit here.
+        const referenced = [
+          ...(await git(['ls-files', '-z', '--cached'], { env, signal })).split('\0'),
+          ...ignoredTracked.split('\0'),
+        ].filter(Boolean);
+        leftOut = leftOut.filter(
+          (file) =>
+            !ignoredFiles.has(file) ||
+            (file.endsWith('/')
+              ? referenced.some((tracked) => tracked.startsWith(file))
+              : referenced.includes(file)),
+        );
+      }
     }
     // The agent controls the workspace, so some paths may be impossible to add: a file it
     // made unreadable, or a repository it created. Add everything else rather than losing
@@ -745,7 +780,14 @@ async function getWorkspaceDiff(
         isRepository: entry.startsWith('160000 '),
         path: entry.slice(entry.indexOf('\t') + 1),
       }));
-    if (skippedPaths || leftOut.length > 0) {
+    // A repository is reported below as one, so its `.git` needs no entry of its own.
+    const repositories = new Set(
+      staged.filter((entry) => entry.isRepository).map((entry) => `${entry.path}/`),
+    );
+    reserved = reserved.filter(
+      (entry) => !repositories.has(entry.parent) && !newFiles.has(entry.parent),
+    );
+    if (skippedPaths || leftOut.length + reserved.length > 0) {
       // Tracked files that still differ from the index are the ones `add --update` skipped.
       const notUpdated = skippedPaths
         ? await git(['-c', 'core.fsmonitor=false', 'diff', '--name-only', '-z'], { env, signal })
@@ -761,6 +803,7 @@ async function getWorkspaceDiff(
           // An untracked repository is listed as a directory, with a trailing slash.
           ...[...newFiles].filter((file) => !indexed.has(file.replace(/\/$/, ''))),
           ...leftOut,
+          ...reserved.map((entry) => entry.file),
         ]),
       ];
       // Naming the paths keeps a search for a changed file from passing on a partial diff.
@@ -775,14 +818,14 @@ async function getWorkspaceDiff(
     }
     // A repository the agent created and committed to is added as a link to its commit. The
     // cloned commit has no such links (see `getCloneableRepository`), so each one hides files.
-    const repositories = staged.filter((entry) => entry.isRepository).map((entry) => entry.path);
-    if (repositories.length > 0) {
+    const nested = staged.filter((entry) => entry.isRepository).map((entry) => entry.path);
+    if (nested.length > 0) {
       notes.push(
-        `[diff incomplete: the files of ${repositories.length} nested repositor` +
-          `${repositories.length === 1 ? 'y' : 'ies'} are not included: ` +
-          repositories.slice(0, MAX_INCOMPLETE_PATHS).join(', ') +
-          (repositories.length > MAX_INCOMPLETE_PATHS
-            ? `, and ${repositories.length - MAX_INCOMPLETE_PATHS} more`
+        `[diff incomplete: the files of ${nested.length} nested repositor` +
+          `${nested.length === 1 ? 'y' : 'ies'} are not included: ` +
+          nested.slice(0, MAX_INCOMPLETE_PATHS).join(', ') +
+          (nested.length > MAX_INCOMPLETE_PATHS
+            ? `, and ${nested.length - MAX_INCOMPLETE_PATHS} more`
             : '') +
           ']',
       );
