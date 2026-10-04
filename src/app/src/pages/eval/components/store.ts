@@ -555,9 +555,13 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 };
 
 // Table requests overlap when the user changes a filter, the search text or the page while
-// an earlier request is still in flight. Only the most recently issued request describes
-// the current UI state, so responses to earlier ones are not applied.
+// an earlier request is still in flight. A later request describes a more recent UI state,
+// so a response is not applied once the response to a request issued after it has been.
+// An earlier response is still applied while the later request is pending, because that
+// request can fail, as a background refresh that overtook the user's own request can.
 let latestTableRequestId = 0;
+/** The most recently issued request whose response has been applied. */
+let appliedTableRequestId = 0;
 
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
@@ -686,16 +690,20 @@ export const useTableStore = create<TableState>()(
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
       const requestId = ++latestTableRequestId;
       const isLatestRequest = () => requestId === latestTableRequestId;
-      // The loading state belongs to the foreground request that turned it on. When this
-      // request is applied or fails as the latest one, any such request at or before it is
-      // settled, including one a background refresh superseded, whose own response is
-      // discarded and could never turn the loading state off.
-      const settleLoading = () => {
+      /** Whether the response to a request issued after this one has been applied. */
+      const isSuperseded = () => requestId < appliedTableRequestId;
+      // The loading state belongs to the foreground request that turned it on. It ends when
+      // a response is applied for that request or a later one, since the table then shows
+      // data at least as recent as that request asked for, or when that request itself fails.
+      const settleLoading = (isOwnFailure = false) => {
         const { loadingRequestId } = get();
-        return loadingRequestId !== null && loadingRequestId <= requestId
-          ? { isFetching: false, loadingRequestId: null }
-          : {};
+        const isSettled = isOwnFailure
+          ? loadingRequestId === requestId
+          : loadingRequestId !== null && loadingRequestId <= requestId;
+        return isSettled ? { isFetching: false, loadingRequestId: null } : {};
       };
+      // A failure only counts for the caller when no later request can still fill the table.
+      const failureOutcome = () => (isLatestRequest() ? null : SUPERSEDED_TABLE_REQUEST);
 
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();
@@ -765,9 +773,10 @@ export const useTableStore = create<TableState>()(
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
-          if (!isLatestRequest()) {
+          if (isSuperseded()) {
             return SUPERSEDED_TABLE_REQUEST;
           }
+          appliedTableRequestId = requestId;
 
           set((prevState) => ({
             table: data.table,
@@ -801,23 +810,19 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
-        if (!isLatestRequest()) {
-          return SUPERSEDED_TABLE_REQUEST;
-        }
-        set(settleLoading());
-        return null;
+        set(settleLoading(true));
+        return failureOutcome();
       } catch (error) {
         console.error('Error fetching eval data:', error);
-        if (!isLatestRequest()) {
-          return SUPERSEDED_TABLE_REQUEST;
-        }
         set({
-          ...settleLoading(),
-          isStreaming: false,
-          metadataKeysLoading: false,
-          currentMetadataKeysRequest: null,
+          ...settleLoading(true),
+          ...(isLatestRequest() && {
+            isStreaming: false,
+            metadataKeysLoading: false,
+            currentMetadataKeysRequest: null,
+          }),
         });
-        return null;
+        return failureOutcome();
       }
     },
 

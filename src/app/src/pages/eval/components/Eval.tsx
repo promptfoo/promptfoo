@@ -403,7 +403,15 @@ export default function Eval({ fetchId }: EvalOptions) {
       logger.debug('[Eval] Fetching eval via recent', {});
       // Fetch from server
       const run = async () => {
-        const evals = await fetchRecentFileEvals();
+        // The route can change while the recent evals are fetched. Nothing may then fail or
+        // clear the page, or start a load that would replace the new route's.
+        const evals = await fetchRecentFileEvals({ reportFailure: false });
+        if (!isCurrentRoute) {
+          return;
+        }
+        if (!evals) {
+          setFailed(true);
+        }
         if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);

@@ -1196,43 +1196,73 @@ describe('useTableStore', () => {
         return pending;
       }
 
+      it('turns off the loading state of a table request once a later refresh is applied', async () => {
+        const pending = deferRequests();
+        let foreground!: Promise<unknown>;
+        let background!: Promise<unknown>;
+        await act(async () => {
+          foreground = useTableStore.getState().fetchEvalData(mockEvalId, { pageIndex: 1 });
+          background = useTableStore
+            .getState()
+            .fetchEvalData(mockEvalId, { skipLoadingState: true });
+        });
+        expect(useTableStore.getState().isFetching).toBe(true);
+
+        await act(async () => {
+          pending[1].respond(tableWith('refreshed'));
+          await background;
+        });
+
+        // The table now shows data at least as recent as the table request asked for, and
+        // that request's own response will not be applied any more.
+        expect(useTableStore.getState().isFetching).toBe(false);
+
+        await act(async () => {
+          pending[0].respond(tableWith('stale'));
+          await foreground;
+        });
+        await expect(foreground).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
+        await expect(background).resolves.toEqual(tableWith('refreshed'));
+        expect(useTableStore.getState().isFetching).toBe(false);
+        expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe('refreshed');
+      });
+
       it.each([
-        ['succeeds', true],
-        ['fails', false],
+        ['an error response', (request: Pending) => request.respond({}, false)],
+        ['a network error', (request: Pending) => request.fail(new Error('connection reset'))],
       ])(
-        'turns off the loading state of the table request it supersedes when it %s',
-        async (_name, ok) => {
+        'applies a table request when the refresh that overtook it ends with %s',
+        async (_name, end) => {
+          const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
           const pending = deferRequests();
-          let foreground!: Promise<unknown>;
-          let background!: Promise<unknown>;
-          await act(async () => {
-            foreground = useTableStore.getState().fetchEvalData(mockEvalId, { pageIndex: 1 });
-            background = useTableStore
-              .getState()
-              .fetchEvalData(mockEvalId, { skipLoadingState: true });
-          });
-          expect(useTableStore.getState().isFetching).toBe(true);
+          try {
+            let foreground!: Promise<unknown>;
+            let background!: Promise<unknown>;
+            await act(async () => {
+              foreground = useTableStore.getState().fetchEvalData(mockEvalId, { pageIndex: 1 });
+              background = useTableStore
+                .getState()
+                .fetchEvalData(mockEvalId, { skipLoadingState: true });
+              end(pending[1]);
+              await background;
+            });
 
-          await act(async () => {
-            pending[1].respond(tableWith('refreshed'), ok);
-            await background;
-          });
+            // The refresh brought nothing, so the user's request is still what the table is
+            // waiting for.
+            await expect(background).resolves.toBeNull();
+            expect(useTableStore.getState().isFetching).toBe(true);
 
-          // The table request's own response is now stale and will not be applied, so only
-          // the refresh can end the loading state.
-          expect(useTableStore.getState().isFetching).toBe(false);
+            await act(async () => {
+              pending[0].respond(tableWith('page two'));
+              await foreground;
+            });
 
-          await act(async () => {
-            pending[0].respond(tableWith('stale'));
-            await foreground;
-          });
-          await expect(foreground).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
-          // Only the request that the table is waiting for can fail it.
-          await expect(background).resolves.toEqual(ok ? tableWith('refreshed') : null);
-          expect(useTableStore.getState().isFetching).toBe(false);
-          expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe(
-            ok ? 'refreshed' : undefined,
-          );
+            await expect(foreground).resolves.toEqual(tableWith('page two'));
+            expect(useTableStore.getState().isFetching).toBe(false);
+            expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe('page two');
+          } finally {
+            errors.mockRestore();
+          }
         },
       );
 
@@ -1279,8 +1309,10 @@ describe('useTableStore', () => {
           pending[0].respond(tableWith('refreshed'));
           await background;
         });
+        // The refresh is applied, since the later request could still fail, and the table
+        // keeps loading for that request.
         expect(useTableStore.getState().isFetching).toBe(true);
-        expect(useTableStore.getState().table).toBeNull();
+        expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe('refreshed');
 
         await act(async () => {
           pending[1].respond(tableWith('matches the search'));
