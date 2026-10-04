@@ -1052,13 +1052,15 @@ Prefer provider configuration when comparing different settings in the same eval
 | `OPENAI_API_BASE_URL`          | Full base URL; preferred over `OPENAI_BASE_URL` at the same environment level                                                   |
 | `OPENAI_BASE_URL`              | Alternate full base URL                                                                                                         |
 | `OPENAI_TEMPERATURE`           | Temperature for supported non-reasoning requests; defaults to 0                                                                 |
-| `OPENAI_MAX_TOKENS`            | Output limit for non-reasoning requests and fallback for reasoning Responses requests; reasoning Chat requests ignore it        |
+| `OPENAI_MAX_TOKENS`            | Output limit for non-reasoning requests; also a fallback for reasoning Responses requests                                       |
 | `OPENAI_MAX_COMPLETION_TOKENS` | Output limit for reasoning Chat requests; preferred environment fallback for reasoning Responses requests. No built-in default. |
 | `PROMPTFOO_EVAL_TIMEOUT_MS`    | Overall eval-call timeout, including Responses background polling                                                               |
 | `REQUEST_TIMEOUT_MS`           | Standard request timeout, except requests with a longer model-specific timeout                                                  |
 | `PROMPTFOO_REQUEST_BACKOFF_MS` | Retry backoff base in milliseconds; defaults to 5,000                                                                           |
 | `PROMPTFOO_RETRY_5XX`          | Set to `true` to retry server errors                                                                                            |
 | `PROMPTFOO_DELAY_MS`           | Delay between calls in milliseconds; defaults to 0                                                                              |
+
+Reasoning Chat requests to OpenAI ignore `OPENAI_MAX_TOKENS`, because their limit also counts reasoning tokens; set `OPENAI_MAX_COMPLETION_TOKENS` for them. GPT-6 Chat requests still fall back to `OPENAI_MAX_TOKENS` when `reasoning_effort` is `none`, when they go through OpenRouter, and on Azure.
 
 Within endpoint environment settings, `OPENAI_API_HOST` is checked first. Provider `env` base URL overrides are checked before process base URL values. Explicit provider connection settings take precedence over these environment variables.
 
