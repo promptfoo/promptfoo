@@ -393,23 +393,29 @@ promptfoo eval --filter-metadata tags=ai
 # Multiple filters use AND logic (tests must match ALL conditions)
 promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
 
-# Comma-separated values use OR logic within one key
-promptfoo eval --filter-metadata category=math,science
+# Opt in to comma-separated OR values within one key
+promptfoo eval --filter-metadata-any category=math,science
 ```
 
-Each value uses case-sensitive substring matching, including for array metadata. Repeated flags use AND even for the same key. Whitespace is significant. Commas separate alternatives, and leading, trailing, or consecutive commas are invalid. To match a value that contains a comma, escape it as `\,`:
+Each value uses case-sensitive substring matching, including for array metadata. Repeated filters use AND even for the same key. Whitespace is significant. `--filter-metadata` treats commas and backslashes literally, as in 0.123.1:
 
 ```bash
-promptfoo eval --filter-metadata 'title=Hello\, world'
+promptfoo eval --filter-metadata 'title=Hello, world'
 ```
 
-Other backslashes are literal, so a value such as `C:\data` needs no escaping. Only when a value ends with a backslash and another alternative follows, double that backslash. This matches `C:\data\` or `D:\data`:
+`--filter-metadata-any` explicitly enables OR alternatives. Leading, trailing, or consecutive commas are invalid in this option. Escape a literal comma as `\,`:
 
 ```bash
-promptfoo eval --filter-metadata 'path=C:\data\\,D:\data'
+promptfoo eval --filter-metadata-any 'title=Hello\, world,Goodbye'
 ```
 
-Quote the argument, as in these examples, so that the shell passes the backslashes on.
+For this opt-in option only, backslash pairs immediately before a comma represent one backslash. Other backslashes remain literal. This matches `C:\data\` or `D:\data`:
+
+```bash
+promptfoo eval --filter-metadata-any 'path=C:\data\\,D:\data'
+```
+
+Quote arguments so the shell passes their backslashes through. Both kinds of filters can be combined; every flag must match.
 
 ### JSON in CSV
 

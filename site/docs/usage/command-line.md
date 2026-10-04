@@ -99,51 +99,52 @@ All specified files must exist or an error is thrown.
 
 By default the `eval` command will read the `promptfooconfig.yaml` configuration file in your current directory. But, if you're looking to override certain parameters you can supply optional arguments:
 
-| Option                               | Description                                                                                              |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `-a, --assertions <path>`            | Path to assertions file                                                                                  |
-| `-c, --config <paths...>`            | Path to configuration file(s). Automatically loads promptfooconfig.yaml                                  |
-| `--delay <number>`                   | Delay between each test (in milliseconds)                                                                |
-| `--description <description>`        | Description of the eval run                                                                              |
-| `--filter-failing <path or id>`      | Filter tests that failed in a previous eval (by file path or eval ID)                                    |
-| `--filter-failing-only <path or id>` | Filter tests that had assertion failures in a previous eval, excluding errors                            |
-| `--filter-errors-only <path or id>`  | Filter tests that resulted in errors in a previous eval                                                  |
-| `-n, --filter-first-n <number>`      | Only run the first N tests                                                                               |
-| `--filter-range <start:end>`         | Only run tests whose zero-based index is in the range. The end index is exclusive.                       |
-| `--filter-sample <number>`           | Only run a random sample of N tests                                                                      |
-| `--filter-sample-seed <number>`      | Numeric seed used to make `--filter-sample` select the same tests on repeated runs                       |
-| `--filter-metadata <key=value>`      | Filter tests by metadata substring. Commas separate OR values (`\,` is a comma); repeated flags use AND. |
-| `--filter-pattern <pattern>`         | Only run tests whose description matches the regex pattern                                               |
-| `--filter-prompts <pattern>`         | Only run tests with prompts whose id or label matches the regex pattern                                  |
-| `--filter-providers <providers>`     | Only run tests with these providers (regex match on provider `id` or `label`)                            |
-| `--filter-targets <targets>`         | Only run tests with these targets (alias for --filter-providers)                                         |
-| `--grader <provider>`                | Model that will grade outputs                                                                            |
-| `-j, --max-concurrency <number>`     | Maximum number of concurrent API calls                                                                   |
-| `--model-outputs <path>`             | Path to JSON containing list of LLM output strings                                                       |
-| `--no-cache`                         | Do not read or write results to disk cache                                                               |
-| `--no-progress-bar`                  | Do not show progress bar                                                                                 |
-| `--no-table`                         | Do not output table in CLI                                                                               |
-| `--no-write`                         | Do not write results to promptfoo directory                                                              |
-| `--resume [evalId]`                  | Resume a paused/incomplete eval. If `evalId` is omitted, resumes latest                                  |
-| `--retry-errors`                     | Retry all ERROR results from the latest eval                                                             |
-| `-o, --output <paths...>`            | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml, junit.xml)                          |
-| `-p, --prompts <paths...>`           | Paths to prompt files (.txt)                                                                             |
-| `--prompt-prefix <path>`             | Prefix prepended to every prompt                                                                         |
-| `--prompt-suffix <path>`             | Suffix appended to every prompt                                                                          |
-| `-r, --providers <name or path...>`  | Provider names or paths to custom API caller modules                                                     |
-| `--remote`                           | Force remote inference wherever possible (used for red teams)                                            |
-| `--repeat <number>`                  | Number of times to run each test                                                                         |
-| `--share`                            | Create a shareable URL                                                                                   |
-| `--no-share`                         | Do not create a shareable URL, this overrides the config file                                            |
-| `--suggest-prompts <number>`         | Generate N new prompts and append them to the prompt list                                                |
-| `--tag <key=value>`                  | Set an eval tag. Can be specified multiple times; CLI tags override config tags.                         |
-| `--table`                            | Output table in CLI                                                                                      |
-| `--table-cell-max-length <number>`   | Truncate console table cells to this length                                                              |
-| `-t, --tests <path>`                 | Path to CSV with test cases                                                                              |
-| `--var <key=value>`                  | Set a variable in key=value format                                                                       |
-| `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                          |
-| `-w, --watch`                        | Watch for changes in config and re-run                                                                   |
-| `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                             |
+| Option                               | Description                                                                                           |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `-a, --assertions <path>`            | Path to assertions file                                                                               |
+| `-c, --config <paths...>`            | Path to configuration file(s). Automatically loads promptfooconfig.yaml                               |
+| `--delay <number>`                   | Delay between each test (in milliseconds)                                                             |
+| `--description <description>`        | Description of the eval run                                                                           |
+| `--filter-failing <path or id>`      | Filter tests that failed in a previous eval (by file path or eval ID)                                 |
+| `--filter-failing-only <path or id>` | Filter tests that had assertion failures in a previous eval, excluding errors                         |
+| `--filter-errors-only <path or id>`  | Filter tests that resulted in errors in a previous eval                                               |
+| `-n, --filter-first-n <number>`      | Only run the first N tests                                                                            |
+| `--filter-range <start:end>`         | Only run tests whose zero-based index is in the range. The end index is exclusive.                    |
+| `--filter-sample <number>`           | Only run a random sample of N tests                                                                   |
+| `--filter-sample-seed <number>`      | Numeric seed used to make `--filter-sample` select the same tests on repeated runs                    |
+| `--filter-metadata <key=value>`      | Filter tests by literal metadata substring, including commas and backslashes; repeated flags use AND. |
+| `--filter-metadata-any <key=value>`  | Opt in to comma-separated OR metadata values (`\,` is a literal comma); repeated filters use AND.     |
+| `--filter-pattern <pattern>`         | Only run tests whose description matches the regex pattern                                            |
+| `--filter-prompts <pattern>`         | Only run tests with prompts whose id or label matches the regex pattern                               |
+| `--filter-providers <providers>`     | Only run tests with these providers (regex match on provider `id` or `label`)                         |
+| `--filter-targets <targets>`         | Only run tests with these targets (alias for --filter-providers)                                      |
+| `--grader <provider>`                | Model that will grade outputs                                                                         |
+| `-j, --max-concurrency <number>`     | Maximum number of concurrent API calls                                                                |
+| `--model-outputs <path>`             | Path to JSON containing list of LLM output strings                                                    |
+| `--no-cache`                         | Do not read or write results to disk cache                                                            |
+| `--no-progress-bar`                  | Do not show progress bar                                                                              |
+| `--no-table`                         | Do not output table in CLI                                                                            |
+| `--no-write`                         | Do not write results to promptfoo directory                                                           |
+| `--resume [evalId]`                  | Resume a paused/incomplete eval. If `evalId` is omitted, resumes latest                               |
+| `--retry-errors`                     | Retry all ERROR results from the latest eval                                                          |
+| `-o, --output <paths...>`            | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml, junit.xml)                       |
+| `-p, --prompts <paths...>`           | Paths to prompt files (.txt)                                                                          |
+| `--prompt-prefix <path>`             | Prefix prepended to every prompt                                                                      |
+| `--prompt-suffix <path>`             | Suffix appended to every prompt                                                                       |
+| `-r, --providers <name or path...>`  | Provider names or paths to custom API caller modules                                                  |
+| `--remote`                           | Force remote inference wherever possible (used for red teams)                                         |
+| `--repeat <number>`                  | Number of times to run each test                                                                      |
+| `--share`                            | Create a shareable URL                                                                                |
+| `--no-share`                         | Do not create a shareable URL, this overrides the config file                                         |
+| `--suggest-prompts <number>`         | Generate N new prompts and append them to the prompt list                                             |
+| `--tag <key=value>`                  | Set an eval tag. Can be specified multiple times; CLI tags override config tags.                      |
+| `--table`                            | Output table in CLI                                                                                   |
+| `--table-cell-max-length <number>`   | Truncate console table cells to this length                                                           |
+| `-t, --tests <path>`                 | Path to CSV with test cases                                                                           |
+| `--var <key=value>`                  | Set a variable in key=value format                                                                    |
+| `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                       |
+| `-w, --watch`                        | Watch for changes in config and re-run                                                                |
+| `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                          |
 
 Use `--tag` for run-specific eval tags that should not change `promptfooconfig.yaml`:
 
