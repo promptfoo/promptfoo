@@ -1081,7 +1081,7 @@ class CodexAppServerConnection {
 
     const candidateLines =
       this.bufferedJsonRpcLines.length > 0 ? [...this.bufferedJsonRpcLines, line] : [trimmed];
-    const candidate = candidateLines.join('\n');
+    let candidate = candidateLines.join('\n');
     if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
       this.bufferedJsonRpcLines = [];
       this.handleProcessFailure(
@@ -1105,10 +1105,11 @@ class CodexAppServerConnection {
           throw error;
         }
         // Preserve compatibility with app-server output containing raw newlines inside strings.
-        message = JSON.parse(candidateLines.join('\\n')) as JsonRpcMessage;
+        candidate = this.escapeStringNewlines(candidate);
+        message = JSON.parse(candidate) as JsonRpcMessage;
       }
     } catch (error) {
-      if (this.shouldBufferJsonRpcLine(error, trimmed)) {
+      if (this.shouldBufferJsonRpcLine(error, candidate)) {
         this.bufferedJsonRpcLines = candidateLines;
         return;
       }
@@ -1122,19 +1123,41 @@ class CodexAppServerConnection {
     this.handleMessage(message);
   }
 
-  private shouldBufferJsonRpcLine(error: unknown, trimmedLine: string): boolean {
-    if (this.bufferedJsonRpcLines.length > 0) {
-      return true;
+  private escapeStringNewlines(candidate: string): string {
+    const parts: string[] = [];
+    let inString = false;
+    let escaped = false;
+    let start = 0;
+
+    for (let index = 0; index < candidate.length; index++) {
+      const character = candidate[index];
+      if (inString && character === '\n' && !escaped) {
+        parts.push(candidate.slice(start, index), '\\n');
+        start = index + 1;
+      }
+      if (escaped) {
+        escaped = false;
+      } else if (inString && character === '\\') {
+        escaped = true;
+      } else if (character === '"') {
+        inString = !inString;
+      }
     }
-    if (!trimmedLine.startsWith('{')) {
+
+    parts.push(candidate.slice(start));
+    return parts.join('');
+  }
+
+  private shouldBufferJsonRpcLine(error: unknown, candidate: string): boolean {
+    if (!candidate.startsWith('{')) {
       return false;
     }
 
     const message = error instanceof Error ? error.message : String(error);
     return (
-      /Unterminated string|Unexpected end of JSON input|Bad control character/i.test(message) ||
+      /Unterminated string|Unexpected end of JSON input/i.test(message) ||
       (message.startsWith('Expected ') &&
-        message.includes(` in JSON at position ${trimmedLine.length} (line`))
+        message.includes(` in JSON at position ${candidate.length} (line`))
     );
   }
 

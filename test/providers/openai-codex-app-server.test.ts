@@ -4847,6 +4847,108 @@ describe('OpenAICodexAppServerProvider', () => {
     },
   );
 
+  it('discards malformed multiline JSON-RPC before the next valid response', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({ config: { thread_cleanup: 'none' } });
+    const resultPromise = provider.callApi('Recover after malformed multiline protocol output');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.stdout.write('{\n  "id": 1,\n}\n');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_recovered' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_recovered', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_recovered',
+        turnId: 'turn_recovered',
+        itemId: 'msg_recovered',
+        delta: 'Recovered',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_recovered',
+        turn: { id: 'turn_recovered', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'Recovered' });
+  });
+
+  it('preserves structural whitespace when repairing raw newlines in JSON-RPC strings', async () => {
+    vi.useFakeTimers();
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none', turn_timeout_ms: 1_000 },
+    });
+    const resultPromise = provider.callApi('Read combined multiline protocol output');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_combined' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_combined', status: 'inProgress' } },
+    });
+    const delta = [
+      'quote "one" and path C:\\folder\\',
+      '',
+      'next \\"quoted\\" and literal \\n',
+      'last',
+    ].join('\n');
+    const params = {
+      threadId: 'thr_combined',
+      turnId: 'turn_combined',
+      itemId: 'msg_combined',
+      delta,
+    };
+    const notification = JSON.stringify({ method: 'item/agentMessage/delta', params }, null, 2);
+    const rawString = `"${delta
+      .split('\n')
+      .map((line) => JSON.stringify(line).slice(1, -1))
+      .join('\n')}"`;
+    server.stdout.write('{"id": }\n');
+    server.stdout.write(`${notification.replace(JSON.stringify(delta), rawString)}\n`);
+    server.send({ method: 'item/agentMessage/delta', params: { ...params, delta: ' tail' } });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_combined',
+        turn: { id: 'turn_combined', status: 'completed', items: [], error: null },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(resultPromise).resolves.toMatchObject({ output: `${delta} tail` });
+  });
+
   it('parses JSON-RPC notifications whose string payloads contain literal newlines', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
