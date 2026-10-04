@@ -446,22 +446,24 @@ redteam:
       });
     });
 
-    it('should preserve legacy GPT-5 target IDs when loading a YAML config', async () => {
-      const user = userEvent.setup();
+    it.each(['openai:gpt-5-mini', 'openai:gpt-6.1-sol'])(
+      'preserves OpenAI target %s when loading a YAML config',
+      async (modelId) => {
+        const user = userEvent.setup();
 
-      render(
-        <MemoryRouter initialEntries={['/redteam/setup']}>
-          <RedTeamSetupPage />
-        </MemoryRouter>,
-      );
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
 
-      const loadButton = screen.getByRole('button', { name: /Load Config/i });
-      await user.click(loadButton);
+        const loadButton = screen.getByRole('button', { name: /Load Config/i });
+        await user.click(loadButton);
 
-      const yamlContent = `
-description: Legacy GPT-5 target config
+        const yamlContent = `
+description: OpenAI target config
 targets:
-  - openai:gpt-5-mini
+  - ${modelId}
 prompts:
   - "{{prompt}}"
 redteam:
@@ -469,19 +471,20 @@ redteam:
   plugins:
     - shell-injection
 `;
-      const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+        const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      expect(fileInput).toBeTruthy();
-      await user.upload(fileInput, file);
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput).toBeTruthy();
+        await user.upload(fileInput, file);
 
-      await waitFor(() => {
-        const { config, providerType } = useRedTeamConfig.getState();
-        expect(config.target.id).toBe('openai:gpt-5-mini');
-        expect(config.target.label).toBe('openai:gpt-5-mini');
-        expect(providerType).toBe('openai');
-      });
-    });
+        await waitFor(() => {
+          const { config, providerType } = useRedTeamConfig.getState();
+          expect(config.target.id).toBe(modelId);
+          expect(config.target.label).toBe(modelId);
+          expect(providerType).toBe('openai');
+        });
+      },
+    );
 
     it('preserves the dated Sonnet 4.5 preset when importing a saved YAML configuration', async () => {
       const user = userEvent.setup();

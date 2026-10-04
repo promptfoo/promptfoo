@@ -136,6 +136,34 @@ describe('bedrock openaiResponses helper', () => {
     });
   });
 
+  describe.each(['provider', 'prompt'] as const)('%s model overrides', (scope) => {
+    it.each([
+      ['openai.gpt-5.6-sol', 'xai.grok-4.3'],
+      ['openai.gpt-5.6-sol', 'openai.gpt-oss-20b'],
+      ['xai.grok-4.3', 'openai.gpt-5.6-sol'],
+      ['xai.grok-4.3', 'openai.gpt-oss-20b'],
+      ['openai.gpt-oss-120b', 'openai.gpt-5.6-sol'],
+      ['openai.gpt-oss-120b', 'xai.grok-4.3'],
+    ])('rejects switching %s to %s', async (model, overrideModel) => {
+      const override = { passthrough: { model: overrideModel } };
+      const provider = createBedrockOpenAiResponsesProvider(model, {
+        config: { reasoning_effort: 'high', ...(scope === 'provider' ? override : {}) },
+      });
+
+      await expect(
+        provider.getOpenAiBody(
+          'hello',
+          scope === 'prompt'
+            ? { prompt: { raw: 'hello', label: 'fixture', config: override }, vars: {} }
+            : undefined,
+        ),
+      ).rejects.toThrow(
+        `Bedrock model ${overrideModel} cannot use the ${model} Responses provider. Configure a separate provider using bedrock:responses:${overrideModel}.`,
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+
   describe('GPT OSS mantle Responses', () => {
     it('classifies only the short mantle GPT OSS ids', () => {
       expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b')).toBe(true);

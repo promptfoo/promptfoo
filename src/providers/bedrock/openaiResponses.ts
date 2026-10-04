@@ -235,12 +235,16 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
   ) {
     const model = this.getRequestModelName(context);
+    if (
+      isBedrockOpenAiResponsesModel(model) !== isBedrockOpenAiResponsesModel(this.modelName) ||
+      isBedrockGrokModel(model) !== isBedrockGrokModel(this.modelName) ||
+      isBedrockGptOssResponsesModel(model) !== isBedrockGptOssResponsesModel(this.modelName)
+    ) {
+      throw new Error(
+        `Bedrock model ${model} cannot use the ${this.modelName} Responses provider. Configure a separate provider using bedrock:responses:${model}.`,
+      );
+    }
     if (isBedrockOpenAiResponsesModel(model) && model !== this.modelName) {
-      if (!isBedrockOpenAiResponsesModel(this.modelName)) {
-        throw new Error(
-          `Bedrock model ${model} cannot use the ${this.modelName} Responses provider. Configure a separate provider using bedrock:responses:${model}.`,
-        );
-      }
       const url = new URL(this.getApiUrl());
       if (getMantleEndpointRegion(url) && url.pathname.replace(/\/+$/, '') !== '/openai/v1') {
         throw new Error(
@@ -324,10 +328,6 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
 export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider {
   protected normalizeCapabilityModelName(modelName: string): string {
     return modelName.replace(/^xai\./, '');
-  }
-
-  protected getCapabilityModelName(): string {
-    return this.normalizeCapabilityModelName(this.modelName);
   }
 
   protected isReasoningModel(): boolean {

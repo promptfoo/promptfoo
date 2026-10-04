@@ -573,6 +573,9 @@
         "TOGETHER_API_KEY": {
           "type": "string"
         },
+        "TYPESAFE_API_KEY": {
+          "type": "string"
+        },
         "VERCEL_AI_GATEWAY_API_KEY": {
           "type": "string"
         },

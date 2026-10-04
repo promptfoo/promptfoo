@@ -297,7 +297,19 @@ providers:
       omitDefaults: true
 ```
 
-Use the model name and endpoint supported by your gateway. `apiBaseUrl` includes the API prefix, such as `/v1`, but not `/chat/completions` or `/responses`. Promptfoo appends the endpoint path and preserves base URL query parameters.
+Use the model ID exactly as listed by your gateway after `openai:chat:`. `apiBaseUrl` includes the API prefix, such as `/v1`, but not `/chat/completions` or `/responses`. Promptfoo appends the endpoint path and preserves base URL query parameters.
+
+The gateway settings under `providers` do not configure the grader for model-graded assertions such as `llm-rubric`. [Set the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader) in `defaultTest.options.provider` to use a model your gateway supports:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:your-model
+      config:
+        apiBaseUrl: https://gateway.example.com/v1
+        apiKeyEnvar: GATEWAY_API_KEY
+```
 
 | Option             | Use                                                                                                                                                                                 |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

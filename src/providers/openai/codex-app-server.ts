@@ -828,6 +828,50 @@ function createAbortError(message: string): Error {
   return error;
 }
 
+/** Find npm's entrypoint only when Windows cannot launch a native Codex binary. */
+function getCodexNpmEntrypoint(env: Record<string, string>): string | undefined {
+  // Match Node's first, case-insensitive PATH key after sorting environment keys.
+  const pathKey = Object.keys(env)
+    .sort()
+    .find((key) => key.toUpperCase() === 'PATH');
+  const searchPath = pathKey
+    ? env[pathKey]
+    : (Object.entries(process.env).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? '');
+  // libuv skips quoted delimiters, then consumes the rest of the PATH component.
+  const directories = (
+    searchPath.match(
+      new RegExp(`(?:"[^"]*(?:"|$)|'[^']*(?:'|$)|[^${path.delimiter}]+)[^${path.delimiter}]*`, 'g'),
+    ) ?? []
+  ).map((directory) => directory.replace(/^["']|["']$/g, ''));
+  // libuv checks the parent process environment when deciding whether to search cwd.
+  const searchCwd = !Object.keys(process.env).some(
+    (key) => key.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH',
+  );
+  const nativeDirectories = searchCwd ? [process.cwd(), ...directories] : directories;
+  if (
+    nativeDirectories.some((directory) =>
+      ['codex.com', 'codex.exe'].some((file) =>
+        fs.existsSync(path.resolve(process.cwd(), directory, file)),
+      ),
+    )
+  ) {
+    return undefined;
+  }
+  // Only discover npm installations on absolute PATH entries, never in the workspace.
+  const binDirectory = directories.find(
+    (directory) => path.isAbsolute(directory) && fs.existsSync(path.join(directory, 'codex.cmd')),
+  );
+  if (!binDirectory) {
+    return undefined;
+  }
+  const nodeModulesDirectory =
+    path.basename(binDirectory).toLowerCase() === '.bin'
+      ? path.dirname(binDirectory)
+      : path.join(binDirectory, 'node_modules');
+  const entrypoint = path.join(nodeModulesDirectory, '@openai', 'codex', 'bin', 'codex.js');
+  return fs.existsSync(entrypoint) ? entrypoint : undefined;
+}
+
 class CodexAppServerConnection {
   readonly instanceId: string;
 
@@ -1750,10 +1794,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     config: CodexAppServerConfig,
   ): Promise<CodexAppServerConnection> {
     const connectionInstanceId = `${connectionKey}:${crypto.randomUUID()}`;
+    const entrypoint =
+      process.platform === 'win32' && config.codex_path_override === undefined
+        ? getCodexNpmEntrypoint(env)
+        : undefined;
+    const args = this.buildAppServerArgs(config, env);
     const connection = new CodexAppServerConnection({
       connectionInstanceId,
-      command: config.codex_path_override ?? 'codex',
-      args: this.buildAppServerArgs(config, env),
+      command: config.codex_path_override ?? (entrypoint ? process.execPath : 'codex'),
+      args: entrypoint ? [entrypoint, ...args] : args,
       env,
       requestTimeoutMs: this.getRequestTimeoutMs(config),
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,

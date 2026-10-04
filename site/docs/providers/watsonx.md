@@ -73,13 +73,15 @@ Make sure you have either the API key or bearer token, along with the project ID
 
 ## Installation
 
-To install the WatsonX provider, use the following steps:
+The WatsonX SDKs are optional peers and are not installed with promptfoo by default. To use this provider:
 
-1. Install the necessary dependencies:
+1. Install promptfoo and the supported SDK versions together in your project:
 
    ```sh
-   npm install @ibm-cloud/watsonx-ai ibm-cloud-sdk-core
+   npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2
    ```
+
+   For a global installation, add `-g` to the same command so both SDKs are installed alongside promptfoo. Missing or incompatible SDKs are reported when the WatsonX provider is used.
 
 2. Set up the necessary environment variables:
 

@@ -441,6 +441,8 @@ describe('Mistral', () => {
       ['mistral-code-latest', 0.00066],
       // Devstral 2 agent alias: $0.40/$2.00
       ['mistral-code-agent-latest', 0.00136],
+      // Z.ai GLM 5.3 hosted by Mistral: $1.40/$4.40
+      ['zai-glm-5-3', 0.0032],
     ])('tracks catalog pricing for %s', async (model, expectedCost) => {
       const provider = new MistralChatCompletionProvider(model);
       vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
@@ -456,6 +458,10 @@ describe('Mistral', () => {
       });
 
       const result = await provider.callApi('Test alias pricing');
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string).model).toBe(
+        model,
+      );
       expect(result.cost).toBeCloseTo(expectedCost, 6);
     });
 
@@ -1052,6 +1058,17 @@ describe('Mistral', () => {
     it('should create a provider with default options', () => {
       expect(provider.modelName).toBe('mistral-embed');
       expect(provider.config).toEqual({});
+      expect(provider.id()).toBe('mistral:embedding:mistral-embed');
+    });
+
+    it('should honor a custom embedding provider ID without changing the model', () => {
+      const customProvider = new MistralEmbeddingProvider({
+        id: 'custom-embedding',
+        modelName: 'codestral-embed',
+      });
+
+      expect(customProvider.id()).toBe('custom-embedding');
+      expect(customProvider.modelName).toBe('codestral-embed');
     });
 
     it('should support non-default embedding models such as codestral-embed', async () => {

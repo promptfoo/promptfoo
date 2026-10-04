@@ -59,7 +59,7 @@ import { checkProviderApiKeys } from '../../src/util/provider';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
-import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
+import type { ApiProvider, ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
@@ -926,6 +926,26 @@ describe('loadApiProvider', () => {
       env: { MODELSLAB_API_KEY: 'context-key' } as any,
     });
     expect((provider as any).apiKey).toBe('provider-key');
+  });
+
+  it('loadApiProvider with typesafe:modelName', async () => {
+    const latest = await loadApiProvider('typesafe:jev-latest');
+    expect(latest.id()).toBe('typesafe:jev-latest');
+    const pinned = await loadApiProvider('typesafe:jev-1.13.0');
+    expect(pinned.id()).toBe('typesafe:jev-1.13.0');
+    expect(pinned).toHaveProperty('callClassificationApi');
+  });
+
+  it('loadApiProvider with typesafe: throws for empty model name', async () => {
+    await expect(loadApiProvider('typesafe:')).rejects.toThrow(/Model name is required/);
+  });
+
+  it('loadApiProvider with typesafe prefers provider-level env over context env', async () => {
+    const provider = (await loadApiProvider('typesafe:jev-latest', {
+      options: { env: { TYPESAFE_API_KEY: 'provider-key' } },
+      env: { TYPESAFE_API_KEY: 'context-key' } as any,
+    })) as ApiProvider & { getApiKey: () => string | undefined };
+    expect(provider.getApiKey()).toBe('provider-key');
   });
 
   it('loadApiProvider with moonshot prefers provider-level env over context env', async () => {

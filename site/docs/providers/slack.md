@@ -17,14 +17,14 @@ The Slack provider enables human-in-the-loop evaluations by sending prompts to S
 
 ### Install Dependencies
 
-The Slack provider requires the `@slack/web-api` package to be installed separately:
+The Slack provider requires `@slack/web-api@^8.1.1`, installed alongside promptfoo:
 
 ```bash
-npm install @slack/web-api@^8
+npm install promptfoo @slack/web-api@^8.1.1
 ```
 
 :::note
-This optional dependency only needs to be installed if you want to use the Slack provider.
+The SDK is not installed by default. For a global promptfoo installation, use `npm install -g promptfoo @slack/web-api@^8.1.1` instead.
 :::
 
 ### Slack App Setup

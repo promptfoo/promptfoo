@@ -271,7 +271,7 @@ const FoundationModelConfiguration = ({
       anthropic: {
         name: 'Anthropic',
         defaultModel: 'anthropic:messages:claude-sonnet-5',
-        placeholder: 'anthropic:messages:claude-opus-5-5, anthropic:messages:claude-sonnet-5',
+        placeholder: 'anthropic:messages:claude-opus-5-5, anthropic:messages:claude-sonnet-5-5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/anthropic',
         envVar: 'ANTHROPIC_API_KEY',
       },

@@ -846,15 +846,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : !this.isReasoningCapabilityModel(modelName);
   }
 
-  /**
-   * Normalize a request model for capability checks while preserving the wire model id.
-   * OpenAI-compatible subclasses can strip vendor-specific prefixes from both their configured
-   * model and per-call passthrough overrides.
-   */
-  protected normalizeCapabilityModelName(modelName: string): string {
-    return modelName;
-  }
-
   private getEffectiveModelName(config: OpenAiCompletionOptions): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     return typeof passthroughModel === 'string'

@@ -76,6 +76,9 @@ providers:
         - id: web-search
 ```
 
+Cohere chat requests bypass Promptfoo’s local response cache. Repeated evals call the API again,
+even when caching is enabled, and may incur additional charges.
+
 ## Control over prompting
 
 By default, a regular string prompt is wrapped in the appropriate chat format. Command A+ and North

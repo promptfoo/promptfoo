@@ -18,6 +18,20 @@ and web assets. Evaluations cover success, assertion failure, and provider error
 with caching disabled and isolated configuration paths. CommonJS also checks
 writable exports and Zod constructor identity.
 
+Both profiles check that Slack stays opt-in and rejects an incompatible SDK without
+affecting ordinary providers, in ESM and CommonJS. The default profile also installs
+the supported Slack SDK and constructs providers without making Slack requests.
+
+Langfuse prompt management is checked in both module formats with the SDK absent or
+incompatible. The default profile installs the real SDK and evaluates text and chat
+prompts against a loopback server, checking version/label selection, compilation,
+concurrent request sharing, and reuse of the SDK prompt cache.
+
+Both profiles check WatsonX with neither SDK, each SDK individually missing, and
+each SDK incompatible, in ESM and CommonJS. The default profile installs both SDKs
+and exercises real text/chat requests against a local bearer-token server, plus
+IAM authenticator construction without external token requests.
+
 The default profile checks both CLI aliases and evaluates compressed HTTP responses
 from a local server. It also checks the Transformers provider with an offline model
 fixture when the optional SDK is absent, incompatible, and installed.
