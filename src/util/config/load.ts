@@ -547,6 +547,22 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 
 type TestSource = { tests: TestSuiteConfig['tests']; basePath: string };
 
+/**
+ * YAML and JSON configs may give `env` values as numbers or booleans. Environment values
+ * are strings, and the resolved suite is validated as such.
+ */
+function stringifyEnvValues(env: UnifiedConfig['env']): TestSuite['env'] {
+  if (!env) {
+    return env;
+  }
+  return Object.fromEntries(
+    Object.entries(env as Record<string, unknown>).map(([key, value]) => [
+      key,
+      typeof value === 'number' || typeof value === 'boolean' ? String(value) : value,
+    ]),
+  ) as TestSuite['env'];
+}
+
 async function readTestSources(
   sources: TestSource[],
   env: TestSuite['env'],
@@ -1269,7 +1285,7 @@ async function resolveLoadedConfig(
     redteam: config.redteam,
     extensions: config.extensions,
     tracing: config.tracing,
-    env: config.env,
+    env: stringifyEnvValues(config.env),
   };
 
   // Validate assertions in tests and defaultTest using Zod schema

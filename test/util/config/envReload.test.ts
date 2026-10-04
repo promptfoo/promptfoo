@@ -17,6 +17,7 @@ import { evaluate } from '../../../src/node/evaluate';
 import { nodeEvaluatorRuntime } from '../../../src/node/evaluatorRuntime';
 import { loadApiProvider, loadApiProviders, resolveProvider } from '../../../src/providers/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { TestSuiteSchema } from '../../../src/types/index';
 import { isApiProvider } from '../../../src/types/providers';
 import { readAzureBlobText } from '../../../src/util/azureBlob';
 import {
@@ -122,6 +123,33 @@ describe('suite environment loading', () => {
     );
     return configPath;
   }
+
+  it('accepts numeric and boolean env values from config files', async () => {
+    const configPath = writeConfig('env-value-types', {
+      env: {
+        PROMPTFOO_EVAL_TIMEOUT_MS: 10000,
+        PROMPTFOO_INSECURE_SSL: true,
+        CUSTOM_RATIO: 0.5,
+        CUSTOM_NAME: 'plain',
+      } as unknown as UnifiedConfig['env'],
+    });
+
+    const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+
+    expect(testSuite.env).toEqual({
+      PROMPTFOO_EVAL_TIMEOUT_MS: '10000',
+      PROMPTFOO_INSECURE_SSL: 'true',
+      CUSTOM_RATIO: '0.5',
+      CUSTOM_NAME: 'plain',
+    });
+    // The saved config keeps the values as authored.
+    expect(config.env).toMatchObject({
+      PROMPTFOO_EVAL_TIMEOUT_MS: 10000,
+      PROMPTFOO_INSECURE_SSL: true,
+    });
+    // `promptfoo validate` and `eval` report these issues to the user.
+    expect(TestSuiteSchema.safeParse(testSuite).error?.issues ?? []).toEqual([]);
+  });
 
   it('applies published tracing defaults to executable and saved file configurations', async () => {
     const input = { enabled: true, otlp: { http: {}, grpc: {} }, storage: {} };
