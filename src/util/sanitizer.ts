@@ -39,24 +39,34 @@ function hasUrlUserinfo(url: string): boolean {
   return atIndex > 0;
 }
 
+/**
+ * Names that hold a credential word without being a credential: special tokens, cursors and
+ * token limits, and settings. Takes a name from `normalizeFieldName`.
+ */
+function isBenignParameterName(normalized: string): boolean {
+  return (
+    /^(?:eos|bos|pad|unk|mask|sep|cls|stop|start|end|next|prev|page|nextpage|continuation|resume|cursor|max|min)tokens?$/.test(
+      normalized,
+    ) || /(?:version|type|enabled)$/.test(normalized)
+  );
+}
+
 function isSecretParameterName(name: string): boolean {
   const normalized = normalizeFieldName(name);
   if (normalized === 'key') {
     return true;
   }
-  if (
-    /^(?:eos|bos|pad|unk|mask|sep|cls|stop|start|end|next|prev|page|nextpage|continuation|resume|cursor|max|min)tokens?$/.test(
-      normalized,
-    ) ||
-    /(?:version|type|enabled)$/.test(normalized)
-  ) {
+  if (isBenignParameterName(normalized)) {
     return false;
   }
   if (isSecretField(name) || name.split(/[-_\s=]+/).some(isSecretField)) {
     return true;
   }
+  return hasCredentialCompound(name);
+}
 
-  // Check credential compounds, including lowercase suffixes, camelCase and numeric versions.
+/** Checks credential compounds, including lowercase suffixes, camelCase and numeric versions. */
+function hasCredentialCompound(name: string): boolean {
   const words = name
     .replace(/(value|hash|encrypted)$/i, '_$1')
     .replace(/v?\d+/gi, '_')
@@ -280,16 +290,50 @@ const ENV_SECRET_SUFFIX_WORDS = [
   'accesskey',
 ].map((word) => word.toUpperCase());
 
+/** `clientSecrets` as `client_Secret`: every word without its plural ending. */
+function singularizeFieldName(fieldName: string): string {
+  return fieldName
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .split(/[-_\s=]+/)
+    .map((word) => (word.length > 3 && /[^s]s$/i.test(word) ? word.slice(0, -1) : word))
+    .join('_');
+}
+
 /**
- * Whether a field name ends in a credential word, as `databasePassword`, `db_password` and
- * `userApiKey` do. `isSecretField` only knows exact names.
+ * How a field name relates to credentials, for data whose keys are not under our control,
+ * such as the arguments of a tool call. `isSecretField` only knows exact names.
  *
- * This is for data whose keys are not under our control, such as the arguments of a tool
- * call. It is not applied to configs, where a key such as `stop_token` is a setting.
+ * - `'credential'`: the name ends in a credential word, as `databasePassword`,
+ *   `db_password` and `userApiKey` do.
+ * - `'related'`: the name is the plural of such a name (`accessTokens`) or qualifies a
+ *   credential word (`apiKeyForTenant`), by the rules for URL parameter names. Such a name
+ *   can also hold a count or a setting (`inputTokens`, `tokenCount`).
+ * - `undefined`: neither. That includes cursors and special tokens (`pageToken`,
+ *   `maxTokens`) and a bare `key`, which is an ordinary argument name.
+ *
+ * This is not applied to configs, where a key such as `secret_name` is a setting.
  */
-export function isCompoundSecretFieldName(fieldName: string): boolean {
-  const normalized = normalizeFieldName(fieldName).toUpperCase();
-  return ENV_SECRET_SUFFIX_WORDS.some((secret) => normalized.endsWith(secret));
+export function getCredentialFieldKind(fieldName: string): 'credential' | 'related' | undefined {
+  const endsInCredentialWord = (normalized: string) =>
+    ENV_SECRET_SUFFIX_WORDS.some((secret) => normalized.toUpperCase().endsWith(secret));
+
+  const normalized = normalizeFieldName(fieldName);
+  if (isBenignParameterName(normalized)) {
+    return undefined;
+  }
+  if (endsInCredentialWord(normalized)) {
+    return 'credential';
+  }
+  const singular = singularizeFieldName(fieldName);
+  const normalizedSingular = normalizeFieldName(singular);
+  if (isBenignParameterName(normalizedSingular)) {
+    return undefined;
+  }
+  return hasCredentialCompound(fieldName) ||
+    hasCredentialCompound(singular) ||
+    endsInCredentialWord(normalizedSingular)
+    ? 'related'
+    : undefined;
 }
 
 /**

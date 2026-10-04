@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
-import { isCompoundSecretFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
+import { getCredentialFieldKind, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
@@ -28,30 +28,47 @@ const MAX_TOOL_DATA_DEPTH = 64;
 const UNSANITIZED_TOOL_DATA = '[MCP tool data omitted: it could not be sanitized]';
 
 /**
- * Redacts what lies under a key that ends in a credential word, such as `databasePassword`.
- * The shared sanitizer matches exact key names, which the names a tool gives its arguments
- * rarely are. JSON inside a string is covered as well.
+ * Redacts what lies under a key whose name speaks of a credential. The shared sanitizer
+ * matches exact key names, which the names a tool gives its arguments rarely are. JSON inside
+ * a string is covered as well.
+ *
+ * - Under a name that ends in a credential word, such as `databasePassword`, the value is
+ *   redacted whatever it is.
+ * - Under a plural or qualified name, such as `accessTokens` or `apiKeyForTenant`, every
+ *   string is redacted, at any depth. Numbers stay: `inputTokens` and `tokenCount` are
+ *   counts.
+ * - A boolean or `null` is never a credential: `useApiKey` is a setting.
  *
  * `data` is the sanitizer's own copy, without cycles and of limited depth, and is changed
  * in place.
  */
-function redactCompoundSecretKeys(data: unknown): unknown {
+function redactCredentialKeys(data: unknown): unknown {
   // Held in a container so that data which is itself a string of JSON is covered too.
   const root = { data };
-  const pending: object[] = [root];
-  while (pending.length > 0) {
-    const container = pending.pop() as Record<string, unknown>;
+  const pending: Array<{ container: object; isCredential: boolean }> = [
+    { container: root, isCredential: false },
+  ];
+  for (let next = pending.pop(); next; next = pending.pop()) {
+    const container = next.container as Record<string, unknown>;
     for (const [key, item] of Object.entries(container)) {
-      if (isCompoundSecretFieldName(key)) {
+      if (item === null || typeof item === 'boolean') {
+        continue;
+      }
+      const kind = getCredentialFieldKind(key) ?? (next.isCredential ? 'related' : undefined);
+      if (kind === 'credential') {
         container[key] = REDACTED;
+      } else if (typeof item === 'object') {
+        pending.push({ container: item, isCredential: kind === 'related' });
+      } else if (kind === 'related') {
+        if (typeof item !== 'number') {
+          container[key] = REDACTED;
+        }
       } else if (typeof item === 'string' && /^\s*[{[]/.test(item)) {
         try {
-          container[key] = JSON.stringify(redactCompoundSecretKeys(JSON.parse(item)));
+          container[key] = JSON.stringify(redactCredentialKeys(JSON.parse(item)));
         } catch {
           // Not JSON after all.
         }
-      } else if (item !== null && typeof item === 'object') {
-        pending.push(item);
       }
     }
   }
@@ -68,7 +85,7 @@ function redactCompoundSecretKeys(data: unknown): unknown {
  */
 export function sanitizeMcpToolData<T>(value: T): T | typeof UNSANITIZED_TOOL_DATA {
   try {
-    return redactCompoundSecretKeys(
+    return redactCredentialKeys(
       sanitizeObject(value, {
         context: 'MCP tool data',
         sanitizeUrls: true,

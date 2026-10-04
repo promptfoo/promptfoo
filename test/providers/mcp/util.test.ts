@@ -206,6 +206,71 @@ describe('sanitizeMcpToolData', () => {
     );
   });
 
+  it('redacts the strings under plural and qualified credential names', () => {
+    expect(
+      sanitizeMcpToolData({
+        clientSecrets: ['first-secret', 'second-secret'],
+        databasePasswords: { primary: 'hunter2', replicas: [{ value: 'hunter3', port: 5432 }] },
+        userApiKeys: 'first-key,second-key',
+        accessTokens: ['first-token'],
+        apiKeysByTenant: { acme: 'tenant-key' },
+        // A credential word with a qualifier after it.
+        apiKeyForTenant: 'tenant-key',
+        tenantClientSecret2Value: 'tenant-secret',
+        tokenValue: 'short',
+      }),
+    ).toEqual({
+      clientSecrets: ['[REDACTED]', '[REDACTED]'],
+      databasePasswords: { primary: '[REDACTED]', replicas: [{ value: '[REDACTED]', port: 5432 }] },
+      userApiKeys: '[REDACTED]',
+      accessTokens: ['[REDACTED]'],
+      apiKeysByTenant: { acme: '[REDACTED]' },
+      apiKeyForTenant: '[REDACTED]',
+      tenantClientSecret2Value: '[REDACTED]',
+      tokenValue: '[REDACTED]',
+    });
+  });
+
+  it('keeps cursors, counts and settings whose names hold a credential word', () => {
+    const args = {
+      // Cursors and special tokens.
+      pageToken: 'cursor-1',
+      nextPageToken: 'cursor-2',
+      next_page_token: 'cursor-3',
+      continuationToken: 'cursor-4',
+      resumeToken: 'cursor-5',
+      nextToken: 'cursor-6',
+      stopTokens: ['</s>'],
+      maxTokens: 256,
+      // Counts.
+      inputTokens: 120,
+      tokenCount: 7,
+      tokenUsage: { input: 120, output: 30 },
+      // Settings.
+      useApiKey: true,
+      includeCredentials: false,
+      tokenType: 'bearer',
+      secretVersion: 'v3',
+      databasePassword: null,
+      // Ordinary argument names.
+      key: 'user:1',
+      keys: ['user:1', 'user:2'],
+      publicKey: 'ssh-ed25519 AAAA',
+      tokenizer: 'cl100k',
+    };
+
+    expect(sanitizeMcpToolData(args)).toEqual(args);
+  });
+
+  it('redacts a number under a name that ends in a credential word', () => {
+    // A password of digits can arrive as a number. A count cannot be told from it by its
+    // value, so only a name that is the credential itself decides.
+    expect(sanitizeMcpToolData({ databasePassword: 123456, accessTokens: 2 })).toEqual({
+      databasePassword: '[REDACTED]',
+      accessTokens: 2,
+    });
+  });
+
   it('copes with arguments that refer to themselves', () => {
     const args: Record<string, unknown> = { id: '123' };
     args.self = args;
