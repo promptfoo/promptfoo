@@ -856,17 +856,32 @@ async function prepareCombinedConfig(
             )
           : source;
       for (const scenario of [loaded].flat()) {
-        scenarios.push(
-          typeof scenario === 'object' && scenario?.tests
-            ? {
-                ...scenario,
-                ...(Array.isArray(scenario.config) && {
-                  config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
-                }),
-                tests: [scenario.tests].flat().map((test) => makeTestAbsolute(basePath, test)),
-              }
-            : scenario,
-        );
+        if (typeof scenario !== 'object' || !scenario?.tests) {
+          scenarios.push(scenario);
+          continue;
+        }
+        const scenarioTests = [scenario.tests]
+          .flat()
+          .map((test) => makeTestAbsolute(basePath, test));
+        scenarios.push({
+          ...scenario,
+          ...(Array.isArray(scenario.config) && {
+            config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
+          }),
+          // Scenario tests are read later, from the suite directory, which leaves the file
+          // vars in the rows of a test file relative to that directory. For a config in
+          // another directory they are read here instead, where their own directory is
+          // known, so that those rows are pinned like the ones written inline.
+          tests:
+            path.resolve(basePath) === suiteBasePath
+              ? scenarioTests
+              : await readTestSources(
+                  [{ tests: scenarioTests as TestSuiteConfig['tests'], basePath }],
+                  combinedEnv,
+                  false,
+                  suiteBasePath,
+                ),
+        });
       }
     }
   }

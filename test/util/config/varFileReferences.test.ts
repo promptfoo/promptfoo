@@ -127,6 +127,36 @@ describe('file:// var references in loaded configs', () => {
     );
   });
 
+  it("pins the file vars in a scenario test file of another config's directory", async () => {
+    const first = writeProject('first', {
+      scenarios: [{ config: [{}], tests: 'file://scenario-tests.yaml' }],
+    });
+    const second = writeProject('second', {
+      tests: [],
+      scenarios: [{ config: [{}], tests: 'file://scenario-tests.yaml' }],
+    });
+    for (const project of [first, second]) {
+      fs.writeFileSync(
+        path.join(project, 'scenario-tests.yaml'),
+        '- vars:\n    doc: file://docs/a.txt\n',
+      );
+    }
+
+    const { testSuite, basePath } = await resolve({
+      config: [path.join(first, 'promptfooconfig.json'), path.join(second, 'promptfooconfig.json')],
+    });
+
+    // Both files hold the same relative reference. The rows of the first config's file
+    // resolve it from the suite directory, and the rows of the second config's file must
+    // keep naming the file next to them.
+    expect(basePath).toBe(first);
+    const [fromFirst, fromSecond] = (testSuite.scenarios as Scenario[]).map(
+      (scenario) => (scenario.tests as TestCase[])[0].vars?.doc,
+    );
+    expect(fromFirst).toBe('file://docs/a.txt');
+    expect(fromSecond).toBe(`file://${path.join(second, 'docs', 'a.txt')}`);
+  });
+
   it('pins only the file vars of rows from another config, leaving nested values as data', async () => {
     const first = writeProject('first', { tests: [] });
     const second = writeProject('second', {
