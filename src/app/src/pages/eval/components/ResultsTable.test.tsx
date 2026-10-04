@@ -172,6 +172,44 @@ describe('ResultsTable Metrics Display', () => {
     }));
   });
 
+  it.each([
+    [
+      'skips its first fetch when the page loaded the eval in the current display mode',
+      'all',
+      false,
+    ],
+    ['fetches when the display mode changed while the page was loading the eval', 'failures', true],
+  ] as const)('%s', async (_name, filterMode, fetches) => {
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData,
+      // The page asked for all rows before this table was mounted.
+      lastTableView: { evalId: '123', filterMode: 'all' },
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} filterMode={filterMode} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    if (fetches) {
+      expect(fetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({ pageIndex: 0, filterMode: 'failures' }),
+      );
+    } else {
+      expect(fetchEvalData).not.toHaveBeenCalled();
+    }
+  });
+
   it('displays total cost with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Total Cost:')).toBeInTheDocument();

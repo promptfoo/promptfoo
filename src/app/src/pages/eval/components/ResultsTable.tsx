@@ -1673,6 +1673,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    lastTableView,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
@@ -1985,7 +1986,11 @@ function ResultsTable({
     // Data should already be loaded by Eval.tsx
     if (pagination.pageIndex === 0 && evalId !== previousEvalIdRef.current) {
       previousEvalIdRef.current = evalId;
-      return;
+      // ...unless the display mode changed while that load was in flight, when this table
+      // did not exist yet to fetch for the new mode.
+      if (!(lastTableView?.evalId === evalId && lastTableView.filterMode !== filterMode)) {
+        return;
+      }
     }
 
     fetchEvalData(evalId, {

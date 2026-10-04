@@ -562,6 +562,8 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 let latestTableRequestId = 0;
 /** The most recently issued request whose response has been applied. */
 let appliedTableRequestId = 0;
+/** The eval of the most recently issued request. Responses for another eval are not applied. */
+let latestTableEvalId: string | undefined;
 
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
@@ -689,9 +691,13 @@ export const useTableStore = create<TableState>()(
 
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
       const requestId = ++latestTableRequestId;
+      latestTableEvalId = id;
       const isLatestRequest = () => requestId === latestTableRequestId;
-      /** Whether the response to a request issued after this one has been applied. */
-      const isSuperseded = () => requestId < appliedTableRequestId;
+      /**
+       * Whether this response must not be applied: the response to a request issued after it
+       * has been, or the page has moved on to another eval, whose table this is not.
+       */
+      const isSuperseded = () => requestId < appliedTableRequestId || id !== latestTableEvalId;
       // The loading state belongs to the foreground request that turned it on. It ends when
       // a response is applied for that request or a later one, since the table then shows
       // data at least as recent as that request asked for, or when that request itself fails.
@@ -702,8 +708,10 @@ export const useTableStore = create<TableState>()(
           : loadingRequestId !== null && loadingRequestId <= requestId;
         return isSettled ? { isFetching: false, loadingRequestId: null } : {};
       };
-      // A failure only counts for the caller when no later request can still fill the table.
-      const failureOutcome = () => (isLatestRequest() ? null : SUPERSEDED_TABLE_REQUEST);
+      // A failure is the caller's failure unless the table has moved on without this request.
+      // A later request that is still pending does not excuse it: that one can fail as well,
+      // and its caller may not report it.
+      const failureOutcome = () => (isSuperseded() ? SUPERSEDED_TABLE_REQUEST : null);
 
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();

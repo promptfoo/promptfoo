@@ -1294,6 +1294,55 @@ describe('useTableStore', () => {
         }
       });
 
+      it('reports a failed request as failed while the request issued after it is still pending', async () => {
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const pending = deferRequests();
+        try {
+          let first!: Promise<unknown>;
+          let second!: Promise<unknown>;
+          await act(async () => {
+            first = useTableStore.getState().fetchEvalData(mockEvalId);
+            second = useTableStore.getState().fetchEvalData(mockEvalId, { searchText: 'four' });
+            pending[0].respond({}, false);
+            await first;
+          });
+
+          // The later request can fail as well, so the earlier failure is not excused by it.
+          await expect(first).resolves.toBeNull();
+
+          await act(async () => {
+            pending[1].respond({}, false);
+            await second;
+          });
+          await expect(second).resolves.toBeNull();
+          expect(useTableStore.getState().isFetching).toBe(false);
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
+      it('does not apply the response for an eval that the page has left', async () => {
+        const pending = deferRequests();
+        let previous!: Promise<unknown>;
+        let current!: Promise<unknown>;
+        await act(async () => {
+          previous = useTableStore.getState().fetchEvalData('eval-a');
+          current = useTableStore.getState().fetchEvalData('eval-b');
+          // The previous eval answers first, while the current one is still loading.
+          pending[0].respond(tableWith('table of eval-a'));
+          await previous;
+        });
+
+        await expect(previous).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
+        expect(useTableStore.getState().table).toBeNull();
+
+        await act(async () => {
+          pending[1].respond(tableWith('table of eval-b'));
+          await current;
+        });
+        expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe('table of eval-b');
+      });
+
       it('keeps loading while a table request issued after the refresh is still in flight', async () => {
         const pending = deferRequests();
         let background!: Promise<unknown>;
