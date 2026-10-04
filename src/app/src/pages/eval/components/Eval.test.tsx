@@ -961,6 +961,81 @@ describe('Eval', () => {
     expect(mockSocketDisconnect.mock.calls.length).toBe(disconnectsAfterMount);
   });
 
+  it('leaves display-mode changes to the results table instead of reloading the eval', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+    } as Response);
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const fetchCallsAfterMount = baseMockTableStore.fetchEvalData.mock.calls.length;
+    const comparisonResetsAfterMount =
+      baseMockResultsViewSettings.setInComparisonMode.mock.calls.length;
+
+    mockFilterMode.current = 'failures';
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="selected-eval" />
+        </MemoryRouter>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // A second, search-less request here used to race the table's own filtered request.
+    expect(baseMockTableStore.fetchEvalData.mock.calls.length).toBe(fetchCallsAfterMount);
+    expect(baseMockResultsViewSettings.setInComparisonMode.mock.calls.length).toBe(
+      comparisonResetsAfterMount,
+    );
+
+    // Background updates still use the mode that is selected now.
+    await act(async () => {
+      await mockSocketHandlers.get('update')?.({ evalId: 'selected-eval' });
+    });
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenLastCalledWith(
+      'selected-eval',
+      expect.objectContaining({ filterMode: 'failures', skipLoadingState: true }),
+    );
+  });
+
+  it('keeps an active search when loading the eval', async () => {
+    const originalUrl = window.location.href;
+    window.history.replaceState({}, '', '/eval/selected-eval?search=four&mode=failures');
+    try {
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+      } as Response);
+
+      render(
+        <MemoryRouter>
+          <Eval fetchId="selected-eval" />
+        </MemoryRouter>,
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
+        'selected-eval',
+        expect.objectContaining({ searchText: 'four' }),
+      );
+    } finally {
+      window.history.replaceState({}, '', originalUrl);
+    }
+  });
+
   it('refetches the pinned eval when the API base URL changes', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,

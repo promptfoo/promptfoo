@@ -531,6 +531,11 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
   return Boolean(filter.value);
 };
 
+// Table requests overlap when the user changes a filter, the search text or the page while
+// an earlier request is still in flight. Only the most recently issued request describes
+// the current UI state, so responses to earlier ones are not applied.
+let latestTableRequestId = 0;
+
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
@@ -644,6 +649,8 @@ export const useTableStore = create<TableState>()(
       } = options;
 
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
+      const requestId = ++latestTableRequestId;
+      const isLatestRequest = () => requestId === latestTableRequestId;
 
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();
@@ -711,6 +718,10 @@ export const useTableStore = create<TableState>()(
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
+          if (!isLatestRequest()) {
+            return data;
+          }
+
           set((prevState) => ({
             table: data.table,
             filteredResultsCount: data.filteredCount,
@@ -743,12 +754,15 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
-        if (!skipLoadingState) {
+        if (!skipLoadingState && isLatestRequest()) {
           set({ isFetching: false });
         }
         return null;
       } catch (error) {
         console.error('Error fetching eval data:', error);
+        if (!isLatestRequest()) {
+          return null;
+        }
         set({
           isFetching: skipLoadingState ? get().isFetching : false,
           isStreaming: false,

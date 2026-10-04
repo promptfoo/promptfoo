@@ -1119,6 +1119,53 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it('applies only the most recently issued table request when responses arrive out of order', async () => {
+      const mockEvalId = 'overlapping-requests-eval';
+      const tableWith = (output: string) => ({
+        table: { head: { prompts: [] }, body: [{ outputs: [{ text: output }], vars: [] }] },
+        totalCount: 1,
+        filteredCount: 1,
+      });
+      const pending: Array<{ url: string; respond: (body: unknown) => void }> = [];
+      vi.mocked(callApi).mockImplementation(
+        (url: string) =>
+          new Promise((resolve) => {
+            pending.push({
+              url,
+              respond: (body) => resolve({ ok: true, json: async () => body } as any),
+            });
+          }),
+      );
+
+      // The unfiltered request is issued first but answered last, as when a display-mode
+      // change overlaps an active search.
+      let stale!: Promise<unknown>;
+      let current!: Promise<unknown>;
+      await act(async () => {
+        stale = useTableStore.getState().fetchEvalData(mockEvalId, { filterMode: 'failures' });
+        current = useTableStore
+          .getState()
+          .fetchEvalData(mockEvalId, { filterMode: 'failures', searchText: 'four' });
+      });
+      expect(
+        pending.map(({ url }) => new URL(url, 'http://localhost').searchParams.get('search')),
+      ).toEqual([null, 'four']);
+
+      await act(async () => {
+        pending[1].respond(tableWith('matches the search'));
+        await current;
+        pending[0].respond(tableWith('unfiltered'));
+        await stale;
+      });
+
+      const state = useTableStore.getState();
+      expect(state.table?.body[0].outputs[0].text).toBe('matches the search');
+      expect(state.shouldHighlightSearchText).toBe(true);
+      expect(state.isFetching).toBe(false);
+      // The superseded request still resolves with its data for the caller.
+      await expect(stale).resolves.toMatchObject({ filteredCount: 1 });
+    });
+
     it('should properly handle filters with special characters in their values when building the API request URL', async () => {
       const evalId = 'test-eval-id';
       const filterValue = 'test value with !@#$%^&*()_+=-`~[]\{}|;\':",./<>? special characters';

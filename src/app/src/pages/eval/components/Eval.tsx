@@ -77,6 +77,11 @@ export default function Eval({ fetchId }: EvalOptions) {
   } = useTableStore();
 
   const { filterMode } = useFilterMode();
+  // The results table refetches itself when the display mode changes. Eval-level loads
+  // (first load, socket updates) read the mode through a ref so they use the current value
+  // without re-running on every mode change, which raced the table's own request.
+  const filterModeRef = useRef(filterMode);
+  filterModeRef.current = filterMode;
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -131,7 +136,9 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
-          filterMode,
+          filterMode: filterModeRef.current,
+          // The table owns the search box, but this load must not drop an active search.
+          searchText: new URLSearchParams(window.location.search).get('search') ?? '',
           filters: Object.values(filters.values).filter((filter) =>
             filter.type === 'metadata'
               ? Boolean(filter.value && filter.field)
@@ -150,7 +157,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId, filterMode],
+    [fetchEvalData, setFailed, setEvalId],
   );
 
   const clearEvalState = useCallback(() => {
