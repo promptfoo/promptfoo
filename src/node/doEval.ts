@@ -196,13 +196,14 @@ function logWatchError(error: unknown): void {
  * Signal handlers are removed as soon as one fires, so a second Ctrl-C falls back to
  * Node's default behaviour and terminates immediately.
  */
-function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
+function watchUntilTerminated(watcher: FSWatcher, onStop: () => void): Promise<void> {
   const signals = ['SIGINT', 'SIGTERM'] as const;
   return new Promise<void>((resolve) => {
     const onSignal = () => {
       for (const signal of signals) {
         process.removeListener(signal, onSignal);
       }
+      onStop();
       logger.info('Stopping watch mode...');
       // Settle regardless: a watcher that fails to close must not wedge the CLI.
       watcher
@@ -329,6 +330,11 @@ async function doEvalWithEnv(
   // Set once watch mode starts watching; awaited before doEval returns so the CLI does
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
+  let initialRun: Promise<Eval>;
+  let watchRerun: Promise<void> | undefined;
+  let watchPending = false;
+  let watchStopped = false;
+  let latestWatchResult: Eval | undefined;
 
   const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
     let config: Partial<UnifiedConfig> | undefined;
@@ -1219,9 +1225,11 @@ async function doEvalWithEnv(
         const cliTests = cmdObj.tests || cmdObj.vars;
         const varPaths: string[] = [];
         if (cliTests) {
-          // resolveConfigs loads `--tests` with no base path, so it resolves against the
-          // working directory rather than the directory holding the config file.
-          varPaths.push(...resolveTestsWatchPaths(cliTests, process.cwd()));
+          // Preserve the released path bases: --tests uses CWD, while --vars uses
+          // the config directory. --tests takes precedence when both are supplied.
+          varPaths.push(
+            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
+          );
         } else {
           varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
           for (const source of testSources ?? []) {
@@ -1234,20 +1242,23 @@ async function doEvalWithEnv(
         const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
-          watchTermination = watchUntilTerminated(watcher);
+          watchTermination = watchUntilTerminated(watcher, () => {
+            watchStopped = true;
+            watchPending = false;
+          });
         }
 
         watcher
           .on('change', async (path) => {
+            if (watchStopped) {
+              return;
+            }
             printBorder();
             logger.info(`File change detected: ${path}`);
             printBorder();
-            clearConfigCache();
-            try {
-              await runEvaluation();
-            } catch (error) {
-              logWatchError(error);
-            }
+            watchPending = true;
+            watchRerun ??= rerunWhilePending();
+            await watchRerun;
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
           .on('ready', () =>
@@ -1297,9 +1308,38 @@ async function doEvalWithEnv(
     );
   };
 
-  const result = await runEvaluation(true /* initialization */);
+  async function rerunWhilePending(): Promise<void> {
+    try {
+      // The watcher is installed before the initial provider cleanup finishes.
+      await initialRun;
+      while (watchPending && !watchStopped) {
+        watchPending = false;
+        try {
+          if (isCliInvocation) {
+            process.exitCode = 0;
+          }
+          clearConfigCache();
+          latestWatchResult = await runEvaluation();
+        } catch (error) {
+          if (isCliInvocation) {
+            process.exitCode = 1;
+          }
+          logWatchError(error);
+        }
+      }
+    } catch (error) {
+      // A late initialization failure must not reject the EventEmitter listener.
+      logWatchError(error);
+    } finally {
+      watchRerun = undefined;
+    }
+  }
+
+  initialRun = runEvaluation(true /* initialization */);
+  const result = await initialRun;
   if (watchTermination) {
     await watchTermination;
+    await watchRerun;
   }
-  return result;
+  return latestWatchResult ?? result;
 }
