@@ -74,6 +74,28 @@ function write(file: string, content: string) {
   fs.writeFileSync(file, content);
 }
 
+/** Real directory listing with the entry types omitted, as on a filesystem without d_type. */
+function omitDirectoryEntryTypes() {
+  const opendir = fs.promises.opendir;
+  return vi.spyOn(fs.promises, 'opendir').mockImplementation(async (...args) => {
+    const directory = await opendir(...args);
+    return {
+      async *[Symbol.asyncIterator]() {
+        for await (const entry of directory) {
+          yield new Proxy(entry, {
+            get(target, key) {
+              if (key === 'isFile' || key === 'isDirectory' || key === 'isSymbolicLink') {
+                return () => false;
+              }
+              return Reflect.get(target, key, target);
+            },
+          });
+        }
+      },
+    } as fs.Dir;
+  });
+}
+
 /** Ends the diff when the agent's own Git index could not be read. The diff is still computed. */
 const UNREADABLE_INDEX_NOTE =
   "[diff incomplete: the workspace's Git index could not be read, so ignored files the agent " +
@@ -2043,6 +2065,84 @@ describe('agent workspaces', () => {
       expect(fs.readFileSync(path.join(source, '.gitignore'), 'utf8')).toBe('ignored/\n');
     });
 
+    it.each([false, true])(
+      'bounds omission checks for undecodable files (unknown entry types: %s)',
+      async (unknownTypes) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const workspace = await create(source);
+        const count = 32;
+        for (let i = 0; i < count; i++) {
+          fs.writeFileSync(
+            Buffer.concat([
+              Buffer.from(`${workspace.dir}/raw-${i}`),
+              Buffer.from([0xff]),
+              Buffer.from('.txt'),
+            ]),
+            'hidden\n',
+          );
+        }
+        const opendir = unknownTypes ? omitDirectoryEntryTypes() : undefined;
+        const original = String.prototype.endsWith;
+        let comparisons = 0;
+        const endsWith = vi.spyOn(String.prototype, 'endsWith').mockImplementation(function (
+          this: string,
+          search,
+          length,
+        ) {
+          if (search === '/' && /^raw-\d+\uFFFD\.txt$/.test(String(this))) {
+            comparisons++;
+          }
+          return original.call(this, search, length);
+        });
+        try {
+          const metadata = await workspace.metadata();
+
+          expect(metadata.workspaceDiffError).toBeUndefined();
+          expect(metadata.workspaceDiffIncomplete).toBe(true);
+          expect(comparisons).toBeLessThanOrEqual(8 * count);
+        } finally {
+          endsWith.mockRestore();
+          opendir?.mockRestore();
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'checks directory names without entry types (raw-byte collision: %s)',
+      async (collision) => {
+        if (collision && process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source, { 'policy\uFFFD/keep.txt': 'safe\n' });
+        const workspace = await create(source);
+        write(path.join(workspace.dir, 'policy\uFFFD', 'keep.txt'), 'visible change\n');
+        if (collision) {
+          const raw = Buffer.concat([
+            Buffer.from(`${workspace.dir}/policy`),
+            Buffer.from([0xff]),
+            Buffer.from('/.git'),
+          ]);
+          fs.mkdirSync(raw, { recursive: true });
+          fs.writeFileSync(Buffer.concat([raw, Buffer.from('/payload')]), 'hidden\n');
+        }
+        const opendir = omitDirectoryEntryTypes();
+        try {
+          const metadata = await workspace.metadata();
+
+          expect(metadata.workspaceDiffError).toBeUndefined();
+          expect(metadata.workspaceDiffIncomplete).toBe(collision ? true : undefined);
+          expect(metadata.workspaceDiff).toContain('+visible change');
+        } finally {
+          opendir.mockRestore();
+        }
+      },
+    );
+
     it('names a new file whose name holds the replacement character', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
@@ -2091,6 +2191,9 @@ describe('agent workspaces', () => {
     });
 
     it('applies an ignore rule for a name that starts with a colon', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
       const source = path.join(root, 'repo');
       makeRepository(source, { '.gitignore': ':cache\n' });
       const workspace = await create(source);

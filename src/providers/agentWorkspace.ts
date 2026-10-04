@@ -1022,6 +1022,7 @@ async function getWorkspaceDiff(
       // commit already tracks are in the index whether or not they changed, so an unchanged
       // one is not reported.
       const indexed = new Set(staged.map((entry) => entry.path));
+      const omittedDirectories = new Set(leftOut.filter((file) => file.endsWith('/')));
       const missing = [
         ...new Set([
           // Changes to existing files come first, so they are the last to be cut off.
@@ -1030,7 +1031,8 @@ async function getWorkspaceDiff(
           ...[...newFiles].filter((file) => !indexed.has(file.replace(/\/$/, ''))),
           // A file below a directory that is reported as unreadable needs no entry of its own.
           ...unverified.filter(
-            (file) => !leftOut.some((left) => left.endsWith('/') && file.startsWith(left)),
+            (file) =>
+              ![...getCoveredDirectories([file])].some((parent) => omittedDirectories.has(parent)),
           ),
           ...leftOut,
           ...reserved.map((entry) => entry.file),
