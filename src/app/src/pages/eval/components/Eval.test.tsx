@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
 import type { EvaluateTable } from '@promptfoo/types';
 
 const {
@@ -361,6 +362,68 @@ describe('Eval', () => {
 
     expect(queryByText('404 Eval not found')).toBeInTheDocument();
     expect(queryByText('Waiting for eval data')).not.toBeInTheDocument();
+  });
+
+  it('should not show the error state when a newer table request replaced its load', async () => {
+    // The store reports a request that another one replaced. Had it failed, that would say
+    // nothing about the table the newer request produced.
+    const fetchEvalDataMock = vi.fn().mockResolvedValue(SUPERSEDED_TABLE_REQUEST);
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    const { queryByText, getByTestId } = render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(fetchEvalDataMock).toHaveBeenCalledTimes(1);
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+    // The route did not change, so what follows its load still applies.
+    expect(getByTestId('results-view').getAttribute('data-default-eval-id')).toBe('test-eval');
+  });
+
+  it('should ignore a load that finishes after the route moved on', async () => {
+    const loads = new Map<string, (data: unknown) => void>();
+    const fetchEvalDataMock = vi.fn(
+      (id: string) => new Promise((resolve) => loads.set(id, resolve)),
+    );
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+    const evalData = { table: mockTable, config: {}, totalCount: 0, filteredCount: 0 };
+
+    const { container } = render(
+      <MemoryRouter>
+        <Eval fetchId="eval-1" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+        { container },
+      );
+    });
+
+    // The current route's load finishes first, then the one it replaced.
+    await act(async () => {
+      loads.get('eval-2')?.(evalData);
+      await vi.advanceTimersByTimeAsync(0);
+      loads.get('eval-1')?.(evalData);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const resultsView = container.querySelector('[data-testid="results-view"]');
+    expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
   });
 
   it('should correctly display the most recent eval data when rapidly switching between fetchIds', async () => {

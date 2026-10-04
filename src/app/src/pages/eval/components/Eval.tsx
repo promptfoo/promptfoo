@@ -14,6 +14,7 @@ import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
+import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
 import './Eval.css';
 
 import { useToast } from '@app/hooks/useToast';
@@ -146,6 +147,11 @@ export default function Eval({ fetchId }: EvalOptions) {
           ),
         });
 
+        if (data === SUPERSEDED_TABLE_REQUEST) {
+          // A newer request replaced this one and decides what the page shows. Whether this
+          // one would have failed no longer matters.
+          return true;
+        }
         if (!data) {
           setFailed(true);
           return false;
@@ -378,11 +384,14 @@ export default function Eval({ fetchId }: EvalOptions) {
       return;
     }
 
+    // Loads are asynchronous, and the route can change before one finishes. What follows a
+    // load only applies to the route that started it.
+    let isCurrentRoute = true;
     if (fetchId) {
       logger.debug('[Eval] Fetching eval by id', { fetchId });
       const run = async () => {
         const success = await loadEvalById(fetchId);
-        if (success) {
+        if (success && isCurrentRoute) {
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
           fetchRecentFileEvals({ reportFailure: false });
@@ -398,7 +407,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
-          if (success) {
+          if (success && isCurrentRoute) {
             setDefaultEvalId(defaultEvalId);
             // Note: setLoaded(true) is handled by the useEffect that watches for table updates
           }
@@ -412,6 +421,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     logger.debug('[Eval] Resetting comparison mode', {});
     setInComparisonMode(false);
     setComparisonEvalIds([]);
+    return () => {
+      isCurrentRoute = false;
+    };
   }, [
     apiBaseUrl,
     clearEvalState,

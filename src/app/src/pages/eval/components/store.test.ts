@@ -5,6 +5,7 @@ import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
+import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
 import type {
   EvalTableDTO,
   EvaluateTable,
@@ -1162,8 +1163,9 @@ describe('useTableStore', () => {
       expect(state.table?.body[0].outputs[0].text).toBe('matches the search');
       expect(state.shouldHighlightSearchText).toBe(true);
       expect(state.isFetching).toBe(false);
-      // The superseded request still resolves with its data for the caller.
-      await expect(stale).resolves.toMatchObject({ filteredCount: 1 });
+      // The caller of the superseded request is told so, instead of getting data that the
+      // table does not show.
+      await expect(stale).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
     });
 
     describe('background refreshes that overlap table requests', () => {
@@ -1173,16 +1175,21 @@ describe('useTableStore', () => {
         totalCount: 120,
         filteredCount: 120,
       });
-      type Pending = { url: URL; respond: (body: unknown, ok?: boolean) => void };
+      type Pending = {
+        url: URL;
+        respond: (body: unknown, ok?: boolean) => void;
+        fail: (error: Error) => void;
+      };
 
       function deferRequests(): Pending[] {
         const pending: Pending[] = [];
         vi.mocked(callApi).mockImplementation(
           (url: string) =>
-            new Promise((resolve) => {
+            new Promise((resolve, reject) => {
               pending.push({
                 url: new URL(url, 'http://localhost'),
                 respond: (body, ok = true) => resolve({ ok, json: async () => body } as any),
+                fail: reject,
               });
             }),
         );
@@ -1219,12 +1226,43 @@ describe('useTableStore', () => {
             pending[0].respond(tableWith('stale'));
             await foreground;
           });
+          await expect(foreground).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
+          // Only the request that the table is waiting for can fail it.
+          await expect(background).resolves.toEqual(ok ? tableWith('refreshed') : null);
           expect(useTableStore.getState().isFetching).toBe(false);
           expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe(
             ok ? 'refreshed' : undefined,
           );
         },
       );
+
+      it.each([
+        ['an error response', (request: Pending) => request.respond({}, false)],
+        ['a network error', (request: Pending) => request.fail(new Error('connection reset'))],
+      ])('reports a replaced request as superseded when it ends with %s', async (_name, end) => {
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const pending = deferRequests();
+        try {
+          let replaced!: Promise<unknown>;
+          let current!: Promise<unknown>;
+          await act(async () => {
+            replaced = useTableStore.getState().fetchEvalData(mockEvalId);
+            current = useTableStore.getState().fetchEvalData(mockEvalId, { searchText: 'four' });
+            pending[1].respond(tableWith('matches the search'));
+            await current;
+            end(pending[0]);
+            await replaced;
+          });
+
+          // A failure of the replaced request is not a failure of what the table shows.
+          await expect(replaced).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
+          expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe(
+            'matches the search',
+          );
+        } finally {
+          errors.mockRestore();
+        }
+      });
 
       it('keeps loading while a table request issued after the refresh is still in flight', async () => {
         const pending = deferRequests();

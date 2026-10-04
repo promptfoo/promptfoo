@@ -12,6 +12,7 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import logger from '../../../../../logger';
+import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
 import { hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
@@ -316,7 +317,10 @@ interface TableState {
    */
   stats: EvaluateStats | null;
 
-  fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
+  fetchEvalData: (
+    id: string,
+    options?: FetchEvalOptions,
+  ) => Promise<EvalTableDTO | null | typeof SUPERSEDED_TABLE_REQUEST>;
   isFetching: boolean;
   /** The foreground table request that turned `isFetching` on, until a response settles it. */
   loadingRequestId: number | null;
@@ -762,7 +766,7 @@ export const useTableStore = create<TableState>()(
           ]);
 
           if (!isLatestRequest()) {
-            return data;
+            return SUPERSEDED_TABLE_REQUEST;
           }
 
           set((prevState) => ({
@@ -797,14 +801,15 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
-        if (isLatestRequest()) {
-          set(settleLoading());
+        if (!isLatestRequest()) {
+          return SUPERSEDED_TABLE_REQUEST;
         }
+        set(settleLoading());
         return null;
       } catch (error) {
         console.error('Error fetching eval data:', error);
         if (!isLatestRequest()) {
-          return null;
+          return SUPERSEDED_TABLE_REQUEST;
         }
         set({
           ...settleLoading(),
