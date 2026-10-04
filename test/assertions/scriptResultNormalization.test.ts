@@ -1,3 +1,5 @@
+import vm from 'node:vm';
+
 import { describe, expect, it } from 'vitest';
 import { asGradingResult } from '../../src/assertions/scriptResultNormalization';
 
@@ -177,6 +179,49 @@ describe('asGradingResult', () => {
     }
 
     expect(asGradingResult(new Grade())).toBeUndefined();
+  });
+
+  it('converts results that were created in another realm', () => {
+    // A grader can build its result in a vm context, where object literals inherit from
+    // that context's Object.prototype instead of this one.
+    const result = vm.runInNewContext(`({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      namedScores: { yes: true, no: false, text: '0.5' },
+      componentResults: [{ pass: false }, { pass: true, namedScores: { nested: null } }],
+    })`);
+    expect(Object.getPrototypeOf(result)).not.toBe(Object.prototype);
+
+    expect(asGradingResult(result)).toEqual({
+      ...grade,
+      namedScores: { yes: 1, no: 0, text: 0.5 },
+      componentResults: [
+        { pass: false, score: 0, reason: '' },
+        { pass: true, score: 1, reason: '', namedScores: { nested: 0 } },
+      ],
+    });
+  });
+
+  it('still rejects class instances and containers from another realm', () => {
+    for (const namedScores of [
+      '[true]',
+      "new Map([['quality', true]])",
+      'new Date(0)',
+      'new (class { quality = true })()',
+    ]) {
+      const result = vm.runInNewContext(
+        `({ pass: true, score: 1, reason: 'ok', namedScores: ${namedScores} })`,
+      );
+      expect(asGradingResult(result)).toBeUndefined();
+    }
+    const instance = vm.runInNewContext(`new (class Grade {
+      pass = true;
+      score = 1;
+      reason = 'ok';
+      namedScores = { quality: true };
+    })()`);
+    expect(asGradingResult(instance)).toBeUndefined();
   });
 
   it('still rejects sparse component results', () => {

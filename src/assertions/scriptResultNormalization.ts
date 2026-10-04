@@ -12,12 +12,18 @@ export interface ScriptLabels {
   language: string;
 }
 
+/**
+ * Whether `value` is an object literal or an object without a prototype. A grader can build
+ * its result in another realm, for example with `vm.runInNewContext`, so the check does not
+ * compare against this realm's `Object.prototype`. Class instances and built-in containers
+ * inherit from a prototype that has one of its own, and are not plain.
+ */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Symbol.toStringTag in value) {
     return false;
   }
   const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+  return prototype === null || Object.getPrototypeOf(prototype) === null;
 }
 
 /** The number earlier releases recorded for a named score, when their arithmetic produced one. */
