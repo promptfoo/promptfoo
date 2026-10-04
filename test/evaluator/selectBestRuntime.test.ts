@@ -4,13 +4,14 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { inspect } from 'node:util';
 
 import { expect, it, vi } from 'vitest';
 import { runCompareAssertion } from '../../src/assertions';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
-import logger from '../../src/logger';
+import logger, { getLogLevel, setLogLevel } from '../../src/logger';
 import Eval from '../../src/models/eval';
 import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
@@ -498,16 +499,24 @@ describeEvaluator('select-best runtime grading configuration', () => {
   it('recovers a grader exception without retaining a failed comparison verdict', async () => {
     const { grader, suite, target } = makeSuite();
     vi.mocked(grader.callApi).mockRejectedValueOnce(new Error('temporary grader failure'));
-    const debug = vi.spyOn(logger, 'debug');
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
-    await evaluate(suite, record, { maxConcurrency: 1 });
+    // The cause is logged only when debug output was asked for, as with --verbose.
+    const previousLogLevel = getLogLevel();
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    setLogLevel('debug');
+    try {
+      await evaluate(suite, record, { maxConcurrency: 1 });
 
-    // The cause is only logged for debugging; saved rows say how to find it.
-    expect(debug).toHaveBeenCalledWith('[Evaluator] select-best grading failed', {
-      error: expect.stringContaining('temporary grader failure'),
-      graderId: 'select-best-grader',
-      testIdx: 0,
-    });
+      expect(debug).toHaveBeenCalledWith('[Evaluator] select-best grading failed', {
+        error: expect.stringContaining('temporary grader failure'),
+        graderId: 'select-best-grader',
+        testIdx: 0,
+      });
+    } finally {
+      setLogLevel(previousLogLevel);
+      debug.mockRestore();
+    }
+    // Saved rows say how to find the cause instead of carrying it.
     const failed = await record.fetchResultsByTestIdx(0);
     expect(failed).toHaveLength(2);
     for (const row of failed) {
@@ -547,6 +556,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
       const outputPath = path.join(directory, 'results.jsonl');
       const graderPath = path.join(directory, 'grader.yaml');
       const call = vi.spyOn(EchoProvider.prototype, 'callApi').mockResolvedValue({ output: '0' });
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
       try {
         if (failure === 'malformed YAML') {
           await writeFile(graderPath, `id: echo\nconfig:\n  apiKey: ${errorSecret}: invalid\n`);
@@ -573,6 +583,14 @@ describeEvaluator('select-best runtime grading configuration', () => {
           expect(row.error).toContain(failure === 'malformed YAML' ? graderPath : grader.id());
         }
         expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+        // The run's log file records debug messages on every run, so without debug output
+        // enabled the cause must not be logged at all.
+        expect(getLogLevel()).not.toBe('debug');
+        expect(debug).not.toHaveBeenCalledWith(
+          '[Evaluator] select-best grading failed',
+          expect.anything(),
+        );
+        expect(inspect(debug.mock.calls, { depth: null })).not.toContain(errorSecret);
 
         await writeFile(graderPath, 'id: echo\n');
         cliState.resume = true;
@@ -583,6 +601,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
         ).toBeNull();
         expect(target.callApi).toHaveBeenCalledTimes(2);
       } finally {
+        debug.mockRestore();
         call.mockRestore();
         await rm(directory, { recursive: true, force: true });
       }

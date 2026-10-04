@@ -19,7 +19,7 @@ import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import logger, { globalLogCallback, setLogCallback } from './logger';
+import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import {
   getResultIndexKey,
@@ -4654,12 +4654,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
       // Provider errors can contain credentials or config source snippets, so saved results get
-      // a generic reason. The cause goes to the debug log, where it can still be diagnosed.
-      logger.debug('[Evaluator] select-best grading failed', {
-        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
-        graderId,
-        testIdx,
-      });
+      // a generic reason. The run's log file records debug messages even without --verbose, so
+      // the cause is logged only when debug output was asked for.
+      if (isDebugEnabled()) {
+        logger.debug('[Evaluator] select-best grading failed', {
+          error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+          graderId,
+          testIdx,
+        });
+      }
       const message =
         'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
