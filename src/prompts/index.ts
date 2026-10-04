@@ -110,28 +110,28 @@ async function processPromptFile(
     return processCsvPrompts(filePath, prompt);
   }
   if (extension === '.j2') {
-    return processJinjaFile(filePath, prompt);
+    return processJinjaFile(filePath, prompt, labelPath);
   }
   if (extension === '.json') {
-    return processJsonFile(filePath, prompt);
+    return processJsonFile(filePath, prompt, labelPath);
   }
   if (extension === '.jsonl') {
-    return processJsonlFile(filePath, prompt);
+    return processJsonlFile(filePath, prompt, labelPath);
   }
   if (extension && isJavascriptFile(extension)) {
-    return processJsFile(filePath, prompt, functionName);
+    return processJsFile(filePath, prompt, functionName, labelPath);
   }
   if (extension === '.md') {
-    return processMarkdownFile(filePath, prompt);
+    return processMarkdownFile(filePath, prompt, labelPath);
   }
   if (extension === '.py') {
-    return processPythonFile(filePath, prompt, functionName);
+    return processPythonFile(filePath, prompt, functionName, labelPath);
   }
   if (extension === '.txt') {
-    return processTxtFile(filePath, prompt);
+    return processTxtFile(filePath, prompt, labelPath);
   }
   if (extension && ['.yml', '.yaml'].includes(extension)) {
-    return processYamlFile(filePath, prompt);
+    return processYamlFile(filePath, prompt, labelPath);
   }
   // Handle common executable extensions
   if (
@@ -154,20 +154,6 @@ async function processPromptFile(
 }
 
 /**
- * Labels prompts read from `filePath` with `labelPath` instead. Processors build a label
- * from the path they read. Raw content is independent of that display label.
- */
-function withLabelPath(prompts: Prompt[], filePath: string, labelPath: string): Prompt[] {
-  if (labelPath === filePath) {
-    return prompts;
-  }
-  return prompts.map((prompt) => ({
-    ...prompt,
-    label: prompt.label.replace(filePath, () => labelPath),
-  }));
-}
-
-/**
  * Processes a raw prompt based on its content type and path.
  * @param prompt - The raw prompt data.
  * @param basePath - Base path for file resolution.
@@ -185,8 +171,6 @@ async function processPrompt(
     labelBasePath === undefined
       ? filePath
       : path.join(labelBasePath, path.relative(basePath, filePath));
-  const labelPrompts = (prompts: Prompt[], filePath: string) =>
-    withLabelPath(prompts, filePath, getLabelPath(filePath));
 
   invariant(
     typeof prompt.raw === 'string',
@@ -202,10 +186,7 @@ async function processPrompt(
   if (prompt.raw.startsWith('exec:')) {
     const execSpec = prompt.raw.substring(5); // Remove 'exec:' prefix
     const { filePath, functionName } = parsePathOrGlob(basePath, execSpec);
-    return labelPrompts(
-      await processExecutableFile(filePath, prompt, functionName, getLabelPath(filePath)),
-      filePath,
-    );
+    return processExecutableFile(filePath, prompt, functionName, getLabelPath(filePath));
   }
 
   if (!maybeFilePath(prompt.raw)) {
@@ -254,10 +235,7 @@ async function processPrompt(
     return prompts;
   }
 
-  return labelPrompts(
-    await processPromptFile(filePath, prompt, extension, functionName, getLabelPath(filePath)),
-    filePath,
-  );
+  return processPromptFile(filePath, prompt, extension, functionName, getLabelPath(filePath));
 }
 
 /**

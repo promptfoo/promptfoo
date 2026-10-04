@@ -86,6 +86,83 @@ describe('file prompt labels', () => {
     expect(testSuite.providerPromptMap).toEqual({ echo: [docPrompt] });
   });
 
+  it.each([
+    ['md', 'Markdown prompt'],
+    ['j2', 'Template prompt'],
+    ['json', '"JSON prompt"'],
+    ['jsonl', '"JSONL prompt"'],
+    ['yaml', 'YAML prompt'],
+    ['cjs', 'module.exports = () => "JavaScript prompt";'],
+    ['py', 'print("Python prompt")'],
+    ['sh', '#!/bin/sh\necho "Shell prompt"'],
+  ])(
+    'preserves authored %s labels containing the resolved filename',
+    async (extension, content) => {
+      const fileName = `labeled.${extension}`;
+      const filePath = path.join(directory, 'project', fileName);
+      const label = `Source ${filePath}`;
+      fs.writeFileSync(filePath, content);
+      fs.writeFileSync(
+        path.join(directory, 'project', 'promptfooconfig.json'),
+        JSON.stringify({
+          prompts: [{ raw: `file://${fileName}`, label }],
+          providers: [{ id: 'echo', prompts: [label] }],
+          tests: [{ prompts: [label], vars: {} }],
+        }),
+      );
+      process.chdir(path.join(directory, 'project'));
+
+      const { testSuite } = await resolve('promptfooconfig.json');
+
+      expect(testSuite.prompts[0].label).toBe(label);
+      expect(doesPromptRefMatch(label, testSuite.prompts[0])).toBe(true);
+      expect(testSuite.providerPromptMap).toEqual({ echo: [label] });
+    },
+  );
+
+  it('normalizes only the generated path in text labels with an authored prefix', async () => {
+    const fileName = 'labeled.txt';
+    const filePath = path.join(directory, 'project', fileName);
+    const label = `Source ${filePath}`;
+    fs.writeFileSync(filePath, 'First\n---\nSecond');
+    fs.writeFileSync(
+      path.join(directory, 'project', 'promptfooconfig.json'),
+      JSON.stringify({ prompts: [{ raw: `file://${fileName}`, label }], providers: ['echo'] }),
+    );
+    process.chdir(path.join(directory, 'project'));
+
+    const { testSuite } = await resolve('promptfooconfig.json');
+
+    expect(testSuite.prompts.map((prompt) => prompt.label)).toEqual([
+      `${label}: ${fileName}: First`,
+      `${label}: ${fileName}: Second`,
+    ]);
+  });
+
+  it('preserves distinct CSV row labels that contain absolute and relative filenames', async () => {
+    const filePath = path.join(directory, 'project', 'prompts.csv');
+    const labels = [`Source ${filePath}`, 'Source prompts.csv'];
+    fs.writeFileSync(
+      filePath,
+      `prompt,label\nFirst,"${labels[0].replace(/"/g, '""')}"\nSecond,"${labels[1]}"\n`,
+    );
+    fs.writeFileSync(
+      path.join(directory, 'project', 'promptfooconfig.json'),
+      JSON.stringify({
+        prompts: ['file://prompts.csv'],
+        providers: [{ id: 'echo', prompts: [labels[0]] }],
+        tests: [{ prompts: [labels[0]], vars: {} }],
+      }),
+    );
+    process.chdir(path.join(directory, 'project'));
+
+    const { testSuite } = await resolve('promptfooconfig.json');
+
+    expect(testSuite.prompts.map((prompt) => prompt.label)).toEqual(labels);
+    expect(doesPromptRefMatch(labels[0], testSuite.prompts[0])).toBe(true);
+    expect(doesPromptRefMatch(labels[0], testSuite.prompts[1])).toBe(false);
+  });
+
   describe('files are still read from the config directory', () => {
     function writeConfig(prompts: string[]) {
       fs.writeFileSync(

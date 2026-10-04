@@ -107,7 +107,7 @@ export const executablePromptFunction = async (
  * @param filePath - Path to the executable file (can include arguments).
  * @param prompt - The raw prompt data.
  * @param functionName - Not used for executables, but kept for interface consistency.
- * @param displayPath - Path used when binary or unreadable files have no displayable content.
+ * @param displayPath - Path used for generated labels and the binary/unreadable content fallback.
  * @returns Array of prompts generated from the executable.
  */
 export async function processExecutableFile(
@@ -137,7 +137,7 @@ export async function processExecutableFile(
     }
   }
 
-  const label = prompt.label ?? filePath;
+  const label = prompt.label ?? displayPath;
 
   return [
     {
