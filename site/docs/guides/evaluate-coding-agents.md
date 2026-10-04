@@ -314,8 +314,11 @@ A clone is fast and doesn't write to your repository. It has no remote, so a pus
 Assertions can read these fields from the response metadata:
 
 - `workingDir`: the workspace directory. It exists until the call's assertions have run.
-- `workspaceDiff`: for a clone, the agent's changes as a unified diff against the cloned commit, including any commits the agent made. Diffs longer than 100,000 characters are truncated. If the diff can't cover everything, it covers the rest and ends with a `[diff incomplete: ...]` line. That line names changed paths Git couldn't add, such as a file the agent made unreadable or a repository it created without a commit, or says that the agent's Git index couldn't be read.
-- `workspaceDiffError`: for a clone, why the diff couldn't be computed. It replaces `workspaceDiff`, so an assertion that relies on the diff should fail when it is set rather than treat a missing diff as no changes.
+- `workspaceDiff`: for a clone, the agent's changes as a unified diff against the cloned commit, including any commits the agent made. Diffs longer than 100,000 characters are truncated. If Git can't add some changed paths, such as a file the agent made unreadable or a repository it created without a commit, or if the agent's Git index can't be read, the diff covers the rest and ends with a `[diff incomplete: ...]` line.
+- `workspaceDiffIncomplete`: `true` when `workspaceDiff` doesn't show every change, because it was truncated or for one of those reasons.
+- `workspaceDiffError`: for a clone, why the diff couldn't be computed. It replaces `workspaceDiff`.
+
+An assertion that relies on the diff should fail when `workspaceDiffError` or `workspaceDiffIncomplete` is set, rather than treat a missing or partial diff as no changes.
 
 ```yaml
 tests:
@@ -329,9 +332,11 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = (output, context) => {
-  const { workingDir, workspaceDiff, workspaceDiffError } = context.providerResponse.metadata;
-  if (workspaceDiffError) {
-    return { pass: false, score: 0, reason: `No workspace diff: ${workspaceDiffError}` };
+  const { workingDir, workspaceDiff, workspaceDiffError, workspaceDiffIncomplete } =
+    context.providerResponse.metadata;
+  if (workspaceDiffError || workspaceDiffIncomplete) {
+    const reason = workspaceDiffError ?? 'The workspace diff does not show every change.';
+    return { pass: false, score: 0, reason };
   }
   const source = fs.readFileSync(path.join(workingDir, 'user_service.py'), 'utf8');
   const pass = source.includes('bcrypt') && !source.includes('md5');
