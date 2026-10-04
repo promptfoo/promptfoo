@@ -1636,6 +1636,61 @@ describe('agent workspaces', () => {
       }
     });
 
+    it('does not let a name with pathspec magic borrow the ignore rule of another path', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'actual-file\n' });
+      const workspace = await create(source);
+      // Read as a pathspec, this name means "actual-file", which the commit ignores.
+      execFileSync('mkfifo', [path.join(workspace.dir, ':(top)actual-file')]);
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiffIncomplete).toBe(true);
+      expect(workspaceDiff).toBe(
+        '[diff incomplete: 1 changed path(s) could not be included: ":(top)actual-file"]',
+      );
+    });
+
+    it('marks the diff incomplete when .git was replaced with a link to another repository', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'ignored.txt\n' });
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'ignored.txt'), 'added by the agent\n');
+      git(workspace.dir, 'add', '--force', 'ignored.txt');
+      write(path.join(workspace.dir, 'README.md'), 'original\ntampered\n');
+      // The source repository's index is readable and does not hold the added file.
+      fs.rmSync(path.join(workspace.dir, '.git'), { recursive: true });
+      fs.symlinkSync(path.join(source, '.git'), path.join(workspace.dir, '.git'));
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiff).toContain('+tampered');
+      expect(workspaceDiff).toContain(UNREADABLE_INDEX_NOTE);
+      expect(workspaceDiffIncomplete).toBe(true);
+    });
+
+    it('names a new file whose name holds the replacement character', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      // A name read from bytes that are not valid text looks like this, and can coincide with
+      // a file that really has this name. The two cannot be told apart, so both are named.
+      write(path.join(workspace.dir, 'policy\uFFFD.txt'), 'new file\n');
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiffIncomplete).toBe(true);
+      expect(workspaceDiff).toBe(
+        '[diff incomplete: 1 changed path(s) could not be included: "policy\\u{fffd}.txt"]',
+      );
+    });
+
     it('reports a top-level directory whose name differs from .git only by case', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);

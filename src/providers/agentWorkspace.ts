@@ -262,7 +262,14 @@ async function findPathsGitLeavesOut(
         } else if (entry.isDirectory()) {
           pending.push(`${entryPath}/`);
         } else if (!entry.isFile() && !entry.isSymbolicLink()) {
-          leftOut.push(entryPath);
+          // Not every file system reports the type of an entry with its name, so the entry
+          // itself is asked before it is taken for a special file.
+          const stat = await fs.lstat(path.join(dir, entryPath)).catch(() => undefined);
+          if (stat?.isDirectory()) {
+            pending.push(`${entryPath}/`);
+          } else if (!stat?.isFile() && !stat?.isSymbolicLink()) {
+            leftOut.push(entryPath);
+          }
         }
       }
     } catch (error) {
@@ -270,12 +277,10 @@ async function findPathsGitLeavesOut(
       if (directory === '') {
         throw error;
       }
-      const code = error instanceof Error && 'code' in error ? error.code : undefined;
-      // A directory that was removed in the meantime has nothing to report. Whatever any
-      // other unreadable directory holds is missing from the diff.
-      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
-        leftOut.push(directory);
-      }
+      // The directory was just listed, so it is not gone when it cannot be opened: it is
+      // unreadable, or its name has bytes that are not valid text and changed when it was
+      // read as text. Either way, whatever it holds is missing from the diff.
+      leftOut.push(directory);
     }
   }
   return { leftOut, reserved };
@@ -604,6 +609,10 @@ async function copyWorkspaceIndex(
   signal?: AbortSignal,
 ): Promise<boolean> {
   const gitDir = path.join(dir, '.git');
+  // A link in its place would have another repository's index read as the agent's.
+  if (!(await fs.lstat(gitDir)).isDirectory()) {
+    throw new Error('the workspace .git is not a directory');
+  }
   const indexSize = await copyIndexFile(
     path.join(gitDir, 'index'),
     destination,
@@ -747,12 +756,22 @@ async function getWorkspaceDiff(
       file,
       parent: file.slice(0, file.toLowerCase().lastIndexOf('/.git') + 1),
     }));
+    // `check-ignore` reads a name that starts with a colon as pathspec magic and would
+    // answer for another path, so such names are not asked about and count as not ignored.
+    const checked = [
+      ...untracked,
+      ...leftOut,
+      ...reserved.flatMap((entry) => [entry.file, entry.parent]),
+    ].filter((file) => !file.startsWith(':'));
     if (untracked.length + leftOut.length + reserved.length > 0) {
-      const ignored = await git(['check-ignore', '--no-index', '-z', '--stdin'], {
-        env: ignoreEnv,
-        input: `${[...untracked, ...leftOut, ...reserved.flatMap((entry) => [entry.file, entry.parent])].join('\0')}\0`,
-        signal,
-      }).catch((error: unknown) => {
+      const ignored = await (checked.length > 0
+        ? git(['check-ignore', '--no-index', '-z', '--stdin'], {
+            env: ignoreEnv,
+            input: `${checked.join('\0')}\0`,
+            signal,
+          })
+        : Promise.resolve('')
+      ).catch((error: unknown) => {
         if (error instanceof Error && 'code' in error && error.code === 1) {
           return ''; // check-ignore returns 1 when no paths are ignored.
         }
@@ -791,10 +810,14 @@ async function getWorkspaceDiff(
     // just listed them, so one that cannot be found is not gone: its name has bytes that are
     // not valid text and did not survive being read as text.
     for (const file of newFiles) {
-      const examined = await fs.lstat(path.join(dir, file)).then(
-        () => true,
-        () => false,
-      );
+      // The replacement character marks such a name even when a file with the read name
+      // happens to exist beside it.
+      const examined =
+        !file.includes('\uFFFD') &&
+        (await fs.lstat(path.join(dir, file)).then(
+          () => true,
+          () => false,
+        ));
       if (!examined) {
         newFiles.delete(file);
         unverified.push(file);
