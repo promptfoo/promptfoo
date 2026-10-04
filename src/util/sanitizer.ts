@@ -327,6 +327,9 @@ function getCompoundSecretObjectFieldKind(
   ) {
     return undefined;
   }
+  if (normalized === 'cookies' || normalized === 'cookiejar') {
+    return 'related';
+  }
   const kind = getCredentialFieldKind(name);
   // Plural collections keep their shape even when a legacy secret suffix (such
   // as `secrets`) also matches the name. Exact legacy fields are checked first.

@@ -162,6 +162,9 @@ describe('MCPProvider', () => {
       dbPwd: 'pwd-fixture',
       clientSecrets: ['secret-one', 'secret-two'],
       apiKeysByTenant: { tenant: 'tenant-secret', count: 2 },
+      cookies: { sid: 'cookie-fixture' },
+      cookieJar: { sid: 123456, nested: ['other-fixture'], enabled: false },
+      cookieSettings: { sameSite: 'lax' },
       tokenUsage: { input: 4, output: 9 },
       hasCredentials: false,
       isSecret: true,
@@ -204,6 +207,8 @@ describe('MCPProvider', () => {
                 dbPwd: '[REDACTED]',
                 clientSecrets: ['[REDACTED]', '[REDACTED]'],
                 apiKeysByTenant: { tenant: '[REDACTED]', count: '[REDACTED]' },
+                cookies: { sid: '[REDACTED]' },
+                cookieJar: { sid: '[REDACTED]', nested: ['[REDACTED]'], enabled: false },
                 dbPassword: '[REDACTED]',
                 authHeaders: {
                   'User-Agent': '{"databasePassword":"[REDACTED]","page":2}',

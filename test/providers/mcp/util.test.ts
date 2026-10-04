@@ -272,6 +272,71 @@ describe('sanitizeMcpToolData', () => {
     },
   );
 
+  it.each(['cookies', 'cookieJar', 'cookie_jar', 'Cookie-Jar'])(
+    'protects explicit MCP cookie container %s without changing generic callers',
+    (name) => {
+      const fields = {
+        [name]: {
+          sid: 'cookie-fixture',
+          numeric: 123456,
+          nested: ['other-fixture'],
+          enabled: false,
+        },
+        cookieSettings: { sameSite: 'lax', path: '/' },
+        sameSiteCookie: 'lax',
+        cookieJarEnabled: true,
+      };
+      const expected = {
+        ...fields,
+        [name]: {
+          sid: '[REDACTED]',
+          numeric: '[REDACTED]',
+          nested: ['[REDACTED]'],
+          enabled: false,
+        },
+      };
+      for (const depth of [0, 5]) {
+        const wrap = (value: unknown) => {
+          for (let level = 0; level < depth; level++) {
+            value = { nested: value };
+          }
+          return value;
+        };
+        const args = wrap(fields);
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(args)).toEqual(wrap(expected));
+        expect(sanitizeObject(args, { maxDepth: 64, sanitizeUrls: true })).toEqual(args);
+        expect(args).toEqual(original);
+      }
+      for (const value of [false, true, null, 12]) {
+        expect(sanitizeMcpToolData({ [name]: value })).toEqual({ [name]: value });
+      }
+      expect(sanitizeMcpToolData({ [name]: 'sid=cookie-fixture' })).toEqual({
+        [name]: '[REDACTED]',
+      });
+    },
+  );
+
+  it.each([
+    (json: string) => json,
+    (json: string) => `data=${encodeURIComponent(json)}`,
+    (json: string) => `https://example.test/?data=${encodeURIComponent(json)}`,
+  ])('retains cookie-container roles through encoded metadata', (wrap) => {
+    const fields = { cookies: { sid: 'cookie-fixture' }, cookieJar: [{ sid: 123456 }], page: 2 };
+    const expected = {
+      cookies: { sid: '[REDACTED]' },
+      cookieJar: [{ sid: '[REDACTED]' }],
+      page: 2,
+    };
+    const value = wrap(JSON.stringify(fields));
+    expect(sanitizeMcpToolData({ nested: { value } })).toEqual({
+      nested: { value: wrap(JSON.stringify(expected)) },
+    });
+    expect(sanitizeObject({ nested: { value } }, { maxDepth: 64, sanitizeUrls: true })).toEqual({
+      nested: { value },
+    });
+  });
+
   it('preserves env and header protection inside credential collections', () => {
     const args = {
       authHeaders: { 'X-Service-Key': 'header-fixture', Accept: 'application/json' },
