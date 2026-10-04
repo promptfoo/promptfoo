@@ -1,30 +1,27 @@
 import type { TokenCredential, WorkloadIdentityCredentialOptions } from '@azure/identity';
 
-/**
- * Keep the SDK's developer/Broker tail while binding both workload attempts to
- * the invocation. Azure Identity 4 has no public per-instance chain exclusions.
- * This is a read-only, guarded dependency on its private source-list layout.
- */
-export async function createScopedAzureWorkloadCredential(
+/** Guard the SDK-owned source list before adapting scoped credential modes. */
+async function getNativeSources(
   identity: typeof import('@azure/identity'),
   native: TokenCredential,
-  options: WorkloadIdentityCredentialOptions,
   selector: string | undefined,
-): Promise<TokenCredential> {
+) {
   const { default: metadata } = await import('@azure/identity/package.json', {
     with: { type: 'json' },
   });
   const unsupported = () =>
     new Error(
-      'This Azure Identity SDK version or credential-chain layout cannot safely isolate scoped workload credentials. Use a supported @azure/identity 4.x SDK or an explicit client-secret/certificate identity.',
+      'This Azure Identity SDK version or credential-chain layout cannot safely isolate scoped Azure credentials. Use a supported @azure/identity 4.x SDK or an explicit client-secret/certificate identity.',
     );
   const sources: unknown = Reflect.get(native, '_sources');
   const expected =
-    selector === 'workloadidentitycredential'
-      ? ['WorkloadIdentityCredential']
-      : selector === 'managedidentitycredential'
-        ? ['ManagedIdentityCredential']
-        : ['EnvironmentCredential', 'WorkloadIdentityCredential', 'ManagedIdentityCredential'];
+    selector === 'environmentcredential'
+      ? ['EnvironmentCredential']
+      : selector === 'workloadidentitycredential'
+        ? ['WorkloadIdentityCredential']
+        : selector === 'managedidentitycredential'
+          ? ['ManagedIdentityCredential']
+          : ['EnvironmentCredential', 'WorkloadIdentityCredential', 'ManagedIdentityCredential'];
   const classes = {
     EnvironmentCredential: identity.EnvironmentCredential,
     WorkloadIdentityCredential: identity.WorkloadIdentityCredential,
@@ -54,6 +51,32 @@ export async function createScopedAzureWorkloadCredential(
   ) {
     throw unsupported();
   }
+  return { sources: sources as TokenCredential[], expected };
+}
+
+/** Skip a scoped environment mode whose constructor failed, preserving the SDK tail. */
+export async function createAzureEnvironmentFallback(
+  identity: typeof import('@azure/identity'),
+  native: TokenCredential,
+  selector: string | undefined,
+): Promise<TokenCredential> {
+  const { sources } = await getNativeSources(identity, native, selector);
+  // The host environment cannot replace the selected but unavailable principal.
+  return new identity.ChainedTokenCredential({ getToken: async () => null }, ...sources.slice(1));
+}
+
+/**
+ * Keep the SDK's developer/Broker tail while binding both workload attempts to
+ * the invocation. Azure Identity 4 has no public per-instance chain exclusions.
+ * This is a read-only, guarded dependency on its private source-list layout.
+ */
+export async function createScopedAzureWorkloadCredential(
+  identity: typeof import('@azure/identity'),
+  native: TokenCredential,
+  options: WorkloadIdentityCredentialOptions,
+  selector: string | undefined,
+): Promise<TokenCredential> {
+  const { sources, expected } = await getNativeSources(identity, native, selector);
   const selected: TokenCredential[] = [];
   for (const [index, name] of expected.entries()) {
     if (name === 'WorkloadIdentityCredential') {

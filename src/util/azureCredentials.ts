@@ -1,5 +1,8 @@
 import { getEnvString, getMergedEnvOverrides } from '../envars';
-import { createScopedAzureWorkloadCredential } from './azureWorkloadIdentity';
+import {
+  createAzureEnvironmentFallback,
+  createScopedAzureWorkloadCredential,
+} from './azureWorkloadIdentity';
 import type { TokenCredential } from '@azure/identity';
 
 import type { EnvOverrides } from '../types/env';
@@ -79,58 +82,69 @@ export async function createAzureCredential(
       ? new identity.DefaultAzureCredential({ authorityHost })
       : new identity.DefaultAzureCredential();
   }
+  const certificatePath = value('AZURE_CLIENT_CERTIFICATE_PATH');
+  const tokenFilePath = value('AZURE_FEDERATED_TOKEN_FILE');
+  const username = value('AZURE_USERNAME');
+  const password = value('AZURE_PASSWORD');
   if (includesEnvironment && clientSecret && clientId && tenantId) {
-    if (!clientId?.trim() || !clientSecret.trim() || !tenantId?.trim()) {
+    if (!clientId?.trim() || !clientSecret.trim()) {
       throw new Error(
         'Scoped Azure service principal credentials are incomplete. Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET and AZURE_TENANT_ID together in the effective environment.',
       );
     }
-    return new identity.ClientSecretCredential(tenantId, clientId, clientSecret, { authorityHost });
   }
-  const certificatePath = value('AZURE_CLIENT_CERTIFICATE_PATH');
-  if (includesEnvironment && certificatePath && clientId && tenantId) {
-    return new identity.ClientCertificateCredential(
-      tenantId,
-      clientId,
-      {
-        certificatePath,
-        certificatePassword: value('AZURE_CLIENT_CERTIFICATE_PASSWORD'),
-      },
-      {
+  let environmentUnavailable = false;
+  try {
+    if (includesEnvironment && clientSecret && clientId && tenantId) {
+      return new identity.ClientSecretCredential(tenantId, clientId, clientSecret, {
         authorityHost,
-        sendCertificateChain: ['true', '1'].includes(
-          value('AZURE_CLIENT_SEND_CERTIFICATE_CHAIN')?.toLowerCase() ?? '',
-        ),
-      },
-    );
-  }
-  const tokenFilePath = value('AZURE_FEDERATED_TOKEN_FILE');
-  const username = value('AZURE_USERNAME');
-  const password = value('AZURE_PASSWORD');
-  if (includesEnvironment && username && password && clientId && tenantId) {
-    const credential = new identity.UsernamePasswordCredential(
-      tenantId,
-      clientId,
-      username,
-      password,
-      {
-        authorityHost,
-      },
-    );
-    return {
-      async getToken(scopes, options) {
-        try {
-          return await credential.getToken(scopes, options);
-        } catch (error) {
-          // EnvironmentCredential treats errors from this mode as fatal; do
-          // not let workload/developer discovery silently choose another user.
-          throw new identity.AuthenticationError(400, {
-            error: 'EnvironmentCredential authentication failed.',
-            error_description: error instanceof Error ? error.message : String(error),
-          });
-        }
-      },
-    };
+      });
+    }
+    if (includesEnvironment && certificatePath && clientId && tenantId) {
+      return new identity.ClientCertificateCredential(
+        tenantId,
+        clientId,
+        {
+          certificatePath,
+          certificatePassword: value('AZURE_CLIENT_CERTIFICATE_PASSWORD'),
+        },
+        {
+          authorityHost,
+          sendCertificateChain: ['true', '1'].includes(
+            value('AZURE_CLIENT_SEND_CERTIFICATE_CHAIN')?.toLowerCase() ?? '',
+          ),
+        },
+      );
+    }
+    if (includesEnvironment && username && password && clientId && tenantId) {
+      const credential = new identity.UsernamePasswordCredential(
+        tenantId,
+        clientId,
+        username,
+        password,
+        {
+          authorityHost,
+        },
+      );
+      return {
+        async getToken(scopes, options) {
+          try {
+            return await credential.getToken(scopes, options);
+          } catch (error) {
+            // EnvironmentCredential treats errors from this mode as fatal; do
+            // not let workload/developer discovery silently choose another user.
+            throw new identity.AuthenticationError(400, {
+              error: 'EnvironmentCredential authentication failed.',
+              error_description: error instanceof Error ? error.message : String(error),
+            });
+          }
+        },
+      };
+    }
+  } catch {
+    // DefaultAzureCredential skips constructor failures, not getToken errors.
+    // Continue scoped workload/managed handling before the SDK developer tail.
+    environmentUnavailable = true;
   }
   if ((includesWorkload || includesManaged) && tokenFilePath && clientId && tenantId) {
     rejectHostMasks({ AZURE_CLIENT_ID: clientId, AZURE_TENANT_ID: tenantId });
@@ -173,5 +187,8 @@ export async function createAzureCredential(
   // Partial identities remain unavailable to their SDK mode and retain fallback.
   // Do not pass tenantId here: it would also constrain CLI/PowerShell/azd tenants.
   // Complete scoped principal/workload identities receive it above.
-  return defaultCredential();
+  const native = defaultCredential();
+  return environmentUnavailable
+    ? createAzureEnvironmentFallback(identity, native, selector)
+    : native;
 }

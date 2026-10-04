@@ -7,7 +7,10 @@ import path from 'node:path';
 import * as identity from '@azure/identity';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAzureCredential } from '../../src/util/azureCredentials';
-import { createScopedAzureWorkloadCredential } from '../../src/util/azureWorkloadIdentity';
+import {
+  createAzureEnvironmentFallback,
+  createScopedAzureWorkloadCredential,
+} from '../../src/util/azureWorkloadIdentity';
 import { mockProcessEnv } from './utils';
 import type { TokenCredential } from '@azure/identity';
 
@@ -294,4 +297,98 @@ describe('scoped Azure workload SDK fallback', () => {
       ).rejects.toThrow('cannot safely isolate');
     },
   );
+});
+
+describe('scoped Azure environment constructor fallback', () => {
+  const modes = ['secret', 'certificate', 'username'] as const;
+  const selectedEnvironment = (mode: (typeof modes)[number], tenant = 'invalid tenant') => ({
+    AZURE_CLIENT_ID: 'selected-client',
+    AZURE_TENANT_ID: tenant,
+    ...(mode === 'secret'
+      ? { AZURE_CLIENT_SECRET: 'fixture-secret' }
+      : mode === 'certificate'
+        ? { AZURE_CLIENT_CERTIFICATE_PATH: path.join(directory, 'unused.pem') }
+        : { AZURE_USERNAME: 'fixture@example.invalid', AZURE_PASSWORD: 'fixture-password' }),
+  });
+
+  it.each(
+    modes.flatMap((mode) =>
+      [undefined, 'prod', 'EnvironmentCredential'].flatMap((selector) =>
+        [false, true].flatMap((ambient) =>
+          ['invalid tenant', ' \t '].map((tenant) => ({ mode, selector, ambient, tenant })),
+        ),
+      ),
+    ),
+  )(
+    'matches SDK fallback for $mode/$selector with ambient principal $ambient and tenant $tenant',
+    async ({ mode, selector, ambient, tenant }) => {
+      vi.spyOn(identity.ManagedIdentityCredential.prototype, 'getToken').mockRejectedValue(
+        new identity.CredentialUnavailableError('Fixture managed identity unavailable.'),
+      );
+      const environment = vi
+        .spyOn(identity.EnvironmentCredential.prototype, 'getToken')
+        .mockResolvedValue({
+          ...token,
+          token: 'host-principal-must-not-be-selected',
+        });
+      mockProcessEnv({ AZURE_TOKEN_CREDENTIALS: selector });
+      const selected = selectedEnvironment(mode, tenant);
+      const restoreSelected = mockProcessEnv(selected);
+      const native = new identity.DefaultAzureCredential();
+      const nativeDevelopers = stubDeveloperTail(native);
+      const expected = await outcome(native);
+      restoreSelected();
+      if (ambient) {
+        mockProcessEnv({
+          AZURE_CLIENT_ID: 'host-client',
+          AZURE_TENANT_ID: 'host-tenant',
+          AZURE_CLIENT_SECRET: 'host-secret',
+        });
+      }
+      const actual = await createAzureCredential({}, selected);
+      const actualDevelopers = stubDeveloperTail(actual);
+      expect(await outcome(actual)).toEqual(expected);
+      expect(actualDevelopers).toEqual(nativeDevelopers);
+      if (selector === undefined) {
+        expect(expected).toEqual({ token });
+      } else {
+        expect(expected).toHaveProperty('errorName');
+      }
+      expect(environment).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(modes)(
+    'does not turn a %s token-acquisition failure into developer fallback',
+    async (mode) => {
+      const credentialClass =
+        mode === 'secret'
+          ? identity.ClientSecretCredential
+          : mode === 'certificate'
+            ? identity.ClientCertificateCredential
+            : identity.UsernamePasswordCredential;
+      vi.spyOn(credentialClass.prototype, 'getToken').mockRejectedValue(
+        new identity.AuthenticationError(400, { error: 'Fixture authentication failed.' }),
+      );
+      const developer = vi
+        .spyOn(identity.AzureCliCredential.prototype, 'getToken')
+        .mockResolvedValue(token);
+      const credential = await createAzureCredential({}, selectedEnvironment(mode, 'valid-tenant'));
+      await expect(credential.getToken(scope)).rejects.toBeInstanceOf(identity.AuthenticationError);
+      expect(developer).not.toHaveBeenCalled();
+    },
+  );
+
+  it('retains SDK tail objects without mutating the native chain', async () => {
+    const native = new identity.DefaultAzureCredential();
+    const original = [...sources(native)];
+    const actual = await createAzureEnvironmentFallback(identity, native, undefined);
+    expect(sources(actual).slice(1)).toEqual(original.slice(1));
+    expect(await sources(actual)[0].getToken(scope)).toBeNull();
+    expect(sources(native)).toEqual(original);
+    sdkMetadata.version = '5.0.0';
+    await expect(createAzureEnvironmentFallback(identity, native, undefined)).rejects.toThrow(
+      'cannot safely isolate',
+    );
+  });
 });

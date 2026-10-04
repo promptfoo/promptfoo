@@ -116,10 +116,10 @@ describe('scoped Azure credentials', () => {
   });
 
   it.each(['config', 'provider', 'suite', 'file'] as const)(
-    'rejects whitespace-only Azure principal fields from %s before constructing a credential',
+    'rejects whitespace-only Azure client/secret fields from %s before constructing a credential',
     async (scope) => {
       mockProcessEnv(principal('host'));
-      for (const field of ['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID'] as const) {
+      for (const field of ['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET'] as const) {
         const env = { ...principal('scoped'), [field]: ' \t ' };
         const verify = async () => {
           await expect(
