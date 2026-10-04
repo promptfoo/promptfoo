@@ -160,13 +160,21 @@ async function git(
     env,
     input,
     signal,
-  }: { cwd?: string; env?: Record<string, string>; input?: string; signal?: AbortSignal } = {},
+    encoding = 'utf8',
+  }: {
+    cwd?: string;
+    env?: Record<string, string>;
+    input?: string;
+    signal?: AbortSignal;
+    encoding?: BufferEncoding;
+  } = {},
 ): Promise<string> {
   signal?.throwIfAborted();
   const baseEnv = { ...process.env };
   clearRepositoryEnv(baseEnv);
   const command = execFileAsync('git', cwd ? ['-C', cwd, ...args] : args, {
     env: { ...baseEnv, ...env },
+    encoding,
     maxBuffer: MAX_GIT_BUFFER,
     timeout: GIT_TIMEOUT_MS,
     killSignal: 'SIGKILL',
@@ -284,66 +292,87 @@ async function findPathsGitLeavesOut(
   dir: string,
   signal?: AbortSignal,
   ignoredDirectories: ReadonlySet<string> = new Set(),
-): Promise<{ leftOut: string[]; reserved: string[]; directories: string[] }> {
+  baselinePaths: ReadonlySet<string> = new Set(),
+): Promise<{
+  leftOut: string[];
+  reserved: string[];
+  directories: string[];
+  timedOut?: true;
+}> {
   const leftOut: string[] = [];
   const reserved: string[] = [];
   const directories: string[] = [];
-  const pending = [''];
-  for (let directory = pending.pop(); directory !== undefined; directory = pending.pop()) {
+  // Match Git's per-operation deadline. A pending OS call cannot be interrupted, but no
+  // more entries are examined after it returns once this deadline has elapsed.
+  const deadline = performance.now() + GIT_TIMEOUT_MS;
+  // Latin-1 strings preserve each pathname byte. UTF-8 is used only for display and ignore
+  // queries; raw filesystem paths prevent a lossy name from opening a different sibling.
+  const baselineDirectories = getCoveredDirectories([...baselinePaths]);
+  const filesystemPath = (display: string, raw: string) =>
+    Buffer.from(display).toString('latin1') === raw
+      ? path.join(dir, display)
+      : Buffer.concat([Buffer.from(`${dir}${path.sep}`), Buffer.from(raw, 'latin1')]);
+  const pending = [{ directory: '', rawDirectory: '' }];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    const { directory, rawDirectory } = next;
     signal?.throwIfAborted();
+    if (performance.now() >= deadline) {
+      return { leftOut, reserved, directories, timedOut: true };
+    }
     if (ignoredDirectories.has(directory)) {
       continue;
     }
     try {
-      const canSearch = await fs.access(path.join(dir, directory), constants.X_OK).then(
+      const physicalDirectory = filesystemPath(directory, rawDirectory);
+      const canSearch = await fs.access(physicalDirectory, constants.X_OK).then(
         () => true,
         () => false,
       );
-      let undecodableNames: Set<string> | undefined;
-      const entries = await fs.opendir(path.join(dir, directory));
+      const entries = await fs.opendir(physicalDirectory, { encoding: 'latin1' });
       if (directory !== '') {
         directories.push(directory);
       }
       for await (const entry of entries) {
         signal?.throwIfAborted();
-        const entryPath = `${directory}${entry.name}`;
+        if (performance.now() >= deadline) {
+          return { leftOut, reserved, directories, timedOut: true };
+        }
+        const name = Buffer.from(entry.name, 'latin1').toString('utf8');
+        const entryPath = `${directory}${name}`;
+        const rawEntryPath = `${rawDirectory}${entry.name}`;
         if (!canSearch) {
           leftOut.push(entry.isDirectory() ? `${entryPath}/` : entryPath);
           continue;
         }
-        if (entry.name.includes('\uFFFD')) {
-          // Check raw names once per parent so a lossy name cannot open a valid sibling.
-          // A literal, valid UTF-8 replacement character remains an ordinary name.
-          undecodableNames ??= new Set(
-            (await fs.readdir(path.join(dir, directory), { encoding: 'buffer' }))
-              .filter((name) => !Buffer.from(name.toString('utf8')).equals(name))
-              .map((name) => name.toString('utf8')),
-          );
-          if (undecodableNames.has(entry.name)) {
-            leftOut.push(entry.isDirectory() ? `${entryPath}/` : entryPath);
-            continue;
-          }
+        // Not every filesystem reports entry types. Ask using the exact pathname bytes.
+        const stat =
+          entry.isDirectory() || entry.isFile() || entry.isSymbolicLink()
+            ? entry
+            : await fs.lstat(filesystemPath(entryPath, rawEntryPath)).catch(() => undefined);
+        if (
+          Buffer.from(entryPath).toString('latin1') !== rawEntryPath &&
+          !(stat?.isDirectory()
+            ? baselineDirectories.has(`${rawEntryPath}/`)
+            : baselinePaths.has(rawEntryPath) && (stat?.isFile() || stat?.isSymbolicLink()))
+        ) {
+          // Git updates baseline paths by their original bytes. New raw paths and special
+          // replacements cannot be staged using their display names and remain unexamined.
+          leftOut.push(stat?.isDirectory() ? `${entryPath}/` : entryPath);
+          continue;
         }
         // Git compares the name without regard to case on file systems that do.
-        if (entry.name.toLowerCase() === '.git') {
-          const reservedPath = entry.isDirectory() ? `${entryPath}/` : entryPath;
+        if (name.toLowerCase() === '.git') {
+          const reservedPath = stat?.isDirectory() ? `${entryPath}/` : entryPath;
           if (directory !== '') {
             reserved.push(reservedPath);
-          } else if (entry.name !== '.git') {
+          } else if (name !== '.git') {
             // Beside the workspace's own `.git`, on a file system that tells them apart.
             leftOut.push(reservedPath);
           }
-        } else if (entry.isDirectory()) {
-          pending.push(`${entryPath}/`);
-        } else if (!entry.isFile() && !entry.isSymbolicLink()) {
-          // Not every file system reports the type of an entry with its name, so the entry
-          // itself is asked before it is taken for a special file.
-          const stat = await fs.lstat(path.join(dir, entryPath)).catch(() => undefined);
-          if (stat?.isDirectory()) {
-            pending.push(`${entryPath}/`);
-          } else if (!stat?.isFile() && !stat?.isSymbolicLink()) {
-            leftOut.push(entryPath);
-          }
+        } else if (stat?.isDirectory()) {
+          pending.push({ directory: `${entryPath}/`, rawDirectory: `${rawEntryPath}/` });
+        } else if (!stat?.isFile() && !stat?.isSymbolicLink()) {
+          leftOut.push(entryPath);
         }
       }
     } catch (error) {
@@ -351,9 +380,7 @@ async function findPathsGitLeavesOut(
       if (directory === '') {
         throw error;
       }
-      // The directory was just listed, so it is not gone when it cannot be opened: it is
-      // unreadable, or its name has bytes that are not valid text and changed when it was
-      // read as text. Either way, whatever it holds is missing from the diff.
+      // The directory was just listed, so failure to examine it leaves its contents unknown.
       leftOut.push(directory);
     }
   }
@@ -857,7 +884,14 @@ async function getWorkspaceDiff(
       .split('\0')
       .filter(Boolean);
     // What the cloned commit tracks. The scratch index holds exactly that at this point.
-    const baseline = (await git(['ls-files', '-z', '--cached'], { env, signal }))
+    const rawBaseline = await git(['ls-files', '-z', '--cached'], {
+      env,
+      signal,
+      encoding: 'latin1',
+    });
+    const baselinePaths = new Set(rawBaseline.split('\0').filter(Boolean));
+    const baseline = Buffer.from(rawBaseline, 'latin1')
+      .toString('utf8')
       .split('\0')
       .filter(Boolean);
     const referenced = [...baseline, ...ignoredTracked.split('\0').filter(Boolean)];
@@ -885,7 +919,10 @@ async function getWorkspaceDiff(
     // anything below a path called `.git`, nor a directory without files. An agent could
     // keep a change out of the diff with `mkfifo`, `chmod` or `mkdir`, so these are looked
     // for separately and reported below.
-    const found = await findPathsGitLeavesOut(dir, signal, ignoredDirectories);
+    const found = await findPathsGitLeavesOut(dir, signal, ignoredDirectories, baselinePaths);
+    if (found.timedOut) {
+      notes.push(`[diff incomplete: workspace traversal exceeded ${GIT_TIMEOUT_MS} ms]`);
+    }
     let leftOut = found.leftOut;
     // A reserved path cannot be tracked, so the directory that holds it decides whether it
     // is ignored.

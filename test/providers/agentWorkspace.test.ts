@@ -2122,13 +2122,10 @@ describe('agent workspaces', () => {
         const workspace = await create(source);
         write(path.join(workspace.dir, 'policy\uFFFD', 'keep.txt'), 'visible change\n');
         if (collision) {
-          const raw = Buffer.concat([
-            Buffer.from(`${workspace.dir}/policy`),
-            Buffer.from([0xff]),
-            Buffer.from('/.git'),
-          ]);
-          fs.mkdirSync(raw, { recursive: true });
-          fs.writeFileSync(Buffer.concat([raw, Buffer.from('/payload')]), 'hidden\n');
+          const raw = Buffer.concat([Buffer.from(`${workspace.dir}/policy`), Buffer.from([0xff])]);
+          fs.mkdirSync(raw);
+          fs.mkdirSync(Buffer.concat([raw, Buffer.from('/.git')]));
+          fs.writeFileSync(Buffer.concat([raw, Buffer.from('/.git/payload')]), 'hidden\n');
         }
         const opendir = omitDirectoryEntryTypes();
         try {
@@ -2142,6 +2139,139 @@ describe('agent workspaces', () => {
         }
       },
     );
+
+    it('ends traversal at the Git deadline and closes open directory handles', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source, 'git');
+      write(path.join(workspace.dir, 'README.md'), 'visible change\n');
+      const slow = path.join(workspace.dir, 'over-budget');
+      fs.mkdirSync(path.join(slow, 'child'), { recursive: true });
+      const opened: fs.Dir[] = [];
+      const original = fs.promises.opendir;
+      const start = performance.now();
+      const now = vi.spyOn(performance, 'now').mockReturnValue(start);
+      const opendir = vi.spyOn(fs.promises, 'opendir').mockImplementation(async (...args) => {
+        const directory = await original(...args);
+        opened.push(directory);
+        if (path.resolve(String(args[0])) === slow) {
+          now.mockReturnValue(start + 30_001);
+        }
+        return directory;
+      });
+      try {
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('+visible change');
+        expect(metadata.workspaceDiff).toContain('workspace traversal exceeded 30000 ms');
+        expect(
+          opendir.mock.calls.some(([dir]) =>
+            path.resolve(String(dir)).startsWith(`${slow}${path.sep}`),
+          ),
+        ).toBe(false);
+        expect(opened.length).toBeGreaterThan(0);
+        for (const directory of opened) {
+          await expect(directory.read()).rejects.toMatchObject({ code: 'ERR_DIR_CLOSED' });
+        }
+      } finally {
+        opendir.mockRestore();
+        now.mockRestore();
+      }
+    });
+
+    it.each([
+      'unchanged-file',
+      'changed-file',
+      'unchanged-parent',
+      'changed-parent',
+      'new-empty',
+      'new-fifo',
+      'new-reserved',
+      'new-collision',
+      'file-symlink',
+      'parent-symlink',
+      'file-fifo',
+    ])('examines exact baseline raw-byte paths (%s)', async (scenario) => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const rawName = Buffer.concat([Buffer.from('policy'), Buffer.from([0xff])]);
+      const rawSource = Buffer.concat([Buffer.from(`${source}/`), rawName]);
+      const directory = [
+        'unchanged-parent',
+        'changed-parent',
+        'new-empty',
+        'new-fifo',
+        'new-reserved',
+        'parent-symlink',
+      ].includes(scenario);
+      if (directory) {
+        fs.mkdirSync(rawSource);
+      }
+      fs.writeFileSync(
+        directory ? Buffer.concat([rawSource, Buffer.from('/keep.txt')]) : rawSource,
+        'original\n',
+      );
+      git(source, 'add', '--all');
+      git(source, 'commit', '-qm', 'track raw-byte path');
+      const workspace = await create(source, 'git');
+      const raw = Buffer.concat([Buffer.from(`${workspace.dir}/`), rawName]);
+      if (scenario.startsWith('changed')) {
+        fs.writeFileSync(
+          directory ? Buffer.concat([raw, Buffer.from('/keep.txt')]) : raw,
+          'visible change\n',
+        );
+      }
+      if (scenario === 'new-empty') {
+        fs.mkdirSync(Buffer.concat([raw, Buffer.from('/enabled.d')]));
+      } else if (scenario === 'new-fifo') {
+        const temporary = path.join(workspace.dir, 'pipe');
+        execFileSync('mkfifo', [temporary]);
+        fs.renameSync(temporary, Buffer.concat([raw, Buffer.from('/pipe')]));
+      } else if (scenario === 'new-reserved') {
+        fs.mkdirSync(Buffer.concat([raw, Buffer.from('/.git')]));
+        fs.writeFileSync(Buffer.concat([raw, Buffer.from('/.git/payload')]), 'hidden\n');
+      } else if (scenario === 'new-collision') {
+        fs.writeFileSync(
+          Buffer.concat([Buffer.from(`${workspace.dir}/policy`), Buffer.from([0xfe])]),
+          'hidden new file\n',
+        );
+      } else if (scenario.endsWith('symlink')) {
+        fs.rmSync(raw, { recursive: directory });
+        fs.symlinkSync('README.md', raw);
+      } else if (scenario === 'file-fifo') {
+        fs.rmSync(raw);
+        const temporary = path.join(workspace.dir, 'pipe');
+        execFileSync('mkfifo', [temporary]);
+        fs.renameSync(temporary, raw);
+      }
+      const opendir = directory ? omitDirectoryEntryTypes() : undefined;
+      try {
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(
+          scenario.startsWith('new-') || scenario === 'parent-symlink' || scenario === 'file-fifo'
+            ? true
+            : undefined,
+        );
+        if (scenario.startsWith('unchanged')) {
+          expect(metadata.workspaceDiff).toBe('');
+        } else if (scenario.startsWith('changed')) {
+          expect(metadata.workspaceDiff).toContain('+visible change');
+        } else if (scenario === 'file-symlink') {
+          expect(metadata.workspaceDiff).toContain('+README.md');
+        } else {
+          expect(metadata.workspaceDiff).toContain('policy\\u{fffd}');
+        }
+      } finally {
+        opendir?.mockRestore();
+      }
+    });
 
     it.each([false, true])(
       'preserves an ignored tracked file with a valid replacement character (changed: %s)',
