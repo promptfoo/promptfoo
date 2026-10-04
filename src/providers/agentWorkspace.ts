@@ -34,9 +34,15 @@ export interface AgentWorkspace {
   readonly strategy: 'git' | 'copy';
   /**
    * Response metadata describing the workspace, including the agent's diff for git
-   * workspaces. `workspaceDiffError` is set instead when that diff could not be computed.
+   * workspaces. `workspaceDiffIncomplete` is set when the diff does not show every change,
+   * and `workspaceDiffError` is set instead of the diff when it could not be computed.
    */
-  metadata(): Promise<{ workingDir: string; workspaceDiff?: string; workspaceDiffError?: string }>;
+  metadata(): Promise<{
+    workingDir: string;
+    workspaceDiff?: string;
+    workspaceDiffIncomplete?: true;
+    workspaceDiffError?: string;
+  }>;
   /** Delete the workspace. Never throws. */
   remove(): Promise<void>;
 }
@@ -48,7 +54,9 @@ interface RepositoryState {
 }
 
 const MAX_DIFF_LENGTH = 100_000;
-const MAX_INCOMPLETE_PATHS = 20;
+const MAX_INCOMPLETE_PATHS = 50;
+/** The socket Git's built-in fsmonitor daemon keeps in the repository while it runs. */
+const FSMONITOR_SOCKET = 'fsmonitor--daemon.ipc';
 const MAX_DIFF_ERROR_LENGTH = 300;
 const MAX_GIT_BUFFER = 64 * 1024 * 1024;
 const MAX_SHARED_INDEX_FILES = 64;
@@ -424,9 +432,13 @@ async function assertCopyable(
         'repository a copy would share. Commit the changes so working_dir is cloned instead.',
     );
   } else if (!stat.isFile() && !stat.isDirectory()) {
-    if (stat.isSocket() && path.relative(root, entry).split(path.sep).includes('.git')) {
-      // Git's own runtime sockets, such as the fsmonitor daemon's, belong to the source
-      // repository's processes and are recreated on demand.
+    if (
+      stat.isSocket() &&
+      path.basename(entry) === FSMONITOR_SOCKET &&
+      path.basename(path.dirname(entry)) === '.git'
+    ) {
+      // The daemon's socket belongs to the source repository's process and Git recreates it
+      // on demand. Any other socket, including one in place of Git metadata, is rejected.
       return false;
     }
     throw new Error(`copy_working_dir cannot copy ${entry}: it is not a regular file or directory`);
@@ -562,7 +574,7 @@ async function getWorkspaceDiff(
   dir: string,
   repo: RepositoryState,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<{ diff: string; incomplete: boolean }> {
   signal?.throwIfAborted();
   if (!isAgentWorkspace(dir)) {
     // Otherwise the diff would copy whatever the link points to into the results.
@@ -612,12 +624,14 @@ async function getWorkspaceDiff(
     const workspaceIndex = path.join(scratch, 'workspace-index');
     let ignoredTracked = '';
     try {
-      if (await copyWorkspaceIndex(dir, workspaceIndex, signal)) {
-        ignoredTracked = await git(
-          ['ls-files', '-z', '--cached', '--ignored', '--exclude-standard'],
-          { env: { ...ignoreEnv, GIT_INDEX_FILE: workspaceIndex }, signal },
-        );
+      if (!(await copyWorkspaceIndex(dir, workspaceIndex, signal))) {
+        // A clone always has an index, so the agent removed it.
+        throw new Error('the workspace has no Git index');
       }
+      ignoredTracked = await git(
+        ['ls-files', '-z', '--cached', '--ignored', '--exclude-standard'],
+        { env: { ...ignoreEnv, GIT_INDEX_FILE: workspaceIndex }, signal },
+      );
     } catch (error) {
       rethrowIfInterrupted(error, signal);
       logger.warn(`[copy_working_dir] Could not read the workspace's Git index: ${error}`);
@@ -679,38 +693,30 @@ async function getWorkspaceDiff(
         { env, signal },
       )) || skippedPaths;
     if (skippedPaths) {
-      const added = new Set(
-        (
-          await git(
-            [
-              '-c',
-              'core.fsmonitor=false',
-              'diff',
-              '--cached',
-              '--name-only',
-              '-z',
-              '--diff-filter=A',
-              repo.head,
-            ],
-            { env, signal },
-          )
-        ).split('\0'),
-      );
       // Tracked files that still differ from the index are the ones `add --update` skipped.
       const notUpdated = await git(['-c', 'core.fsmonitor=false', 'diff', '--name-only', '-z'], {
         env,
         signal,
       });
+      // A new path that is not in the index at all could not be added. Files the cloned
+      // commit already tracks are in the index whether or not they changed, so an unchanged
+      // one is not reported.
+      const indexed = new Set(
+        (await git(['ls-files', '-z', '--cached'], { env, signal })).split('\0'),
+      );
       const missing = [
-        // An untracked repository is listed as a directory, with a trailing slash.
-        ...[...newFiles].filter((file) => !added.has(file.replace(/\/$/, ''))),
+        // Changes to existing files come first, so they are the last to be cut off.
         ...notUpdated.split('\0').filter(Boolean),
+        // An untracked repository is listed as a directory, with a trailing slash.
+        ...[...newFiles].filter((file) => !indexed.has(file.replace(/\/$/, ''))),
       ];
-      // Naming the paths keeps a check for a changed file from passing on a partial diff.
+      // Naming the paths keeps a search for a changed file from passing on a partial diff.
       notes.push(
         `[diff incomplete: ${missing.length || 'some'} changed path(s) could not be included` +
           (missing.length > 0 ? `: ${missing.slice(0, MAX_INCOMPLETE_PATHS).join(', ')}` : '') +
-          (missing.length > MAX_INCOMPLETE_PATHS ? ', ...' : '') +
+          (missing.length > MAX_INCOMPLETE_PATHS
+            ? `, and ${missing.length - MAX_INCOMPLETE_PATHS} more`
+            : '') +
           ']',
       );
     }
@@ -727,14 +733,17 @@ async function getWorkspaceDiff(
       ],
       { env, signal },
     );
-    const shown =
-      diff.length > MAX_DIFF_LENGTH
-        ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`
-        : diff;
-    if (notes.length === 0) {
-      return shown;
-    }
-    return `${shown}${shown && !shown.endsWith('\n') ? '\n' : ''}${notes.join('\n')}`;
+    const truncated = diff.length > MAX_DIFF_LENGTH;
+    const shown = truncated
+      ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`
+      : diff;
+    return {
+      diff:
+        notes.length === 0
+          ? shown
+          : `${shown}${shown && !shown.endsWith('\n') ? '\n' : ''}${notes.join('\n')}`,
+      incomplete: truncated || notes.length > 0,
+    };
   } finally {
     await fs.rm(scratch, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -842,7 +851,14 @@ export async function createAgentWorkspace(
         return { workingDir: dir };
       }
       try {
-        return { workingDir: dir, workspaceDiff: await getWorkspaceDiff(dir, repo, signal) };
+        const { diff, incomplete } = await getWorkspaceDiff(dir, repo, signal);
+        return {
+          workingDir: dir,
+          workspaceDiff: diff,
+          // The notes in the diff are for readers. This flag lets an assertion reject a diff
+          // that does not show every change without parsing them.
+          ...(incomplete && { workspaceDiffIncomplete: true as const }),
+        };
       } catch (error) {
         rethrowIfInterrupted(error, signal);
         logger.warn(`[copy_working_dir] Could not compute the workspace diff: ${error}`);
