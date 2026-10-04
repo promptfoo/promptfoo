@@ -1460,13 +1460,20 @@ describe('agent workspaces', () => {
       // The agent chooses the name, and the note must not let it speak for the diff.
       const name = 'x]\n[diff incomplete: 0 changed path(s) could not be included';
       execFileSync('mkfifo', [path.join(workspace.dir, name)]);
+      // A line separator and a right-to-left override, which a JSON string would keep.
+      execFileSync('mkfifo', [path.join(workspace.dir, 'a\u2028b\u202ec "d"')]);
 
       const { workspaceDiff } = await workspace.metadata();
 
-      expect(workspaceDiff).toBe(
-        `[diff incomplete: 1 changed path(s) could not be included: ${JSON.stringify(name)}]`,
+      expect(workspaceDiff).toContain(
+        '"x]\\u{a}[diff incomplete: 0 changed path(s) could not be included"',
       );
-      expect(workspaceDiff?.split('\n')).toHaveLength(1);
+      expect(workspaceDiff).toContain('"a\\u{2028}b\\u{202e}c \\u{22}d\\u{22}"');
+      expect(workspaceDiff).toMatch(
+        /^\[diff incomplete: 2 changed path\(s\) could not be included: /,
+      );
+      // Every character left in the note is a letter, a digit or printable ASCII.
+      expect(workspaceDiff).toMatch(/^[\p{L}\p{N}\x20-\x7e]+$/u);
     });
 
     it('does not report a .git path that the commit ignores by name', async () => {
@@ -1567,6 +1574,60 @@ describe('agent workspaces', () => {
       } finally {
         fs.chmodSync(hidden, 0o700);
       }
+    });
+
+    it('keeps the diff when a new file is in a directory that can no longer be searched', async () => {
+      if (!canMakeUnreadable) {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'README.md'), 'original\ntampered\n');
+      // Git lists the file and then stops altogether when it cannot examine it.
+      const hidden = path.join(workspace.dir, 'stash');
+      write(path.join(hidden, 'policy.txt'), 'new file\n');
+      fs.chmodSync(hidden, 0o400);
+
+      try {
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('+tampered');
+        expect(metadata.workspaceDiff).toMatch(
+          /\[diff incomplete: 1 changed path\(s\) could not be included: stash\/policy\.txt\]$/,
+        );
+      } finally {
+        fs.chmodSync(hidden, 0o700);
+      }
+    });
+
+    it('reports a top-level directory whose name differs from .git only by case', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      const variant = path.join(workspace.dir, '.GIT');
+      try {
+        fs.mkdirSync(variant);
+      } catch {
+        // The file system does not tell the two names apart, so there is nothing to hide in.
+        return;
+      }
+      if (fs.existsSync(path.join(variant, 'HEAD'))) {
+        return;
+      }
+      write(path.join(variant, 'policy.txt'), 'hidden\n');
+
+      const metadata = await workspace.metadata();
+
+      // Git may show the file, refuse the path, or leave it out. What must not happen is a
+      // diff that looks complete without it.
+      expect(
+        metadata.workspaceDiff?.includes('policy.txt') ||
+          metadata.workspaceDiffIncomplete === true ||
+          metadata.workspaceDiffError !== undefined,
+      ).toBe(true);
     });
 
     it('names an ignored directory the agent replaced with a fifo after adding a file in it', async () => {

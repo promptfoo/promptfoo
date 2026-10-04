@@ -209,11 +209,21 @@ async function addReadablePaths(
 }
 
 /**
- * A path as a note shows it. The agent chooses its file names, so any name with more than
- * plain characters is quoted: it cannot add lines to the diff or end the note early.
+ * A path as a note shows it. The agent chooses its file names, so a name with more than
+ * plain characters is quoted, and inside the quotes everything but letters, digits and
+ * printable ASCII is written as its code point. A name can then neither add lines to the
+ * diff, nor end the note early, nor reorder the text around it.
  */
 function quotePath(file: string): string {
-  return /^[\p{L}\p{N} ._/@+~=-]+$/u.test(file) ? file : JSON.stringify(file);
+  if (/^[\p{L}\p{N} ._/@+~=-]+$/u.test(file)) {
+    return file;
+  }
+  const escaped = Array.from(file, (char) =>
+    /[\p{L}\p{N}\x20-\x7e]/u.test(char) && char !== '"' && char !== '\\'
+      ? char
+      : `\\u{${(char.codePointAt(0) ?? 0).toString(16)}}`,
+  ).join('');
+  return `"${escaped}"`;
 }
 
 /**
@@ -242,8 +252,12 @@ async function findPathsGitLeavesOut(
         const entryPath = `${directory}${entry.name}`;
         // Git compares the name without regard to case on file systems that do.
         if (entry.name.toLowerCase() === '.git') {
+          const reservedPath = entry.isDirectory() ? `${entryPath}/` : entryPath;
           if (directory !== '') {
-            reserved.push(entry.isDirectory() ? `${entryPath}/` : entryPath);
+            reserved.push(reservedPath);
+          } else if (entry.name !== '.git') {
+            // Beside the workspace's own `.git`, on a file system that tells them apart.
+            leftOut.push(reservedPath);
           }
         } else if (entry.isDirectory()) {
           pending.push(`${entryPath}/`);
@@ -770,6 +784,20 @@ async function getWorkspaceDiff(
                 tracked === file || tracked.startsWith(file.endsWith('/') ? file : `${file}/`),
             ),
         );
+      }
+    }
+    // Git stops altogether at a new file it cannot examine, such as one in a directory that
+    // can be listed but not searched. Those are named below instead of being added.
+    for (const file of newFiles) {
+      const code = await fs.lstat(path.join(dir, file)).then(
+        () => undefined,
+        (error: unknown) => (error instanceof Error && 'code' in error ? error.code : 'unknown'),
+      );
+      if (code !== undefined) {
+        newFiles.delete(file);
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+          unverified.push(file);
+        }
       }
     }
     // The agent controls the workspace, so some paths may be impossible to add: a file it
