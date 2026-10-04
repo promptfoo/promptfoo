@@ -37,6 +37,8 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 describe('sanitizeMcpToolData', () => {
+  const omitted = '[MCP tool data omitted: it could not be sanitized]';
+
   it('keeps deeply nested arguments while redacting secrets at any depth', () => {
     const args = {
       query: {
@@ -53,6 +55,74 @@ describe('sanitizeMcpToolData', () => {
       query: args.query,
       connection: { options: { pool: { retry: { apiKey: '[REDACTED]', attempts: 2 } } } },
     });
+  });
+
+  /** Arguments with `levels` nested objects and a secret in the innermost one. */
+  function nestedArgs(levels: number) {
+    const args: Record<string, unknown> = {};
+    let node = args;
+    for (let level = 0; level < levels; level++) {
+      const child: Record<string, unknown> = {};
+      node.child = child;
+      node = child;
+    }
+    node.apiKey = 'tool-secret-value';
+    node.attempts = 2;
+    return args;
+  }
+
+  /** The innermost object of a sanitized result, without recursion. */
+  function innermost(value: unknown) {
+    let node = value as Record<string, unknown>;
+    let levels = 0;
+    while (node.child !== null && typeof node.child === 'object') {
+      node = node.child as Record<string, unknown>;
+      levels++;
+    }
+    return { node, levels };
+  }
+
+  it('reports arguments down to 64 levels and cuts off anything deeper', () => {
+    expect(innermost(sanitizeMcpToolData(nestedArgs(64)))).toEqual({
+      node: { apiKey: '[REDACTED]', attempts: 2 },
+      levels: 64,
+    });
+    expect(innermost(sanitizeMcpToolData(nestedArgs(65)))).toEqual({
+      node: { child: '[...]' },
+      levels: 64,
+    });
+  });
+
+  it.each([4_000, 20_000, 200_000])(
+    'does not expose a secret in arguments nested %i levels deep',
+    (levels) => {
+      // Nesting this deep exhausts the stack somewhere in the sanitizer. The sanitizer's
+      // fallback of returning its input would report the secret as it came in.
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const result: unknown = sanitizeMcpToolData(nestedArgs(levels));
+
+        // Either the arguments are cut off at the depth limit, or they are omitted.
+        if (result !== omitted) {
+          expect(innermost(result)).toEqual({ node: { child: '[...]' }, levels: 64 });
+        }
+        expect(errors).not.toHaveBeenCalled();
+      } finally {
+        errors.mockRestore();
+      }
+    },
+  );
+
+  it('reports a placeholder instead of arguments it cannot sanitize', () => {
+    const args = { apiKey: 'tool-secret-value' };
+    Object.defineProperty(args, 'unreadable', {
+      enumerable: true,
+      get() {
+        throw new Error('cannot be read');
+      },
+    });
+
+    expect(sanitizeMcpToolData(args)).toBe(omitted);
   });
 
   it('copes with arguments that refer to themselves', () => {

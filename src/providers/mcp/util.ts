@@ -17,13 +17,38 @@ import type {
 
 export type { OAuthTokenResult };
 
-/** Redact secrets in tool arguments. Nested arguments are kept, however deep they go. */
+/**
+ * How many levels of nested tool arguments are reported. Real arguments are far shallower.
+ * The ceiling keeps the sanitizer's recursion well inside the stack when a payload is
+ * nested deeply enough to exhaust it.
+ */
+const MAX_TOOL_DATA_DEPTH = 64;
+
+/** Reported in place of tool data that could not be sanitized. */
+const UNSANITIZED_TOOL_DATA = '[MCP tool data omitted: it could not be sanitized]';
+
+/**
+ * Redact secrets in tool arguments. Nested arguments are kept down to
+ * `MAX_TOOL_DATA_DEPTH` levels, and anything deeper is replaced with `"[...]"`.
+ *
+ * The arguments come from the prompt, so they are never returned as they came in: when they
+ * cannot be sanitized, for example because their nesting exhausts the stack, a placeholder
+ * is reported instead.
+ */
 export function sanitizeMcpToolData<T>(value: T): T {
-  return sanitizeObject(value, {
-    context: 'MCP tool data',
-    sanitizeUrls: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  });
+  try {
+    return sanitizeObject(value, {
+      context: 'MCP tool data',
+      sanitizeUrls: true,
+      maxDepth: MAX_TOOL_DATA_DEPTH,
+      throwOnError: true,
+    });
+  } catch (error) {
+    logger.debug('[MCP] Tool data could not be sanitized and is omitted', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return UNSANITIZED_TOOL_DATA as T;
+  }
 }
 
 export function normalizeMcpToolContent(
