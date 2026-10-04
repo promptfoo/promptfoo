@@ -227,6 +227,47 @@ function quotePath(file: string): string {
 }
 
 /**
+ * How a path is asked about with `git check-ignore`, or undefined when it cannot be asked
+ * about and counts as not ignored.
+ *
+ * - A name that starts with a colon would be read as pathspec magic and answered for another
+ *   path, so it is asked about as `./name`.
+ * - A path with the replacement character was read from bytes that are not valid text, so
+ *   its real name is unknown and could match a rule that the read name does not, or the
+ *   other way round. Only the nearest directory above it whose name survived is asked
+ *   about: what Git ignores as a directory, it ignores with everything in it.
+ */
+function toIgnoreQuery(file: string): string | undefined {
+  let query = file;
+  const lost = file.indexOf('\uFFFD');
+  if (lost !== -1) {
+    const end = file.lastIndexOf('/', lost);
+    if (end === -1) {
+      return undefined;
+    }
+    query = file.slice(0, end + 1);
+  }
+  return query.startsWith(':') ? `./${query}` : query;
+}
+
+/** The directories that hold the given paths, at any depth. A path ending with a slash is one. */
+function getCoveredDirectories(paths: string[]): Set<string> {
+  const covered = new Set<string>();
+  for (const file of paths) {
+    let slash = file.endsWith('/') ? file.length - 1 : file.lastIndexOf('/');
+    while (slash !== -1) {
+      const directory = file.slice(0, slash + 1);
+      if (covered.has(directory)) {
+        break;
+      }
+      covered.add(directory);
+      slash = file.lastIndexOf('/', slash - 1);
+    }
+  }
+  return covered;
+}
+
+/**
  * Paths in the workspace that Git leaves out of a diff without saying so. Paths use forward
  * slashes, and directories end with one, as in Git's output.
  *
@@ -234,20 +275,27 @@ function quotePath(file: string): string {
  *   sockets, and directories that cannot be read.
  * - `reserved`: anything called `.git` below the top level. Git never lists what such a
  *   path holds, whether or not it is a repository.
+ * - `directories`: every directory that was read. Git lists files, so a directory without
+ *   any is found by comparing these with what Git lists.
  *
  * Entries are only listed, never opened. The top-level `.git` is the workspace's own.
  */
 async function findPathsGitLeavesOut(
   dir: string,
   signal?: AbortSignal,
-): Promise<{ leftOut: string[]; reserved: string[] }> {
+): Promise<{ leftOut: string[]; reserved: string[]; directories: string[] }> {
   const leftOut: string[] = [];
   const reserved: string[] = [];
+  const directories: string[] = [];
   const pending = [''];
   for (let directory = pending.pop(); directory !== undefined; directory = pending.pop()) {
     signal?.throwIfAborted();
     try {
-      for await (const entry of await fs.opendir(path.join(dir, directory))) {
+      const entries = await fs.opendir(path.join(dir, directory));
+      if (directory !== '') {
+        directories.push(directory);
+      }
+      for await (const entry of entries) {
         signal?.throwIfAborted();
         const entryPath = `${directory}${entry.name}`;
         // Git compares the name without regard to case on file systems that do.
@@ -283,7 +331,7 @@ async function findPathsGitLeavesOut(
       leftOut.push(directory);
     }
   }
-  return { leftOut, reserved };
+  return { leftOut, reserved, directories };
 }
 
 class UnsupportedGitAttributesError extends Error {}
@@ -745,9 +793,14 @@ async function getWorkspaceDiff(
     const untracked = (await git(['ls-files', '-z', '--others'], { env, signal }))
       .split('\0')
       .filter(Boolean);
+    // What the cloned commit tracks. The scratch index holds exactly that at this point.
+    const baseline = (await git(['ls-files', '-z', '--cached'], { env, signal }))
+      .split('\0')
+      .filter(Boolean);
     // Git lists neither special files, nor the contents of directories it cannot read, nor
-    // anything below a path called `.git`. An agent could keep a change out of the diff with
-    // `mkfifo`, `chmod` or `mkdir`, so these are looked for separately and reported below.
+    // anything below a path called `.git`, nor a directory without files. An agent could
+    // keep a change out of the diff with `mkfifo`, `chmod` or `mkdir`, so these are looked
+    // for separately and reported below.
     const found = await findPathsGitLeavesOut(dir, signal);
     let leftOut = found.leftOut;
     // A reserved path cannot be tracked, so the directory that holds it decides whether it
@@ -756,55 +809,79 @@ async function getWorkspaceDiff(
       file,
       parent: file.slice(0, file.toLowerCase().lastIndexOf('/.git') + 1),
     }));
-    // `check-ignore` reads a name that starts with a colon as pathspec magic and would
-    // answer for another path, so such names are not asked about and count as not ignored.
-    const checked = [
+    // A directory is new and empty when nothing lies in it that the cloned commit tracks,
+    // that Git lists as untracked, or that was found above. Git lists a repository as one
+    // directory, so what is in it is not looked at. Only the outermost empty directory is
+    // reported.
+    const covered = getCoveredDirectories([
+      ...baseline,
+      ...untracked,
+      ...leftOut,
+      ...found.reserved,
+    ]);
+    const repositoryRoots = untracked.filter((file) => file.endsWith('/'));
+    const withoutFiles = new Set(
+      found.directories.filter(
+        (directory) =>
+          !covered.has(directory) && !repositoryRoots.some((root) => directory.startsWith(root)),
+      ),
+    );
+    let emptyDirectories = [...withoutFiles].filter(
+      (directory) =>
+        !withoutFiles.has(directory.slice(0, directory.lastIndexOf('/', directory.length - 2) + 1)),
+    );
+
+    // The committed ignore rules decide which of these are part of the diff.
+    const queries = new Map<string, string | undefined>();
+    for (const file of [
       ...untracked,
       ...leftOut,
       ...reserved.flatMap((entry) => [entry.file, entry.parent]),
-    ].filter((file) => !file.startsWith(':'));
-    if (untracked.length + leftOut.length + reserved.length > 0) {
-      const ignored = await (checked.length > 0
-        ? git(['check-ignore', '--no-index', '-z', '--stdin'], {
-            env: ignoreEnv,
-            input: `${checked.join('\0')}\0`,
-            signal,
-          })
-        : Promise.resolve('')
-      ).catch((error: unknown) => {
-        if (error instanceof Error && 'code' in error && error.code === 1) {
-          return ''; // check-ignore returns 1 when no paths are ignored.
-        }
-        throw error;
-      });
-      const ignoredFiles = new Set(ignored.split('\0'));
-      for (const file of untracked) {
-        if (!ignoredFiles.has(file)) {
-          newFiles.add(file);
-        }
-      }
-      // A rule can name the reserved path itself, such as `**/.git/`, or a directory above it.
-      reserved = reserved.filter(
-        (entry) => !ignoredFiles.has(entry.file) && !ignoredFiles.has(entry.parent),
-      );
-      if (leftOut.some((file) => ignoredFiles.has(file))) {
-        // An ignored path is still part of the diff when the cloned commit tracks it or the
-        // agent added it to its index. The scratch index holds the cloned commit here.
-        const referenced = [
-          ...(await git(['ls-files', '-z', '--cached'], { env, signal })).split('\0'),
-          ...ignoredTracked.split('\0'),
-        ].filter(Boolean);
-        // What replaced a directory, such as a FIFO, stands for the files that were below it.
-        leftOut = leftOut.filter(
-          (file) =>
-            !ignoredFiles.has(file) ||
-            referenced.some(
-              (tracked) =>
-                tracked === file || tracked.startsWith(file.endsWith('/') ? file : `${file}/`),
-            ),
-        );
+      ...emptyDirectories,
+    ]) {
+      queries.set(file, toIgnoreQuery(file));
+    }
+    const asked = [...new Set(queries.values())].filter((query) => query !== undefined);
+    const ignoredQueries = new Set(
+      asked.length === 0
+        ? []
+        : (
+            await git(['check-ignore', '--no-index', '-z', '--stdin'], {
+              env: ignoreEnv,
+              input: `${asked.join('\0')}\0`,
+              signal,
+            }).catch((error: unknown) => {
+              if (error instanceof Error && 'code' in error && error.code === 1) {
+                return ''; // check-ignore returns 1 when no paths are ignored.
+              }
+              throw error;
+            })
+          ).split('\0'),
+    );
+    const isIgnored = (file: string) => {
+      const query = queries.get(file);
+      return query !== undefined && ignoredQueries.has(query);
+    };
+    for (const file of untracked) {
+      if (!isIgnored(file)) {
+        newFiles.add(file);
       }
     }
+    // A rule can name the reserved path itself, such as `**/.git/`, or a directory above it.
+    reserved = reserved.filter((entry) => !isIgnored(entry.file) && !isIgnored(entry.parent));
+    emptyDirectories = emptyDirectories.filter((directory) => !isIgnored(directory));
+    // An ignored path is still part of the diff when the cloned commit tracks it or the agent
+    // added it to its index. What replaced a directory, such as a FIFO, stands for the files
+    // that were below it.
+    const referenced = [...baseline, ...ignoredTracked.split('\0').filter(Boolean)];
+    leftOut = leftOut.filter(
+      (file) =>
+        !isIgnored(file) ||
+        referenced.some(
+          (tracked) =>
+            tracked === file || tracked.startsWith(file.endsWith('/') ? file : `${file}/`),
+        ),
+    );
     // Git stops altogether at a new file it cannot examine, such as one in a directory that
     // can be listed but not searched. Those are named below instead of being added. Git has
     // just listed them, so one that cannot be found is not gone: its name has bytes that are
@@ -864,7 +941,10 @@ async function getWorkspaceDiff(
     reserved = reserved.filter(
       (entry) => !repositories.has(entry.parent) && !newFiles.has(entry.parent),
     );
-    if (skippedPaths || leftOut.length + reserved.length + unverified.length > 0) {
+    if (
+      skippedPaths ||
+      leftOut.length + reserved.length + unverified.length + emptyDirectories.length > 0
+    ) {
       // Tracked files that still differ from the index are the ones `add --update` skipped.
       const notUpdated = skippedPaths
         ? await git(['-c', 'core.fsmonitor=false', 'diff', '--name-only', '-z'], { env, signal })
@@ -885,6 +965,7 @@ async function getWorkspaceDiff(
           ),
           ...leftOut,
           ...reserved.map((entry) => entry.file),
+          ...emptyDirectories,
         ]),
       ];
       // Naming the paths keeps a search for a changed file from passing on a partial diff.
@@ -909,6 +990,38 @@ async function getWorkspaceDiff(
           nested.slice(0, MAX_INCOMPLETE_PATHS).map(quotePath).join(', ') +
           (nested.length > MAX_INCOMPLETE_PATHS
             ? `, and ${nested.length - MAX_INCOMPLETE_PATHS} more`
+            : '') +
+          ']',
+      );
+    }
+    // For a binary file, the diff says that it changed and not how. A file is binary as soon
+    // as it holds a NUL byte, so an agent can make a text file one. Deleted files are shown
+    // in full by being deleted.
+    const binary = (
+      await git(
+        [
+          '-c',
+          'core.fsmonitor=false',
+          'diff',
+          '--cached',
+          '--numstat',
+          '-z',
+          '--no-renames',
+          '--diff-filter=d',
+          repo.head,
+        ],
+        { env, signal },
+      )
+    )
+      .split('\0')
+      .filter((entry) => entry.startsWith('-\t-\t'))
+      .map((entry) => entry.slice(4));
+    if (binary.length > 0) {
+      notes.push(
+        `[diff incomplete: the contents of ${binary.length} binary file(s) are not shown: ` +
+          binary.slice(0, MAX_INCOMPLETE_PATHS).map(quotePath).join(', ') +
+          (binary.length > MAX_INCOMPLETE_PATHS
+            ? `, and ${binary.length - MAX_INCOMPLETE_PATHS} more`
             : '') +
           ']',
       );
