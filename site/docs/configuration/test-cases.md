@@ -417,6 +417,8 @@ promptfoo eval --filter-metadata-any 'path=C:\data\\,D:\data'
 
 Quote arguments so the shell passes their backslashes through. Both kinds of filters can be combined; every flag must match.
 
+You can set the opt-in default in `commandLineOptions.filterMetadataAny`; the CLI option overrides it. The opt-in filter also applies to scenarios after their default, config, and test metadata are merged. Its selection is preserved when resuming an evaluation.
+
 ### JSON in CSV
 
 Include structured data:
