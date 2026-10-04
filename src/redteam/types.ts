@@ -95,6 +95,15 @@ export const PluginConfigSchema = z.object({
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
 
+  // mcp:tool-response-poisoning - restricts which advertised MCP tools the
+  // plugin is allowed to invoke. Unlike most plugins, this one executes real
+  // tool calls against the target server, so a catalog containing
+  // write-capable tools can cause side effects during a scan. These are
+  // plugin-scoped; the MCP provider's own `tools` / `exclude_tools` filter the
+  // catalog at the connection level and are generally the better control.
+  allowedTools: z.array(z.string()).optional(),
+  excludedTools: z.array(z.string()).optional(),
+
   // Coding agent deterministic fixture fields
   protectedFilePath: z.string().optional(),
   protectedFilePaths: z.array(z.string()).optional(),

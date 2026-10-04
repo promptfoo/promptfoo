@@ -62,6 +62,62 @@ Every strategy except `basic` is automatically excluded from this plugin. The MC
 
 :::
 
+## Limiting which tools are called
+
+:::warning This plugin calls your tools for real
+
+Unlike most red team plugins, the attack here is in the server's _response_, so
+the generated tool calls are executed against the live MCP server. The arguments
+are benign, but the **tool itself** may not be — generation is told to spread
+across the catalog for coverage, so a server advertising `send_email`,
+`create_order` or `delete_ticket` can have those tools invoked during a scan.
+Point this plugin at a staging server, or restrict the tool set.
+
+:::
+
+Restrict the tools this plugin may invoke with `allowedTools` or `excludedTools`:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  plugins:
+    - id: mcp:tool-response-poisoning
+      config:
+        allowedTools:
+          - search_docs
+          - get_status
+```
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  plugins:
+    - id: mcp:tool-response-poisoning
+      config:
+        excludedTools:
+          - send_email
+          - delete_ticket
+```
+
+If a tool appears in both lists, exclusion wins. When neither is set, every
+advertised tool may be called and a warning is logged naming the count.
+
+For most setups the MCP provider's own filter is the better control, since it
+keeps unwanted tools out of the catalog entirely — generation never sees them,
+and the restriction applies to every plugin in the scan:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      servers:
+        - command: 'python'
+          args: ['/path/to/your_mcp_server.py']
+      # Only these tools are exposed at all.
+      tools:
+        - search_docs
+        - get_status
+```
+
 ## Example poisoned responses caught
 
 ```json

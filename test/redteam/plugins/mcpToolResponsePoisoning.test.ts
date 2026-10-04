@@ -57,15 +57,112 @@ describe('MCPToolResponsePoisoningPlugin', () => {
     expect(plugin.id).toBe('promptfoo:redteam:mcp:tool-response-poisoning');
   });
 
+  // Asserted by message rather than call count: the constructor also warns
+  // when no tool allowlist is configured.
+  const warnings = () => warnSpy.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+
   it('warns when the purpose lacks the MCP tools marker', () => {
     new MCPToolResponsePoisoningPlugin(createMockProvider(), purposeWithoutTools, 'prompt');
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toContain('No "Available MCP tools:"');
+    expect(warnings()).toContain('No "Available MCP tools:"');
   });
 
-  it('does not warn when the purpose contains the MCP tools marker', () => {
+  it('does not warn about the marker when the purpose contains it', () => {
     new MCPToolResponsePoisoningPlugin(createMockProvider(), purposeWithTools, 'prompt');
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(warnings()).not.toContain('No "Available MCP tools:"');
+  });
+
+  describe('tool allowlist', () => {
+    // Generated envelopes are executed against the real server, so an
+    // unrestricted catalog can fire write-capable tools during a scan.
+    const multiToolPurpose =
+      'Support MCP server.\nAvailable MCP tools:\n' +
+      '{"name":"get_weather","description":"Read weather"}\n' +
+      '{"name":"send_email","description":"Send an email"}\n' +
+      '{"name":"delete_ticket","description":"Delete a ticket"}';
+
+    const generate = async (config: Record<string, unknown>) => {
+      const provider = createMockProvider({
+        response: createProviderResponse({
+          output: [
+            'Prompt: {"tool":"get_weather","args":{"city":"Oslo"}}',
+            'Prompt: {"tool":"send_email","args":{"to":"a@b.com"}}',
+            'Prompt: {"tool":"delete_ticket","args":{"id":"1"}}',
+          ].join('\n'),
+        }),
+      });
+      const plugin = new MCPToolResponsePoisoningPlugin(
+        provider,
+        multiToolPurpose,
+        'prompt',
+        config,
+      );
+      const tests = await plugin.generateTests(3);
+      return tests.map((t) => JSON.parse(t.vars?.prompt as string).tool).sort();
+    };
+
+    it('drops envelopes for tools outside allowedTools', async () => {
+      expect(await generate({ allowedTools: ['get_weather'] })).toEqual(['get_weather']);
+    });
+
+    it('drops envelopes for tools named in excludedTools', async () => {
+      expect(await generate({ excludedTools: ['send_email', 'delete_ticket'] })).toEqual([
+        'get_weather',
+      ]);
+    });
+
+    it('lets exclusion win when a tool appears in both lists', async () => {
+      const tools = await generate({
+        allowedTools: ['get_weather', 'send_email'],
+        excludedTools: ['send_email'],
+      });
+
+      expect(tools).toEqual(['get_weather']);
+      expect(warnings()).toContain('exclusion wins');
+    });
+
+    it('invokes every advertised tool when unconfigured', async () => {
+      expect(await generate({})).toEqual(['delete_ticket', 'get_weather', 'send_email']);
+    });
+
+    it('warns when no tool restriction is configured', () => {
+      new MCPToolResponsePoisoningPlugin(createMockProvider(), multiToolPurpose, 'prompt');
+      expect(warnings()).toContain('all 3 advertised tool(s) may be invoked');
+    });
+
+    it('does not warn when a restriction is configured', () => {
+      new MCPToolResponsePoisoningPlugin(createMockProvider(), multiToolPurpose, 'prompt', {
+        allowedTools: ['get_weather'],
+      });
+      expect(warnings()).not.toContain('may be invoked against the live server');
+    });
+
+    it('throws when no configured allowedTools are advertised', () => {
+      // A typo must fail loudly rather than silently producing an empty or
+      // unrestricted run.
+      expect(
+        () =>
+          new MCPToolResponsePoisoningPlugin(createMockProvider(), multiToolPurpose, 'prompt', {
+            allowedTools: ['get_wether'],
+          }),
+      ).toThrow(/None of the configured allowedTools/);
+    });
+
+    it('constrains the generation prompt to the allowed tools', async () => {
+      const provider = createMockProvider({
+        response: createProviderResponse({
+          output: 'Prompt: {"tool":"get_weather","args":{"city":"Oslo"}}',
+        }),
+      });
+      const plugin = new MCPToolResponsePoisoningPlugin(provider, multiToolPurpose, 'prompt', {
+        allowedTools: ['get_weather'],
+      });
+
+      await plugin.generateTests(1);
+
+      expect(String(vi.mocked(provider.callApi).mock.calls[0][0])).toContain(
+        'MUST choose tool names ONLY from this list: get_weather',
+      );
+    });
   });
 
   it('returns the tool-poisoning assertion from getAssertions', () => {
