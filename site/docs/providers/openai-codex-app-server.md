@@ -190,6 +190,8 @@ The provider validates top-level provider config strictly. Prompt-level config i
 The app-server provider starts the `codex` binary on your PATH, or `codex_path_override`. Use version 0.144.0 or later so its model catalog recognizes GPT-5.6 and the corresponding reasoning levels. Confirm the effective reasoning with `deep_tracing` when using a custom binary.
 :::
 
+On Windows, the default command supports npm-installed Codex on `PATH`. An explicit `codex_path_override` is launched unchanged and must point to a native executable, not an npm `.cmd` shim.
+
 ### Granular Approval Policy
 
 ```yaml
