@@ -103,6 +103,10 @@ export const PluginConfigSchema = z.object({
   // catalog at the connection level and are generally the better control.
   allowedTools: z.array(z.string()).optional(),
   excludedTools: z.array(z.string()).optional(),
+  // Fails the run unless `allowedTools` is set explicitly. Off by default so
+  // the quickstart keeps working; useful in CI, where an unreviewed catalog
+  // change should not silently widen what a scan invokes.
+  requireToolAllowlist: z.boolean().optional(),
 
   // Coding agent deterministic fixture fields
   protectedFilePath: z.string().optional(),

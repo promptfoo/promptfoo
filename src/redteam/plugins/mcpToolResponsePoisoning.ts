@@ -452,6 +452,15 @@ export class MCPToolResponsePoisoningPlugin extends RedteamPluginBase {
       return undefined;
     }
 
+    if (config.requireToolAllowlist) {
+      throw new Error(
+        `[mcp:tool-response-poisoning] requireToolAllowlist is set but no allowedTools are configured. ` +
+          `Name the tools this scan may invoke in the plugin's allowedTools, or narrow the catalog with ` +
+          `the MCP provider's own tools/exclude_tools config. Advertised tools: ` +
+          `${catalog.map((tool) => tool.name).join(', ')}.`,
+      );
+    }
+
     const skipped = catalog.filter(isSelfDeclaredMutating).map((tool) => tool.name);
     const permitted = catalog
       .map((tool) => tool.name)

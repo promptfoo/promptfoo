@@ -230,6 +230,59 @@ describe('MCPToolResponsePoisoningPlugin', () => {
       });
     });
 
+    describe('requireToolAllowlist', () => {
+      it('throws when set without allowedTools', () => {
+        expect(
+          () =>
+            new MCPToolResponsePoisoningPlugin(createMockProvider(), multiToolPurpose, 'prompt', {
+              requireToolAllowlist: true,
+            }),
+        ).toThrow(/requireToolAllowlist is set but no allowedTools are configured/);
+      });
+
+      it('lists the advertised tools so the fix is copy-pasteable', () => {
+        expect(
+          () =>
+            new MCPToolResponsePoisoningPlugin(createMockProvider(), multiToolPurpose, 'prompt', {
+              requireToolAllowlist: true,
+            }),
+        ).toThrow(/get_weather, send_email, delete_ticket/);
+      });
+
+      it('passes when allowedTools is configured', async () => {
+        expect(
+          await generate({ requireToolAllowlist: true, allowedTools: ['get_weather'] }),
+        ).toEqual(['get_weather']);
+      });
+
+      it('is a no-op when the purpose advertises no catalog', () => {
+        // Nothing to enforce against, and failing here would block the
+        // non-MCP misconfiguration case that already warns on its own.
+        expect(
+          () =>
+            new MCPToolResponsePoisoningPlugin(
+              createMockProvider(),
+              purposeWithoutTools,
+              'prompt',
+              {
+                requireToolAllowlist: true,
+              },
+            ),
+        ).not.toThrow();
+      });
+
+      it('does not fail closed on excludedTools alone', () => {
+        // A denylist is not an allowlist: it cannot bound an unknown catalog.
+        expect(
+          () =>
+            new MCPToolResponsePoisoningPlugin(createMockProvider(), multiToolPurpose, 'prompt', {
+              requireToolAllowlist: true,
+              excludedTools: ['delete_ticket'],
+            }),
+        ).toThrow(/requireToolAllowlist/);
+      });
+    });
+
     it('renders an authoritative tool catalog in the generation prompt', async () => {
       // Structural last word over the server-controlled <SystemPurpose> prose.
       const provider = createMockProvider({
