@@ -96,6 +96,32 @@ function omitDirectoryEntryTypes() {
   });
 }
 
+/** Force Node's real getDirent/lstat fallback before yielding each actual directory entry. */
+function forceNativeUnknownDirectoryEntryTypes() {
+  const opendir = fs.promises.opendir;
+  return vi.spyOn(fs.promises, 'opendir').mockImplementation(async (...args) => {
+    const directory = await opendir(...args);
+    // Node uses alternating filename/type pairs here. Unlike a Dirent Proxy, this
+    // runs before its native conversion attempts to join and stat each pathname.
+    const convert = Reflect.get(directory, 'processReadResult') as (
+      path: string | Buffer,
+      result: Array<string | Buffer | number>,
+    ) => void;
+    expect(typeof convert).toBe('function');
+    Reflect.set(
+      directory,
+      'processReadResult',
+      function (entryPath: string | Buffer, result: Array<string | Buffer | number>) {
+        for (let index = 1; index < result.length; index += 2) {
+          result[index] = 0; // libuv UV_DIRENT_UNKNOWN
+        }
+        return convert.call(directory, entryPath, result);
+      },
+    );
+    return directory;
+  });
+}
+
 /** Ends the diff when the agent's own Git index could not be read. The diff is still computed. */
 const UNREADABLE_INDEX_NOTE =
   "[diff incomplete: the workspace's Git index could not be read, so ignored files the agent " +
@@ -2005,7 +2031,7 @@ describe('agent workspaces', () => {
           const metadata = await workspace.metadata();
 
           expect(metadata.workspaceDiffError).toBeUndefined();
-          expect(metadata.workspaceDiffIncomplete).toBe(true);
+          expect(metadata.workspaceDiffIncomplete).toBe(kind === 'literal' ? undefined : true);
           expect(metadata.workspaceDiff).toContain('vendor/');
         } finally {
           fs.chmodSync(vendor, 0o700);
@@ -2137,6 +2163,212 @@ describe('agent workspaces', () => {
         } finally {
           opendir.mockRestore();
         }
+      },
+    );
+
+    it.each(['file', 'empty-directory', 'child', 'noncolliding-directory'] as const)(
+      'keeps a new valid UTF-8 path beside a raw baseline path (%s)',
+      async (kind) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const rawName = Buffer.concat([Buffer.from('policy'), Buffer.from([0xff])]);
+        const rawSource = Buffer.concat([Buffer.from(`${source}/`), rawName]);
+        if (kind === 'file') {
+          fs.writeFileSync(rawSource, 'original\n');
+        } else {
+          fs.mkdirSync(rawSource);
+          fs.writeFileSync(Buffer.concat([rawSource, Buffer.from('/keep.txt')]), 'original\n');
+        }
+        git(source, 'add', '--all');
+        git(source, 'commit', '-qm', 'track raw-byte path');
+        const workspace = await create(source, 'git');
+        const name = kind === 'noncolliding-directory' ? 'other\uFFFD' : 'policy\uFFFD';
+        if (kind === 'empty-directory') {
+          fs.mkdirSync(path.join(workspace.dir, name));
+        } else {
+          write(
+            path.join(workspace.dir, name, ...(kind === 'file' ? [] : ['keep.txt'])),
+            'new visible payload\n',
+          );
+        }
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(
+          kind === 'empty-directory' || kind === 'child' ? true : undefined,
+        );
+        if (kind === 'empty-directory') {
+          expect(metadata.workspaceDiff).toContain('policy\\u{fffd}/');
+        } else {
+          expect(metadata.workspaceDiff).toContain('+new visible payload');
+        }
+      },
+    );
+
+    it.each(['abort', 'timeout'] as const)(
+      'stops ignore-directory preparation on %s without staging unclassified files',
+      async (kind) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': '.env\n' });
+        const controller = new AbortController();
+        const workspace = await create(source, 'git', controller.signal);
+        for (let i = 0; i < 3; i++) {
+          fs.mkdirSync(path.join(workspace.dir, `probe-${i}`));
+        }
+        write(path.join(workspace.dir, '.env'), 'SYNTHETIC_PRIVATE_VALUE=not-a-real-secret\n');
+        write(path.join(workspace.dir, 'README.md'), 'visible change\n');
+        const start = performance.now();
+        const now = vi.spyOn(performance, 'now').mockReturnValue(start);
+        const original = fs.promises.mkdir;
+        let prepared = 0;
+        const mkdir = vi.spyOn(fs.promises, 'mkdir').mockImplementation(async (...args) => {
+          const result = await original(...args);
+          if (
+            path.basename(path.dirname(String(args[0]))) === 'ignore' &&
+            path.basename(String(args[0])).startsWith('probe-')
+          ) {
+            prepared++;
+            if (kind === 'abort') {
+              controller.abort();
+            } else {
+              now.mockReturnValue(start + 30_001);
+            }
+          }
+          return result;
+        });
+        try {
+          if (kind === 'abort') {
+            await expect(workspace.metadata()).rejects.toMatchObject({ name: 'AbortError' });
+          } else {
+            const metadata = await workspace.metadata();
+            expect(metadata.workspaceDiffError).toContain('ignore preparation exceeded 30000 ms');
+            expect(metadata.workspaceDiff).toBeUndefined();
+            expect(JSON.stringify(metadata)).not.toContain('SYNTHETIC_PRIVATE_VALUE');
+          }
+          expect(prepared).toBe(1);
+          expect(fs.readdirSync(path.dirname(workspace.dir))).toEqual(['workspace']);
+        } finally {
+          mkdir.mockRestore();
+          now.mockRestore();
+        }
+      },
+    );
+
+    it.each(['unicode', 'raw-parent'] as const)(
+      'preserves exact pathnames in Node’s native unknown-type fallback (%s)',
+      async (kind) => {
+        if (kind === 'raw-parent' && process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source, { 'café.txt': 'original\n' });
+        const rawName = Buffer.concat([Buffer.from('policy'), Buffer.from([0xff])]);
+        if (kind === 'raw-parent') {
+          const parent = Buffer.concat([Buffer.from(`${source}/`), rawName]);
+          fs.mkdirSync(parent);
+          fs.writeFileSync(Buffer.concat([parent, Buffer.from('/café.txt')]), 'original\n');
+          git(source, 'add', '--all');
+          git(source, 'commit', '-qm', 'track raw parent');
+        }
+        const workspace = await create(source, 'git');
+        const file =
+          kind === 'raw-parent'
+            ? Buffer.concat([Buffer.from(`${workspace.dir}/`), rawName, Buffer.from('/café.txt')])
+            : path.join(workspace.dir, 'café.txt');
+        fs.writeFileSync(file, 'visible change\n');
+        const opendir = forceNativeUnknownDirectoryEntryTypes();
+        try {
+          const metadata = await workspace.metadata();
+          expect(metadata.workspaceDiffError).toBeUndefined();
+          expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+          expect(metadata.workspaceDiff).toContain('+visible change');
+        } finally {
+          opendir.mockRestore();
+        }
+      },
+    );
+
+    it.each([
+      'ignored',
+      'staged',
+      'ignored-colon',
+      'staged-colon',
+      'raw-staged-collision',
+    ] as const)(
+      'uses exact ignore and index identities for a new valid UTF-8 file (%s)',
+      async (kind) => {
+        if (
+          (kind === 'raw-staged-collision' || kind.endsWith('-colon')) &&
+          process.platform === 'win32'
+        ) {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        const name = `${kind.endsWith('-colon') ? ':' : ''}policy\uFFFD.txt`;
+        makeRepository(source, { '.gitignore': 'policy*\n:policy*\n' });
+        const workspace = await create(source, 'git');
+        write(path.join(workspace.dir, name), 'ignored private fixture\n');
+        if (kind.startsWith('staged')) {
+          git(workspace.dir, '--literal-pathspecs', 'add', '--force', name);
+        } else if (kind === 'raw-staged-collision') {
+          const raw = Buffer.concat([
+            Buffer.from(`${workspace.dir}/policy`),
+            Buffer.from([0xff]),
+            Buffer.from('.txt'),
+          ]);
+          fs.writeFileSync(raw, 'raw staged fixture\n');
+          git(workspace.dir, 'add', '--force', '--all');
+          git(workspace.dir, 'reset', '--', name);
+        }
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(
+          kind === 'raw-staged-collision' ? true : undefined,
+        );
+        if (kind.startsWith('staged')) {
+          expect(metadata.workspaceDiff).toContain('+ignored private fixture');
+        } else {
+          expect(metadata.workspaceDiff).not.toContain('ignored private fixture');
+          if (kind.startsWith('ignored')) {
+            expect(metadata.workspaceDiff).toBe('');
+          }
+        }
+      },
+    );
+
+    it.each(['empty', 'child', 'colon-empty', 'colon-child'] as const)(
+      'ignores only the exact new Unicode directory beside a raw baseline (%s)',
+      async (kind) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        const prefix = kind.startsWith('colon-') ? ':policy' : 'policy';
+        const name = `${prefix}\uFFFD`;
+        makeRepository(source, { '.gitignore': `${name}/\n` });
+        const rawName = Buffer.concat([Buffer.from(prefix), Buffer.from([0xff])]);
+        const rawSource = Buffer.concat([Buffer.from(`${source}/`), rawName]);
+        fs.mkdirSync(rawSource);
+        fs.writeFileSync(Buffer.concat([rawSource, Buffer.from('/keep.txt')]), 'original\n');
+        git(source, 'add', '--all');
+        git(source, 'commit', '-qm', 'track raw directory');
+        const workspace = await create(source, 'git');
+        fs.mkdirSync(path.join(workspace.dir, name));
+        if (kind.endsWith('child')) {
+          write(path.join(workspace.dir, name, 'keep.txt'), 'ignored private fixture\n');
+        }
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+        expect(metadata.workspaceDiff).toBe('');
       },
     );
 
@@ -2327,20 +2559,16 @@ describe('agent workspaces', () => {
       expect(fs.readFileSync(raw, 'utf8')).toBe('hidden new file\n');
     });
 
-    it('names a new file whose name holds the replacement character', async () => {
+    it('includes a new file with a valid UTF-8 replacement character', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
       const workspace = await create(source);
-      // A name read from bytes that are not valid text looks like this, and can coincide with
-      // a file that really has this name. The two cannot be told apart, so both are named.
       write(path.join(workspace.dir, 'policy\uFFFD.txt'), 'new file\n');
 
       const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
 
-      expect(workspaceDiffIncomplete).toBe(true);
-      expect(workspaceDiff).toBe(
-        '[diff incomplete: 1 changed path(s) could not be included: "policy\\u{fffd}.txt"]',
-      );
+      expect(workspaceDiffIncomplete).toBeUndefined();
+      expect(workspaceDiff).toContain('+new file');
     });
 
     it('marks the diff incomplete when a changed file is binary', async () => {
@@ -2390,10 +2618,8 @@ describe('agent workspaces', () => {
       expect(metadata.workspaceDiffIncomplete).toBeUndefined();
     });
 
-    it('does not apply an ignore rule to a name that may not be the one that was read', async () => {
+    it('applies exact committed ignore rules to actual UTF-8 replacement-character files', async () => {
       const source = path.join(root, 'repo');
-      // The replacement character is what a byte that is not valid text reads as, so a name
-      // with it can belong to a file whose real name the rules do not match.
       makeRepository(source, { '.gitignore': 'policy\uFFFD.txt\npolicy???.bin\n' });
       const workspace = await create(source);
       write(path.join(workspace.dir, 'policy\uFFFD.txt'), 'new file\n');
@@ -2401,10 +2627,8 @@ describe('agent workspaces', () => {
 
       const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
 
-      expect(workspaceDiffIncomplete).toBe(true);
-      expect(workspaceDiff).toMatch(
-        /^\[diff incomplete: 2 changed path\(s\) could not be included: "policy\\u\{fffd\}\.(bin|txt)", "policy\\u\{fffd\}\.(bin|txt)"\]$/,
-      );
+      expect(workspaceDiffIncomplete).toBeUndefined();
+      expect(workspaceDiff).toBe('');
     });
 
     it('still ignores such a name below a directory that the commit ignores', async () => {

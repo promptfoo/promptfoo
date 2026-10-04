@@ -10,7 +10,7 @@
  * A workspace keeps one call from affecting another; it is not a security sandbox.
  */
 import { execFile } from 'node:child_process';
-import { constants, lstatSync, realpathSync, rmSync } from 'node:fs';
+import { constants, type Dirent, lstatSync, realpathSync, rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -308,6 +308,9 @@ async function findPathsGitLeavesOut(
   // Latin-1 strings preserve each pathname byte. UTF-8 is used only for display and ignore
   // queries; raw filesystem paths prevent a lossy name from opening a different sibling.
   const baselineDirectories = getCoveredDirectories([...baselinePaths]);
+  const displayedBaselineDirectories = new Set(
+    [...baselineDirectories].map((directory) => Buffer.from(directory, 'latin1').toString('utf8')),
+  );
   const filesystemPath = (display: string, raw: string) =>
     Buffer.from(display).toString('latin1') === raw
       ? path.join(dir, display)
@@ -319,7 +322,7 @@ async function findPathsGitLeavesOut(
     if (performance.now() >= deadline) {
       return { leftOut, reserved, directories, timedOut: true };
     }
-    if (ignoredDirectories.has(directory)) {
+    if (ignoredDirectories.has(rawDirectory)) {
       continue;
     }
     try {
@@ -328,7 +331,11 @@ async function findPathsGitLeavesOut(
         () => true,
         () => false,
       );
-      const entries = await fs.opendir(physicalDirectory, { encoding: 'latin1' });
+      // Node must retain bytes for its own DT_UNKNOWN lstat fallback, before yielding an
+      // entry. The installed Node typings omit opendir's supported Buffer-name option.
+      const entries = (await fs.opendir(physicalDirectory, {
+        encoding: 'buffer' as BufferEncoding,
+      })) as unknown as AsyncIterable<Dirent<Buffer>>;
       if (directory !== '') {
         directories.push(directory);
       }
@@ -337,9 +344,9 @@ async function findPathsGitLeavesOut(
         if (performance.now() >= deadline) {
           return { leftOut, reserved, directories, timedOut: true };
         }
-        const name = Buffer.from(entry.name, 'latin1').toString('utf8');
+        const name = entry.name.toString('utf8');
         const entryPath = `${directory}${name}`;
-        const rawEntryPath = `${rawDirectory}${entry.name}`;
+        const rawEntryPath = `${rawDirectory}${entry.name.toString('latin1')}`;
         if (!canSearch) {
           leftOut.push(entry.isDirectory() ? `${entryPath}/` : entryPath);
           continue;
@@ -349,14 +356,19 @@ async function findPathsGitLeavesOut(
           entry.isDirectory() || entry.isFile() || entry.isSymbolicLink()
             ? entry
             : await fs.lstat(filesystemPath(entryPath, rawEntryPath)).catch(() => undefined);
+        if (stat?.isDirectory() && ignoredDirectories.has(`${rawEntryPath}/`)) {
+          continue;
+        }
         if (
-          Buffer.from(entryPath).toString('latin1') !== rawEntryPath &&
+          (Buffer.from(entryPath).toString('latin1') !== rawEntryPath ||
+            (stat?.isDirectory() && displayedBaselineDirectories.has(`${entryPath}/`))) &&
           !(stat?.isDirectory()
             ? baselineDirectories.has(`${rawEntryPath}/`)
             : baselinePaths.has(rawEntryPath) && (stat?.isFile() || stat?.isSymbolicLink()))
         ) {
           // Git updates baseline paths by their original bytes. New raw paths and special
-          // replacements cannot be staged using their display names and remain unexamined.
+          // replacements remain unexamined. A distinct directory with a colliding display
+          // name must not borrow the baseline's coverage of its children.
           leftOut.push(stat?.isDirectory() ? `${entryPath}/` : entryPath);
           continue;
         }
@@ -801,8 +813,17 @@ async function getWorkspaceDiff(
     const ignoreEnv = { ...env, GIT_WORK_TREE: ignoreDir };
     const copiedIgnoreFiles = new Set(ignoreFiles.split('\0').filter(Boolean));
     const getIgnoredQueries = async (queries: string[]) => {
+      const deadline = performance.now() + GIT_TIMEOUT_MS;
+      const checkPreparation = () => {
+        signal?.throwIfAborted();
+        if (performance.now() >= deadline) {
+          // Unknown ignore decisions cannot safely make files eligible for staging.
+          throw new Error(`workspace ignore preparation exceeded ${GIT_TIMEOUT_MS} ms`);
+        }
+      };
       const normalized = new Map<string, string>();
       for (const query of queries) {
+        checkPreparation();
         if (query.endsWith('/')) {
           // A trailing slash can match `vendor/*` even when `vendor` itself is not ignored.
           // Give Git the directory type instead, keeping all queries on committed rules.
@@ -813,11 +834,13 @@ async function getWorkspaceDiff(
             continue;
           }
           await fs.mkdir(path.join(ignoreDir, directory), { recursive: true });
+          checkPreparation();
           normalized.set(query, directory);
         } else {
           normalized.set(query, query);
         }
       }
+      checkPreparation();
       if (normalized.size === 0) {
         return new Set<string>();
       }
@@ -843,15 +866,17 @@ async function getWorkspaceDiff(
     // replace or corrupt it) costs these files, not the whole diff.
     const workspaceIndex = path.join(scratch, 'workspace-index');
     let ignoredTracked = '';
+    let rawIgnoredTracked = '';
     try {
       if (!(await copyWorkspaceIndex(dir, workspaceIndex, signal))) {
         // A clone always has an index, so the agent removed it.
         throw new Error('the workspace has no Git index');
       }
-      ignoredTracked = await git(
+      rawIgnoredTracked = await git(
         ['ls-files', '-z', '--cached', '--ignored', '--exclude-standard'],
-        { env: { ...ignoreEnv, GIT_INDEX_FILE: workspaceIndex }, signal },
+        { env: { ...ignoreEnv, GIT_INDEX_FILE: workspaceIndex }, signal, encoding: 'latin1' },
       );
+      ignoredTracked = Buffer.from(rawIgnoredTracked, 'latin1').toString('utf8');
     } catch (error) {
       rethrowIfInterrupted(error, signal);
       logger.warn(`[copy_working_dir] Could not read the workspace's Git index: ${error}`);
@@ -898,13 +923,27 @@ async function getWorkspaceDiff(
     // Git can list untracked subtree roots without walking them. Prune only roots ignored
     // by the committed rules, and keep any containing a tracked or explicitly staged path.
     const protectedDirectories = getCoveredDirectories(referenced.map((file) => `${file}/`));
+    const protectedRawDirectories = getCoveredDirectories(
+      [...baselinePaths, ...rawIgnoredTracked.split('\0').filter(Boolean)].map(
+        (file) => `${file}/`,
+      ),
+    );
     const untrackedDirectories = (
-      await git(['ls-files', '-z', '--others', '--directory'], { env, signal })
+      await git(['ls-files', '-z', '--others', '--directory'], { env, signal, encoding: 'latin1' })
     )
       .split('\0')
-      .filter((file) => file.endsWith('/') && !protectedDirectories.has(file));
+      .filter((file) => file.endsWith('/') && !protectedRawDirectories.has(file));
     const directoryQueries = new Map(
-      untrackedDirectories.map((file) => [file, toIgnoreQuery(file)]),
+      untrackedDirectories.map((raw) => {
+        const file = Buffer.from(raw, 'latin1').toString('utf8');
+        const query =
+          Buffer.from(file).toString('latin1') === raw
+            ? file.startsWith(':')
+              ? `./${file}`
+              : file
+            : toIgnoreQuery(file);
+        return [raw, query];
+      }),
     );
     const ignoredDirectoryQueries = await getIgnoredQueries(
       [...new Set(directoryQueries.values())].filter((query) => query !== undefined),
@@ -985,25 +1024,42 @@ async function getWorkspaceDiff(
     );
     // Existing files are handled by add --update, including valid UTF-8 names containing
     // the replacement character. The scanner still reports any colliding raw-byte paths.
-    for (const file of baseline) {
-      newFiles.delete(file);
+    const exactIgnoreQueries = new Map<string, string>();
+    const explicitlyAdded = new Set(rawIgnoredTracked.split('\0').filter(Boolean));
+    for (const file of newFiles) {
+      if (baselinePaths.has(Buffer.from(file).toString('latin1'))) {
+        newFiles.delete(file);
+      }
     }
     // Git stops altogether at a new file it cannot examine, such as one in a directory that
     // can be listed but not searched. Those are named below instead of being added. Git has
     // just listed them, so one that cannot be found is not gone: its name has bytes that are
     // not valid text and did not survive being read as text.
     for (const file of newFiles) {
-      // The replacement character marks such a name even when a file with the read name
-      // happens to exist beside it.
-      const examined =
-        !file.includes('\uFFFD') &&
-        (await fs.lstat(path.join(dir, file)).then(
-          () => true,
-          () => false,
-        ));
+      // Valid UTF-8 siblings can still be staged. The byte-aware scanner independently
+      // reports any raw path that only happens to share this decoded name.
+      const examined = await fs.lstat(path.join(dir, file)).then(
+        () => true,
+        () => false,
+      );
       if (!examined) {
         newFiles.delete(file);
         unverified.push(file);
+      } else if (
+        file.includes('\uFFFD') &&
+        !explicitlyAdded.has(Buffer.from(file).toString('latin1'))
+      ) {
+        // This actual UTF-8 path may be ignored even though its conservative, possibly
+        // lossy query was not. Keep raw omission checks separate from this staging decision.
+        exactIgnoreQueries.set(file, file.startsWith(':') ? `./${file}` : file);
+      }
+    }
+    if (exactIgnoreQueries.size > 0) {
+      const ignored = await getIgnoredQueries([...exactIgnoreQueries.values()]);
+      for (const [file, query] of exactIgnoreQueries) {
+        if (ignored.has(query)) {
+          newFiles.delete(file);
+        }
       }
     }
     // The agent controls the workspace, so some paths may be impossible to add: a file it
