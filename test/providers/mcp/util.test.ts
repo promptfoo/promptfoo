@@ -58,6 +58,33 @@ describe('sanitizeMcpToolData', () => {
     });
   });
 
+  it.each(['databasePassword', 'dbPassword', 'database_password', 'DB_PASSWORD'])(
+    'redacts compound credential %s in nested objects and JSON arguments',
+    (key) => {
+      const fields = {
+        [key]: 'mcp-compound-fixture',
+        pageToken: 'page-2',
+        maxTokens: 100,
+        databasePasswordEnabled: true,
+        includeCredentials: false,
+        monkey: 'ordinary',
+        key: 'record-name',
+        'record.key': 'field-name',
+      };
+      const expected = { ...fields, [key]: '[REDACTED]' };
+      const args = { one: { two: { three: { four: { items: [fields] } } } } };
+      const original = structuredClone(args);
+
+      expect(sanitizeMcpToolData(args)).toEqual({
+        one: { two: { three: { four: { items: [expected] } } } },
+      });
+      expect(sanitizeMcpToolData({ encoded: JSON.stringify(args) })).toEqual({
+        encoded: JSON.stringify({ one: { two: { three: { four: { items: [expected] } } } } }),
+      });
+      expect(args).toEqual(original);
+    },
+  );
+
   /** Arguments with `levels` nested objects and a secret in the innermost one. */
   function nestedArgs(levels: number) {
     const args: Record<string, unknown> = {};
@@ -68,6 +95,7 @@ describe('sanitizeMcpToolData', () => {
       node = child;
     }
     node.apiKey = 'tool-secret-value';
+    node.databasePassword = 'compound-secret-value';
     node.attempts = 2;
     return args;
   }
@@ -85,7 +113,7 @@ describe('sanitizeMcpToolData', () => {
 
   it('reports arguments down to 64 levels and cuts off anything deeper', () => {
     expect(innermost(sanitizeMcpToolData(nestedArgs(64)))).toEqual({
-      node: { apiKey: '[REDACTED]', attempts: 2 },
+      node: { apiKey: '[REDACTED]', databasePassword: '[REDACTED]', attempts: 2 },
       levels: 64,
     });
     expect(innermost(sanitizeMcpToolData(nestedArgs(65)))).toEqual({
@@ -108,10 +136,12 @@ describe('sanitizeMcpToolData', () => {
         // What matters is that the secret is in none of them.
         if (typeof result === 'string') {
           expect(result).not.toContain('tool-secret-value');
+          expect(result).not.toContain('compound-secret-value');
         } else {
           const { node, levels: reported } = innermost(result);
           expect(reported).toBeLessThanOrEqual(64);
           expect(JSON.stringify(node)).not.toContain('tool-secret-value');
+          expect(JSON.stringify(node)).not.toContain('compound-secret-value');
         }
         expect(errors).not.toHaveBeenCalled();
       } finally {

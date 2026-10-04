@@ -71,7 +71,11 @@ function isSecretParameterName(name: string): boolean {
   });
 }
 
-function isSecretParameter(name: string, value: string | undefined): boolean {
+function isSecretParameter(
+  name: string,
+  value: string | undefined,
+  includeGenericKey = true,
+): boolean {
   // Boolean controls such as includeCredentials are settings, not credential values.
   if (
     /^(?:true|false)$/i.test(value ?? '') &&
@@ -79,7 +83,12 @@ function isSecretParameter(name: string, value: string | undefined): boolean {
   ) {
     return false;
   }
-  return name.split(/[.\[\]]+/).some(isSecretParameterName);
+  return name
+    .split(/[.\[\]]+/)
+    .some(
+      (part) =>
+        (includeGenericKey || normalizeFieldName(part) !== 'key') && isSecretParameterName(part),
+    );
 }
 
 /**
@@ -1012,6 +1021,7 @@ function sanitizeJsonString(
   depth: number,
   maxDepth: number,
   sanitizeUrls = false,
+  redactCompoundKeys = false,
 ): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
@@ -1021,7 +1031,14 @@ function sanitizeJsonString(
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth, sanitizeUrls);
+      const sanitized = recursiveSanitize(
+        parsed,
+        depth,
+        maxDepth,
+        sanitizeUrls,
+        false,
+        redactCompoundKeys,
+      );
       return JSON.stringify(sanitized);
     }
   } catch {
@@ -1198,6 +1215,7 @@ function sanitizePlainObject(
   maxDepth: number,
   sanitizeUrls: boolean,
   isEnvMap: boolean,
+  redactCompoundKeys: boolean,
 ): any {
   const sanitized: any = {};
   let keySuffix = 0;
@@ -1211,7 +1229,16 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
-    if (isSecretKey(key)) {
+    if (
+      isSecretKey(key) ||
+      (redactCompoundKeys &&
+        isSecretParameter(
+          key,
+          typeof value === 'string' || typeof value === 'boolean' ? String(value) : undefined,
+          // Bare `key` is ambiguous in tool data; only URL parameters treat it as a secret.
+          false,
+        ))
+    ) {
       sanitized[key] = REDACTED;
     } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
       sanitized[key] = Object.fromEntries(
@@ -1259,6 +1286,7 @@ function sanitizePlainObject(
         maxDepth,
         sanitizeUrls,
         key === 'env',
+        redactCompoundKeys,
       );
       sanitized[key] =
         typeof sanitizedValue === 'string' &&
@@ -1280,6 +1308,7 @@ function recursiveSanitize(
   maxDepth = MAX_DEPTH,
   sanitizeUrls = false,
   isEnvMap = false,
+  redactCompoundKeys = false,
 ): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
@@ -1289,7 +1318,7 @@ function recursiveSanitize(
   if (typeof obj === 'string') {
     return sanitizeUrls && URL_REFERENCE.test(obj)
       ? sanitizeUrl(obj)
-      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls);
+      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactCompoundKeys);
   }
 
   // Handle primitives and null/undefined
@@ -1304,7 +1333,9 @@ function recursiveSanitize(
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth, sanitizeUrls));
+    return obj.map((item) =>
+      recursiveSanitize(item, depth + 1, maxDepth, sanitizeUrls, false, redactCompoundKeys),
+    );
   }
 
   // Handle class instances
@@ -1314,7 +1345,7 @@ function recursiveSanitize(
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap, redactCompoundKeys);
 }
 
 /**
@@ -1331,6 +1362,9 @@ export function sanitizeObject(
     maxDepth?: number;
     // Config output and provider configs can carry credentials in any URL string or map key.
     sanitizeUrls?: boolean;
+    // MCP tool data can use application-specific names such as databasePassword. Opt into
+    // the URL parameter credential-name rules without changing ordinary object defaults.
+    redactCompoundKeys?: boolean;
   } = {},
 ): any {
   const {
@@ -1338,6 +1372,7 @@ export function sanitizeObject(
     throwOnError = false,
     maxDepth = MAX_DEPTH,
     sanitizeUrls = false,
+    redactCompoundKeys = false,
   } = options;
 
   try {
@@ -1348,7 +1383,7 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return recursiveSanitize(obj, 0, maxDepth, sanitizeUrls);
+      return recursiveSanitize(obj, 0, maxDepth, sanitizeUrls, false, redactCompoundKeys);
     }
 
     // Handle other primitives
@@ -1380,7 +1415,7 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth, sanitizeUrls);
+    return recursiveSanitize(safeObj, 0, maxDepth, sanitizeUrls, false, redactCompoundKeys);
   } catch (error) {
     if (throwOnError) {
       throw error;

@@ -40,6 +40,7 @@ export function sanitizeMcpToolData<T>(value: T): T | typeof UNSANITIZED_TOOL_DA
     return sanitizeObject(value, {
       context: 'MCP tool data',
       sanitizeUrls: true,
+      redactCompoundKeys: true,
       maxDepth: MAX_TOOL_DATA_DEPTH,
       throwOnError: true,
     });

@@ -442,6 +442,27 @@ describe('isSecretEnvVarName', () => {
 });
 
 describe('sanitizeObject', () => {
+  it('only applies compound credential names when explicitly requested', () => {
+    const fields = {
+      databasePassword: 'database-fixture',
+      dbPassword: 'db-fixture',
+      databasePasswordEnabled: true,
+      pageToken: 'next-page',
+      maxTokens: 42,
+      includeCredentials: false,
+      monkey: 'ordinary',
+      key: 'record-name',
+      'record.key': 'field-name',
+    };
+    const input = { items: [fields], encoded: JSON.stringify(fields) };
+    const redacted = { ...fields, databasePassword: '[REDACTED]', dbPassword: '[REDACTED]' };
+    expect(sanitizeObject(input)).toEqual(input);
+    expect(sanitizeObject(input, { redactCompoundKeys: true })).toEqual({
+      items: [redacted],
+      encoded: JSON.stringify(redacted),
+    });
+  });
+
   describe('environment variable maps', () => {
     it.each([
       'url',

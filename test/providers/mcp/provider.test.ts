@@ -152,6 +152,49 @@ describe('MCPProvider', () => {
     expect(result.metadata?.originalPayload).toEqual({ tool: 'create_order', args });
   });
 
+  it('redacts deep compound credentials in metadata without changing the tool call', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+    const provider = new MCPProvider({
+      config: { enabled: true, defaultArgs: { dbPassword: 'configured-db-fixture' } },
+    });
+    const fields = {
+      databasePassword: 'database-fixture',
+      dbPassword: 'db-fixture',
+      databasePasswordEnabled: true,
+      pageToken: 'next-page',
+      maxTokens: 42,
+      monkey: 'ordinary',
+      key: 'record-name',
+      'record.key': 'field-name',
+    };
+    const args = { one: { two: { three: { four: { five: fields } } } } };
+    const sanitizedArgs = {
+      one: {
+        two: {
+          three: {
+            four: {
+              five: {
+                ...fields,
+                databasePassword: '[REDACTED]',
+                dbPassword: '[REDACTED]',
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const result = await provider.callApi('', createContext({ tool: 'lookup_user', args }));
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      dbPassword: 'configured-db-fixture',
+      ...args,
+    });
+    expect(result.metadata?.toolArgs).toEqual({ dbPassword: '[REDACTED]', ...sanitizedArgs });
+    expect(result.metadata?.originalPayload).toEqual({ tool: 'lookup_user', args: sanitizedArgs });
+    expect(args.one.two.three.four.five).toEqual(fields);
+  });
+
   it('still accepts defaultArgs passed as a constructor option', async () => {
     mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
 

@@ -900,7 +900,23 @@ describe('MCPClient', () => {
       const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
 
       try {
-        const args = { query: 'inventory', session: 'opaque-session', nested: { apiKey: 'short' } };
+        const fields = {
+          databasePassword: 'database-fixture',
+          dbPassword: 'db-fixture',
+          databasePasswordEnabled: true,
+          pageToken: 'next-page',
+          maxTokens: 42,
+          monkey: 'ordinary',
+          key: 'record-name',
+          'record.key': 'field-name',
+        };
+        const args = {
+          query: 'inventory',
+          session: 'opaque-session',
+          nested: { apiKey: 'short' },
+          one: { two: { three: { four: { five: fields } } } },
+        };
+        const original = structuredClone(args);
         expect(await mcpClient.callTool('tool1', args)).toEqual({
           content: 'result',
           raw: { content: 'result' },
@@ -917,13 +933,30 @@ describe('MCPClient', () => {
             attributes: expect.objectContaining({
               'gen_ai.operation.name': 'execute_tool',
               'gen_ai.tool.name': 'tool1',
-              'tool.arguments':
-                '{"query":"inventory","session":"[REDACTED]","nested":{"apiKey":"[REDACTED]"}}',
+              'tool.arguments': JSON.stringify({
+                ...args,
+                session: '[REDACTED]',
+                nested: { apiKey: '[REDACTED]' },
+                one: {
+                  two: {
+                    three: {
+                      four: {
+                        five: {
+                          ...fields,
+                          databasePassword: '[REDACTED]',
+                          dbPassword: '[REDACTED]',
+                        },
+                      },
+                    },
+                  },
+                },
+              }),
             }),
           }),
           expect.any(Function),
         );
         expect(span.setAttribute).toHaveBeenCalledWith('tool.output', 'result');
+        expect(args).toEqual(original);
       } finally {
         activeSpanSpy.mockRestore();
         tracerSpy.mockRestore();
