@@ -1109,6 +1109,8 @@ describe('Eval', () => {
   });
 
   it('keeps an active search when loading the eval', async () => {
+    // Tests run in random order, and another one may have left its own store behind.
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
     const originalUrl = window.location.href;
     window.history.replaceState({}, '', '/eval/selected-eval?search=four&mode=failures');
     try {
