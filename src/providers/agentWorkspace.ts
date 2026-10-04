@@ -756,18 +756,18 @@ async function getWorkspaceDiff(
       file,
       parent: file.slice(0, file.toLowerCase().lastIndexOf('/.git') + 1),
     }));
-    // `check-ignore` reads a name that starts with a colon as pathspec magic and would
-    // answer for another path, so such names are not asked about and count as not ignored.
+    // Preserve literal colon-prefixed names without interpreting pathspec magic. Lossy
+    // names cannot safely borrow ignore rules for their decoded spelling: report them below.
     const checked = [
       ...untracked,
       ...leftOut,
       ...reserved.flatMap((entry) => [entry.file, entry.parent]),
-    ].filter((file) => !file.startsWith(':'));
+    ].filter((file) => !file.includes('\uFFFD'));
     if (untracked.length + leftOut.length + reserved.length > 0) {
       const ignored = await (checked.length > 0
         ? git(['check-ignore', '--no-index', '-z', '--stdin'], {
             env: ignoreEnv,
-            input: `${checked.join('\0')}\0`,
+            input: `${checked.map((file) => `./${file}`).join('\0')}\0`,
             signal,
           })
         : Promise.resolve('')
@@ -777,7 +777,7 @@ async function getWorkspaceDiff(
         }
         throw error;
       });
-      const ignoredFiles = new Set(ignored.split('\0'));
+      const ignoredFiles = new Set(ignored.split('\0').map((file) => file.replace(/^\.\//, '')));
       for (const file of untracked) {
         if (!ignoredFiles.has(file)) {
           newFiles.add(file);
@@ -926,6 +926,12 @@ async function getWorkspaceDiff(
       ],
       { env, signal },
     );
+    // Git's binary marker omits content changes. Match a whole patch line: content lines
+    // have a +, - or space prefix, and Git quotes newlines in filenames. Pure renames and
+    // mode changes have no binary marker because the patch fully describes those changes.
+    if (/(?:^|\n)Binary files [^\n]+ differ(?:\n|$)/.test(diff)) {
+      notes.push('[diff incomplete: binary file contents are not included]');
+    }
     const truncated = diff.length > MAX_DIFF_LENGTH;
     const shown = truncated
       ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`

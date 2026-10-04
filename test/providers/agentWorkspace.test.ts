@@ -347,6 +347,104 @@ describe('agent workspaces', () => {
       expect(fs.readFileSync(path.join(source, 'app.ts'), 'utf8')).toBe('const value = 1;\n');
     });
 
+    it.each(['modified', 'added', 'deleted', 'attributes'] as const)(
+      'marks omitted binary content incomplete for a %s file',
+      async (kind) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, {
+          'policy.txt': kind === 'deleted' ? 'safe\0original\n' : 'safe\n',
+          ...(kind === 'attributes' ? { '.gitattributes': 'policy.txt -diff\n' } : {}),
+        });
+        const workspace = await create(source, 'git');
+        if (kind === 'deleted') {
+          fs.rmSync(path.join(workspace.dir, 'policy.txt'));
+        } else {
+          write(
+            path.join(workspace.dir, kind === 'added' ? 'new.bin' : 'policy.txt'),
+            kind === 'attributes' ? 'forbidden\n' : 'safe\0forbidden\n',
+          );
+        }
+        write(path.join(workspace.dir, 'README.md'), 'original\nvisible change\n');
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('Binary files');
+        expect(metadata.workspaceDiff).not.toContain('forbidden');
+        expect(metadata.workspaceDiff).toContain('+visible change');
+        expect(metadata.workspaceDiff).toContain(
+          '[diff incomplete: binary file contents are not included]',
+        );
+        expect(fs.readFileSync(path.join(source, 'policy.txt'), 'utf8')).toBe(
+          kind === 'deleted' ? 'safe\0original\n' : 'safe\n',
+        );
+      },
+    );
+
+    it('does not treat binary-marker text or renamed path names as binary content', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source, 'git');
+      write(
+        path.join(workspace.dir, 'README.md'),
+        'Binary files a/policy and b/policy differ\n' +
+          'prefix\rBinary files a/one and b/one differ\n' +
+          'prefix\u2028Binary files a/two and b/two differ\n',
+      );
+      // Tabs/newlines in a rename must remain paths, not numstat records.
+      const name = process.platform === 'win32' ? 'renamed.txt' : '-\t-\tpretend-binary\n.txt';
+      fs.renameSync(path.join(workspace.dir, 'src', 'app.txt'), path.join(workspace.dir, name));
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+      expect(metadata.workspaceDiffError).toBeUndefined();
+      expect(metadata.workspaceDiff).toContain('+Binary files a/policy and b/policy differ');
+      expect(metadata.workspaceDiff).toContain('rename from src/app.txt');
+    });
+
+    it.each([false, true])(
+      'reports binary rename completeness with content changes=%s',
+      async (changed) => {
+        const source = path.join(root, 'repo');
+        const original = `safe\0${'retained line\n'.repeat(1000)}`;
+        makeRepository(source, { 'asset.bin': original });
+        const workspace = await create(source, 'git');
+        const renamed = path.join(workspace.dir, 'renamed.bin');
+        fs.renameSync(path.join(workspace.dir, 'asset.bin'), renamed);
+        if (changed) {
+          fs.appendFileSync(renamed, 'forbidden\n');
+        }
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiff).toContain('rename from asset.bin');
+        expect(metadata.workspaceDiff).toContain('rename to renamed.bin');
+        expect(metadata.workspaceDiffIncomplete).toBe(changed ? true : undefined);
+        expect(metadata.workspaceDiff).not.toContain('forbidden');
+        expect(fs.readFileSync(path.join(source, 'asset.bin'), 'utf8')).toBe(original);
+      },
+    );
+
+    it('keeps a binary mode-only change complete', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source, { 'asset.bin': 'safe\0unchanged\n' });
+      const workspace = await create(source, 'git');
+      fs.chmodSync(path.join(workspace.dir, 'asset.bin'), 0o755);
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiffError).toBeUndefined();
+      expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+      expect(metadata.workspaceDiff).toContain('old mode 100644');
+      expect(metadata.workspaceDiff).toContain('new mode 100755');
+    });
+
     it('keeps the workspace and diff scratch outside a source-local temp directory', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
@@ -1635,6 +1733,89 @@ describe('agent workspaces', () => {
         fs.rmSync(name);
       }
     });
+
+    it.each(['file', 'fifo'] as const)(
+      'respects literal colon-prefixed ignore rules for an untracked %s',
+      async (kind) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': ':cache\n:(top)literal\n' });
+        const workspace = await create(source, 'git');
+        for (const name of [':cache', ':(top)literal']) {
+          if (kind === 'fifo') {
+            execFileSync('mkfifo', [path.join(workspace.dir, name)]);
+          } else {
+            write(path.join(workspace.dir, name), 'ignored artifact\n');
+          }
+        }
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiff).toBe('');
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+      },
+    );
+
+    it.each([
+      ['wildcard', 'policy???.txt\n'],
+      ['literal', 'policy\uFFFD.txt\n'],
+    ])(
+      'does not excuse lossy file or fifo names using a colliding %s ignore rule',
+      async (_kind, rule) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': rule });
+        for (const kind of ['file', 'fifo']) {
+          const workspace = await create(source, 'git');
+          const name = Buffer.concat([
+            Buffer.from(`${workspace.dir}${path.sep}policy`),
+            Buffer.from([0xff]),
+            Buffer.from('.txt'),
+          ]);
+          try {
+            fs.writeFileSync(name, 'hidden change\n');
+          } catch {
+            // Some filesystems only support names that are valid text.
+            return;
+          }
+          try {
+            if (kind === 'fifo') {
+              fs.rmSync(name);
+              const temporary = path.join(workspace.dir, 'pipe');
+              execFileSync('mkfifo', [temporary]);
+              fs.renameSync(temporary, name);
+            }
+            // Query actual bytes, independently of the decoded path seen by metadata().
+            expect(() =>
+              execFileSync(
+                'git',
+                ['-C', workspace.dir, 'check-ignore', '--no-index', '-z', '--stdin'],
+                {
+                  input: Buffer.concat([
+                    Buffer.from('policy'),
+                    Buffer.from([0xff]),
+                    Buffer.from('.txt\0'),
+                  ]),
+                },
+              ),
+            ).toThrow();
+
+            const metadata = await workspace.metadata();
+
+            expect(metadata.workspaceDiffError).toBeUndefined();
+            expect(metadata.workspaceDiffIncomplete).toBe(true);
+            expect(metadata.workspaceDiff).toContain('"policy\\u{fffd}.txt"');
+          } finally {
+            fs.rmSync(name);
+          }
+        }
+      },
+    );
 
     it('does not let a name with pathspec magic borrow the ignore rule of another path', async () => {
       if (process.platform === 'win32') {
