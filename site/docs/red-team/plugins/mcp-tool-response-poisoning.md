@@ -1,4 +1,5 @@
 ---
+title: MCP Tool Response Poisoning
 sidebar_label: MCP Tool Response Poisoning
 description: A plugin for the MCP provider that issues benign tool calls and grades the server's response for embedded prompt-injection content (tool poisoning)
 ---
@@ -23,7 +24,7 @@ This plugin inspects **only the content a tool returns when it is called**. It d
 2. The redteam LLM reads that catalog and generates `numTests` benign JSON tool calls covering the advertised tools and argument schemas.
 3. Each call is sent through the MCP provider, which invokes the real tool on the real server.
 4. The grader inspects each tool response with a hybrid check:
-   - **Character-hygiene pre-screen** for hidden/invisible smuggling channels — invisible Unicode tag characters (U+E0000–U+E007F "ASCII smuggling"), zero-width and bidirectional-override characters, and raw control/escape bytes (e.g. ANSI sequences). These defeat plain text scanning, so their presence in a response fails the test immediately (the smuggled payload is decoded and reported).
+   - **Character-hygiene pre-screen** for hidden/invisible smuggling channels — invisible Unicode tag characters (U+E0000–U+E007F "ASCII smuggling"), zero-width characters, bidirectional-override and unbalanced isolate characters, variation-selector smuggling (hidden bytes encoded as runs of U+FE00–U+FE0F / U+E0100–U+E01EF), and raw or JSON-escaped control bytes including the C0 and C1 blocks (e.g. ANSI and CSI sequences). These defeat plain text scanning, so their presence in a response fails the test immediately (the smuggled payload is decoded and reported). Legitimate formatting is exempt: emoji presentation and keycap sequences, Japanese ideographic variation sequences, subdivision flag emoji, balanced bidi isolates in mixed-direction text, and the ZWJ/ZWNJ/LRM/RLM/ALM marks required by ordinary localized content.
    - **Regex pre-screen** for canonical poisoning markers (`SYSTEM:`, `ignore previous instructions`, `_internal_instructions`, exfiltration URLs, `CRITICAL TOOL`, …). Any match fails the test immediately, no LLM call.
    - **LLM rubric** for everything else — flags subtler instruction-shaped content embedded in tool output.
 
@@ -38,6 +39,9 @@ A test **fails** when the server's response contains directive content aimed at 
 ## Configuration
 
 ```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{prompt}}'
+
 providers:
   - id: mcp
     config:
@@ -53,6 +57,8 @@ redteam:
     - mcp:tool-response-poisoning
   numTests: 10
 ```
+
+The `prompts` entry must be the bare `{{prompt}}` placeholder: this plugin generates a complete JSON tool-call envelope, and `MCPProvider.callApi` parses the whole prompt as JSON. Wrapping it in any surrounding text breaks the call. Omitting `prompts` entirely makes generation fail with `Prompts array cannot be empty`.
 
 The target must be `id: mcp`. If you point this plugin at any other provider, the JSON envelope it generates will be sent as a literal string prompt and the test will not exercise a real tool call.
 
@@ -137,17 +143,17 @@ Other patterns the regex layer catches:
 
 The plugin is designed to detect **response-side** poisoning across the techniques below. Each row is one attack technique; the variations are the concrete forms it looks for.
 
-Detection strength differs by layer. The deterministic pre-screens always fire on what they cover — invisible Unicode tag characters, zero-width and bidirectional-override characters, raw or JSON-escaped control/ANSI bytes, grading-delimiter injection, and the named regex markers (`SYSTEM:` directives, `ignore previous instructions`, `_internal_instructions`, `debug`/policy-override fields, exfiltration phrasing, `CRITICAL TOOL`, `leak credentials`). Everything else in the table — homoglyph substitution, Base64-encoded directives, spreadsheet formula injection, HTML/script passthrough, Markdown-rendering tricks, provenance and cross-tool manipulation — reaches the LLM rubric instead, so it is best-effort and non-deterministic rather than guaranteed.
+Detection strength differs by layer. The deterministic pre-screens always fire on what they cover — invisible Unicode tag characters, zero-width characters, bidirectional overrides and unbalanced isolates, variation-selector smuggling, raw or JSON-escaped control bytes (C0 and C1), grading-delimiter injection, and the named regex markers (`SYSTEM:` directives, `ignore previous instructions`, `_internal_instructions`, `debug`/policy-override fields, exfiltration phrasing, `CRITICAL TOOL`, `leak credentials`). Everything else in the table — homoglyph substitution, Base64-encoded directives, spreadsheet formula injection, HTML/script passthrough, Markdown-rendering tricks, provenance and cross-tool manipulation — reaches the LLM rubric instead, so it is best-effort and non-deterministic rather than guaranteed.
 
-| Attack technique                                      | Variations covered (`†` = best-effort via the LLM rubric, not deterministically detected)                                                                                                                                                                                       |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Direct instruction injection**                      | Naked imperative directives (`ignore previous instructions…`); authority / role spoofing (fake `SYSTEM:` or admin-override channel); delimiter / turn-marker confusion (fake closing tags + fake system turn); polite social-engineering framing; urgency / consequence framing |
-| **Structural / field-based smuggling**                | Payload in an `_internal`-style field; payload hidden in an error / status / warning channel; schema-mimicking field name (e.g. `agent_directive`); payload buried deep in a nested array; long benign body with the payload appended at the end                                |
-| **Encoding & obfuscation**                            | Invisible Unicode tag characters (U+E0000 block); zero-width characters + bidirectional-override markers; homoglyph substitution (Cyrillic look-alikes)`†`; Base64-encoded directive with a "decode and follow" nudge`†`; ANSI escape sequences                                 |
-| **Context / identity spoofing**`†`                    | Fake provenance / "signed by the platform" claim; fabricated earlier conversation turn embedded in the record; fake prior tool-call result / permission grant; user-impersonation framing ("the user already authorized…")                                                      |
-| **Exfiltration-oriented payloads**                    | Direct request to reveal secrets / API keys; Markdown image-link exfil beacon; clickable-link phishing lure; instructed tool-chaining exfil (e.g. call an email tool with sensitive contents); staged beaconing token carried into the next call                                |
-| **Cross-tool reference / preference manipulation**`†` | Response pushing an unnecessary destructive sibling-tool call; "always prefer this tool" preference hijacking; impersonating a different, higher-trust tool's output; installing a standing instruction to chain into a destructive action                                      |
-| **Output-format / rendering-specific**`†`             | Markdown styled to impersonate trusted system UI (fake "verified" badge); payload hidden inside a code-block comment; HTML / script (XSS-style) passthrough in a rendered table; spreadsheet formula injection (`=HYPERLINK(…)`)                                                |
+| Attack technique                                      | Variations covered (`†` = best-effort via the LLM rubric, not deterministically detected)                                                                                                                                                                                                                              |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Direct instruction injection**                      | Naked imperative directives (`ignore previous instructions…`); authority / role spoofing (fake `SYSTEM:` or admin-override channel); delimiter / turn-marker confusion (fake closing tags + fake system turn); polite social-engineering framing; urgency / consequence framing                                        |
+| **Structural / field-based smuggling**                | Payload in an `_internal`-style field; payload hidden in an error / status / warning channel; schema-mimicking field name (e.g. `agent_directive`); payload buried deep in a nested array; long benign body with the payload appended at the end                                                                       |
+| **Encoding & obfuscation**                            | Invisible Unicode tag characters (U+E0000 block); zero-width characters + bidirectional-override markers; variation-selector smuggling (U+FE00–U+FE0F / U+E0100–U+E01EF); homoglyph substitution (Cyrillic look-alikes)`†`; Base64-encoded directive with a "decode and follow" nudge`†`; ANSI and C1 escape sequences |
+| **Context / identity spoofing**`†`                    | Fake provenance / "signed by the platform" claim; fabricated earlier conversation turn embedded in the record; fake prior tool-call result / permission grant; user-impersonation framing ("the user already authorized…")                                                                                             |
+| **Exfiltration-oriented payloads**                    | Direct request to reveal secrets / API keys; Markdown image-link exfil beacon; clickable-link phishing lure; instructed tool-chaining exfil (e.g. call an email tool with sensitive contents); staged beaconing token carried into the next call                                                                       |
+| **Cross-tool reference / preference manipulation**`†` | Response pushing an unnecessary destructive sibling-tool call; "always prefer this tool" preference hijacking; impersonating a different, higher-trust tool's output; installing a standing instruction to chain into a destructive action                                                                             |
+| **Output-format / rendering-specific**`†`             | Markdown styled to impersonate trusted system UI (fake "verified" badge); payload hidden inside a code-block comment; HTML / script (XSS-style) passthrough in a rendered table; spreadsheet formula injection (`=HYPERLINK(…)`)                                                                                       |
 
 `†` Best-effort via the LLM rubric; not deterministically detected. A pass on these classes reflects the grader's judgment, not a guaranteed screen — treat them as lower-assurance than the deterministic rows.
 
@@ -158,6 +164,10 @@ Some manipulations are outside this plugin's response-only, instruction-focused 
 - **Description / definition-side poisoning** — payload in a tool's name or description rather than its response. Out of scope (see the [response-only scope](#overview) note above).
 - **Non-instruction data falsification** — plausible-but-wrong values or biased steering that contain no directive-shaped language. The response carries nothing to flag as an instruction; add domain-specific assertions to catch corrupted data.
 - **Conditional / stochastic poisoning** — responses poisoned only on some calls (rug-pull after N calls, trigger-word gating, random or periodic poisoning). Only detectable on calls where the poisoned branch actually fires; raise `numTests` to improve the odds of triggering it.
+
+There is also one deliberate false positive:
+
+- **Tools that legitimately return `<Output>` or `<Rubric>` XML** — some CI, build-log and document tools do. The graded response is embedded in the grading prompt, so these tags break its structure regardless of the server's intent and the response fails deterministically. Setting `graderGuidance` switches such a tool to LLM grading with the delimiters neutralized, rather than an unappealable failure; narrowing the tool set with `allowedTools` avoids the case entirely.
 
 ## Differences vs related plugins
 
