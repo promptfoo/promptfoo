@@ -46,6 +46,11 @@ function write(file: string, content: string) {
   fs.writeFileSync(file, content);
 }
 
+/** Ends the diff when the agent's own Git index could not be read. The diff is still computed. */
+const UNREADABLE_INDEX_NOTE =
+  "[diff incomplete: the workspace's Git index could not be read, so ignored files the agent " +
+  'added to it are not included]';
+
 /** A committed repository with README.md and src/app.txt. Returns its HEAD. */
 function makeRepository(dir: string, files: Record<string, string> = {}): string {
   write(path.join(dir, 'README.md'), 'original\n');
@@ -378,13 +383,30 @@ describe('agent workspaces', () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
       const workspace = await create(source);
+      write(path.join(workspace.dir, 'README.md'), 'original\ntampered\n');
       const index = path.join(workspace.dir, '.git', 'index');
       fs.unlinkSync(index);
       execFileSync('mkfifo', [index]);
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      // Replacing the index must not hide the agent's changes from the diff.
+      const { workspaceDiff } = await workspace.metadata();
+      expect(workspaceDiff).toContain('+tampered');
+      expect(workspaceDiff).toContain(UNREADABLE_INDEX_NOTE);
       await workspace.remove();
       expect(fs.existsSync(workspace.dir)).toBe(false);
+    });
+
+    it('still reports the changes of an agent that corrupted its index', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'README.md'), 'original\ntampered\n');
+      fs.writeFileSync(path.join(workspace.dir, '.git', 'index'), 'not an index');
+
+      const { workspaceDiff } = await workspace.metadata();
+
+      expect(workspaceDiff).toContain('+tampered');
+      expect(workspaceDiff).toContain(UNREADABLE_INDEX_NOTE);
     });
 
     it('rejects an oversized agent-controlled index before reading it', async () => {
@@ -393,7 +415,10 @@ describe('agent workspaces', () => {
       const workspace = await create(source);
       fs.truncateSync(path.join(workspace.dir, '.git', 'index'), 64 * 1024 * 1024 + 1);
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiff: UNREADABLE_INDEX_NOTE,
+      });
     });
 
     it.each(['agent', 'global'])(
@@ -459,7 +484,10 @@ describe('agent workspaces', () => {
         execFileSync('mkfifo', [sharedIndex]);
       }
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiff: UNREADABLE_INDEX_NOTE,
+      });
     });
 
     it('bounds the total size of copied shared indexes', async () => {
@@ -472,7 +500,10 @@ describe('agent workspaces', () => {
         fs.truncateSync(file, 33 * 1024 * 1024);
       }
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiff: UNREADABLE_INDEX_NOTE,
+      });
     });
 
     it('bounds the number of copied shared indexes', async () => {
@@ -486,7 +517,10 @@ describe('agent workspaces', () => {
         );
       }
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiff: UNREADABLE_INDEX_NOTE,
+      });
     });
 
     it.each([
@@ -1153,7 +1187,67 @@ describe('agent workspaces', () => {
       fs.renameSync(workspace.dir, `${workspace.dir}-moved`);
       fs.symlinkSync(secrets, workspace.dir);
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      // The failure is reported, so an assertion on the diff does not read it as "no changes".
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiffError: expect.stringContaining('no longer available or was replaced'),
+      });
+    });
+
+    it('keeps the diff and names paths git cannot add when the agent creates a repository or an unreadable file', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'README.md'), 'original\ntampered\n');
+      write(path.join(workspace.dir, 'notes', 'new.txt'), 'new file\n');
+      // Either of these used to make `git add` fail outright, which dropped the whole diff.
+      write(path.join(workspace.dir, 'newproj', 'main.py'), 'print(1)\n');
+      git(path.join(workspace.dir, 'newproj'), 'init', '-q');
+      const unreadable = path.join(workspace.dir, 'secret.bin');
+      write(unreadable, 'x');
+      fs.chmodSync(unreadable, 0o000);
+
+      try {
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiff).toContain('+tampered');
+        expect(metadata.workspaceDiff).toContain('+++ b/notes/new.txt');
+        expect(metadata.workspaceDiff).toMatch(
+          /\[diff incomplete: 2 changed path\(s\) could not be included: (newproj\/, secret\.bin|secret\.bin, newproj\/)\]$/,
+        );
+      } finally {
+        fs.chmodSync(unreadable, 0o600);
+      }
+    });
+
+    it('names a tracked file the agent changed and then made unreadable', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source, { 'docs/guide.md': 'guide\n' });
+      const workspace = await create(source);
+      const hidden = path.join(workspace.dir, 'README.md');
+      write(hidden, 'original\nhidden change\n');
+      fs.chmodSync(hidden, 0o000);
+      write(path.join(workspace.dir, 'src', 'app.txt'), 'app\nvisible change\n');
+
+      try {
+        const { workspaceDiff } = await workspace.metadata();
+
+        expect(workspaceDiff).toContain('+visible change');
+        // The content cannot be read, but a check for changes to README.md must not pass.
+        // Unchanged files, such as docs/guide.md, are not listed.
+        expect(workspaceDiff).toContain(
+          '[diff incomplete: 1 changed path(s) could not be included: README.md]',
+        );
+      } finally {
+        fs.chmodSync(hidden, 0o600);
+      }
     });
 
     it('clones a linked worktree at its own commit', async () => {
@@ -1515,6 +1609,33 @@ describe('agent workspaces', () => {
         await expect(createAgentWorkspace(source)).rejects.toThrow(
           'it is not a regular file or directory',
         );
+      } finally {
+        await new Promise<void>((resolve) => socket.close(() => resolve()));
+      }
+    });
+
+    it("copies a repository whose .git directory holds one of git's runtime sockets", async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      // An untracked file makes automatic mode copy instead of clone.
+      write(path.join(source, 'untracked.txt'), 'local\n');
+      // The built-in fsmonitor daemon keeps a socket here while it runs.
+      // (A short name keeps the path within the platform's socket path limit.)
+      const socket = createServer();
+      await new Promise<void>((resolve, reject) => {
+        socket.once('error', reject);
+        socket.listen(path.join(source, '.git', 'ipc'), resolve);
+      });
+      try {
+        const workspace = await create(source);
+
+        expect(workspace.strategy).toBe('copy');
+        expect(fs.existsSync(path.join(workspace.dir, 'untracked.txt'))).toBe(true);
+        expect(fs.existsSync(path.join(workspace.dir, '.git', 'HEAD'))).toBe(true);
+        expect(fs.existsSync(path.join(workspace.dir, '.git', 'ipc'))).toBe(false);
       } finally {
         await new Promise<void>((resolve) => socket.close(() => resolve()));
       }

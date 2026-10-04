@@ -32,8 +32,11 @@ export interface AgentWorkspace {
   /** Directory the agent runs in. */
   readonly dir: string;
   readonly strategy: 'git' | 'copy';
-  /** Response metadata describing the workspace, including the agent's diff for git workspaces. */
-  metadata(): Promise<{ workingDir: string; workspaceDiff?: string }>;
+  /**
+   * Response metadata describing the workspace, including the agent's diff for git
+   * workspaces. `workspaceDiffError` is set instead when that diff could not be computed.
+   */
+  metadata(): Promise<{ workingDir: string; workspaceDiff?: string; workspaceDiffError?: string }>;
   /** Delete the workspace. Never throws. */
   remove(): Promise<void>;
 }
@@ -45,6 +48,8 @@ interface RepositoryState {
 }
 
 const MAX_DIFF_LENGTH = 100_000;
+const MAX_INCOMPLETE_PATHS = 20;
+const MAX_DIFF_ERROR_LENGTH = 300;
 const MAX_GIT_BUFFER = 64 * 1024 * 1024;
 const MAX_SHARED_INDEX_FILES = 64;
 const GIT_TIMEOUT_MS = 30_000;
@@ -166,6 +171,33 @@ async function git(
   }
   const { stdout } = await command;
   return stdout;
+}
+
+/** Rethrow cancellation and Git timeouts, which must not be reported as a problem with the diff. */
+function rethrowIfInterrupted(error: unknown, signal?: AbortSignal): void {
+  signal?.throwIfAborted();
+  if (error instanceof Error && 'killed' in error && error.killed) {
+    throw error;
+  }
+}
+
+/**
+ * Run `git add --ignore-errors`, which adds every path it can read and exits with status 1
+ * when it had to skip some. Returns whether any path was skipped.
+ */
+async function addReadablePaths(
+  args: string[],
+  options: { env: Record<string, string>; input?: string; signal?: AbortSignal },
+): Promise<boolean> {
+  try {
+    await git(args, options);
+    return false;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 1) {
+      return true;
+    }
+    throw error;
+  }
 }
 
 class UnsupportedGitAttributesError extends Error {}
@@ -392,6 +424,11 @@ async function assertCopyable(
         'repository a copy would share. Commit the changes so working_dir is cloned instead.',
     );
   } else if (!stat.isFile() && !stat.isDirectory()) {
+    if (stat.isSocket() && path.relative(root, entry).split(path.sep).includes('.git')) {
+      // Git's own runtime sockets, such as the fsmonitor daemon's, belong to the source
+      // repository's processes and are recreated on demand.
+      return false;
+    }
     throw new Error(`copy_working_dir cannot copy ${entry}: it is not a regular file or directory`);
   }
   return true;
@@ -567,14 +604,28 @@ async function getWorkspaceDiff(
       });
     }
     const ignoreEnv = { ...env, GIT_WORK_TREE: ignoreDir };
+    // Lines appended to the diff when it does not cover everything the agent changed.
+    const notes: string[] = [];
     // Include ignored files the agent explicitly added, without loading its Git configuration.
+    // Only this step reads the agent's index, so an index that cannot be read (the agent can
+    // replace or corrupt it) costs these files, not the whole diff.
     const workspaceIndex = path.join(scratch, 'workspace-index');
-    const ignoredTracked = (await copyWorkspaceIndex(dir, workspaceIndex, signal))
-      ? await git(['ls-files', '-z', '--cached', '--ignored', '--exclude-standard'], {
-          env: { ...ignoreEnv, GIT_INDEX_FILE: workspaceIndex },
-          signal,
-        })
-      : '';
+    let ignoredTracked = '';
+    try {
+      if (await copyWorkspaceIndex(dir, workspaceIndex, signal)) {
+        ignoredTracked = await git(
+          ['ls-files', '-z', '--cached', '--ignored', '--exclude-standard'],
+          { env: { ...ignoreEnv, GIT_INDEX_FILE: workspaceIndex }, signal },
+        );
+      }
+    } catch (error) {
+      rethrowIfInterrupted(error, signal);
+      logger.warn(`[copy_working_dir] Could not read the workspace's Git index: ${error}`);
+      notes.push(
+        "[diff incomplete: the workspace's Git index could not be read, so ignored files the " +
+          'agent added to it are not included]',
+      );
+    }
     const newFiles = new Set<string>();
     for (const file of ignoredTracked.split('\0').filter(Boolean)) {
       const fullPath = path.resolve(dir, file);
@@ -601,9 +652,20 @@ async function getWorkspaceDiff(
         }
       }
     }
+    // The agent controls the workspace, so some paths may be impossible to add: a file it
+    // made unreadable, or a repository it created. Add everything else rather than losing
+    // the whole diff, and name the skipped paths below.
+    let skippedPaths = false;
     if (newFiles.size > 0) {
-      await git(
-        ['--literal-pathspecs', 'add', '--force', '--pathspec-from-file=-', '--pathspec-file-nul'],
+      skippedPaths = await addReadablePaths(
+        [
+          '--literal-pathspecs',
+          'add',
+          '--force',
+          '--ignore-errors',
+          '--pathspec-from-file=-',
+          '--pathspec-file-nul',
+        ],
         {
           env,
           input: `${[...newFiles].join('\0')}\0`,
@@ -611,7 +673,47 @@ async function getWorkspaceDiff(
         },
       );
     }
-    await git(['-c', 'core.fsmonitor=false', 'add', '--update'], { env, signal });
+    skippedPaths =
+      (await addReadablePaths(
+        ['-c', 'core.fsmonitor=false', 'add', '--update', '--ignore-errors'],
+        { env, signal },
+      )) || skippedPaths;
+    if (skippedPaths) {
+      const added = new Set(
+        (
+          await git(
+            [
+              '-c',
+              'core.fsmonitor=false',
+              'diff',
+              '--cached',
+              '--name-only',
+              '-z',
+              '--diff-filter=A',
+              repo.head,
+            ],
+            { env, signal },
+          )
+        ).split('\0'),
+      );
+      // Tracked files that still differ from the index are the ones `add --update` skipped.
+      const notUpdated = await git(['-c', 'core.fsmonitor=false', 'diff', '--name-only', '-z'], {
+        env,
+        signal,
+      });
+      const missing = [
+        // An untracked repository is listed as a directory, with a trailing slash.
+        ...[...newFiles].filter((file) => !added.has(file.replace(/\/$/, ''))),
+        ...notUpdated.split('\0').filter(Boolean),
+      ];
+      // Naming the paths keeps a check for a changed file from passing on a partial diff.
+      notes.push(
+        `[diff incomplete: ${missing.length || 'some'} changed path(s) could not be included` +
+          (missing.length > 0 ? `: ${missing.slice(0, MAX_INCOMPLETE_PATHS).join(', ')}` : '') +
+          (missing.length > MAX_INCOMPLETE_PATHS ? ', ...' : '') +
+          ']',
+      );
+    }
     const diff = await git(
       [
         '-c',
@@ -625,9 +727,14 @@ async function getWorkspaceDiff(
       ],
       { env, signal },
     );
-    return diff.length > MAX_DIFF_LENGTH
-      ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`
-      : diff;
+    const shown =
+      diff.length > MAX_DIFF_LENGTH
+        ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`
+        : diff;
+    if (notes.length === 0) {
+      return shown;
+    }
+    return `${shown}${shown && !shown.endsWith('\n') ? '\n' : ''}${notes.join('\n')}`;
   } finally {
     await fs.rm(scratch, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -737,12 +844,15 @@ export async function createAgentWorkspace(
       try {
         return { workingDir: dir, workspaceDiff: await getWorkspaceDiff(dir, repo, signal) };
       } catch (error) {
-        signal?.throwIfAborted();
-        if (error instanceof Error && 'killed' in error && error.killed) {
-          throw error;
-        }
+        rethrowIfInterrupted(error, signal);
         logger.warn(`[copy_working_dir] Could not compute the workspace diff: ${error}`);
-        return { workingDir: dir };
+        // Report the failure so an assertion on the diff cannot mistake it for "no changes".
+        return {
+          workingDir: dir,
+          workspaceDiffError: (error instanceof Error ? error.message : String(error))
+            .split('\n')[0]
+            .slice(0, MAX_DIFF_ERROR_LENGTH),
+        };
       }
     },
   };
