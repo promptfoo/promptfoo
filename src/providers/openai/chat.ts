@@ -551,6 +551,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       delete body.max_tokens;
     }
 
+    // Whether a native GPT-6 request reasons decides which environment limit applies to it.
+    const gpt6Effort =
+      isGPT6Model && !isOpenRouterGpt6
+        ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
+            renderVarsInObject(value, context?.vars),
+          )
+        : undefined;
     if (isGPT6Model) {
       const outputCap = resolveGpt6ChatOutputCap(
         this.config,
@@ -560,8 +567,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
           // OPENAI_MAX_TOKENS limits the visible output of non-reasoning requests. As a GPT-6
           // cap it would also limit reasoning, as it never has for o-series or GPT-5 Chat
-          // requests. Only OpenRouter requests, which have always honored it, fall back to it.
-          maxTokens: isOpenRouterGpt6 ? getEnvInt('OPENAI_MAX_TOKENS') : undefined,
+          // requests, so it applies only when reasoning is turned off. OpenRouter requests,
+          // which have always honored it, keep falling back to it.
+          maxTokens:
+            isOpenRouterGpt6 || gpt6Effort === 'none' ? getEnvInt('OPENAI_MAX_TOKENS') : undefined,
         },
       );
       if (outputCap === undefined) {
@@ -578,13 +587,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           'GPT-6 Chat Completions requests use reasoning_effort. Configure reasoning_effort, or use the Responses API for config.reasoning.',
         );
       }
-      const effort = getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
-        renderVarsInObject(value, context?.vars),
-      );
-      if (effort === undefined) {
+      if (gpt6Effort === undefined) {
         delete body.reasoning_effort;
       } else {
-        body.reasoning_effort = effort;
+        body.reasoning_effort = gpt6Effort;
       }
     }
     // OpenRouter can translate Chat tools to the upstream Responses API.

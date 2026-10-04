@@ -852,6 +852,75 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     },
   );
 
+  it.each([
+    ['provider config', { config: { reasoning_effort: 'none' } }, undefined],
+    ['provider passthrough', { config: { passthrough: { reasoning_effort: 'none' } } }, undefined],
+    ['prompt config', {}, { reasoning_effort: 'none' }],
+    [
+      'a rendered template',
+      { config: { passthrough: { reasoning_effort: '{{ effort }}' } } },
+      undefined,
+    ],
+  ] as const)(
+    'keeps OPENAI_MAX_TOKENS as the Chat output limit when reasoning is turned off in %s',
+    async (_source, options, promptConfig) => {
+      const context = {
+        vars: { effort: 'none' },
+        prompt: { raw: 'Say ready.', label: 'ready', config: promptConfig },
+      };
+      const restoreCaps = mockProcessEnv({
+        OPENAI_MAX_TOKENS: '71',
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+      });
+      try {
+        // Without reasoning the limit only bounds the visible output, as max_tokens does.
+        const { body } = await new OpenAiChatCompletionProvider(model, options).getOpenAiBody(
+          'Say ready.',
+          context,
+        );
+        expect(body.reasoning_effort).toBe('none');
+        expect(body.max_completion_tokens).toBe(71);
+        expect(body).not.toHaveProperty('max_tokens');
+      } finally {
+        restoreCaps();
+      }
+
+      const restoreBoth = mockProcessEnv({
+        OPENAI_MAX_TOKENS: '71',
+        OPENAI_MAX_COMPLETION_TOKENS: '72',
+      });
+      try {
+        const { body } = await new OpenAiChatCompletionProvider(model, options).getOpenAiBody(
+          'Say ready.',
+          context,
+        );
+        expect(body.max_completion_tokens).toBe(72);
+      } finally {
+        restoreBoth();
+      }
+    },
+  );
+
+  it.each([undefined, 'low', 'high'] as const)(
+    'ignores OPENAI_MAX_TOKENS for a native Chat request that reasons at %s',
+    async (effort) => {
+      const restoreCaps = mockProcessEnv({
+        OPENAI_MAX_TOKENS: '71',
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+      });
+      try {
+        const { body } = await new OpenAiChatCompletionProvider(model, {
+          config: { reasoning_effort: effort },
+        }).getOpenAiBody('Say ready.');
+        expect(body.reasoning_effort).toBe(effort);
+        expect(body).not.toHaveProperty('max_completion_tokens');
+        expect(body).not.toHaveProperty('max_tokens');
+      } finally {
+        restoreCaps();
+      }
+    },
+  );
+
   it.each(['none', 'high'] as const)(
     'rejects native Chat config.reasoning at %s',
     async (effort) => {
