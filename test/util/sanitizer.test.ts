@@ -1,3 +1,4 @@
+import Ajv from 'ajv';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isSecretEnvVarName,
@@ -71,6 +72,130 @@ describe('looksLikeSecret', () => {
 });
 
 describe('sanitizeConfigForOutput', () => {
+  const assertionSchema = {
+    type: 'object',
+    properties: {
+      token: { $ref: '#/definitions/token' },
+      password: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+      nested: {
+        type: 'array',
+        items: { type: 'object', properties: { apiKey: { type: 'string' } } },
+      },
+      secret: false,
+    },
+    definitions: { token: { type: 'string', minLength: 1 } },
+    required: ['token', 'password'],
+    additionalProperties: false,
+  };
+
+  it.each(['is-json', 'not-is-json', 'contains-json', 'not-contains-json'] as const)(
+    'preserves %s schema definitions at each config test location',
+    (type) => {
+      const test = { assert: [{ type, value: assertionSchema }] };
+      const config = {
+        tests: [test],
+        defaultTest: test,
+        scenarios: [{ config: [test], tests: [test] }],
+      };
+      const output = sanitizeConfigForOutput(config);
+      expect(output).toEqual(config);
+      expect(config.tests[0].assert[0].value).toBe(assertionSchema);
+      const projected = (output.tests as typeof config.tests)[0].assert[0].value;
+      const validate = new Ajv().compile(projected);
+      expect(
+        validate({ token: 'public', password: 'example', nested: [{ apiKey: 'sample' }] }),
+      ).toBe(true);
+      expect(validate({ token: 5, password: 'example' })).toBe(false);
+      expect(validate({ token: 'public', password: 'example', secret: 'unexpected' })).toBe(false);
+    },
+  );
+
+  it('preserves JSON string schemas and schemas in assertion sets', () => {
+    const config = {
+      tests: [
+        {
+          assert: [
+            {
+              type: 'assert-set' as const,
+              assert: [{ type: 'is-json' as const, value: JSON.stringify(assertionSchema) }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(sanitizeConfigForOutput(config)).toEqual(config);
+  });
+
+  it('preserves schema maps, dependencies, tuples and conditional subschemas', () => {
+    const schema = {
+      $defs: { token: { type: 'string' } },
+      patternProperties: { password: { type: 'string' } },
+      dependentSchemas: { token: { properties: { password: { type: 'string' } } } },
+      dependencies: { token: ['password'] },
+      dependentRequired: { token: ['password'] },
+      allOf: [
+        {
+          if: { properties: { token: { type: 'string' } } },
+          // biome-ignore lint/suspicious/noThenProperty: `then` is a JSON Schema keyword, not a promise callback.
+          then: { not: false },
+        },
+      ],
+      items: [{ properties: { apiKey: true } }],
+      prefixItems: [{ properties: { token: false } }],
+      additionalProperties: { properties: { secret: { type: 'string' } } },
+    };
+    const config = { tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }] };
+    expect(sanitizeConfigForOutput(config)).toEqual(config);
+  });
+
+  it('keeps operational credentials and literal schema credentials redacted', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        password: { type: 'string', default: 'private-default', enum: ['private-enum'] },
+        dbPassword: { type: 'string', const: 'private-const', examples: ['private-example'] },
+        data: { default: { apiKey: 'private-data-key', label: 'public' } },
+      },
+      apiKey: 'private-extension',
+    };
+    const config = {
+      env: { API_KEY: 'private-env' },
+      providers: [{ id: 'echo', config: { apiKey: 'private-provider' } }],
+      tests: [
+        {
+          vars: { password: 'private-var' },
+          assert: [{ type: 'is-json' as const, value: schema }],
+        },
+      ],
+    };
+    const output = sanitizeConfigForOutput(config);
+    expect(JSON.stringify(output)).not.toContain('private-');
+    const projected = (output.tests as typeof config.tests)[0].assert[0].value;
+    expect(projected.properties.password).toEqual({
+      type: 'string',
+      default: '[REDACTED]',
+      enum: ['[REDACTED]'],
+    });
+    expect(projected.properties.data.default.label).toBe('public');
+    expect(config.tests[0].assert[0].value).toBe(schema);
+    expect(schema.properties.password.default).toBe('private-default');
+  });
+
+  it('does not exempt arbitrary assertion data or malformed schema property values', () => {
+    const value = { properties: { password: 'private-value' } };
+    const config = {
+      tests: [
+        {
+          assert: [
+            { type: 'is-json' as const, value },
+            { type: 'equals' as const, value },
+          ],
+        },
+      ],
+    };
+    expect(JSON.stringify(sanitizeConfigForOutput(config))).not.toContain('private-value');
+  });
+
   it.each([
     { prompts: 'private literal' },
     { prompts: ['private literal'] },

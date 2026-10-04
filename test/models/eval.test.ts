@@ -1,3 +1,4 @@
+import Ajv from 'ajv';
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
@@ -1519,6 +1520,29 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it('preserves saved assertion schema definitions without exposing config credentials', async () => {
+      const schema = {
+        type: 'object',
+        properties: { token: { type: 'string' }, password: { type: 'string' } },
+        required: ['token'],
+      };
+      const config = {
+        providers: [{ id: 'echo', config: { apiKey: 'private-provider-key' } }],
+        tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }],
+      };
+      const evaluation = await Eval.create(config, []);
+      const reloaded = await Eval.findById(evaluation.id);
+      expect(reloaded).not.toBeNull();
+      const output = await reloaded!.toResultsFile();
+      const projected = (output.config.tests as typeof config.tests)[0].assert[0].value;
+      expect(projected).toEqual(schema);
+      const validate = new Ajv().compile(projected);
+      expect(validate({ token: 'public' })).toBe(true);
+      expect(validate({ token: 123 })).toBe(false);
+      expect(JSON.stringify(output.config)).not.toContain('private-provider-key');
+      expect(reloaded!.config).toEqual(config);
+    });
+
     it('redacts gateway URL credentials from result files while preserving the live config', async () => {
       const gateway = 'https://gateway.example/v1?googleAccessToken=short-private-value';
       const evaluation = new Eval({
