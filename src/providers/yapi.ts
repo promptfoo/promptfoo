@@ -117,10 +117,11 @@ export class YApiProvider extends OpenAiChatCompletionProvider {
   }
 
   /**
-   * Y-API meters in account credit, not USD, and the credit-to-cash conversion is
-   * currently promotional (1:20) with a scheduled drop to the standard 1:10. Any USD
-   * figure baked into the provider would be wrong within days, so no `cost` is reported
-   * and eval results fall back to token counts. Live prices: https://y-api.bestvirtualgoods.com/pricing.json
+   * Y-API meters in account credit, not USD. The credit-to-cash conversion has changed
+   * at least once (a limited-time 1:20 promo ended and reverted to 1:10 on 2026-10-01),
+   * so any USD figure baked into the provider would go stale — no `cost` is reported and
+   * eval results fall back to token counts. Live prices and the rate currently in force:
+   * https://y-api.bestvirtualgoods.com/pricing.json
    *
    * This also avoids a concrete misreporting bug inherited from the base class: it
    * resolves billing rates from `modelName.split('/').pop()`, so a Y-API model ID such as

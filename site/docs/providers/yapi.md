@@ -67,14 +67,14 @@ providers:
 
 ## Limitations
 
-- **No cost reporting.** Y-API meters usage in account credit rather than USD, and its credit-to-cash conversion is promotional (1:20) with a scheduled change to the standard rate (1:10). Any USD figure compiled into the provider would go stale, so this provider reports no `cost` and eval results carry token counts only. Live prices are published at [y-api.bestvirtualgoods.com/pricing.json](https://y-api.bestvirtualgoods.com/pricing.json). To track spend in an eval, set `inputCost` / `outputCost` to the **USD you actually pay** per 1M tokens — that is the published `credit_price` divided by `top_up.quota_rate`, not the credit figure itself. At the standard 1:10 conversion, `deepseek/deepseek-v4-pro` (credit price 0.5 input / 1 output per 1M) works out to $0.05 / $0.10:
+- **No cost reporting.** Y-API meters usage in account credit rather than USD, and its credit-to-cash conversion has changed before (a limited-time 1:20 promo reverted to the standard 1:10 on 2026-10-01), so any USD figure compiled into the provider would go stale. This provider reports no `cost` and eval results carry token counts only. Live prices are published at [y-api.bestvirtualgoods.com/pricing.json](https://y-api.bestvirtualgoods.com/pricing.json). To track spend in an eval, set `inputCost` / `outputCost` to the **USD you actually pay** per 1M tokens — that is the published `credit_price` divided by `top_up.quota_rate`, not the credit figure itself. At the standard 1:10 conversion, `deepseek/deepseek-v4-pro` (credit price 0.5 input / 1 output per 1M) works out to $0.05 / $0.10:
 
   ```yaml
   providers:
     - id: y-api:deepseek/deepseek-v4-pro
       config:
-        # USD per 1M tokens = credit_price / top_up.quota_rate (standard 1:10).
-        # While the promotional 1:20 rate is in effect these halve.
+        # USD per 1M tokens = credit_price / top_up.quota_rate (currently 1:10).
+        # Read top_up.quota_rate from pricing.json — it has changed before.
         inputCost: 0.05
         outputCost: 0.1
   ```
