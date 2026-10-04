@@ -552,7 +552,6 @@ async function readTestWithEnv(
   }
 
   if (!loadProviders) {
-    testCase.vars = resolveVarsFileReferences(testCase.vars, basePath) as TestCase['vars'];
     if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
       testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
     } else if (
@@ -761,14 +760,33 @@ export async function readTests(
   );
 }
 
-/** Parse source files once and retain declarative rows for persistence and replay. */
+/**
+ * Parse source files once and retain declarative rows for persistence and replay.
+ *
+ * `file://` vars are resolved from `suiteBasePath` when the evaluation runs. Rows read from
+ * that same directory keep their references exactly as authored, so results, exports and
+ * test identity do not depend on where the project is checked out. Rows read from another
+ * directory (an additional config file) would resolve from the wrong place, so their
+ * references are pinned to the directory they were authored in.
+ */
 export async function readTestConfigs(
   tests: TestSuiteConfig['tests'],
   basePath: string = cliState.basePath || '',
   env: EnvOverrides | undefined = cliState.env,
+  suiteBasePath: string = basePath,
 ): Promise<TestCase[]> {
   return cliState.withBasePath(basePath, () =>
-    cliState.withEnv(env, () => readTestsWithEnv(tests, basePath, env, false)),
+    cliState.withEnv(env, async () => {
+      const rows = await readTestsWithEnv(tests, basePath, env, false);
+      if (path.resolve(basePath) === path.resolve(suiteBasePath)) {
+        return rows;
+      }
+      return rows.map((row) =>
+        isRemoteTestCase(row)
+          ? row
+          : { ...row, vars: resolveVarsFileReferences(row.vars, basePath) as TestCase['vars'] },
+      );
+    }),
   );
 }
 
