@@ -593,7 +593,13 @@ tests:
       shared: file://../shared/context.json
 ```
 
-Nested `file://` references inside test and vars files keep the owning config's base directory. With multiple configs, each config's tests use its base directory; configured providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
+Rows in YAML test files, or JSON/JSONL files supplied in a `tests` array or glob, resolve bare `vars:` paths and globs from the tests file's directory. For example, `vars: ../vars/*.yaml` in `tests/cases.yaml` loads files from the adjacent `vars` directory. Watch mode observes those same files.
+
+Row-provider scripts, including bare paths, `python:provider.py`, and `file://provider.py:call_api`, also resolve from the tests file's directory. Provider configuration files such as `provider: file://provider.yaml` are read from the owning config's directory; script IDs inside them resolve from the tests file's directory. Saved evaluations retain that provider directory. Inline `file://` vars keep the owning config's directory. A single non-YAML test path, such as `tests: file://tests/cases.json`, or a `{ path, config }` source also keeps bare vars-file paths and row providers relative to the config directory.
+
+A bare test-file entry inside an imported tests file resolves beside the declaring file. Vars and provider paths inside that referenced row use the referenced file's directory.
+
+With multiple configs, each config's tests use its base directory; suite-level providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
 
 CLI evaluations save parsed test rows, external defaults, and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. An unmatched test-source glob warns and adds no rows; a missing literal test file is an error.
 

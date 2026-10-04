@@ -1,3 +1,4 @@
+import { parse as parseBrowserCsv } from 'csv-parse/browser/esm/sync';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseCommaSeparatedValues } from '../src/assertions/contains';
@@ -12,6 +13,36 @@ vi.mock('../src/logger', () => ({
 }));
 
 import type { Assertion, CsvRow, TestCase } from '../src/types/index';
+
+describe.each([
+  ['Node.js', parseCsv],
+  ['browser', parseBrowserCsv],
+] as const)('%s CSV parsing', (_name, parse) => {
+  it('preserves special column names as own properties', () => {
+    const [record] = parse<Record<string, string>>(
+      '__proto__,constructor,toString\nproto-value,constructor-value,toString-value',
+      { columns: true },
+    );
+
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.hasOwn(record, '__proto__')).toBe(true);
+    expect(record.__proto__).toBe('proto-value');
+    expect(record.constructor).toBe('constructor-value');
+    expect(record.toString).toBe('toString-value');
+  });
+
+  it('groups duplicate __proto__ headers without replacing the record prototype', () => {
+    const [record] = parse<Record<string, string[]>>(
+      '__proto__,__proto__,value,value\nfirst,second,one,two',
+      { columns: true, group_columns_by_name: true },
+    );
+
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.hasOwn(record, '__proto__')).toBe(true);
+    expect(record.__proto__).toEqual(['first', 'second']);
+    expect(record.value).toEqual(['one', 'two']);
+  });
+});
 
 describe('testCaseFromCsvRow', () => {
   const INVALID_THRESHOLD_VALUES = [

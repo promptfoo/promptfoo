@@ -61,6 +61,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['@hono/node-server', '<1.19.15 || >=2.0.0 <2.0.10'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
+  ['csv-parse', '<7.0.2'], // GHSA-8cw4-87c7-c6xx
   ['dompurify', '<=3.4.15'], // GHSA-p98j-92pf-mc4p, GHSA-6688-9rhm-gjv2
   ['drizzle-orm', '<0.45.2 || >=1.0.0-beta.2 <1.0.0-beta.20'], // GHSA-gpj5-g38j-94v9
   ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
