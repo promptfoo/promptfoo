@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
-import { sanitizeObject } from '../../util/sanitizer';
+import { isCompoundSecretFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
@@ -28,6 +28,37 @@ const MAX_TOOL_DATA_DEPTH = 64;
 const UNSANITIZED_TOOL_DATA = '[MCP tool data omitted: it could not be sanitized]';
 
 /**
+ * Redacts what lies under a key that ends in a credential word, such as `databasePassword`.
+ * The shared sanitizer matches exact key names, which the names a tool gives its arguments
+ * rarely are. JSON inside a string is covered as well.
+ *
+ * `data` is the sanitizer's own copy, without cycles and of limited depth, and is changed
+ * in place.
+ */
+function redactCompoundSecretKeys(data: unknown): unknown {
+  // Held in a container so that data which is itself a string of JSON is covered too.
+  const root = { data };
+  const pending: object[] = [root];
+  while (pending.length > 0) {
+    const container = pending.pop() as Record<string, unknown>;
+    for (const [key, item] of Object.entries(container)) {
+      if (isCompoundSecretFieldName(key)) {
+        container[key] = REDACTED;
+      } else if (typeof item === 'string' && /^\s*[{[]/.test(item)) {
+        try {
+          container[key] = JSON.stringify(redactCompoundSecretKeys(JSON.parse(item)));
+        } catch {
+          // Not JSON after all.
+        }
+      } else if (item !== null && typeof item === 'object') {
+        pending.push(item);
+      }
+    }
+  }
+  return root.data;
+}
+
+/**
  * Redact secrets in tool arguments. Nested arguments are kept down to
  * `MAX_TOOL_DATA_DEPTH` levels, and anything deeper is replaced with `"[...]"`.
  *
@@ -37,12 +68,14 @@ const UNSANITIZED_TOOL_DATA = '[MCP tool data omitted: it could not be sanitized
  */
 export function sanitizeMcpToolData<T>(value: T): T | typeof UNSANITIZED_TOOL_DATA {
   try {
-    return sanitizeObject(value, {
-      context: 'MCP tool data',
-      sanitizeUrls: true,
-      maxDepth: MAX_TOOL_DATA_DEPTH,
-      throwOnError: true,
-    });
+    return redactCompoundSecretKeys(
+      sanitizeObject(value, {
+        context: 'MCP tool data',
+        sanitizeUrls: true,
+        maxDepth: MAX_TOOL_DATA_DEPTH,
+        throwOnError: true,
+      }),
+    ) as T;
   } catch {
     // The thrown value can carry the data it was thrown for, and inspecting it can run code
     // it controls, so it is neither read nor logged.

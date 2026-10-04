@@ -281,6 +281,18 @@ const ENV_SECRET_SUFFIX_WORDS = [
 ].map((word) => word.toUpperCase());
 
 /**
+ * Whether a field name ends in a credential word, as `databasePassword`, `db_password` and
+ * `userApiKey` do. `isSecretField` only knows exact names.
+ *
+ * This is for data whose keys are not under our control, such as the arguments of a tool
+ * call. It is not applied to configs, where a key such as `stop_token` is a setting.
+ */
+export function isCompoundSecretFieldName(fieldName: string): boolean {
+  const normalized = normalizeFieldName(fieldName).toUpperCase();
+  return ENV_SECRET_SUFFIX_WORDS.some((secret) => normalized.endsWith(secret));
+}
+
+/**
  * Secret only as the final `_`-delimited word. `MLFLOW_BASIC_AUTH` and `NPM_CONFIG__AUTH`
  * hold a credential; `WATSONX_AI_AUTH_TYPE` names a method and `OAUTH_SCOPE` is not an
  * `AUTH` word at all.

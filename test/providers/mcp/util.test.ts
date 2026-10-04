@@ -159,6 +159,53 @@ describe('sanitizeMcpToolData', () => {
     }
   });
 
+  it('redacts values under keys that end in a credential word, at any depth', () => {
+    // A tool names its arguments as it likes, so exact key names are not enough.
+    const connection = {
+      databasePassword: 'hunter2',
+      db_password: 'hunter2',
+      userApiKey: 'tool-secret-value',
+      'x-upstream-token': 'tool-secret-value',
+      oauthClientSecret: { value: 'tool-secret-value' },
+      // These end in words that are not credentials.
+      sortKey: 'name',
+      key: 'user:1',
+      maxTokens: 5,
+      author: 'ada',
+    };
+    const args = { ...connection, level1: { level2: { level3: { level4: { connection } } } } };
+
+    const expected = {
+      databasePassword: '[REDACTED]',
+      db_password: '[REDACTED]',
+      userApiKey: '[REDACTED]',
+      'x-upstream-token': '[REDACTED]',
+      oauthClientSecret: '[REDACTED]',
+      sortKey: 'name',
+      key: 'user:1',
+      maxTokens: 5,
+      author: 'ada',
+    };
+    expect(sanitizeMcpToolData(args)).toEqual({
+      ...expected,
+      level1: { level2: { level3: { level4: { connection: expected } } } },
+    });
+    // The caller's arguments are left as they were.
+    expect(connection.databasePassword).toBe('hunter2');
+  });
+
+  it('redacts such keys in JSON that an argument carries as a string', () => {
+    const payload = JSON.stringify({ query: 'select 1', dbPassword: 'hunter2' });
+
+    expect(sanitizeMcpToolData({ payload, note: '{not json' })).toEqual({
+      payload: JSON.stringify({ query: 'select 1', dbPassword: '[REDACTED]' }),
+      note: '{not json',
+    });
+    expect(sanitizeMcpToolData(payload)).toBe(
+      JSON.stringify({ query: 'select 1', dbPassword: '[REDACTED]' }),
+    );
+  });
+
   it('copes with arguments that refer to themselves', () => {
     const args: Record<string, unknown> = { id: '123' };
     args.self = args;
