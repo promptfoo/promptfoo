@@ -67,18 +67,32 @@ type TestFilterFn = (test: TestCase) => boolean;
 /**
  * Splits a metadata filter value into its alternatives. Commas separate alternatives, and
  * `\,` stands for a comma inside one.
+ *
+ * Backslashes are only special in a run directly before a comma, where each pair stands for
+ * one backslash: `a\\,b` is the alternatives `a\` and `b`, and `a\\\,b` is the single value
+ * `a\,b`. Anywhere else they are literal, so paths such as `C:\dir` need no escaping.
  */
 function splitMetadataFilterValue(value: string): string[] {
   const alternatives = [''];
-  for (let index = 0; index < value.length; index++) {
-    if (value[index] === '\\' && value[index + 1] === ',') {
-      alternatives[alternatives.length - 1] += ',';
-      index++;
-    } else if (value[index] === ',') {
-      alternatives.push('');
-    } else {
-      alternatives[alternatives.length - 1] += value[index];
+  let index = 0;
+  while (index < value.length) {
+    let end = index;
+    while (value[end] === '\\') {
+      end++;
     }
+    const backslashes = end - index;
+    if (value[end] === ',') {
+      alternatives[alternatives.length - 1] += '\\'.repeat(Math.floor(backslashes / 2));
+      if (backslashes % 2 === 1) {
+        alternatives[alternatives.length - 1] += ',';
+      } else {
+        alternatives.push('');
+      }
+    } else {
+      // Not before a comma: the backslashes and the character after them are literal.
+      alternatives[alternatives.length - 1] += value.slice(index, end + 1);
+    }
+    index = end + 1;
   }
   return alternatives;
 }

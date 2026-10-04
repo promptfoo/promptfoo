@@ -306,10 +306,16 @@ describe('filterTests', () => {
         // Without the escape, the comma separates "Hello" from " world", space included.
         { filter: 'id=Hello, world', expected: ['Hello, world', 'Hello'] },
         { filter: 'id=a\\,b,peace', expected: ['world peace', 'a,b'] },
-        { filter: 'id=\\,', expected: ['Hello, world', 'a,b'] },
+        { filter: 'id=\\,', expected: ['Hello, world', 'a,b', 'x\\,y'] },
         // A backslash is only special before a comma.
         { filter: 'id=C:\\dir', expected: ['C:\\dir'] },
         { filter: 'id=:\\d,peace', expected: ['world peace', 'C:\\dir'] },
+        { filter: 'id=\\\\server', expected: ['\\\\server\\share'] },
+        // Before a comma, a pair of backslashes is one backslash, so a value that ends with a
+        // backslash can still be followed by another alternative.
+        { filter: 'id=D:\\\\,peace', expected: ['world peace', 'D:\\'] },
+        // An odd run ends with an escaped comma.
+        { filter: 'id=x\\\\\\,y', expected: ['x\\,y'] },
       ])(
         'should treat an escaped comma as part of the value in $filter',
         async ({ filter, expected }) => {
@@ -317,15 +323,32 @@ describe('filterTests', () => {
             {
               prompts: [],
               providers: [],
-              tests: ['Hello, world', 'Hello', 'world peace', 'a,b', 'C:\\dir', 'b'].map((id) => ({
-                metadata: { id },
-              })),
+              tests: [
+                'Hello, world',
+                'Hello',
+                'world peace',
+                'a,b',
+                'C:\\dir',
+                'b',
+                'D:\\',
+                'x\\,y',
+                '\\\\server\\share',
+              ].map((id) => ({ metadata: { id } })),
             },
             { metadata: filter },
           );
           expect(result.map((test) => test.metadata?.id)).toEqual(expected);
         },
       );
+
+      it('should reject an alternative left empty by a doubled backslash before a comma', async () => {
+        await expect(
+          filterTests(
+            { prompts: [], providers: [], tests: [{ metadata: { id: 'D:\\' } }] },
+            { metadata: 'id=D:\\\\,' },
+          ),
+        ).rejects.toThrow('--filter-metadata has an empty value');
+      });
 
       it.each(['env=,dev', 'env=dev,', 'env=dev,,prod', 'env=,'])(
         'should reject an empty list value in %s even without tests',
