@@ -301,11 +301,16 @@ function getReplayPrompts(
     () => mergeProviderRuns(splitColumnsAtProviderChanges(columns)),
     // Columns that do not name their provider, as long as every provider ran the same prompts.
     () => getRepeatedColumns(columns, providerKeys.length),
+    // Such columns can also all belong to one provider, with their repeats.
+    () => columns.map(toReplayPrompt),
     () => getDistinctPrompts(columns),
   ];
+  // Every column as a prompt is only right when it is known to rebuild the columns: with
+  // several providers it would create each column once per provider.
+  const isNearest = [true, true, true, false, true];
 
   let closest: Prompt[] | undefined;
-  for (const reconstruct of reconstructions) {
+  for (const [index, reconstruct] of reconstructions.entries()) {
     const prompts = reconstruct();
     if (
       prompts &&
@@ -313,7 +318,9 @@ function getReplayPrompts(
     ) {
       return { prompts };
     }
-    closest ??= prompts;
+    if (isNearest[index]) {
+      closest ??= prompts;
+    }
   }
 
   // The config's prompt filters do not produce the saved columns. Each provider's saved

@@ -2088,6 +2088,14 @@ describe('evalCommand', () => {
         expected: columnsOf(undefined, 'first', 'second'),
       },
       {
+        name: 'unnamed columns with a repeated prompt belong to one of two providers',
+        providers: ['first-target', 'second-target'],
+        // The first provider runs no prompt, so the three columns cannot be shared equally.
+        providerPromptMap: { 'first-target': [], 'second-target': ['same'] },
+        columns: columnsOf(undefined, 'same', 'same', 'same'),
+        expected: columnsOf(undefined, 'same', 'same', 'same'),
+      },
+      {
         name: 'the columns do not name their provider',
         providers: ['first-target', 'second-target'],
         columns: columnsOf(undefined, 'same', 'same', 'other', 'same', 'same', 'other'),
