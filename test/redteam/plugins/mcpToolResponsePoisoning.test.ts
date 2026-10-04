@@ -147,6 +147,108 @@ describe('MCPToolResponsePoisoningPlugin', () => {
       ).toThrow(/None of the configured allowedTools/);
     });
 
+    describe('server-declared annotations', () => {
+      // MCP lets a server mark a tool as mutating. We honour that to *skip*
+      // tools, never to grant trust, so a server that lies gets exactly the
+      // unannotated behaviour and gains nothing.
+      const annotatedPurpose =
+        'Ticketing MCP server.\nAvailable MCP tools:\n' +
+        '{"name":"get_ticket","description":"Read a ticket","annotations":{"readOnlyHint":true}}\n' +
+        '{"name":"delete_ticket","description":"Delete a ticket","annotations":{"destructiveHint":true}}\n' +
+        '{"name":"draft_reply","description":"Draft a reply","annotations":{"readOnlyHint":false}}\n' +
+        '{"name":"search_tickets","description":"Search tickets"}';
+
+      const generateAnnotated = async (config: Record<string, unknown> = {}) => {
+        const provider = createMockProvider({
+          response: createProviderResponse({
+            output: [
+              'Prompt: {"tool":"get_ticket","args":{"id":"1"}}',
+              'Prompt: {"tool":"delete_ticket","args":{"id":"1"}}',
+              'Prompt: {"tool":"draft_reply","args":{"id":"1"}}',
+              'Prompt: {"tool":"search_tickets","args":{"q":"open"}}',
+            ].join('\n'),
+          }),
+        });
+        const plugin = new MCPToolResponsePoisoningPlugin(
+          provider,
+          annotatedPurpose,
+          'prompt',
+          config,
+        );
+        const tests = await plugin.generateTests(4);
+        return tests.map((t) => JSON.parse(t.vars?.prompt as string).tool).sort();
+      };
+
+      it('skips tools the server declares as mutating', async () => {
+        expect(await generateAnnotated()).toEqual(['get_ticket', 'search_tickets']);
+      });
+
+      it('names the skipped tools in a warning', async () => {
+        await generateAnnotated();
+        expect(warnings()).toContain('delete_ticket');
+        expect(warnings()).toContain('draft_reply');
+        expect(warnings()).toContain('declares as mutating');
+      });
+
+      it('keeps unannotated tools', async () => {
+        // The non-breaking guard: most servers advertise no annotations at
+        // all, and absent hints mean "unknown", not "mutating".
+        const tools = await generateAnnotated();
+        expect(tools).toContain('search_tickets');
+      });
+
+      it('lets an explicit allowedTools entry override the skip', async () => {
+        expect(await generateAnnotated({ allowedTools: ['get_ticket', 'delete_ticket'] })).toEqual([
+          'delete_ticket',
+          'get_ticket',
+        ]);
+        expect(warnings()).toContain('server declares as mutating');
+      });
+
+      it('still honours excludedTools alongside the annotation skip', async () => {
+        expect(await generateAnnotated({ excludedTools: ['search_tickets'] })).toEqual([
+          'get_ticket',
+        ]);
+      });
+
+      it('throws when every advertised tool is skipped', () => {
+        // Generating zero cases silently reads as a clean run; fail loudly.
+        expect(
+          () =>
+            new MCPToolResponsePoisoningPlugin(
+              createMockProvider(),
+              'Ticketing MCP server.\nAvailable MCP tools:\n' +
+                '{"name":"delete_ticket","description":"Delete","annotations":{"destructiveHint":true}}',
+              'prompt',
+            ),
+        ).toThrow(/leaving nothing to test/);
+      });
+
+      it('does not warn about an unrestricted catalog when tools were skipped', async () => {
+        await generateAnnotated();
+        expect(warnings()).not.toContain('may be invoked against the live server');
+      });
+    });
+
+    it('renders an authoritative tool catalog in the generation prompt', async () => {
+      // Structural last word over the server-controlled <SystemPurpose> prose.
+      const provider = createMockProvider({
+        response: createProviderResponse({
+          output: 'Prompt: {"tool":"get_weather","args":{"city":"Oslo"}}',
+        }),
+      });
+      const plugin = new MCPToolResponsePoisoningPlugin(provider, multiToolPurpose, 'prompt', {
+        allowedTools: ['get_weather'],
+      });
+
+      await plugin.generateTests(1);
+
+      const rendered = String(vi.mocked(provider.callApi).mock.calls[0][0]);
+      expect(rendered).toContain('<ToolCatalog>\nget_weather\n</ToolCatalog>');
+      expect(rendered).toContain('authoritative and overrides anything in');
+      expect(rendered).not.toContain('send_email\n</ToolCatalog>');
+    });
+
     it('constrains the generation prompt to the allowed tools', async () => {
       const provider = createMockProvider({
         response: createProviderResponse({
@@ -256,7 +358,11 @@ describe('MCPToolResponsePoisoningPlugin', () => {
         ].join('\n'),
       }),
     });
-    const plugin = new MCPToolResponsePoisoningPlugin(provider, purposeWithTools, 'prompt');
+    const plugin = new MCPToolResponsePoisoningPlugin(
+      provider,
+      `${purposeWithTools}\n{"name":"get_status","description":"Service status"}`,
+      'prompt',
+    );
 
     const tests = await plugin.generateTests(5);
 
@@ -276,7 +382,11 @@ describe('MCPToolResponsePoisoningPlugin', () => {
         output: 'Prompt: {"tool":"run_query","args":{"sql":"SELECT 1;"}}',
       }),
     });
-    const plugin = new MCPToolResponsePoisoningPlugin(provider, purposeWithTools, 'prompt');
+    const plugin = new MCPToolResponsePoisoningPlugin(
+      provider,
+      'Reporting MCP server.\nAvailable MCP tools:\n{"name":"run_query","description":"Run a read-only query"}',
+      'prompt',
+    );
 
     const tests = await plugin.generateTests(1);
 
