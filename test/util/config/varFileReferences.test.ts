@@ -159,6 +159,44 @@ describe('file:// var references in loaded configs', () => {
     ]);
   });
 
+  it('renders env templates in the default test and scenarios with the env of a later config', async () => {
+    const first = writeProject('first', {
+      defaultTest: { vars: { shared: 'file://{{ env.DOC_PATH }}' } },
+      scenarios: [
+        {
+          config: [
+            { vars: { doc: 'file://{{ env.DOC_PATH }}', list: ['file://{{ env.DOC_PATH }}'] } },
+          ],
+          tests: [{ vars: { extra: 'file://{{ env.DOC_PATH }}' } }],
+        },
+      ],
+    });
+    fs.writeFileSync(
+      path.join(first, 'env.json'),
+      JSON.stringify({ env: { DOC_PATH: 'docs/a.txt' }, tests: [] }),
+    );
+
+    const { testSuite } = await resolve({
+      config: [path.join(first, 'promptfooconfig.json'), path.join(first, 'env.json')],
+    });
+
+    // The default test and scenario configs are not read as test rows, so each has its own
+    // path through config loading.
+    const [scenario] = testSuite.scenarios as Scenario[];
+    const defaultTest = testSuite.defaultTest as TestCase;
+    expect(defaultTest.vars).toEqual({ shared: 'file://docs/a.txt' });
+    expect(scenario.config[0].vars).toEqual({
+      doc: 'file://docs/a.txt',
+      list: ['file://docs/a.txt'],
+    });
+    expect((scenario.tests as TestCase[])[0].vars).toEqual({ extra: 'file://docs/a.txt' });
+    for (const vars of [defaultTest.vars, scenario.config[0].vars]) {
+      expect(() =>
+        cliState.withBasePath(first, () => generateVarCombinations(vars ?? {})),
+      ).not.toThrow();
+    }
+  });
+
   it('renders an env template in --tests before locating it from the working directory', async () => {
     const project = writeProject('project', {});
     fs.writeFileSync(

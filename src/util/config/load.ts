@@ -688,12 +688,14 @@ async function prepareCombinedConfig(
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
-  const resolveConfigPath = (basePath: string, reference: string): string => {
-    if (reference.includes('{{')) {
-      reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
-    }
-    return resolveReferenceFromDirectory(basePath, reference);
-  };
+  // The env can come from any of the configs, so templates are rendered with the combined one.
+  const renderReference = (reference: string): string =>
+    reference.includes('{{')
+      ? cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference))
+      : reference;
+
+  const resolveConfigPath = (basePath: string, reference: string): string =>
+    resolveReferenceFromDirectory(basePath, renderReference(reference));
 
   const resolveNestedFileReferences = (basePath: string, value: unknown): unknown => {
     if (typeof value === 'string') {
@@ -731,19 +733,19 @@ async function prepareCombinedConfig(
 
   // In vars, only top-level strings and the members of top-level arrays are file references.
   // Strings nested inside objects are data and stay as written.
-  const resolveVarFileReferences = (basePath: string, vars: Record<string, unknown>) =>
-    Object.fromEntries(
+  const mapVarFileReferences = (
+    vars: Record<string, unknown>,
+    mapReference: (reference: string) => string,
+  ) => {
+    const mapValue = (value: unknown) =>
+      typeof value === 'string' && value.startsWith('file://') ? mapReference(value) : value;
+    return Object.fromEntries(
       Object.entries(vars).map(([name, value]) => [
         name,
-        typeof value === 'string'
-          ? resolveNestedFileReferences(basePath, value)
-          : Array.isArray(value)
-            ? value.map((item) =>
-                typeof item === 'string' ? resolveNestedFileReferences(basePath, item) : item,
-              )
-            : value,
+        Array.isArray(value) ? value.map(mapValue) : mapValue(value),
       ]),
     );
+  };
 
   const suiteBasePath = configSources[0] ? path.resolve(configSources[0].basePath) : undefined;
   const makeTestAbsolute = (basePath: string, test: unknown): unknown => {
@@ -762,20 +764,23 @@ async function prepareCombinedConfig(
     }
     const source = test as TestCase;
     // `file://` vars resolve from the suite directory at run time. Rows authored there keep
-    // their references as written; only rows from another config's directory are pinned.
-    const pinVars = path.resolve(basePath) !== suiteBasePath;
+    // their references relative; only rows from another config's directory are pinned. Env
+    // templates in a reference are rendered either way.
+    const prepareReference =
+      path.resolve(basePath) === suiteBasePath
+        ? renderReference
+        : (reference: string) => resolveConfigPath(basePath, reference);
     // Keep grader IDs unchanged so references can reuse configured providers.
     return {
       ...source,
-      ...(source.vars &&
-        pinVars && {
-          vars:
-            typeof source.vars === 'string'
-              ? resolveConfigPath(basePath, source.vars)
-              : Array.isArray(source.vars)
-                ? source.vars.map((value) => resolveConfigPath(basePath, value))
-                : resolveVarFileReferences(basePath, source.vars),
-        }),
+      ...(source.vars && {
+        vars:
+          typeof source.vars === 'string'
+            ? prepareReference(source.vars)
+            : Array.isArray(source.vars)
+              ? source.vars.map((value) => prepareReference(value))
+              : mapVarFileReferences(source.vars, prepareReference),
+      }),
       ...(typeof source.provider === 'string' &&
         source.provider.startsWith('file://') && {
           provider: resolveConfigPath(basePath, source.provider),

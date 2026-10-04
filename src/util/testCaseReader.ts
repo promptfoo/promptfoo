@@ -552,6 +552,9 @@ async function readTestWithEnv(
   }
 
   if (!loadProviders) {
+    // Env templates in file vars are rendered here, for the default test as for any other
+    // row. The references stay relative; `readTestConfigs` pins the ones that need it.
+    testCase.vars = prepareVarsFileReferences(testCase.vars);
     if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
       testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
     } else if (
