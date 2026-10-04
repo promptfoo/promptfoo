@@ -209,6 +209,14 @@ async function addReadablePaths(
 }
 
 /**
+ * A path as a note shows it. The agent chooses its file names, so any name with more than
+ * plain characters is quoted: it cannot add lines to the diff or end the note early.
+ */
+function quotePath(file: string): string {
+  return /^[\p{L}\p{N} ._/@+~=-]+$/u.test(file) ? file : JSON.stringify(file);
+}
+
+/**
  * Paths in the workspace that Git leaves out of a diff without saying so. Paths use forward
  * slashes, and directories end with one, as in Git's output.
  *
@@ -692,10 +700,23 @@ async function getWorkspaceDiff(
       );
     }
     const newFiles = new Set<string>();
+    // Files in the agent's index that can be neither added nor shown to be gone.
+    const unverified: string[] = [];
     for (const file of ignoredTracked.split('\0').filter(Boolean)) {
       const fullPath = path.resolve(dir, file);
-      if (isInside(dir, fullPath) && (await fs.lstat(fullPath).catch(() => undefined))) {
+      if (!isInside(dir, fullPath)) {
+        continue;
+      }
+      try {
+        await fs.lstat(fullPath);
         newFiles.add(file);
+      } catch (error) {
+        const code = error instanceof Error && 'code' in error ? error.code : undefined;
+        // The file is gone when it or a directory above it no longer exists. Anything else,
+        // such as a directory that cannot be searched, hides whether it is there.
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+          unverified.push(file);
+        }
       }
     }
     const untracked = (await git(['ls-files', '-z', '--others'], { env, signal }))
@@ -715,7 +736,7 @@ async function getWorkspaceDiff(
     if (untracked.length + leftOut.length + reserved.length > 0) {
       const ignored = await git(['check-ignore', '--no-index', '-z', '--stdin'], {
         env: ignoreEnv,
-        input: `${[...untracked, ...leftOut, ...reserved.map((entry) => entry.parent)].join('\0')}\0`,
+        input: `${[...untracked, ...leftOut, ...reserved.flatMap((entry) => [entry.file, entry.parent])].join('\0')}\0`,
         signal,
       }).catch((error: unknown) => {
         if (error instanceof Error && 'code' in error && error.code === 1) {
@@ -729,7 +750,10 @@ async function getWorkspaceDiff(
           newFiles.add(file);
         }
       }
-      reserved = reserved.filter((entry) => !ignoredFiles.has(entry.parent));
+      // A rule can name the reserved path itself, such as `**/.git/`, or a directory above it.
+      reserved = reserved.filter(
+        (entry) => !ignoredFiles.has(entry.file) && !ignoredFiles.has(entry.parent),
+      );
       if (leftOut.some((file) => ignoredFiles.has(file))) {
         // An ignored path is still part of the diff when the cloned commit tracks it or the
         // agent added it to its index. The scratch index holds the cloned commit here.
@@ -737,12 +761,14 @@ async function getWorkspaceDiff(
           ...(await git(['ls-files', '-z', '--cached'], { env, signal })).split('\0'),
           ...ignoredTracked.split('\0'),
         ].filter(Boolean);
+        // What replaced a directory, such as a FIFO, stands for the files that were below it.
         leftOut = leftOut.filter(
           (file) =>
             !ignoredFiles.has(file) ||
-            (file.endsWith('/')
-              ? referenced.some((tracked) => tracked.startsWith(file))
-              : referenced.includes(file)),
+            referenced.some(
+              (tracked) =>
+                tracked === file || tracked.startsWith(file.endsWith('/') ? file : `${file}/`),
+            ),
         );
       }
     }
@@ -787,7 +813,7 @@ async function getWorkspaceDiff(
     reserved = reserved.filter(
       (entry) => !repositories.has(entry.parent) && !newFiles.has(entry.parent),
     );
-    if (skippedPaths || leftOut.length + reserved.length > 0) {
+    if (skippedPaths || leftOut.length + reserved.length + unverified.length > 0) {
       // Tracked files that still differ from the index are the ones `add --update` skipped.
       const notUpdated = skippedPaths
         ? await git(['-c', 'core.fsmonitor=false', 'diff', '--name-only', '-z'], { env, signal })
@@ -802,6 +828,10 @@ async function getWorkspaceDiff(
           ...notUpdated.split('\0').filter(Boolean),
           // An untracked repository is listed as a directory, with a trailing slash.
           ...[...newFiles].filter((file) => !indexed.has(file.replace(/\/$/, ''))),
+          // A file below a directory that is reported as unreadable needs no entry of its own.
+          ...unverified.filter(
+            (file) => !leftOut.some((left) => left.endsWith('/') && file.startsWith(left)),
+          ),
           ...leftOut,
           ...reserved.map((entry) => entry.file),
         ]),
@@ -809,7 +839,9 @@ async function getWorkspaceDiff(
       // Naming the paths keeps a search for a changed file from passing on a partial diff.
       notes.push(
         `[diff incomplete: ${missing.length || 'some'} changed path(s) could not be included` +
-          (missing.length > 0 ? `: ${missing.slice(0, MAX_INCOMPLETE_PATHS).join(', ')}` : '') +
+          (missing.length > 0
+            ? `: ${missing.slice(0, MAX_INCOMPLETE_PATHS).map(quotePath).join(', ')}`
+            : '') +
           (missing.length > MAX_INCOMPLETE_PATHS
             ? `, and ${missing.length - MAX_INCOMPLETE_PATHS} more`
             : '') +
@@ -823,7 +855,7 @@ async function getWorkspaceDiff(
       notes.push(
         `[diff incomplete: the files of ${nested.length} nested repositor` +
           `${nested.length === 1 ? 'y' : 'ies'} are not included: ` +
-          nested.slice(0, MAX_INCOMPLETE_PATHS).join(', ') +
+          nested.slice(0, MAX_INCOMPLETE_PATHS).map(quotePath).join(', ') +
           (nested.length > MAX_INCOMPLETE_PATHS
             ? `, and ${nested.length - MAX_INCOMPLETE_PATHS} more`
             : '') +
