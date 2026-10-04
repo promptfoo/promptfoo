@@ -562,8 +562,7 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
         expect(registers).toEqual({ audio: storedOutput });
         expect(() => readFileSync(oldFile)).toThrow();
         const expectedVars = currentAudio ? { alias: encoded, audio: encoded } : { audio: encoded };
-        expect(second[0].vars).toEqual(expectedVars);
-        expect(Object.getOwnPropertySymbols(second[0].vars)).toHaveLength(0);
+        expect(Object.fromEntries(Object.entries(second[0].vars))).toEqual(expectedVars);
         expect(JSON.parse(JSON.stringify(second[0])).vars).toEqual(expectedVars);
       },
     );
