@@ -6,6 +6,25 @@ import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
 /**
+ * Replaces every Nunjucks template `{{ ... }}` in `value`. A template runs from `{{` to the
+ * next `}}`, so its content may contain `}` but not `}}`. The scan is linear in the length
+ * of the string, including for strings with many unclosed `{{`.
+ */
+function replaceTemplates(value: string, replace: (template: string) => string): string {
+  let result = '';
+  let position = 0;
+  while (true) {
+    const start = value.indexOf('{{', position);
+    const end = start === -1 ? -1 : value.indexOf('}}', start + 2);
+    if (end === -1) {
+      return position === 0 ? value : result + value.slice(position);
+    }
+    result += value.slice(position, start) + replace(value.slice(start, end + 2));
+    position = end + 2;
+  }
+}
+
+/**
  * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
  * This allows env vars to be resolved at provider load time while preserving runtime var templates.
  *
@@ -20,7 +39,7 @@ import type { EnvOverrides } from '../types/env';
  * - {{ vars.x }} - preserved as literal
  * - {{ prompt }} - preserved as literal
  *
- * Implementation: Uses regex to find env templates, delegates to Nunjucks for rendering.
+ * Implementation: Scans for templates, delegates the ones that reference env to Nunjucks.
  * This ensures full Nunjucks feature support while preserving non-env templates.
  *
  * @param obj - The object to process
@@ -62,13 +81,8 @@ export function renderEnvOnlyInObject<T>(
     return templating;
   };
 
-  const renderString = (value: string): string => {
-    if (!value.includes('{{')) {
-      return value;
-    }
-    // Match ALL Nunjucks templates {{ ... }}
-    // The pattern (?:[^}]|\}(?!\}))* matches content that may contain } but not }}
-    return value.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
+  const renderString = (value: string): string =>
+    replaceTemplates(value, (match) => {
       // Only process templates that reference env
       if (!match.match(/\benv\.|env\[/)) {
         return match; // Not an env template, preserve as-is
@@ -103,7 +117,6 @@ export function renderEnvOnlyInObject<T>(
       // Variable doesn't exist and no filter - preserve template for potential runtime resolution
       return match;
     });
-  };
 
   const render = (value: unknown): unknown => {
     if (typeof value === 'string') {

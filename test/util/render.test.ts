@@ -648,6 +648,27 @@ Line 2: {{ vars.test }}`);
       expect(renderEnvOnlyInObject(longString)).toBe(longString);
     });
 
+    it.each([
+      ['{{ env.HOST }}{{ env.HOST }}', 'example.comexample.com'],
+      ['{{ env.HOST }}}', 'example.com}'],
+      ['{{{ env.HOST }}', '{{{ env.HOST }}'],
+      ['{{ vars.a {{ env.HOST }}', '{{ vars.a {{ env.HOST }}'],
+      ['{{ env.HOST } }} and {{ env.HOST }}', '{{ env.HOST } }} and example.com'],
+      ['{{ env.HOST }} then {{ env.HOST', 'example.com then {{ env.HOST'],
+      ['}} {{ env.HOST', '}} {{ env.HOST'],
+    ])('should find template boundaries in %j', async (template, expected) => {
+      mockProcessEnv({ HOST: 'example.com' });
+      expect(renderEnvOnlyInObject(template)).toBe(expected);
+    });
+
+    it('should scan strings with many unclosed templates in linear time', async () => {
+      mockProcessEnv({ HOST: 'example.com' });
+      // A backtracking pattern takes minutes on this input.
+      const unclosed = '{{ env.HOST '.repeat(200_000);
+      expect(renderEnvOnlyInObject(unclosed)).toBe(unclosed);
+      expect(renderEnvOnlyInObject(`{{ env.HOST }}${unclosed}`)).toBe(`example.com${unclosed}`);
+    });
+
     it('should not confuse env in other contexts', async () => {
       mockProcessEnv({ TEST: 'value' });
       // Should not match "environment" or other words containing "env"
