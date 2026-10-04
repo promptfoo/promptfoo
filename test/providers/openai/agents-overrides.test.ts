@@ -269,7 +269,7 @@ describe('OpenAiAgentsProvider execution overrides', () => {
       config: {
         agent: new Agent({ name: 'Root', tools: [delegatedTool] }),
         model: 'evaluated-model',
-        modelSettings: { temperature: 0.2 },
+        modelSettings: { temperature: 0.2, maxTokens: 32 },
       },
     });
 
@@ -281,14 +281,42 @@ describe('OpenAiAgentsProvider execution overrides', () => {
     expect(classifierModel.requests[0].modelSettings).toEqual({ temperature: 0.05 });
     expect(getModel.mock.calls).toEqual([['evaluated-model'], ['evaluated-model']]);
     expect(evaluatedModel.requests.map((request) => request.modelSettings)).toEqual([
-      { temperature: 0.2 },
-      { temperature: 0.2 },
+      { temperature: 0.2, maxTokens: 32 },
+      { temperature: 0.2, maxTokens: 32 },
     ]);
     if (!callback.startsWith('tool-')) {
       expect(childModel.requests).toHaveLength(1);
       expect(childModel.requests[0].modelSettings).toEqual({ temperature: 0.9 });
       expect(child.model).toBe(childModel);
     }
+  });
+
+  it('preserves an independent agent tool that uses the SDK default model', async () => {
+    const evaluatedModel = new ToolCallingModel();
+    const childModel = new HandoffModel();
+    const child = new Agent({ name: 'Child', modelSettings: { temperature: 0.9 } });
+    const getModel = vi.fn((name?: string) =>
+      name === 'evaluated-model' ? evaluatedModel : childModel,
+    );
+    setDefaultModelProvider({ getModel });
+    const provider = new OpenAiAgentsProvider('evaluated-workflow', {
+      config: {
+        agent: new Agent({ name: 'Root', tools: [child.asTool({ toolName: 'delegate' })] }),
+        model: 'evaluated-model',
+        modelSettings: { temperature: 0.2, maxTokens: 32 },
+      },
+    });
+
+    await expect(provider.callApi('Delegate this request.')).resolves.toMatchObject({
+      output: 'Escalated successfully.',
+    });
+    expect(getModel.mock.calls).toEqual([['evaluated-model'], [child.model], ['evaluated-model']]);
+    expect(childModel.requests).toHaveLength(1);
+    expect(childModel.requests[0].modelSettings).toEqual({ temperature: 0.9 });
+    expect(evaluatedModel.requests.map((request) => request.modelSettings)).toEqual([
+      { temperature: 0.2, maxTokens: 32 },
+      { temperature: 0.2, maxTokens: 32 },
+    ]);
   });
 
   it.each([

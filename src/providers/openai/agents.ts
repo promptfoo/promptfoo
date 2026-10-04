@@ -208,17 +208,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
       const mockTools =
         this.agentConfig.executeTools === false || this.agentConfig.executeTools === 'mock';
-      const runnerModelSettings =
-        mockTools && this.executionModelSettings
-          ? snapshotMockModelSettings(this.executionModelSettings)
-          : this.executionModelSettings;
-
-      // Keep Runner defaults for SDK-created agents while the per-run graph below enforces the
-      // provider overrides on explicit initial and handoff agents.
-      const runner = new Runner({
-        ...(this.agentConfig.model ? { model: this.agentConfig.model } : {}),
-        ...(runnerModelSettings ? { modelSettings: runnerModelSettings } : {}),
-      });
+      // Runner defaults propagate into independent Agent.asTool() runs. Apply execution
+      // overrides only to the initial and handoff agents in the per-run graph below.
+      const runner = new Runner({});
 
       if (mockTools) {
         assertNoMockToolOverrides(runOptions.modelSettings, 'run options');

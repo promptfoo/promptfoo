@@ -246,9 +246,7 @@ export async function renderPrompt(
   skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
-  // Reusing vars for another render must not inherit provenance from earlier loads.
-  setLoadedFileMimeTypes(vars);
-  const loadedMimeTypes = new Map<string, string>();
+  const loadedMimeTypes = setLoadedFileMimeTypes(vars);
 
   let basePrompt = prompt.raw;
 

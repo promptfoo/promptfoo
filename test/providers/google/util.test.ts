@@ -2158,7 +2158,7 @@ describe('util', () => {
           (brand) => {
             const media = Buffer.from(`....ftyp${brand}........`).toString('base64');
             const vars = { media };
-            // The real renderer supplies this same value-bound, nonenumerable carrier.
+            // The real renderer supplies this same value-bound Symbol carrier.
             setLoadedFileMimeTypes(vars, new Map([[media, 'audio/mp4']]));
 
             const { contents } = geminiFormatAndSystemInstructions(media, vars);
@@ -2182,7 +2182,7 @@ describe('util', () => {
           expect(contents[0].parts).toEqual([
             { inlineData: { mimeType: 'audio/mp4', data: audio } },
           ]);
-          expect(vars).toEqual({ audio, alias: audio });
+          expect(Object.keys(vars)).toEqual(['audio', 'alias']);
           expect(JSON.parse(JSON.stringify(vars))).toEqual({ audio, alias: audio });
         });
 

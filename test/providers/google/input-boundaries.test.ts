@@ -174,8 +174,7 @@ describe('Google media and tool-policy input boundaries', () => {
         expect(rendered).toBe(encoded);
         expect(Object.keys(vars)).toEqual(['alias', 'audio']);
         expect(JSON.stringify(vars)).toBe(JSON.stringify({ alias: encoded, audio: encoded }));
-        expect({ ...vars }).toEqual({ alias: encoded, audio: encoded });
-        expect(Object.getOwnPropertySymbols({ ...vars })).toHaveLength(0);
+        expect(JSON.parse(JSON.stringify({ ...vars }))).toEqual({ alias: encoded, audio: encoded });
 
         const response = await withCacheEnabled(false, () =>
           provider.callApi(rendered, { vars, prompt }),
@@ -311,7 +310,7 @@ describe('Google media and tool-policy input boundaries', () => {
       const provider = await load(route);
       const rendered = await renderPrompt(prompt, vars, {}, provider);
       expect(rendered).toBe(encoded);
-      expect(vars).toEqual({ audio: encoded, alias: encoded });
+      expect(JSON.parse(JSON.stringify(vars))).toEqual({ audio: encoded, alias: encoded });
       expect(originalVars).toEqual({ audio: `file://${file}`, alias: '{{audio}}' });
 
       const response = await withCacheEnabled(false, () =>
@@ -327,7 +326,7 @@ describe('Google media and tool-policy input boundaries', () => {
         ],
         generationConfig: {},
       });
-      expect(vars).toEqual({ audio: encoded, alias: encoded });
+      expect(JSON.parse(JSON.stringify(vars))).toEqual({ audio: encoded, alias: encoded });
       expect(originalVars).toEqual({ audio: `file://${file}`, alias: '{{audio}}' });
     });
 
@@ -570,8 +569,9 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
     );
   });
 
-  it('does not retain loaded MIME across a new vars object or a new render', async () => {
+  it.each(['isom', 'mp42'])('retains loaded %s MIME across copies and rerenders', async (brand) => {
     const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+    bytes.write(brand, 8, 'ascii');
     const file = path.join(temporaryDirectory, 'recording.m4a');
     await writeFile(file, bytes);
     const encoded = bytes.toString('base64');
@@ -582,12 +582,40 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
     expect(geminiFormatAndSystemInstructions(encoded, vars).contents[0].parts).toEqual([
       { inlineData: { mimeType: 'audio/mp4', data: encoded } },
     ]);
-    expect(geminiFormatAndSystemInstructions(encoded, { ...vars }).contents[0].parts).toEqual([
+    expect(
+      geminiFormatAndSystemInstructions(encoded, { audio: encoded }).contents[0].parts,
+    ).toEqual([{ inlineData: { mimeType: 'video/mp4', data: encoded } }]);
+    const copied = { ...{ ...vars } };
+    const rendered = await renderPrompt(prompt, copied, {}, provider);
+    expect(rendered).toBe(encoded);
+    expect(JSON.parse(JSON.stringify(copied))).toEqual({ audio: encoded });
+    const response = await withCacheEnabled(false, () =>
+      provider.callApi(rendered, { vars: copied, prompt }),
+    );
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('ok');
+    expect(requestBody('Studio').contents[0].parts).toEqual([
+      { inlineData: { mimeType: 'audio/mp4', data: encoded } },
+    ]);
+  });
+
+  it('prunes replaced MIME values on rerender without changing sibling copies', async () => {
+    const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+    const file = path.join(temporaryDirectory, 'recording.m4a');
+    await writeFile(file, bytes);
+    const encoded = bytes.toString('base64');
+    const vars = { audio: `file://${file}` };
+    const prompt = { raw: '{{audio}}', label: 'reuse' };
+    const provider = await load('Studio');
+    await renderPrompt(prompt, vars, {}, provider);
+    const copied = { ...vars, audio: 'Replacement text' };
+    await renderPrompt(prompt, copied, {}, provider);
+    copied.audio = encoded;
+    expect(geminiFormatAndSystemInstructions(encoded, copied).contents[0].parts).toEqual([
       { inlineData: { mimeType: 'video/mp4', data: encoded } },
     ]);
-    await renderPrompt(prompt, vars, {}, provider);
     expect(geminiFormatAndSystemInstructions(encoded, vars).contents[0].parts).toEqual([
-      { inlineData: { mimeType: 'video/mp4', data: encoded } },
+      { inlineData: { mimeType: 'audio/mp4', data: encoded } },
     ]);
   });
 

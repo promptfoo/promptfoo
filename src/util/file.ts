@@ -28,20 +28,35 @@ type VarsWithFileMimeTypes = Record<string, unknown> & {
   [loadedFileMimeTypes]?: ReadonlyMap<string, string>;
 };
 
-/** Keep loaded-file provenance on the current vars object, outside serialized vars. */
+/** Preserve loaded-file provenance through object copies, outside serialized vars. */
 export function setLoadedFileMimeTypes(
   vars: Record<string, unknown>,
   mimeTypes?: ReadonlyMap<string, string>,
-): void {
-  if (mimeTypes) {
+): Map<string, string> {
+  const current = (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  const next = new Map(mimeTypes);
+  if (!mimeTypes) {
+    // Rerenders keep only unchanged loaded values. Each render owns a fresh map so
+    // pruning or loading another file cannot mutate a sibling copy of vars.
+    for (const value of Object.values(vars)) {
+      if (typeof value === 'string') {
+        const mimeType = current?.get(value);
+        if (mimeType) {
+          next.set(value, mimeType);
+        }
+      }
+    }
+  }
+  if (next.size > 0) {
     Object.defineProperty(vars, loadedFileMimeTypes, {
-      value: mimeTypes,
-      enumerable: false,
+      value: next,
+      enumerable: true,
       configurable: true,
     });
   } else {
     delete (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
   }
+  return next;
 }
 
 export function getLoadedFileMimeType(
