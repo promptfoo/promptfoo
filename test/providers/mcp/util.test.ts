@@ -125,8 +125,10 @@ describe('sanitizeMcpToolData', () => {
     Object.defineProperty(args, 'unreadable', {
       enumerable: true,
       get() {
-        // An error can quote the data it was thrown for.
-        throw new Error(`cannot read ${args.apiKey}`);
+        // An error can carry the data it was thrown for, in its message or in its name.
+        const error = new Error(`cannot read ${args.apiKey}`);
+        error.name = args.apiKey;
+        throw error;
       },
     });
     const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
@@ -134,7 +136,7 @@ describe('sanitizeMcpToolData', () => {
     try {
       expect(sanitizeMcpToolData(args)).toBe(omitted);
       expect(debug).toHaveBeenCalledWith('[MCP] Tool data could not be sanitized and is omitted', {
-        errorType: 'Error',
+        reason: 'could not be read',
       });
       expect(JSON.stringify(debug.mock.calls)).not.toContain('tool-secret-value');
     } finally {
