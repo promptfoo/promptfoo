@@ -159,7 +159,7 @@ describe('scoped AWS SDK authentication', () => {
     },
   );
 
-  it.each(['file', 'suite'] as const)(
+  it.each(['file', 'suite', 'provider'] as const)(
     'does not restore a host bearer cleared by the %s environment',
     async (scope) => {
       mockProcessEnv({ ...keys('host'), AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
@@ -167,7 +167,9 @@ describe('scoped AWS SDK authentication', () => {
         .spyOn(NodeHttpHandler.prototype, 'handle')
         .mockRejectedValue(new Error('Unexpected transport request'));
       const run = async () => {
-        const provider = new AwsBedrockCompletionProvider('fixture');
+        const provider = new AwsBedrockCompletionProvider('fixture', {
+          env: scope === 'provider' ? { AWS_BEARER_TOKEN_BEDROCK: '' } : undefined,
+        });
         const client = await provider.getBedrockInstance();
         try {
           await expect(
@@ -185,9 +187,49 @@ describe('scoped AWS SDK authentication', () => {
       const env = { AWS_BEARER_TOKEN_BEDROCK: '' };
       await (scope === 'file'
         ? cliState.withEnvFileOverrides(env, run)
-        : cliState.withEnv(env, run));
+        : scope === 'suite'
+          ? cliState.withEnv(env, run)
+          : run());
     },
   );
+
+  it.each(
+    ['host', 'file', 'suite'].flatMap((lower) =>
+      ['unset', 'empty', 'configured'].map((upper) => ({ lower, upper })),
+    ),
+  )('uses $upper provider bearer selection above $lower credentials', async ({ lower, upper }) => {
+    mockProcessEnv({ ...keys('host'), AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
+    const handle = vi
+      .spyOn(NodeHttpHandler.prototype, 'handle')
+      .mockResolvedValue({ response: { statusCode: 200, headers: {}, body: Buffer.from('{}') } });
+    const run = async () => {
+      const client = await new AwsBedrockCompletionProvider('fixture', {
+        env: upper === 'unset' ? undefined : { AWS_BEARER_TOKEN_BEDROCK: '' },
+        config: upper === 'configured' ? { apiKey: 'configured-bearer' } : {},
+      }).getBedrockInstance();
+      try {
+        const request = client.invokeModel({ modelId: 'fixture', body: Buffer.from('{}') });
+        if (upper === 'empty') {
+          await expect(request).rejects.toThrow('token');
+          expect(handle).not.toHaveBeenCalled();
+        } else {
+          await request;
+          expect(new Headers(handle.mock.calls[0][0].headers).get('authorization')).toBe(
+            `Bearer ${upper === 'configured' ? 'configured' : lower}-bearer`,
+          );
+        }
+      } finally {
+        client.destroy();
+      }
+    };
+    const env = { AWS_BEARER_TOKEN_BEDROCK: `${lower}-bearer` };
+    await (lower === 'file'
+      ? cliState.withEnvFileOverrides(env, run)
+      : lower === 'suite'
+        ? cliState.withEnv(env, run)
+        : run());
+    expect(process.env.AWS_BEARER_TOKEN_BEDROCK).toBe('host-bearer');
+  });
 
   it.each(['config-keys', 'config-api-key', 'scoped-keys', 'scoped-profile', 'harmless-empty'])(
     'preserves %s authentication with an empty scoped bearer placeholder',

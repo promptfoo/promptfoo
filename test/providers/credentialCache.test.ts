@@ -218,6 +218,38 @@ describe('scoped SDK response cache compatibility', () => {
     expect(await key('fixture-one')).not.toBe(await key('fixture-two'));
   });
 
+  it.each(['host', 'file', 'suite'])(
+    'isolates a provider bearer mask from inherited %s bearer responses',
+    async (scope) => {
+      restore = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
+      const run = () => {
+        const key = (env: { AWS_BEARER_TOKEN_BEDROCK?: string }, config = {}) => {
+          const provider = new AwsBedrockCompletionProvider('fixture', { env, config });
+          return createBedrockCacheKeyHash({
+            config,
+            params: { prompt: 'same request' },
+            region: 'us-east-1',
+            cacheNamespace: Reflect.get(provider, 'responseCacheNamespace'),
+          });
+        };
+        expect(key({ AWS_BEARER_TOKEN_BEDROCK: '' })).not.toBe(key({}));
+        expect(key({ AWS_BEARER_TOKEN_BEDROCK: '' })).toBe(key({ AWS_BEARER_TOKEN_BEDROCK: '' }));
+        for (const config of [
+          { apiKey: 'configured-bearer' },
+          { accessKeyId: 'configured-access', secretAccessKey: 'configured-secret' },
+        ]) {
+          expect(key({ AWS_BEARER_TOKEN_BEDROCK: '' }, config)).toBe(key({}, config));
+        }
+      };
+      const env = { AWS_BEARER_TOKEN_BEDROCK: 'scoped-bearer' };
+      await (scope === 'file'
+        ? cliState.withEnvFileOverrides(env, run)
+        : scope === 'suite'
+          ? cliState.withEnv(env, run)
+          : run());
+    },
+  );
+
   it('invalidates same-path Google ADC and AWS profile caches after file replacement', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-credential-cache-'));
     const filename = path.join(dir, 'credentials');

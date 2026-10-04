@@ -150,7 +150,12 @@ export abstract class AwsBedrockGenericProvider {
         ? undefined
         : getOpaqueCredentialCacheNamespace(bearer);
     }
-    return getAwsCredentialCacheNamespace(this.config, this.env);
+    const namespace = getAwsCredentialCacheNamespace(this.config, this.env);
+    // A provider-level empty value masks a lower bearer identity. Keep that
+    // selection separate even when IAM discovery otherwise uses the legacy key.
+    return bearer === '' && getEnvString('AWS_BEARER_TOKEN_BEDROCK')
+      ? `bedrock-bearer-cleared:${namespace ?? 'default'}`
+      : namespace;
   }
   modelName: string;
   env?: EnvOverrides;
@@ -199,8 +204,7 @@ export abstract class AwsBedrockGenericProvider {
   protected getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
-      this.env?.AWS_BEARER_TOKEN_BEDROCK ||
-      getEnvString('AWS_BEARER_TOKEN_BEDROCK')
+      (this.env?.AWS_BEARER_TOKEN_BEDROCK ?? getEnvString('AWS_BEARER_TOKEN_BEDROCK'))
     );
   }
 
@@ -252,10 +256,7 @@ export abstract class AwsBedrockGenericProvider {
       ...(profile === undefined ? {} : { profile }),
       // Explicitly represent an invocation's cleared bearer token so SDK
       // discovery cannot restore the host token. Existing SigV4 paths still win.
-      ...(!credentials &&
-      !apiKey &&
-      getEnvString('AWS_BEARER_TOKEN_BEDROCK') === '' &&
-      process.env.AWS_BEARER_TOKEN_BEDROCK
+      ...(!credentials && apiKey === '' && process.env.AWS_BEARER_TOKEN_BEDROCK
         ? { token: { token: '' } }
         : {}),
       ...(credentials
