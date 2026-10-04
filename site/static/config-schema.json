@@ -3000,6 +3000,9 @@
         "watch": {
           "type": "boolean"
         },
+        "safeMode": {
+          "type": "boolean"
+        },
         "filterErrorsOnly": {
           "type": "string"
         },
