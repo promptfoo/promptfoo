@@ -83,6 +83,8 @@ Numeric returns, `score`, and all values in `namedScores` and `namedScoreWeights
 
 A `componentResults` array must contain a valid grading result at every index; sparse arrays are rejected.
 
+Results from custom graders and scoring functions also accept a few shapes that earlier releases recorded: a named score that is a boolean, `null`, or a numeric string is recorded as its number (`true` is 1; `false` and `null` are 0), and a nested component result may omit `reason` and `score`, which then follows `pass`.
+
 ## Multiline functions
 
 Javascript assertions support multiline strings:

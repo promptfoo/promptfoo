@@ -1281,6 +1281,8 @@ GradingResult is an object that represents the result of grading a test case. It
 
 `namedScores`, `namedScoreWeights`, and `componentResults` may be omitted or `null` to indicate no values.
 
+Results from custom graders and scoring functions also accept a few shapes that earlier releases recorded: a named score that is a boolean, `null`, or a numeric string is recorded as its number (`true` is 1; `false` and `null` are 0), and a nested component result may omit `reason` and `score`, which then follows `pass`.
+
 ```typescript
 interface ResultSuggestion {
   type: string;
