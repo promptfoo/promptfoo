@@ -394,7 +394,7 @@ promptfoo eval --filter-metadata tags=ai
 promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
 
 # Match a literal comma in a metadata value
-promptfoo eval --filter-metadata category=math,science
+promptfoo eval --filter-metadata tags=global,warming
 ```
 
 Each value uses case-sensitive literal substring matching, including for array metadata. Commas, backslashes, whitespace, and additional equals signs are part of the value; leading, trailing, or consecutive commas are valid. Repeated flags use AND even for the same key. Quote values as needed for your shell.
