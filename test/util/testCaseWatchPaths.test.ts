@@ -7,11 +7,6 @@ import { resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
-/**
- * These cover the paths watch mode needs to observe. The watcher previously duplicated
- * the loader's resolution rules and drifted from them, so each case here pins one rule
- * that the loader already applies in readTests()/loadTestsFromGlob().
- */
 describe('resolveTestsWatchPaths', () => {
   let base: string;
 
@@ -64,15 +59,10 @@ describe('resolveTestsWatchPaths', () => {
   });
 
   it("never watches a glob's parent directory", () => {
-    // chokidar watches a directory recursively, and doEval reruns the whole evaluation
-    // on any `change` beneath it. Watching the parent would therefore rerun on every
-    // unrelated edit in the tree -- including the run writing its own output file,
-    // which reruns forever. It also buys nothing: a newly added file emits `add`, and
-    // the watcher only handles `change`.
+    // Watching a parent would rerun on unrelated changes, including eval output.
     expect(resolve('file://tests/*.yaml' as TestSuiteConfig['tests'])).not.toContain(
       path.join(base, 'tests'),
     );
-    // The worst shape: a pattern anchored at the config directory itself.
     expect(resolve('file://*.yaml' as TestSuiteConfig['tests'])).not.toContain(base);
     expect(resolve('file://**/*.yaml' as TestSuiteConfig['tests'])).not.toContain(base);
   });
@@ -110,7 +100,7 @@ describe('resolveTestsWatchPaths', () => {
     // invoking the generator, so editing them changes the generated cases.
     const watched = resolve({
       path: 'file://gen.py:make',
-      config: { data: 'file://dataset.yaml' },
+      config: { nested: { data: ['file://dataset.yaml'] } },
     } as unknown as TestSuiteConfig['tests']);
     expect(watched).toContain(path.join(base, 'gen.py'));
     expect(watched).toContain(path.join(base, 'dataset.yaml'));
@@ -130,7 +120,6 @@ describe('resolveTestsWatchPaths', () => {
   });
 
   it('returns the literal path when a reference matches nothing yet', () => {
-    // Creating the file later should still trigger a rerun.
     expect(resolve('file://not-created-yet.yaml' as TestSuiteConfig['tests'])).toEqual([
       path.join(base, 'not-created-yet.yaml'),
     ]);
@@ -163,6 +152,69 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'nested/cases.jsonl'));
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
+
+  it.each(['yaml', 'json', 'jsonl'])(
+    'watches bare vars files from nested %s rows using the loader base',
+    (extension) => {
+      const file = path.join(base, `nested/vars-cases.${extension}`);
+      const row = { vars: ['one.yaml', 'two.yaml'], provider: 'file://provider.yaml' };
+      fs.writeFileSync(
+        file,
+        extension === 'yaml'
+          ? '- vars: [one.yaml, two.yaml]\n  provider: file://provider.yaml\n'
+          : JSON.stringify(extension === 'json' ? [row] : row),
+      );
+      const source = `nested/vars-cases.${extension}`;
+      const arrayPaths = resolve([source]);
+      expect(arrayPaths).toEqual(
+        expect.arrayContaining([
+          file,
+          path.join(base, 'nested/one.yaml'),
+          path.join(base, 'nested/two.yaml'),
+          path.join(base, 'provider.yaml'),
+        ]),
+      );
+      expect(arrayPaths).not.toContain(path.join(base, 'nested/provider.yaml'));
+      const scalarBase = extension === 'yaml' ? path.join(base, 'nested') : base;
+      expect(resolve(source)).toContain(path.join(scalarBase, 'one.yaml'));
+      expect(resolve(`nested/vars-cases*.${extension}`)).toContain(
+        path.join(base, 'nested/one.yaml'),
+      );
+    },
+  );
+
+  it.each(['yaml', 'json', 'jsonl'])(
+    'watches row-provider scripts beside %s tests without moving vars or provider config files',
+    (extension) => {
+      const file = path.join(base, `nested/provider-cases.${extension}`);
+      const rows = [
+        { vars: { doc: 'file://provider.py:call_api' }, provider: 'file://provider.py:call_api' },
+        { vars: {}, provider: { id: 'file://other.py:call_api' } },
+        { vars: {}, provider: 'file://provider.yaml' },
+      ];
+      fs.writeFileSync(
+        file,
+        extension === 'jsonl'
+          ? rows.map((row) => JSON.stringify(row)).join('\n')
+          : JSON.stringify(rows),
+      );
+      const source = `nested/provider-cases.${extension}`;
+      const watched = resolve([source]);
+      expect(watched).toEqual(
+        expect.arrayContaining([
+          file,
+          path.join(base, 'provider.py'),
+          path.join(base, 'nested/provider.py'),
+          path.join(base, 'nested/other.py'),
+          path.join(base, 'provider.yaml'),
+        ]),
+      );
+      expect(watched).not.toContain(path.join(base, 'other.py'));
+      expect(watched).not.toContain(path.join(base, 'nested/provider.yaml'));
+      const scalarBase = extension === 'yaml' ? path.join(base, 'nested') : base;
+      expect(resolve(source)).toContain(path.join(scalarBase, 'other.py'));
+    },
+  );
 
   it('tolerates a self-referential generator config', () => {
     // A YAML anchor produces a cyclic object, which naive recursion would follow until
@@ -205,6 +257,25 @@ describe('resolveTestsWatchPaths', () => {
   it('still handles the vars mapping form', () => {
     const watched = resolve([{ vars: { data: 'file://vars.csv' } }] as TestSuiteConfig['tests']);
     expect(watched).toEqual([path.join(base, 'vars.csv')]);
+  });
+
+  it('watches every reference of an array-valued var', () => {
+    // Each array string becomes a separate rendered case.
+    const watched = resolve([
+      { vars: { doc: ['file://tests/a.yaml', 'file://tests/b.yaml'] } },
+    ] as unknown as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'tests/a.yaml'));
+    expect(watched).toContain(path.join(base, 'tests/b.yaml'));
+  });
+
+  it.each([
+    { data: { path: 'file://vars.csv' } },
+    { data: [{ path: 'file://vars.csv' }] },
+    { data: [42, 'file://vars.csv'] },
+    { data: [null, 'file://vars.csv'] },
+    { data: [{ title: 'literal' }, 'file://vars.csv'] },
+  ])('ignores file-like strings inside literal var objects: %j', (vars) => {
+    expect(resolve([{ vars }] as TestSuiteConfig['tests'])).toEqual([]);
   });
 
   it('ignores remote references', () => {

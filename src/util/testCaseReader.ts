@@ -512,21 +512,44 @@ async function readTestWithEnv(
   isDefaultTest: boolean,
   env: EnvOverrides | undefined,
   loadProviders = true,
+  // Bare vars-file references and providers in imported rows use the tests file's directory.
+  sourceBasePath = basePath,
 ): Promise<TestCase> {
   if (typeof test === 'object' && isRemoteTestCase(test)) {
     return test as TestCase;
   }
   let testCase: TestCase;
-  let effectiveBasePath = basePath;
+  let effectiveBasePath = sourceBasePath;
 
   if (typeof test === 'string') {
-    const testFilePath = path.resolve(basePath, test);
+    const testFilePath = path.resolve(sourceBasePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
-    testCase = await loadTestWithVars(test, basePath);
+    testCase = await loadTestWithVars(test, sourceBasePath);
+  }
+
+  const providerId =
+    typeof testCase.provider === 'string' ? testCase.provider : testCase.provider?.id;
+  // Provider construction is deferred until after parsing. Keep the source directory
+  // in replayable rows without rewriting bare provider IDs.
+  if (
+    effectiveBasePath !== basePath &&
+    typeof providerId === 'string' &&
+    !isApiProvider(testCase.provider)
+  ) {
+    testCase.metadata = {
+      ...testCase.metadata,
+      __promptfoo: {
+        ...testCase.metadata?.__promptfoo,
+        providerBasePath: path.resolve(effectiveBasePath),
+      },
+    };
+  }
+  if (typeof testCase.metadata?.__promptfoo?.providerBasePath === 'string') {
+    effectiveBasePath = testCase.metadata.__promptfoo.providerBasePath;
   }
 
   if (!loadProviders) {
@@ -546,21 +569,24 @@ async function readTestWithEnv(
   }
 
   if (loadProviders && testCase.provider && typeof testCase.provider !== 'function') {
-    // Load provider - resolve paths relative to the test case's location
-    if (typeof testCase.provider === 'string') {
+    // Inherit the suite environment without turning it into an explicit override
+    // of defaults in a provider file. Resolve paths relative to the test case.
+    const provider = testCase.provider;
+    if (typeof provider === 'string') {
       testCase.provider = trackProvider(
-        await loadApiProvider(testCase.provider, {
-          basePath: effectiveBasePath,
-          env,
-        }),
+        await cliState.withEnv(env, () =>
+          loadApiProvider(provider, { basePath: effectiveBasePath }),
+        ),
       );
-    } else if (typeof testCase.provider.id === 'string') {
+    } else if (typeof provider.id === 'string') {
+      const providerPath = provider.id;
       testCase.provider = trackProvider(
-        await loadApiProvider(testCase.provider.id, {
-          options: testCase.provider as ProviderOptions,
-          basePath: effectiveBasePath,
-          env,
-        }),
+        await cliState.withEnv(env, () =>
+          loadApiProvider(providerPath, {
+            options: provider as ProviderOptions,
+            basePath: effectiveBasePath,
+          }),
+        ),
       );
     }
   }
@@ -714,7 +740,16 @@ async function loadTestsFromGlobWithEnv(
         testCases = [testCases];
       }
       for (const testCase of testCases) {
-        ret.push(await readTestWithEnv(testCase, basePath, false, env, loadProviders));
+        ret.push(
+          await readTestWithEnv(
+            testCase,
+            basePath,
+            false,
+            env,
+            loadProviders,
+            path.dirname(testFile),
+          ),
+        );
       }
     }
   }
@@ -905,14 +940,7 @@ function hasGlobMagic(reference: string): boolean {
   return hasMagic(reference, { windowsPathsNoEscape: true, magicalBraces: true });
 }
 
-/**
- * Resolve a single `tests` string reference to the file paths the loader will read.
- *
- * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
- * chokidar v5 does not expand glob patterns itself. Only concrete files are returned:
- * watching a pattern's parent directory instead would rerun the evaluation on every
- * unrelated edit beneath it, including the run's own output file.
- */
+/** Expand test references into files; watching parent directories causes unrelated reruns. */
 function resolveTestsFileReference(reference: string, basePath: string): string[] {
   reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
@@ -951,7 +979,11 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
  * unreadable file is left to the loader to report, since this runs only to decide what
  * to watch.
  */
-function collectNestedFileReferences(testsFile: string, basePath: string): string[] {
+function collectNestedFileReferences(
+  testsFile: string,
+  basePath: string,
+  varsBasePath: string,
+): string[] {
   const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
   if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
     return [];
@@ -964,19 +996,37 @@ function collectNestedFileReferences(testsFile: string, basePath: string): strin
         : ext === 'jsonl'
           ? parseJsonlLines(raw, testsFile)
           : loadYaml(raw);
-    return collectConfigFileReferences(parsed, basePath);
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    const varsFiles = rows.flatMap((row) =>
+      row && (typeof row.vars === 'string' || Array.isArray(row.vars))
+        ? resolveTestsWatchPaths([{ vars: row.vars }], varsBasePath)
+        : [],
+    );
+    // Script providers use the row's directory; provider config files and inline
+    // vars still use the config directory. Rewrite only the script ID for collection.
+    const scopedRows = rows.map((row) => {
+      const provider = row?.provider;
+      const id = typeof provider === 'string' ? provider : provider?.id;
+      if (typeof id !== 'string' || !id.startsWith('file://')) {
+        return row;
+      }
+      const script = stripFunctionSuffix(renderEnvOnlyInObject(id).slice('file://'.length));
+      if (!script.endsWith('.py') && !isJavascriptFile(script)) {
+        return row;
+      }
+      const resolvedId = resolveVarsFileReferences(id, varsBasePath);
+      return {
+        ...row,
+        provider: typeof provider === 'string' ? resolvedId : { ...provider, id: resolvedId },
+      };
+    });
+    return [...collectConfigFileReferences(scopedRows, basePath), ...varsFiles];
   } catch {
     return [];
   }
 }
 
-/**
- * Collect `file://` references nested anywhere inside a parsed value.
- *
- * Used for a test generator's `config` object, which `readStandaloneTestsFile` passes
- * through `maybeLoadConfigFromExternalFile` before invoking the generator, and for the
- * contents of a declarative tests file.
- */
+/** Collect nested references that the config loader resolves before evaluation. */
 function collectConfigFileReferences(
   value: unknown,
   basePath: string,
@@ -988,8 +1038,7 @@ function collectConfigFileReferences(
   if (typeof value !== 'object' || value === null) {
     return [];
   }
-  // A YAML anchor can make a config self-referential, which would recurse forever.
-  // Visiting each node once also keeps a widely shared anchor from being re-expanded.
+  // YAML anchors can introduce cycles or shared objects.
   if (seen.has(value)) {
     return [];
   }
@@ -998,16 +1047,7 @@ function collectConfigFileReferences(
   return children.flatMap((item) => collectConfigFileReferences(item, basePath, seen));
 }
 
-/**
- * Resolve the filesystem paths that a `tests` config reads, for watch mode.
- *
- * `readTests` accepts a bare file reference, a test-generator object, or an array of
- * either plus inline test cases. This mirrors that resolution so the watcher and the
- * loader agree on which files feed an evaluation, rather than duplicating the rules.
- *
- * Must be called with the raw `tests` value from the config file. `combineConfigs`
- * expands references into concrete test cases and discards the original reference.
- */
+/** Resolve watch paths from raw `tests`, before combineConfigs expands its references. */
 export function resolveTestsWatchPaths(
   tests: TestSuiteConfig['tests'],
   basePath: string = cliState.basePath || '',
@@ -1022,9 +1062,19 @@ export function resolveTestsWatchPaths(
       // A tests file may itself point at more files, e.g. a case with
       // `vars: {data: file://vars.yaml}`. The loader reads those before the resolved
       // config is built, so collect them here as well.
+      const source = renderEnvOnlyInObject(entry).replace(/^file:\/\//, '');
+      const useSourceDirectory =
+        Array.isArray(tests) ||
+        source.endsWith('yaml') ||
+        source.endsWith('yml') ||
+        (hasGlobMagic(source) && !fs.existsSync(path.resolve(basePath, source)));
       return resolveTestsFileReference(entry, basePath).flatMap((file) => [
         file,
-        ...collectNestedFileReferences(file, basePath),
+        ...collectNestedFileReferences(
+          file,
+          basePath,
+          useSourceDirectory ? path.dirname(file) : basePath,
+        ),
       ]);
     }
     if (!entry || typeof entry !== 'object') {
@@ -1037,21 +1087,21 @@ export function resolveTestsWatchPaths(
       ];
     }
     if ('vars' in entry && entry.vars) {
-      // `vars` may be a file reference, or a list of them, rather than a mapping, e.g.
-      // `{ vars: 'vars/*.yaml' }`. loadTestWithVars() hands both forms straight to
-      // readTestFiles(), so they carry no file:// scheme and resolve as written.
+      // Vars-file references support globs without a file:// prefix.
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
           typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
         );
       }
-      // A mapping: only file:// values are file references, the rest are literal vars.
-      return Object.values(entry.vars).flatMap((value) =>
-        typeof value === 'string' && value.startsWith('file://')
-          ? resolveTestsFileReference(value, basePath)
-          : [],
-      );
+      // Arrays starting with non-strings are literal values, as in generateVarCombinations.
+      return Object.values(entry.vars)
+        .flatMap((value) => (Array.isArray(value) && typeof value[0] !== 'string' ? [] : value))
+        .flatMap((value) =>
+          typeof value === 'string' && value.startsWith('file://')
+            ? resolveTestsFileReference(value, basePath)
+            : [],
+        );
     }
     return [];
   });

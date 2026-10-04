@@ -6,7 +6,7 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
+permissions: &read-only-permissions
   contents: read
 
 concurrency:
@@ -70,7 +70,7 @@ jobs:
     # Cold-cache Node 26 installs can approach 20m before the test phase starts, so leave room for the test body.
     timeout-minutes: 40
     runs-on: ${{ matrix.os }}
-    permissions:
+    permissions: &test-reporting-permissions
       contents: read
       checks: write
       id-token: write # Required for OIDC authentication with Codecov
@@ -79,7 +79,8 @@ jobs:
       matrix: ${{ fromJSON(needs.ci-config.outputs.test-matrix) }}
 
     steps:
-      - name: Checkout repo
+      - &checkout-two-commits
+        name: Checkout repo
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 2
@@ -91,11 +92,15 @@ jobs:
           # Keep the matrix label at 22.22 for stable check names, but install exactly
           # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
-          cache: 'npm'
+          # Windows already caches node_modules below; compressing npm's download cache
+          # again can stall post-job cleanup long after the tests finish.
+          cache: ${{ runner.os != 'Windows' && 'npm' || '' }}
+          package-manager-cache: false
 
-      - name: Use Python 3.14
+      - &use-python-3-14
+        name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
+        with: &python-3-14-8
           python-version: 3.14.8
 
       # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
@@ -113,20 +118,17 @@ jobs:
           path: node_modules
           key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
 
-      - name: Use npm 11
+      - &use-npm-11
+        name: Use npm 11
         run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
 
-      - name: Install Dependencies (Node 26)
-        if: steps.cache-node-modules.outputs.cache-hit != 'true' && matrix.node == '26.x'
+      - name: Install Dependencies${{ matrix.node == '26.x' && ' (Node 26)' || '' }}
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         # Node 26 hosted installs stall when lifecycle scripts run during npm ci.
-        # Install the tree without scripts, then rebuild the native addon tests need.
+        # Keep its final rebuild command: Windows PowerShell reports the last native exit code.
         run: |
-          npm ci --ignore-scripts --registry=https://registry.npmjs.org/
-          npm rebuild better-sqlite3
-
-      - name: Install Dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true' && matrix.node != '26.x'
-        run: npm ci --registry=https://registry.npmjs.org/
+          npm ci ${{ matrix.node == '26.x' && '--ignore-scripts' || '' }} --registry=https://registry.npmjs.org/
+          ${{ matrix.node == '26.x' && 'npm rebuild better-sqlite3' || '' }}
 
       - name: Test
         # Treat a post-run forks-worker crash (all tests already passed, then the
@@ -149,6 +151,8 @@ jobs:
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
+        # Authentication can fail before fail_ci_if_error applies; uploads are informational.
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage/coverage-final.json
@@ -174,9 +178,10 @@ jobs:
       matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}
 
     steps:
-      - name: Checkout repo
+      - &checkout-repo-read-only
+        name: Checkout repo
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
+        with: &no-persisted-credentials
           persist-credentials: false
 
       - name: Use Node ${{ matrix.node }}
@@ -187,29 +192,22 @@ jobs:
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
           cache: 'npm'
 
-      - name: Use npm 11
-        run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - *use-npm-11
 
       - name: Install Dependencies
         # The build does not need native dependency lifecycle scripts. Skipping them
         # keeps the Node 26 build lane out of the install stall seen on hosted runners.
-        run: |
-          if [ "${{ matrix.node }}" = "26.x" ]; then
-            npm ci --ignore-scripts --registry=https://registry.npmjs.org/
-          else
-            npm ci --registry=https://registry.npmjs.org/
-          fi
+        run: npm ci ${{ matrix.node == '26.x' && '--ignore-scripts' || '' }} --registry=https://registry.npmjs.org/
 
       - name: Use Python for installed wrapper acceptance
         if: matrix.node == '24.x'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.14.8'
+        with: *python-3-14-8
 
       - name: Use Ruby for installed wrapper acceptance
         if: matrix.node == '24.x'
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with:
+        with: &ruby-4-0-1
           ruby-version: '4.0.1'
 
       - name: Use Go for installed wrapper acceptance
@@ -260,8 +258,18 @@ jobs:
           browser_args=()
           if [ "$RUNTIME_ASSETS" = all ]; then
             browser_args+=(--browser)
+            browser_args+=(--sbom-output "$RUNNER_TEMP/sbom-runtime")
           fi
           npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --runtime-assets "$RUNTIME_ASSETS" "${browser_args[@]}"
+
+      - name: Upload packed consumer inventory
+        if: matrix.node == '24.x'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-runtime
+          path: ${{ runner.temp }}/sbom-runtime
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Test Package Artifact Without Optional Dependencies
         if: matrix.node == '24.x'
@@ -288,9 +296,9 @@ jobs:
     name: Installed package on ${{ matrix.os }}
     needs: build
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    permissions:
-      contents: read
+    # Fresh Windows consumer installs can take 17m; leave time for assertions and cleanup.
+    timeout-minutes: ${{ matrix.os == 'windows-2025-vs2026' && 40 || 20 }}
+    permissions: *read-only-permissions
     strategy:
       fail-fast: false
       matrix:
@@ -301,14 +309,13 @@ jobs:
     env:
       npm_config_cache: ${{ github.workspace }}/.artifact-npm-cache
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
+      - &checkout-source-read-only
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: *no-persisted-credentials
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22.22.0'
-      - name: Use npm 11
-        run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - *use-npm-11
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: promptfoo-platform-package
@@ -334,12 +341,10 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
+      - *checkout-repo-read-only
 
-      - name: Use Node
+      - &use-node
+        name: Use Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
@@ -348,7 +353,8 @@ jobs:
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
+      - &upgrade-npm
+        name: Upgrade npm
         run: npm install -g npm@11.18.0
 
       # Madge's TypeScript peer dependency differs from the repository's compiler.
@@ -407,16 +413,9 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
+      - *checkout-repo-read-only
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       - name: Use Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -427,8 +426,7 @@ jobs:
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
       - name: Install Dependencies
         run: npm ci --ignore-scripts
@@ -459,10 +457,7 @@ jobs:
       matrix:
         python-version: [3.9, 3.14]
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
+      - *checkout-repo-read-only
 
       - name: Use Python ${{ matrix.python-version }}
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -488,24 +483,17 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
+      - *checkout-repo-read-only
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
-      - name: Install Dependencies
+      - &install-dependencies
+        name: Install Dependencies
         run: npm ci
 
       - name: Type Check
@@ -518,27 +506,95 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload docs browser inventory
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-site
+          path: site/build/browser-inventory.json
+          if-no-files-found: error
+          retention-days: 30
+
+  sbom-comparison:
+    name: Compare shipped dependency inventories
+    needs: [build, docs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - *checkout-source-read-only
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: '.nvmrc'
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sbom-runtime
+          path: ${{ runner.temp }}/sbom-current
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sbom-site
+          path: ${{ runner.temp }}/sbom-site
+      # Only this API/download step has a token; neither PR scripts nor downloaded
+      # artifact contents execute with credentials. Never use pull_request_target.
+      - name: Find exact base inventory
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          status=no-base
+          if [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]] && [[ "$BASE_SHA" != 0000000000000000000000000000000000000000 ]]; then
+            run_id="$(gh api "repos/$GH_REPO/actions/workflows/main.yml/runs?event=push&branch=main&head_sha=$BASE_SHA&status=success&per_page=100" --jq '.workflow_runs[0].id // empty')"
+            status=no-successful-run
+            if [[ "$run_id" =~ ^[0-9]+$ ]]; then
+              artifact="$(gh api "repos/$GH_REPO/actions/runs/$run_id/artifacts?per_page=100" --jq '[.artifacts[] | select(.name == "sbom-inventory")][0] // empty')"
+              status=missing-artifact
+              if [[ -n "$artifact" ]]; then
+                status=expired-artifact
+                if [[ "$(jq -r '.expired' <<< "$artifact")" == false ]]; then
+                  gh run download "$run_id" --name sbom-inventory --dir "$RUNNER_TEMP/sbom-baseline"
+                  status=available
+                fi
+              fi
+            fi
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Compare runtime and browser inventories
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASELINE_STATUS: ${{ steps.baseline.outputs.status }}
+        run: |
+          cp "$RUNNER_TEMP/sbom-site/browser-inventory.json" "$RUNNER_TEMP/sbom-current/site-browser.json"
+          node scripts/compareSbom.ts \
+            --current "$RUNNER_TEMP/sbom-current" \
+            --baseline "$RUNNER_TEMP/sbom-baseline" \
+            --baseline-status "$BASELINE_STATUS" \
+            --source-sha "$GITHUB_SHA" --base-sha "$BASE_SHA" \
+            --output "$RUNNER_TEMP/sbom-report"
+      - name: Upload SBOM comparison and next baseline
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-inventory
+          path: ${{ runner.temp }}/sbom-report
+          if-no-files-found: error
+          retention-days: 90
+
   code-scan-action:
     name: Code Scan Action
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
+      - *checkout-repo-read-only
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
       # Install root dependencies first (code-scan-action imports from ../../src/types/codeScan.ts which needs zod)
       - name: Install Root Dependencies
@@ -561,28 +617,20 @@ jobs:
     name: Site tests
     timeout-minutes: 10
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-      id-token: write # Required for OIDC authentication with Codecov
+    permissions: *test-reporting-permissions # Required for OIDC authentication with Codecov
     steps:
-      - name: Checkout repo
+      - &checkout-repo
+        name: Checkout repo
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
-      - name: Install Dependencies
-        run: npm ci
+      - *install-dependencies
 
       - name: Run Site Tests with Coverage
         working-directory: site
@@ -595,6 +643,8 @@ jobs:
         run: test -s ./site/coverage/coverage-final.json
 
       - name: Upload Site Coverage to Codecov
+        # Authentication can fail before fail_ci_if_error applies; uploads are informational.
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./site/coverage/coverage-final.json
@@ -612,31 +662,18 @@ jobs:
     name: webui tests
     timeout-minutes: 10
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-      id-token: write # Required for OIDC authentication with Codecov
+    permissions: *test-reporting-permissions # Required for OIDC authentication with Codecov
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          fetch-depth: 2
-          persist-credentials: false
+      - *checkout-two-commits
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
-      - name: Install Dependencies
-        run: npm ci
+      - *install-dependencies
 
       # Browser binaries are opt-in; install the version from the locked SDK.
       - name: Install Chromium
@@ -652,6 +689,8 @@ jobs:
         run: npm run test:coverage:ratchet -- --report frontend
 
       - name: Upload Frontend Coverage to Codecov
+        # Authentication can fail before fail_ci_if_error applies; uploads are informational.
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./src/app/coverage/coverage-final.json
@@ -670,32 +709,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
+      - *checkout-repo-read-only
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
-      - name: Use Python 3.14
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: 3.14.8
+      - *use-python-3-14
 
-      - name: Use Ruby
+      - &use-ruby
+        name: Use Ruby
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with:
-          ruby-version: 4.0.1
+        with: *ruby-4-0-1
 
       - name: Install Dependencies
         run: |
@@ -709,8 +737,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - *checkout-repo
 
       # Keep real unsupported and minimum-supported runtimes available while
       # installing dependencies, building, and running Vitest on the repo Node.
@@ -730,30 +757,18 @@ jobs:
       - name: Record minimum supported Node executable
         run: echo "PROMPTFOO_MIN_NODE_BIN=$(node -p process.execPath)" >> "$GITHUB_ENV"
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
-      - name: Use Python 3.14
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: 3.14.8
+      - *use-python-3-14
 
-      - name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with:
-          ruby-version: 4.0.1
+      - *use-ruby
 
-      - name: Install Dependencies
-        run: npm ci
+      - *install-dependencies
 
       - name: Build
         run: npm run build
@@ -766,26 +781,18 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - *checkout-repo
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
-      - name: Install Dependencies
-        run: npm ci
+      - *install-dependencies
 
       - name: Run local server
         run: |
@@ -866,26 +873,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - *checkout-repo
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
-      - name: Install Dependencies
-        run: npm ci
+      - *install-dependencies
 
       - name: Run Redteam (Production API)
-        run: |
+        run: &redteam-integration-command |
           npm run test:redteam:integration
 
   redteam-staging:
@@ -893,26 +893,18 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - *checkout-repo
 
-      - name: Use Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *use-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
       # allowScripts, which silently skips e.g. the Playwright browser download.
-      - name: Upgrade npm
-        run: npm install -g npm@11.18.0
+      - *upgrade-npm
 
-      - name: Install Dependencies
-        run: npm ci
+      - *install-dependencies
 
       # Need to build first so we can login
       - name: Build
@@ -928,18 +920,15 @@ jobs:
 
       - name: Run Redteam with Staging API
         continue-on-error: true
-        run: |
-          npm run test:redteam:integration
+        run: *redteam-integration-command
 
   actionlint:
     name: GitHub Actions Lint
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - *checkout-repo
 
       - name: Install and run actionlint
         run: |
@@ -954,8 +943,7 @@ jobs:
       matrix:
         ruby-version: ['3.0', '3.4']
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - *checkout-repo
 
       - name: Use Ruby ${{ matrix.ruby-version }}
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
@@ -999,8 +987,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - *checkout-repo
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6

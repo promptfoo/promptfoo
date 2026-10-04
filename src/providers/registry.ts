@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -102,6 +103,7 @@ import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
+import { loadSlackProviderModule } from './slack-availability';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
@@ -127,6 +129,7 @@ export function mergeProviderEnv(
   ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
 ): NonNullable<ProviderOptions['env']> | undefined {
   const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  const isWindowsOpenCode = os.platform() === 'win32' && /^opencode(?::|$)/.test(providerPath);
   let merged: NonNullable<ProviderOptions['env']> | undefined;
   for (const layer of layers) {
     if (!layer) {
@@ -137,10 +140,21 @@ export function mergeProviderEnv(
       delete merged.OPENAI_API_KEY;
       delete merged.CODEX_API_KEY;
     }
-    Object.assign(
-      merged,
-      Object.fromEntries(Object.entries(layer).filter(([, value]) => value !== undefined)),
-    );
+    for (const [key, value] of Object.entries(layer)) {
+      if (value === undefined) {
+        continue;
+      }
+      if (isWindowsOpenCode) {
+        for (const existingKey of Object.keys(merged)) {
+          if (existingKey !== key && existingKey.toUpperCase() === key.toUpperCase()) {
+            // Keep earlier spellings available to case-sensitive provider templates.
+            // The server environment later collapses aliases with this same value.
+            merged[existingKey] = value;
+          }
+        }
+      }
+      merged[key] = value;
+    }
   }
   return merged;
 }
@@ -1332,6 +1346,26 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('typesafe:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { TypeSafeProvider } = await import('./typesafe');
+      const modelName = modelNameFromProviderPath(providerPath, 1);
+      if (!modelName) {
+        throw new Error(
+          `Invalid typesafe provider path: ${providerPath}. Model name is required. Use: typesafe:jev-latest`,
+        );
+      }
+      return new TypeSafeProvider(modelName, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('llamaapi:'),
     create: async (
       providerPath: string,
@@ -1746,56 +1780,47 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      try {
-        const { SlackProvider } = await import('./slack');
+      const { SlackProvider } = await loadSlackProviderModule(() => import('./slack'));
 
-        // Handle plain 'slack' format
-        if (providerPath === 'slack') {
-          return new SlackProvider(providerOptions);
-        }
+      // Handle plain 'slack' format
+      if (providerPath === 'slack') {
+        return new SlackProvider(providerOptions);
+      }
 
-        // Handle slack:* formats
-        const splits = providerPath.split(':');
+      // Handle slack:* formats
+      const splits = providerPath.split(':');
 
-        if (splits.length < 2) {
-          throw new Error(
-            'Invalid Slack provider path. Use slack:<channel_id> or slack:channel:<channel_id>',
-          );
-        }
+      if (splits.length < 2) {
+        throw new Error(
+          'Invalid Slack provider path. Use slack:<channel_id> or slack:channel:<channel_id>',
+        );
+      }
 
-        // Handle slack:C0123ABCDEF format
-        if (splits.length === 2) {
-          return new SlackProvider({
-            ...providerOptions,
-            config: {
-              ...providerOptions.config,
-              channel: splits[1],
-            },
-          });
-        }
+      // Handle slack:C0123ABCDEF format
+      if (splits.length === 2) {
+        return new SlackProvider({
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            channel: splits[1],
+          },
+        });
+      }
 
-        // Handle slack:channel:C0123ABCDEF or slack:user:U0123ABCDEF format
-        const targetType = splits[1];
-        const targetId = splits.slice(2).join(':');
+      // Handle slack:channel:C0123ABCDEF or slack:user:U0123ABCDEF format
+      const targetType = splits[1];
+      const targetId = splits.slice(2).join(':');
 
-        if (targetType === 'channel' || targetType === 'user') {
-          return new SlackProvider({
-            ...providerOptions,
-            config: {
-              ...providerOptions.config,
-              channel: targetId,
-            },
-          });
-        } else {
-          throw new Error(`Invalid Slack target type: ${targetType}. Use 'channel' or 'user'`);
-        }
-      } catch (error: any) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@slack/web-api')) {
-          throw new Error(
-            'The Slack provider requires the @slack/web-api package. Please install it with: npm install @slack/web-api@^8',
-          );
-        }
-        throw error;
+      if (targetType === 'channel' || targetType === 'user') {
+        return new SlackProvider({
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            channel: targetId,
+          },
+        });
+      } else {
+        throw new Error(`Invalid Slack target type: ${targetType}. Use 'channel' or 'user'`);
       }
     },
   },
