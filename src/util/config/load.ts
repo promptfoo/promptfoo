@@ -1136,13 +1136,12 @@ async function resolveLoadedConfig(
 
   // Parse prompts, providers, and tests
   // Pass filtered resolved configs to avoid re-reading files
-  // File prompts are labeled with the path they are read from, and labels identify prompts
-  // (IDs, provider/test prompt references, --filter-prompts). Read them relative to the
-  // working directory so labels stay as authored instead of embedding the checkout path.
-  let parsedPrompts = await readPrompts(
-    config.prompts,
-    cmdObj.prompts ? undefined : path.relative(process.cwd(), basePath),
-  );
+  // File prompts are labeled with their path, and labels identify prompts (IDs, provider and
+  // test prompt references, --filter-prompts). Read the files from the absolute base, but
+  // label them relative to the working directory so labels do not embed the checkout path.
+  let parsedPrompts = cmdObj.prompts
+    ? await readPrompts(config.prompts)
+    : await readPrompts(config.prompts, basePath, path.relative(process.cwd(), basePath));
 
   // Filter prompts if --filter-prompts option is provided
   if (cmdObj.filterPrompts) {

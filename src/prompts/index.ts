@@ -1,4 +1,5 @@
 import { stat } from 'fs/promises';
+import path from 'path';
 
 import { globSync } from 'glob';
 import logger from '../logger';
@@ -97,78 +98,13 @@ export function readProviderPromptMap(
   return ret;
 }
 
-/**
- * Processes a raw prompt based on its content type and path.
- * @param prompt - The raw prompt data.
- * @param basePath - Base path for file resolution.
- * @param maxRecursionDepth - Maximum recursion depth for globbing.
- * @returns Promise resolving to an array of processed prompts.
- */
-async function processPrompt(
+/** Reads the prompts in one file, choosing the processor by its extension. */
+async function processPromptFile(
+  filePath: string,
   prompt: Partial<Prompt>,
-  basePath: string = '',
-  maxRecursionDepth: number = 1,
+  extension: string | undefined,
+  functionName: string | undefined,
 ): Promise<Prompt[]> {
-  invariant(
-    typeof prompt.raw === 'string',
-    `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
-  );
-
-  // Handling when the prompt is a raw function (e.g. javascript function)
-  if (prompt.function) {
-    return [prompt as Prompt];
-  }
-
-  // Handle exec: prefix for executable prompts
-  if (prompt.raw.startsWith('exec:')) {
-    const execSpec = prompt.raw.substring(5); // Remove 'exec:' prefix
-    const { filePath, functionName } = parsePathOrGlob(basePath, execSpec);
-    return await processExecutableFile(filePath, prompt, functionName);
-  }
-
-  if (!maybeFilePath(prompt.raw)) {
-    return processString(prompt);
-  }
-
-  const {
-    extension,
-    functionName,
-    isPathPattern,
-    filePath,
-  }: {
-    extension?: string;
-    functionName?: string;
-    isPathPattern: boolean;
-    filePath: string;
-  } = parsePathOrGlob(basePath, prompt.raw);
-
-  if (isPathPattern && maxRecursionDepth > 0) {
-    const globbedPath = globSync(filePath.replace(/\\/g, '/'), {
-      windowsPathsNoEscape: true,
-    });
-    logger.debug(
-      `Expanded prompt ${prompt.raw} to ${filePath} and then to ${JSON.stringify(globbedPath)}`,
-    );
-    const prompts: Prompt[] = [];
-    for (const globbedFilePath of globbedPath) {
-      const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
-      const processedPrompts = await processPrompt(
-        { raw: rawPath, config: prompt.config },
-        basePath,
-        maxRecursionDepth - 1,
-      );
-      prompts.push(...processedPrompts);
-    }
-    if (prompts.length === 0) {
-      // There was nothing at this filepath, so treat it as a prompt string.
-      logger.debug(
-        `Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`,
-      );
-      prompts.push(...processString(prompt));
-    }
-    return prompts;
-  }
-
   if (extension === '.csv') {
     return processCsvPrompts(filePath, prompt);
   }
@@ -217,20 +153,128 @@ async function processPrompt(
 }
 
 /**
+ * Labels prompts read from `filePath` with `labelPath` instead. Processors build a label
+ * (and, for binary executables, the displayed text) from the path they read.
+ */
+function withLabelPath(prompts: Prompt[], filePath: string, labelPath: string): Prompt[] {
+  if (labelPath === filePath) {
+    return prompts;
+  }
+  return prompts.map((prompt) => ({
+    ...prompt,
+    label: prompt.label.replace(filePath, () => labelPath),
+    ...(prompt.raw === filePath && { raw: labelPath }),
+  }));
+}
+
+/**
+ * Processes a raw prompt based on its content type and path.
+ * @param prompt - The raw prompt data.
+ * @param basePath - Base path for file resolution.
+ * @param maxRecursionDepth - Maximum recursion depth for globbing.
+ * @param labelBasePath - When set, files are labeled as if read from this base instead.
+ * @returns Promise resolving to an array of processed prompts.
+ */
+async function processPrompt(
+  prompt: Partial<Prompt>,
+  basePath: string = '',
+  maxRecursionDepth: number = 1,
+  labelBasePath?: string,
+): Promise<Prompt[]> {
+  const labelPrompts = (prompts: Prompt[], filePath: string) =>
+    labelBasePath === undefined
+      ? prompts
+      : withLabelPath(
+          prompts,
+          filePath,
+          path.join(labelBasePath, path.relative(basePath, filePath)),
+        );
+
+  invariant(
+    typeof prompt.raw === 'string',
+    `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
+  );
+
+  // Handling when the prompt is a raw function (e.g. javascript function)
+  if (prompt.function) {
+    return [prompt as Prompt];
+  }
+
+  // Handle exec: prefix for executable prompts
+  if (prompt.raw.startsWith('exec:')) {
+    const execSpec = prompt.raw.substring(5); // Remove 'exec:' prefix
+    const { filePath, functionName } = parsePathOrGlob(basePath, execSpec);
+    return labelPrompts(await processExecutableFile(filePath, prompt, functionName), filePath);
+  }
+
+  if (!maybeFilePath(prompt.raw)) {
+    return processString(prompt);
+  }
+
+  const {
+    extension,
+    functionName,
+    isPathPattern,
+    filePath,
+  }: {
+    extension?: string;
+    functionName?: string;
+    isPathPattern: boolean;
+    filePath: string;
+  } = parsePathOrGlob(basePath, prompt.raw);
+
+  if (isPathPattern && maxRecursionDepth > 0) {
+    const globbedPath = globSync(filePath.replace(/\\/g, '/'), {
+      windowsPathsNoEscape: true,
+    });
+    logger.debug(
+      `Expanded prompt ${prompt.raw} to ${filePath} and then to ${JSON.stringify(globbedPath)}`,
+    );
+    const prompts: Prompt[] = [];
+    for (const globbedFilePath of globbedPath) {
+      // The match already includes the base, so resolve it before the base is applied again.
+      const matchedPath = path.resolve(globbedFilePath);
+      const rawPath = functionName ? `${matchedPath}:${functionName}` : matchedPath;
+      const processedPrompts = await processPrompt(
+        { raw: rawPath, config: prompt.config },
+        basePath,
+        maxRecursionDepth - 1,
+        labelBasePath,
+      );
+      prompts.push(...processedPrompts);
+    }
+    if (prompts.length === 0) {
+      // There was nothing at this filepath, so treat it as a prompt string.
+      logger.debug(
+        `Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`,
+      );
+      prompts.push(...processString(prompt));
+    }
+    return prompts;
+  }
+
+  return labelPrompts(await processPromptFile(filePath, prompt, extension, functionName), filePath);
+}
+
+/**
  * Reads and processes prompts from a specified path or glob pattern.
  * @param promptPathOrGlobs - The path or glob pattern.
  * @param basePath - Base path for file resolution.
+ * @param labelBasePath - When set, prompt files are labeled as if read from this base. Labels
+ *   identify prompts, so they should not depend on where the project is checked out even
+ *   when `basePath` is absolute.
  * @returns Promise resolving to an array of processed prompts.
  */
 export async function readPrompts(
   promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
   basePath: string = '',
+  labelBasePath?: string,
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
   const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
   for (const prompt of promptPartials) {
-    const promptBatch = await processPrompt(prompt, basePath);
+    const promptBatch = await processPrompt(prompt, basePath, 1, labelBasePath);
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }

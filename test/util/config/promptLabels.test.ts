@@ -85,4 +85,59 @@ describe('file prompt labels', () => {
     expect(doesPromptRefMatch(multiPrompt, testSuite.prompts[0])).toBe(true);
     expect(testSuite.providerPromptMap).toEqual({ echo: [docPrompt] });
   });
+
+  describe('files are still read from the config directory', () => {
+    function writeConfig(prompts: string[]) {
+      fs.writeFileSync(
+        path.join(directory, 'project', 'promptfooconfig.json'),
+        JSON.stringify({ prompts, providers: ['echo'], tests: [{ vars: { topic: 'labels' } }] }),
+      );
+    }
+
+    it.each([
+      ['the config directory', 'project', 'promptfooconfig.json', ''],
+      ['a parent directory', '', path.join('project', 'promptfooconfig.json'), 'project'],
+    ])('expands a prompt glob when run from %s', async (_name, cwd, configPath, labelBase) => {
+      fs.writeFileSync(path.join(directory, 'project', 'prompts', 'a.txt'), 'Glob A {{topic}}');
+      fs.writeFileSync(path.join(directory, 'project', 'prompts', 'b.txt'), 'Glob B {{topic}}');
+      // Without the file:// prefix the glob is expanded by the prompt reader itself.
+      writeConfig(['prompts/*.txt']);
+      process.chdir(path.join(directory, cwd));
+
+      const { testSuite } = await resolve(configPath);
+
+      const labels = testSuite.prompts.map((prompt) => prompt.label).sort();
+      expect(labels).toEqual(
+        [
+          `${path.join(labelBase, 'prompts', 'a.txt')}: Glob A {{topic}}`,
+          `${path.join(labelBase, 'prompts', 'b.txt')}: Glob B {{topic}}`,
+          `${path.join(labelBase, 'prompts', 'multi.txt')}: First {{topic}}`,
+          `${path.join(labelBase, 'prompts', 'multi.txt')}: Second {{topic}}`,
+        ].sort(),
+      );
+    });
+
+    it.each(['exec:generate.sh', 'file://generate.sh'])(
+      'runs the executable prompt %s by its full path and labels it by its relative one',
+      async (reference) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const script = path.join(directory, 'project', 'generate.sh');
+        fs.writeFileSync(script, '#!/bin/sh\necho "Generated prompt"\n', { mode: 0o755 });
+        writeConfig([reference]);
+        // From here a bare "generate.sh" is not a path, so only the full path can be run.
+        process.chdir(path.join(directory, 'project'));
+
+        const { testSuite } = await resolve('promptfooconfig.json');
+
+        const [prompt] = testSuite.prompts;
+        expect(prompt.label).toBe('generate.sh');
+        expect(prompt.label).not.toContain(directory);
+        await expect(
+          prompt.function?.({ vars: {}, provider: { id: () => 'echo' } as never }),
+        ).resolves.toBe('Generated prompt');
+      },
+    );
+  });
 });
