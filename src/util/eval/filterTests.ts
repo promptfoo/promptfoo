@@ -64,6 +64,25 @@ export interface FilterOptions {
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
 
+/**
+ * Splits a metadata filter value into its alternatives. Commas separate alternatives, and
+ * `\,` stands for a comma inside one.
+ */
+function splitMetadataFilterValue(value: string): string[] {
+  const alternatives = [''];
+  for (let index = 0; index < value.length; index++) {
+    if (value[index] === '\\' && value[index + 1] === ',') {
+      alternatives[alternatives.length - 1] += ',';
+      index++;
+    } else if (value[index] === ',') {
+      alternatives.push('');
+    } else {
+      alternatives[alternatives.length - 1] += value[index];
+    }
+  }
+  return alternatives;
+}
+
 function createSeededRandom(seed: number): () => number {
   const stringSeed = String(seed);
   let state = 2166136261;
@@ -180,7 +199,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         throw new Error('--filter-metadata must be specified in key=value format');
       }
       // Values within each filter use OR; separate filters use AND below.
-      const values = value.split(',');
+      const values = splitMetadataFilterValue(value);
       if (values.includes('')) {
         throw new Error(`--filter-metadata has an empty value in "${filter}"`);
       }

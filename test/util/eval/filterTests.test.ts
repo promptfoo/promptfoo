@@ -300,6 +300,33 @@ describe('filterTests', () => {
         expect(result.map((test) => test.metadata?.id)).toEqual(expected);
       });
 
+      it.each([
+        // An escaped comma is part of the value, so a value that contains one can be matched.
+        { filter: 'id=Hello\\, world', expected: ['Hello, world'] },
+        // Without the escape, the comma separates "Hello" from " world", space included.
+        { filter: 'id=Hello, world', expected: ['Hello, world', 'Hello'] },
+        { filter: 'id=a\\,b,peace', expected: ['world peace', 'a,b'] },
+        { filter: 'id=\\,', expected: ['Hello, world', 'a,b'] },
+        // A backslash is only special before a comma.
+        { filter: 'id=C:\\dir', expected: ['C:\\dir'] },
+        { filter: 'id=:\\d,peace', expected: ['world peace', 'C:\\dir'] },
+      ])(
+        'should treat an escaped comma as part of the value in $filter',
+        async ({ filter, expected }) => {
+          const result = await filterTests(
+            {
+              prompts: [],
+              providers: [],
+              tests: ['Hello, world', 'Hello', 'world peace', 'a,b', 'C:\\dir', 'b'].map((id) => ({
+                metadata: { id },
+              })),
+            },
+            { metadata: filter },
+          );
+          expect(result.map((test) => test.metadata?.id)).toEqual(expected);
+        },
+      );
+
       it.each(['env=,dev', 'env=dev,', 'env=dev,,prod', 'env=,'])(
         'should reject an empty list value in %s even without tests',
         async (metadata) => {
