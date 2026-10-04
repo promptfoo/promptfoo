@@ -925,10 +925,12 @@ describe('MCPClient', () => {
           authHeaders: {
             'User-Agent': '{"databasePassword":"header-fixture","page":2}',
             Accept: 'https://example.test/?api_key=header-fixture',
+            'https://example.test/?api_key=header-key': 'value',
           },
           form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: 'encoded-fixture', tokenCount: 12 }))}`,
           callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: 'encoded-fixture', credentialsRequired: false }))}`,
           url: 'redirect=https://alice:fixture-password@example.test/path',
+          secondaryUrl: JSON.stringify({ target: 'callback?token=relative-fixture' }),
           byUrl: {
             'https://example.test/?api_key=short': { method: 'GET' },
           },
@@ -974,10 +976,12 @@ describe('MCPClient', () => {
                           authHeaders: {
                             'User-Agent': '{"databasePassword":"[REDACTED]","page":2}',
                             Accept: 'https://example.test/?api_key=%5BREDACTED%5D',
+                            'https://example.test/?api_key=%5BREDACTED%5D': '[REDACTED]',
                           },
                           form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: '[REDACTED]', tokenCount: 12 }))}`,
                           callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: '[REDACTED]', credentialsRequired: false }))}`,
                           url: '[REDACTED]',
+                          secondaryUrl: '[REDACTED]',
                           byUrl: {
                             'https://example.test/?api_key=%5BREDACTED%5D': { method: 'GET' },
                           },

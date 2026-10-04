@@ -1185,8 +1185,10 @@ function sanitizeJsonString(
     return redactedAzureBlobUri;
   }
 
+  let parsedJson = false;
   try {
     const parsed = JSON.parse(str);
+    parsedJson = true;
     if (parsed && typeof parsed === 'object') {
       const sanitized = recursiveSanitize(
         parsed,
@@ -1198,7 +1200,12 @@ function sanitizeJsonString(
       );
       return JSON.stringify(sanitized);
     }
-  } catch {
+  } catch (error) {
+    if (redactCompoundKeys && parsedJson) {
+      // A traversal/serialization failure is not a parse failure. Let MCP's
+      // fail-closed boundary handle it instead of restoring the original JSON.
+      throw error;
+    }
     if (looksLikeUrlEncodedFormData(str)) {
       const sanitizedUrlEncoded = sanitizeUrlEncodedStringWithContext(
         str,
@@ -1284,25 +1291,26 @@ function redactNestedJsonValue(
   if (!parsed || typeof parsed !== 'object') {
     return null;
   }
-  let sanitized: unknown;
+  let sanitizedSerialized: string | undefined;
   try {
-    sanitized = sanitizeObject(parsed, {
+    const sanitized = sanitizeObject(parsed, {
       sanitizeUrls: true,
       maxDepth: compoundContext?.maxDepth ?? Number.POSITIVE_INFINITY,
       redactCompoundKeys: compoundContext !== undefined,
       throwOnError: compoundContext !== undefined,
     });
+    sanitizedSerialized = JSON.stringify(sanitized);
+    // Canonical mode only serializes the bounded result, never the unbounded
+    // original. A comparison failure must not discard already sanitized data.
+    return !preserveUnchanged || sanitizedSerialized !== JSON.stringify(parsed)
+      ? sanitizedSerialized
+      : null;
   } catch (error) {
     if (compoundContext) {
-      return JSON.stringify(REDACTED);
+      return sanitizedSerialized ?? JSON.stringify(REDACTED);
     }
     throw error;
   }
-  const originalSerialized = JSON.stringify(parsed);
-  const sanitizedSerialized = JSON.stringify(sanitized);
-  return preserveUnchanged && sanitizedSerialized === originalSerialized
-    ? null
-    : sanitizedSerialized;
 }
 
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
@@ -1436,7 +1444,14 @@ function sanitizePlainObject(
       const usedNames = new Set<string>();
       for (const [name, item] of Object.entries(value)) {
         const redactedName =
-          redactCredentialValues && matchesCredentialFormat(name) ? REDACTED : name;
+          redactCredentialValues && matchesCredentialFormat(name)
+            ? REDACTED
+            : redactCompoundKeys &&
+                normalizeFieldName(key) === 'authheaders' &&
+                sanitizeUrls &&
+                URL_REFERENCE.test(name)
+              ? sanitizeUrlWithContext(name, { maxDepth: maxDepth - depth - 2 })
+              : name;
         let headerName = redactedName;
         while (
           usedNames.has(headerName) ||
@@ -1509,9 +1524,12 @@ function sanitizePlainObject(
       // Own JSON/form traversal once for MCP URL fields. A generic recursive pass
       // followed by URL sanitization would revisit every nested payload. Direct
       // JSON strings keep the generic string path's canonical serialization.
-      sanitized[key] =
-        redactNestedJsonValue(value, compoundContext, false) ??
-        sanitizeUrlWithContext(value, compoundContext);
+      const sanitizedJson = redactNestedJsonValue(value, compoundContext, false);
+      sanitized[key] = sanitizeUrlWithContext(
+        sanitizedJson ?? value,
+        compoundContext,
+        sanitizedJson !== null,
+      );
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
@@ -1739,7 +1757,11 @@ export function sanitizeUrl(url: string): string {
   return sanitizeUrlWithContext(url);
 }
 
-function sanitizeUrlWithContext(url: string, compoundContext?: CompoundKeyContext): string {
+function sanitizeUrlWithContext(
+  url: string,
+  compoundContext?: CompoundKeyContext,
+  jsonAlreadySanitized = false,
+): string {
   try {
     // Ensure url is a string and handle edge cases
     if (typeof url !== 'string' || !url.trim()) {
@@ -1762,7 +1784,7 @@ function sanitizeUrlWithContext(url: string, compoundContext?: CompoundKeyContex
       return sanitizeTemplatedUrl(url, compoundContext);
     }
 
-    const nestedJson = redactNestedJsonValue(url, compoundContext);
+    const nestedJson = jsonAlreadySanitized ? null : redactNestedJsonValue(url, compoundContext);
     if (nestedJson !== null) {
       return nestedJson;
     }

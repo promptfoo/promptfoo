@@ -421,6 +421,76 @@ describe('sanitizeMcpToolData', () => {
     expect(sanitizeMcpToolData({ callbackUrl: value })).toEqual({ callbackUrl: expected });
   });
 
+  it.each(['callback?token=fixture', 'callback#api_key=fixture', 'https://user:fixture@host/'])(
+    'retains URL checks after sanitizing JSON containing %s',
+    (target) => {
+      const args = { callbackUrl: JSON.stringify({ target, page: 2 }) };
+      expect(sanitizeMcpToolData(args)).toEqual({ callbackUrl: '[REDACTED]' });
+      expect(args.callbackUrl).toContain('fixture');
+    },
+  );
+
+  it('preserves public relative references in JSON-valued URL fields', () => {
+    const args = { callbackUrl: JSON.stringify({ target: 'callback?page=2', page: 2 }) };
+    expect(sanitizeMcpToolData(args)).toEqual(args);
+  });
+
+  it.each(['callbackUrl', 'url'])(
+    'retains outer redaction when deeply nested %s JSON cannot be serialized for comparison',
+    (key) => {
+      const deep = '{"child":'.repeat(5000) + '{}' + '}'.repeat(5000);
+      const payload = JSON.stringify({ password: 'outer-fixture', [key]: deep, page: 2 });
+      const result = sanitizeMcpToolData({ payload });
+      expect(result).not.toBe(omitted);
+      expect(typeof result).toBe('object');
+      const parsed = JSON.parse((result as { payload: string }).payload);
+      expect(parsed.password).toBe('[REDACTED]');
+      expect(parsed.page).toBe(2);
+      expect(typeof parsed[key]).toBe('string');
+      expect(parsed[key].length).toBeLessThan(2000);
+      expect(JSON.stringify(result)).not.toContain('outer-fixture');
+    },
+  );
+
+  it('does not treat MCP JSON serialization failures as malformed JSON', () => {
+    const payload = '{"password":"outer-fixture","failSerialization":true}';
+    const originalStringify = JSON.stringify;
+    const stringify = vi.spyOn(JSON, 'stringify').mockImplementation((value, ...args) => {
+      if (value && typeof value === 'object' && value.failSerialization) {
+        throw new Error('serialization-fixture');
+      }
+      return originalStringify(value, ...args);
+    });
+    let result: unknown;
+    try {
+      result = sanitizeMcpToolData({ payload });
+    } finally {
+      stringify.mockRestore();
+    }
+    expect(result).toBe(omitted);
+  });
+
+  it('sanitizes authHeaders URL keys while reserving authored names', () => {
+    const canonical = 'https://example.test/?api_key=%5BREDACTED%5D';
+    const authHeaders = {
+      'https://example.test/?api_key=first': 'first',
+      [canonical]: 'authored',
+      'https://example.test/?api_key=second': 'second',
+      Accept: 'application/json',
+    };
+    expect(sanitizeMcpToolData({ authHeaders })).toEqual({
+      authHeaders: {
+        [`${canonical}#1`]: '[REDACTED]',
+        [canonical]: '[REDACTED]',
+        [`${canonical}#2`]: '[REDACTED]',
+        Accept: 'application/json',
+      },
+    });
+    expect(
+      Object.keys(sanitizeObject({ headers: authHeaders }, { sanitizeUrls: true }).headers),
+    ).toEqual(Object.keys(authHeaders));
+  });
+
   it('sanitizes embedded credentials in allowed authHeaders values without changing generic headers', () => {
     const authHeaders = {
       'User-Agent': '{"databasePassword":"fixture","page":2}',
