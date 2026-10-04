@@ -43,12 +43,10 @@ export function sanitizeMcpToolData<T>(value: T): T | typeof UNSANITIZED_TOOL_DA
       maxDepth: MAX_TOOL_DATA_DEPTH,
       throwOnError: true,
     });
-  } catch (error) {
-    // The error can carry the data it was thrown for in any of its properties, the name
-    // included, so nothing is read from it. A range error is the stack running out.
-    logger.debug('[MCP] Tool data could not be sanitized and is omitted', {
-      reason: error instanceof RangeError ? 'nested too deeply' : 'could not be read',
-    });
+  } catch {
+    // The thrown value can carry the data it was thrown for, and inspecting it can run code
+    // it controls, so it is neither read nor logged.
+    logger.debug('[MCP] Tool data could not be sanitized and is omitted');
     return UNSANITIZED_TOOL_DATA;
   }
 }

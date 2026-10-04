@@ -135,10 +135,25 @@ describe('sanitizeMcpToolData', () => {
 
     try {
       expect(sanitizeMcpToolData(args)).toBe(omitted);
-      expect(debug).toHaveBeenCalledWith('[MCP] Tool data could not be sanitized and is omitted', {
-        reason: 'could not be read',
-      });
+      expect(debug).toHaveBeenCalledWith('[MCP] Tool data could not be sanitized and is omitted');
       expect(JSON.stringify(debug.mock.calls)).not.toContain('tool-secret-value');
+
+      // Even looking at what was thrown can run code that the data controls.
+      const hostile = { apiKey: 'tool-secret-value' };
+      Object.defineProperty(hostile, 'unreadable', {
+        enumerable: true,
+        get() {
+          throw new Proxy(
+            {},
+            {
+              getPrototypeOf() {
+                throw new Error(hostile.apiKey);
+              },
+            },
+          );
+        },
+      });
+      expect(sanitizeMcpToolData(hostile)).toBe(omitted);
     } finally {
       debug.mockRestore();
     }
