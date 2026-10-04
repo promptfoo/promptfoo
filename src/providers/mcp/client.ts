@@ -309,6 +309,10 @@ export class MCPClient {
           name: tool.name,
           description: tool.description || '',
           inputSchema: tool.inputSchema,
+          // Spread conditionally: `extractMcpToolsInfo` JSON.stringify's each
+          // tool into the redteam purpose, and an always-present key would
+          // churn that text for every server that advertises no annotations.
+          ...(tool.annotations ? { annotations: tool.annotations } : {}),
         })) || [];
 
       // Filter tools if specified

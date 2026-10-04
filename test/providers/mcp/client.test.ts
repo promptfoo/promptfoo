@@ -684,6 +684,69 @@ describe('MCPClient', () => {
       ]);
     });
 
+    it('preserves server-advertised tool annotations', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [
+          {
+            name: 'read_doc',
+            description: 'desc1',
+            inputSchema: {},
+            annotations: { readOnlyHint: true, title: 'Read document' },
+          },
+          {
+            name: 'delete_doc',
+            description: 'desc2',
+            inputSchema: {},
+            annotations: { readOnlyHint: false, destructiveHint: true },
+          },
+        ],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'npm', args: ['start'] },
+      });
+
+      await mcpClient.initialize();
+
+      expect(mcpClient.getAllTools()).toEqual([
+        {
+          name: 'read_doc',
+          description: 'desc1',
+          inputSchema: {},
+          annotations: { readOnlyHint: true, title: 'Read document' },
+        },
+        {
+          name: 'delete_doc',
+          description: 'desc2',
+          inputSchema: {},
+          annotations: { readOnlyHint: false, destructiveHint: true },
+        },
+      ]);
+    });
+
+    it('omits the annotations key entirely for unannotated tools', async () => {
+      // `extractMcpToolsInfo` JSON.stringify's these into the redteam purpose,
+      // so an always-present `annotations` key would churn that text for every
+      // server that advertises none.
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'npm', args: ['start'] },
+      });
+
+      await mcpClient.initialize();
+
+      expect(JSON.stringify(mcpClient.getAllTools()[0])).toBe(
+        '{"name":"tool1","description":"desc1","inputSchema":{}}',
+      );
+    });
+
     it('should initialize with correct client metadata including name, version, and description', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
