@@ -69,6 +69,7 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
+  Prompt,
   Scenario,
   TestSuite,
   UnifiedConfig,
@@ -101,6 +102,44 @@ function runtimeTagsForEval(
   };
 
   return Object.keys(tags).length > 0 ? tags : undefined;
+}
+
+/**
+ * The prompts of a saved eval, rebuilt from its results-table columns.
+ *
+ * A saved eval has one column per provider and prompt, so with several providers each
+ * prompt is saved several times. Passing every column back as a prompt would create each
+ * column once per provider again, and results would no longer line up with their columns.
+ */
+function getReplayPrompts(columns: Prompt[], testSuite: TestSuite): Prompt[] {
+  const toPrompt = (column: Prompt) =>
+    ({ raw: column.raw, label: column.label, config: column.config }) as Prompt;
+  const providerCount = testSuite.providers.length;
+  const hasPromptMap = Object.keys(testSuite.providerPromptMap ?? {}).length > 0;
+  if (!hasPromptMap && providerCount > 0 && columns.length % providerCount === 0) {
+    // Every provider ran the same prompts in the same order: the first provider's columns.
+    return columns.slice(0, columns.length / providerCount).map(toPrompt);
+  }
+
+  // Providers ran different prompts. Keep each saved prompt once, in the order the saved
+  // config lists them, so every provider's columns come out where they were. A prompt the
+  // config no longer lists goes after the others.
+  const configOrder = new Map(testSuite.prompts.map((prompt, index) => [prompt.label, index]));
+  const unique = new Map<string, Prompt>();
+  for (const column of columns) {
+    const key = JSON.stringify([column.label, column.raw]);
+    if (!unique.has(key)) {
+      unique.set(key, toPrompt(column));
+    }
+  }
+  return [...unique.values()]
+    .map((prompt, index) => ({
+      prompt,
+      index,
+      position: configOrder.get(prompt.label) ?? Number.MAX_SAFE_INTEGER,
+    }))
+    .sort((a, b) => a.position - b.position || a.index - b.index)
+    .map(({ prompt }) => prompt);
 }
 
 async function resolveReplayConfigs(
@@ -454,14 +493,7 @@ async function doEvalWithEnv(
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
+        testSuite.prompts = getReplayPrompts(resumeEval.prompts, testSuite);
       }
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
@@ -512,14 +544,7 @@ async function doEvalWithEnv(
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
+        testSuite.prompts = getReplayPrompts(resumeEval.prompts, testSuite);
       }
     } else {
       ({

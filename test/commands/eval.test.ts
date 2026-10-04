@@ -1894,6 +1894,105 @@ describe('evalCommand', () => {
     }
   });
 
+  it.each([
+    {
+      name: 'the same prompts for every provider',
+      providerPromptMap: undefined,
+      configPrompts: [],
+      // One saved column per provider and prompt, provider by provider.
+      columns: ['first', 'second', 'first', 'second'],
+      expected: ['first', 'second'],
+    },
+    {
+      name: 'a prompt that is listed twice',
+      providerPromptMap: undefined,
+      configPrompts: [],
+      columns: ['same', 'same', 'same', 'same'],
+      expected: ['same', 'same'],
+    },
+    {
+      name: 'different prompts per provider',
+      providerPromptMap: { 'first-target': ['second', 'third'] },
+      configPrompts: ['first', 'second', 'third'],
+      // The first provider skips "first", so its columns start with "second".
+      columns: ['second', 'third', 'first', 'second', 'third'],
+      expected: ['first', 'second', 'third'],
+    },
+    {
+      name: 'different prompts per provider after the config changed',
+      providerPromptMap: { 'first-target': ['second'] },
+      configPrompts: ['second'],
+      columns: ['second', 'removed', 'second'],
+      expected: ['second', 'removed'],
+    },
+  ])(
+    'should resume with each saved prompt once when two providers ran $name',
+    async ({ providerPromptMap, configPrompts, columns, expected }) => {
+      const toSaved = (label: string) => ({ raw: `${label} text`, label, config: {} });
+      const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
+      resumeEval.prompts = columns.map(toSaved) as any;
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: configPrompts.map((label) => ({ raw: 'changed since the first run', label })),
+          providers: ['first-target', 'second-target'].map(
+            (label) => ({ id: () => label, label, callApi: vi.fn() }) as ApiProvider,
+          ),
+          ...(providerPromptMap && { providerPromptMap }),
+        },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord) => {
+        expect(testSuite.prompts).toEqual(expected.map(toSaved));
+        return evalRecord as Eval;
+      });
+
+      try {
+        await doEval(
+          { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          defaultConfigPath,
+          {},
+        );
+
+        expect(evaluate).toHaveBeenCalledTimes(1);
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    },
+  );
+
+  it('should retry errors with each saved prompt once when two providers ran it', async () => {
+    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+    const saved = { raw: 'retry prompt', label: 'Retry', config: {} };
+    latestEval.prompts = [saved, saved] as any;
+    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1']);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: ['first-target', 'second-target'].map(
+          (label) => ({ id: () => label, label, callApi: vi.fn() }) as ApiProvider,
+        ),
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord) => {
+      expect(testSuite.prompts).toEqual([saved]);
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {});
+
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    } finally {
+      latestSpy.mockRestore();
+    }
+  });
+
   it('should retry error results from the latest eval and clean up after success', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
     latestEval.prompts = [{ raw: 'retry prompt', label: 'Retry', config: {} }] as any;
