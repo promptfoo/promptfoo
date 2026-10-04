@@ -1217,7 +1217,11 @@ describe('createShareableUrl', () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       const schema = {
         type: 'object',
-        properties: { token: { type: 'string' }, password: { type: 'string' } },
+        properties: {
+          token: { type: 'string' },
+          password: { type: 'string', pattern: '^private-password$' },
+          headers: { type: 'object', default: { 'X-Custom': 'private-header-value' } },
+        },
         required: ['token'],
       };
       mockEval.config = {
@@ -1232,7 +1236,15 @@ describe('createShareableUrl', () => {
       await createShareableUrl(mockEval as Eval);
 
       const request = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(request.config.tests[0].assert[0].value).toEqual(schema);
+      expect(request.config.tests[0].assert[0].value).toEqual({
+        ...schema,
+        properties: {
+          token: schema.properties.token,
+          password: { type: 'string', pattern: String.raw`^\[REDACTED\]$` },
+          headers: { type: 'object', default: '[REDACTED]' },
+        },
+      });
+      expect(JSON.stringify(request.config)).not.toContain('private-');
       expect(request.config.providers[0].config.apiKey).toBe('[REDACTED]');
       expect(mockEval.config).toEqual(original);
     });

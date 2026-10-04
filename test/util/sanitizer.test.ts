@@ -153,7 +153,7 @@ describe('sanitizeConfigForOutput', () => {
       type: 'object',
       properties: {
         password: { type: 'string', default: 'private-default', enum: ['private-enum'] },
-        dbPassword: { type: 'string', const: 'private-const', examples: ['private-example'] },
+        apiKey: { type: 'string', const: 'private-const', examples: ['private-example'] },
         data: { default: { apiKey: 'private-data-key', label: 'public' } },
       },
       apiKey: 'private-extension',
@@ -194,6 +194,92 @@ describe('sanitizeConfigForOutput', () => {
       ],
     };
     expect(JSON.stringify(sanitizeConfigForOutput(config))).not.toContain('private-value');
+  });
+
+  it('retains ordinary property and definition constraints without URL-name heuristics', () => {
+    const schema = {
+      type: 'object',
+      definitions: { key: { enum: ['id', 'name'] } },
+      properties: {
+        key: { type: 'number', const: 7 },
+        sortField: { $ref: '#/definitions/key' },
+        dbPassword: { enum: ['first', 'second'] },
+      },
+      required: ['key', 'sortField', 'dbPassword'],
+    };
+    const config = { tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }] };
+    const output = sanitizeConfigForOutput(config);
+    expect(output).toEqual(config);
+    const projected = (output.tests as typeof config.tests)[0].assert[0].value;
+    const validate = new Ajv().compile(projected);
+    expect(validate({ key: 7, sortField: 'id', dbPassword: 'first' })).toBe(true);
+    expect(validate({ key: 8, sortField: 'id', dbPassword: 'first' })).toBe(false);
+    expect(validate({ key: 7, sortField: 'other', dbPassword: 'first' })).toBe(false);
+  });
+
+  it.each([false, true])(
+    'redacts schema credential literals without invalid enums (JSON: %s)',
+    (json) => {
+      const schema = {
+        type: 'object',
+        properties: {
+          password: {
+            type: 'string',
+            pattern: '^private-password$',
+            enum: ['private-password', 'private-alternative'],
+            title: 'private-title',
+            description: 'private-description',
+          },
+          headers: {
+            type: 'object',
+            default: { 'X-Custom': 'private-header-default' },
+            const: { 'X-Custom': 'private-header-const' },
+            enum: [{ 'X-Custom': 'private-one' }, { 'X-Custom': 'private-two' }],
+            examples: [{ 'X-Custom': 'private-example' }],
+          },
+          publicField: { type: 'string', pattern: '^ordinary$' },
+        },
+      };
+      const value = json ? JSON.stringify(schema) : schema;
+      const config = { tests: [{ assert: [{ type: 'is-json' as const, value }] }] };
+      const original = structuredClone(config);
+      const output = sanitizeConfigForOutput(config);
+      expect(JSON.stringify(output)).not.toContain('private-');
+      const projectedValue = (output.tests as typeof config.tests)[0].assert[0].value;
+      const projected =
+        typeof projectedValue === 'string' ? JSON.parse(projectedValue) : projectedValue;
+      expect(projected.properties.password.enum).toEqual(['[REDACTED]']);
+      expect(projected.properties.headers.enum).toEqual(['[REDACTED]']);
+      expect(new RegExp(projected.properties.password.pattern).test('R')).toBe(false);
+      expect(projected.properties.publicField).toEqual(schema.properties.publicField);
+      const validate = new Ajv().compile(projected);
+      expect(validate({ publicField: 'ordinary' })).toBe(true);
+      expect(validate({ publicField: 'other' })).toBe(false);
+      expect(validate({ password: 'private-password' })).toBe(false);
+      expect(config).toEqual(original);
+    },
+  );
+
+  it('reserves existing schema map names when URL redaction changes another name', () => {
+    const authored = 'https://example.com/?token=private-value';
+    const existing = 'https://example.com/?token=%5BREDACTED%5D';
+    const schema = {
+      type: 'object',
+      properties: { [authored]: { type: 'string' }, [existing]: { type: 'integer' } },
+      required: [existing],
+    };
+    const config = { tests: [{ assert: [{ type: 'is-json' as const, value: schema }] }] };
+    const output = sanitizeConfigForOutput(config);
+    const projected = (output.tests as typeof config.tests)[0].assert[0].value;
+    expect(projected.properties).toEqual({
+      [existing]: { type: 'integer' },
+      [`${existing}#1`]: { type: 'string' },
+    });
+    expect(JSON.stringify(projected)).not.toContain('private-value');
+    const validate = new Ajv().compile(projected);
+    expect(validate({ [existing]: 7 })).toBe(true);
+    expect(validate({ [existing]: 'wrong' })).toBe(false);
+    expect(schema.properties[authored]).toEqual({ type: 'string' });
   });
 
   it.each([

@@ -712,6 +712,41 @@ const JSON_SCHEMA_CHILD_KEYWORDS = new Set([
   'contentSchema',
 ]);
 const JSON_SCHEMA_ARRAY_KEYWORDS = new Set(['allOf', 'anyOf', 'oneOf', 'prefixItems']);
+// These keywords describe structure or validation rules, rather than example data.
+const JSON_SCHEMA_STRUCTURAL_KEYWORDS = new Set([
+  '$schema',
+  '$id',
+  '$ref',
+  '$anchor',
+  '$dynamicRef',
+  '$dynamicAnchor',
+  '$recursiveRef',
+  '$recursiveAnchor',
+  '$vocabulary',
+  'type',
+  'format',
+  'required',
+  'multipleOf',
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'minLength',
+  'maxLength',
+  'minItems',
+  'maxItems',
+  'uniqueItems',
+  'minContains',
+  'maxContains',
+  'minProperties',
+  'maxProperties',
+  'contentEncoding',
+  'contentMediaType',
+  'readOnly',
+  'writeOnly',
+  'deprecated',
+  'nullable',
+]);
 
 function isSchemaObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -724,15 +759,22 @@ function sanitizeAssertionSchemaMap(
 ): Record<string, unknown> {
   const options = { sanitizeUrls: true, throwOnError: true, maxDepth: Number.POSITIVE_INFINITY };
   const properties: Record<string, unknown> = Object.create(null);
+  let keySuffix = 0;
   for (const [name, definition] of Object.entries(value)) {
     const safeName = URL_REFERENCE.test(name) ? sanitizeUrl(name) : name;
     let uniqueName = safeName;
-    for (let suffix = 1; Object.prototype.hasOwnProperty.call(properties, uniqueName); suffix++) {
-      uniqueName = `${safeName}#${suffix}`;
+    while (
+      Object.prototype.hasOwnProperty.call(properties, uniqueName) ||
+      (uniqueName !== name && Object.prototype.hasOwnProperty.call(value, uniqueName))
+    ) {
+      uniqueName = `${safeName}#${++keySuffix}`;
     }
     properties[uniqueName] =
       isSchemaObject(definition) || typeof definition === 'boolean'
-        ? sanitizeAssertionJsonSchema(definition, credentialProperty || isSecretParameterName(name))
+        ? sanitizeAssertionJsonSchema(
+            definition,
+            credentialProperty || isSecretField(name) || name.toLowerCase() === 'headers',
+          )
         : (keyword === 'dependencies' || keyword === 'dependentRequired') &&
             Array.isArray(definition)
           ? sanitizeObject(definition, options)
@@ -765,12 +807,18 @@ function sanitizeAssertionJsonSchema(schema: unknown, credentialProperty = false
           ],
         ];
       }
-      // Keep schema structure, but do not publish literal credentials embedded in schemas.
-      if (
-        credentialProperty &&
-        ['default', 'const', 'enum', 'examples', 'example'].includes(keyword)
-      ) {
-        return [[keyword, Array.isArray(value) ? value.map(() => REDACTED) : REDACTED]];
+      // Retain the existing secret-field/header boundary while restoring schema structure.
+      // Patterns and annotations can contain literal credentials just like defaults do.
+      if (credentialProperty && !JSON_SCHEMA_STRUCTURAL_KEYWORDS.has(keyword)) {
+        const redacted =
+          keyword === 'pattern'
+            ? String.raw`^\[REDACTED\]$`
+            : keyword === 'enum' && Array.isArray(value) && value.length > 0
+              ? [REDACTED]
+              : Array.isArray(value)
+                ? value.map(() => REDACTED)
+                : REDACTED;
+        return [[keyword, redacted]];
       }
       return Object.entries(sanitizeObject({ [keyword]: value }, options));
     }),
