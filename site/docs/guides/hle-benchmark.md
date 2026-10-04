@@ -208,7 +208,12 @@ tests:
 providers:
   - anthropic:claude-sonnet-5
   - openai:o4-mini
-  - deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-flash
+    config:
+      max_tokens: 8192
+      passthrough:
+        thinking:
+          type: enabled
 ```
 
 **Increase reasoning depth:**
