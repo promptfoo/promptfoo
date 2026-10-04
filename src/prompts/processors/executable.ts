@@ -107,15 +107,17 @@ export const executablePromptFunction = async (
  * @param filePath - Path to the executable file (can include arguments).
  * @param prompt - The raw prompt data.
  * @param functionName - Not used for executables, but kept for interface consistency.
+ * @param displayPath - Path used when binary or unreadable files have no displayable content.
  * @returns Array of prompts generated from the executable.
  */
 export async function processExecutableFile(
   filePath: string,
   prompt: Partial<Prompt>,
   _functionName?: string,
+  displayPath: string = filePath,
 ): Promise<Prompt[]> {
   // For display purposes, try to read the file if it exists and is a text file
-  let rawContent = filePath;
+  let rawContent = displayPath;
   const scriptParts = parseScriptParts(filePath);
   const firstPart = scriptParts[0];
 

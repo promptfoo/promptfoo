@@ -104,6 +104,7 @@ async function processPromptFile(
   prompt: Partial<Prompt>,
   extension: string | undefined,
   functionName: string | undefined,
+  labelPath: string,
 ): Promise<Prompt[]> {
   if (extension === '.csv') {
     return processCsvPrompts(filePath, prompt);
@@ -137,14 +138,14 @@ async function processPromptFile(
     extension &&
     ['.sh', '.bash', '.exe', '.bat', '.cmd', '.ps1', '.rb', '.pl'].includes(extension)
   ) {
-    return await processExecutableFile(filePath, prompt, functionName);
+    return await processExecutableFile(filePath, prompt, functionName, labelPath);
   }
   // If no extension matched but file exists and is executable, treat it as an executable
   try {
     const stats = await stat(filePath);
     if (stats.isFile() && (stats.mode & 0o111) !== 0) {
       // File is executable
-      return await processExecutableFile(filePath, prompt, functionName);
+      return await processExecutableFile(filePath, prompt, functionName, labelPath);
     }
   } catch (_e) {
     // File doesn't exist or can't be accessed, fall through
@@ -154,7 +155,7 @@ async function processPromptFile(
 
 /**
  * Labels prompts read from `filePath` with `labelPath` instead. Processors build a label
- * (and, for binary executables, the displayed text) from the path they read.
+ * from the path they read. Raw content is independent of that display label.
  */
 function withLabelPath(prompts: Prompt[], filePath: string, labelPath: string): Prompt[] {
   if (labelPath === filePath) {
@@ -163,7 +164,6 @@ function withLabelPath(prompts: Prompt[], filePath: string, labelPath: string): 
   return prompts.map((prompt) => ({
     ...prompt,
     label: prompt.label.replace(filePath, () => labelPath),
-    ...(prompt.raw === filePath && { raw: labelPath }),
   }));
 }
 
@@ -181,14 +181,12 @@ async function processPrompt(
   maxRecursionDepth: number = 1,
   labelBasePath?: string,
 ): Promise<Prompt[]> {
-  const labelPrompts = (prompts: Prompt[], filePath: string) =>
+  const getLabelPath = (filePath: string) =>
     labelBasePath === undefined
-      ? prompts
-      : withLabelPath(
-          prompts,
-          filePath,
-          path.join(labelBasePath, path.relative(basePath, filePath)),
-        );
+      ? filePath
+      : path.join(labelBasePath, path.relative(basePath, filePath));
+  const labelPrompts = (prompts: Prompt[], filePath: string) =>
+    withLabelPath(prompts, filePath, getLabelPath(filePath));
 
   invariant(
     typeof prompt.raw === 'string',
@@ -204,7 +202,10 @@ async function processPrompt(
   if (prompt.raw.startsWith('exec:')) {
     const execSpec = prompt.raw.substring(5); // Remove 'exec:' prefix
     const { filePath, functionName } = parsePathOrGlob(basePath, execSpec);
-    return labelPrompts(await processExecutableFile(filePath, prompt, functionName), filePath);
+    return labelPrompts(
+      await processExecutableFile(filePath, prompt, functionName, getLabelPath(filePath)),
+      filePath,
+    );
   }
 
   if (!maybeFilePath(prompt.raw)) {
@@ -253,7 +254,10 @@ async function processPrompt(
     return prompts;
   }
 
-  return labelPrompts(await processPromptFile(filePath, prompt, extension, functionName), filePath);
+  return labelPrompts(
+    await processPromptFile(filePath, prompt, extension, functionName, getLabelPath(filePath)),
+    filePath,
+  );
 }
 
 /**

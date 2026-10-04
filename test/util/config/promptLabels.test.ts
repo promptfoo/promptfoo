@@ -94,6 +94,38 @@ describe('file prompt labels', () => {
       );
     }
 
+    it.each(['txt', 'md', 'j2', 'sh'])(
+      'preserves %s file content that equals its absolute path',
+      async (extension) => {
+        const fileName = `self.${extension}`;
+        const filePath = path.join(directory, 'project', fileName);
+        fs.writeFileSync(filePath, filePath);
+        writeConfig([`file://${fileName}`]);
+        process.chdir(path.join(directory, 'project'));
+
+        const { testSuite } = await resolve('promptfooconfig.json');
+
+        expect(testSuite.prompts).toHaveLength(1);
+        expect(testSuite.prompts[0].raw).toBe(filePath);
+        expect(testSuite.prompts[0].label.startsWith(fileName)).toBe(true);
+      },
+    );
+
+    it.each(['exec:binary.exe', 'file://binary.exe'])(
+      'keeps the relative display fallback for %s',
+      async (reference) => {
+        fs.writeFileSync(path.join(directory, 'project', 'binary.exe'), Buffer.from([0, 1, 2]));
+        writeConfig([reference]);
+        process.chdir(path.join(directory, 'project'));
+
+        const { testSuite } = await resolve('promptfooconfig.json');
+
+        expect(testSuite.prompts[0].raw).toBe('binary.exe');
+        expect(testSuite.prompts[0].label).toBe('binary.exe');
+        expect(testSuite.prompts[0].function).toEqual(expect.any(Function));
+      },
+    );
+
     it.each([
       ['the config directory', 'project', 'promptfooconfig.json', ''],
       ['a parent directory', '', path.join('project', 'promptfooconfig.json'), 'project'],
