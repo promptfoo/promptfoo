@@ -178,8 +178,26 @@ export async function getGradingProvider(
   } else if (provider != null && typeof provider === 'object') {
     const typeValue = (provider as ProviderTypeMap)[type];
     if (typeValue) {
-      // Defined as embedding, classification, or text record
-      finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+      // Apply evaluation overrides only when the selected typed grader is loaded.
+      // Capturing them in the test config would retain credentials across later runs.
+      if (typeof typeValue === 'string') {
+        finalProvider = trackProvider(
+          await loadApiProvider(typeValue, {
+            basePath: cliState.basePath,
+            env: cliState.env,
+          }),
+        );
+      } else if (typeof typeValue.id === 'string') {
+        finalProvider = trackProvider(
+          await loadApiProvider(typeValue.id, {
+            options: typeValue as ProviderOptions,
+            basePath: cliState.basePath,
+            env: cliState.env,
+          }),
+        );
+      } else {
+        finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+      }
     } else if ((provider as ProviderOptions).id) {
       // Defined as ProviderOptions
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);

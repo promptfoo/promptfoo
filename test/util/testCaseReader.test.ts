@@ -5,6 +5,7 @@ import dedent from 'dedent';
 import { globSync } from 'glob';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { importModule } from '../../src/esm';
@@ -13,6 +14,7 @@ import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatas
 import logger from '../../src/logger';
 import { fetchCsvFromSharepoint } from '../../src/microsoftSharepoint';
 import { loadApiProvider } from '../../src/providers/index';
+import { withProviderCleanup } from '../../src/providers/lifecycle';
 import { runPython } from '../../src/python/pythonUtils';
 import { readAzureBlobText } from '../../src/util/azureBlob';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
@@ -938,6 +940,35 @@ describe('readTest', () => {
   });
 
   describe('readTest with provider', () => {
+    it.each(['string', 'options'] as const)(
+      'cleans an owned %s provider while preserving its scoped environment',
+      async (form) => {
+        const cleanup = vi.fn();
+        const provider = { ...createMockProvider({ id: 'mock-provider' }), cleanup };
+        const env = { OPENAI_API_KEY: 'suite-key' };
+        const previousEnv = cliState.env;
+        vi.mocked(loadApiProvider).mockImplementation(async (_id, options) => {
+          expect(cliState.env).toEqual(env);
+          expect(options).not.toHaveProperty('env');
+          return provider;
+        });
+
+        await withProviderCleanup(async () => {
+          const result = await readTest(
+            { provider: form === 'string' ? 'mock-provider' : { id: 'mock-provider' } },
+            '',
+            false,
+            env,
+          );
+          expect(result.provider).toBe(provider);
+          expect(cliState.env).toBe(previousEnv);
+          expect(cleanup).not.toHaveBeenCalled();
+        });
+
+        expect(cleanup).toHaveBeenCalledOnce();
+      },
+    );
+
     it('should load provider when provider is a string', async () => {
       const mockProvider = createMockProvider({ id: 'mock-provider' });
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
@@ -1961,6 +1992,29 @@ describe('loadTestsFromGlob', () => {
     vi.mocked(globSync).mockReturnValue([]);
     await expect(loadTestsFromGlob('fixtures/{first,second}.yaml')).resolves.toEqual([]);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No test files found'));
+  });
+
+  it("loads a row's vars files and Python provider from its tests file directory", async () => {
+    const configDir = path.resolve('fixture-config');
+    const testsFile = path.join(configDir, 'tests', 'cases.yaml');
+    const varsFile = path.join(configDir, 'vars', 'extra.yaml');
+    vi.mocked(fs.existsSync).mockImplementation((file) => file === testsFile);
+    vi.mocked(globSync).mockImplementation((pattern) =>
+      pattern === path.join(configDir, 'vars', '*.yaml') ? [varsFile] : [],
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((file) =>
+      file === varsFile
+        ? 'topic: nested'
+        : '- vars: ../vars/*.yaml\n  provider: python:provider.py\n',
+    );
+
+    const [test] = await loadTestsFromGlob('tests/cases.yaml', configDir);
+
+    expect(test.vars).toEqual({ topic: 'nested' });
+    expect(loadApiProvider).toHaveBeenCalledWith(
+      'python:provider.py',
+      expect.objectContaining({ basePath: path.dirname(testsFile) }),
+    );
   });
 
   it('should handle Hugging Face dataset URLs', async () => {

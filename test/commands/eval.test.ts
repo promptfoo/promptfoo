@@ -1802,6 +1802,45 @@ describe('evalCommand', () => {
     loggerErrorSpy.mockRestore();
   });
 
+  it.each([
+    { flags: { vars: 'cases.csv' }, basePath: undefined, expected: '/suite/cases.csv' },
+    { flags: { vars: 'cases.csv' }, basePath: '/assets', expected: '/assets/cases.csv' },
+    { flags: { tests: 'cases.csv' }, basePath: undefined, expected: '/working/cases.csv' },
+    {
+      flags: { tests: 'cases.csv', vars: 'ignored.csv' },
+      basePath: undefined,
+      expected: '/working/cases.csv',
+    },
+  ])(
+    'watches the released CLI test-file base: $flags, $basePath',
+    async ({ flags, basePath, expected }) => {
+      const config = { prompts: [], providers: [], tests: [], basePath } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve(basePath ?? '/suite'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+      const cwd = vi.spyOn(process, 'cwd').mockReturnValue(path.resolve('/working'));
+      try {
+        await doEval(
+          { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false, ...flags },
+          config,
+          undefined,
+          {},
+        );
+        expect(chokidarMocks.watch).toHaveBeenCalledWith(
+          expect.arrayContaining([path.resolve(expected)]),
+          { ignored: /^\./, persistent: true },
+        );
+      } finally {
+        cwd.mockRestore();
+      }
+    },
+  );
+
   it('should resume an existing eval with persisted prompts', async () => {
     const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
     resumeEval.prompts = [
