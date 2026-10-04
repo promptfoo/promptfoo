@@ -543,6 +543,49 @@ describe('Eval', () => {
     expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('retried-eval');
   });
 
+  it('drops a socket update that was still waiting when the route changed', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    // The root route follows the latest eval, and asks which one that is first.
+    let answerRecents!: (response: Response) => void;
+    const recents = new Promise<Response>((resolve) => {
+      answerRecents = resolve;
+    });
+    const { container } = render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.mocked(callApi).mockReturnValueOnce(recents);
+    let update!: Promise<void> | undefined;
+    await act(async () => {
+      update = mockSocketHandlers.get('update')?.({});
+      // The user opens a specific eval while that request is pending.
+      render(
+        <MemoryRouter>
+          <Eval fetchId="pinned-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    baseMockTableStore.fetchEvalData.mockClear();
+
+    await act(async () => {
+      answerRecents({
+        ok: true,
+        json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+      } as Response);
+      await update;
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Reloading the latest eval now would put its table under the pinned route.
+    expect(baseMockTableStore.fetchEvalData).not.toHaveBeenCalled();
+  });
+
   it('does not navigate away for a scoped background socket update', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,

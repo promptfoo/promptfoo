@@ -97,6 +97,9 @@ export default function Eval({ fetchId }: EvalOptions) {
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
   currentEvalIdRef.current = evalId;
+  // The route as of the latest render, for handlers that wait and may outlive their route.
+  const fetchIdRef = useRef(fetchId);
+  fetchIdRef.current = fetchId;
 
   // ================================
   // Handlers
@@ -219,6 +222,11 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
+    if (fetchIdRef.current !== fetchId) {
+      // The route changed while the recent evals were fetched. What follows was decided for
+      // the old route, and a reload from here would replace the table of the new one.
+      return;
+    }
     if (!newRecentEvals) {
       // Recents are unavailable. If the socket told us the pinned eval was deleted, don't strand
       // the user on a now-gone /eval/:id — fall back to the root route, which reconciles on load.
