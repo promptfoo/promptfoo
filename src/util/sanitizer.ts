@@ -1492,6 +1492,19 @@ function sanitizePlainObject(
       typeof value === 'string' &&
       (key === 'apiHost' || (isEnvMap && key.toUpperCase().endsWith('_HOST')))
     ) {
+      // Host fields may carry structured tool data. Inspect the original payload
+      // before a synthetic scheme makes JSON/form recognition impossible.
+      if (compoundContext) {
+        const sanitizedJson = redactNestedJsonValue(value, compoundContext, 'original');
+        if (sanitizedJson !== null || looksLikeUrlEncodedFormData(value)) {
+          sanitized[key] = sanitizeUrlForLoggingWithContext(
+            sanitizedJson ?? value,
+            compoundContext,
+            sanitizedJson !== null,
+          );
+          continue;
+        }
+      }
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);
       const endpoint = sanitizeUrlForLoggingWithContext(
@@ -1888,8 +1901,9 @@ export function sanitizeUrlForLogging(url: string): string {
 function sanitizeUrlForLoggingWithContext(
   url: string,
   compoundContext?: CompoundKeyContext,
+  jsonAlreadySanitized = false,
 ): string {
-  const sanitized = sanitizeUrlWithContext(url, compoundContext);
+  const sanitized = sanitizeUrlWithContext(url, compoundContext, jsonAlreadySanitized);
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);

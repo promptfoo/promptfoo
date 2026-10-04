@@ -170,7 +170,10 @@ describe('MCPProvider', () => {
         'User-Agent': '{"password":"header-fixture","label":"{{ value }}"}',
         'https://example.test/?api_key=header-key': 'value',
       },
-      env: { SERVICE_URL: '{"password":"url-fixture","label":"{{ value }}"}' },
+      env: {
+        SERVICE_URL: '{"password":"url-fixture","label":"{{ value }}"}',
+        SERVICE_HOST: '{"databasePassword":"host-fixture","label":"{{ value }}"}',
+      },
       tokenUsage: { input: 4, output: 9 },
       hasCredentials: false,
       isSecret: true,
@@ -220,7 +223,10 @@ describe('MCPProvider', () => {
                   'User-Agent': '{"password":"[REDACTED]","label":"{{ value }}"}',
                   'https://example.test/?api_key=%5BREDACTED%5D': '[REDACTED]',
                 },
-                env: { SERVICE_URL: '{"password":"[REDACTED]","label":"{{ value }}"}' },
+                env: {
+                  SERVICE_URL: '{"password":"[REDACTED]","label":"{{ value }}"}',
+                  SERVICE_HOST: '{"databasePassword":"[REDACTED]","label":"{{ value }}"}',
+                },
                 dbPassword: '[REDACTED]',
                 authHeaders: {
                   'User-Agent': '{"databasePassword":"[REDACTED]","page":2}',

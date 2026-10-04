@@ -618,6 +618,91 @@ describe('sanitizeMcpToolData', () => {
     },
   );
 
+  it.each(['apiHost', 'env.SERVICE_HOST', 'env.service_host'])(
+    'sanitizes raw MCP payloads before normalizing %s',
+    (name) => {
+      const wrap = (value: string) =>
+        name.startsWith('env.') ? { env: { [name.slice(4)]: value } } : { [name]: value };
+      const json = '{"databasePassword":"host-fixture","label":"{{ value }}","page":2}';
+      const safeJson = '{"databasePassword":"[REDACTED]","label":"{{ value }}","page":2}';
+      for (const [value, expected] of [
+        [json, safeJson],
+        [`data=${encodeURIComponent(json)}`, `data=${encodeURIComponent(safeJson)}`],
+        ['databasePassword=host-fixture', '[REDACTED]'],
+        ['{"target":"callback?token=host-fixture"}', '[REDACTED]'],
+      ]) {
+        const fields = wrap(value);
+        const args = { one: { two: { three: { four: { five: fields } } } } };
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(fields)).toEqual(wrap(expected));
+        expect(sanitizeMcpToolData(args)).toEqual({
+          one: { two: { three: { four: { five: wrap(expected) } } } },
+        });
+        expect(args).toEqual(original);
+      }
+      for (const value of [
+        'gateway.example',
+        'localhost:8080',
+        'gateway.example/proxy/v1',
+        'https://gateway.example/proxy/v1',
+        '{{ host }}',
+        'https://{{ host }}/?page=2',
+        ' { "label":"{{ value }}", "page":2 } ',
+        'data=%7B%22page%22%3A2%7D',
+      ]) {
+        expect(sanitizeMcpToolData(wrap(value))).toEqual(wrap(value));
+      }
+      expect(sanitizeObject(wrap(json), { sanitizeUrls: true, maxDepth: 64 })).toEqual(wrap(json));
+    },
+  );
+
+  it.each(['apiHost', 'env.SERVICE_HOST', 'env.service_host'])(
+    'retains logging path guards for raw %s form payloads',
+    (name) => {
+      const wrap = (value: string) =>
+        name.startsWith('env.') ? { env: { [name.slice(4)]: value } } : { [name]: value };
+      for (const path of ['token-secret12345', '01234567-89ab-cdef-0123-456789abcdef']) {
+        for (const prefix of ['data=gateway.example/', 'data=https://gateway.example/']) {
+          const value = `${prefix}${path}`;
+          const fields = wrap(value);
+          const args = { one: { two: { three: { four: { five: fields } } } } };
+          const original = structuredClone(args);
+          expect(JSON.stringify(sanitizeMcpToolData(fields))).not.toContain(path);
+          expect(JSON.stringify(sanitizeMcpToolData(args))).not.toContain(path);
+          expect(args).toEqual(original);
+        }
+      }
+      for (const value of [
+        'data=gateway.example/public-path',
+        'data=https://gateway.example/public-path',
+      ]) {
+        expect(sanitizeMcpToolData(wrap(value))).toEqual(wrap(value));
+      }
+    },
+  );
+
+  it.each(['apiHost', 'env.SERVICE_HOST'])('walks nested raw %s JSON payloads once', (name) => {
+    const wrap = (value: string) =>
+      name.startsWith('env.') ? { env: { [name.slice(4)]: value } } : { [name]: value };
+    let args: Record<string, unknown> = { databasePassword: 'host-fixture', page: 2 };
+    let expected: Record<string, unknown> = { databasePassword: '[REDACTED]', page: 2 };
+    for (let level = 0; level < 12; level++) {
+      args = wrap(JSON.stringify(args));
+      expected = wrap(JSON.stringify(expected));
+    }
+    const parse = vi.spyOn(JSON, 'parse');
+    let result: unknown;
+    let calls: number;
+    try {
+      result = sanitizeMcpToolData(args);
+      calls = parse.mock.calls.length;
+    } finally {
+      parse.mockRestore();
+    }
+    expect(result).toEqual(expected);
+    expect(calls).toBeLessThan(100);
+  });
+
   it('preserves unchanged exact-URL JSON bytes without repeating nested traversal', () => {
     let args: Record<string, unknown> = { label: '{{ value }}', page: 2 };
     for (let level = 0; level < 12; level++) {
