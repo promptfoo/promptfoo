@@ -946,6 +946,11 @@ async function getWorkspaceDiff(
       (file) =>
         !isIgnored(file) || protectedDirectories.has(file.endsWith('/') ? file : `${file}/`),
     );
+    // Existing files are handled by add --update, including valid UTF-8 names containing
+    // the replacement character. The scanner still reports any colliding raw-byte paths.
+    for (const file of baseline) {
+      newFiles.delete(file);
+    }
     // Git stops altogether at a new file it cannot examine, such as one in a directory that
     // can be listed but not searched. Those are named below instead of being added. Git has
     // just listed them, so one that cannot be found is not gone: its name has bytes that are

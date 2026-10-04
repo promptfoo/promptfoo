@@ -2143,6 +2143,60 @@ describe('agent workspaces', () => {
       },
     );
 
+    it.each([false, true])(
+      'preserves an ignored tracked file with a valid replacement character (changed: %s)',
+      async (changed) => {
+        const source = path.join(root, 'repo');
+        const name = 'policy\uFFFD.txt';
+        makeRepository(source, { '.gitignore': `${name}\n` });
+        write(path.join(source, name), 'original\n');
+        git(source, 'add', '--force', name);
+        git(source, 'commit', '-qm', 'track ignored file');
+        const workspace = await create(source, 'git');
+        if (changed) {
+          write(path.join(workspace.dir, name), 'visible change\n');
+        }
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+        if (changed) {
+          expect(metadata.workspaceDiff).toContain('+visible change');
+        } else {
+          expect(metadata.workspaceDiff).toBe('');
+        }
+      },
+    );
+
+    it('still reports a raw filename colliding with an ignored tracked UTF-8 name', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      const name = 'policy\uFFFD.txt';
+      makeRepository(source, { '.gitignore': `${name}\n` });
+      write(path.join(source, name), 'original\n');
+      git(source, 'add', '--force', name);
+      git(source, 'commit', '-qm', 'track ignored file');
+      const workspace = await create(source, 'git');
+      write(path.join(workspace.dir, name), 'visible change\n');
+      const raw = Buffer.concat([
+        Buffer.from(`${workspace.dir}${path.sep}policy`),
+        Buffer.from([0xff]),
+        Buffer.from('.txt'),
+      ]);
+      fs.writeFileSync(raw, 'hidden new file\n');
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiffError).toBeUndefined();
+      expect(metadata.workspaceDiffIncomplete).toBe(true);
+      expect(metadata.workspaceDiff).toContain('+visible change');
+      expect(metadata.workspaceDiff).toContain('policy\\u{fffd}.txt');
+      expect(fs.readFileSync(raw, 'utf8')).toBe('hidden new file\n');
+    });
+
     it('names a new file whose name holds the replacement character', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
