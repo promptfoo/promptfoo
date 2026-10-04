@@ -134,7 +134,7 @@ async function checkMigrations(tempDir) {
           },
         ],
       },
-      stats: { successes: 1, failures: 0, errors: 0, tokenUsage: historicalTokens },
+      stats: { successes: 1, failures: 0, errors: 0, cachedRows: 0, tokenUsage: historicalTokens },
     };
     const historical = {
       id: 'eval-package-artifact-historical',
