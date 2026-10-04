@@ -35,7 +35,7 @@ const UNSANITIZED_TOOL_DATA = '[MCP tool data omitted: it could not be sanitized
  * cannot be sanitized, for example because their nesting exhausts the stack, a placeholder
  * is reported instead.
  */
-export function sanitizeMcpToolData<T>(value: T): T {
+export function sanitizeMcpToolData<T>(value: T): T | typeof UNSANITIZED_TOOL_DATA {
   try {
     return sanitizeObject(value, {
       context: 'MCP tool data',
@@ -44,10 +44,11 @@ export function sanitizeMcpToolData<T>(value: T): T {
       throwOnError: true,
     });
   } catch (error) {
+    // The error can quote the data it was thrown for, so only its kind is logged.
     logger.debug('[MCP] Tool data could not be sanitized and is omitted', {
-      error: error instanceof Error ? error.message : String(error),
+      errorType: error instanceof Error ? error.name : typeof error,
     });
-    return UNSANITIZED_TOOL_DATA as T;
+    return UNSANITIZED_TOOL_DATA;
   }
 }
 

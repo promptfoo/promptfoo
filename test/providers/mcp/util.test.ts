@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import logger from '../../../src/logger';
 import {
   applyQueryParams,
   discoverTokenEndpoint,
@@ -124,11 +125,21 @@ describe('sanitizeMcpToolData', () => {
     Object.defineProperty(args, 'unreadable', {
       enumerable: true,
       get() {
-        throw new Error('cannot be read');
+        // An error can quote the data it was thrown for.
+        throw new Error(`cannot read ${args.apiKey}`);
       },
     });
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
 
-    expect(sanitizeMcpToolData(args)).toBe(omitted);
+    try {
+      expect(sanitizeMcpToolData(args)).toBe(omitted);
+      expect(debug).toHaveBeenCalledWith('[MCP] Tool data could not be sanitized and is omitted', {
+        errorType: 'Error',
+      });
+      expect(JSON.stringify(debug.mock.calls)).not.toContain('tool-secret-value');
+    } finally {
+      debug.mockRestore();
+    }
   });
 
   it('copes with arguments that refer to themselves', () => {
