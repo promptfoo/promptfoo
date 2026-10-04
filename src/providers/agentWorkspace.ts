@@ -208,6 +208,44 @@ async function addReadablePaths(
   }
 }
 
+/**
+ * Paths in the workspace that Git leaves out of a diff without saying so: entries that are
+ * neither files, directories nor links, such as FIFOs and sockets, and directories that
+ * cannot be read. Paths use forward slashes, and directories end with one, as in Git's output.
+ *
+ * Entries are only listed, never opened. `.git` directories are Git's own.
+ */
+async function findPathsGitLeavesOut(dir: string, signal?: AbortSignal): Promise<string[]> {
+  const leftOut: string[] = [];
+  const pending = [''];
+  for (let directory = pending.pop(); directory !== undefined; directory = pending.pop()) {
+    signal?.throwIfAborted();
+    try {
+      for await (const entry of await fs.opendir(path.join(dir, directory))) {
+        const entryPath = `${directory}${entry.name}`;
+        if (entry.isDirectory()) {
+          if (entry.name !== '.git') {
+            pending.push(`${entryPath}/`);
+          }
+        } else if (!entry.isFile() && !entry.isSymbolicLink()) {
+          leftOut.push(entryPath);
+        }
+      }
+    } catch (error) {
+      if (directory === '') {
+        throw error;
+      }
+      const code = error instanceof Error && 'code' in error ? error.code : undefined;
+      // A directory that was removed in the meantime has nothing to report. Whatever any
+      // other unreadable directory holds is missing from the diff.
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+        leftOut.push(directory);
+      }
+    }
+  }
+  return leftOut;
+}
+
 class UnsupportedGitAttributesError extends Error {}
 class UnsupportedGitSubmoduleError extends Error {}
 
@@ -647,11 +685,17 @@ async function getWorkspaceDiff(
         newFiles.add(file);
       }
     }
-    const untracked = await git(['ls-files', '-z', '--others'], { env, signal });
-    if (untracked) {
+    const untracked = (await git(['ls-files', '-z', '--others'], { env, signal }))
+      .split('\0')
+      .filter(Boolean);
+    // Git lists neither special files nor the contents of directories it cannot read, so an
+    // agent could keep a change out of the diff with `mkfifo` or `chmod`. They are looked
+    // for separately and reported below.
+    let leftOut = await findPathsGitLeavesOut(dir, signal);
+    if (untracked.length + leftOut.length > 0) {
       const ignored = await git(['check-ignore', '--no-index', '-z', '--stdin'], {
         env: ignoreEnv,
-        input: untracked,
+        input: `${[...untracked, ...leftOut].join('\0')}\0`,
         signal,
       }).catch((error: unknown) => {
         if (error instanceof Error && 'code' in error && error.code === 1) {
@@ -660,11 +704,12 @@ async function getWorkspaceDiff(
         throw error;
       });
       const ignoredFiles = new Set(ignored.split('\0'));
-      for (const file of untracked.split('\0').filter(Boolean)) {
+      for (const file of untracked) {
         if (!ignoredFiles.has(file)) {
           newFiles.add(file);
         }
       }
+      leftOut = leftOut.filter((file) => !ignoredFiles.has(file));
     }
     // The agent controls the workspace, so some paths may be impossible to add: a file it
     // made unreadable, or a repository it created. Add everything else rather than losing
@@ -692,23 +737,31 @@ async function getWorkspaceDiff(
         ['-c', 'core.fsmonitor=false', 'add', '--update', '--ignore-errors'],
         { env, signal },
       )) || skippedPaths;
-    if (skippedPaths) {
+    // The index entries, as "<mode> <object> <stage>\t<path>".
+    const staged = (await git(['ls-files', '-z', '--stage'], { env, signal }))
+      .split('\0')
+      .filter(Boolean)
+      .map((entry) => ({
+        isRepository: entry.startsWith('160000 '),
+        path: entry.slice(entry.indexOf('\t') + 1),
+      }));
+    if (skippedPaths || leftOut.length > 0) {
       // Tracked files that still differ from the index are the ones `add --update` skipped.
-      const notUpdated = await git(['-c', 'core.fsmonitor=false', 'diff', '--name-only', '-z'], {
-        env,
-        signal,
-      });
+      const notUpdated = skippedPaths
+        ? await git(['-c', 'core.fsmonitor=false', 'diff', '--name-only', '-z'], { env, signal })
+        : '';
       // A new path that is not in the index at all could not be added. Files the cloned
       // commit already tracks are in the index whether or not they changed, so an unchanged
       // one is not reported.
-      const indexed = new Set(
-        (await git(['ls-files', '-z', '--cached'], { env, signal })).split('\0'),
-      );
+      const indexed = new Set(staged.map((entry) => entry.path));
       const missing = [
-        // Changes to existing files come first, so they are the last to be cut off.
-        ...notUpdated.split('\0').filter(Boolean),
-        // An untracked repository is listed as a directory, with a trailing slash.
-        ...[...newFiles].filter((file) => !indexed.has(file.replace(/\/$/, ''))),
+        ...new Set([
+          // Changes to existing files come first, so they are the last to be cut off.
+          ...notUpdated.split('\0').filter(Boolean),
+          // An untracked repository is listed as a directory, with a trailing slash.
+          ...[...newFiles].filter((file) => !indexed.has(file.replace(/\/$/, ''))),
+          ...leftOut,
+        ]),
       ];
       // Naming the paths keeps a search for a changed file from passing on a partial diff.
       notes.push(
@@ -716,6 +769,20 @@ async function getWorkspaceDiff(
           (missing.length > 0 ? `: ${missing.slice(0, MAX_INCOMPLETE_PATHS).join(', ')}` : '') +
           (missing.length > MAX_INCOMPLETE_PATHS
             ? `, and ${missing.length - MAX_INCOMPLETE_PATHS} more`
+            : '') +
+          ']',
+      );
+    }
+    // A repository the agent created and committed to is added as a link to its commit. The
+    // cloned commit has no such links (see `getCloneableRepository`), so each one hides files.
+    const repositories = staged.filter((entry) => entry.isRepository).map((entry) => entry.path);
+    if (repositories.length > 0) {
+      notes.push(
+        `[diff incomplete: the files of ${repositories.length} nested repositor` +
+          `${repositories.length === 1 ? 'y' : 'ies'} are not included: ` +
+          repositories.slice(0, MAX_INCOMPLETE_PATHS).join(', ') +
+          (repositories.length > MAX_INCOMPLETE_PATHS
+            ? `, and ${repositories.length - MAX_INCOMPLETE_PATHS} more`
             : '') +
           ']',
       );

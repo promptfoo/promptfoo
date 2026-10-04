@@ -1317,6 +1317,137 @@ describe('agent workspaces', () => {
       }
     });
 
+    it.each(['fifo', 'socket'] as const)(
+      'marks the diff incomplete when the agent creates a %s, which git does not list',
+      async (kind) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const workspace = await create(source);
+        write(path.join(workspace.dir, 'notes', 'new.txt'), 'new file\n');
+        // Neither `git status` nor `git add` reports these, so the diff alone would say that
+        // nothing called policy.txt was created.
+        const sockets = [];
+        for (const directory of [workspace.dir, path.join(workspace.dir, 'notes')]) {
+          if (kind === 'fifo') {
+            execFileSync('mkfifo', [path.join(directory, 'policy.txt')]);
+          } else {
+            sockets.push(await listenIn(directory, 'policy.txt'));
+          }
+        }
+
+        try {
+          const metadata = await workspace.metadata();
+
+          expect(metadata.workspaceDiffError).toBeUndefined();
+          expect(metadata.workspaceDiffIncomplete).toBe(true);
+          expect(metadata.workspaceDiff).toContain('+++ b/notes/new.txt');
+          expect(metadata.workspaceDiff).toMatch(
+            /\[diff incomplete: 2 changed path\(s\) could not be included: (policy\.txt, notes\/policy\.txt|notes\/policy\.txt, policy\.txt)\]$/,
+          );
+        } finally {
+          for (const socket of sockets) {
+            await new Promise<void>((resolve) => socket.close(() => resolve()));
+          }
+        }
+      },
+    );
+
+    it('names a tracked file the agent replaced with a fifo', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      fs.rmSync(path.join(workspace.dir, 'README.md'));
+      execFileSync('mkfifo', [path.join(workspace.dir, 'README.md')]);
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiffIncomplete).toBe(true);
+      expect(workspaceDiff).toBe(
+        '[diff incomplete: 1 changed path(s) could not be included: README.md]',
+      );
+    });
+
+    it('marks the diff incomplete when the agent makes a directory unreadable', async () => {
+      if (!canMakeUnreadable) {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'README.md'), 'original\ntampered\n');
+      // Git warns that it cannot open the directory and reports nothing inside it.
+      const hidden = path.join(workspace.dir, 'hidden');
+      write(path.join(hidden, 'policy.txt'), 'new file\n');
+      fs.chmodSync(hidden, 0o000);
+
+      try {
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('+tampered');
+        expect(metadata.workspaceDiff).toMatch(
+          /\[diff incomplete: 1 changed path\(s\) could not be included: hidden\/\]$/,
+        );
+      } finally {
+        fs.chmodSync(hidden, 0o700);
+      }
+    });
+
+    it('does not report special files and unreadable directories that the commit ignores', async () => {
+      if (!canMakeUnreadable) {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'tmp/\n*.sock\n' });
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'README.md'), 'original\ntampered\n');
+      // What a tool leaves behind in ignored places is not a change to the workspace.
+      const cache = path.join(workspace.dir, 'tmp', 'cache');
+      write(path.join(cache, 'entry'), 'cached\n');
+      execFileSync('mkfifo', [path.join(workspace.dir, 'tmp', 'pipe')]);
+      execFileSync('mkfifo', [path.join(workspace.dir, 'server.sock')]);
+      fs.chmodSync(cache, 0o000);
+
+      try {
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+        expect(metadata.workspaceDiff).toContain('+tampered');
+        expect(metadata.workspaceDiff).not.toContain('diff incomplete');
+      } finally {
+        fs.chmodSync(cache, 0o700);
+      }
+    });
+
+    it('marks the diff incomplete when the agent commits to a repository it created', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      // Git records the repository as a link to its commit, so the diff shows that it exists
+      // and none of its files.
+      const nested = path.join(workspace.dir, 'newproj');
+      write(path.join(nested, 'policy.txt'), 'hidden from the diff\n');
+      git(nested, 'init', '-q');
+      git(nested, 'add', '-A');
+      git(nested, 'commit', '-q', '-m', 'nested');
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiff).toContain('Subproject commit');
+      expect(workspaceDiff).not.toContain('hidden from the diff');
+      expect(workspaceDiffIncomplete).toBe(true);
+      expect(workspaceDiff).toMatch(
+        /\[diff incomplete: the files of 1 nested repository are not included: newproj\]$/,
+      );
+    });
+
     it('does not report an unchanged ignored file the repository already tracks', async () => {
       const source = path.join(root, 'repo');
       // The cloned commit tracks a file that its own ignore rules match.
