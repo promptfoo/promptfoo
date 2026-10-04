@@ -390,23 +390,60 @@ describe('bedrock openaiResponses helper', () => {
         expect(errorSpy).toHaveBeenCalledWith(hint);
       });
 
-      it('points an explicit Mantle apiBaseUrl at a listed region', async () => {
-        mockMantleResponse('openai.gpt-6-astra');
-        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
-          config: {
-            apiKey: 'bedrock-key',
-            region: 'us-west-2',
-            apiBaseUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
-          },
-        });
+      it.each([
+        ['factory', 'us-west-2'],
+        ['factory', 'us-east-1'],
+        ['direct', 'us-west-2'],
+        ['direct', 'us-east-1'],
+      ])(
+        'points an explicit Mantle apiBaseUrl at a listed region (%s, %s)',
+        async (mode, region) => {
+          mockMantleResponse('openai.gpt-6-astra');
+          const options = {
+            config: {
+              apiKey: 'bedrock-key',
+              region,
+              apiBaseUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+            },
+          };
+          const provider =
+            mode === 'factory'
+              ? createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', options)
+              : new BedrockOpenAiResponsesProvider('openai.gpt-6-astra', options);
 
-        const result = await provider.callApi('hello');
+          const result = await provider.callApi('hello');
 
-        expect(result.error).toContain(
-          'Amazon Bedrock does not list openai.gpt-6-astra on the Mantle endpoint in us-east-1. ' +
-            'Point config.apiBaseUrl at a listed Region: us-west-2.',
-        );
-      });
+          expect(provider.getApiUrl()).toBe(options.config.apiBaseUrl);
+          expect(result.metadata?.http?.status).toBe(404);
+          expect(result.error).toContain(
+            'Amazon Bedrock does not list openai.gpt-6-astra on the Mantle endpoint in us-east-1. ' +
+              'Point config.apiBaseUrl at a listed Region: us-west-2.',
+          );
+          expect(result.error).not.toContain('Set config.region');
+        },
+      );
+
+      it.each(['factory', 'direct'])(
+        'keeps region remediation for a generated Mantle endpoint (%s)',
+        async (mode) => {
+          mockMantleResponse('openai.gpt-6-astra');
+          const options = {
+            config: { apiKey: 'bedrock-key', region: 'us-east-1', apiBaseUrl: '' },
+          };
+          const provider =
+            mode === 'factory'
+              ? createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', options)
+              : new BedrockOpenAiResponsesProvider('openai.gpt-6-astra', options);
+
+          const result = await provider.callApi('hello');
+
+          expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/openai/v1');
+          expect(result.error).toContain(
+            'Set config.region or AWS_BEDROCK_REGION to a listed Region: us-west-2.',
+          );
+          expect(result.error).not.toContain('Point config.apiBaseUrl');
+        },
+      );
 
       it('does not turn a 404 refusal into an error', async () => {
         restoreEnv = mockProcessEnv({ AWS_REGION: 'us-east-1' });
