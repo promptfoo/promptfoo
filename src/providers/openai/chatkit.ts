@@ -736,6 +736,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private initialized: boolean = false;
+  private pool: ChatKitBrowserPool | null = null;
 
   // Static userId for consistent template keys across concurrent evaluations
   private static defaultUserId: string | null = null;
@@ -903,13 +904,16 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
    * Clean up browser resources
    */
   async cleanup(): Promise<void> {
-    const { context, browser, server } = this;
+    const { context, browser, server, pool } = this;
+    this.pool = null;
     this.context = null;
     this.page = null;
     this.browser = null;
     this.server = null;
     this.serverPort = 0;
     this.initialized = false;
+
+    await pool?.release(this);
 
     for (const [name, resource] of [
       ['context', context],
@@ -1149,6 +1153,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       maxConcurrency: this.chatKitConfig.poolSize,
       headless: this.chatKitConfig.headless,
     });
+    pool.retain(this);
+    this.pool = pool;
 
     // Generate a unique template key for this workflow configuration
     // This ensures different workflows get isolated pages in the pool
