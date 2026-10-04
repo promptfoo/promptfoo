@@ -331,6 +331,11 @@ export default class Eval {
   runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
+  /**
+   * The first non-transient HTTP status among the rows added in this run. It stands in for
+   * the database when that cannot be queried afterwards.
+   */
+  private observedTargetErrorStatus?: number;
   private failedResults = new Map<string, EvaluateResult>();
   // Reconstructed EvalResults for rows that failed to persist, cached so comparison
   // assertions reuse the SAME instance across passes (select-best then max-score).
@@ -755,6 +760,14 @@ export default class Eval {
   }
 
   async addResult(result: EvaluateResult) {
+    const httpStatus = result.response?.metadata?.http?.status;
+    if (
+      this.observedTargetErrorStatus === undefined &&
+      typeof httpStatus === 'number' &&
+      isNonTransientHttpStatus(httpStatus)
+    ) {
+      this.observedTargetErrorStatus = httpStatus;
+    }
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
     });
@@ -896,9 +909,9 @@ export default class Eval {
 
       return result?.httpStatus ?? unsavedStatus;
     } catch {
-      // Fall back to in-memory scan if database query fails
-      // This handles edge cases like mocked databases in tests
-      return scanInMemory() ?? unsavedStatus;
+      // Fall back to what is held in memory if the database query fails: loaded results,
+      // rows that could not be saved, and what the rows added in this run showed.
+      return scanInMemory() ?? unsavedStatus ?? this.observedTargetErrorStatus;
     }
   }
 

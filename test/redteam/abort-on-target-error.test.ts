@@ -3,6 +3,7 @@ import http from 'http';
 import { AddressInfo } from 'net';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database/index';
 import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -255,6 +256,37 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
     // The command drops loaded results before it reports, which must not lose the row.
     evalRecord.clearResults();
 
+    expect(await evalRecord.findTargetErrorStatus()).toBe(403);
+  });
+
+  it('should still find a saved target error when the database cannot be queried', async () => {
+    const mockApiProvider = createMockProvider({
+      id: 'test-http-provider-unqueryable',
+      response: {
+        output: 'Forbidden',
+        metadata: { http: { status: 403, statusText: 'Forbidden' } },
+      },
+    });
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: {} }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    // The command drops loaded results before it reports.
+    evalRecord.clearResults();
+
+    const db = await getDb();
+    const select = vi.spyOn(db, 'select').mockImplementation(() => {
+      throw new Error('database is locked');
+    });
+    try {
+      // The row was saved, but nothing can be read back. What the run itself saw still counts.
+      expect(await evalRecord.findTargetErrorStatus()).toBe(403);
+    } finally {
+      select.mockRestore();
+    }
     expect(await evalRecord.findTargetErrorStatus()).toBe(403);
   });
 
