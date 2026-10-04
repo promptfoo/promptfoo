@@ -908,6 +908,12 @@ describe('MCPClient', () => {
           cookies: { sid: 'cookie-fixture' },
           cookieJar: { sid: 123456, nested: ['other-fixture'], enabled: false },
           cookieSettings: { sameSite: 'lax' },
+          headers: {
+            Accept: 'https://example.test/?api_key=header-fixture',
+            'User-Agent': '{"password":"header-fixture","label":"{{ value }}"}',
+            'https://example.test/?api_key=header-key': 'value',
+          },
+          env: { SERVICE_URL: '{"password":"url-fixture","label":"{{ value }}"}' },
           tokenUsage: { input: 4, output: 9 },
           hasCredentials: false,
           isSecret: true,
@@ -977,6 +983,12 @@ describe('MCPClient', () => {
                           apiKeysByTenant: { tenant: '[REDACTED]', count: '[REDACTED]' },
                           cookies: { sid: '[REDACTED]' },
                           cookieJar: { sid: '[REDACTED]', nested: ['[REDACTED]'], enabled: false },
+                          headers: {
+                            Accept: 'https://example.test/?api_key=%5BREDACTED%5D',
+                            'User-Agent': '{"password":"[REDACTED]","label":"{{ value }}"}',
+                            'https://example.test/?api_key=%5BREDACTED%5D': '[REDACTED]',
+                          },
+                          env: { SERVICE_URL: '{"password":"[REDACTED]","label":"{{ value }}"}' },
                           dbPassword: '[REDACTED]',
                           authHeaders: {
                             'User-Agent': '{"databasePassword":"[REDACTED]","page":2}',

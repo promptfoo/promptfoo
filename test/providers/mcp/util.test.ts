@@ -14,7 +14,7 @@ import {
   renderAuthVars,
   sanitizeMcpToolData,
 } from '../../../src/providers/mcp/util';
-import { sanitizeObject } from '../../../src/util/sanitizer';
+import { sanitizeObject, sanitizeUrl } from '../../../src/util/sanitizer';
 
 import type {
   MCPOAuthClientCredentialsAuth,
@@ -443,29 +443,33 @@ describe('sanitizeMcpToolData', () => {
     expect(sanitizeMcpToolData(args)).toEqual(expected);
   });
 
-  it.each(['callbackUrl', 'callbackUri', 'callbackHost', 'callbackEndpoint', 'callbackProxy'])(
-    'walks nested JSON-valued %s fields once',
-    (name) => {
-      let args: Record<string, unknown> = { databasePassword: 'fixture', value: 1 };
-      let expected: Record<string, unknown> = { databasePassword: '[REDACTED]', value: 1 };
-      for (let level = 0; level < 12; level++) {
-        args = { [name]: JSON.stringify(args) };
-        expected = { [name]: JSON.stringify(expected) };
-      }
-      const parse = vi.spyOn(JSON, 'parse');
-      let result: unknown;
-      let calls: number;
-      try {
-        result = sanitizeMcpToolData(args);
-        calls = parse.mock.calls.length;
-      } finally {
-        parse.mockRestore();
-      }
-      expect(result).toEqual(expected);
-      expect(calls).toBeLessThan(100);
-      expect(JSON.stringify(args)).toContain('fixture');
-    },
-  );
+  it.each([
+    'url',
+    'callbackUrl',
+    'callbackUri',
+    'callbackHost',
+    'callbackEndpoint',
+    'callbackProxy',
+  ])('walks nested JSON-valued %s fields once', (name) => {
+    let args: Record<string, unknown> = { databasePassword: 'fixture', value: 1 };
+    let expected: Record<string, unknown> = { databasePassword: '[REDACTED]', value: 1 };
+    for (let level = 0; level < 12; level++) {
+      args = { [name]: JSON.stringify(args) };
+      expected = { [name]: JSON.stringify(expected) };
+    }
+    const parse = vi.spyOn(JSON, 'parse');
+    let result: unknown;
+    let calls: number;
+    try {
+      result = sanitizeMcpToolData(args);
+      calls = parse.mock.calls.length;
+    } finally {
+      parse.mockRestore();
+    }
+    expect(result).toEqual(expected);
+    expect(calls).toBeLessThan(100);
+    expect(JSON.stringify(args)).toContain('fixture');
+  });
 
   it.each([
     [' \n{ "page": 2 }\t', '{"page":2}'],
@@ -533,6 +537,105 @@ describe('sanitizeMcpToolData', () => {
       stringify.mockRestore();
     }
     expect(result).toBe(omitted);
+  });
+
+  it.each(['headers', 'authHeaders'])(
+    'sanitizes MCP %s keys and allowed values at shallow and restored depths',
+    (name) => {
+      const canonical = 'https://example.test/?api_key=%5BREDACTED%5D';
+      const fields = {
+        [name]: {
+          'https://example.test/?api_key=fixture': 'private',
+          [canonical]: 'authored',
+          Accept: 'https://{{ host }}/?api_key=fixture',
+          'User-Agent': '{"password":"fixture","label":"{{ value }}"}',
+          'Content-Type': 'application/json',
+          'X-Tenant-Id': 'tenant-1',
+          Authorization: '{{ env.API_TOKEN }}',
+        },
+      };
+      const expected = {
+        [name]: {
+          [`${canonical}#1`]: '[REDACTED]',
+          [canonical]: '[REDACTED]',
+          Accept: 'https://{{ host }}/?api_key=%5BREDACTED%5D',
+          'User-Agent': '{"password":"[REDACTED]","label":"{{ value }}"}',
+          'Content-Type': 'application/json',
+          'X-Tenant-Id': 'tenant-1',
+          Authorization: '{{ env.API_TOKEN }}',
+        },
+      };
+      for (const depth of [0, 5]) {
+        const wrap = (value: unknown) => {
+          for (let level = 0; level < depth; level++) {
+            value = { nested: value };
+          }
+          return value;
+        };
+        const args = wrap(fields);
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(args)).toEqual(wrap(expected));
+        expect(args).toEqual(original);
+        expect(sanitizeMcpToolData(wrap({ [name]: { Accept: 'application/json' } }))).toEqual(
+          wrap({ [name]: { Accept: 'application/json' } }),
+        );
+      }
+      expect(sanitizeObject({ headers: fields[name] }, { sanitizeUrls: true })).toEqual({
+        headers: {
+          ...fields[name],
+          'https://example.test/?api_key=fixture': '[REDACTED]',
+          [canonical]: '[REDACTED]',
+        },
+      });
+    },
+  );
+
+  it.each(['url', 'callbackUrl', 'apiBaseUrl', 'server_url', 'env.SERVICE_URL'])(
+    'sanitizes whole JSON before template handling for MCP %s',
+    (name) => {
+      const wrap = (value: string) =>
+        name === 'env.SERVICE_URL' ? { env: { SERVICE_URL: value } } : { [name]: value };
+      const value = '{"password":"fixture","label":"{{ value }}","page":2}';
+      const sanitized = '{"password":"[REDACTED]","label":"{{ value }}","page":2}';
+      expect(sanitizeMcpToolData(wrap(value))).toEqual(wrap(sanitized));
+      expect(sanitizeMcpToolData({ a: { b: { c: { d: { e: wrap(value) } } } } })).toEqual({
+        a: { b: { c: { d: { e: wrap(sanitized) } } } },
+      });
+      for (const publicValue of [
+        '{"label":"{{ value }}","page":2}',
+        'https://{{ host }}/path?page=2',
+      ]) {
+        expect(sanitizeMcpToolData(wrap(publicValue))).toEqual(wrap(publicValue));
+      }
+      expect(sanitizeUrl(value)).toBe(value);
+      expect(sanitizeMcpToolData(wrap('https://{{ host }}/?api_key=fixture'))).toEqual(
+        wrap(
+          name === 'apiBaseUrl' || name === 'server_url'
+            ? '[REDACTED]'
+            : 'https://{{ host }}/?api_key=%5BREDACTED%5D',
+        ),
+      );
+    },
+  );
+
+  it('preserves unchanged exact-URL JSON bytes without repeating nested traversal', () => {
+    let args: Record<string, unknown> = { label: '{{ value }}', page: 2 };
+    for (let level = 0; level < 12; level++) {
+      args = { url: ` \n${JSON.stringify(args)}\t` };
+    }
+    const original = structuredClone(args);
+    const parse = vi.spyOn(JSON, 'parse');
+    let result: unknown;
+    let calls: number;
+    try {
+      result = sanitizeMcpToolData(args);
+      calls = parse.mock.calls.length;
+    } finally {
+      parse.mockRestore();
+    }
+    expect(result).toEqual(original);
+    expect(args).toEqual(original);
+    expect(calls).toBeLessThan(100);
   });
 
   it('sanitizes authHeaders URL keys while reserving authored names', () => {

@@ -1276,7 +1276,7 @@ function decodeFormComponent(component: string): string | undefined {
 function redactNestedJsonValue(
   decoded: string | undefined,
   compoundContext?: CompoundKeyContext,
-  preserveUnchanged = true,
+  unchangedResult: 'null' | 'canonical' | 'original' = 'null',
 ): string | null {
   if (decoded === undefined) {
     return null;
@@ -1305,9 +1305,10 @@ function redactNestedJsonValue(
     sanitizedSerialized = JSON.stringify(sanitized);
     // Canonical mode only serializes the bounded result, never the unbounded
     // original. A comparison failure must not discard already sanitized data.
-    return !preserveUnchanged || sanitizedSerialized !== JSON.stringify(parsed)
-      ? sanitizedSerialized
-      : null;
+    if (unchangedResult === 'canonical' || sanitizedSerialized !== JSON.stringify(parsed)) {
+      return sanitizedSerialized;
+    }
+    return unchangedResult === 'original' ? decoded : null;
   } catch (error) {
     if (compoundContext) {
       return sanitizedSerialized ?? JSON.stringify(REDACTED);
@@ -1449,10 +1450,7 @@ function sanitizePlainObject(
         const redactedName =
           redactCredentialValues && matchesCredentialFormat(name)
             ? REDACTED
-            : redactCompoundKeys &&
-                normalizeFieldName(key) === 'authheaders' &&
-                sanitizeUrls &&
-                URL_REFERENCE.test(name)
+            : redactCompoundKeys && sanitizeUrls && URL_REFERENCE.test(name)
               ? sanitizeUrlWithContext(name, { maxDepth: maxDepth - depth - 2 })
               : name;
         let headerName = redactedName;
@@ -1471,7 +1469,7 @@ function sanitizePlainObject(
               !isTracingCredentialHeader(name, item) &&
               (isNonCredentialHeader(name) ||
                 SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()))))
-            ? redactCompoundKeys && normalizeFieldName(key) === 'authheaders'
+            ? redactCompoundKeys
               ? recursiveSanitize(item, depth + 2, maxDepth, sanitizeUrls, false, true)
               : item
             : REDACTED,
@@ -1527,7 +1525,7 @@ function sanitizePlainObject(
       // Own JSON/form traversal once for MCP URL fields. A generic recursive pass
       // followed by URL sanitization would revisit every nested payload. Direct
       // JSON strings keep the generic string path's canonical serialization.
-      const sanitizedJson = redactNestedJsonValue(value, compoundContext, false);
+      const sanitizedJson = redactNestedJsonValue(value, compoundContext, 'canonical');
       sanitized[key] = sanitizeUrlWithContext(
         sanitizedJson ?? value,
         compoundContext,
@@ -1769,6 +1767,17 @@ function sanitizeUrlWithContext(
     // Ensure url is a string and handle edge cases
     if (typeof url !== 'string' || !url.trim()) {
       return url;
+    }
+
+    // Exact URL fields reach this helper without the suffix-field JSON pass.
+    // Own whole JSON before template handling, then retain the remaining URL
+    // guards without recursively decoding that same payload a second time.
+    if (compoundContext && !jsonAlreadySanitized) {
+      const nestedJson = redactNestedJsonValue(url, compoundContext, 'original');
+      if (nestedJson !== null) {
+        url = nestedJson;
+        jsonAlreadySanitized = true;
+      }
     }
 
     // URL-named MCP fields can still contain a form payload. Reuse the same
