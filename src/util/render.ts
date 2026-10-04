@@ -37,21 +37,38 @@ export function renderEnvOnlyInObject<T>(
     return obj;
   }
 
-  if (typeof obj === 'string') {
-    const nunjucks = getNunjucksEngine();
-    // process.env values are always strings or undefined, never numbers or booleans
-    const baseEnvGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
-    // If replaceBase is true, use envOverrides as the complete env (useful for isolating from cliState)
-    // Otherwise merge envOverrides on top of baseEnvGlobals (normal override behavior)
-    const envGlobals = replaceBase
-      ? (envOverrides ?? {})
-      : envOverrides
-        ? { ...baseEnvGlobals, ...envOverrides }
-        : baseEnvGlobals;
+  // Built on first use and shared by every string in `obj`. Most values contain no env
+  // template, and merging the overrides enumerates the whole process environment.
+  let templating:
+    | {
+        nunjucks: ReturnType<typeof getNunjucksEngine>;
+        envGlobals: Record<string, string | undefined>;
+      }
+    | undefined;
+  const getTemplating = () => {
+    if (!templating) {
+      const nunjucks = getNunjucksEngine();
+      // process.env values are always strings or undefined, never numbers or booleans
+      const baseEnvGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
+      // If replaceBase is true, use envOverrides as the complete env (useful for isolating from cliState)
+      // Otherwise merge envOverrides on top of baseEnvGlobals (normal override behavior)
+      const envGlobals = replaceBase
+        ? (envOverrides ?? {})
+        : envOverrides
+          ? { ...baseEnvGlobals, ...envOverrides }
+          : baseEnvGlobals;
+      templating = { nunjucks, envGlobals };
+    }
+    return templating;
+  };
 
+  const renderString = (value: string): string => {
+    if (!value.includes('{{')) {
+      return value;
+    }
     // Match ALL Nunjucks templates {{ ... }}
     // The pattern (?:[^}]|\}(?!\}))* matches content that may contain } but not }}
-    return obj.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
+    return value.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
       // Only process templates that reference env
       if (!match.match(/\benv\.|env\[/)) {
         return match; // Not an env template, preserve as-is
@@ -69,6 +86,7 @@ export function renderEnvOnlyInObject<T>(
       // 1. Template has a filter (let Nunjucks handle undefined with filter logic)
       // 2. Variable exists AND is not undefined (empty string is valid, undefined is not)
       // This prevents rendering {{env.FOO}} to empty string when FOO is undefined
+      const { nunjucks, envGlobals } = getTemplating();
       if (hasFilter || (varName && varName in envGlobals && envGlobals[varName] !== undefined)) {
         try {
           // Use Nunjucks to render the template (supports filters, expressions, etc.)
@@ -84,34 +102,35 @@ export function renderEnvOnlyInObject<T>(
 
       // Variable doesn't exist and no filter - preserve template for potential runtime resolution
       return match;
-    }) as unknown as T;
-  }
+    });
+  };
 
-  if (Array.isArray(obj)) {
-    return obj.map((item) =>
-      renderEnvOnlyInObject(item, envOverrides, replaceBase),
-    ) as unknown as T;
-  }
+  const render = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      return renderString(value);
+    }
 
-  if (typeof obj === 'object' && obj !== null) {
-    const result: Record<string, unknown> = {};
-    for (const key in obj) {
-      if (key === '_conversation') {
+    if (Array.isArray(value)) {
+      return value.map(render);
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      const result: Record<string, unknown> = {};
+      for (const key in value) {
         // Conversation history is runtime data and may contain untrusted model output.
         // Preserve it as literal data instead of rendering env templates.
-        result[key] = (obj as Record<string, unknown>)[key];
-        continue;
+        result[key] =
+          key === '_conversation'
+            ? (value as Record<string, unknown>)[key]
+            : render((value as Record<string, unknown>)[key]);
       }
-      result[key] = renderEnvOnlyInObject(
-        (obj as Record<string, unknown>)[key],
-        envOverrides,
-        replaceBase,
-      );
+      return result;
     }
-    return result as T;
-  }
 
-  return obj;
+    return value;
+  };
+
+  return render(obj) as T;
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {

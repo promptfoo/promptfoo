@@ -528,6 +528,77 @@ describe('renderEnvOnlyInObject', () => {
     });
   });
 
+  describe('Env overrides', () => {
+    /** Counts how often the overrides are enumerated, which is what merging them does. */
+    function countingOverrides(values: Record<string, string>) {
+      const counter = { merges: 0 };
+      const overrides = new Proxy(values, {
+        ownKeys(target) {
+          counter.merges++;
+          return Reflect.ownKeys(target);
+        },
+      });
+      return { counter, overrides };
+    }
+
+    it('should prefer overrides over the process environment', async () => {
+      mockProcessEnv({ API_HOST: 'process.example.com', PORT: '8080' });
+      expect(
+        renderEnvOnlyInObject(
+          { url: 'https://{{ env.API_HOST }}:{{ env.PORT }}', region: '{{ env.REGION }}' },
+          { API_HOST: 'override.example.com', REGION: 'us-east-1' } as Record<string, string>,
+        ),
+      ).toEqual({ url: 'https://override.example.com:8080', region: 'us-east-1' });
+    });
+
+    it('should use only the overrides when they replace the base environment', async () => {
+      mockProcessEnv({ API_HOST: 'process.example.com' });
+      expect(
+        renderEnvOnlyInObject(
+          ['{{ env.API_HOST }}', '{{ env.REGION }}'],
+          { REGION: 'us-east-1' } as Record<string, string>,
+          true,
+        ),
+      ).toEqual(['{{ env.API_HOST }}', 'us-east-1']);
+    });
+
+    it('should not merge the overrides for values without env templates', async () => {
+      const { counter, overrides } = countingOverrides({ REGION: 'us-east-1' });
+      const config = {
+        description: 'plain text',
+        prompts: ['{{ question }} ({{ context }})'],
+        tests: [{ vars: { question: 'What is 1 + 1?', count: 2, nested: [null, true] } }],
+      };
+
+      expect(renderEnvOnlyInObject(config, overrides)).toEqual(config);
+      expect(counter.merges).toBe(0);
+    });
+
+    it('should merge the overrides once for all the env templates in a value', async () => {
+      const { counter, overrides } = countingOverrides({ REGION: 'us-east-1' });
+
+      expect(
+        renderEnvOnlyInObject(
+          {
+            providers: [{ id: 'echo', config: { region: '{{ env.REGION }}' } }],
+            tests: [
+              { vars: { where: '{{ env.REGION }} and {{ env.REGION | upper }}' } },
+              { vars: { where: '{{ env.MISSING }}', question: '{{ question }}' } },
+            ],
+          },
+          overrides,
+        ),
+      ).toEqual({
+        providers: [{ id: 'echo', config: { region: 'us-east-1' } }],
+        tests: [
+          { vars: { where: 'us-east-1 and US-EAST-1' } },
+          { vars: { where: '{{ env.MISSING }}', question: '{{ question }}' } },
+        ],
+      });
+      expect(counter.merges).toBe(1);
+    });
+  });
+
   describe('Edge cases', () => {
     it('should handle multiple env vars in same string', async () => {
       mockProcessEnv({ HOST: 'example.com' });
