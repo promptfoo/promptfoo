@@ -10,6 +10,7 @@ import { runCompareAssertion } from '../../src/assertions';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
@@ -497,14 +498,23 @@ describeEvaluator('select-best runtime grading configuration', () => {
   it('recovers a grader exception without retaining a failed comparison verdict', async () => {
     const { grader, suite, target } = makeSuite();
     vi.mocked(grader.callApi).mockRejectedValueOnce(new Error('temporary grader failure'));
+    const debug = vi.spyOn(logger, 'debug');
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
     await evaluate(suite, record, { maxConcurrency: 1 });
 
+    // The cause is only logged for debugging; saved rows say how to find it.
+    expect(debug).toHaveBeenCalledWith('[Evaluator] select-best grading failed', {
+      error: expect.stringContaining('temporary grader failure'),
+      graderId: 'select-best-grader',
+      testIdx: 0,
+    });
     const failed = await record.fetchResultsByTestIdx(0);
     expect(failed).toHaveLength(2);
     for (const row of failed) {
       expect(row.failureReason).toBe(ResultFailureReason.ERROR);
       expect(row.error).toContain('Check the grader configuration and credentials');
+      expect(row.error).toContain('Run with --verbose to log the underlying error');
+      expect(row.error).not.toContain('temporary grader failure');
       expect(row.gradingResult?.pass).toBe(true);
       expect(row.gradingResult?.componentResults).toEqual([]);
     }

@@ -4653,9 +4653,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         throw error;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
-      // Provider errors can contain credentials or config source snippets.
+      // Provider errors can contain credentials or config source snippets, so saved results get
+      // a generic reason. The cause goes to the debug log, where it can still be diagnosed.
+      logger.debug('[Evaluator] select-best grading failed', {
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        graderId,
+        testIdx,
+      });
       const message =
-        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation.';
+        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
       for (const result of resultsToCompare) {
