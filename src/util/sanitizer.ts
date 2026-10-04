@@ -78,16 +78,20 @@ function isSecretParameterName(name: string): boolean {
   });
 }
 
+function isBooleanCredentialControl(name: string, value: string | undefined): boolean {
+  // Boolean controls such as includeCredentials are settings, not credential values.
+  return (
+    /^(?:true|false)$/i.test(value ?? '') &&
+    /(?:^|[.\[])(?:include|require|use|with|enable|disable)(?:[a-z]|[_-])[^.\[\]]*\]?$/i.test(name)
+  );
+}
+
 function isSecretParameter(
   name: string,
   value: string | undefined,
   includeGenericKey = true,
 ): boolean {
-  // Boolean controls such as includeCredentials are settings, not credential values.
-  if (
-    /^(?:true|false)$/i.test(value ?? '') &&
-    /(?:^|[.\[])(?:include|require|use|with|enable|disable)(?:[a-z]|[_-])[^.\[\]]*\]?$/i.test(name)
-  ) {
+  if (isBooleanCredentialControl(name, value)) {
     return false;
   }
   return name
@@ -246,23 +250,42 @@ const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES].filter(
 );
 const MAX_SECRET_PARAMETER_LENGTH = Math.max(...SECRET_PARAMETER_NAMES.map((name) => name.length));
 
-// MCP object fields also describe controls and counts, rather than credential material.
-// Keep these value-aware exceptions local to the opt-in object policy.
+// MCP object fields use terminal credential names: tokenUsage/passwordPolicy describe
+// ordinary data even though the broader URL-parameter policy recognizes their prefixes.
 function isCompoundSecretObjectField(name: string, value: unknown): boolean {
   const normalized = normalizeFieldName(name);
-  if (
-    (typeof value === 'number' && /(?:count|length|limit|size)$/.test(normalized)) ||
-    (typeof value === 'boolean' &&
-      /(?:required|enabled|disabled|supported|available|configured)$/.test(normalized))
-  ) {
+  const textValue =
+    typeof value === 'string' || typeof value === 'boolean' ? String(value) : undefined;
+  if (isBooleanCredentialControl(name, textValue)) {
     return false;
   }
-  // Bare `key` is ambiguous in tool data; only URL parameters treat it as a secret.
-  return isSecretParameter(
-    name,
-    typeof value === 'string' || typeof value === 'boolean' ? String(value) : undefined,
-    false,
-  );
+  // Preserve the existing value-bearing aliases and numeric versions, including
+  // databasePasswordValue, tokenHash and dbPwdV2Encrypted. These passes are bounded.
+  let materialName = normalized;
+  for (let pass = 0; pass < 2; pass++) {
+    let end = materialName.length;
+    while (
+      end > 0 &&
+      materialName.charCodeAt(end - 1) >= 48 &&
+      materialName.charCodeAt(end - 1) <= 57
+    ) {
+      end--;
+    }
+    if (end < materialName.length && materialName[end - 1] === 'v') {
+      end--;
+    }
+    materialName = materialName.slice(0, end);
+    if (pass === 0) {
+      materialName = materialName.replace(/(?:value|hash|encrypted)$/, '');
+    }
+  }
+  const terminal = SECRET_PARAMETER_NAMES.find((secret) => materialName.endsWith(secret));
+  if (!terminal) {
+    return false;
+  }
+  // The URL policy intentionally omits short suffixes, but dbPwd/userSig are
+  // credential-bearing object names. Bare `key` is not in SECRET_PARAMETER_NAMES.
+  return terminal.length <= 3 || isSecretParameter(name, textValue, false);
 }
 
 // Carry the MCP-only policy and remaining object depth through existing encoded
@@ -1331,6 +1354,16 @@ function sanitizePlainObject(
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact opaque credential values before trying URL-specific handling.
       sanitized[key] = REDACTED;
+    } else if (
+      compoundContext &&
+      typeof value === 'string' &&
+      looksLikeUrlEncodedFormData(value) &&
+      (key.toLowerCase() === 'url' ||
+        (sanitizeUrls && /(?:url|uri|host|endpoint|proxy)$/i.test(key)))
+    ) {
+      // The URL path owns this form's decoded JSON traversal. Running the generic
+      // recursive pass first would visit every nested form twice at each level.
+      sanitized[key] = sanitizeUrlWithContext(value, compoundContext);
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.

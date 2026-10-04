@@ -58,34 +58,51 @@ describe('sanitizeMcpToolData', () => {
     });
   });
 
-  it.each(['databasePassword', 'dbPassword', 'database_password', 'DB_PASSWORD'])(
-    'redacts compound credential %s in nested objects and JSON arguments',
-    (key) => {
-      const fields = {
-        [key]: 'mcp-compound-fixture',
-        pageToken: 'page-2',
-        maxTokens: 100,
-        databasePasswordEnabled: true,
-        includeCredentials: false,
-        monkey: 'ordinary',
-        key: 'record-name',
-        'record.key': 'field-name',
-        tokenCount: 12,
-        credentialsRequired: false,
-      };
-      const expected = { ...fields, [key]: '[REDACTED]' };
-      const args = { one: { two: { three: { four: { items: [fields] } } } } };
-      const original = structuredClone(args);
+  it.each([
+    'databasePassword',
+    'dbPassword',
+    'database_password',
+    'DB_PASSWORD',
+    'dbPwd',
+    'userPwd',
+    'userSig',
+    'tokenValue',
+    'databasePasswordValue',
+    'tokenHash',
+    'databasePasswordEncrypted',
+    'dbPwdV2Encrypted',
+  ])('redacts compound credential %s in nested objects and JSON arguments', (key) => {
+    const fields = {
+      [key]: 'mcp-compound-fixture',
+      pageToken: 'page-2',
+      maxTokens: 100,
+      databasePasswordEnabled: true,
+      includeCredentials: false,
+      usePwd: false,
+      monkey: 'ordinary',
+      key: 'record-name',
+      'record.key': 'field-name',
+      tokenCount: 12,
+      credentialsRequired: false,
+      tokenBudget: 4096,
+      tokenIds: [101, 102],
+      tokenUsage: { input: 4, output: 9 },
+      signatureAlgorithm: 'SHA256',
+      passwordPolicy: { minLength: 12 },
+      accessTokenUrl: 'https://example.test/oauth/token',
+    };
+    const expected = { ...fields, [key]: '[REDACTED]' };
+    const args = { one: { two: { three: { four: { items: [fields] } } } } };
+    const original = structuredClone(args);
 
-      expect(sanitizeMcpToolData(args)).toEqual({
-        one: { two: { three: { four: { items: [expected] } } } },
-      });
-      expect(sanitizeMcpToolData({ encoded: JSON.stringify(args) })).toEqual({
-        encoded: JSON.stringify({ one: { two: { three: { four: { items: [expected] } } } } }),
-      });
-      expect(args).toEqual(original);
-    },
-  );
+    expect(sanitizeMcpToolData(args)).toEqual({
+      one: { two: { three: { four: { items: [expected] } } } },
+    });
+    expect(sanitizeMcpToolData({ encoded: JSON.stringify(args) })).toEqual({
+      encoded: JSON.stringify({ one: { two: { three: { four: { items: [expected] } } } } }),
+    });
+    expect(args).toEqual(original);
+  });
 
   it.each([
     (value: string) => `data=${encodeURIComponent(value)}`,
@@ -160,6 +177,31 @@ describe('sanitizeMcpToolData', () => {
       [prefix]: 'ordinary',
       [`${prefix}databasePassword`]: '[REDACTED]',
     });
+  });
+
+  it('handles long numeric argument-name segments without suffix backtracking', () => {
+    const prefix = `${'9'.repeat(100_000)}x`;
+    const args = { [prefix]: 'ordinary', [`${prefix}dbPwdV2`]: 'secret-fixture' };
+    expect(sanitizeMcpToolData(args)).toEqual({
+      [prefix]: 'ordinary',
+      [`${prefix}dbPwdV2`]: '[REDACTED]',
+    });
+  });
+
+  it('sanitizes credentials inside ordinary metadata structures', () => {
+    expect(
+      sanitizeMcpToolData({ tokenUsage: { input: 4, output: 9, databasePassword: 'fixture' } }),
+    ).toEqual({ tokenUsage: { input: 4, output: 9, databasePassword: '[REDACTED]' } });
+  });
+
+  it('walks nested form-valued URL fields once while preserving their public data', () => {
+    let args = { password: 'fixture', value: 1 } as Record<string, unknown>;
+    let expected = { password: '[REDACTED]', value: 1 } as Record<string, unknown>;
+    for (let level = 0; level < 24; level++) {
+      args = { callbackUrl: `data=${encodeURIComponent(JSON.stringify(args))}` };
+      expected = { callbackUrl: `data=${encodeURIComponent(JSON.stringify(expected))}` };
+    }
+    expect(sanitizeMcpToolData(args)).toEqual(expected);
   });
 
   /** Arguments with `levels` nested objects and a secret in the innermost one. */

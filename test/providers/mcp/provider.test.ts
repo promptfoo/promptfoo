@@ -159,6 +159,10 @@ describe('MCPProvider', () => {
     });
     const fields = {
       databasePassword: 'database-fixture',
+      dbPwd: 'pwd-fixture',
+      tokenUsage: { input: 4, output: 9 },
+      tokenBudget: 4096,
+      signatureAlgorithm: 'SHA256',
       dbPassword: 'db-fixture',
       databasePasswordEnabled: true,
       pageToken: 'next-page',
@@ -184,6 +188,7 @@ describe('MCPProvider', () => {
               five: {
                 ...fields,
                 databasePassword: '[REDACTED]',
+                dbPwd: '[REDACTED]',
                 dbPassword: '[REDACTED]',
                 form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: '[REDACTED]', tokenCount: 12 }))}`,
                 callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: '[REDACTED]', credentialsRequired: false }))}`,
