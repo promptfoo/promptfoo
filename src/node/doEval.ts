@@ -243,17 +243,20 @@ function getDistinctPrompts(columns: SavedColumn[]): Prompt[] {
   return distinct;
 }
 
-/** Whether the evaluator would build exactly the saved columns from `prompts`. */
+/**
+ * Whether the evaluator would build exactly the saved columns from `prompts`, given which
+ * prompts each provider runs.
+ */
 function buildsSavedColumns(
   prompts: Prompt[],
   columns: SavedColumn[],
-  testSuite: TestSuite,
+  providerKeys: string[],
+  providerPromptMap: TestSuite['providerPromptMap'],
 ): boolean {
   let index = 0;
-  for (const provider of testSuite.providers) {
-    const key = getProviderIdentifier(provider);
+  for (const key of providerKeys) {
     for (const prompt of prompts) {
-      if (!isPromptAllowed(prompt, testSuite.providerPromptMap?.[key])) {
+      if (!isPromptAllowed(prompt, providerPromptMap?.[key])) {
         continue;
       }
       const column = columns[index++];
@@ -280,12 +283,20 @@ function buildsSavedColumns(
  * now are not consulted: a prompt file can have changed since, and results stay addressed
  * by the saved column positions. The first reconstruction from which the evaluator would
  * build the saved columns again is used.
+ *
+ * The same goes for which prompts each provider runs. When the prompt filters of the config
+ * no longer produce the saved columns, for example because they list the labels of a prompt
+ * file that has changed, `providerPromptMap` holds filters taken from the saved columns.
  */
-function getReplayPrompts(columns: SavedColumn[], testSuite: TestSuite): Prompt[] {
+function getReplayPrompts(
+  columns: SavedColumn[],
+  testSuite: TestSuite,
+): { prompts: Prompt[]; providerPromptMap?: TestSuite['providerPromptMap'] } {
   const providerKeys = testSuite.providers.map((provider) => getProviderIdentifier(provider));
+  const providerRuns = splitColumnsByProvider(columns, providerKeys);
   const reconstructions = [
     // Each provider's columns, merged. Providers can run different prompts.
-    () => mergeProviderRuns(splitColumnsByProvider(columns, providerKeys)),
+    () => mergeProviderRuns(providerRuns),
     // The same, for columns that do not line up with the providers the config resolves to.
     () => mergeProviderRuns(splitColumnsAtProviderChanges(columns)),
     // Columns that do not name their provider, as long as every provider ran the same prompts.
@@ -296,18 +307,46 @@ function getReplayPrompts(columns: SavedColumn[], testSuite: TestSuite): Prompt[
   let closest: Prompt[] | undefined;
   for (const reconstruct of reconstructions) {
     const prompts = reconstruct();
-    if (prompts && buildsSavedColumns(prompts, columns, testSuite)) {
-      return prompts;
+    if (
+      prompts &&
+      buildsSavedColumns(prompts, columns, providerKeys, testSuite.providerPromptMap)
+    ) {
+      return { prompts };
     }
     closest ??= prompts;
   }
-  // The providers or their prompt filters no longer produce the saved columns, for example
-  // because a provider was filtered out. This is the nearest list there is.
+
+  // The config's prompt filters do not produce the saved columns. Each provider's saved
+  // columns say which prompts it ran, so they can stand in for its filter.
+  const merged = mergeProviderRuns(providerRuns);
+  if (providerRuns && merged) {
+    const providerPromptMap = Object.fromEntries(
+      providerKeys.map((key, index) => [
+        key,
+        [...new Set(providerRuns[index].map((column) => column.label))],
+      ]),
+    );
+    if (buildsSavedColumns(merged, columns, providerKeys, providerPromptMap)) {
+      return { prompts: merged, providerPromptMap };
+    }
+  }
+
+  // The providers no longer produce the saved columns, for example because one was filtered
+  // out. This is the nearest list there is.
   logger.debug('[Eval] The saved prompt columns could not be reproduced exactly', {
     columns: columns.length,
     providers: providerKeys.length,
   });
-  return closest ?? columns.map(toReplayPrompt);
+  return { prompts: closest ?? columns.map(toReplayPrompt) };
+}
+
+/** Makes a resumed or retried eval build the prompt columns of its first run again. */
+function applyReplayPrompts(testSuite: TestSuite, columns: SavedColumn[]): void {
+  const { prompts, providerPromptMap } = getReplayPrompts(columns, testSuite);
+  testSuite.prompts = prompts;
+  if (providerPromptMap) {
+    testSuite.providerPromptMap = providerPromptMap;
+  }
 }
 
 async function resolveReplayConfigs(
@@ -661,7 +700,7 @@ async function doEvalWithEnv(
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = getReplayPrompts(resumeEval.prompts, testSuite);
+        applyReplayPrompts(testSuite, resumeEval.prompts);
       }
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
@@ -712,7 +751,7 @@ async function doEvalWithEnv(
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = getReplayPrompts(resumeEval.prompts, testSuite);
+        applyReplayPrompts(testSuite, resumeEval.prompts);
       }
     } else {
       ({

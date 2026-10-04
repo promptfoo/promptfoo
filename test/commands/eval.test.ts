@@ -1928,10 +1928,14 @@ describe('evalCommand', () => {
       livePrompts?: string[];
       columns: Column[];
       expected: Column[];
+      /** The prompt filters of the replay, when the config's own no longer fit the columns. */
+      replayedPromptMap?: Record<string, string[]>;
     };
 
     async function replay(
-      options: Omit<ReplayCase, 'name' | 'expected'> & { mode: 'resume' | 'retry' },
+      options: Omit<ReplayCase, 'name' | 'expected' | 'replayedPromptMap'> & {
+        mode: 'resume' | 'retry';
+      },
     ): Promise<TestSuite> {
       const savedEval = new Eval({ prompts: [] } as UnifiedConfig);
       savedEval.prompts = options.columns.map(toSaved) as any;
@@ -2038,15 +2042,32 @@ describe('evalCommand', () => {
         expected: columnsOf(undefined, 'first', 'second'),
       },
       {
-        name: 'a prompt was removed from the config since the first run',
+        name: 'a prompt was removed from the prompt file since the first run',
         providers: ['first-target', 'second-target'],
         livePrompts: ['second'],
-        providerPromptMap: { 'first-target': ['second'] },
+        // The second provider has no filter, so its entry lists the labels that exist now.
+        providerPromptMap: { 'first-target': ['second'], 'second-target': ['second'] },
         columns: [
           ...columnsOf('first-target', 'second'),
           ...columnsOf('second-target', 'removed', 'second'),
         ],
         expected: columnsOf(undefined, 'removed', 'second'),
+        replayedPromptMap: { 'first-target': ['second'], 'second-target': ['removed', 'second'] },
+      },
+      {
+        name: 'the prompts were renamed in the prompt file since the first run',
+        providers: ['first-target', 'second-target'],
+        livePrompts: ['renamed'],
+        providerPromptMap: { 'first-target': ['renamed'], 'second-target': ['renamed'] },
+        columns: [
+          ...columnsOf('first-target', 'first', 'second'),
+          ...columnsOf('second-target', 'first', 'second'),
+        ],
+        expected: columnsOf(undefined, 'first', 'second'),
+        replayedPromptMap: {
+          'first-target': ['first', 'second'],
+          'second-target': ['first', 'second'],
+        },
       },
       {
         name: 'two providers share an identifier',
@@ -2074,10 +2095,12 @@ describe('evalCommand', () => {
       },
     ])(
       'should resume with the columns of the first run when $name',
-      async ({ name: _name, columns, expected, ...options }) => {
+      async ({ name: _name, columns, expected, replayedPromptMap, ...options }) => {
         const testSuite = await replay({ mode: 'resume', columns, ...options });
 
         expect(testSuite.prompts).toEqual(expected.map(toReplayed));
+        // The config's prompt filters are kept whenever they still produce the saved columns.
+        expect(testSuite.providerPromptMap).toEqual(replayedPromptMap ?? options.providerPromptMap);
         // Results are addressed by column position, so the evaluator has to build the same
         // columns again: the same prompts for the same providers, in the same places.
         const built = builtColumns(testSuite);
