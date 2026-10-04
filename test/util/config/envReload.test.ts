@@ -151,6 +151,30 @@ describe('suite environment loading', () => {
     expect(TestSuiteSchema.safeParse(testSuite).error?.issues ?? []).toEqual([]);
   });
 
+  it('gives providers and tests string env values before they are loaded', async () => {
+    // Providers that read their own env, as OpenClaw does for its gateway port, call string
+    // methods on these values while the config is still being resolved.
+    const configPath = writeConfig('env-value-types-providers', {
+      env: { OPENCLAW_GATEWAY_PORT: 18789, FEATURE_FLAG: true } as unknown as UnifiedConfig['env'],
+      providers: ['openclaw:main', 'echo'],
+      tests: [{ vars: { input: 'first' } }],
+    });
+
+    const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+
+    expect(testSuite.providers.map((provider) => provider.id())).toEqual([
+      expect.stringContaining('openclaw'),
+      'echo',
+    ]);
+    for (const provider of testSuite.providers) {
+      expect((provider as { env?: unknown }).env ?? testSuite.env).toEqual({
+        OPENCLAW_GATEWAY_PORT: '18789',
+        FEATURE_FLAG: 'true',
+      });
+    }
+    expect(config.env).toEqual({ OPENCLAW_GATEWAY_PORT: 18789, FEATURE_FLAG: true });
+  });
+
   it('applies published tracing defaults to executable and saved file configurations', async () => {
     const input = { enabled: true, otlp: { http: {}, grpc: {} }, storage: {} };
     const configPath = writeConfig('tracing-defaults', {
