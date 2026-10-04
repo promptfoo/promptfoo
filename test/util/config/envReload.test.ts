@@ -1199,13 +1199,16 @@ describe('suite environment loading', () => {
     },
   );
 
-  it.each(['tests', 'vars'] as const)(
-    'resolves an explicit CLI %s path from the working directory',
-    async (flag) => {
+  it.each([
+    { flag: 'tests', expected: 'working-directory' },
+    { flag: 'vars', expected: 'config-directory' },
+  ] as const)(
+    'preserves the released relative path base for CLI --$flag',
+    async ({ flag, expected }) => {
       const configPath = writeConfig('cli-path', {});
       for (const [directory, source] of [
         [tempDir, 'working-directory'],
-        [path.dirname(configPath), 'wrong-config-shadow'],
+        [path.dirname(configPath), 'config-directory'],
       ]) {
         fs.mkdirSync(path.join(directory, 'tests'));
         fs.writeFileSync(path.join(directory, 'tests/cases.yaml'), `- vars: { source: ${source} }`);
@@ -1216,12 +1219,24 @@ describe('suite environment loading', () => {
           { config: [configPath], [flag]: 'tests/cases.yaml' },
           {},
         );
-        expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['working-directory']);
+        expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual([expected]);
       } finally {
         cwd.mockRestore();
       }
     },
   );
+
+  it('loads --vars CSV from the config directory when the working directory has no copy', async () => {
+    const configPath = writeConfig('cli-vars-csv', {});
+    fs.writeFileSync(path.join(path.dirname(configPath), 'cases.csv'), 'name\nAda\n');
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    try {
+      const { testSuite } = await resolveConfigs({ config: [configPath], vars: 'cases.csv' }, {});
+      expect(testSuite.tests?.map((test) => test.vars)).toEqual([{ name: 'Ada' }]);
+    } finally {
+      cwd.mockRestore();
+    }
+  });
 
   it('uses config-relative references inside a nested defaultTest file', async () => {
     const configPath = writeConfig('default-root', { defaultTest: 'file://defaults/default.yaml' });
