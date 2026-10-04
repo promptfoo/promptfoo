@@ -820,17 +820,37 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
       config: { max_completion_tokens: 55, passthrough: { max_tokens: 99 } },
     }).getOpenAiBody('Say ready.');
     expect(canonical.max_completion_tokens).toBe(55);
-
-    const restoreCaps = mockProcessEnv({ OPENAI_MAX_TOKENS: '71' });
-    try {
-      const { body: fromEnvironment } = await new OpenAiChatCompletionProvider(model).getOpenAiBody(
-        'Say ready.',
-      );
-      expect(fromEnvironment.max_completion_tokens).toBe(71);
-    } finally {
-      restoreCaps();
-    }
   });
+
+  it.each([
+    [{ OPENAI_MAX_TOKENS: '71' }, undefined],
+    [{ OPENAI_MAX_COMPLETION_TOKENS: '72' }, 72],
+    [{ OPENAI_MAX_TOKENS: '71', OPENAI_MAX_COMPLETION_TOKENS: '72' }, 72],
+  ])(
+    'caps native and gateway Chat output from the reasoning environment limit only: %j',
+    async (environment, expected) => {
+      const restoreCaps = mockProcessEnv({
+        OPENAI_MAX_TOKENS: undefined,
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        ...environment,
+      });
+      try {
+        for (const provider of [
+          new OpenAiChatCompletionProvider(model),
+          new OpenAiChatCompletionProvider(model, {
+            config: { apiBaseUrl: 'https://proxy.example.test/v1' },
+          }),
+          new TrueFoundryProvider(`openai-main/${model}`, { config: {} }),
+        ]) {
+          const { body } = await provider.getOpenAiBody('Say ready.');
+          expect(body.max_completion_tokens).toBe(expected);
+          expect(body).not.toHaveProperty('max_tokens');
+        }
+      } finally {
+        restoreCaps();
+      }
+    },
+  );
 
   it.each(['none', 'high'] as const)(
     'rejects native Chat config.reasoning at %s',

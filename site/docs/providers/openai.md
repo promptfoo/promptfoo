@@ -1052,7 +1052,7 @@ Prefer provider configuration when comparing different settings in the same eval
 | `OPENAI_API_BASE_URL`          | Full base URL; preferred over `OPENAI_BASE_URL` at the same environment level                                                   |
 | `OPENAI_BASE_URL`              | Alternate full base URL                                                                                                         |
 | `OPENAI_TEMPERATURE`           | Temperature for supported non-reasoning requests; defaults to 0                                                                 |
-| `OPENAI_MAX_TOKENS`            | Output limit for non-reasoning requests; also a fallback for reasoning Responses requests                                       |
+| `OPENAI_MAX_TOKENS`            | Output limit for non-reasoning requests and fallback for reasoning Responses requests; reasoning Chat requests ignore it        |
 | `OPENAI_MAX_COMPLETION_TOKENS` | Output limit for reasoning Chat requests; preferred environment fallback for reasoning Responses requests. No built-in default. |
 | `PROMPTFOO_EVAL_TIMEOUT_MS`    | Overall eval-call timeout, including Responses background polling                                                               |
 | `REQUEST_TIMEOUT_MS`           | Standard request timeout, except requests with a longer model-specific timeout                                                  |

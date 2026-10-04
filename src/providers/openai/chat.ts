@@ -558,7 +558,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         isOpenRouterGpt6,
         {
           maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
-          maxTokens: getEnvInt('OPENAI_MAX_TOKENS'),
+          // OPENAI_MAX_TOKENS limits the visible output of non-reasoning requests. As a GPT-6
+          // cap it would also limit reasoning, as it never has for o-series or GPT-5 Chat
+          // requests. Only OpenRouter requests, which have always honored it, fall back to it.
+          maxTokens: isOpenRouterGpt6 ? getEnvInt('OPENAI_MAX_TOKENS') : undefined,
         },
       );
       if (outputCap === undefined) {
