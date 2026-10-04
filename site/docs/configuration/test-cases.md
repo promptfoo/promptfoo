@@ -403,6 +403,8 @@ Each value uses case-sensitive substring matching, including for array metadata.
 promptfoo eval --filter-metadata 'title=Hello\, world'
 ```
 
+Other backslashes are literal, so `path=C:\data` needs no escaping. Only when a value ends with a backslash and another alternative follows, double that backslash: `path=C:\data\\,D:\data` matches `C:\data\` or `D:\data`.
+
 ### JSON in CSV
 
 Include structured data:
