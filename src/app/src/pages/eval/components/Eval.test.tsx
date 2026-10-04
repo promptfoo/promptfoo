@@ -586,6 +586,49 @@ describe('Eval', () => {
     expect(baseMockTableStore.fetchEvalData).not.toHaveBeenCalled();
   });
 
+  it('drops a socket update that was still waiting when the API endpoint changed', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    let answerRecents!: (response: Response) => void;
+    const recents = new Promise<Response>((resolve) => {
+      answerRecents = resolve;
+    });
+    const { container, getByTestId } = render(
+      <MemoryRouter>
+        <Eval fetchId="pinned-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.mocked(callApi).mockReturnValueOnce(recents);
+    let update!: Promise<void> | undefined;
+    await act(async () => {
+      // An update for the pinned eval reloads it and asks the old endpoint for its evals.
+      update = mockSocketHandlers.get('update')?.({ evalId: 'pinned-eval' });
+      // The same route is then pointed at another endpoint.
+      mockApiConfig.apiBaseUrl = 'http://other-host';
+      render(
+        <MemoryRouter>
+          <Eval fetchId="pinned-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    await act(async () => {
+      answerRecents({
+        ok: true,
+        json: async () => ({ data: [{ evalId: 'eval-of-the-old-endpoint' }] }),
+      } as Response);
+      await update;
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // The old endpoint's list says nothing about the evals of the new one.
+    expect(getByTestId('results-view').getAttribute('data-default-eval-id')).toBe('pinned-eval');
+  });
+
   it('does not navigate away for a scoped background socket update', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,

@@ -97,9 +97,11 @@ export default function Eval({ fetchId }: EvalOptions) {
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
   currentEvalIdRef.current = evalId;
-  // The route as of the latest render, for handlers that wait and may outlive their route.
-  const fetchIdRef = useRef(fetchId);
-  fetchIdRef.current = fetchId;
+  // The route and the API endpoint as of the latest render. A handler that waits compares
+  // them with the ones it started under before it acts on what it waited for.
+  const lifecycleKey = JSON.stringify([apiBaseUrl ?? null, fetchId]);
+  const lifecycleKeyRef = useRef(lifecycleKey);
+  lifecycleKeyRef.current = lifecycleKey;
 
   // ================================
   // Handlers
@@ -210,11 +212,18 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Pinned /eval/:id route + a scoped update for THIS eval: reload it directly via
     // /eval/:id/table. The recent-evals list is only needed for the dropdown, so fetch it
     // concurrently and don't let a transient /api/results failure drop the pinned eval's refresh.
+    // Whether the route or the API endpoint changed while this handler was waiting. What it
+    // waited for was then answered for another page, and must not be applied to this one.
+    const isStale = () => lifecycleKeyRef.current !== lifecycleKey;
+
     if (fetchId && deletedEvalIds === undefined && scopedEvalId === fetchId) {
       const [recents] = await Promise.all([
         fetchRecentFileEvals({ reportFailure: false }),
         reloadInBackground(fetchId),
       ]);
+      if (isStale()) {
+        return;
+      }
       if (recents && recents.length > 0) {
         setDefaultEvalId(recents[0].evalId);
       }
@@ -222,9 +231,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
-    if (fetchIdRef.current !== fetchId) {
-      // The route changed while the recent evals were fetched. What follows was decided for
-      // the old route, and a reload from here would replace the table of the new one.
+    if (isStale()) {
+      // What follows was decided for the old page, and a reload from here would replace the
+      // table of the new one.
       return;
     }
     if (!newRecentEvals) {
