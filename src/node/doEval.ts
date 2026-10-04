@@ -680,13 +680,6 @@ async function doEvalWithEnv(
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
-    const filterMetadataAny = cmdObj.filterMetadataAny ?? commandLineOptions?.filterMetadataAny;
-    // Keep the opt-in filter with the run so expanded scenarios and resume use the same rows.
-    const metadataFilter = resumeEval
-      ? resumeEval.runtimeOptions?.metadataFilter
-      : filterMetadataAny === undefined
-        ? undefined
-        : { metadata: cmdObj.filterMetadata, metadataAny: filterMetadataAny };
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -694,7 +687,6 @@ async function doEvalWithEnv(
       cmdObj.filterErrorsOnly !== undefined ||
       cmdObj.filterFirstN !== undefined ||
       cmdObj.filterMetadata !== undefined ||
-      filterMetadataAny !== undefined ||
       cmdObj.filterPattern !== undefined ||
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
@@ -713,7 +705,6 @@ async function doEvalWithEnv(
         errorsOnly: cmdObj.filterErrorsOnly,
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
-        metadataAny: filterMetadataAny,
         pattern: cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
         sample: filterSample,
@@ -794,7 +785,6 @@ async function doEvalWithEnv(
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       filterRange,
-      metadataFilter,
       maxConcurrency,
       cache,
     };

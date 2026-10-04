@@ -82,7 +82,6 @@ import {
   TestSuiteConfigSchema,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
-import { filterTests } from './util/eval/filterTests';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
@@ -5221,12 +5220,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.store.appendPrompts(prompts);
 
     let tests = buildTestsFromSuite(testSuite);
-    if (options.metadataFilter) {
-      tests = (await filterTests(
-        { ...testSuite, tests },
-        options.metadataFilter,
-      )) as AtomicTestCase[];
-    }
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 

@@ -133,7 +133,6 @@ export const CommandLineOptionsSchema = z.object({
   filterFailingOnly: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterMetadata: z.union([z.string(), z.array(z.string())]).optional(),
-  filterMetadataAny: z.union([z.string(), z.array(z.string())]).optional(),
   filterPattern: z.string().optional(),
   filterPrompts: z.string().optional(),
   filterProviders: z.string().optional(),
@@ -324,11 +323,6 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
-  /** @internal Opt-in metadata filters reapplied after scenario expansion and on resume. */
-  metadataFilter?: {
-    metadata?: string | string[];
-    metadataAny: string | string[];
-  };
 };
 
 const PromptMetricsSchema = z.object({

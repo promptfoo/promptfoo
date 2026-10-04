@@ -132,15 +132,7 @@ export function evalCommand(
     )
     .option(
       '--filter-metadata <key=value>',
-      'Only run tests whose metadata contains the literal value. Commas and backslashes are literal; repeated flags use AND',
-      (value: string, previous: string[] | undefined) => {
-        return previous ? [...previous, value] : [value];
-      },
-    )
-
-    .option(
-      '--filter-metadata-any <key=value>',
-      'Match any comma-separated metadata substring; \\, is a literal comma. Repeated flags and --filter-metadata conditions use AND',
+      'Only run tests whose metadata includes the literal value. Commas and backslashes are literal; repeated flags use AND, even for the same key (e.g. --filter-metadata type=unit --filter-metadata env=prod)',
       (value: string, previous: string[] | undefined) => {
         return previous ? [...previous, value] : [value];
       },
