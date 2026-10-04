@@ -48,7 +48,8 @@ import {
 import * as defaultConfigModule from '../../src/util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
-import { checkProviderApiKeys } from '../../src/util/provider';
+import { isPromptAllowed } from '../../src/util/promptMatching';
+import { checkProviderApiKeys, getProviderIdentifier } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import { mockProcessEnv } from '../util/utils';
 
@@ -1894,103 +1895,245 @@ describe('evalCommand', () => {
     }
   });
 
-  it.each([
-    {
-      name: 'the same prompts for every provider',
-      providerPromptMap: undefined,
-      configPrompts: [],
-      // One saved column per provider and prompt, provider by provider.
-      columns: ['first', 'second', 'first', 'second'],
-      expected: ['first', 'second'],
-    },
-    {
-      name: 'a prompt that is listed twice',
-      providerPromptMap: undefined,
-      configPrompts: [],
-      columns: ['same', 'same', 'same', 'same'],
-      expected: ['same', 'same'],
-    },
-    {
-      name: 'different prompts per provider',
-      providerPromptMap: { 'first-target': ['second', 'third'] },
-      configPrompts: ['first', 'second', 'third'],
-      // The first provider skips "first", so its columns start with "second".
-      columns: ['second', 'third', 'first', 'second', 'third'],
-      expected: ['first', 'second', 'third'],
-    },
-    {
-      name: 'different prompts per provider after the config changed',
-      providerPromptMap: { 'first-target': ['second'] },
-      configPrompts: ['second'],
-      columns: ['second', 'removed', 'second'],
-      expected: ['second', 'removed'],
-    },
-  ])(
-    'should resume with each saved prompt once when two providers ran $name',
-    async ({ providerPromptMap, configPrompts, columns, expected }) => {
-      const toSaved = (label: string) => ({ raw: `${label} text`, label, config: {} });
-      const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
-      resumeEval.prompts = columns.map(toSaved) as any;
-      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+  describe('prompts rebuilt from the saved columns', () => {
+    type Column = { provider?: string; label: string; raw: string };
+    /** Saved columns of one provider, as [label] or [label, raw]. */
+    const columnsOf = (provider: string | undefined, ...prompts: (string | [string, string])[]) =>
+      prompts.map((prompt): Column => {
+        const [label, raw] = typeof prompt === 'string' ? [prompt, `${prompt} text`] : prompt;
+        return { ...(provider && { provider }), label, raw };
+      });
+    const toSaved = ({ provider, label, raw }: Column) => ({
+      raw,
+      label,
+      config: {},
+      ...(provider && { provider, id: `id of ${label}`, metrics: { testPassCount: 1 } }),
+    });
+    const toReplayed = ({ label, raw }: Column) => ({ raw, label, config: {} });
+
+    /** The columns the evaluator builds: every provider's allowed prompts, provider by provider. */
+    const builtColumns = (testSuite: TestSuite) =>
+      testSuite.providers.flatMap((provider) => {
+        const key = getProviderIdentifier(provider);
+        return testSuite.prompts
+          .filter((prompt) => isPromptAllowed(prompt, testSuite.providerPromptMap?.[key]))
+          .map((prompt) => ({ provider: key, label: prompt.label, raw: prompt.raw }));
+      });
+
+    type ReplayCase = {
+      name: string;
+      providers: string[];
+      providerPromptMap?: Record<string, string[]>;
+      /** What the saved config resolves to now, which the first run may not have seen. */
+      livePrompts?: string[];
+      columns: Column[];
+      expected: Column[];
+    };
+
+    async function replay(
+      options: Omit<ReplayCase, 'name' | 'expected'> & { mode: 'resume' | 'retry' },
+    ): Promise<TestSuite> {
+      const savedEval = new Eval({ prompts: [] } as UnifiedConfig);
+      savedEval.prompts = options.columns.map(toSaved) as any;
+      const findSpy =
+        options.mode === 'resume'
+          ? vi.spyOn(Eval, 'findById').mockResolvedValueOnce(savedEval)
+          : vi.spyOn(Eval, 'latest').mockResolvedValueOnce(savedEval);
+      if (options.mode === 'retry') {
+        // Queued only when it is consumed: an unused value would be returned to a later test.
+        vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1']);
+      }
       vi.mocked(resolveConfigs).mockResolvedValueOnce({
         config: {} as UnifiedConfig,
         testSuite: {
-          prompts: configPrompts.map((label) => ({ raw: 'changed since the first run', label })),
-          providers: ['first-target', 'second-target'].map(
+          prompts: (options.livePrompts ?? []).map((label) => ({
+            raw: 'changed since the first run',
+            label,
+          })),
+          providers: options.providers.map(
             (label) => ({ id: () => label, label, callApi: vi.fn() }) as ApiProvider,
           ),
-          ...(providerPromptMap && { providerPromptMap }),
+          ...(options.providerPromptMap && { providerPromptMap: options.providerPromptMap }),
         },
         basePath: path.resolve('/'),
       });
+      let replayed: TestSuite | undefined;
       vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord) => {
-        expect(testSuite.prompts).toEqual(expected.map(toSaved));
+        replayed = structuredClone({ ...testSuite, providers: [] });
+        replayed.providers = testSuite.providers;
         return evalRecord as Eval;
       });
 
       try {
         await doEval(
-          { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+          (options.mode === 'resume'
+            ? { resume: 'eval-123' }
+            : { retryErrors: true }) as Parameters<typeof doEval>[0],
           defaultConfig,
           defaultConfigPath,
           {},
         );
-
-        expect(evaluate).toHaveBeenCalledTimes(1);
       } finally {
-        findByIdSpy.mockRestore();
+        findSpy.mockRestore();
       }
-    },
-  );
-
-  it('should retry errors with each saved prompt once when two providers ran it', async () => {
-    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
-    const saved = { raw: 'retry prompt', label: 'Retry', config: {} };
-    latestEval.prompts = [saved, saved] as any;
-    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
-    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1']);
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {} as UnifiedConfig,
-      testSuite: {
-        prompts: [],
-        providers: ['first-target', 'second-target'].map(
-          (label) => ({ id: () => label, label, callApi: vi.fn() }) as ApiProvider,
-        ),
-      },
-      basePath: path.resolve('/'),
-    });
-    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord) => {
-      expect(testSuite.prompts).toEqual([saved]);
-      return evalRecord as Eval;
-    });
-
-    try {
-      await doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {});
-
       expect(evaluate).toHaveBeenCalledTimes(1);
-    } finally {
-      latestSpy.mockRestore();
+      return replayed!;
     }
+
+    it.each<ReplayCase>([
+      {
+        name: 'two providers ran the same prompts',
+        providers: ['first-target', 'second-target'],
+        // resolveConfigs gives every provider an entry, listing every prompt label.
+        providerPromptMap: {
+          'first-target': ['first', 'second'],
+          'second-target': ['first', 'second'],
+        },
+        columns: [
+          ...columnsOf('first-target', 'first', 'second'),
+          ...columnsOf('second-target', 'first', 'second'),
+        ],
+        expected: columnsOf(undefined, 'first', 'second'),
+      },
+      {
+        name: 'a prompt is listed twice',
+        providers: ['first-target', 'second-target'],
+        providerPromptMap: { 'first-target': ['same', 'same'], 'second-target': ['same', 'same'] },
+        columns: [
+          ...columnsOf('first-target', 'same', 'same'),
+          ...columnsOf('second-target', 'same', 'same'),
+        ],
+        expected: columnsOf(undefined, 'same', 'same'),
+      },
+      {
+        name: 'providers ran different prompts',
+        providers: ['first-target', 'second-target'],
+        providerPromptMap: {
+          'first-target': ['second', 'third'],
+          'second-target': ['first', 'second', 'third'],
+        },
+        // The first provider skips "first", so its columns start with "second".
+        columns: [
+          ...columnsOf('first-target', 'second', 'third'),
+          ...columnsOf('second-target', 'first', 'second', 'third'),
+        ],
+        expected: columnsOf(undefined, 'first', 'second', 'third'),
+      },
+      {
+        name: 'different prompts share a label',
+        providers: ['first-target', 'second-target'],
+        providerPromptMap: { 'first-target': ['shared'] },
+        columns: [
+          ...columnsOf('first-target', ['shared', 'one'], ['shared', 'two']),
+          ...columnsOf('second-target', ['shared', 'one'], 'other', ['shared', 'two']),
+        ],
+        expected: columnsOf(undefined, ['shared', 'one'], 'other', ['shared', 'two']),
+      },
+      {
+        name: 'the prompt file was reordered since the first run',
+        providers: ['only-target'],
+        livePrompts: ['second', 'first'],
+        providerPromptMap: { 'only-target': ['second', 'first'] },
+        columns: columnsOf('only-target', 'first', 'second'),
+        expected: columnsOf(undefined, 'first', 'second'),
+      },
+      {
+        name: 'a prompt was removed from the config since the first run',
+        providers: ['first-target', 'second-target'],
+        livePrompts: ['second'],
+        providerPromptMap: { 'first-target': ['second'] },
+        columns: [
+          ...columnsOf('first-target', 'second'),
+          ...columnsOf('second-target', 'removed', 'second'),
+        ],
+        expected: columnsOf(undefined, 'removed', 'second'),
+      },
+      {
+        name: 'two providers share an identifier',
+        providers: ['twin', 'twin'],
+        providerPromptMap: { twin: ['same', 'other'] },
+        columns: columnsOf('twin', 'same', 'same', 'other', 'same', 'same', 'other'),
+        expected: columnsOf(undefined, 'same', 'same', 'other'),
+      },
+      {
+        name: 'providers that share an identifier are apart',
+        providers: ['twin', 'other-target', 'twin'],
+        providerPromptMap: { twin: ['first'], 'other-target': ['first', 'second'] },
+        columns: [
+          ...columnsOf('twin', 'first'),
+          ...columnsOf('other-target', 'first', 'second'),
+          ...columnsOf('twin', 'first'),
+        ],
+        expected: columnsOf(undefined, 'first', 'second'),
+      },
+      {
+        name: 'the columns do not name their provider',
+        providers: ['first-target', 'second-target'],
+        columns: columnsOf(undefined, 'same', 'same', 'other', 'same', 'same', 'other'),
+        expected: columnsOf(undefined, 'same', 'same', 'other'),
+      },
+    ])(
+      'should resume with the columns of the first run when $name',
+      async ({ name: _name, columns, expected, ...options }) => {
+        const testSuite = await replay({ mode: 'resume', columns, ...options });
+
+        expect(testSuite.prompts).toEqual(expected.map(toReplayed));
+        // Results are addressed by column position, so the evaluator has to build the same
+        // columns again: the same prompts for the same providers, in the same places.
+        const built = builtColumns(testSuite);
+        expect(built.map(({ label, raw }) => ({ label, raw }))).toEqual(
+          columns.map(({ label, raw }) => ({ label, raw })),
+        );
+        if (columns[0].provider) {
+          expect(built.map(({ provider }) => provider)).toEqual(
+            columns.map(({ provider }) => provider),
+          );
+        }
+      },
+    );
+
+    it.each<ReplayCase>([
+      {
+        name: 'a provider was filtered out since the first run',
+        providers: ['first-target'],
+        columns: [
+          ...columnsOf('first-target', 'same', 'same', 'other'),
+          ...columnsOf('second-target', 'same', 'same', 'other'),
+        ],
+        // The remaining provider keeps its columns, in their saved positions.
+        expected: columnsOf(undefined, 'same', 'same', 'other'),
+      },
+      {
+        name: 'unnamed columns differ between providers',
+        providers: ['first-target', 'second-target'],
+        providerPromptMap: { 'first-target': ['second'] },
+        columns: columnsOf(undefined, 'second', 'removed', 'second'),
+        expected: columnsOf(undefined, 'second', 'removed'),
+      },
+    ])(
+      'should resume with the nearest prompt list when $name',
+      async ({ name: _name, columns, expected, ...options }) => {
+        const testSuite = await replay({ mode: 'resume', columns, ...options });
+
+        expect(testSuite.prompts).toEqual(expected.map(toReplayed));
+      },
+    );
+
+    it('should retry errors with the columns of the first run', async () => {
+      const columns = [
+        ...columnsOf('first-target', 'same', 'same'),
+        ...columnsOf('second-target', 'same', 'same'),
+      ];
+      const testSuite = await replay({
+        mode: 'retry',
+        providers: ['first-target', 'second-target'],
+        providerPromptMap: { 'first-target': ['same', 'same'], 'second-target': ['same', 'same'] },
+        columns,
+      });
+
+      expect(testSuite.prompts).toEqual(columnsOf(undefined, 'same', 'same').map(toReplayed));
+      expect(builtColumns(testSuite)).toEqual(columns);
+    });
   });
 
   it('should retry error results from the latest eval and clean up after success', async () => {

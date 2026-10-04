@@ -2316,13 +2316,16 @@ function createDefaultPromptMetrics(): PromptMetrics {
 
 function buildExistingPromptsMap(store: EvaluationStore) {
   const existingPromptsMap = new Map<string, CompletedPrompt>();
+  // The saved columns, in table order.
+  const existingPrompts: CompletedPrompt[] = [];
   if (cliState.resume && store.persisted && store.prompts.length > 0) {
     logger.debug('Resuming evaluation: preserving metrics from previous run');
     for (const existingPrompt of store.prompts) {
       existingPromptsMap.set(`${existingPrompt.provider}:${existingPrompt.id}`, existingPrompt);
+      existingPrompts.push(existingPrompt);
     }
   }
-  return existingPromptsMap;
+  return { existingPromptsMap, existingPrompts };
 }
 
 /**
@@ -2350,7 +2353,7 @@ function buildCompletedPrompts(
 ): { prompts: CompletedPrompt[]; columnsByProvider: ProviderColumns[] } {
   const prompts: CompletedPrompt[] = [];
   const columnsByProvider: ProviderColumns[] = [];
-  const existingPromptsMap = buildExistingPromptsMap(store);
+  const { existingPromptsMap, existingPrompts } = buildExistingPromptsMap(store);
 
   for (const provider of testSuite.providers) {
     const providerKey = getProviderIdentifier(provider);
@@ -2362,7 +2365,14 @@ function buildCompletedPrompts(
       }
 
       const promptId = generateIdFromPrompt(prompt);
-      const existingPrompt = existingPromptsMap.get(`${providerKey}:${promptId}`);
+      // A resumed eval rebuilds its columns in their saved positions (see `doEval`), so the
+      // saved column at this position is this column. Identity cannot tell apart columns
+      // that share a provider and a prompt label, and is the fallback when positions moved.
+      const savedColumn = existingPrompts[prompts.length];
+      const existingPrompt =
+        savedColumn?.provider === providerKey && savedColumn.id === promptId
+          ? savedColumn
+          : existingPromptsMap.get(`${providerKey}:${promptId}`);
       if (existingPrompt?.metrics) {
         backfillNamedScoreWeights(existingPrompt.metrics);
       }
@@ -2373,10 +2383,8 @@ function buildCompletedPrompts(
         id: promptId,
         provider: providerKey,
         label: prompt.label,
-        // `existingPromptsMap` is still keyed by identity, so duplicate providers resolve
-        // to the same stored prompt. Clone its metrics so the columns do not accumulate
-        // into one shared object. (Resume has deeper duplicate-provider problems; see
-        // `doEval`, which rebuilds `testSuite.prompts` from the previous run's columns.)
+        // Columns found through `existingPromptsMap` can resolve to the same stored prompt.
+        // Clone its metrics so the columns do not accumulate into one shared object.
         metrics: existingPrompt?.metrics
           ? structuredClone(existingPrompt.metrics)
           : createDefaultPromptMetrics(),
