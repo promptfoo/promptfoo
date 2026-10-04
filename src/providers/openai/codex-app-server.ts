@@ -1081,7 +1081,7 @@ class CodexAppServerConnection {
 
     const candidateLines =
       this.bufferedJsonRpcLines.length > 0 ? [...this.bufferedJsonRpcLines, line] : [trimmed];
-    const candidate = candidateLines.join('\\n');
+    const candidate = candidateLines.join('\n');
     if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
       this.bufferedJsonRpcLines = [];
       this.handleProcessFailure(
@@ -1094,7 +1094,19 @@ class CodexAppServerConnection {
     }
     let message: JsonRpcMessage;
     try {
-      message = JSON.parse(candidate) as JsonRpcMessage;
+      try {
+        message = JSON.parse(candidate) as JsonRpcMessage;
+      } catch (error) {
+        if (
+          candidateLines.length <= 1 ||
+          !(error instanceof Error) ||
+          !/Bad control character/i.test(error.message)
+        ) {
+          throw error;
+        }
+        // Preserve compatibility with app-server output containing raw newlines inside strings.
+        message = JSON.parse(candidateLines.join('\\n')) as JsonRpcMessage;
+      }
     } catch (error) {
       if (this.shouldBufferJsonRpcLine(error, trimmed)) {
         this.bufferedJsonRpcLines = candidateLines;
@@ -1119,7 +1131,11 @@ class CodexAppServerConnection {
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    return /Unterminated string|Unexpected end of JSON input|Bad control character/i.test(message);
+    return (
+      /Unterminated string|Unexpected end of JSON input|Bad control character/i.test(message) ||
+      (message.startsWith('Expected ') &&
+        message.includes(` in JSON at position ${trimmedLine.length} (line`))
+    );
   }
 
   private handleMessage(message: JsonRpcMessage): void {

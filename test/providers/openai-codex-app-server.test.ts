@@ -4789,6 +4789,64 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'Recovered' });
   });
 
+  it.each(['opening brace', 'property name', 'property value'])(
+    'parses multiline JSON-RPC split after the %s',
+    async (splitAfter) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({ config: { thread_cleanup: 'none' } });
+      const sendMultiline = (message: unknown) => {
+        for (const line of JSON.stringify(message, null, 2).split('\n')) {
+          server.stdout.write(`${line}\n`);
+        }
+      };
+
+      const resultPromise = provider.callApi('Read multiline protocol messages');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      const initialResponse = JSON.stringify({ id: initialize.id, result: {} });
+      const splitIndex =
+        splitAfter === 'property name'
+          ? initialResponse.indexOf(':')
+          : splitAfter === 'property value'
+            ? initialResponse.indexOf(',')
+            : 1;
+      // A malformed complete line must not poison the next valid response.
+      server.stdout.write('{"id": }\n');
+      server.stdout.write(
+        `${initialResponse.slice(0, splitIndex)}\n${initialResponse.slice(splitIndex)}\n`,
+      );
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      sendMultiline({ id: threadStart.id, result: { thread: { id: 'thr_pretty' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      sendMultiline({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_pretty', status: 'inProgress' } },
+      });
+      server.stdout.write('\n');
+      sendMultiline({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_pretty',
+          turnId: 'turn_pretty',
+          itemId: 'msg_pretty',
+          delta: 'line one\nline two',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_pretty',
+          turn: { id: 'turn_pretty', status: 'completed', items: [], error: null },
+        },
+      });
+
+      await expect(resultPromise).resolves.toMatchObject({ output: 'line one\nline two' });
+    },
+  );
+
   it('parses JSON-RPC notifications whose string payloads contain literal newlines', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
