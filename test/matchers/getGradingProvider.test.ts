@@ -404,9 +404,10 @@ describe('getGradingProvider', () => {
         '../../src/matchers/providers'
       );
       const { default: freshLogger } = await import('../../src/logger');
+      const { default: freshCliState } = await import('../../src/cliState');
       const provider = createMockProvider({ id: 'openai:chat:gpt-4' });
 
-      (cliState as any).config = {
+      (freshCliState as any).config = {
         defaultTest: {
           provider: 'openai:chat:gpt-4',
         },
@@ -427,9 +428,10 @@ describe('getGradingProvider', () => {
         '../../src/matchers/providers'
       );
       const { default: freshLogger } = await import('../../src/logger');
+      const { default: freshCliState } = await import('../../src/cliState');
       const provider = createMockProvider({ id: 'openai:chat:gpt-4o' });
 
-      (cliState as any).config = {
+      (freshCliState as any).config = {
         defaultTest: {
           options: {
             provider: 'openai:chat:gpt-4o',
@@ -450,9 +452,10 @@ describe('getGradingProvider', () => {
         '../../src/matchers/providers'
       );
       const { default: freshLogger } = await import('../../src/logger');
+      const { default: freshCliState } = await import('../../src/cliState');
       const provider = createMockProvider({ id: 'openai:chat:gpt-4o-mini' });
 
-      (cliState as any).config = {
+      (freshCliState as any).config = {
         defaultTest: {
           provider: 'openai:chat:gpt-4',
         },
