@@ -1654,6 +1654,67 @@ describe('XAI Video Provider', () => {
       expect(submittedReferenceUrls).toEqual([firstCredentialUrl, rotatedCredentialUrl]);
     });
 
+    it.each([
+      ['image', 'provider'],
+      ['reference_images', 'provider'],
+      ['image', 'prompt'],
+      ['reference_images', 'prompt'],
+    ] as const)(
+      'bypasses cache for mixed inputs with a named path in %s from %s config',
+      async (field, scope) => {
+        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+        vi.mocked(fetch.fetchWithProxy)
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ request_id: mockRequestId }),
+          } as Response)
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+              video: { url: mockVideoUrl, duration: 12 },
+              model: 'grok-imagine-video-1.5',
+            }),
+          } as Response)
+          .mockResolvedValueOnce({
+            ok: true,
+            arrayBuffer: async () => new ArrayBuffer(1000),
+          } as Response);
+        const ordinaryUrl = 'https://example.com/frame.png';
+        const namedPathUrl = 'https://example.com/media/token/sample/frame.png';
+        const inputs = {
+          image: { url: field === 'image' ? namedPathUrl : ordinaryUrl },
+          reference_images: [{ url: field === 'reference_images' ? namedPathUrl : ordinaryUrl }],
+        };
+        const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+          config: {
+            cacheNamespace: 'test-account',
+            duration: 12,
+            image: { url: ordinaryUrl },
+            reference_images: [{ url: ordinaryUrl }],
+            ...(scope === 'provider' ? inputs : {}),
+          },
+        });
+
+        const result = await provider.callApi(
+          mockPrompt,
+          scope === 'prompt'
+            ? { vars: {}, prompt: { raw: mockPrompt, label: 'mixed-media', config: inputs } }
+            : undefined,
+        );
+
+        expect(videoUtils.generateVideoCacheKey).not.toHaveBeenCalled();
+        expect(videoUtils.checkVideoCache).not.toHaveBeenCalled();
+        expect(videoUtils.storeCacheMapping).not.toHaveBeenCalled();
+        expect(result.error).toBeUndefined();
+        expect(result.cached).not.toBe(true);
+        expect(fetch.fetchWithProxy).toHaveBeenCalledTimes(3);
+        expect(
+          JSON.parse(vi.mocked(fetch.fetchWithProxy).mock.calls[0][1]?.body as string),
+        ).toMatchObject(inputs);
+        expect(result.video?.storageRef?.key).toBe(mockStorageKey);
+      },
+    );
+
     it('preserves benign UUID resource identity in Video 1.5 reference-image cache keys', async () => {
       const actualVideoUtils = await vi.importActual<typeof videoUtils>(
         '../../../src/providers/video/utils',

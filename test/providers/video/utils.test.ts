@@ -134,4 +134,21 @@ describe('video cache utilities', () => {
 
     expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
   });
+
+  it.each([
+    '/token/sample/frame.png',
+    '/media/token/sample/frame.png',
+    '/media/API_Key/sample/frame.png',
+    '/media/%61pi_key/sample/frame.png',
+  ])('excludes credential-name/value paths from cache eligibility: %s', (pathname) => {
+    // These ordinary fixture values test route structure, not actual credentials.
+    expect(isVideoCacheReferenceUrlSafe(`https://example.com${pathname}`)).toBe(false);
+  });
+
+  it.each(['/media/tokenizer/sample.png', '/media/item/sample.png', '/media/token'])(
+    'preserves cache eligibility for an ordinary resource path: %s',
+    (pathname) => {
+      expect(isVideoCacheReferenceUrlSafe(`https://example.com${pathname}`)).toBe(true);
+    },
+  );
 });

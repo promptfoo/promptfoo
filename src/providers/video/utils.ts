@@ -191,9 +191,13 @@ export function isVideoCacheReferenceUrlSafe(reference: string): boolean {
       return false;
     }
 
-    return !referenceUrl.pathname.split('/').some((segment) => {
+    return !referenceUrl.pathname.split('/').some((segment, index, segments) => {
       try {
-        return CACHE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
+        const decodedSegment = decodeURIComponent(segment);
+        return (
+          CACHE_CREDENTIAL_PATH_SEGMENT.test(decodedSegment) ||
+          (isSecretField(decodedSegment) && Boolean(segments[index + 1]))
+        );
       } catch {
         return false;
       }
