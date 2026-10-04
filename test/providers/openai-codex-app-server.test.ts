@@ -4847,7 +4847,19 @@ describe('OpenAICodexAppServerProvider', () => {
     },
   );
 
-  it('discards malformed multiline JSON-RPC before the next valid response', async () => {
+  it.each(
+    [
+      { label: 'complete malformed line', malformed: '{"id": }\n' },
+      { label: 'complete malformed multiline object', malformed: '{\n  "id": 1,\n}\n' },
+      { label: 'unfinished object', malformed: '{"id": 1\n' },
+      { label: 'unfinished string', malformed: '{"result":"unfinished\n' },
+    ].flatMap((input) =>
+      ['compact', 'multiline', 'indented-multiline', 'raw-newline'].map((format) => ({
+        ...input,
+        format,
+      })),
+    ),
+  )('recovers from $label before a $format response', async ({ malformed, format }) => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
     const provider = new OpenAICodexAppServerProvider({ config: { thread_cleanup: 'none' } });
@@ -4856,8 +4868,15 @@ describe('OpenAICodexAppServerProvider', () => {
       server,
       (message) => message.method === 'initialize',
     );
-    server.stdout.write('{\n  "id": 1,\n}\n');
-    server.send({ id: initialize.id, result: {} });
+    server.stdout.write(malformed);
+    const response = { id: initialize.id, result: { message: 'line one\nline two' } };
+    const serialized = JSON.stringify(response, null, format.endsWith('multiline') ? 2 : undefined);
+    if (format === 'indented-multiline') {
+      server.stdout.write('  ');
+    }
+    server.stdout.write(
+      `${format === 'raw-newline' ? serialized.replace(JSON.stringify(response.result.message), '"line one\nline two"') : serialized}\n`,
+    );
     const threadStart = await waitForMessageWithoutTimers(
       server,
       (message) => message.method === 'thread/start',

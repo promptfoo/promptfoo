@@ -1073,7 +1073,7 @@ class CodexAppServerConnection {
     return this.closePromise;
   }
 
-  private handleLine(line: string): void {
+  private handleLine(line: string, retryBufferedMessage = true): void {
     const trimmed = line.trim();
     if (!trimmed && this.bufferedJsonRpcLines.length === 0) {
       return;
@@ -1116,6 +1116,18 @@ class CodexAppServerConnection {
 
       logger.warn('[CodexAppServer] Failed to parse JSON-RPC line', { error, line: candidate });
       this.bufferedJsonRpcLines = [];
+      if (retryBufferedMessage && candidateLines.length > 1) {
+        // A later object may begin a new record after an unfinished malformed message.
+        let restartIndex = candidateLines.length - 1;
+        for (let index = candidateLines.length - 1; index > 0; index--) {
+          if (candidateLines[index].trimStart().startsWith('{')) {
+            restartIndex = index;
+            break;
+          }
+        }
+        this.bufferedJsonRpcLines = candidateLines.slice(restartIndex, -1);
+        this.handleLine(line, false);
+      }
       return;
     }
 
@@ -1149,7 +1161,7 @@ class CodexAppServerConnection {
   }
 
   private shouldBufferJsonRpcLine(error: unknown, candidate: string): boolean {
-    if (!candidate.startsWith('{')) {
+    if (!candidate.trimStart().startsWith('{')) {
       return false;
     }
 
