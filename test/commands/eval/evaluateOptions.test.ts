@@ -12,6 +12,7 @@ import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
+import type { InternalEvaluateOptions } from '../../../src/types/internal';
 
 vi.mock('../../../src/evaluator', async (importOriginal) => {
   return {
@@ -979,6 +980,44 @@ describe('evaluateOptions behavior', () => {
       ]);
     });
 
+    it.each([undefined, 'category=drop,other'])(
+      'uses metadata-any config defaults unless CLI overrides them with %s',
+      async (filterMetadataAny) => {
+        const tempConfig = writeTempConfig(tmpDir, 'metadata-any-default.yaml', {
+          providers: ['echo'],
+          prompts: ['Hello'],
+          commandLineOptions: { filterMetadataAny: 'category=keep,other' },
+          tests: [{ metadata: { category: 'keep' } }, { metadata: { category: 'drop' } }],
+        });
+        await doEval(
+          { table: false, write: false, config: [tempConfig], filterMetadataAny },
+          {},
+          undefined,
+          {},
+        );
+        const [suite, record, options] = evaluateMock.mock.calls.at(-1)!;
+        expect(suite.tests?.map((test) => test.metadata?.category)).toEqual([
+          filterMetadataAny ? 'drop' : 'keep',
+        ]);
+        const expected = { metadataAny: filterMetadataAny ?? 'category=keep,other' };
+        expect((record as Eval).runtimeOptions?.metadataFilter).toEqual(expected);
+        expect((options as InternalEvaluateOptions).metadataFilter).toEqual(expected);
+      },
+    );
+
+    it('applies a configured metadata-any default to the implicit test', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'metadata-any-implicit.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        defaultTest: { metadata: { category: 'keep' } },
+        commandLineOptions: { filterMetadataAny: 'category=drop,other' },
+      });
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+      const [suite] = evaluateMock.mock.calls.at(-1)!;
+      expect(suite.tests).toEqual([]);
+      expect(suite.scenarios).toEqual([]);
+    });
+
     it('should filter an implicit default test by inherited metadata', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-implicit-default-metadata.yaml', {
         providers: ['echo'],
@@ -1130,6 +1169,31 @@ describe('evaluateOptions behavior', () => {
         expect(evaluateMock).toHaveBeenCalled();
         const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
         expect(options.filterRange).toBe('1:2');
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('restores persisted metadata alternatives when resuming scenarios', async () => {
+      const metadataFilter = { metadata: 'title=a,b', metadataAny: 'category=keep,other' };
+      const resumeEval = new Eval(
+        {
+          providers: ['echo'],
+          prompts: ['Hello'],
+          scenarios: [{ config: [{}], tests: [{ metadata: { category: 'keep' } }] }],
+        },
+        {
+          id: 'eval-resume-metadata-any',
+          persisted: true,
+          runtimeOptions: { metadataFilter },
+        },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      try {
+        const command = { table: false, resume: resumeEval.id, filterMetadataAny: 'category=drop' };
+        await doEval(command, {}, undefined, {});
+        const options = evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions;
+        expect(options.metadataFilter).toEqual(metadataFilter);
       } finally {
         findByIdSpy.mockRestore();
       }

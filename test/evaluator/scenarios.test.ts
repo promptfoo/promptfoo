@@ -10,6 +10,40 @@ import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator scenarios and conversations', () => {
+  it.each(['keep,other', 'missing,other'])(
+    'filters expanded scenario metadata with opt-in alternatives %s',
+    async (alternatives) => {
+      const provider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({ output: 'Hello' }),
+      };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Hello')],
+        defaultTest: { metadata: { title: 'a,b' } },
+        scenarios: [
+          {
+            config: [{ metadata: { category: 'keep' } }, { metadata: { category: 'drop' } }],
+            tests: [{ vars: { id: 'inherited' } }, { metadata: { title: 'a' } }],
+          },
+          {
+            config: [{ metadata: { category: 'drop' } }],
+            tests: [{ metadata: { category: 'keep' }, vars: { id: 'overridden' } }],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, {
+        metadataFilter: { metadata: 'title=a,b', metadataAny: `category=${alternatives}` },
+      });
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results.map((row) => row.vars.id)).toEqual(
+        alternatives === 'keep,other' ? ['inherited', 'overridden'] : [],
+      );
+      expect(provider.callApi).toHaveBeenCalledTimes(alternatives === 'keep,other' ? 2 : 0);
+    },
+  );
+
   it('evaluate with scenarios', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

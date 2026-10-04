@@ -324,6 +324,11 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
+  /** @internal Opt-in metadata filters reapplied after scenario expansion and on resume. */
+  metadataFilter?: {
+    metadata?: string | string[];
+    metadataAny: string | string[];
+  };
 };
 
 const PromptMetricsSchema = z.object({
