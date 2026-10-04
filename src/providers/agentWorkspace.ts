@@ -295,6 +295,11 @@ async function findPathsGitLeavesOut(
       continue;
     }
     try {
+      const canSearch = await fs.access(path.join(dir, directory), constants.X_OK).then(
+        () => true,
+        () => false,
+      );
+      let undecodableNames: Set<string> | undefined;
       const entries = await fs.opendir(path.join(dir, directory));
       if (directory !== '') {
         directories.push(directory);
@@ -302,6 +307,23 @@ async function findPathsGitLeavesOut(
       for await (const entry of entries) {
         signal?.throwIfAborted();
         const entryPath = `${directory}${entry.name}`;
+        if (!canSearch) {
+          leftOut.push(entry.isDirectory() ? `${entryPath}/` : entryPath);
+          continue;
+        }
+        if (entry.name.includes('\uFFFD')) {
+          // Check raw names once per parent so a lossy name cannot open a valid sibling.
+          // A literal, valid UTF-8 replacement character remains an ordinary name.
+          undecodableNames ??= new Set(
+            (await fs.readdir(path.join(dir, directory), { encoding: 'buffer' }))
+              .filter((name) => !Buffer.from(name.toString('utf8')).equals(name))
+              .map((name) => name.toString('utf8')),
+          );
+          if (undecodableNames.has(entry.name)) {
+            leftOut.push(entry.isDirectory() ? `${entryPath}/` : entryPath);
+            continue;
+          }
+        }
         // Git compares the name without regard to case on file systems that do.
         if (entry.name.toLowerCase() === '.git') {
           const reservedPath = entry.isDirectory() ? `${entryPath}/` : entryPath;
@@ -750,13 +772,31 @@ async function getWorkspaceDiff(
       });
     }
     const ignoreEnv = { ...env, GIT_WORK_TREE: ignoreDir };
+    const copiedIgnoreFiles = new Set(ignoreFiles.split('\0').filter(Boolean));
     const getIgnoredQueries = async (queries: string[]) => {
-      if (queries.length === 0) {
+      const normalized = new Map<string, string>();
+      for (const query of queries) {
+        if (query.endsWith('/')) {
+          // A trailing slash can match `vendor/*` even when `vendor` itself is not ignored.
+          // Give Git the directory type instead, keeping all queries on committed rules.
+          const directory = query.slice(0, -1);
+          const parents = getCoveredDirectories([`${directory.replace(/^\.\//, '')}/`]);
+          if ([...parents].some((parent) => copiedIgnoreFiles.has(parent.slice(0, -1)))) {
+            // Do not create directories through a copied ignore file or symbolic link.
+            continue;
+          }
+          await fs.mkdir(path.join(ignoreDir, directory), { recursive: true });
+          normalized.set(query, directory);
+        } else {
+          normalized.set(query, query);
+        }
+      }
+      if (normalized.size === 0) {
         return new Set<string>();
       }
       const ignored = await git(['check-ignore', '--no-index', '-z', '--stdin'], {
         env: ignoreEnv,
-        input: `${queries.join('\0')}\0`,
+        input: `${[...new Set(normalized.values())].join('\0')}\0`,
         signal,
       }).catch((error: unknown) => {
         if (error instanceof Error && 'code' in error && error.code === 1) {
@@ -764,7 +804,10 @@ async function getWorkspaceDiff(
         }
         throw error;
       });
-      return new Set(ignored.split('\0').filter(Boolean));
+      const matches = new Set(ignored.split('\0').filter(Boolean));
+      return new Set(
+        [...normalized].filter(([, query]) => matches.has(query)).map(([query]) => query),
+      );
     };
     // Lines appended to the diff when it does not cover everything the agent changed.
     const notes: string[] = [];
@@ -827,15 +870,8 @@ async function getWorkspaceDiff(
       .split('\0')
       .filter((file) => file.endsWith('/') && !protectedDirectories.has(file));
     const directoryQueries = new Map(
-      untrackedDirectories.map((file) => [file, toIgnoreQuery(file)?.replace(/\/$/, '')]),
+      untrackedDirectories.map((file) => [file, toIgnoreQuery(file)]),
     );
-    // A trailing slash can match `vendor/*` even when `vendor` itself is not ignored.
-    // Give Git the directory type in the trusted tree instead, so negations stay effective.
-    for (const query of new Set(directoryQueries.values())) {
-      if (query !== undefined) {
-        await fs.mkdir(path.join(ignoreDir, query), { recursive: true });
-      }
-    }
     const ignoredDirectoryQueries = await getIgnoredQueries(
       [...new Set(directoryQueries.values())].filter((query) => query !== undefined),
     );
@@ -908,11 +944,7 @@ async function getWorkspaceDiff(
     // that were below it.
     leftOut = leftOut.filter(
       (file) =>
-        !isIgnored(file) ||
-        referenced.some(
-          (tracked) =>
-            tracked === file || tracked.startsWith(file.endsWith('/') ? file : `${file}/`),
-        ),
+        !isIgnored(file) || protectedDirectories.has(file.endsWith('/') ? file : `${file}/`),
     );
     // Git stops altogether at a new file it cannot examine, such as one in a directory that
     // can be listed but not searched. Those are named below instead of being added. Git has

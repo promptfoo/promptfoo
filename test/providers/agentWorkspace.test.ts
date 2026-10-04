@@ -1889,6 +1889,160 @@ describe('agent workspaces', () => {
       expect(workspaceDiffIncomplete).toBe(true);
     });
 
+    it('names a tracked file below a readable directory that can no longer be searched', async () => {
+      if (!canMakeUnreadable) {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source, { 'hidden/policy.txt': 'safe\n' });
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'README.md'), 'visible change\n');
+      write(path.join(workspace.dir, 'hidden', 'policy.txt'), 'hidden change\n');
+      fs.chmodSync(path.join(workspace.dir, 'hidden'), 0o400);
+      try {
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('+visible change');
+        expect(metadata.workspaceDiff).toContain('hidden/policy.txt');
+      } finally {
+        fs.chmodSync(path.join(workspace.dir, 'hidden'), 0o700);
+      }
+    });
+
+    it.each(['empty', 'reserved'] as const)(
+      'does not traverse a valid sibling of an undecodable %s directory',
+      async (kind) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source, { 'policy\uFFFD/keep.txt': 'safe\n' });
+        const workspace = await create(source);
+        const raw = Buffer.concat([
+          Buffer.from(`${workspace.dir}${path.sep}policy`),
+          Buffer.from([0xff]),
+        ]);
+        fs.mkdirSync(raw);
+        if (kind === 'reserved') {
+          fs.mkdirSync(Buffer.concat([raw, Buffer.from('/.git')]));
+          fs.writeFileSync(Buffer.concat([raw, Buffer.from('/.git/payload')]), 'hidden');
+        }
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('policy\\u{fffd}/');
+        expect(fs.readFileSync(path.join(workspace.dir, 'policy\uFFFD', 'keep.txt'), 'utf8')).toBe(
+          'safe\n',
+        );
+      },
+    );
+
+    it('preserves a tracked directory with a valid UTF-8 replacement character', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { 'policy\uFFFD/keep.txt': 'safe\n' });
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'policy\uFFFD', 'keep.txt'), 'visible change\n');
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiffError).toBeUndefined();
+      expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+      expect(metadata.workspaceDiff).toContain('+visible change');
+    });
+
+    it.each(['literal', 'raw', 'empty', 'unreadable'] as const)(
+      'preserves ignore negations for %s ancestor queries',
+      async (kind) => {
+        if (
+          (kind === 'raw' && process.platform === 'win32') ||
+          (kind === 'unreadable' && !canMakeUnreadable)
+        ) {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': 'vendor/*\n!vendor/policy*\n' });
+        const workspace = await create(source);
+        const vendor = path.join(workspace.dir, 'vendor');
+        fs.mkdirSync(vendor);
+        if (kind === 'literal') {
+          write(path.join(vendor, 'policy\uFFFD.txt'), 'visible\n');
+        } else if (kind === 'raw') {
+          fs.writeFileSync(
+            Buffer.concat([Buffer.from(`${vendor}/policy`), Buffer.from([0xff])]),
+            'hidden',
+          );
+        } else if (kind === 'unreadable') {
+          write(path.join(vendor, 'policy.txt'), 'hidden\n');
+          fs.chmodSync(vendor, 0o000);
+        }
+        try {
+          const metadata = await workspace.metadata();
+
+          expect(metadata.workspaceDiffError).toBeUndefined();
+          expect(metadata.workspaceDiffIncomplete).toBe(true);
+          expect(metadata.workspaceDiff).toContain('vendor/');
+        } finally {
+          fs.chmodSync(vendor, 0o700);
+        }
+      },
+    );
+
+    it('does not scan all tracked references for each ignored special file', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      const files: Record<string, string> = { '.gitignore': 'ignored-*\n' };
+      for (let i = 0; i < 32; i++) {
+        files[`tracked/${i}.txt`] = 'safe\n';
+      }
+      makeRepository(source, files);
+      const workspace = await create(source);
+      for (let i = 0; i < 32; i++) {
+        execFileSync('mkfifo', [path.join(workspace.dir, `ignored-${i}`)]);
+      }
+      const original = String.prototype.startsWith;
+      let comparisons = 0;
+      const startsWith = vi.spyOn(String.prototype, 'startsWith').mockImplementation(function (
+        this: string,
+        search,
+        position,
+      ) {
+        if (/^ignored-\d+\/$/.test(search)) {
+          comparisons++;
+        }
+        return original.call(this, search, position);
+      });
+      try {
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiff).toBe('');
+        expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+        expect(comparisons).toBeLessThanOrEqual(64);
+      } finally {
+        startsWith.mockRestore();
+      }
+    });
+
+    it('keeps the diff when a copied ignore file is replaced with a directory', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'ignored/\n' });
+      const workspace = await create(source);
+      fs.unlinkSync(path.join(workspace.dir, '.gitignore'));
+      write(path.join(workspace.dir, '.gitignore', 'nested', '.git', 'payload'), 'hidden\n');
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiffError).toBeUndefined();
+      expect(metadata.workspaceDiffIncomplete).toBe(true);
+      expect(metadata.workspaceDiff).toContain('.gitignore/nested/.git/');
+      expect(fs.readFileSync(path.join(source, '.gitignore'), 'utf8')).toBe('ignored/\n');
+    });
+
     it('names a new file whose name holds the replacement character', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
