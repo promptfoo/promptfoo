@@ -1603,6 +1603,34 @@ describe('agent workspaces', () => {
       }
     });
 
+    it('names a new file whose name is not valid text', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'README.md'), 'original\ntampered\n');
+      const name = Buffer.concat([
+        Buffer.from(`${workspace.dir}${path.sep}policy`),
+        Buffer.from([0xff]),
+        Buffer.from('.txt'),
+      ]);
+      try {
+        fs.writeFileSync(name, 'new file\n');
+      } catch {
+        // The file system only takes names that are valid text.
+        return;
+      }
+
+      const metadata = await workspace.metadata();
+
+      // Git's listing is read as text, which changes this name, so the file cannot be added
+      // under the name that was read. It must not disappear from the account of the changes.
+      expect(metadata.workspaceDiff ?? '').toContain('+tampered');
+      expect(metadata.workspaceDiffIncomplete).toBe(true);
+      expect(metadata.workspaceDiff).toMatch(
+        /\[diff incomplete: 1 changed path\(s\) could not be included: "policy/,
+      );
+    });
+
     it('reports a top-level directory whose name differs from .git only by case', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);

@@ -787,17 +787,17 @@ async function getWorkspaceDiff(
       }
     }
     // Git stops altogether at a new file it cannot examine, such as one in a directory that
-    // can be listed but not searched. Those are named below instead of being added.
+    // can be listed but not searched. Those are named below instead of being added. Git has
+    // just listed them, so one that cannot be found is not gone: its name has bytes that are
+    // not valid text and did not survive being read as text.
     for (const file of newFiles) {
-      const code = await fs.lstat(path.join(dir, file)).then(
-        () => undefined,
-        (error: unknown) => (error instanceof Error && 'code' in error ? error.code : 'unknown'),
+      const examined = await fs.lstat(path.join(dir, file)).then(
+        () => true,
+        () => false,
       );
-      if (code !== undefined) {
+      if (!examined) {
         newFiles.delete(file);
-        if (code !== 'ENOENT' && code !== 'ENOTDIR') {
-          unverified.push(file);
-        }
+        unverified.push(file);
       }
     }
     // The agent controls the workspace, so some paths may be impossible to add: a file it
