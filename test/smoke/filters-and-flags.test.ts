@@ -314,6 +314,41 @@ describe('Metadata Filter Tests', () => {
     }
   });
 
+  it('--filter-metadata preserves literal commas, backslashes and equals signs', () => {
+    const value = String.raw`C:\data\,file=name,`;
+    const configPath = path.join(OUTPUT_DIR, 'metadata-literal-config.json');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-literal-output.json');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        prompts: ['{{ value }}'],
+        providers: ['echo'],
+        tests: [value, 'C:\\data', 'file=name'].map((value) => ({
+          vars: { value },
+          metadata: { value },
+          assert: [{ type: 'equals', value }],
+        })),
+      }),
+    );
+
+    const { exitCode } = runCli([
+      'eval',
+      '-c',
+      configPath,
+      '-o',
+      outputPath,
+      '--no-cache',
+      '--filter-metadata',
+      `value=${value}`,
+    ]);
+
+    expect(exitCode).toBe(0);
+    const rows = JSON.parse(fs.readFileSync(outputPath, 'utf-8')).results.results;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ response: { output: value }, success: true, score: 1 });
+    expect(rows[0].error).toBeFalsy();
+  });
+
   it('1.8.3.1 - --filter-metadata matches by key=value', () => {
     const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'metadata-output.json');
@@ -434,7 +469,7 @@ describe('Metadata Filter Tests', () => {
     expect(parsed.results.results[0].response.output).toContain('Alice');
   });
 
-  it('1.8.3.4b - comma-separated --filter-metadata values use OR logic within one key', () => {
+  it('1.8.3.4b - comma-separated --filter-metadata-any values use OR logic within one key', () => {
     const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'metadata-or-output.json');
 
@@ -446,9 +481,9 @@ describe('Metadata Filter Tests', () => {
         '-o',
         outputPath,
         '--no-cache',
-        '--filter-metadata',
+        '--filter-metadata-any',
         'category=auth,profile',
-        '--filter-metadata',
+        '--filter-metadata-any',
         'priority=high,medium',
       ],
       { cwd: CONFIGS_DIR },
@@ -479,19 +514,19 @@ describe('Metadata Filter Tests', () => {
   });
 
   it.each(['category=,auth', 'category=auth,', 'category=auth,,profile'])(
-    '--filter-metadata rejects an empty alternative in %s',
+    '--filter-metadata-any rejects an empty alternative in %s',
     (filter) => {
       const { exitCode, stdout, stderr } = runCli([
         'eval',
         '-c',
         path.join(CONFIGS_DIR, 'multi-test.yaml'),
         '--no-cache',
-        '--filter-metadata',
+        '--filter-metadata-any',
         filter,
       ]);
 
       expect(exitCode).not.toBe(0);
-      expect(`${stdout}${stderr}`).toContain('--filter-metadata has an empty value');
+      expect(`${stdout}${stderr}`).toContain('--filter-metadata-any has an empty value');
       expect(`${stdout}${stderr}`).toContain(filter);
     },
   );

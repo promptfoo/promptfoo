@@ -687,6 +687,7 @@ async function doEvalWithEnv(
       cmdObj.filterErrorsOnly !== undefined ||
       cmdObj.filterFirstN !== undefined ||
       cmdObj.filterMetadata !== undefined ||
+      cmdObj.filterMetadataAny !== undefined ||
       cmdObj.filterPattern !== undefined ||
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
@@ -705,6 +706,7 @@ async function doEvalWithEnv(
         errorsOnly: cmdObj.filterErrorsOnly,
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
+        metadataAny: cmdObj.filterMetadataAny,
         pattern: cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
         sample: filterSample,

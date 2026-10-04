@@ -129,6 +129,46 @@ describe('filterTests', () => {
       expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
     });
 
+    it.each([
+      'a,b',
+      'a,',
+      ',a',
+      ',',
+      'a,,b',
+      String.raw`a\,b`,
+      String.raw`C:\data\,D:\data`,
+      String.raw`\\server\share`,
+      String.raw`a\\,b`,
+      'a=b,c=d',
+      'a, b',
+    ])('matches %s literally by default', async (value) => {
+      const selected = { metadata: { value } };
+      const suite = {
+        prompts: [],
+        providers: [],
+        tests: [selected, { metadata: { value: 'a' } }, { metadata: { value: 'b' } }],
+      };
+      await expect(filterTests(suite, { metadata: `value=${value}` })).resolves.toEqual([selected]);
+    });
+
+    it('combines literal and opt-in OR filters with AND', async () => {
+      const selected = { metadata: { title: 'a,b', env: 'prod' } };
+      await expect(
+        filterTests(
+          {
+            prompts: [],
+            providers: [],
+            tests: [
+              selected,
+              { metadata: { title: 'a', env: 'prod' } },
+              { metadata: { title: 'a,b', env: 'dev' } },
+            ],
+          },
+          { metadata: 'title=a,b', metadataAny: 'env=prod,stage' },
+        ),
+      ).resolves.toEqual([selected]);
+    });
+
     describe('multiple metadata filters', () => {
       const multiMetadataTestSuite: TestSuite = {
         prompts: [],
@@ -225,14 +265,14 @@ describe('filterTests', () => {
             ...multiMetadataTestSuite,
             tests: [...multiMetadataTestSuite.tests!, { metadata: { env: 'staging' } }],
           },
-          { metadata: 'env=dev,prod' },
+          { metadataAny: 'env=dev,prod' },
         );
         expect(result).toEqual(multiMetadataTestSuite.tests);
       });
 
       it('should OR within a key and AND across repeated flags together', async () => {
         const result = await filterTests(multiMetadataTestSuite, {
-          metadata: ['type=unit,integration', 'priority=high,medium'],
+          metadataAny: ['type=unit,integration', 'priority=high,medium'],
         });
         expect(result.map((t: TestCase) => t.vars?.var1).sort()).toEqual([
           'test1',
@@ -243,14 +283,14 @@ describe('filterTests', () => {
 
       it('should narrow OR values with a second key', async () => {
         const result = await filterTests(multiMetadataTestSuite, {
-          metadata: ['env=dev,prod', 'priority=high'],
+          metadataAny: ['env=dev,prod', 'priority=high'],
         });
         expect(result.map((t: TestCase) => t.vars?.var1).sort()).toEqual(['test1', 'test3']);
       });
 
       it('should AND repeated filters for the same key', async () => {
         const result = await filterTests(multiMetadataTestSuite, {
-          metadata: ['env=dev,prod', 'env=prod,staging'],
+          metadataAny: ['env=dev,prod', 'env=prod,staging'],
         });
         expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test2', 'test4']);
       });
@@ -278,7 +318,7 @@ describe('filterTests', () => {
           ],
         };
         const result = await filterTests(arrayMetadataSuite, {
-          metadata: ['tags=beta,gamma'],
+          metadataAny: ['tags=beta,gamma'],
         });
         expect(result).toEqual(arrayMetadataSuite.tests!.slice(0, 2));
       });
@@ -295,7 +335,7 @@ describe('filterTests', () => {
             providers: [],
             tests: values.map((id) => ({ metadata: { id } })),
           },
-          { metadata: filter },
+          { metadataAny: filter },
         );
         expect(result.map((test) => test.metadata?.id)).toEqual(expected);
       });
@@ -335,7 +375,7 @@ describe('filterTests', () => {
                 '\\\\server\\share',
               ].map((id) => ({ metadata: { id } })),
             },
-            { metadata: filter },
+            { metadataAny: filter },
           );
           expect(result.map((test) => test.metadata?.id)).toEqual(expected);
         },
@@ -345,17 +385,17 @@ describe('filterTests', () => {
         await expect(
           filterTests(
             { prompts: [], providers: [], tests: [{ metadata: { id: 'D:\\' } }] },
-            { metadata: 'id=D:\\\\,' },
+            { metadataAny: 'id=D:\\\\,' },
           ),
-        ).rejects.toThrow('--filter-metadata has an empty value');
+        ).rejects.toThrow('--filter-metadata-any has an empty value');
       });
 
       it.each(['env=,dev', 'env=dev,', 'env=dev,,prod', 'env=,'])(
         'should reject an empty list value in %s even without tests',
         async (metadata) => {
           await expect(
-            filterTests({ prompts: [], providers: [], tests: [] }, { metadata }),
-          ).rejects.toThrow(`--filter-metadata has an empty value in "${metadata}"`);
+            filterTests({ prompts: [], providers: [], tests: [] }, { metadataAny: metadata }),
+          ).rejects.toThrow(`--filter-metadata-any has an empty value in "${metadata}"`);
         },
       );
 

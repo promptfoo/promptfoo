@@ -922,6 +922,7 @@ describe('evaluateOptions behavior', () => {
     it.each([
       ['--filter-pattern', { filterPattern: 'no match' }],
       ['--filter-metadata', { filterMetadata: 'category=drop' }],
+      ['--filter-metadata-any', { filterMetadataAny: 'category=drop,other' }],
     ])('should apply %s to the implicit default test', async (_filterName, filterOptions) => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-implicit-default.yaml', {
         providers: ['echo'],
@@ -948,6 +949,34 @@ describe('evaluateOptions behavior', () => {
       const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
       expect(testSuite.tests).toHaveLength(0);
       expect(testSuite.scenarios).toEqual([]);
+    });
+
+    it('passes literal and OR metadata options to filtering together', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-metadata-any.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [
+          { metadata: { title: 'a,b', category: 'keep' } },
+          { metadata: { title: 'a', category: 'keep' } },
+          { metadata: { title: 'a,b', category: 'drop' } },
+        ],
+      });
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadata: 'title=a,b',
+          filterMetadataAny: 'category=keep,other',
+        },
+        {},
+        undefined,
+        {},
+      );
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests?.map((test) => test.metadata)).toEqual([
+        { title: 'a,b', category: 'keep' },
+      ]);
     });
 
     it('should filter an implicit default test by inherited metadata', async () => {

@@ -49,8 +49,10 @@ export interface FilterOptions {
   failingOnly?: string;
   /** Number of tests to take from the beginning */
   firstN?: number | string;
-  /** Metadata filters: comma-separated values use OR; separate filters use AND, even for the same key. */
+  /** Literal metadata substring filters; separate filters use AND. */
   metadata?: string | string[];
+  /** Opt-in comma-separated OR values; separate filters still use AND. */
+  metadataAny?: string | string[];
   /** Regular expression pattern to filter tests by description */
   pattern?: string;
   /** Zero-based test index range in start:end format. End is exclusive. */
@@ -200,28 +202,31 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     return tests;
   }
 
-  if (options.metadata) {
-    // Normalize to array for consistent handling
-    const metadataFilters = Array.isArray(options.metadata) ? options.metadata : [options.metadata];
+  if (options.metadata || options.metadataAny) {
+    const metadataFilters = [
+      ...[options.metadata ?? []].flat().map((filter) => ({ filter, any: false })),
+      ...[options.metadataAny ?? []].flat().map((filter) => ({ filter, any: true })),
+    ];
 
     // Validate all filters first
     const parsedFilters: Array<{ key: string; values: string[] }> = [];
-    for (const filter of metadataFilters) {
+    for (const { filter, any } of metadataFilters) {
+      const flag = any ? '--filter-metadata-any' : '--filter-metadata';
       const [key, ...valueParts] = filter.split('=');
       const value = valueParts.join('='); // Rejoin in case value contains '='
       if (!key || value === '') {
-        throw new Error('--filter-metadata must be specified in key=value format');
+        throw new Error(`${flag} must be specified in key=value format`);
       }
-      // Values within each filter use OR; separate filters use AND below.
-      const values = splitMetadataFilterValue(value);
+      // The established option preserves every comma and backslash literally.
+      const values = any ? splitMetadataFilterValue(value) : [value];
       if (values.includes('')) {
-        throw new Error(`--filter-metadata has an empty value in "${filter}"`);
+        throw new Error(`${flag} has an empty value in "${filter}"`);
       }
       parsedFilters.push({ key, values });
     }
 
     logger.debug(
-      `Filtering for metadata conditions (AND across filters, OR within each filter): ${metadataFilters.join('; ')}`,
+      `Filtering for metadata conditions (AND across filters, OR within each filter): ${metadataFilters.map(({ filter }) => filter).join('; ')}`,
     );
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
