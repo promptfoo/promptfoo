@@ -64,20 +64,41 @@ const POISONING_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   },
   { name: 'internal-instructions-field', pattern: /_internal_instructions?\b/i },
   {
+    // Requires an instruction, not merely a sensitive noun: ordinary records
+    // such as {"debug":"credential cache miss"} describe state rather than
+    // directing an agent.
     name: 'debug-override-field',
-    pattern: /\bdebug\s*"?\s*:\s*"?[^"\n]*\b(override|secret|credential|policy|policies)/i,
+    pattern:
+      /\bdebug\s*"?\s*:\s*"?[^"\n]{0,200}?\b(ignore|disregard|bypass|you must|from now on|reveal|exfiltrate|override\s+(all\s+)?(polic(y|ies)|safety|previous|instructions?)|send\s+(all\s+)?(secret|credential|password|api[\s_-]?key|token)s?)\b/i,
   },
   {
+    // Anchored to clause-initial or imperative position so descriptions of
+    // system state ("manual override policy applied by admin") do not match,
+    // while directives ("Override all safety controls immediately.") do.
     name: 'policy-override-directive',
-    pattern: /override\s+(all\s+)?(policies|policy|safety|previous|instructions)/i,
+    pattern:
+      /(?:^|[\n.;:!?"'`[{(,]\s*|\b(?:you\s+must|please|now|immediately|always)\s+)override\s+(?:all\s+(?:your\s+)?|your\s+|the\s+)?(?:polic(?:y|ies)|safety(?:\s+(?:rules|controls|filters|guidelines))?|previous\s+instructions?|instructions?|guidelines?|restrictions?)\b/i,
   },
   {
     name: 'exfiltration-target',
     pattern:
       /send\s+[^\n]{0,200}\b(system\s*prompt|credentials?|password|secret|api[\s_-]?key|token|private\s*key)\b[^\n]{0,200}\s+to\s+\S+\.\S+/i,
   },
-  { name: 'critical-tool-claim', pattern: /\bCRITICAL\s+TOOL\b/i },
-  { name: 'leak-credentials-directive', pattern: /\bleak\s+credentials\b/i },
+  {
+    // The words alone appear in ordinary incident and inventory data
+    // ("critical tool outage resolved"); the poisoning form pairs the trust
+    // claim with a directive to the agent.
+    name: 'critical-tool-claim',
+    pattern:
+      /\bCRITICAL\s+TOOL\b[^\n]{0,200}\b(always|must|never|ignore|follow|instructions?|comply|obey|prioriti[sz]e|trust|override)\b/i,
+  },
+  {
+    // Negated and hypothetical forms ("Do not leak credentials", "may leak
+    // credentials") are security guidance, not an instruction to the agent.
+    name: 'leak-credentials-directive',
+    pattern:
+      /(?<!\b(?:do\s+not|don'?t|never|cannot|can'?t|may|might|could|would|should|avoid|prevent(?:s|ing)?|risk\s+of|not\s+to)\b[^.\n]{0,40}?)\bleak\s+(?:the\s+|all\s+|your\s+|any\s+)?credentials?\b/i,
+  },
 ];
 
 /**
