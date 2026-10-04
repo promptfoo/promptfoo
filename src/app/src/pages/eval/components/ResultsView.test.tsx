@@ -1365,7 +1365,7 @@ describe('ResultsView Chart Rendering', () => {
     );
   });
 
-  it('should render ResultsCharts if all scores are uniform but not binary edge values', async () => {
+  it.each([0.8, 2, -2])('renders charts for uniform nonbinary scores of %s', async (score) => {
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1386,7 +1386,7 @@ describe('ResultsView Chart Rendering', () => {
           ],
           vars: ['input'],
         },
-        body: [{ outputs: [{ score: 0.8 }, { score: 0.8 }] }],
+        body: [{ outputs: [{ score }, { score }] }],
       },
       config: {
         description: 'Test Evaluation',
@@ -1416,9 +1416,9 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    // Uniform score of 0.8 is meaningful (graded assertion), should show charts
     const showChartsButton = screen.queryByText('Hide Charts');
     expect(showChartsButton).toBeInTheDocument();
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
 
   it('recomputes the default chart visibility when navigating between evals', async () => {

@@ -251,6 +251,17 @@ For endpoint-specific fields, see the [Chat Completions reference](https://devel
 
 </details>
 
+### Safety identifiers
+
+Set `config.safety_identifier` to send a stable end-user ID with Chat Completions or Responses requests. For Realtime, Promptfoo sends it as the `OpenAI-Safety-Identifier` connection header. Hash email addresses or internal user IDs before setting this value; Promptfoo sends it unchanged. See [OpenAI's safety checks guide](https://developers.openai.com/api/docs/guides/safety-checks).
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1-mini
+    config:
+      safety_identifier: hashed-user-id
+```
+
 ### Ultrafast mode
 
 Set `service_tier: ultrafast` to opt in on a supported model:
@@ -284,7 +295,19 @@ providers:
       omitDefaults: true
 ```
 
-Use the model name and endpoint supported by your gateway. `apiBaseUrl` includes the API prefix, such as `/v1`, but not `/chat/completions` or `/responses`. Promptfoo appends the endpoint path and preserves base URL query parameters.
+Use the model ID exactly as listed by your gateway after `openai:chat:`. `apiBaseUrl` includes the API prefix, such as `/v1`, but not `/chat/completions` or `/responses`. Promptfoo appends the endpoint path and preserves base URL query parameters.
+
+The gateway settings under `providers` do not configure the grader for model-graded assertions such as `llm-rubric`. [Set the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader) in `defaultTest.options.provider` to use a model your gateway supports:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:your-model
+      config:
+        apiBaseUrl: https://gateway.example.com/v1
+        apiKeyEnvar: GATEWAY_API_KEY
+```
 
 | Option             | Use                                                                                                                                                                                 |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
