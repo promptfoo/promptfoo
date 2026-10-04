@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { isMissingPackageImportError } from '../../src/util/packageImportErrors';
+import {
+  isMissingPackageImportError,
+  optionalPackageInstallHint,
+} from '../../src/util/packageImportErrors';
+
+describe('optionalPackageInstallHint', () => {
+  it('gives the command for a project install and for a global one', () => {
+    expect(optionalPackageInstallHint('npm install promptfoo @slack/web-api@^8.1.1')).toBe(
+      'Install it with: npm install promptfoo @slack/web-api@^8.1.1 ' +
+        '(or, if Promptfoo is installed globally: npm install -g promptfoo @slack/web-api@^8.1.1)',
+    );
+  });
+
+  it('keeps every package of a multi-package command in the global form', () => {
+    expect(
+      optionalPackageInstallHint(
+        'npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2',
+      ),
+    ).toContain(
+      'npm install -g promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2)',
+    );
+  });
+});
 
 describe('isMissingPackageImportError', () => {
   it('recognizes missing optional packages', () => {

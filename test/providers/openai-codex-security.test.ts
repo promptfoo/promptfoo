@@ -208,9 +208,12 @@ describe('OpenAICodexSecurityProvider', () => {
       vi.mocked(resolvePackageEntryPoint).mockReturnValue(null);
       const provider = new OpenAICodexSecurityProvider();
 
-      expect(await provider.callApi('Scan')).toEqual({
+      const response = await provider.callApi('Scan');
+
+      expect(response).toEqual({
         error: expect.stringContaining('npm install promptfoo @openai/codex-security'),
       });
+      expect(response.error).toContain('If Promptfoo is installed globally, add -g');
     });
 
     it('explains SDK import and runtime failures', async () => {

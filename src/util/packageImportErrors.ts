@@ -45,3 +45,13 @@ export function isMissingPackageImportError(error: unknown, packageName: string)
   // but not a different package whose path merely mentions <pkg>.
   return missingSpecifier === packageName || missingSpecifier.startsWith(`${packageName}/`);
 }
+
+/**
+ * How to install an opt-in package so that Promptfoo can load it. These packages are resolved
+ * from Promptfoo's own install location, so a globally installed Promptfoo only finds them
+ * when they are installed globally too.
+ */
+export function optionalPackageInstallHint(command: string): string {
+  const globalCommand = command.replace(/^npm install /, 'npm install -g ');
+  return `Install it with: ${command} (or, if Promptfoo is installed globally: ${globalCommand})`;
+}
