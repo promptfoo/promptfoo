@@ -143,6 +143,93 @@ describe('MCPToolResponsePoisoningPlugin', () => {
       expect(parsed.args).toHaveProperty('city');
     }
   });
+
+  it('drops generated prompts that are not valid tool-call envelopes', async () => {
+    // Malformed envelopes make MCPProvider.callApi return an error response, so
+    // the row errors instead of grading -- which reads as "not a failure".
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const provider = createMockProvider({
+      response: createProviderResponse({
+        output: [
+          'Prompt: {"tool":"get_weather","args":{"city":"Berlin"}}',
+          'Prompt: not json at all',
+          'Prompt: {"args":{"city":"Oslo"}}',
+          'Prompt: {"tool":"get_weather","args":[1,2,3]}',
+          'Prompt: {"tool":"get_status","args":{}}',
+        ].join('\n'),
+      }),
+    });
+    const plugin = new MCPToolResponsePoisoningPlugin(provider, purposeWithTools, 'prompt');
+
+    const tests = await plugin.generateTests(5);
+
+    const tools = tests.map((t) => JSON.parse(t.vars?.prompt as string).tool);
+    expect(tools.sort()).toEqual(['get_status', 'get_weather']);
+    expect(warnSpy.mock.calls.map((c) => String(c[0])).join('\n')).toContain(
+      'Dropped 3 generated test case(s)',
+    );
+  });
+
+  it('keeps envelopes whose arguments contain semicolons', async () => {
+    // Standing guard for the prompt-line splitter: multiInputFormat splits on
+    // ';' only when a new "Prompt:" marker follows, so semicolons inside
+    // generated JSON arguments are content and must survive intact.
+    const provider = createMockProvider({
+      response: createProviderResponse({
+        output: 'Prompt: {"tool":"run_query","args":{"sql":"SELECT 1;"}}',
+      }),
+    });
+    const plugin = new MCPToolResponsePoisoningPlugin(provider, purposeWithTools, 'prompt');
+
+    const tests = await plugin.generateTests(1);
+
+    expect(tests).toHaveLength(1);
+    expect(JSON.parse(tests[0].vars?.prompt as string).args.sql).toBe('SELECT 1;');
+  });
+
+  it('documents the empty-args and typed-value envelope forms', async () => {
+    const plugin = new MCPToolResponsePoisoningPlugin(
+      createMockProvider({ response: createProviderResponse({ output: '' }) }),
+      purposeWithTools,
+      'prompt',
+    );
+
+    const template = await (plugin as any).getTemplate();
+
+    expect(template).toContain('"args": {}');
+    expect(template).toContain('numbers unquoted');
+  });
+
+  it('renders user-supplied examples into the generation prompt', async () => {
+    // config.examples was accepted but silently ignored: the template had no
+    // {% if examples %} block, unlike nearly every other plugin.
+    const example = '{"tool":"get_weather","args":{"city":"Oslo"}}';
+    const provider = createMockProvider({
+      response: createProviderResponse({ output: `Prompt: ${example}` }),
+    });
+    const plugin = new MCPToolResponsePoisoningPlugin(provider, purposeWithTools, 'prompt', {
+      examples: [example],
+    });
+
+    await plugin.generateTests(1);
+
+    const renderedPrompt = String(vi.mocked(provider.callApi).mock.calls[0][0]);
+    expect(renderedPrompt).toContain('<Example>');
+    expect(renderedPrompt).toContain(example);
+  });
+
+  it('omits the example block when no examples are configured', async () => {
+    const provider = createMockProvider({
+      response: createProviderResponse({
+        output: 'Prompt: {"tool":"get_weather","args":{"city":"Oslo"}}',
+      }),
+    });
+    const plugin = new MCPToolResponsePoisoningPlugin(provider, purposeWithTools, 'prompt');
+
+    await plugin.generateTests(1);
+
+    expect(String(vi.mocked(provider.callApi).mock.calls[0][0])).not.toContain('<Example>');
+  });
 });
 
 describe('MCPToolResponsePoisoningGrader.matchPoisoningPattern', () => {
