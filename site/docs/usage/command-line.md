@@ -95,6 +95,8 @@ promptfoo eval --env-file .env,.env.local
 
 All specified files must exist or an error is thrown.
 
+Without `--env-file`, promptfoo loads `.env` from the current directory if it exists, and values already set in your shell take precedence over the file. Three environment variables change that default: `DOTENV_PATH` names a different file, `DOTENV_OVERRIDE=true` lets the file override your shell, and `DOTENV_ENCODING` sets its encoding. The older `DOTENV_CONFIG_PATH`, `DOTENV_CONFIG_OVERRIDE`, and `DOTENV_CONFIG_ENCODING` names are used when the newer one is unset. Files passed with `--env-file` are loaded afterwards and always override both.
+
 ## `promptfoo eval`
 
 By default the `eval` command will read the `promptfooconfig.yaml` configuration file in your current directory. But, if you're looking to override certain parameters you can supply optional arguments:
