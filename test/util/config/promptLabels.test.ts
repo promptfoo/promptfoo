@@ -9,6 +9,9 @@ import { doesPromptRefMatch } from '../../../src/util/promptMatching';
 
 describe('file prompt labels', () => {
   const originalCwd = process.cwd();
+  // Labels use the platform's path separator, as file paths do everywhere else.
+  const multiPrompt = path.join('prompts', 'multi.txt');
+  const docPrompt = path.join('prompts', 'doc.md');
   let directory: string;
 
   function resolve(configPath: string) {
@@ -30,7 +33,7 @@ describe('file prompt labels', () => {
       path.join(directory, 'project', 'promptfooconfig.json'),
       JSON.stringify({
         prompts: ['file://prompts/multi.txt', 'file://prompts/doc.md'],
-        providers: [{ id: 'echo', prompts: ['prompts/doc.md'] }],
+        providers: [{ id: 'echo', prompts: [docPrompt] }],
         tests: [{ vars: { topic: 'labels' } }],
       }),
     );
@@ -47,10 +50,11 @@ describe('file prompt labels', () => {
     const { testSuite } = await resolve('promptfooconfig.json');
 
     expect(testSuite.prompts.map((prompt) => prompt.label)).toEqual([
-      'prompts/multi.txt: First {{topic}}',
-      'prompts/multi.txt: Second {{topic}}',
-      expect.stringMatching(/^prompts\/doc\.md: Markdown \{\{topic\}\}/),
+      `${multiPrompt}: First {{topic}}`,
+      `${multiPrompt}: Second {{topic}}`,
+      expect.stringContaining(`${docPrompt}: Markdown {{topic}}`),
     ]);
+    expect(testSuite.prompts[2].label.startsWith(docPrompt)).toBe(true);
     expect(testSuite.prompts.map((prompt) => prompt.raw)).toEqual([
       'First {{topic}}',
       'Second {{topic}}',
@@ -77,8 +81,8 @@ describe('file prompt labels', () => {
       expect(prompt.label).not.toContain(directory);
     }
     // Provider and test `prompts:` filters use the group-prefix rule against the label.
-    expect(doesPromptRefMatch('prompts/doc.md', testSuite.prompts[2])).toBe(true);
-    expect(doesPromptRefMatch('prompts/multi.txt', testSuite.prompts[0])).toBe(true);
-    expect(testSuite.providerPromptMap).toEqual({ echo: ['prompts/doc.md'] });
+    expect(doesPromptRefMatch(docPrompt, testSuite.prompts[2])).toBe(true);
+    expect(doesPromptRefMatch(multiPrompt, testSuite.prompts[0])).toBe(true);
+    expect(testSuite.providerPromptMap).toEqual({ echo: [docPrompt] });
   });
 });
