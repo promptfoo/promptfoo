@@ -184,6 +184,20 @@ function runNpm(
   );
 }
 
+function installConsumerPackages(
+  phase: string,
+  packages: string[],
+  consumerDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+): void {
+  runNpm(
+    phase,
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', ...packages],
+    consumerDir,
+    npmEnv,
+  );
+}
+
 function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
@@ -675,16 +689,11 @@ ${script}
   };
   for (const mode of ['missing', 'incompatible', 'installed']) {
     if (mode !== 'missing') {
-      runNpm(
+      installConsumerPackages(
         mode === 'incompatible'
           ? 'install incompatible Codex Security SDK'
           : 'install supported Codex Security SDK',
         [
-          'install',
-          '--ignore-scripts',
-          '--no-audit',
-          '--no-fund',
-          '--no-package-lock',
           mode === 'incompatible'
             ? '@openai/codex-security@0.1.28'
             : '@openai/codex-security@^0.1.31',
@@ -916,20 +925,24 @@ async function runOptionalOpenAiAgentsChecks(
   }
 }
 
-async function runOptionalSlackChecks(
+async function runOptionalSdkChecks(
   consumerDir: string,
   configDir: string,
   npmEnv: NodeJS.ProcessEnv,
   withOptionalDependencies: boolean,
+  sdk: { name: string; package: string; version: string; script: string; env: NodeJS.ProcessEnv },
 ): Promise<void> {
-  const sdkDir = path.join(consumerDir, 'node_modules', '@slack', 'web-api');
-  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Slack SDK');
+  const sdkDir = path.join(consumerDir, 'node_modules', sdk.package);
+  assert(
+    !fs.existsSync(sdkDir),
+    `Default consumers should not install the optional ${sdk.name} SDK`,
+  );
   const runChecks = async (state: string) => {
     for (const format of ['esm', 'cjs']) {
       console.log(
-        await runAsync(process.execPath, ['optional-slack.mjs', format, state], consumerDir, {
+        await runAsync(process.execPath, [sdk.script, format, state], consumerDir, {
           NODE_PATH: '',
-          SLACK_BOT_TOKEN: '',
+          ...sdk.env,
           PROMPTFOO_CONFIG_DIR: configDir,
           PROMPTFOO_DISABLE_TELEMETRY: '1',
           PROMPTFOO_DISABLE_UPDATE: 'true',
@@ -942,11 +955,11 @@ async function runOptionalSlackChecks(
   try {
     fs.writeFileSync(
       path.join(sdkDir, 'package.json'),
-      JSON.stringify({ name: '@slack/web-api', version: '0.0.0', main: './index.js' }),
+      JSON.stringify({ name: sdk.package, version: '0.0.0', main: './index.js' }),
     );
     fs.writeFileSync(
       path.join(sdkDir, 'index.js'),
-      'throw new Error("Unsupported Slack SDK code must not execute");',
+      `throw new Error("Unsupported ${sdk.name} SDK code must not execute");`,
     );
     await runChecks('incompatible');
   } finally {
@@ -955,75 +968,9 @@ async function runOptionalSlackChecks(
 
   // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
   if (withOptionalDependencies) {
-    runNpm(
-      'install Slack SDK',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--no-package-lock',
-        '@slack/web-api@^8.1.1',
-      ],
-      consumerDir,
-      npmEnv,
-    );
-    await runChecks('installed');
-  }
-}
-
-async function runOptionalLangfuseChecks(
-  consumerDir: string,
-  configDir: string,
-  npmEnv: NodeJS.ProcessEnv,
-  withOptionalDependencies: boolean,
-): Promise<void> {
-  const sdkDir = path.join(consumerDir, 'node_modules', '@langfuse', 'client');
-  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Langfuse SDK');
-  const runChecks = async (state: string) => {
-    for (const format of ['esm', 'cjs']) {
-      console.log(
-        await runAsync(process.execPath, ['optional-langfuse.mjs', format, state], consumerDir, {
-          NODE_PATH: '',
-          LANGFUSE_PUBLIC_KEY: '',
-          LANGFUSE_SECRET_KEY: '',
-          LANGFUSE_HOST: '',
-          LANGFUSE_BASE_URL: '',
-          PROMPTFOO_CONFIG_DIR: configDir,
-          PROMPTFOO_DISABLE_TELEMETRY: '1',
-          PROMPTFOO_DISABLE_UPDATE: 'true',
-        }),
-      );
-    }
-  };
-  await runChecks('missing');
-  fs.mkdirSync(sdkDir, { recursive: true });
-  try {
-    fs.writeFileSync(
-      path.join(sdkDir, 'package.json'),
-      JSON.stringify({ name: '@langfuse/client', version: '0.0.0', main: './index.js' }),
-    );
-    fs.writeFileSync(
-      path.join(sdkDir, 'index.js'),
-      'throw new Error("Unsupported Langfuse SDK code must not execute");',
-    );
-    await runChecks('incompatible');
-  } finally {
-    fs.rmSync(sdkDir, { recursive: true, force: true });
-  }
-
-  // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
-  if (withOptionalDependencies) {
-    runNpm(
-      'install Langfuse SDK',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--no-package-lock',
-        '@langfuse/client@^5.11.1',
-      ],
+    installConsumerPackages(
+      `install ${sdk.name} SDK`,
+      [`${sdk.package}@${sdk.version}`],
       consumerDir,
       npmEnv,
     );
@@ -1157,16 +1104,9 @@ async function assertOptionalBrowserDependencies(
   }
   for (const state of withOptionalDependencies ? ['missing', 'incompatible'] : ['missing']) {
     if (state === 'incompatible') {
-      runNpm(
+      installConsumerPackages(
         'install incompatible browser SDK',
-        [
-          'install',
-          '--ignore-scripts',
-          '--no-audit',
-          '--no-fund',
-          '--no-package-lock',
-          'playwright@1.62.0',
-        ],
+        ['playwright@1.62.0'],
         consumerDir,
         npmEnv,
       );
@@ -1506,15 +1446,27 @@ async function main(): Promise<void> {
       runOptionalOpenAiAgentsChecks(consumerDir, configDir),
     );
     await timeAsyncPhase('check optional Slack SDK', () =>
-      runOptionalSlackChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
+      runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
+        name: 'Slack',
+        package: '@slack/web-api',
+        version: '^8.1.1',
+        script: 'optional-slack.mjs',
+        env: { SLACK_BOT_TOKEN: '' },
+      }),
     );
     await timeAsyncPhase('check optional Langfuse SDK', () =>
-      runOptionalLangfuseChecks(
-        consumerDir,
-        configDir,
-        consumerNpmEnv,
-        values.profile === 'default',
-      ),
+      runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
+        name: 'Langfuse',
+        package: '@langfuse/client',
+        version: '^5.11.1',
+        script: 'optional-langfuse.mjs',
+        env: {
+          LANGFUSE_PUBLIC_KEY: '',
+          LANGFUSE_SECRET_KEY: '',
+          LANGFUSE_HOST: '',
+          LANGFUSE_BASE_URL: '',
+        },
+      }),
     );
     await timeAsyncPhase('check optional WatsonX SDKs', () =>
       runOptionalWatsonXChecks(
@@ -1563,18 +1515,9 @@ async function main(): Promise<void> {
     }
 
     if (values.browser) {
-      runNpm(
+      installConsumerPackages(
         'install browser dependencies',
-        [
-          'install',
-          '--ignore-scripts',
-          '--no-audit',
-          '--no-fund',
-          '--no-package-lock',
-          'playwright@1.63.0',
-          'playwright-extra@4.3.6',
-          'puppeteer-extra-plugin-stealth@2.11.2',
-        ],
+        ['playwright@1.63.0', 'playwright-extra@4.3.6', 'puppeteer-extra-plugin-stealth@2.11.2'],
         consumerDir,
         consumerNpmEnv,
       );

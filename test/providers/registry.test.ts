@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,7 @@ import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import { getProviderFactories, providerMap } from '../../src/providers/registry';
+import { getProviderFactories, mergeProviderEnv, providerMap } from '../../src/providers/registry';
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
@@ -91,6 +92,74 @@ describe('Provider Registry', () => {
     const provider = await factory.create(providerPath, { id }, { options: {} });
     expect(provider.id()).toBe(id ?? providerPath);
   });
+
+  it.each([
+    { suiteKey: 'Path', providerKey: 'PATH', value: 'provider-path' },
+    { suiteKey: 'PATH', providerKey: 'Path', value: 'provider-path' },
+    { suiteKey: 'Path', providerKey: 'PATH', value: '' },
+    { suiteKey: 'PATH', providerKey: 'Path', value: undefined },
+  ])(
+    'merges Windows OpenCode environment layers: $suiteKey/$providerKey/$value',
+    async ({ suiteKey, providerKey, value }) => {
+      const platform = vi.spyOn(os, 'platform').mockReturnValue('win32');
+      try {
+        const provider = await loadApiProvider('opencode:sdk', {
+          env: { [suiteKey]: 'suite-path' },
+          options: { env: { [providerKey]: value } },
+        });
+        expect(provider).toHaveProperty('env', {
+          [suiteKey]: value ?? 'suite-path',
+          ...(value === undefined ? {} : { [providerKey]: value }),
+        });
+      } finally {
+        platform.mockRestore();
+      }
+    },
+  );
+
+  it.each(
+    [
+      ['OPENAI_API_KEY', 'openai_api_key'],
+      ['openai_api_key', 'OPENAI_API_KEY'],
+      ['OpenAI_Api_Key', 'oPeNaI_aPi_KeY'],
+    ].flatMap(([suiteKey, providerKey]) =>
+      [suiteKey, providerKey].map((templateKey) => ({ suiteKey, providerKey, templateKey })),
+    ),
+  )(
+    'renders the winning Windows credential with either spelling: $suiteKey/$providerKey/$templateKey',
+    async ({ suiteKey, providerKey, templateKey }) => {
+      const platform = vi.spyOn(os, 'platform').mockReturnValue('win32');
+      try {
+        const provider = await loadApiProvider('opencode:sdk', {
+          env: { [suiteKey]: 'suite-key' },
+          options: {
+            env: { [providerKey]: 'provider-key' },
+            config: { apiKey: `{{ env.${templateKey} }}` },
+          },
+        });
+        expect(provider).toHaveProperty('config.apiKey', 'provider-key');
+      } finally {
+        platform.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    { platform: 'linux' as const, providerPath: 'opencode:sdk' },
+    { platform: 'win32' as const, providerPath: 'openai:chat' },
+  ])(
+    'keeps case-sensitive environment layers for $platform/$providerPath',
+    ({ platform, providerPath }) => {
+      const platformMock = vi.spyOn(os, 'platform').mockReturnValue(platform);
+      try {
+        expect(
+          mergeProviderEnv(providerPath, { Path: 'suite-path' }, { PATH: 'provider-path' }),
+        ).toEqual({ Path: 'suite-path', PATH: 'provider-path' });
+      } finally {
+        platformMock.mockRestore();
+      }
+    },
+  );
 
   it.each(['openai:codex-sdk', 'openai:codex-sdk:gpt-5.5'])(
     'merges scoped Codex SDK environment for %s',
