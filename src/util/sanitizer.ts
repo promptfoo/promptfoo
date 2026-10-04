@@ -301,9 +301,9 @@ function isCompoundSecretObjectField(name: string, value: unknown): boolean {
   return terminal.length <= 3 || isSecretParameter(name, textValue, false);
 }
 
-// Credential collections retain their structure and numeric counts, but hide their
-// string leaves. Metadata roles stay ordinary and still recurse through the usual
-// credential/URL checks. This classification is only enabled for MCP tool data.
+// Credential collections retain their structure but hide string and numeric
+// descendants; direct scalar counts stay intact. Metadata roles remain ordinary
+// and recurse through credential/URL checks. This policy is only enabled for MCP.
 function getCompoundSecretObjectFieldKind(
   name: string,
   value: unknown,
@@ -312,6 +312,14 @@ function getCompoundSecretObjectFieldKind(
     return undefined;
   }
   const normalized = normalizeFieldName(name);
+  if (
+    normalized === 'basicauth' ||
+    normalized === 'sessioncookie' ||
+    normalized === 'subscriptionkey' ||
+    (normalized === 'authheaders' && typeof value !== 'object')
+  ) {
+    return 'credential';
+  }
   if (
     /(?:tokenusage|tokenbudget|tokenids|signaturealgorithm|passwordpolicy)$/.test(normalized) ||
     /(?:url|uri|host|endpoint|proxy)$/.test(normalized) ||
@@ -500,15 +508,9 @@ export function sanitizeRuntimeOptions(
   return sanitized;
 }
 
-/**
- * Check if a value looks like a secret based on common patterns.
- * Detects API keys, tokens, and other credential patterns.
- */
-export function looksLikeSecret(value: string): boolean {
-  if (typeof value !== 'string') {
-    return false;
-  }
-
+// Known credential formats are also safe to recognize in structural map keys.
+// Opaque-length heuristics remain value-only so ordinary tenant IDs retain names.
+function matchesCredentialFormat(value: string): boolean {
   // OpenAI API keys (sk-...)
   if (/^sk-[a-zA-Z0-9-_]{20,}/.test(value)) {
     return true;
@@ -546,6 +548,21 @@ export function looksLikeSecret(value: string): boolean {
 
   // Google API keys (AIza...)
   if (/^AIza[a-zA-Z0-9_-]{35}/.test(value)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if a value looks like a secret based on common patterns.
+ * Detects API keys, tokens, and other credential patterns.
+ */
+export function looksLikeSecret(value: string): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  if (matchesCredentialFormat(value)) {
     return true;
   }
 
@@ -1388,7 +1405,11 @@ function sanitizePlainObject(
   for (const [rawKey, value] of Object.entries(obj)) {
     const isUrlKey = URL_REFERENCE.test(rawKey);
     const redactedKey =
-      sanitizeUrls && isUrlKey ? sanitizeUrlWithContext(rawKey, compoundContext) : rawKey;
+      redactCredentialValues && matchesCredentialFormat(rawKey)
+        ? REDACTED
+        : sanitizeUrls && isUrlKey
+          ? sanitizeUrlWithContext(rawKey, compoundContext)
+          : rawKey;
     let key = redactedKey;
     while (
       Object.prototype.hasOwnProperty.call(sanitized, key) ||
@@ -1400,27 +1421,50 @@ function sanitizePlainObject(
       redactCompoundKeys && !isUrlKey ? getCompoundSecretObjectFieldKind(key, value) : undefined;
     if (isSecretKey(key) || compoundKind === 'credential') {
       sanitized[key] = REDACTED;
+    } else if (
+      (key.toLowerCase() === 'headers' ||
+        (redactCompoundKeys && normalizeFieldName(key) === 'authheaders')) &&
+      value &&
+      typeof value === 'object'
+    ) {
+      const headers: [string, unknown][] = [];
+      const reservedNames = new Set(Object.keys(value));
+      const usedNames = new Set<string>();
+      for (const [name, item] of Object.entries(value)) {
+        const redactedName =
+          redactCredentialValues && matchesCredentialFormat(name) ? REDACTED : name;
+        let headerName = redactedName;
+        while (
+          usedNames.has(headerName) ||
+          (headerName !== name && reservedNames.has(headerName))
+        ) {
+          headerName = `${redactedName}#${++keySuffix}`;
+        }
+        usedNames.add(headerName);
+        headers.push([
+          headerName,
+          !redactCredentialValues &&
+          (isSafeTracingCredentialTemplate(item) ||
+            (typeof item === 'string' &&
+              !isTracingCredentialHeader(name, item) &&
+              (isNonCredentialHeader(name) ||
+                SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()))))
+            ? item
+            : REDACTED,
+        ]);
+      }
+      sanitized[key] = Object.fromEntries(headers);
     } else if (compoundKind === 'related' || redactCredentialValues) {
       sanitized[key] = recursiveSanitize(
         value,
         depth + 1,
         maxDepth,
         sanitizeUrls,
-        false,
+        key === 'env',
         redactCompoundKeys,
-        true,
-      );
-    } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
-      sanitized[key] = Object.fromEntries(
-        Object.entries(value).map(([name, item]) => [
-          name,
-          isSafeTracingCredentialTemplate(item) ||
-          (typeof item === 'string' &&
-            !isTracingCredentialHeader(name, item) &&
-            (isNonCredentialHeader(name) || SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase())))
-            ? item
-            : REDACTED,
-        ]),
+        // A direct numeric related field can be a count. Once inside a
+        // credential collection, numeric entries can themselves be credentials.
+        redactCredentialValues || typeof value !== 'number',
       );
     } else if (
       typeof value === 'string' &&
@@ -1494,15 +1538,15 @@ function recursiveSanitize(
   redactCompoundKeys = false,
   redactCredentialValues = false,
 ): any {
+  if (redactCredentialValues && (typeof obj === 'string' || typeof obj === 'number')) {
+    return REDACTED;
+  }
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    if (redactCredentialValues) {
-      return REDACTED;
-    }
     return sanitizeUrls && URL_REFERENCE.test(obj)
       ? sanitizeUrlWithContext(obj, redactCompoundKeys ? { maxDepth: maxDepth - depth } : undefined)
       : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactCompoundKeys);

@@ -512,6 +512,29 @@ describe('getCredentialFieldKind', () => {
 });
 
 describe('sanitizeObject', () => {
+  it('limits MCP alias, collection-number and map-key handling to the opt-in policy', () => {
+    const credentialKey = `sk-${'a'.repeat(24)}`;
+    const input = {
+      basicAuth: 'alice:fixture',
+      subscriptionKey: 'fixture',
+      sessionCookie: 'fixture',
+      authHeaders: { 'X-Service-Key': 'fixture', Accept: 'application/json' },
+      databasePasswords: [123456],
+      apiKeysByTenant: { acme: 424242 },
+      revokedApiKeys: { [credentialKey]: true },
+    };
+    expect(sanitizeObject(input)).toEqual(input);
+    expect(sanitizeObject(input, { redactCompoundKeys: true })).toEqual({
+      basicAuth: '[REDACTED]',
+      subscriptionKey: '[REDACTED]',
+      sessionCookie: '[REDACTED]',
+      authHeaders: { 'X-Service-Key': '[REDACTED]', Accept: 'application/json' },
+      databasePasswords: ['[REDACTED]'],
+      apiKeysByTenant: { acme: '[REDACTED]' },
+      revokedApiKeys: { '[REDACTED]': true },
+    });
+  });
+
   it('only applies compound credential names when explicitly requested', () => {
     const fields = {
       databasePassword: 'database-fixture',

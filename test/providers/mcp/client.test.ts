@@ -965,7 +965,7 @@ describe('MCPClient', () => {
                           databasePassword: '[REDACTED]',
                           dbPwd: '[REDACTED]',
                           clientSecrets: ['[REDACTED]', '[REDACTED]'],
-                          apiKeysByTenant: { tenant: '[REDACTED]', count: 2 },
+                          apiKeysByTenant: { tenant: '[REDACTED]', count: '[REDACTED]' },
                           dbPassword: '[REDACTED]',
                           form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: '[REDACTED]', tokenCount: 12 }))}`,
                           callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: '[REDACTED]', credentialsRequired: false }))}`,

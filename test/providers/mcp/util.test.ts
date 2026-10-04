@@ -159,6 +159,12 @@ describe('sanitizeMcpToolData', () => {
       ],
       apiKeysByTenant: { tenant: 'third' },
       apiKeyForTenant: 'fourth',
+      basicAuth: 'alice:alias-fixture',
+      sessionCookie: 'alias-fixture',
+      subscriptionKey: 'alias-fixture',
+      authHeaders: { 'X-Service-Key': 'header-fixture', Accept: 'application/json' },
+      databasePasswords: [123456],
+      revokedApiKeys: { [`sk-${'a'.repeat(24)}`]: true, tenant: false },
       tokenUsage: { kind: 'public', databasePassword: 'fifth' },
       tokenBudget: 'public',
       tokenIds: ['public-id'],
@@ -172,7 +178,7 @@ describe('sanitizeMcpToolData', () => {
         '[REDACTED]',
         {
           value: '[REDACTED]',
-          count: 2,
+          count: '[REDACTED]',
           enabled: false,
           empty: null,
           tokenUsage: '[REDACTED]',
@@ -181,6 +187,12 @@ describe('sanitizeMcpToolData', () => {
       ],
       apiKeysByTenant: { tenant: '[REDACTED]' },
       apiKeyForTenant: '[REDACTED]',
+      basicAuth: '[REDACTED]',
+      sessionCookie: '[REDACTED]',
+      subscriptionKey: '[REDACTED]',
+      authHeaders: { 'X-Service-Key': '[REDACTED]', Accept: 'application/json' },
+      databasePasswords: ['[REDACTED]'],
+      revokedApiKeys: { '[REDACTED]': true, tenant: false },
       tokenUsage: { kind: 'public', databasePassword: '[REDACTED]' },
       accessTokenUrl: 'https://example.test/?api_key=%5BREDACTED%5D',
     };
@@ -244,6 +256,84 @@ describe('sanitizeMcpToolData', () => {
     expect(
       sanitizeMcpToolData({ tokenUsage: { input: 4, output: 9, databasePassword: 'fixture' } }),
     ).toEqual({ tokenUsage: { input: 4, output: 9, databasePassword: '[REDACTED]' } });
+  });
+
+  it.each(['basicAuth', 'basic_auth', 'sessionCookie', 'subscriptionKey'])(
+    'protects the MCP credential alias %s without changing boolean settings',
+    (name) => {
+      const fields = { [name]: 'alias-fixture', [`${name}Enabled`]: true, oauthScope: 'read' };
+      expect(sanitizeMcpToolData({ nested: fields })).toEqual({
+        nested: { ...fields, [name]: '[REDACTED]' },
+      });
+      for (const value of [false, true, null]) {
+        expect(sanitizeMcpToolData({ [name]: value })).toEqual({ [name]: value });
+      }
+    },
+  );
+
+  it('preserves env and header protection inside credential collections', () => {
+    const args = {
+      authHeaders: { 'X-Service-Key': 'header-fixture', Accept: 'application/json' },
+      clientSecrets: {
+        env: { SERVICE_KEY: 123456, OTHER_KEY: false, PUBLIC: 'public' },
+        headers: { 'X-Service-Key': 123456, 'X-Boolean-Key': false, Accept: 'public' },
+      },
+      databasePasswords: [123456],
+      apiKeysByTenant: { acme: 424242 },
+      inputTokens: 120,
+      tokenCount: 2,
+      tokenUsage: { input: 4 },
+      tokenIds: [101, 102],
+    };
+    expect(sanitizeMcpToolData(args)).toEqual({
+      ...args,
+      authHeaders: { 'X-Service-Key': '[REDACTED]', Accept: 'application/json' },
+      clientSecrets: {
+        env: { SERVICE_KEY: '[REDACTED]', OTHER_KEY: '[REDACTED]', PUBLIC: '[REDACTED]' },
+        headers: {
+          'X-Service-Key': '[REDACTED]',
+          'X-Boolean-Key': '[REDACTED]',
+          Accept: '[REDACTED]',
+        },
+      },
+      databasePasswords: ['[REDACTED]'],
+      apiKeysByTenant: { acme: '[REDACTED]' },
+    });
+  });
+
+  it('redacts credential-pattern collection keys while reserving authored keys', () => {
+    const first = `sk-${'a'.repeat(24)}`;
+    const second = `sk-${'b'.repeat(24)}`;
+    const tenantId = 'a'.repeat(80);
+    const args = {
+      revokedApiKeys: {
+        [first]: true,
+        '[REDACTED]': false,
+        '[REDACTED]#1': null,
+        [second]: false,
+        tenant: true,
+        [tenantId]: false,
+      },
+    };
+    expect(sanitizeMcpToolData(args)).toEqual({
+      revokedApiKeys: {
+        '[REDACTED]#2': true,
+        '[REDACTED]': false,
+        '[REDACTED]#1': null,
+        '[REDACTED]#3': false,
+        tenant: true,
+        [tenantId]: false,
+      },
+    });
+    expect(Object.keys(args.revokedApiKeys)).toContain(first);
+    expect(sanitizeMcpToolData({ ordinary: { [first]: true } })).toEqual({
+      ordinary: { [first]: true },
+    });
+    expect(
+      sanitizeMcpToolData({ clientSecrets: { headers: { [first]: true, '[REDACTED]': false } } }),
+    ).toEqual({
+      clientSecrets: { headers: { '[REDACTED]#1': '[REDACTED]', '[REDACTED]': '[REDACTED]' } },
+    });
   });
 
   it.each(['hasCredentials', 'isSecret', 'requiresCredentials', 'needsPassword', 'supportsApiKey'])(
@@ -453,7 +543,10 @@ describe('sanitizeMcpToolData', () => {
       }),
     ).toEqual({
       clientSecrets: ['[REDACTED]', '[REDACTED]'],
-      databasePasswords: { primary: '[REDACTED]', replicas: [{ value: '[REDACTED]', port: 5432 }] },
+      databasePasswords: {
+        primary: '[REDACTED]',
+        replicas: [{ value: '[REDACTED]', port: '[REDACTED]' }],
+      },
       userApiKeys: '[REDACTED]',
       accessTokens: ['[REDACTED]'],
       apiKeysByTenant: { acme: '[REDACTED]' },
