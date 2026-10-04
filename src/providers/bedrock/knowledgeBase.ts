@@ -91,7 +91,7 @@ export class AwsBedrockKnowledgeBaseProvider
   }
   private readonly getClientState = createEnvironmentScopedState(
     () => ({
-      cacheNamespace: this.selectResponseCacheNamespace(),
+      cacheNamespace: this.selectResponseCacheNamespace(this.getIamCredentialConfig()),
       client: undefined as BedrockAgentRuntimeClient | undefined,
       initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
     }),

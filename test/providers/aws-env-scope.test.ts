@@ -801,6 +801,57 @@ describe('scoped AWS SDK authentication', () => {
     );
   });
 
+  it.each(['host', 'file'])(
+    'partitions Knowledge Base caches by selected IAM keys when masking a %s bearer with a profile',
+    async (source) => {
+      mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: source === 'host' ? 'fixture-host-bearer' : undefined,
+      });
+      await cliState.withEnvFileOverrides(
+        source === 'file' ? { AWS_BEARER_TOKEN_BEDROCK: 'fixture-file-bearer' } : {},
+        () =>
+          cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory' }, () =>
+            withCacheEnabled(true, async () => {
+              const requests: string[] = [];
+              for (const [index, owner] of ['first', 'second', 'first'].entries()) {
+                const provider = new AwsBedrockKnowledgeBaseProvider('fixture', {
+                  config: {
+                    knowledgeBaseId: `fixture-masked-${source}`,
+                    region: 'us-east-1',
+                    profile: 'ignored-profile',
+                  },
+                  env: { ...keys(owner), AWS_BEARER_TOKEN_BEDROCK: '' },
+                });
+                const client = await provider.getKnowledgeBaseClient();
+                vi.spyOn(client.config.requestHandler, 'handle').mockImplementation(
+                  async (request) => {
+                    expect(request.headers.authorization).toContain(`Credential=${owner}-access/`);
+                    requests.push(owner);
+                    return {
+                      response: {
+                        statusCode: 200,
+                        headers: {},
+                        body: Buffer.from(JSON.stringify({ output: { text: owner } })),
+                      },
+                    };
+                  },
+                );
+                try {
+                  expect((await client.config.credentials()).accessKeyId).toBe(`${owner}-access`);
+                  const response = await provider.callApi('same masked prompt');
+                  expect(response.output).toBe(owner);
+                  expect(Boolean(response.cached)).toBe(index === 2);
+                } finally {
+                  client.destroy();
+                }
+              }
+              expect(requests).toEqual(['first', 'second']);
+            }),
+          ),
+      );
+    },
+  );
+
   it.each(['agent', 'knowledge-base'])(
     'isolates %s response caches across scoped credential owners',
     async (kind) => {

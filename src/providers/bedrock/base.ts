@@ -138,7 +138,7 @@ export abstract class AwsBedrockGenericProvider {
     return this.getSdkState().cacheNamespace;
   }
 
-  protected selectResponseCacheNamespace(): string | undefined {
+  protected selectResponseCacheNamespace(iamConfig = this.config): string | undefined {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
       return undefined;
     }
@@ -150,7 +150,7 @@ export abstract class AwsBedrockGenericProvider {
         ? undefined
         : getOpaqueCredentialCacheNamespace(bearer);
     }
-    const namespace = getAwsCredentialCacheNamespace(this.config, this.env);
+    const namespace = getAwsCredentialCacheNamespace(iamConfig, this.env);
     // A provider-level empty value masks a lower bearer identity. Keep that
     // selection separate even when IAM discovery otherwise uses the legacy key.
     return bearer === '' && getEnvString('AWS_BEARER_TOKEN_BEDROCK')
