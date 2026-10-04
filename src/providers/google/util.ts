@@ -1320,23 +1320,42 @@ export function normalizeGeminiAudio(output: Part[] | string | undefined) {
  *   (e.g., additionalProperties, $schema, default) that Gemini doesn't support
  */
 export function normalizeTools(tools: Tool[]): Tool[] {
-  return tools.map((tool) => {
+  // Canonical declarations take precedence even when a legacy alias appears in
+  // an earlier tool entry. For duplicates using the same spelling, the first wins.
+  const canonicalNames = new Set(
+    tools.flatMap((tool) => tool.functionDeclarations?.map(({ name }) => name) ?? []),
+  );
+  const seenNames = new Set<string>();
+
+  return tools.flatMap((tool) => {
     const normalizedTool: Tool = { ...tool };
 
     // Normalize declarations before sanitizing their schemas. Merge both aliases
     // without mutating the caller's tools or retaining duplicate wire fields.
-    // The canonical camel-case declaration wins if both aliases name a function.
-    if (normalizedTool.function_declarations) {
-      const canonicalNames = new Set(
-        normalizedTool.functionDeclarations?.map((declaration) => declaration.name),
-      );
+    if (tool.functionDeclarations || tool.function_declarations) {
       normalizedTool.functionDeclarations = [
-        ...(normalizedTool.functionDeclarations ?? []),
-        ...normalizedTool.function_declarations.filter(
-          (declaration) => !canonicalNames.has(declaration.name),
-        ),
-      ];
+        ...(tool.functionDeclarations ?? []),
+        ...(tool.function_declarations ?? []).filter(({ name }) => !canonicalNames.has(name)),
+      ].filter(({ name }) => {
+        if (seenNames.has(name)) {
+          return false;
+        }
+        seenNames.add(name);
+        return true;
+      });
       delete normalizedTool.function_declarations;
+
+      // Removing duplicates must not leave an empty function tool on the wire.
+      // Keep any built-in tools sharing the entry, and leave existing empty inputs alone.
+      if (
+        normalizedTool.functionDeclarations.length === 0 &&
+        (tool.functionDeclarations?.length || tool.function_declarations?.length)
+      ) {
+        delete normalizedTool.functionDeclarations;
+        if (Object.keys(normalizedTool).length === 0) {
+          return [];
+        }
+      }
     }
 
     // Use index access with type assertion to avoid TypeScript errors
@@ -1364,7 +1383,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
       }));
     }
 
-    return normalizedTool;
+    return [normalizedTool];
   });
 }
 
@@ -1846,10 +1865,9 @@ export function validateFunctionCall(
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
     const functionArgs = parseStringObject(functionCall.args);
-    const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
-    const functionSchema = functionDeclarations?.functionDeclarations?.find(
-      (f) => f.name === functionName,
-    );
+    const functionSchema = interpolatedFunctions
+      ?.flatMap((tool) => tool.functionDeclarations ?? [])
+      .find((declaration) => declaration.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }

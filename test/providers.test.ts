@@ -676,6 +676,11 @@ describe('loadApiProvider', () => {
     ['openai:chatkit:gpt-5-codex-mini', 'openai:chatkit:gpt-5-codex-mini'],
     ['openai:chatkit:gpt-5.3-codex-spark', 'openai:chatkit:gpt-5.3-codex-spark'],
   ])('should allow Codex-like names on identifier-based route %s', async (route, expectedId) => {
+    if (route.startsWith('openai:agents:')) {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ name: '@openai/agents', version: '0.11.8' }),
+      );
+    }
     const provider = await loadApiProvider(route);
 
     expect(provider.id()).toBe(expectedId);
@@ -1086,7 +1091,7 @@ describe('loadApiProvider', () => {
 
   it('should load OpenAI chat provider with default model', async () => {
     const provider = await loadApiProvider('openai:chat');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.6-terra', expect.any(Object));
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-6-sol', expect.any(Object));
     expect(provider).toBeDefined();
   });
 
@@ -1279,15 +1284,30 @@ describe('loadApiProvider', () => {
     vi.mocked(fs.readFileSync).mockReturnValue('provider config');
     vi.mocked(loadYaml).mockReturnValue({
       id: 'openai:codex-sdk',
-      env: { OPENAI_API_KEY: 'file-key' },
+      env: { OPENAI_API_KEY: 'file-key', OPENAI_API_BASE_URL: 'https://file.example/v1' },
     });
     const provider = await loadApiProvider('file://provider.yaml', {
-      env: { CODEX_API_KEY: 'suite-key' },
+      env: { CODEX_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
     });
     expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('suite-key');
+    expect((provider as OpenAICodexSDKProvider).env?.OPENAI_API_BASE_URL).toBe(
+      'https://suite.example/v1',
+    );
   });
 
-  it('should handle file provider with environment variables', async () => {
+  it('keeps Codex file credentials above an inherited evaluation environment', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('provider config');
+    vi.mocked(loadYaml).mockReturnValue({
+      id: 'openai:codex-sdk',
+      env: { OPENAI_API_KEY: 'file-key' },
+    });
+    const provider = await cliState.withEnv({ CODEX_API_KEY: 'ambient-key' }, () =>
+      loadApiProvider('file://provider.yaml'),
+    );
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('file-key');
+  });
+
+  it('allows the caller environment to override provider-file defaults', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'test-key-from-env' });
     const yamlContent: ProviderOptions = {
       id: 'openai:chat:gpt-4',
@@ -1303,7 +1323,7 @@ describe('loadApiProvider', () => {
 
     const provider = await loadApiProvider('file://test.yaml', {
       basePath: '/test',
-      env: { OPENAI_API_KEY: 'final-override-key' },
+      env: { OPENAI_API_KEY: 'suite-key' },
     });
 
     expect(provider).toBeDefined();
@@ -1311,14 +1331,45 @@ describe('loadApiProvider', () => {
       'gpt-4',
       expect.objectContaining({
         config: expect.objectContaining({
-          apiKey: expect.any(String),
+          apiKey: 'suite-key',
         }),
         env: expect.objectContaining({
-          OPENAI_API_KEY: 'final-override-key',
+          OPENAI_API_KEY: 'suite-key',
         }),
       }),
     );
     mockProcessEnv({ OPENAI_API_KEY: undefined });
+  });
+
+  it.each([
+    { caller: undefined, options: undefined, expected: 'file-model' },
+    { caller: 'caller-model', options: undefined, expected: 'caller-model' },
+    { caller: 'caller-model', options: 'options-model', expected: 'options-model' },
+    { caller: '', options: undefined, expected: '' },
+  ])('uses the same file environment for routing and config: $expected', async (testCase) => {
+    vi.mocked(fs.readFileSync).mockReturnValue('provider config');
+    vi.mocked(loadYaml).mockReturnValue({
+      id: 'openai:chat:model-{{ env.OPENAI_MODEL }}',
+      config: { apiKey: '{{ env.OPENAI_MODEL }}' },
+      env: { OPENAI_MODEL: 'file-model' },
+    });
+
+    await cliState.withEnv({ OPENAI_MODEL: 'ambient-model' }, () =>
+      loadApiProvider('file://provider.yaml', {
+        env: testCase.caller === undefined ? undefined : { OPENAI_MODEL: testCase.caller },
+        options: {
+          env: testCase.options === undefined ? undefined : { OPENAI_MODEL: testCase.options },
+        },
+      }),
+    );
+
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      `model-${testCase.expected}`,
+      expect.objectContaining({
+        config: expect.objectContaining({ apiKey: testCase.expected }),
+        env: expect.objectContaining({ OPENAI_MODEL: testCase.expected }),
+      }),
+    );
   });
 
   it('should load multiple providers from yaml file using loadApiProviders', async () => {
