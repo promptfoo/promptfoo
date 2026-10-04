@@ -170,6 +170,10 @@ describe('MCPProvider', () => {
       credentialsRequired: false,
       form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: 'encoded-fixture', tokenCount: 12 }))}`,
       callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: 'encoded-fixture', credentialsRequired: false }))}`,
+      url: 'redirect=https://alice:fixture-password@example.test/path',
+      byUrl: {
+        'https://example.test/?api_key=short': { method: 'GET' },
+      },
     };
     const args = { one: { two: { three: { four: { five: fields } } } } };
     const sanitizedArgs = {
@@ -183,6 +187,10 @@ describe('MCPProvider', () => {
                 dbPassword: '[REDACTED]',
                 form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: '[REDACTED]', tokenCount: 12 }))}`,
                 callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: '[REDACTED]', credentialsRequired: false }))}`,
+                url: '[REDACTED]',
+                byUrl: {
+                  'https://example.test/?api_key=%5BREDACTED%5D': { method: 'GET' },
+                },
               },
             },
           },

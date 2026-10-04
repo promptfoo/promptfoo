@@ -122,6 +122,37 @@ describe('sanitizeMcpToolData', () => {
     expect(JSON.stringify(result)).toContain('%5B...%5D');
   });
 
+  it.each([
+    'redirect=https://alice:fixture-password@example.test/path',
+    'redirect=/callback?api_key=short-secret',
+    'redirect=/callback#access_token=short-secret',
+  ])('retains URL credential checks for form-valued URL fields (%s)', (value) => {
+    const args = { url: value, callbackUrl: value };
+    expect(sanitizeMcpToolData(args)).toEqual({ url: '[REDACTED]', callbackUrl: '[REDACTED]' });
+    expect(args).toEqual({ url: value, callbackUrl: value });
+    expect(sanitizeMcpToolData({ url: 'redirect=/callback?page=2' })).toEqual({
+      url: 'redirect=/callback?page=2',
+    });
+  });
+
+  it('preserves URL-keyed payloads while sanitizing the key and nested credentials', () => {
+    const args = {
+      'https://example.test/?api_key=short': { method: 'GET', databasePassword: 'fixture' },
+      'https://example.test/?api_key=%5BREDACTED%5D': { method: 'POST' },
+      '/callback?api_key=short': { status: 200 },
+    };
+    const original = structuredClone(args);
+    expect(sanitizeMcpToolData(args)).toEqual({
+      'https://example.test/?api_key=%5BREDACTED%5D#1': {
+        method: 'GET',
+        databasePassword: '[REDACTED]',
+      },
+      'https://example.test/?api_key=%5BREDACTED%5D': { method: 'POST' },
+      '/callback?api_key=%5BREDACTED%5D': { status: 200 },
+    });
+    expect(args).toEqual(original);
+  });
+
   it('handles long segmented argument names and their credential suffixes', () => {
     const prefix = 'word_'.repeat(50_000);
     const args = { [prefix]: 'ordinary', [`${prefix}databasePassword`]: 'secret-fixture' };
@@ -233,6 +264,53 @@ describe('sanitizeMcpToolData', () => {
     } finally {
       debug.mockRestore();
     }
+  });
+
+  it('redacts values under keys that end in a credential word, at any depth', () => {
+    // A tool names its arguments as it likes, so exact key names are not enough.
+    const connection = {
+      databasePassword: 'hunter2',
+      db_password: 'hunter2',
+      userApiKey: 'tool-secret-value',
+      'x-upstream-token': 'tool-secret-value',
+      oauthClientSecret: { value: 'tool-secret-value' },
+      // These end in words that are not credentials.
+      sortKey: 'name',
+      key: 'user:1',
+      maxTokens: 5,
+      author: 'ada',
+    };
+    const args = { ...connection, level1: { level2: { level3: { level4: { connection } } } } };
+
+    const expected = {
+      databasePassword: '[REDACTED]',
+      db_password: '[REDACTED]',
+      userApiKey: '[REDACTED]',
+      'x-upstream-token': '[REDACTED]',
+      oauthClientSecret: '[REDACTED]',
+      sortKey: 'name',
+      key: 'user:1',
+      maxTokens: 5,
+      author: 'ada',
+    };
+    expect(sanitizeMcpToolData(args)).toEqual({
+      ...expected,
+      level1: { level2: { level3: { level4: { connection: expected } } } },
+    });
+    // The caller's arguments are left as they were.
+    expect(connection.databasePassword).toBe('hunter2');
+  });
+
+  it('redacts such keys in JSON that an argument carries as a string', () => {
+    const payload = JSON.stringify({ query: 'select 1', dbPassword: 'hunter2' });
+
+    expect(sanitizeMcpToolData({ payload, note: '{not json' })).toEqual({
+      payload: JSON.stringify({ query: 'select 1', dbPassword: '[REDACTED]' }),
+      note: '{not json',
+    });
+    expect(sanitizeMcpToolData(payload)).toBe(
+      JSON.stringify({ query: 'select 1', dbPassword: '[REDACTED]' }),
+    );
   });
 
   it('copes with arguments that refer to themselves', () => {

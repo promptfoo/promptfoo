@@ -1276,10 +1276,9 @@ function sanitizePlainObject(
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   const compoundContext = redactCompoundKeys ? { maxDepth: maxDepth - depth - 1 } : undefined;
   for (const [rawKey, value] of Object.entries(obj)) {
+    const isUrlKey = URL_REFERENCE.test(rawKey);
     const redactedKey =
-      sanitizeUrls && URL_REFERENCE.test(rawKey)
-        ? sanitizeUrlWithContext(rawKey, compoundContext)
-        : rawKey;
+      sanitizeUrls && isUrlKey ? sanitizeUrlWithContext(rawKey, compoundContext) : rawKey;
     let key = redactedKey;
     while (
       Object.prototype.hasOwnProperty.call(sanitized, key) ||
@@ -1287,7 +1286,10 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
-    if (isSecretKey(key) || (redactCompoundKeys && isCompoundSecretObjectField(key, value))) {
+    if (
+      isSecretKey(key) ||
+      (redactCompoundKeys && !isUrlKey && isCompoundSecretObjectField(key, value))
+    ) {
       sanitized[key] = REDACTED;
     } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
       sanitized[key] = Object.fromEntries(
@@ -1546,7 +1548,11 @@ function sanitizeUrlWithContext(url: string, compoundContext?: CompoundKeyContex
     // URL-named MCP fields can still contain a form payload. Reuse the same
     // bounded decoded-JSON policy rather than losing it in the URL fast path.
     if (compoundContext && looksLikeUrlEncodedFormData(url)) {
-      return sanitizeUrlEncodedStringWithContext(url, compoundContext);
+      // Form values can contain an embedded URL. Keep the existing URL fallback
+      // guard for its userinfo/query/fragment before taking the form-only path.
+      return unparseableUrlMightLeakSecret(url)
+        ? REDACTED
+        : sanitizeUrlEncodedStringWithContext(url, compoundContext);
     }
 
     // Preserve unresolved template syntax while redacting any literal credentials
