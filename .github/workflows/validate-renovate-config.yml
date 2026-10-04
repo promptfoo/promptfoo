@@ -2,15 +2,13 @@ name: Validate Renovate Config
 
 on:
   pull_request:
-    paths:
+    paths: &watched-paths
       - 'renovate.json'
       - '.github/workflows/validate-renovate-config.yml'
   push:
     branches:
       - main
-    paths:
-      - 'renovate.json'
-      - '.github/workflows/validate-renovate-config.yml'
+    paths: *watched-paths
 
 permissions:
   contents: read
