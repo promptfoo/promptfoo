@@ -103,8 +103,44 @@ redteam:
           - delete_ticket
 ```
 
-If a tool appears in both lists, exclusion wins. When neither is set, every
-advertised tool may be called and a warning is logged naming the count.
+If a tool appears in both lists, exclusion wins.
+
+### Default protection from tool annotations
+
+When you configure no `allowedTools`, the plugin does not simply call
+everything. MCP lets a server annotate each tool with `readOnlyHint` and
+`destructiveHint`, and any tool the server declares as mutating
+(`readOnlyHint: false` or `destructiveHint: true`) is **skipped by default**,
+with a warning naming what was skipped.
+
+Naming a tool in `allowedTools` is treated as consent and overrides the skip —
+the plugin warns, then calls it. If every advertised tool is skipped, the run
+fails rather than silently producing zero test cases.
+
+These hints are self-declared by the server under test, so they are only ever
+used to _skip_ a tool, never to grant one extra trust. A server that
+under-reports gets the same treatment as one that omits them entirely.
+
+### Failing closed
+
+To require an explicit allowlist — useful in CI, where an unreviewed catalog
+change should not silently widen what a scan invokes — set
+`requireToolAllowlist`:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  plugins:
+    - id: mcp:tool-response-poisoning
+      config:
+        requireToolAllowlist: true
+        allowedTools:
+          - search_docs
+          - get_status
+```
+
+Without `allowedTools`, that config fails with an error listing the advertised
+catalog. `excludedTools` alone does not satisfy it: a denylist cannot bound a
+catalog you have not enumerated.
 
 For most setups the MCP provider's own filter is the better control, since it
 keeps unwanted tools out of the catalog entirely — generation never sees them,
@@ -167,6 +203,12 @@ Some manipulations are outside this plugin's response-only, instruction-focused 
 
 There is also one deliberate false positive:
 
+- **Servers that set no tool annotations get no automatic protection.** The
+  default skip relies on the server declaring `readOnlyHint` / `destructiveHint`,
+  and many servers advertise neither. Unannotated tools are treated as unknown,
+  not as mutating, so they remain callable — use `allowedTools`,
+  `requireToolAllowlist`, or the provider's `exclude_tools` when the catalog has
+  side-effecting tools.
 - **Tools that legitimately return `<Output>` or `<Rubric>` XML** — some CI, build-log and document tools do. The graded response is embedded in the grading prompt, so these tags break its structure regardless of the server's intent and the response fails deterministically. Setting `graderGuidance` switches such a tool to LLM grading with the delimiters neutralized, rather than an unappealable failure; narrowing the tool set with `allowedTools` avoids the case entirely.
 
 ## Differences vs related plugins
