@@ -1872,6 +1872,102 @@ describe('agent workspaces', () => {
       );
     });
 
+    it('marks the diff incomplete when a changed file is binary', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { 'old.bin': 'x\0y' });
+      const workspace = await create(source);
+      // One NUL byte makes Git treat a text file as binary and leave its content out.
+      write(path.join(workspace.dir, 'README.md'), 'original\n\0hidden payload\n');
+      write(path.join(workspace.dir, 'src', 'new.bin'), 'a\0b');
+      write(path.join(workspace.dir, 'src', 'app.txt'), 'app\nvisible change\n');
+      // A deleted binary file is shown in full by being deleted.
+      fs.rmSync(path.join(workspace.dir, 'old.bin'));
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiff).toContain('+visible change');
+      expect(workspaceDiff).not.toContain('hidden payload');
+      expect(workspaceDiffIncomplete).toBe(true);
+      expect(workspaceDiff).toMatch(
+        /\[diff incomplete: the contents of 2 binary file\(s\) are not shown: README\.md, src\/new\.bin\]$/,
+      );
+    });
+
+    it('does not mark the diff incomplete for a deleted binary file', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { 'old.bin': 'x\0y' });
+      const workspace = await create(source);
+      fs.rmSync(path.join(workspace.dir, 'old.bin'));
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiff).toContain('deleted file mode');
+      expect(workspaceDiffIncomplete).toBeUndefined();
+    });
+
+    it('applies an ignore rule for a name that starts with a colon', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': ':cache\n' });
+      const workspace = await create(source);
+      // The rule names this file, even though the name reads like pathspec magic.
+      write(path.join(workspace.dir, ':cache'), 'ignored\n');
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiff).toBe('');
+      expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+    });
+
+    it('does not apply an ignore rule to a name that may not be the one that was read', async () => {
+      const source = path.join(root, 'repo');
+      // The replacement character is what a byte that is not valid text reads as, so a name
+      // with it can belong to a file whose real name the rules do not match.
+      makeRepository(source, { '.gitignore': 'policy\uFFFD.txt\npolicy???.bin\n' });
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'policy\uFFFD.txt'), 'new file\n');
+      write(path.join(workspace.dir, 'policy\uFFFD.bin'), 'new file\n');
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiffIncomplete).toBe(true);
+      expect(workspaceDiff).toMatch(
+        /^\[diff incomplete: 2 changed path\(s\) could not be included: "policy\\u\{fffd\}\.(bin|txt)", "policy\\u\{fffd\}\.(bin|txt)"\]$/,
+      );
+    });
+
+    it('still ignores such a name below a directory that the commit ignores', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'cache/\n' });
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'cache', 'entry\uFFFD.bin'), 'cached\n');
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiff).toBe('');
+      expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+    });
+
+    it('names a new directory without files, which a diff cannot show', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'tmp/\n' });
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'notes', 'new.txt'), 'new file\n');
+      fs.mkdirSync(path.join(workspace.dir, 'enabled.d'));
+      fs.mkdirSync(path.join(workspace.dir, 'notes', 'deep', 'er'), { recursive: true });
+      // Neither an ignored directory nor one whose files were deleted is a new directory.
+      fs.mkdirSync(path.join(workspace.dir, 'tmp', 'work'), { recursive: true });
+      fs.rmSync(path.join(workspace.dir, 'src', 'app.txt'));
+
+      const { workspaceDiff, workspaceDiffIncomplete } = await workspace.metadata();
+
+      expect(workspaceDiff).toContain('+++ b/notes/new.txt');
+      expect(workspaceDiff).toContain('--- a/src/app.txt');
+      expect(workspaceDiffIncomplete).toBe(true);
+      expect(workspaceDiff).toMatch(
+        /\[diff incomplete: 2 changed path\(s\) could not be included: (enabled\.d\/, notes\/deep\/|notes\/deep\/, enabled\.d\/)\]$/,
+      );
+    });
+
     it('reports a top-level directory whose name differs from .git only by case', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
