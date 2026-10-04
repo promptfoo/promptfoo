@@ -111,16 +111,16 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 ### OpenAI Models
 
-| Category             | Models                                                                                                                                                                                                                                          |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **GPT-6 Series**     | `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`                                                                                                                                                                                                        |
-| **GPT-5 Series**     | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.2-pro`, `gpt-5`, `gpt-5-pro`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.1-chat`, `gpt-5.1-codex` |
-| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                                                                                                                                                                                       |
-| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                                                                                                                                                                                      |
-| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`                                                                                                                                                                                 |
-| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                                                                                                                                                                                      |
-| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                                                                                                                                                                                     |
-| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`                                                                                                                                                                    |
+| Category             | Models                                                                                                                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **GPT-6 Series**     | `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`                                                                                                                                                                          |
+| **GPT-5 Series**     | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5`, `gpt-5-pro`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.1-chat`, `gpt-5.1-codex` |
+| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                                                                                                                                                         |
+| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                                                                                                                                                        |
+| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`                                                                                                                                                   |
+| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                                                                                                                                                        |
+| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                                                                                                                                                       |
+| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`                                                                                                                                      |
 
 ### Third-Party Models (Azure AI Foundry)
 
@@ -195,7 +195,7 @@ Microsoft's [model lifecycle table](https://learn.microsoft.com/azure/foundry/op
 
 Azure does not document the bare `gpt-5.6` alias. Deploy a concrete tier, then use your customer-defined deployment name with `azure:chat:` or `azure:responses:`. Promptfoo accepts arbitrary deployment names and auto-detects GPT-5 reasoning behavior when the name includes a recognizable GPT-5 model ID. Built-in standard and long-context cost estimates are available when the deployment name exactly matches `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`; an opaque alias cannot be matched automatically, so no cost is reported for it. Separately, set `isReasoningModel: true` on an opaque alias to keep GPT-5 reasoning request behavior (this does not affect cost matching).
 
-The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and `gpt-audio` and `gpt-realtime` aliases (including mini and 1.5 variants). For models with published priority rates, including GPT-5.6 and several GPT-5.1 to GPT-5.5 snapshots, set `passthrough.service_tier: priority` on `azure:chat`, `azure:completion`, or `azure:responses`. Promptfoo then applies the priority rate to its estimate. It also tracks text and audio tokens separately and uses discounted cached-input rates where available.
+The Azure pricing table also recognizes `gpt-audio` and `gpt-realtime` aliases (including mini and 1.5 variants). Promptfoo does not provide built-in cost estimates for `gpt-5.5-pro`, `gpt-5.2-pro`, or their dated snapshots; check Azure billing for those deployments. For models with published priority rates, including GPT-5.6 and several GPT-5.1 to GPT-5.5 snapshots, set `passthrough.service_tier: priority` on `azure:chat`, `azure:completion`, or `azure:responses`. Promptfoo then applies the priority rate to its estimate. It also tracks text and audio tokens separately and uses discounted cached-input rates where available.
 
 ### Azure Realtime API
 
@@ -243,7 +243,7 @@ does not select the Azure URL or its API-key authentication.
 The Responses API supports Azure deployments backed by current Azure OpenAI responses-capable models. Common examples include:
 
 - **GPT-6 Series**: `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`
-- **GPT-5 Series**: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.2-pro`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
+- **GPT-5 Series**: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
 - **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
 - **Specialized Models**: `computer-use-preview`, `gpt-image-1`, `gpt-image-1-mini`, `gpt-image-1.5`, `gpt-image-2`, `codex-mini-latest`
