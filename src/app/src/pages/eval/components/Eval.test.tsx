@@ -48,14 +48,21 @@ vi.mock('./FilterModeProvider', () => ({
 vi.mock('./ResultsView', () => ({
   default: ({
     defaultEvalId,
+    recentEvals,
     onRecentEvalSelected,
   }: {
     defaultEvalId: string;
+    recentEvals: { evalId: string }[];
     onRecentEvalSelected: (evalId: string) => void;
   }) => {
     const [mountId] = React.useState(() => Math.random().toString(36).slice(2));
     return (
-      <div data-testid="results-view" data-default-eval-id={defaultEvalId} data-mount-id={mountId}>
+      <div
+        data-testid="results-view"
+        data-default-eval-id={defaultEvalId}
+        data-recent-eval-ids={recentEvals.map((recent) => recent.evalId).join(',')}
+        data-mount-id={mountId}
+      >
         <button
           type="button"
           data-testid="select-recent-eval"
@@ -627,6 +634,53 @@ describe('Eval', () => {
 
     // The old endpoint's list says nothing about the evals of the new one.
     expect(getByTestId('results-view').getAttribute('data-default-eval-id')).toBe('pinned-eval');
+    // It is not offered in the eval selector either.
+    expect(getByTestId('results-view').getAttribute('data-recent-eval-ids')).toBe('');
+  });
+
+  it('keeps the recent evals of the endpoint when only the route changed', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    let answerRecents!: (response: Response) => void;
+    const recents = new Promise<Response>((resolve) => {
+      answerRecents = resolve;
+    });
+    const { container, getByTestId } = render(
+      <MemoryRouter>
+        <Eval fetchId="pinned-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.mocked(callApi).mockReturnValueOnce(recents);
+    let update!: Promise<void> | undefined;
+    await act(async () => {
+      update = mockSocketHandlers.get('update')?.({ evalId: 'pinned-eval' });
+      // The user opens another eval of the same endpoint before the list arrives.
+      render(
+        <MemoryRouter>
+          <Eval fetchId="other-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    await act(async () => {
+      answerRecents({
+        ok: true,
+        json: async () => ({ data: [{ evalId: 'eval-of-this-endpoint' }] }),
+      } as Response);
+      await update;
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // The list is still that of the endpoint, so the selector gets it. The update itself
+    // was for the other route and changes nothing else.
+    expect(getByTestId('results-view').getAttribute('data-recent-eval-ids')).toBe(
+      'eval-of-this-endpoint',
+    );
+    expect(getByTestId('results-view').getAttribute('data-default-eval-id')).toBe('other-eval');
   });
 
   it('does not navigate away for a scoped background socket update', async () => {

@@ -102,6 +102,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   const lifecycleKey = JSON.stringify([apiBaseUrl ?? null, fetchId]);
   const lifecycleKeyRef = useRef(lifecycleKey);
   lifecycleKeyRef.current = lifecycleKey;
+  const apiBaseUrlRef = useRef(apiBaseUrl);
+  apiBaseUrlRef.current = apiBaseUrl;
 
   // ================================
   // Handlers
@@ -112,7 +114,14 @@ export default function Eval({ fetchId }: EvalOptions) {
   }: {
     reportFailure?: boolean;
   } = {}) => {
+    // The list is the one of the API endpoint that was asked. An answer that arrives after
+    // the endpoint changed says nothing about the new one, and leaves the page as it is.
+    const endpoint = apiBaseUrlRef.current;
+    const isOtherEndpoint = () => apiBaseUrlRef.current !== endpoint;
     const resp = await callApi(`/results`, { cache: 'no-store' });
+    if (isOtherEndpoint()) {
+      return;
+    }
     if (!resp.ok) {
       if (reportFailure) {
         setFailed(true);
@@ -120,6 +129,9 @@ export default function Eval({ fetchId }: EvalOptions) {
       return;
     }
     const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
+    if (isOtherEndpoint()) {
+      return;
+    }
     setRecentEvals(body.data);
     return body.data;
   };
