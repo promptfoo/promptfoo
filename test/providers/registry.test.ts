@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,7 @@ import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import { getProviderFactories, providerMap } from '../../src/providers/registry';
+import { getProviderFactories, mergeProviderEnv, providerMap } from '../../src/providers/registry';
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
@@ -91,6 +92,74 @@ describe('Provider Registry', () => {
     const provider = await factory.create(providerPath, { id }, { options: {} });
     expect(provider.id()).toBe(id ?? providerPath);
   });
+
+  it.each([
+    { suiteKey: 'Path', providerKey: 'PATH', value: 'provider-path' },
+    { suiteKey: 'PATH', providerKey: 'Path', value: 'provider-path' },
+    { suiteKey: 'Path', providerKey: 'PATH', value: '' },
+    { suiteKey: 'PATH', providerKey: 'Path', value: undefined },
+  ])(
+    'merges Windows OpenCode environment layers: $suiteKey/$providerKey/$value',
+    async ({ suiteKey, providerKey, value }) => {
+      const platform = vi.spyOn(os, 'platform').mockReturnValue('win32');
+      try {
+        const provider = await loadApiProvider('opencode:sdk', {
+          env: { [suiteKey]: 'suite-path' },
+          options: { env: { [providerKey]: value } },
+        });
+        expect(provider).toHaveProperty('env', {
+          [suiteKey]: value ?? 'suite-path',
+          ...(value === undefined ? {} : { [providerKey]: value }),
+        });
+      } finally {
+        platform.mockRestore();
+      }
+    },
+  );
+
+  it.each(
+    [
+      ['OPENAI_API_KEY', 'openai_api_key'],
+      ['openai_api_key', 'OPENAI_API_KEY'],
+      ['OpenAI_Api_Key', 'oPeNaI_aPi_KeY'],
+    ].flatMap(([suiteKey, providerKey]) =>
+      [suiteKey, providerKey].map((templateKey) => ({ suiteKey, providerKey, templateKey })),
+    ),
+  )(
+    'renders the winning Windows credential with either spelling: $suiteKey/$providerKey/$templateKey',
+    async ({ suiteKey, providerKey, templateKey }) => {
+      const platform = vi.spyOn(os, 'platform').mockReturnValue('win32');
+      try {
+        const provider = await loadApiProvider('opencode:sdk', {
+          env: { [suiteKey]: 'suite-key' },
+          options: {
+            env: { [providerKey]: 'provider-key' },
+            config: { apiKey: `{{ env.${templateKey} }}` },
+          },
+        });
+        expect(provider).toHaveProperty('config.apiKey', 'provider-key');
+      } finally {
+        platform.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    { platform: 'linux' as const, providerPath: 'opencode:sdk' },
+    { platform: 'win32' as const, providerPath: 'openai:chat' },
+  ])(
+    'keeps case-sensitive environment layers for $platform/$providerPath',
+    ({ platform, providerPath }) => {
+      const platformMock = vi.spyOn(os, 'platform').mockReturnValue(platform);
+      try {
+        expect(
+          mergeProviderEnv(providerPath, { Path: 'suite-path' }, { PATH: 'provider-path' }),
+        ).toEqual({ Path: 'suite-path', PATH: 'provider-path' });
+      } finally {
+        platformMock.mockRestore();
+      }
+    },
+  );
 
   it.each(['openai:codex-sdk', 'openai:codex-sdk:gpt-5.5'])(
     'merges scoped Codex SDK environment for %s',
@@ -483,11 +552,11 @@ describe('Provider Registry', () => {
       it.each([
         ['chat', OpenAiChatCompletionProvider],
         ['responses', OpenAiResponsesProvider],
-      ])('uses Terra when openai:%s omits a model', async (endpoint, Provider) => {
+      ])('uses GPT-6 Sol when openai:%s omits a model', async (endpoint, Provider) => {
         const provider = await registry.create(`openai:${endpoint}`);
 
         expect(provider).toBeInstanceOf(Provider);
-        expect(provider).toHaveProperty('modelName', 'gpt-5.6-terra');
+        expect(provider).toHaveProperty('modelName', 'gpt-6-sol');
       });
 
       it.each([
@@ -505,6 +574,8 @@ describe('Provider Registry', () => {
         'gpt-6-luna',
         'gpt-6-astra-2026-09-01',
         'gpt-6.1',
+        'gpt-6.1-sol',
+        'gpt-6.1-sol-2026-09-29',
         'gpt-7-mini',
       ])('defaults bare %s to Responses', async (model) => {
         const provider = await registry.create(`openai:${model}`);
@@ -514,15 +585,20 @@ describe('Provider Registry', () => {
         expect(provider.id()).toBe(`openai:${model}`);
       });
 
-      it.each(['gpt-5.6', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-7-mini'])(
-        'honors the explicit Chat endpoint for %s',
-        async (model) => {
-          const provider = await registry.create(`openai:chat:${model}`);
+      it.each([
+        'gpt-5.6',
+        'gpt-5.6-luna',
+        'gpt-6-astra',
+        'gpt-6-sol',
+        'gpt-6-luna',
+        'gpt-6.1-sol',
+        'gpt-7-mini',
+      ])('honors the explicit Chat endpoint for %s', async (model) => {
+        const provider = await registry.create(`openai:chat:${model}`);
 
-          expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-          expect(provider).toHaveProperty('modelName', model);
-        },
-      );
+        expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+        expect(provider).toHaveProperty('modelName', model);
+      });
 
       it.each([
         'gpt-35-turbo',
@@ -880,6 +956,62 @@ describe('Provider Registry', () => {
 
       const provider = await factory!.create(path, redteamConfig, mockContext);
       expect(provider.id()).toBe(path);
+    });
+
+    it.each([
+      ['ai21:jamba:custom:v2', 'AI21ChatCompletionProvider', 'jamba:custom:v2'],
+      ['voyage:custom:model:v2', 'VoyageEmbeddingProvider', 'custom:model:v2'],
+      ['typesafe:jev-1.13.0', 'TypeSafeProvider', 'jev-1.13.0'],
+      [
+        'anthropic:messages:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        'AnthropicMessagesProvider',
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      ],
+      ['anthropic:completion:claude-2:custom', 'AnthropicCompletionProvider', 'claude-2:custom'],
+      [
+        'anthropic:claude-sonnet-4-6:custom',
+        'AnthropicMessagesProvider',
+        'claude-sonnet-4-6:custom',
+      ],
+      ['anthropic:claude-2.1:custom', 'AnthropicCompletionProvider', 'claude-2.1:custom'],
+    ])('preserves the model suffix and provider type for %s', async (path, type, modelName) => {
+      const provider = await loadApiProvider(path, { options: { config: { apiKey: 'test-key' } } });
+      expect(provider.constructor.name).toBe(type);
+      expect(provider).toHaveProperty('modelName', modelName);
+      expect(provider.id()).toContain(modelName);
+    });
+
+    it('preserves the full Promptfoo-hosted model ID', async () => {
+      const path = 'promptfoo:model:custom:model:v2';
+      const provider = await loadApiProvider(path);
+      expect(provider.id()).toBe(path);
+    });
+
+    it.each(['anthropic:messages', 'anthropic:messages:'])(
+      'reports a missing model for %s without sending a request',
+      async (path) => {
+        const provider = await loadApiProvider(path, {
+          options: { config: { apiKey: 'test-key' } },
+        });
+        await expect(provider.callApi('hello')).rejects.toThrow('Anthropic model name is not set');
+      },
+    );
+
+    it.each(['azure', 'azureopenai'])('preserves %s deployment suffixes', async (prefix) => {
+      for (const type of [
+        'chat',
+        'completion',
+        'embedding',
+        'embeddings',
+        'responses',
+        'realtime',
+        'video',
+      ]) {
+        const provider = await loadApiProvider(`${prefix}:${type}:deployment:custom:v2`, {
+          options: { config: { apiKey: 'test-key' } },
+        });
+        expect(provider).toHaveProperty('deploymentName', 'deployment:custom:v2');
+      }
     });
 
     it('should handle anthropic providers correctly', async () => {

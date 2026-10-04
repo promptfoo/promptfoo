@@ -1230,9 +1230,11 @@ async function doEvalWithEnv(
         const cliTests = cmdObj.tests || cmdObj.vars;
         const varPaths: string[] = [];
         if (cliTests) {
-          // resolveConfigs loads `--tests` with no base path, so it resolves against the
-          // working directory rather than the directory holding the config file.
-          varPaths.push(...resolveTestsWatchPaths(cliTests, process.cwd()));
+          // Preserve the released path bases: --tests uses CWD, while --vars uses
+          // the config directory. --tests takes precedence when both are supplied.
+          varPaths.push(
+            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
+          );
         } else {
           varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
           for (const source of testSources ?? []) {

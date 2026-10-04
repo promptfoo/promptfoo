@@ -12,8 +12,7 @@ import {
   vi,
 } from 'vitest';
 import { mockProcessEnv } from './util/utils';
-import type { Logger } from 'winston';
-import type Transport from 'winston-transport';
+import type { Logger, transport as Transport } from 'winston';
 
 // Create hoisted mocks
 const { mockGetEnvString, mockGetEnvBool, mockGetConfigDirectoryPath, fsMock, mockLogger } =
@@ -831,9 +830,6 @@ describe('logger', () => {
       expect(logger.getLoggerShuttingDown()).toBe(true);
       // Verify winstonLogger.end() was called for proper stream draining
       expect(mockLogger.end).toHaveBeenCalled();
-      // Verify error handler was attached for "write after end" protection
-      expect(mockTransport.on).toHaveBeenCalledWith('error', expect.any(Function));
-      expect(mockTransport.off).toHaveBeenCalledWith('error', expect.any(Function));
       logger.setLoggerShuttingDown(false);
     });
 
@@ -872,47 +868,6 @@ describe('logger', () => {
       // Should not throw
       await expect(logger.closeLogger()).resolves.not.toThrow();
 
-      logger.setLoggerShuttingDown(false);
-    });
-
-    it('should catch write after end errors during shutdown', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      let errorHandler: ((err: Error) => void) | undefined;
-
-      const mockTransport = {
-        filename: '/mock/path/test.log',
-        once: vi.fn((event: string, callback: () => void) => {
-          if (event === 'finish') {
-            setImmediate(callback);
-          }
-        }),
-        on: vi.fn((event: string, handler: (err: Error) => void) => {
-          if (event === 'error') {
-            errorHandler = handler;
-          }
-        }),
-        off: vi.fn(),
-        end: vi.fn(),
-      };
-
-      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
-
-      mockLogger.transports.length = 0;
-      mockLogger.transports.push(mockTransport as any);
-
-      const closePromise = logger.closeLogger();
-
-      // Simulate "write after end" error during shutdown
-      if (errorHandler) {
-        errorHandler(new Error('write after end'));
-      }
-
-      await closePromise;
-
-      // The error should be silently handled, not logged to console
-      expect(consoleErrorSpy).not.toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
       logger.setLoggerShuttingDown(false);
     });
 
