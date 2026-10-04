@@ -10,7 +10,6 @@ import {
 } from '../awsCredentials';
 import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
-import { getScopedBedrockTokenOptions } from './util';
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
@@ -114,6 +113,10 @@ const DEFAULT_CONFIG = {
   },
 };
 
+const NOVA_2_SONIC_REGIONS = ['us-east-1', 'us-west-2', 'eu-north-1', 'ap-northeast-1'] as const;
+const TOOL_EXECUTION_UNSUPPORTED_ERROR =
+  'Tool execution is not supported by the Nova Sonic provider.';
+
 export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private sessions = new Map<string, SessionState>();
   private bedrockClient?: BedrockRuntimeClient;
@@ -155,22 +158,25 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       return state.client;
     }
     return (state.initialization ??= (async () => {
+      const region = this.getRegion();
+      this.validateRegionConfig(region);
+
       // Use configurable timeouts (defaults: session=300000ms, request=300000ms)
       const sessionTimeout = this.config?.sessionTimeout ?? 300000;
       const requestTimeout = this.config?.requestTimeout ?? 300000;
 
-      // Sonic historically used SDK discovery, ignoring configured key/profile
-      // and provider-only bearer fields. Its bidirectional command requires IAM
-      // credentials; do not introduce the generic provider's bearer selection.
-      const credentials = await resolveAwsCredentials({}, this.env);
-      const profile = getScopedAwsCredentialConfig({}, this.env)?.profile;
+      // Bidirectional streaming requires IAM credentials, even when a bearer
+      // token is present. Keep explicit configuration ahead of scoped discovery.
+      const credentials = await resolveAwsCredentials(this.config, this.env);
+      const profile = getScopedAwsCredentialConfig(this.config, this.env)?.profile;
       try {
         const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
         const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
 
         state.client = new BedrockRuntimeClient({
-          region: this.getRegion(),
-          ...getScopedBedrockTokenOptions(),
+          region,
+          authSchemePreference: ['sigv4'],
+          ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
           ...getAwsCredentialProviderOptions(this.env),
           ...(credentials ? { credentials } : {}),
           ...(profile === undefined ? {} : { profile }),
@@ -319,7 +325,32 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     return this.sendTextMessage(sessionId, role, prompt);
   }
 
+  private validateRegionConfig(region = this.getRegion()): void {
+    if (
+      this.modelName === 'amazon.nova-2-sonic-v1:0' &&
+      !this.config.endpoint &&
+      !NOVA_2_SONIC_REGIONS.includes(region as (typeof NOVA_2_SONIC_REGIONS)[number])
+    ) {
+      throw new Error(
+        `Amazon Bedrock model "${this.modelName}" is not available in AWS region "${region}". ` +
+          `Supported Regions: ${NOVA_2_SONIC_REGIONS.join(', ')}.`,
+      );
+    }
+  }
+
+  private validateModelConfig(): void {
+    if (this.modelName === 'amazon.nova-sonic-v1:0' && this.config.turnDetectionConfiguration) {
+      throw new Error(
+        'turnDetectionConfiguration is only supported by amazon.nova-2-sonic-v1:0; ' +
+          'it is not supported by amazon.nova-sonic-v1:0.',
+      );
+    }
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    this.validateModelConfig();
+    this.validateRegionConfig();
+
     const sessionId = crypto.randomUUID();
     const session = this.createSession(sessionId);
 
@@ -327,7 +358,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     let userTranscript = '';
     let audioContent = '';
     let hasAudioContent = false;
-    let functionCallOccurred = false;
+    const toolCalls: { toolUseId: string; toolName: string; content: string }[] = [];
 
     logger.debug('prompt: ' + prompt.slice(0, 1000));
     // Set up event handlers
@@ -353,51 +384,12 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       audioContent += data.content;
     });
 
-    session.responseHandlers.set('toolUse', async (data) => {
+    session.responseHandlers.set('toolUse', (data) => {
       logger.debug('toolUse');
-      functionCallOccurred = true;
-      const result = {
-        error: 'Tool use is not supported by the Nova Sonic provider.',
-        toolName: data.toolName,
+      toolCalls.push({
         toolUseId: data.toolUseId,
-      };
-      const toolResultId = crypto.randomUUID();
-
-      await this.sendEvent(sessionId, {
-        event: {
-          contentStart: {
-            promptName: session.promptName,
-            contentName: toolResultId,
-            interactive: false,
-            type: 'TOOL',
-            role: 'TOOL',
-            toolResultInputConfiguration: {
-              toolUseId: data.toolUseId,
-              type: 'TEXT',
-              textInputConfiguration: {
-                mediaType: 'text/plain',
-              },
-            },
-          },
-        },
-      });
-      await this.sendEvent(sessionId, {
-        event: {
-          toolResult: {
-            promptName: session.promptName,
-            contentName: toolResultId,
-            content: JSON.stringify(result),
-          },
-        },
-      });
-
-      await this.sendEvent(sessionId, {
-        event: {
-          contentEnd: {
-            promptName: session.promptName,
-            contentName: toolResultId,
-          },
-        },
+        toolName: data.toolName,
+        content: data.content,
       });
     });
 
@@ -422,6 +414,9 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         event: {
           sessionStart: {
             inferenceConfiguration: this.inferenceConfiguration,
+            ...(this.config?.turnDetectionConfiguration && {
+              turnDetectionConfiguration: this.config.turnDetectionConfiguration,
+            }),
           },
         },
       });
@@ -435,6 +430,9 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
             textOutputConfiguration: this.config?.textOutputConfiguration || DEFAULT_CONFIG.text,
             audioOutputConfiguration:
               this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output,
+            ...(this.config?.toolUseOutputConfiguration && {
+              toolUseOutputConfiguration: this.config.toolUseOutputConfiguration,
+            }),
             ...(this.config?.toolConfig && { toolConfiguration: this.config?.toolConfig }),
           },
         },
@@ -528,6 +526,11 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
             if (handler) {
               await handler(data.event[eventType]);
             }
+            // Tool execution is unsupported. Surface the requested operation and
+            // close the session without supplying invented tool data.
+            if (toolCalls.length > 0) {
+              break;
+            }
           }
         }
       }
@@ -551,6 +554,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
           : {};
 
       return {
+        ...(toolCalls.length > 0 ? { error: TOOL_EXECUTION_UNSUPPORTED_ERROR } : {}),
         output: assistantTranscript || '[No response received from API]',
         ...audioOutput,
         // TODO: Add proper token usage tracking
@@ -558,7 +562,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         cached: false,
         metadata: {
           ...audioOutput,
-          functionCallOccurred,
+          functionCallOccurred: toolCalls.length > 0,
+          ...(toolCalls.length > 0 ? { toolCalls } : {}),
         },
       };
     } catch (error) {
@@ -571,6 +576,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         error: categorized.message,
         metadata: {
           errorType: categorized.type,
+          ...(toolCalls.length > 0 ? { functionCallOccurred: true, toolCalls } : {}),
         },
       };
     } finally {

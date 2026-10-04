@@ -44,6 +44,7 @@ export const ProviderEnvOverridesSchema = z.object({
   CLOUDFLARE_GATEWAY_ID: z.string().optional(),
   CF_AIG_TOKEN: z.string().optional(),
   COMETAPI_KEY: z.string().optional(),
+  COHERE_API_BASE_URL: z.string().optional(),
   COHERE_API_KEY: z.string().optional(),
   COHERE_CLIENT_NAME: z.string().optional(),
   DATABRICKS_TOKEN: z.string().optional(),

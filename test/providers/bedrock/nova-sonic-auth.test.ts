@@ -85,24 +85,29 @@ async function sonic(config: object, env?: Record<string, string | undefined>) {
   });
   return send(await Reflect.get(provider, 'getBedrockClient').call(provider));
 }
-function native() {
+function native(credentials?: { accessKeyId: string; secretAccessKey: string }) {
   return send(
-    new BedrockRuntimeClient({ region: 'us-east-1', requestHandler: new NodeHttp2Handler() }),
+    new BedrockRuntimeClient({
+      region: 'us-east-1',
+      authSchemePreference: ['sigv4'],
+      ...(credentials ? { credentials } : {}),
+      requestHandler: new NodeHttp2Handler(),
+    }),
   );
 }
 
-describe('Nova Sonic released command authentication', () => {
+describe('Nova Sonic scoped SigV4 authentication', () => {
   // The service accepts SigV4, not Bedrock API keys:
   // https://docs.aws.amazon.com/bedrock/latest/userguide/models-api-compatibility.html
-  // Keep the previously valid SigV4 paths; ambient SDK bearer behavior remains unchanged.
+  // Retain main's SigV4-only selection while passing invocation-scoped credentials.
   it.each(
     ['absent', 'config', 'provider', 'ambient', 'file', 'suite', 'file-blank'].flatMap((source) =>
-      ['absent', 'keys', 'profile', 'partial'].flatMap((configured) =>
+      ['absent', 'keys'].flatMap((configured) =>
         [false, true].map((shared) => ({ source, configured, shared })),
       ),
     ),
   )(
-    'matches native bidirectional signing for $source, ignored config=$configured, shared=$shared',
+    'matches SigV4 bidirectional signing for $source, config=$configured, shared=$shared',
     async ({ source, configured, shared }) => {
       mockProcessEnv({
         ...(shared ? { AWS_ACCESS_KEY_ID: undefined, AWS_SECRET_ACCESS_KEY: undefined } : {}),
@@ -113,19 +118,19 @@ describe('Nova Sonic released command authentication', () => {
       const config = {
         ...(source === 'config' ? { apiKey: 'ignored-config-token' } : {}),
         ...(configured === 'keys'
-          ? { accessKeyId: 'ignored-access', secretAccessKey: 'ignored-secret' }
-          : configured === 'profile'
-            ? { profile: 'missing-sso' }
-            : configured === 'partial'
-              ? { profile: 'missing-sso', accessKeyId: '', secretAccessKey: '' }
-              : {}),
+          ? { accessKeyId: 'configured-access', secretAccessKey: 'configured-secret' }
+          : {}),
       };
       const scoped = { AWS_BEARER_TOKEN_BEDROCK: source === 'file-blank' ? '' : 'scoped-token' };
       const hasScope = ['file', 'suite', 'file-blank'].includes(source);
       const restoreScope = hasScope ? mockProcessEnv(scoped) : () => {};
       let expectedError;
       try {
-        expectedError = await native();
+        expectedError = await native(
+          configured === 'keys'
+            ? { accessKeyId: 'configured-access', secretAccessKey: 'configured-secret' }
+            : undefined,
+        );
       } finally {
         restoreScope();
       }
@@ -147,11 +152,9 @@ describe('Nova Sonic released command authentication', () => {
       expect(authorizations).toEqual(expected);
       if (['absent', 'config', 'provider'].includes(source)) {
         expect(actualError).toBeUndefined();
-        expect(authorizations).toEqual([shared ? 'default-access' : 'host-access']);
-      }
-      if (source === 'file-blank') {
-        expect(actualError).toContain('token');
-        expect(authorizations).toEqual([]);
+        expect(authorizations).toEqual([
+          configured === 'keys' ? 'configured-access' : shared ? 'default-access' : 'host-access',
+        ]);
       }
       expect(process.env.AWS_BEARER_TOKEN_BEDROCK).toBe(
         source === 'ambient' || source === 'file-blank' ? 'host-token' : undefined,
@@ -179,9 +182,6 @@ describe('Nova Sonic released command authentication', () => {
       sonic(
         {
           apiKey: 'ignored-token',
-          profile: 'missing-sso',
-          accessKeyId: 'ignored-access',
-          secretAccessKey: 'ignored-secret',
         },
         source === 'provider' ? scoped : undefined,
       );

@@ -1172,7 +1172,7 @@ describe('scoped AWS SDK authentication', () => {
         accessKeyId: 'sonic-access',
         secretAccessKey: 'sonic-secret',
       });
-      expect(await client.config.authSchemePreference()).toEqual([]);
+      expect(await client.config.authSchemePreference()).toEqual(['sigv4']);
     } finally {
       client.destroy();
     }

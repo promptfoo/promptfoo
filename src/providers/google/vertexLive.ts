@@ -2,15 +2,10 @@ import { getEnvOverrides, getEnvString } from '../../envars';
 import { GoogleAuthManager } from './auth';
 import { GoogleLiveProvider } from './live';
 
-import type { ProviderOptions } from '../../types/providers';
 import type { CompletionOptions } from './types';
 
 export class VertexLiveProvider extends GoogleLiveProvider {
   protected override readonly isVertex = true;
-
-  constructor(modelName: string, options: ProviderOptions) {
-    super(modelName, options);
-  }
 
   override id(): string {
     return `vertex:live:${this.modelName}`;

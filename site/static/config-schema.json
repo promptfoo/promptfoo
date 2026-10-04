@@ -300,6 +300,9 @@
         "COMETAPI_KEY": {
           "type": "string"
         },
+        "COHERE_API_BASE_URL": {
+          "type": "string"
+        },
         "COHERE_API_KEY": {
           "type": "string"
         },

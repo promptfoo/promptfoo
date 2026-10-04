@@ -26,6 +26,7 @@ import {
   SuccessResponseSchema,
   UserSchemas,
 } from '../../src/contracts';
+import { ProviderOptionsSchema } from '../../src/validators/providers';
 
 describe('contracts leaf surface', () => {
   describe('barrel exports', () => {
@@ -130,6 +131,27 @@ describe('contracts leaf surface', () => {
         expect(parsed.data.AWS_PROFILE).toBe('bedrock-profile');
         expect(parsed.data.AWS_SECRET_ACCESS_KEY).toBe('secret-key');
         expect(parsed.data.AWS_SESSION_TOKEN).toBe('session-token');
+      }
+    });
+
+    it('preserves GOOGLE_CLOUD_LOCATION for provider-scoped Vertex configuration', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({
+        GOOGLE_CLOUD_LOCATION: 'us-central1',
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.GOOGLE_CLOUD_LOCATION).toBe('us-central1');
+      }
+    });
+
+    it('preserves GOOGLE_CLOUD_PROJECT through provider config validation', () => {
+      const parsed = ProviderOptionsSchema.safeParse({
+        id: 'vertex:embedding:gemini-embedding-001',
+        env: { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.env).toEqual({ GOOGLE_CLOUD_PROJECT: 'provider-project' });
       }
     });
 
