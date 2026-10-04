@@ -10,7 +10,6 @@ import {
 import { getPackageVersion } from '../../util/packageVersion';
 
 const installCommand = 'npm install promptfoo @openai/agents@^0.11.8';
-const missingPackageMessage = `The @openai/agents package is required for OpenAI Agents providers. ${optionalPackageInstallHint(installCommand)}`;
 
 /** Check Promptfoo's SDK before loading either the provider or its redteam tool loader. */
 export async function loadOpenAiAgentsModule<T>(load: () => Promise<T>): Promise<T> {
@@ -29,7 +28,9 @@ export async function loadOpenAiAgentsModule<T>(load: () => Promise<T>): Promise
     return await load();
   } catch (error) {
     if (isMissingPackageImportError(error, '@openai/agents')) {
-      throw new Error(missingPackageMessage);
+      throw new Error(
+        `The @openai/agents package is required for OpenAI Agents providers. ${optionalPackageInstallHint(installCommand)}`,
+      );
     }
     throw error;
   }
