@@ -1551,6 +1551,92 @@ describe('OpenAI billing helpers', () => {
       ).toBeCloseTo(expected, 10);
     });
 
+    describe('custom audio rates for used directions', () => {
+      const inputUsage = {
+        prompt_tokens: 1000,
+        completion_tokens: 500,
+        prompt_tokens_details: {
+          text_tokens: 250,
+          audio_tokens: 750,
+          cached_tokens: 100,
+          cached_tokens_details: { audio_tokens: 100 },
+        },
+        completion_tokens_details: { text_tokens: 500, audio_tokens: 0 },
+      };
+      const outputUsage = {
+        input_tokens: 1000,
+        output_tokens: 500,
+        input_tokens_details: { text_tokens: 1000, audio_tokens: 0 },
+        output_tokens_details: { text_tokens: 100, audio_tokens: 400 },
+      };
+
+      it.each([
+        {
+          name: 'audio input',
+          config: { cost: 2 / 1e6, audioInputCost: 10 / 1e6 },
+          usage: inputUsage,
+          expected: 0.009,
+        },
+        {
+          name: 'audio output',
+          config: { cost: 2 / 1e6, audioOutputCost: 20 / 1e6 },
+          usage: outputUsage,
+          expected: 0.0102,
+        },
+        {
+          name: 'zero audio input',
+          config: { cost: 2 / 1e6, audioInputCost: 0 },
+          usage: inputUsage,
+          expected: 0.0015,
+        },
+        {
+          name: 'zero audio output',
+          config: { cost: 2 / 1e6, audioOutputCost: 0 },
+          usage: outputUsage,
+          expected: 0.0022,
+        },
+        {
+          name: 'zero text and audio input',
+          config: { cost: 0, audioInputCost: 0 },
+          usage: inputUsage,
+          expected: 0,
+        },
+      ])('prices $name without requiring the unused audio rate', ({ config, usage, expected }) => {
+        expect(calculateOpenAIUsageCost('gateway/custom-audio', config, usage)).toBeCloseTo(
+          expected,
+          12,
+        );
+      });
+
+      it.each([
+        { name: 'input', config: { cost: 2 / 1e6, audioOutputCost: 20 / 1e6 }, usage: inputUsage },
+        { name: 'output', config: { cost: 2 / 1e6, audioInputCost: 10 / 1e6 }, usage: outputUsage },
+      ])('rejects a missing rate for used audio $name', ({ config, usage }) => {
+        expect(calculateOpenAIUsageCost('gateway/custom-audio', config, usage)).toBeUndefined();
+      });
+
+      it('does not charge for a cached response with a one-direction audio rate', () => {
+        expect(
+          calculateOpenAIUsageCost(
+            'gateway/custom-audio',
+            { cost: 2 / 1e6, audioInputCost: 10 / 1e6 },
+            inputUsage,
+            { cachedResponse: true },
+          ),
+        ).toBe(0);
+      });
+
+      it('does not require an audio output rate when the response has no audio', () => {
+        expect(
+          calculateOpenAIUsageCost(
+            'gateway/custom-audio',
+            { cost: 2 / 1e6, audioInputCost: 10 / 1e6 },
+            usage,
+          ),
+        ).toBeCloseTo(0.006, 12);
+      });
+    });
+
     it.each([
       { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
       { cost: 2 / 1e6, audioInputCost: 20 / 1e6 },

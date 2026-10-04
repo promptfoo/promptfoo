@@ -96,6 +96,130 @@ describe('OpenAI Provider', () => {
       vi.clearAllMocks();
     });
 
+    describe('custom audio response costs', () => {
+      it.each([
+        {
+          name: 'audio input',
+          audioInput: 750,
+          audioOutput: 0,
+          config: { cost: 2 / 1e6, audioInputCost: 10 / 1e6 },
+          expected: 0.009,
+        },
+        {
+          name: 'audio output',
+          audioInput: 0,
+          audioOutput: 400,
+          config: { cost: 2 / 1e6, audioOutputCost: 20 / 1e6 },
+          expected: 0.0102,
+        },
+        {
+          name: 'zero audio input',
+          audioInput: 750,
+          audioOutput: 0,
+          config: { cost: 2 / 1e6, audioInputCost: 0 },
+          expected: 0.0015,
+        },
+        {
+          name: 'zero text and audio input',
+          audioInput: 750,
+          audioOutput: 0,
+          config: { cost: 0, audioInputCost: 0 },
+          expected: 0,
+        },
+        {
+          name: 'missing audio input',
+          audioInput: 750,
+          audioOutput: 0,
+          config: { cost: 2 / 1e6, audioOutputCost: 20 / 1e6 },
+          expected: undefined,
+        },
+        {
+          name: 'missing audio output',
+          audioInput: 0,
+          audioOutput: 400,
+          config: { cost: 2 / 1e6, audioInputCost: 10 / 1e6 },
+          expected: undefined,
+        },
+      ])(
+        'returns the correct cost for $name',
+        async ({ audioInput, audioOutput, config, expected }) => {
+          mockFetchWithCache.mockResolvedValueOnce({
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+            data: {
+              choices: [{ message: { content: 'PONG' } }],
+              usage: {
+                prompt_tokens: 1000,
+                completion_tokens: 500,
+                total_tokens: 1500,
+                prompt_tokens_details: { text_tokens: 1000 - audioInput, audio_tokens: audioInput },
+                completion_tokens_details: {
+                  text_tokens: 500 - audioOutput,
+                  audio_tokens: audioOutput,
+                },
+              },
+            },
+          });
+          const provider = new OpenAiChatCompletionProvider('gateway/custom-audio', { config });
+          const response = await provider.callApi('Ordinary billing fixture');
+          expect(response.error).toBeUndefined();
+          expect(response.output).toBe('PONG');
+          expect(response.tokenUsage).toMatchObject({
+            prompt: 1000,
+            completion: 500,
+            total: 1500,
+            numRequests: 1,
+          });
+          expect(response.cached).toBe(false);
+          if (expected === undefined) {
+            expect(response.cost).toBeUndefined();
+          } else {
+            expect(response.cost).toBeCloseTo(expected, 12);
+          }
+          expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+          const [, options] = mockFetchWithCache.mock.calls[0];
+          expect(JSON.parse(options?.body as string)).toMatchObject({
+            model: 'gateway/custom-audio',
+            messages: [{ role: 'user', content: 'Ordinary billing fixture' }],
+          });
+        },
+      );
+
+      it('uses the prompt audio-rate override without requiring unused audio output', async () => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: {
+            choices: [{ message: { content: 'PONG' } }],
+            usage: {
+              prompt_tokens: 1000,
+              completion_tokens: 500,
+              total_tokens: 1500,
+              prompt_tokens_details: { text_tokens: 250, audio_tokens: 750 },
+              completion_tokens_details: { text_tokens: 500, audio_tokens: 0 },
+            },
+          },
+        });
+        const provider = new OpenAiChatCompletionProvider('gateway/custom-audio', {
+          config: { cost: 3 / 1e6, audioInputCost: 20 / 1e6 },
+        });
+        const response = await provider.callApi('Ordinary billing fixture', {
+          vars: {},
+          prompt: {
+            raw: 'Ordinary billing fixture',
+            label: 'fixture',
+            config: { cost: 2 / 1e6, audioInputCost: 10 / 1e6 },
+          },
+        });
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('PONG');
+        expect(response.cost).toBeCloseTo(0.009, 12);
+        expect(provider.config).toMatchObject({ cost: 3 / 1e6, audioInputCost: 20 / 1e6 });
+      });
+    });
+
     it.each([
       { reported: 'ultrafast', cost: undefined },
       { reported: undefined, cost: undefined },

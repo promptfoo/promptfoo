@@ -965,10 +965,20 @@ function getCompleteTextCostOverrides(config: OpenAIBillingConfig): OpenAITextRa
   return input === undefined || output === undefined ? undefined : { input, output };
 }
 
-function getCompleteAudioCostOverrides(config: OpenAIBillingConfig): OpenAIModalRates | undefined {
+function getCompleteAudioCostOverrides(
+  config: OpenAIBillingConfig,
+  usage: OpenAIBillingUsage,
+): OpenAIModalRates | undefined {
   const input = config.audioInputCost ?? config.audioCost;
   const output = config.audioOutputCost ?? config.audioCost;
-  return input === undefined || output === undefined ? undefined : { input, output };
+  if (
+    (input === undefined && output === undefined) ||
+    (usage.audioInputTokens > 0 && input === undefined) ||
+    (usage.audioOutputTokens > 0 && output === undefined)
+  ) {
+    return undefined;
+  }
+  return { input, output };
 }
 
 function getFastTextRates(
@@ -1331,9 +1341,9 @@ export function calculateOpenAIUsageCost(
       ? getDaybreakModelRates(modelName, usage.totalInputTokens, options)
       : getModelRates(modelName, tier, usage.totalInputTokens);
   const explicitTextRates = getCompleteTextCostOverrides(config);
-  const explicitAudioRates = getCompleteAudioCostOverrides(config);
+  const explicitAudioRates = getCompleteAudioCostOverrides(config, usage);
   // Complete explicit rates are authoritative when no catalog entry applies, including for
-  // namespaced gateway models. Partial overrides cannot establish a safe fallback rate table.
+  // namespaced gateway models. Audio rates need only cover directions used by the response.
   const modelRates =
     (catalogRates
       ? {
