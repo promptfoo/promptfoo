@@ -240,14 +240,14 @@ function quotePath(file: string): string {
  *
  * - A name that starts with a colon would be read as pathspec magic and answered for another
  *   path, so it is asked about as `./name`.
- * - A path with the replacement character was read from bytes that are not valid text, so
+ * - Without matching original bytes, a replacement character may represent invalid text, so
  *   its real name is unknown and could match a rule that the read name does not, or the
  *   other way round. Only the nearest directory above it whose name survived is asked
  *   about: what Git ignores as a directory, it ignores with everything in it.
  */
-function toIgnoreQuery(file: string): string | undefined {
+function toIgnoreQuery(file: string, raw?: string): string | undefined {
   let query = file;
-  const lost = file.indexOf('\uFFFD');
+  const lost = Buffer.from(file).toString('latin1') === raw ? -1 : file.indexOf('\uFFFD');
   if (lost !== -1) {
     const end = file.lastIndexOf('/', lost);
     if (end === -1) {
@@ -275,6 +275,8 @@ function getCoveredDirectories(paths: string[]): Set<string> {
   return covered;
 }
 
+type WorkspacePath = { file: string; raw: string };
+
 /**
  * Paths in the workspace that Git leaves out of a diff without saying so. Paths use forward
  * slashes, and directories end with one, as in Git's output.
@@ -294,19 +296,19 @@ async function findPathsGitLeavesOut(
   ignoredDirectories: ReadonlySet<string> = new Set(),
   baselinePaths: ReadonlySet<string> = new Set(),
 ): Promise<{
-  leftOut: { file: string; raw: string }[];
-  reserved: string[];
-  directories: string[];
+  leftOut: WorkspacePath[];
+  reserved: WorkspacePath[];
+  directories: WorkspacePath[];
   timedOut?: true;
 }> {
-  const leftOut: { file: string; raw: string }[] = [];
+  const leftOut: WorkspacePath[] = [];
   const omit = (file: string, raw: string, directory = false) =>
     leftOut.push({
       file: directory ? `${file}/` : file,
       raw: directory ? `${raw}/` : raw,
     });
-  const reserved: string[] = [];
-  const directories: string[] = [];
+  const reserved: WorkspacePath[] = [];
+  const directories: WorkspacePath[] = [];
   // Match Git's per-operation deadline. A pending OS call cannot be interrupted, but no
   // more entries are examined after it returns once this deadline has elapsed.
   const deadline = performance.now() + GIT_TIMEOUT_MS;
@@ -342,7 +344,7 @@ async function findPathsGitLeavesOut(
         encoding: 'buffer' as BufferEncoding,
       })) as unknown as AsyncIterable<Dirent<Buffer>>;
       if (directory !== '') {
-        directories.push(directory);
+        directories.push({ file: directory, raw: rawDirectory });
       }
       for await (const entry of entries) {
         signal?.throwIfAborted();
@@ -381,7 +383,10 @@ async function findPathsGitLeavesOut(
         if (name.toLowerCase() === '.git') {
           const reservedPath = stat?.isDirectory() ? `${entryPath}/` : entryPath;
           if (directory !== '') {
-            reserved.push(reservedPath);
+            reserved.push({
+              file: reservedPath,
+              raw: stat?.isDirectory() ? `${rawEntryPath}/` : rawEntryPath,
+            });
           } else if (name !== '.git') {
             // Beside the workspace's own `.git`, on a file system that tells them apart.
             omit(entryPath, rawEntryPath, stat?.isDirectory());
@@ -910,9 +915,13 @@ async function getWorkspaceDiff(
         }
       }
     }
-    const untracked = (await git(['ls-files', '-z', '--others'], { env, signal }))
+    const untrackedPaths = (
+      await git(['ls-files', '-z', '--others'], { env, signal, encoding: 'latin1' })
+    )
       .split('\0')
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((raw) => ({ file: Buffer.from(raw, 'latin1').toString('utf8'), raw }));
+    const untracked = untrackedPaths.map(({ file }) => file);
     // What the cloned commit tracks. The scratch index holds exactly that at this point.
     const rawBaseline = await git(['ls-files', '-z', '--cached'], {
       env,
@@ -939,12 +948,7 @@ async function getWorkspaceDiff(
     const directoryQueries = new Map(
       untrackedDirectories.map((raw) => {
         const file = Buffer.from(raw, 'latin1').toString('utf8');
-        const query =
-          Buffer.from(file).toString('latin1') === raw
-            ? file.startsWith(':')
-              ? `./${file}`
-              : file
-            : toIgnoreQuery(file);
+        const query = toIgnoreQuery(file, raw);
         return [raw, query];
       }),
     );
@@ -968,10 +972,16 @@ async function getWorkspaceDiff(
     let leftOut = found.leftOut.map(({ file }) => file);
     // A reserved path cannot be tracked, so the directory that holds it decides whether it
     // is ignored.
-    let reserved = found.reserved.map((file) => ({
-      file,
-      parent: file.slice(0, file.lastIndexOf('/', file.length - 2) + 1),
-    }));
+    let reserved = found.reserved.map(({ file, raw }) => {
+      const parent = file.slice(0, file.lastIndexOf('/', file.length - 2) + 1);
+      const rawParent = raw.slice(0, raw.lastIndexOf('/', raw.length - 2) + 1);
+      return {
+        file,
+        parent,
+        query: toIgnoreQuery(file, raw),
+        parentQuery: toIgnoreQuery(parent, rawParent),
+      };
+    });
     // A directory is new and empty when nothing lies in it that the cloned commit tracks,
     // that Git lists as untracked, or that was found above. Git lists a repository as one
     // directory, so what is in it is not looked at. Only the outermost empty directory is
@@ -980,66 +990,64 @@ async function getWorkspaceDiff(
       ...baseline,
       ...untracked,
       ...leftOut,
-      ...found.reserved,
+      ...found.reserved.map(({ file }) => file),
     ]);
     const repositoryRoots = new Set(untracked.filter((file) => file.endsWith('/')));
     const withoutFiles = new Set(
-      found.directories.filter(
-        (directory) =>
-          !covered.has(directory) &&
-          ![...getCoveredDirectories([directory])].some((parent) => repositoryRoots.has(parent)),
-      ),
+      found.directories
+        .filter(
+          ({ file }) =>
+            !covered.has(file) &&
+            ![...getCoveredDirectories([file])].some((parent) => repositoryRoots.has(parent)),
+        )
+        .map(({ file }) => file),
     );
-    let emptyDirectories = [...withoutFiles].filter(
-      (directory) =>
-        !withoutFiles.has(directory.slice(0, directory.lastIndexOf('/', directory.length - 2) + 1)),
-    );
+    let emptyDirectories = found.directories
+      .filter(
+        ({ file }) =>
+          withoutFiles.has(file) &&
+          !withoutFiles.has(file.slice(0, file.lastIndexOf('/', file.length - 2) + 1)),
+      )
+      .map(({ file, raw }) => ({ file, query: toIgnoreQuery(file, raw) }));
 
-    // The committed ignore rules decide which of these are part of the diff.
-    const queries = new Map<string, string | undefined>();
-    for (const file of [
-      ...untracked,
-      ...leftOut,
-      ...reserved.flatMap((entry) => [entry.file, entry.parent]),
-      ...emptyDirectories,
-    ]) {
-      queries.set(file, toIgnoreQuery(file));
-    }
+    // Keep each path's provenance: a valid spelling must not authorize its raw-byte alias.
+    const untrackedQueries = untrackedPaths.map(({ file, raw }) => ({
+      file,
+      query: toIgnoreQuery(file, raw),
+    }));
     const omittedQueries = found.leftOut.map(({ file, raw }) => ({
       file,
       raw,
-      query:
-        Buffer.from(file).toString('latin1') === raw
-          ? file.startsWith(':')
-            ? `./${file}`
-            : file
-          : toIgnoreQuery(file),
+      query: toIgnoreQuery(file, raw),
     }));
     const asked = [
-      ...new Set([...queries.values(), ...omittedQueries.map(({ query }) => query)]),
+      ...new Set([
+        ...untrackedQueries.map(({ query }) => query),
+        ...omittedQueries.map(({ query }) => query),
+        ...reserved.flatMap(({ query, parentQuery }) => [query, parentQuery]),
+        ...emptyDirectories.map(({ query }) => query),
+      ]),
     ].filter((query) => query !== undefined);
     const ignoredQueries = await getIgnoredQueries(asked);
-    const isIgnored = (file: string) => {
-      const query = queries.get(file);
-      return query !== undefined && ignoredQueries.has(query);
-    };
-    for (const file of untracked) {
-      if (!isIgnored(file)) {
+    const isIgnored = (query: string | undefined) =>
+      query !== undefined && ignoredQueries.has(query);
+    for (const { file, query } of untrackedQueries) {
+      if (!isIgnored(query)) {
         newFiles.add(file);
       }
     }
     // A rule can name the reserved path itself, such as `**/.git/`, or a directory above it.
-    reserved = reserved.filter((entry) => !isIgnored(entry.file) && !isIgnored(entry.parent));
-    emptyDirectories = emptyDirectories.filter((directory) => !isIgnored(directory));
+    reserved = reserved.filter(
+      ({ query, parentQuery }) => !isIgnored(query) && !isIgnored(parentQuery),
+    );
+    emptyDirectories = emptyDirectories.filter(({ query }) => !isIgnored(query));
     // An ignored path is still part of the diff when the cloned commit tracks it or the agent
     // added it to its index. What replaced a directory, such as a FIFO, stands for the files
     // that were below it.
     leftOut = omittedQueries
       .filter(
         ({ raw, query }) =>
-          query === undefined ||
-          !ignoredQueries.has(query) ||
-          protectedRawDirectories.has(raw.endsWith('/') ? raw : `${raw}/`),
+          !isIgnored(query) || protectedRawDirectories.has(raw.endsWith('/') ? raw : `${raw}/`),
       )
       .map(({ file }) => file);
     // Existing files are handled by add --update, including valid UTF-8 names containing
@@ -1163,7 +1171,7 @@ async function getWorkspaceDiff(
           ),
           ...leftOut,
           ...reserved.map((entry) => entry.file),
-          ...emptyDirectories,
+          ...emptyDirectories.map(({ file }) => file),
         ]),
       ];
       // Naming the paths keeps a search for a changed file from passing on a partial diff.

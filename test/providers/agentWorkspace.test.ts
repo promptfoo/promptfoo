@@ -2510,6 +2510,84 @@ describe('agent workspaces', () => {
       },
     );
 
+    it.each(
+      (['reserved', 'empty', 'unsearchable'] as const).flatMap((kind) =>
+        (['ascii', 'valid', 'colon', 'raw', 'collision'] as const).flatMap((name) =>
+          (name === 'collision' ? [true] : [false, true]).map((ignored) => ({
+            kind,
+            name,
+            ignored,
+          })),
+        ),
+      ),
+    )(
+      'keeps ignore provenance for $kind paths ($name, ignored=$ignored)',
+      async ({ kind, name, ignored }) => {
+        if (
+          process.platform === 'win32' &&
+          (kind === 'unsearchable' || ['colon', 'raw', 'collision'].includes(name))
+        ) {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        const valid = Buffer.from(
+          name === 'ascii' ? 'policy' : name === 'colon' ? ':policy\uFFFD' : 'policy\uFFFD',
+        );
+        const raw = Buffer.concat([Buffer.from('policy'), Buffer.from([0xff])]);
+        const parents = name === 'collision' ? [valid, raw] : [name === 'raw' ? raw : valid];
+        const child = kind === 'reserved' ? '.git' : 'ignored';
+        const pattern = name === 'collision' ? `policy\uFFFD/${child}/\n` : `**/${child}/\n`;
+        makeRepository(source, { '.gitignore': ignored ? pattern : '' });
+        for (const parent of parents) {
+          const directory = Buffer.concat([Buffer.from(`${source}/`), parent]);
+          fs.mkdirSync(directory);
+          fs.writeFileSync(Buffer.concat([directory, Buffer.from('/keep.txt')]), 'baseline\n');
+        }
+        git(source, 'add', '--all');
+        git(source, 'commit', '-qm', 'track parent paths');
+        const workspace = await create(source, 'git');
+        const directories: Buffer[] = [];
+        try {
+          for (const parent of parents) {
+            const directory = Buffer.concat([
+              Buffer.from(`${workspace.dir}/`),
+              parent,
+              Buffer.from(`/${child}`),
+            ]);
+            fs.mkdirSync(directory);
+            directories.push(directory);
+            fs.writeFileSync(
+              Buffer.concat([directory, Buffer.from(kind === 'reserved' ? '/HEAD' : '/note.txt')]),
+              kind === 'reserved' ? 'ref: x\n' : 'ignored content\n',
+            );
+          }
+          if (kind === 'empty') {
+            git(workspace.dir, 'add', '--all', '--force');
+            for (const directory of directories) {
+              fs.unlinkSync(Buffer.concat([directory, Buffer.from('/note.txt')]));
+            }
+          } else if (kind === 'unsearchable') {
+            for (const directory of directories) {
+              fs.chmodSync(directory, 0o600);
+            }
+          }
+          const metadata = await workspace.metadata();
+          const incomplete = !ignored || name === 'raw' || name === 'collision';
+          expect(metadata.workspaceDiffError).toBeUndefined();
+          expect(metadata.workspaceDiffIncomplete).toBe(incomplete ? true : undefined);
+          if (incomplete) {
+            expect(metadata.workspaceDiff).toContain('diff incomplete');
+          } else {
+            expect(metadata.workspaceDiff).toBe('');
+          }
+        } finally {
+          for (const directory of directories) {
+            fs.chmodSync(directory, 0o700);
+          }
+        }
+      },
+    );
+
     it('ends traversal at the Git deadline and closes open directory handles', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
