@@ -453,6 +453,8 @@ describe('sanitizeObject', () => {
       monkey: 'ordinary',
       key: 'record-name',
       'record.key': 'field-name',
+      tokenCount: 12,
+      credentialsRequired: false,
     };
     const input = { items: [fields], encoded: JSON.stringify(fields) };
     const redacted = { ...fields, databasePassword: '[REDACTED]', dbPassword: '[REDACTED]' };

@@ -70,6 +70,8 @@ describe('sanitizeMcpToolData', () => {
         monkey: 'ordinary',
         key: 'record-name',
         'record.key': 'field-name',
+        tokenCount: 12,
+        credentialsRequired: false,
       };
       const expected = { ...fields, [key]: '[REDACTED]' };
       const args = { one: { two: { three: { four: { items: [fields] } } } } };
@@ -84,6 +86,50 @@ describe('sanitizeMcpToolData', () => {
       expect(args).toEqual(original);
     },
   );
+
+  it.each([
+    (value: string) => `data=${encodeURIComponent(value)}`,
+    (value: string) => `https://example.test/?data=${encodeURIComponent(value)}`,
+    (value: string) => `https://example.test/#data=${encodeURIComponent(value)}`,
+    (value: string) => `https://{{ hostname }}/?data=${encodeURIComponent(value)}`,
+  ])('retains the compound-key policy in encoded JSON (%#)', (wrap) => {
+    const fields = {
+      databasePassword: 'encoded-fixture',
+      dbPassword: 'db-fixture',
+      tokenCount: 12,
+      credentialsRequired: false,
+      key: 'row-id',
+    };
+    const value = wrap(JSON.stringify(fields));
+    const expected = wrap(
+      JSON.stringify({ ...fields, databasePassword: '[REDACTED]', dbPassword: '[REDACTED]' }),
+    );
+    const args = { one: { two: { three: { four: { five: { value, url: value } } } } } };
+    expect(sanitizeMcpToolData(args)).toEqual({
+      one: { two: { three: { four: { five: { value: expected, url: expected } } } } },
+    });
+    expect(args.one.two.three.four.five.value).toBe(value);
+    expect(sanitizeMcpToolData({ url: 'ordinary-relative-resource' })).toEqual({
+      url: 'ordinary-relative-resource',
+    });
+  });
+
+  it('keeps the depth ceiling when form JSON resumes object traversal', () => {
+    const encoded = `data=${encodeURIComponent(JSON.stringify(nestedArgs(80)))}`;
+    const result = sanitizeMcpToolData({ one: { two: { encoded } } });
+    expect(JSON.stringify(result)).not.toContain('compound-secret-value');
+    expect(JSON.stringify(result)).not.toContain('tool-secret-value');
+    expect(JSON.stringify(result)).toContain('%5B...%5D');
+  });
+
+  it('handles long segmented argument names and their credential suffixes', () => {
+    const prefix = 'word_'.repeat(50_000);
+    const args = { [prefix]: 'ordinary', [`${prefix}databasePassword`]: 'secret-fixture' };
+    expect(sanitizeMcpToolData(args)).toEqual({
+      [prefix]: 'ordinary',
+      [`${prefix}databasePassword`]: '[REDACTED]',
+    });
+  });
 
   /** Arguments with `levels` nested objects and a secret in the innermost one. */
   function nestedArgs(levels: number) {

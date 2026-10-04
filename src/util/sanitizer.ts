@@ -62,11 +62,18 @@ function isSecretParameterName(name: string): boolean {
     .replace(/v?\d+/gi, '_')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .split(/[-_\s=]+/);
-  let prefix = '';
+  let suffix = '';
+  let length = 0;
   return words.some((word) => {
-    prefix += word.toLowerCase();
+    const normalizedWord = word.toLowerCase();
+    length += normalizedWord.length;
+    // Only the longest credential name can affect a suffix match. Keeping the
+    // full growing prefix makes repeated endsWith checks quadratic on long keys.
+    suffix = (suffix + normalizedWord).slice(-MAX_SECRET_PARAMETER_LENGTH);
     return SECRET_PARAMETER_NAMES.some(
-      (secret) => prefix === secret || (secret.length > 3 && prefix.endsWith(secret)),
+      (secret) =>
+        (length === secret.length && suffix === secret) ||
+        (secret.length > 3 && suffix.endsWith(secret)),
     );
   });
 }
@@ -237,6 +244,30 @@ export const SECRET_FIELD_NAMES = new Set([
 const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES].filter(
   (name) => !['auth', 'session', 'cookie', 'setcookie'].includes(name),
 );
+const MAX_SECRET_PARAMETER_LENGTH = Math.max(...SECRET_PARAMETER_NAMES.map((name) => name.length));
+
+// MCP object fields also describe controls and counts, rather than credential material.
+// Keep these value-aware exceptions local to the opt-in object policy.
+function isCompoundSecretObjectField(name: string, value: unknown): boolean {
+  const normalized = normalizeFieldName(name);
+  if (
+    (typeof value === 'number' && /(?:count|length|limit|size)$/.test(normalized)) ||
+    (typeof value === 'boolean' &&
+      /(?:required|enabled|disabled|supported|available|configured)$/.test(normalized))
+  ) {
+    return false;
+  }
+  // Bare `key` is ambiguous in tool data; only URL parameters treat it as a secret.
+  return isSecretParameter(
+    name,
+    typeof value === 'string' || typeof value === 'boolean' ? String(value) : undefined,
+    false,
+  );
+}
+
+// Carry the MCP-only policy and remaining object depth through existing encoded
+// JSON paths. Public URL/form sanitizers keep their established defaults.
+type CompoundKeyContext = { maxDepth: number };
 
 /**
  * Normalize field names for comparison (lowercase, drop hyphens, underscores,
@@ -1043,7 +1074,10 @@ function sanitizeJsonString(
     }
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
-      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
+      const sanitizedUrlEncoded = sanitizeUrlEncodedStringWithContext(
+        str,
+        redactCompoundKeys ? { maxDepth: maxDepth - depth } : undefined,
+      );
       if (sanitizedUrlEncoded !== str) {
         return sanitizedUrlEncoded;
       }
@@ -1102,7 +1136,10 @@ function decodeFormComponent(component: string): string | undefined {
  * the value is JSON but contains no secrets (so callers can preserve the
  * original byte-for-byte).
  */
-function redactNestedJsonValue(decoded: string | undefined): string | null {
+function redactNestedJsonValue(
+  decoded: string | undefined,
+  compoundContext?: CompoundKeyContext,
+): string | null {
   if (decoded === undefined) {
     return null;
   }
@@ -1119,10 +1156,20 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
   if (!parsed || typeof parsed !== 'object') {
     return null;
   }
-  const sanitized = sanitizeObject(parsed, {
-    sanitizeUrls: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  });
+  let sanitized: unknown;
+  try {
+    sanitized = sanitizeObject(parsed, {
+      sanitizeUrls: true,
+      maxDepth: compoundContext?.maxDepth ?? Number.POSITIVE_INFINITY,
+      redactCompoundKeys: compoundContext !== undefined,
+      throwOnError: compoundContext !== undefined,
+    });
+  } catch (error) {
+    if (compoundContext) {
+      return JSON.stringify(REDACTED);
+    }
+    throw error;
+  }
   const originalSerialized = JSON.stringify(parsed);
   const sanitizedSerialized = JSON.stringify(sanitized);
   return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
@@ -1141,6 +1188,13 @@ function isPureTemplateValue(value: string): boolean {
 }
 
 export function sanitizeUrlEncodedString(value: string): string {
+  return sanitizeUrlEncodedStringWithContext(value);
+}
+
+function sanitizeUrlEncodedStringWithContext(
+  value: string,
+  compoundContext?: CompoundKeyContext,
+): string {
   if (!value.includes('=')) {
     return value;
   }
@@ -1183,7 +1237,7 @@ export function sanitizeUrlEncodedString(value: string): string {
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
     // redacted at the leaf rather than leaked as opaque bytes.
-    const nestedJson = redactNestedJsonValue(decodedValue);
+    const nestedJson = redactNestedJsonValue(decodedValue, compoundContext);
     if (nestedJson !== null) {
       changed = true;
       return `${separator}${rawKey}=${encodeURIComponent(nestedJson)}`;
@@ -1220,8 +1274,12 @@ function sanitizePlainObject(
   const sanitized: any = {};
   let keySuffix = 0;
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
+  const compoundContext = redactCompoundKeys ? { maxDepth: maxDepth - depth - 1 } : undefined;
   for (const [rawKey, value] of Object.entries(obj)) {
-    const redactedKey = sanitizeUrls && URL_REFERENCE.test(rawKey) ? sanitizeUrl(rawKey) : rawKey;
+    const redactedKey =
+      sanitizeUrls && URL_REFERENCE.test(rawKey)
+        ? sanitizeUrlWithContext(rawKey, compoundContext)
+        : rawKey;
     let key = redactedKey;
     while (
       Object.prototype.hasOwnProperty.call(sanitized, key) ||
@@ -1229,16 +1287,7 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
-    if (
-      isSecretKey(key) ||
-      (redactCompoundKeys &&
-        isSecretParameter(
-          key,
-          typeof value === 'string' || typeof value === 'boolean' ? String(value) : undefined,
-          // Bare `key` is ambiguous in tool data; only URL parameters treat it as a secret.
-          false,
-        ))
-    ) {
+    if (isSecretKey(key) || (redactCompoundKeys && isCompoundSecretObjectField(key, value))) {
       sanitized[key] = REDACTED;
     } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
       sanitized[key] = Object.fromEntries(
@@ -1258,7 +1307,10 @@ function sanitizePlainObject(
     ) {
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);
-      const endpoint = sanitizeUrlForLogging(hasScheme ? value : `https://${value}`);
+      const endpoint = sanitizeUrlForLoggingWithContext(
+        hasScheme ? value : `https://${value}`,
+        compoundContext,
+      );
       const host = hasScheme ? endpoint : endpoint.replace(/^https:\/\//, '');
       const hasPath = value.replace(scheme, '').split(/[?#]/, 1)[0].includes('/');
       sanitized[key] = hasPath ? host : host.replace(/\/(?=[?#]|$)/, '');
@@ -1272,8 +1324,8 @@ function sanitizePlainObject(
       sanitized[key] =
         key === 'url' ||
         (isEnvMap && key.toUpperCase().endsWith('_URL') && !/^OPENAI_(?:API_)?BASE_URL$/i.test(key))
-          ? sanitizeUrl(value)
-          : sanitizeUrlForLogging(value);
+          ? sanitizeUrlWithContext(value, compoundContext)
+          : sanitizeUrlForLoggingWithContext(value, compoundContext);
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact opaque credential values before trying URL-specific handling.
       sanitized[key] = REDACTED;
@@ -1292,7 +1344,7 @@ function sanitizePlainObject(
         typeof sanitizedValue === 'string' &&
         (key.toLowerCase() === 'url' ||
           (sanitizeUrls && /(?:url|uri|host|endpoint|proxy)$/i.test(key)))
-          ? sanitizeUrl(sanitizedValue)
+          ? sanitizeUrlWithContext(sanitizedValue, compoundContext)
           : sanitizedValue;
     }
   }
@@ -1317,7 +1369,7 @@ function recursiveSanitize(
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
     return sanitizeUrls && URL_REFERENCE.test(obj)
-      ? sanitizeUrl(obj)
+      ? sanitizeUrlWithContext(obj, redactCompoundKeys ? { maxDepth: maxDepth - depth } : undefined)
       : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactCompoundKeys);
   }
 
@@ -1457,7 +1509,7 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
   return secretKeys;
 }
 
-function sanitizeTemplatedUrl(url: string): string {
+function sanitizeTemplatedUrl(url: string, compoundContext?: CompoundKeyContext): string {
   // A template may coexist with an already-rendered env credential. Avoid URL
   // parsing here because it encodes the remaining Nunjucks syntax, but still
   // scrub literal query and fragment credentials before the value is logged or
@@ -1472,26 +1524,38 @@ function sanitizeTemplatedUrl(url: string): string {
   const queryIndex = beforeHash.indexOf('?');
   const beforeQuery = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
   const query = queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1);
-  const sanitizedQuery = query ? sanitizeUrlEncodedString(query) : query;
-  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash) : hash;
+  const sanitizedQuery = query
+    ? sanitizeUrlEncodedStringWithContext(query, compoundContext)
+    : query;
+  const sanitizedHash = hash ? sanitizeUrlEncodedStringWithContext(hash, compoundContext) : hash;
 
   return `${beforeQuery}${queryIndex === -1 ? '' : `?${sanitizedQuery}`}${hashIndex === -1 ? '' : `#${sanitizedHash}`}`;
 }
 
 export function sanitizeUrl(url: string): string {
+  return sanitizeUrlWithContext(url);
+}
+
+function sanitizeUrlWithContext(url: string, compoundContext?: CompoundKeyContext): string {
   try {
     // Ensure url is a string and handle edge cases
     if (typeof url !== 'string' || !url.trim()) {
       return url;
     }
 
+    // URL-named MCP fields can still contain a form payload. Reuse the same
+    // bounded decoded-JSON policy rather than losing it in the URL fast path.
+    if (compoundContext && looksLikeUrlEncodedFormData(url)) {
+      return sanitizeUrlEncodedStringWithContext(url, compoundContext);
+    }
+
     // Preserve unresolved template syntax while redacting any literal credentials
     // that were already rendered into another part of the same URL.
     if (url.includes('{{') && url.includes('}}')) {
-      return sanitizeTemplatedUrl(url);
+      return sanitizeTemplatedUrl(url, compoundContext);
     }
 
-    const nestedJson = redactNestedJsonValue(url);
+    const nestedJson = redactNestedJsonValue(url, compoundContext);
     if (nestedJson !== null) {
       return nestedJson;
     }
@@ -1526,7 +1590,7 @@ export function sanitizeUrl(url: string): string {
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         } else {
-          const nestedJson = redactNestedJsonValue(value);
+          const nestedJson = redactNestedJsonValue(value, compoundContext);
           if (nestedJson !== null) {
             sanitizedUrl.searchParams.set(key, nestedJson);
           }
@@ -1534,7 +1598,9 @@ export function sanitizeUrl(url: string): string {
       }
     } catch (paramError) {
       // Can't use logger here as it would create a circular dependency.
-      console.warn(`Failed to sanitize URL parameters: ${paramError}`);
+      if (!compoundContext) {
+        console.warn(`Failed to sanitize URL parameters: ${paramError}`);
+      }
       return REDACTED;
     }
 
@@ -1542,7 +1608,10 @@ export function sanitizeUrl(url: string): string {
     // shape `#access_token=...`). The hash is a `key=value(&...)` string after the
     // leading `#`, so reuse the same form-pair scrubbing as the query.
     if (sanitizedUrl.hash.length > 1) {
-      const sanitizedHash = sanitizeUrlEncodedString(sanitizedUrl.hash.slice(1));
+      const sanitizedHash = sanitizeUrlEncodedStringWithContext(
+        sanitizedUrl.hash.slice(1),
+        compoundContext,
+      );
       sanitizedUrl.hash = sanitizedHash ? `#${sanitizedHash}` : '';
     }
 
@@ -1572,7 +1641,14 @@ export function sanitizeUrl(url: string): string {
  * use this stricter redaction.
  */
 export function sanitizeUrlForLogging(url: string): string {
-  const sanitized = sanitizeUrl(url);
+  return sanitizeUrlForLoggingWithContext(url);
+}
+
+function sanitizeUrlForLoggingWithContext(
+  url: string,
+  compoundContext?: CompoundKeyContext,
+): string {
+  const sanitized = sanitizeUrlWithContext(url, compoundContext);
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);

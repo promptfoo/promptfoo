@@ -166,6 +166,10 @@ describe('MCPProvider', () => {
       monkey: 'ordinary',
       key: 'record-name',
       'record.key': 'field-name',
+      tokenCount: 12,
+      credentialsRequired: false,
+      form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: 'encoded-fixture', tokenCount: 12 }))}`,
+      callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: 'encoded-fixture', credentialsRequired: false }))}`,
     };
     const args = { one: { two: { three: { four: { five: fields } } } } };
     const sanitizedArgs = {
@@ -177,6 +181,8 @@ describe('MCPProvider', () => {
                 ...fields,
                 databasePassword: '[REDACTED]',
                 dbPassword: '[REDACTED]',
+                form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: '[REDACTED]', tokenCount: 12 }))}`,
+                callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: '[REDACTED]', credentialsRequired: false }))}`,
               },
             },
           },
