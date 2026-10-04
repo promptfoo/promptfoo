@@ -11,6 +11,7 @@ import {
   isMcpToolNameFilter,
   normalizeMcpToolContent,
   renderAuthVars,
+  sanitizeMcpToolData,
 } from '../../../src/providers/mcp/util';
 
 import type {
@@ -34,6 +35,34 @@ it('resolves MCP auth from file defaults unless explicit vars replace them', () 
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
+
+describe('sanitizeMcpToolData', () => {
+  it('keeps deeply nested arguments while redacting secrets at any depth', () => {
+    const args = {
+      query: {
+        filter: {
+          and: [
+            { field: 'status', in: ['open', { any: [{ of: ['urgent', { level: { min: 3 } }] }] }] },
+          ],
+        },
+      },
+      connection: { options: { pool: { retry: { apiKey: 'tool-secret-value', attempts: 2 } } } },
+    };
+
+    expect(sanitizeMcpToolData(args)).toEqual({
+      query: args.query,
+      connection: { options: { pool: { retry: { apiKey: '[REDACTED]', attempts: 2 } } } },
+    });
+  });
+
+  it('copes with arguments that refer to themselves', () => {
+    const args: Record<string, unknown> = { id: '123' };
+    args.self = args;
+
+    expect(() => sanitizeMcpToolData(args)).not.toThrow();
+    expect(sanitizeMcpToolData(args)).toMatchObject({ id: '123' });
+  });
+});
 
 describe('normalizeMcpToolContent', () => {
   it.each([

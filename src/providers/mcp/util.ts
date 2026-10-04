@@ -17,8 +17,13 @@ import type {
 
 export type { OAuthTokenResult };
 
+/** Redact secrets in tool arguments. Nested arguments are kept, however deep they go. */
 export function sanitizeMcpToolData<T>(value: T): T {
-  return sanitizeObject(value, { context: 'MCP tool data', sanitizeUrls: true });
+  return sanitizeObject(value, {
+    context: 'MCP tool data',
+    sanitizeUrls: true,
+    maxDepth: Number.POSITIVE_INFINITY,
+  });
 }
 
 export function normalizeMcpToolContent(

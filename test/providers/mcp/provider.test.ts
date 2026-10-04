@@ -138,6 +138,20 @@ describe('MCPProvider', () => {
     }
   });
 
+  it('reports nested tool arguments in full', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const args = {
+      order: { items: [{ product: { options: { engraving: { text: 'Hi', font: 'serif' } } } }] },
+    };
+
+    const result = await provider.callApi('', createContext({ tool: 'create_order', args }));
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('create_order', args);
+    expect(result.metadata?.toolArgs).toEqual(args);
+    expect(result.metadata?.originalPayload).toEqual({ tool: 'create_order', args });
+  });
+
   it('still accepts defaultArgs passed as a constructor option', async () => {
     mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
 
