@@ -1253,7 +1253,7 @@ function calculateModalCost(
   );
 }
 
-function calculateCustomUsageCost(
+export function calculateCustomUsageCost(
   usage: OpenAIBillingUsage,
   config: OpenAIBillingConfig,
   cachedResponse: boolean | undefined,

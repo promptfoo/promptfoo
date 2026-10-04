@@ -1,3 +1,4 @@
+import { calculateCustomUsageCost, extractOpenAIBillingUsage } from './openai/billing';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
 import { splitLocalOptions } from './openai/localOptions';
 import { calculateCost } from './shared';
@@ -27,7 +28,23 @@ export function calculateCerebrasCost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  return calculateCost(modelName, config, promptTokens, completionTokens, CEREBRAS_CHAT_MODELS);
+  if (CEREBRAS_CHAT_MODELS.some((model) => model.id === modelName)) {
+    return calculateCost(modelName, config, promptTokens, completionTokens, CEREBRAS_CHAT_MODELS);
+  }
+  if (
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens)
+  ) {
+    return undefined;
+  }
+
+  return calculateCustomUsageCost(
+    extractOpenAIBillingUsage({ prompt_tokens: promptTokens, completion_tokens: completionTokens }),
+    config,
+    false,
+  );
 }
 
 /**
@@ -93,12 +110,24 @@ export function createCerebrasProvider(
       const effectiveConfig = { ...passthrough, ...config };
       // The request body uses the provider selector unless passthrough overrides it.
       const modelName = typeof passthrough.model === 'string' ? passthrough.model : this.modelName;
-      return calculateCerebrasCost(
-        modelName,
-        effectiveConfig,
-        data.usage?.prompt_tokens,
-        data.usage?.completion_tokens,
-      );
+      if (data.usage) {
+        const customCost = calculateCustomUsageCost(
+          extractOpenAIBillingUsage(data.usage),
+          effectiveConfig,
+          false,
+        );
+        if (customCost !== undefined) {
+          return customCost;
+        }
+      }
+      return CEREBRAS_CHAT_MODELS.some((model) => model.id === modelName)
+        ? calculateCerebrasCost(
+            modelName,
+            effectiveConfig,
+            data.usage?.prompt_tokens,
+            data.usage?.completion_tokens,
+          )
+        : undefined;
     }
   }
 

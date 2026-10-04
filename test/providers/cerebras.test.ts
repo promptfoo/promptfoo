@@ -346,6 +346,38 @@ describe('Cerebras provider', () => {
         expectedModel: 'gpt-oss-120b',
         expectedCost: 7,
       },
+      {
+        name: 'prices an uncatalogued model with explicit input and output rates',
+        model: 'qwen-3.8-27b',
+        providerConfig: { inputCost: 1 / 1e6, outputCost: 2 / 1e6 },
+        promptConfig: {},
+        expectedModel: 'qwen-3.8-27b',
+        expectedCost: 3,
+      },
+      {
+        name: 'prices a dedicated model with a flat rate',
+        model: 'dedicated-model',
+        providerConfig: { cost: 2 / 1e6 },
+        promptConfig: {},
+        expectedModel: 'dedicated-model',
+        expectedCost: 4,
+      },
+      {
+        name: 'honors prompt pricing for an uncatalogued passthrough model',
+        model: 'gemma-4-31b',
+        providerConfig: { model: 'dedicated-model', inputCost: 1 / 1e6, outputCost: 2 / 1e6 },
+        promptConfig: { inputCost: 3 / 1e6, outputCost: 4 / 1e6 },
+        expectedModel: 'dedicated-model',
+        expectedCost: 7,
+      },
+      {
+        name: 'does not fill incomplete custom rates from the OpenAI catalog',
+        model: 'gpt-4o',
+        providerConfig: { inputCost: 1 / 1e6 },
+        promptConfig: {},
+        expectedModel: 'gpt-4o',
+        expectedCost: undefined,
+      },
     ])('$name', async ({ model, providerConfig, promptConfig, expectedModel, expectedCost }) => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
@@ -372,6 +404,9 @@ describe('Cerebras provider', () => {
       expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1);
       const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
       expect(body.model).toBe(expectedModel);
+      for (const field of ['cost', 'inputCost', 'outputCost']) {
+        expect(body).not.toHaveProperty(field);
+      }
       if (expectedCost === undefined) {
         expect(result.cost).toBeUndefined();
       } else {
@@ -388,6 +423,117 @@ describe('Cerebras provider', () => {
       expect(cachedResult.cached).toBe(true);
       expect(cachedResult.cost).toBe(0);
     });
+  });
+
+  const customRates = { inputCost: 1e-6, outputCost: 2e-6 };
+  const completeUsage = { prompt_tokens: 1000, completion_tokens: 500, total_tokens: 1500 };
+  const audioUsage = { ...completeUsage, prompt_tokens_details: { audio_tokens: 200 } };
+
+  it.each(
+    [
+      {
+        name: 'absent usage',
+        usage: undefined,
+        config: customRates,
+        costs: [undefined, undefined],
+      },
+      { name: 'null usage', usage: null, config: customRates, costs: [undefined, undefined] },
+      { name: 'falsy usage', usage: 0, config: customRates, costs: [undefined, undefined] },
+      { name: 'empty usage with explicit rates', usage: {}, config: customRates, costs: [0, 0] },
+      {
+        name: 'input-only usage',
+        usage: { prompt_tokens: 1000 },
+        config: customRates,
+        costs: [0.001, 0.001],
+      },
+      {
+        name: 'output-only usage',
+        usage: { completion_tokens: 500 },
+        config: customRates,
+        costs: [0.001, 0.001],
+      },
+      {
+        name: 'total-only usage',
+        usage: { total_tokens: 1500 },
+        config: customRates,
+        costs: [0.0015, 0.0015],
+      },
+      {
+        name: 'zero directions with a positive total',
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 1500 },
+        config: customRates,
+        costs: [0.0015, 0.0015],
+      },
+      {
+        name: 'complete usage and split rates',
+        usage: completeUsage,
+        config: customRates,
+        costs: [0.002, 0.002],
+      },
+      {
+        name: 'complete usage and scalar rate',
+        usage: completeUsage,
+        config: { cost: 2e-6 },
+        costs: [0.003, 0.003],
+      },
+      { name: 'explicit zero rate', usage: completeUsage, config: { cost: 0 }, costs: [0, 0] },
+      {
+        name: 'incomplete rates with catalog fallback',
+        usage: completeUsage,
+        config: { inputCost: 1e-6 },
+        costs: [undefined, 0.001745],
+      },
+      {
+        name: 'uncovered normalized input for an unknown model',
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 1500 },
+        config: { outputCost: 2e-6 },
+        costs: [undefined],
+      },
+      {
+        name: 'explicit text and audio rates',
+        usage: audioUsage,
+        config: { ...customRates, audioInputCost: 3e-6 },
+        costs: [0.0024, 0.0024],
+      },
+      {
+        name: 'uncovered audio for an unknown model',
+        usage: audioUsage,
+        config: customRates,
+        costs: [undefined],
+      },
+      {
+        name: 'normalization of a nonfinite input count',
+        usage: { ...completeUsage, prompt_tokens: Number.NaN },
+        config: customRates,
+        costs: [0.001, 0.001],
+      },
+      { name: 'no explicit rates', usage: completeUsage, config: {}, costs: [undefined, 0.001735] },
+    ].flatMap(({ costs, ...testCase }) =>
+      // Expectations list unknown-model cost first, then catalog cost when that contract is in scope.
+      costs.map((cost, index) => ({
+        ...testCase,
+        model: ['dedicated-model', 'gemma-4-31b'][index],
+        cost,
+      })),
+    ),
+  )('$name ($model)', async ({ model, usage, config, cost }) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { choices: [{ message: { content: 'response' } }], usage },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = createCerebrasProvider(`cerebras:${model}`, { config: { config } });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('response');
+    if (cost === undefined) {
+      expect(result.cost).toBeUndefined();
+    } else {
+      expect(result.cost).toBeCloseTo(cost, 10);
+    }
   });
 
   describe('calculateCerebrasCost', () => {
@@ -415,6 +561,54 @@ describe('Cerebras provider', () => {
         ),
       ).toBeCloseTo(3, 10);
     });
+
+    it.each([
+      {
+        config: { inputCost: 1 / 1e6, outputCost: 2 / 1e6 },
+        prompt: 1e6,
+        completion: 1e6,
+        cost: 3,
+      },
+      { config: { cost: 2 / 1e6 }, prompt: 1e6, completion: 1e6, cost: 4 },
+      { config: { cost: 2 / 1e6, inputCost: 0 }, prompt: 1e6, completion: 1e6, cost: 2 },
+      { config: { cost: 0 }, prompt: 1e6, completion: 1e6, cost: 0 },
+      { config: { inputCost: 1 / 1e6 }, prompt: 1e6, completion: 0, cost: 1 },
+      { config: { outputCost: 2 / 1e6 }, prompt: 0, completion: 1e6, cost: 2 },
+      { config: { cost: 1 / 1e6 }, prompt: 0, completion: 0, cost: 0 },
+    ])(
+      'prices uncatalogued usage with explicit rates: %j',
+      ({ config, prompt, completion, cost }) => {
+        expect(calculateCerebrasCost('dedicated-model', config, prompt, completion)).toBeCloseTo(
+          cost,
+          10,
+        );
+      },
+    );
+
+    it.each([{}, { inputCost: 1 / 1e6 }, { outputCost: 2 / 1e6 }])(
+      'requires explicit rates for all nonzero uncatalogued usage: %j',
+      (config) => {
+        expect(calculateCerebrasCost('dedicated-model', config, 1e6, 1e6)).toBeUndefined();
+      },
+    );
+
+    it.each([
+      [undefined, 1e6],
+      [1e6, undefined],
+      [Number.NaN, 1e6],
+      [1e6, Number.NaN],
+      [Number.POSITIVE_INFINITY, 1e6],
+      [1e6, Number.POSITIVE_INFINITY],
+    ])(
+      'rejects incomplete or nonfinite usage even with explicit rates (%s, %s)',
+      (prompt, completion) => {
+        for (const model of ['gpt-oss-120b', 'dedicated-model']) {
+          expect(
+            calculateCerebrasCost(model, { cost: 1 / 1e6 }, prompt, completion),
+          ).toBeUndefined();
+        }
+      },
+    );
 
     it('reports the published model cost through the provider response hook', () => {
       const provider = createCerebrasProvider('cerebras:gpt-oss-120b') as unknown as {
