@@ -1284,7 +1284,11 @@ async function doEvalWithEnv(
           );
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
+        // A run that failed its tests returns here, as it always has. A run stopped by its
+        // target goes on to clean up its providers, as it did when it still exited with 0.
+        if (targetErrorStatus == null) {
+          return ret;
+        }
       }
     }
     if (testSuite.redteam) {

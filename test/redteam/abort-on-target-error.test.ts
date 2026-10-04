@@ -9,7 +9,7 @@ import Eval from '../../src/models/eval';
 import { findTargetErrorStatus, isNonTransientHttpStatus } from '../../src/util/fetch/errors';
 import { createMockProvider } from '../factories/provider';
 
-import type { ApiProvider, Prompt, TestSuite } from '../../src/types';
+import type { ApiProvider, EvaluateResult, Prompt, TestSuite } from '../../src/types';
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
@@ -239,6 +239,23 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
     // This should do an efficient DB query, not load all results
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
     expect(targetErrorStatus).toBe(403);
+  });
+
+  it('should find a target error in a row that could not be saved', async () => {
+    const evalRecord = await Eval.create({}, [toPrompt('Test prompt')], { id: randomUUID() });
+    expect(await evalRecord.findTargetErrorStatus()).toBeUndefined();
+
+    // The evaluator hands over a row whose database write failed. It is not in the database,
+    // so only the eval record knows that the target returned 403.
+    evalRecord.recordResultPersistenceFailure({
+      promptIdx: 0,
+      testIdx: 0,
+      response: { output: 'Forbidden', metadata: { http: { status: 403 } } },
+    } as EvaluateResult);
+    // The command drops loaded results before it reports, which must not lose the row.
+    evalRecord.clearResults();
+
+    expect(await evalRecord.findTargetErrorStatus()).toBe(403);
   });
 
   it('should return undefined when no target error exists', async () => {

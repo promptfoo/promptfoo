@@ -2214,6 +2214,44 @@ describe('evalCommand', () => {
     }
   });
 
+  it.each([
+    ['every earlier row passed', { testPassCount: 1, testFailCount: 0, testErrorCount: 0 }],
+    ['the stopping row is an error', { testPassCount: 1, testFailCount: 0, testErrorCount: 1 }],
+  ])(
+    'should clean up providers after an eval that an unavailable target stopped, when %s',
+    async (_name, metrics) => {
+      const previousExitCode = process.exitCode;
+      process.exitCode = undefined;
+      const cleanup = vi.fn().mockResolvedValue(undefined);
+      const provider = {
+        id: () => 'cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup,
+      } as ApiProvider;
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: { prompts: [], providers: [provider] },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        (evalRecord as Eval).prompts = [{ metrics }] as any;
+        vi.spyOn(evalRecord as Eval, 'findTargetErrorStatus').mockResolvedValue(403);
+        return evalRecord as Eval;
+      });
+
+      try {
+        await doEval({ write: false }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+        // Providers can hold child processes and sockets, which a failing exit code must not
+        // leave behind.
+        expect(process.exitCode).toBe(100);
+        expect(cleanup).toHaveBeenCalledTimes(1);
+      } finally {
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
+
   it("should leave the exit code alone when a reusable caller's eval was stopped by an unavailable target", async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
