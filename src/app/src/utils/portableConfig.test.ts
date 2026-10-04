@@ -19,6 +19,14 @@ describe('toPortableConfig', () => {
     expect(savedConfig).toHaveProperty('basePath');
   });
 
+  it('does not offer the base path on the result type', () => {
+    const portable = toPortableConfig(savedConfig);
+
+    // @ts-expect-error basePath is removed from the type as well as from the value
+    expect(portable.basePath).toBeUndefined();
+    expect(portable.description).toBe('saved eval');
+  });
+
   it('returns configs without a base path unchanged', () => {
     const config = { prompts: ['hello'], providers: ['echo'] };
 
