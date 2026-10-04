@@ -2190,6 +2190,50 @@ describe('evalCommand', () => {
     }
   });
 
+  it('should set the failed-test exit code when the eval was stopped by an unavailable target', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      // Every row that ran before the stop passed.
+      (evalRecord as Eval).prompts = [
+        { metrics: { testPassCount: 1, testFailCount: 0, testErrorCount: 0 } },
+      ] as any;
+      vi.spyOn(evalRecord as Eval, 'findTargetErrorStatus').mockResolvedValue(404);
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval({ write: false }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+      expect(process.exitCode).toBe(100);
+      expect(loggerInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('Pass rate'));
+    } finally {
+      loggerInfoSpy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it("should leave the exit code alone when a reusable caller's eval was stopped by an unavailable target", async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      (evalRecord as Eval).prompts = [
+        { metrics: { testPassCount: 1, testFailCount: 0, testErrorCount: 0 } },
+      ] as any;
+      vi.spyOn(evalRecord as Eval, 'findTargetErrorStatus').mockResolvedValue(404);
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval({ write: false }, defaultConfig, defaultConfigPath, { eventSource: 'library' });
+
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
   it('should await async provider cleanup after evaluation', async () => {
     const cleanup = vi.fn().mockResolvedValue(undefined);
     const provider = {

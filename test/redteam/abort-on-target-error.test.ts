@@ -109,6 +109,41 @@ describe('abort on target error', () => {
     expect(isNonTransientHttpStatus(403)).toBe(true);
   });
 
+  it('should count the row that stopped the scan', async () => {
+    const good = createMockProvider({
+      id: 'good-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output: 'pong' }),
+    });
+    const bad = createMockProvider({
+      id: 'bad-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+        error: 'API error: 404 Not Found',
+        metadata: { http: { status: 404, statusText: 'Not Found' } },
+      }),
+    });
+    const testSuite: TestSuite = {
+      providers: [good, bad],
+      prompts: [toPrompt('Reply pong {{ n }}')],
+      tests: [{ vars: { n: 1 } }, { vars: { n: 2 } }, { vars: { n: 3 } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+
+    // The scan stops at the first 404, and that row is an error like any other. Without it
+    // the totals would read "1 passed, 0 errors".
+    expect(bad.callApi).toHaveBeenCalledTimes(1);
+    const totals = evalRecord.prompts.reduce(
+      (sum, prompt) => ({
+        passed: sum.passed + (prompt.metrics?.testPassCount ?? 0),
+        errors: sum.errors + (prompt.metrics?.testErrorCount ?? 0),
+      }),
+      { passed: 0, errors: 0 },
+    );
+    expect(totals).toEqual({ passed: 1, errors: 1 });
+    expect(findTargetErrorStatus(await evalRecord.getResults())).toBe(404);
+  });
+
   it('should include HTTP status in result metadata', async () => {
     // Create a mock provider that returns 403
     const mockApiProvider = createMockProvider({

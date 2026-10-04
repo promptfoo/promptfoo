@@ -3959,10 +3959,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       await this.persistEvalRow(row);
 
-      if (this.abortIfTargetUnavailable(row, context)) {
-        break;
-      }
-
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
@@ -3973,6 +3969,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
       });
+
+      // The row that stops the eval is counted first, like any other error. Otherwise the
+      // summary and the exit code would report only the rows that passed before it.
+      if (this.abortIfTargetUnavailable(row, context)) {
+        break;
+      }
 
       context.options.progressCallback?.(
         context.numComplete,
