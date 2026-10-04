@@ -140,6 +140,58 @@ describe('sanitizeMcpToolData', () => {
   });
 
   it.each([
+    (value: string) => value,
+    (value: string) => `data=${encodeURIComponent(value)}`,
+    (value: string) => `https://example.test/?data=${encodeURIComponent(value)}`,
+    (value: string) => `https://example.test/#data=${encodeURIComponent(value)}`,
+  ])('retains credential collection roles through encoded JSON (%#)', (wrap) => {
+    const fields = {
+      clientSecrets: [
+        'first',
+        {
+          value: 'second',
+          count: 2,
+          enabled: false,
+          empty: null,
+          tokenUsage: 'inherited-secret',
+          callbackUrl: 'inherited-secret',
+        },
+      ],
+      apiKeysByTenant: { tenant: 'third' },
+      apiKeyForTenant: 'fourth',
+      tokenUsage: { kind: 'public', databasePassword: 'fifth' },
+      tokenBudget: 'public',
+      tokenIds: ['public-id'],
+      signatureAlgorithm: 'SHA256',
+      passwordPolicy: { description: 'public', minLength: 12 },
+      accessTokenUrl: 'https://example.test/?api_key=fixture',
+    };
+    const expected = {
+      ...fields,
+      clientSecrets: [
+        '[REDACTED]',
+        {
+          value: '[REDACTED]',
+          count: 2,
+          enabled: false,
+          empty: null,
+          tokenUsage: '[REDACTED]',
+          callbackUrl: '[REDACTED]',
+        },
+      ],
+      apiKeysByTenant: { tenant: '[REDACTED]' },
+      apiKeyForTenant: '[REDACTED]',
+      tokenUsage: { kind: 'public', databasePassword: '[REDACTED]' },
+      accessTokenUrl: 'https://example.test/?api_key=%5BREDACTED%5D',
+    };
+    const value = wrap(JSON.stringify(fields));
+    expect(sanitizeMcpToolData({ nested: { value } })).toEqual({
+      nested: { value: wrap(JSON.stringify(expected)) },
+    });
+    expect(value).toBe(wrap(JSON.stringify(fields)));
+  });
+
+  it.each([
     'redirect=https://alice:fixture-password@example.test/path',
     'redirect=/callback?api_key=short-secret',
     'redirect=/callback#access_token=short-secret',
@@ -384,6 +436,71 @@ describe('sanitizeMcpToolData', () => {
     expect(sanitizeMcpToolData(payload)).toBe(
       JSON.stringify({ query: 'select 1', dbPassword: '[REDACTED]' }),
     );
+  });
+
+  it('redacts the strings under plural and qualified credential names', () => {
+    expect(
+      sanitizeMcpToolData({
+        clientSecrets: ['first-secret', 'second-secret'],
+        databasePasswords: { primary: 'hunter2', replicas: [{ value: 'hunter3', port: 5432 }] },
+        userApiKeys: 'first-key,second-key',
+        accessTokens: ['first-token'],
+        apiKeysByTenant: { acme: 'tenant-key' },
+        // A credential word with a qualifier after it.
+        apiKeyForTenant: 'tenant-key',
+        tenantClientSecret2Value: 'tenant-secret',
+        tokenValue: 'short',
+      }),
+    ).toEqual({
+      clientSecrets: ['[REDACTED]', '[REDACTED]'],
+      databasePasswords: { primary: '[REDACTED]', replicas: [{ value: '[REDACTED]', port: 5432 }] },
+      userApiKeys: '[REDACTED]',
+      accessTokens: ['[REDACTED]'],
+      apiKeysByTenant: { acme: '[REDACTED]' },
+      apiKeyForTenant: '[REDACTED]',
+      tenantClientSecret2Value: '[REDACTED]',
+      tokenValue: '[REDACTED]',
+    });
+  });
+
+  it('keeps cursors, counts and settings whose names hold a credential word', () => {
+    const args = {
+      // Cursors and special tokens.
+      pageToken: 'cursor-1',
+      nextPageToken: 'cursor-2',
+      next_page_token: 'cursor-3',
+      continuationToken: 'cursor-4',
+      resumeToken: 'cursor-5',
+      nextToken: 'cursor-6',
+      stopTokens: ['</s>'],
+      maxTokens: 256,
+      // Counts.
+      inputTokens: 120,
+      tokenCount: 7,
+      tokenUsage: { input: 120, output: 30 },
+      // Settings.
+      useApiKey: true,
+      includeCredentials: false,
+      tokenType: 'bearer',
+      secretVersion: 'v3',
+      databasePassword: null,
+      // Ordinary argument names.
+      key: 'user:1',
+      keys: ['user:1', 'user:2'],
+      publicKey: 'ssh-ed25519 AAAA',
+      tokenizer: 'cl100k',
+    };
+
+    expect(sanitizeMcpToolData(args)).toEqual(args);
+  });
+
+  it('redacts a number under a name that ends in a credential word', () => {
+    // A password of digits can arrive as a number. A count cannot be told from it by its
+    // value, so only a name that is the credential itself decides.
+    expect(sanitizeMcpToolData({ databasePassword: 123456, accessTokens: 2 })).toEqual({
+      databasePassword: '[REDACTED]',
+      accessTokens: 2,
+    });
   });
 
   it('copes with arguments that refer to themselves', () => {

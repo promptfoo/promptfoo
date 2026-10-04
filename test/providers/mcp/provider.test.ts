@@ -160,6 +160,8 @@ describe('MCPProvider', () => {
     const fields = {
       databasePassword: 'database-fixture',
       dbPwd: 'pwd-fixture',
+      clientSecrets: ['secret-one', 'secret-two'],
+      apiKeysByTenant: { tenant: 'tenant-secret', count: 2 },
       tokenUsage: { input: 4, output: 9 },
       hasCredentials: false,
       isSecret: true,
@@ -194,6 +196,8 @@ describe('MCPProvider', () => {
                 ...fields,
                 databasePassword: '[REDACTED]',
                 dbPwd: '[REDACTED]',
+                clientSecrets: ['[REDACTED]', '[REDACTED]'],
+                apiKeysByTenant: { tenant: '[REDACTED]', count: 2 },
                 dbPassword: '[REDACTED]',
                 form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: '[REDACTED]', tokenCount: 12 }))}`,
                 callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: '[REDACTED]', credentialsRequired: false }))}`,

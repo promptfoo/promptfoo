@@ -39,24 +39,34 @@ function hasUrlUserinfo(url: string): boolean {
   return atIndex > 0;
 }
 
+/**
+ * Names that hold a credential word without being a credential: special tokens, cursors and
+ * token limits, and settings. Takes a name from `normalizeFieldName`.
+ */
+function isBenignParameterName(normalized: string): boolean {
+  return (
+    /^(?:eos|bos|pad|unk|mask|sep|cls|stop|start|end|next|prev|page|nextpage|continuation|resume|cursor|max|min)tokens?$/.test(
+      normalized,
+    ) || /(?:version|type|enabled)$/.test(normalized)
+  );
+}
+
 function isSecretParameterName(name: string): boolean {
   const normalized = normalizeFieldName(name);
   if (normalized === 'key') {
     return true;
   }
-  if (
-    /^(?:eos|bos|pad|unk|mask|sep|cls|stop|start|end|next|prev|page|nextpage|continuation|resume|cursor|max|min)tokens?$/.test(
-      normalized,
-    ) ||
-    /(?:version|type|enabled)$/.test(normalized)
-  ) {
+  if (isBenignParameterName(normalized)) {
     return false;
   }
   if (isSecretField(name) || name.split(/[-_\s=]+/).some(isSecretField)) {
     return true;
   }
+  return hasCredentialCompound(name);
+}
 
-  // Check credential compounds, including lowercase suffixes, camelCase and numeric versions.
+/** Checks credential compounds, including lowercase suffixes, camelCase and numeric versions. */
+function hasCredentialCompound(name: string): boolean {
   const words = name
     .replace(/(value|hash|encrypted)$/i, '_$1')
     .replace(/v?\d+/gi, '_')
@@ -253,15 +263,13 @@ const MAX_SECRET_PARAMETER_LENGTH = Math.max(...SECRET_PARAMETER_NAMES.map((name
 // MCP object fields use terminal credential names: tokenUsage/passwordPolicy describe
 // ordinary data even though the broader URL-parameter policy recognizes their prefixes.
 function isCompoundSecretObjectField(name: string, value: unknown): boolean {
+  if (value === null || typeof value === 'boolean') {
+    return false;
+  }
   const normalized = normalizeFieldName(name);
   const textValue =
     typeof value === 'string' || typeof value === 'boolean' ? String(value) : undefined;
-  if (
-    isBooleanCredentialControl(name, textValue) ||
-    // MCP presence/capability flags are data. String values with the same names
-    // can still carry credentials; URL/form parameter policy stays unchanged.
-    (typeof value === 'boolean' && /^(?:has|is|needs|supports)/.test(normalized))
-  ) {
+  if (isBooleanCredentialControl(name, textValue)) {
     return false;
   }
   // Preserve the existing value-bearing aliases and numeric versions, including
@@ -291,6 +299,33 @@ function isCompoundSecretObjectField(name: string, value: unknown): boolean {
   // The URL policy intentionally omits short suffixes, but dbPwd/userSig are
   // credential-bearing object names. Bare `key` is not in SECRET_PARAMETER_NAMES.
   return terminal.length <= 3 || isSecretParameter(name, textValue, false);
+}
+
+// Credential collections retain their structure and numeric counts, but hide their
+// string leaves. Metadata roles stay ordinary and still recurse through the usual
+// credential/URL checks. This classification is only enabled for MCP tool data.
+function getCompoundSecretObjectFieldKind(
+  name: string,
+  value: unknown,
+): 'credential' | 'related' | undefined {
+  if (value === null || typeof value === 'boolean') {
+    return undefined;
+  }
+  const normalized = normalizeFieldName(name);
+  if (
+    /(?:tokenusage|tokenbudget|tokenids|signaturealgorithm|passwordpolicy)$/.test(normalized) ||
+    /(?:url|uri|host|endpoint|proxy)$/.test(normalized) ||
+    isBooleanCredentialControl(name, typeof value === 'string' ? value : undefined)
+  ) {
+    return undefined;
+  }
+  const kind = getCredentialFieldKind(name);
+  // Plural collections keep their shape even when a legacy secret suffix (such
+  // as `secrets`) also matches the name. Exact legacy fields are checked first.
+  if (kind === 'related' && normalized.endsWith('s')) {
+    return kind;
+  }
+  return isCompoundSecretObjectField(name, value) ? 'credential' : kind;
 }
 
 // Carry the MCP-only policy and remaining object depth through existing encoded
@@ -347,6 +382,52 @@ const ENV_SECRET_SUFFIX_WORDS = [
   // compound shows up in env vars.
   'accesskey',
 ].map((word) => word.toUpperCase());
+
+/** `clientSecrets` as `client_Secret`: every word without its plural ending. */
+function singularizeFieldName(fieldName: string): string {
+  return fieldName
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .split(/[-_\s=]+/)
+    .map((word) => (word.length > 3 && /[^s]s$/i.test(word) ? word.slice(0, -1) : word))
+    .join('_');
+}
+
+/**
+ * How a field name relates to credentials, for data whose keys are not under our control,
+ * such as the arguments of a tool call. `isSecretField` only knows exact names.
+ *
+ * - `'credential'`: the name ends in a credential word, as `databasePassword`,
+ *   `db_password` and `userApiKey` do.
+ * - `'related'`: the name is the plural of such a name (`accessTokens`) or qualifies a
+ *   credential word (`apiKeyForTenant`), by the rules for URL parameter names. Such a name
+ *   can also hold a count or a setting (`inputTokens`, `tokenCount`).
+ * - `undefined`: neither. That includes cursors and special tokens (`pageToken`,
+ *   `maxTokens`) and a bare `key`, which is an ordinary argument name.
+ *
+ * This is not applied to configs, where a key such as `secret_name` is a setting.
+ */
+export function getCredentialFieldKind(fieldName: string): 'credential' | 'related' | undefined {
+  const endsInCredentialWord = (normalized: string) =>
+    ENV_SECRET_SUFFIX_WORDS.some((secret) => normalized.toUpperCase().endsWith(secret));
+
+  const normalized = normalizeFieldName(fieldName);
+  if (isBenignParameterName(normalized)) {
+    return undefined;
+  }
+  if (endsInCredentialWord(normalized)) {
+    return 'credential';
+  }
+  const singular = singularizeFieldName(fieldName);
+  const normalizedSingular = normalizeFieldName(singular);
+  if (isBenignParameterName(normalizedSingular)) {
+    return undefined;
+  }
+  return hasCredentialCompound(fieldName) ||
+    hasCredentialCompound(singular) ||
+    endsInCredentialWord(normalizedSingular)
+    ? 'related'
+    : undefined;
+}
 
 /**
  * Secret only as the final `_`-delimited word. `MLFLOW_BASIC_AUTH` and `NPM_CONFIG__AUTH`
@@ -1298,6 +1379,7 @@ function sanitizePlainObject(
   sanitizeUrls: boolean,
   isEnvMap: boolean,
   redactCompoundKeys: boolean,
+  redactCredentialValues: boolean,
 ): any {
   const sanitized: any = {};
   let keySuffix = 0;
@@ -1314,11 +1396,20 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
-    if (
-      isSecretKey(key) ||
-      (redactCompoundKeys && !isUrlKey && isCompoundSecretObjectField(key, value))
-    ) {
+    const compoundKind =
+      redactCompoundKeys && !isUrlKey ? getCompoundSecretObjectFieldKind(key, value) : undefined;
+    if (isSecretKey(key) || compoundKind === 'credential') {
       sanitized[key] = REDACTED;
+    } else if (compoundKind === 'related' || redactCredentialValues) {
+      sanitized[key] = recursiveSanitize(
+        value,
+        depth + 1,
+        maxDepth,
+        sanitizeUrls,
+        false,
+        redactCompoundKeys,
+        true,
+      );
     } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
       sanitized[key] = Object.fromEntries(
         Object.entries(value).map(([name, item]) => [
@@ -1401,6 +1492,7 @@ function recursiveSanitize(
   sanitizeUrls = false,
   isEnvMap = false,
   redactCompoundKeys = false,
+  redactCredentialValues = false,
 ): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
@@ -1408,6 +1500,9 @@ function recursiveSanitize(
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
+    if (redactCredentialValues) {
+      return REDACTED;
+    }
     return sanitizeUrls && URL_REFERENCE.test(obj)
       ? sanitizeUrlWithContext(obj, redactCompoundKeys ? { maxDepth: maxDepth - depth } : undefined)
       : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactCompoundKeys);
@@ -1426,7 +1521,15 @@ function recursiveSanitize(
   // Handle arrays
   if (Array.isArray(obj)) {
     return obj.map((item) =>
-      recursiveSanitize(item, depth + 1, maxDepth, sanitizeUrls, false, redactCompoundKeys),
+      recursiveSanitize(
+        item,
+        depth + 1,
+        maxDepth,
+        sanitizeUrls,
+        false,
+        redactCompoundKeys,
+        redactCredentialValues,
+      ),
     );
   }
 
@@ -1437,7 +1540,15 @@ function recursiveSanitize(
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap, redactCompoundKeys);
+  return sanitizePlainObject(
+    obj,
+    depth,
+    maxDepth,
+    sanitizeUrls,
+    isEnvMap,
+    redactCompoundKeys,
+    redactCredentialValues,
+  );
 }
 
 /**

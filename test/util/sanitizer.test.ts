@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getCredentialFieldKind,
   isSecretEnvVarName,
   looksLikeSecret,
   preserveTracingCredentialReferences,
@@ -438,6 +439,75 @@ describe('isSecretEnvVarName', () => {
     'cacheKey',
   ])('leaves %s alone', (name) => {
     expect(isSecretEnvVarName(name)).toBe(false);
+  });
+});
+
+describe('getCredentialFieldKind', () => {
+  it.each([
+    'databasePassword',
+    'db_password',
+    'DB-PASSWORD',
+    'userApiKey',
+    'x-upstream-token',
+    'oauthClientSecret',
+    'dbPwd',
+    'userCredential',
+    'includeCredentials',
+  ])('takes %s for a credential', (name) => {
+    expect(getCredentialFieldKind(name)).toBe('credential');
+  });
+
+  it.each([
+    // Plurals.
+    'clientSecrets',
+    'databasePasswords',
+    'userApiKeys',
+    'accessTokens',
+    'ACCESS_TOKENS',
+    'apiKeysByTenant',
+    'tokens',
+    'inputTokens',
+    // A credential word with a qualifier after it.
+    'apiKeyForTenant',
+    'tenantClientSecret2Value',
+    'tokenValue',
+    'tokenCount',
+    'passwordHash',
+    'secret_name',
+  ])('takes %s for a name related to a credential', (name) => {
+    expect(getCredentialFieldKind(name)).toBe('related');
+  });
+
+  it.each([
+    // Cursors and special tokens.
+    'pageToken',
+    'page_tokens',
+    'nextPageToken',
+    'continuationToken',
+    'resumeToken',
+    'cursorToken',
+    'nextToken',
+    'stopToken',
+    'maxTokens',
+    'max_tokens',
+    // Settings.
+    'tokenType',
+    'secretVersion',
+    'passwordEnabled',
+    // Ordinary names.
+    'key',
+    'keys',
+    'sortKey',
+    'publicKey',
+    'author',
+    'tokenizer',
+    'passwordless',
+    'session_name',
+    'auth_mode',
+    'access',
+    'status',
+  ])('does not take %s for a credential', (name) => {
+    expect(getCredentialFieldKind(name)).toBeUndefined();
   });
 });
 
