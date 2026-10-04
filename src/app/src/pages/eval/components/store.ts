@@ -210,8 +210,23 @@ interface FetchEvalOptions {
   filterMode?: EvalResultsFilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
+  /**
+   * Marks a background refresh, such as a socket update while an eval is running. It does
+   * not show the loading state, and it reloads the view the table last asked for instead
+   * of the view described by these options.
+   */
   skipLoadingState?: boolean;
   filters?: ResultsFilter[];
+}
+
+/** The page of results a table request asks the server for. */
+interface TableView {
+  evalId: string;
+  pageIndex: number;
+  pageSize: number;
+  filterMode: EvalResultsFilterMode;
+  searchText: string;
+  filters: ResultsFilter[];
 }
 
 interface ColumnState {
@@ -303,6 +318,10 @@ interface TableState {
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+  /** The foreground table request that turned `isFetching` on, until a response settles it. */
+  loadingRequestId: number | null;
+  /** The view of the last foreground table request, which background refreshes reload. */
+  lastTableView: TableView | null;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
 
@@ -631,26 +650,48 @@ export const useTableStore = create<TableState>()(
     userRatedResultsCount: 0,
 
     isFetching: false,
+    loadingRequestId: null,
+    lastTableView: null,
     isStreaming: false,
     setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
 
     shouldHighlightSearchText: false,
 
     fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
-      const {
-        pageIndex = 0,
-        pageSize = 50,
-        // Default to current store value to keep initial load consistent with UI state
-        filterMode = get().filterMode,
-        searchText = '',
-        skipSettingEvalId = false,
-        skipLoadingState = false,
-        filters = [],
-      } = options;
+      const { skipSettingEvalId = false, skipLoadingState = false } = options;
+
+      // A background refresh must not change what the table shows. It supersedes the
+      // request the table has in flight, so it reloads that request's view: the same page,
+      // filters and search. Otherwise a socket update would put page one, unfiltered, under
+      // controls that still show the user's page and search.
+      const lastView = get().lastTableView;
+      const view: TableView =
+        skipLoadingState && lastView?.evalId === id
+          ? lastView
+          : {
+              evalId: id,
+              pageIndex: options.pageIndex ?? 0,
+              pageSize: options.pageSize ?? 50,
+              // Default to current store value to keep initial load consistent with UI state
+              filterMode: options.filterMode ?? get().filterMode,
+              searchText: options.searchText ?? '',
+              filters: options.filters ?? [],
+            };
+      const { pageIndex, pageSize, filterMode, searchText, filters } = view;
 
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
       const requestId = ++latestTableRequestId;
       const isLatestRequest = () => requestId === latestTableRequestId;
+      // The loading state belongs to the foreground request that turned it on. When this
+      // request is applied or fails as the latest one, any such request at or before it is
+      // settled, including one a background refresh superseded, whose own response is
+      // discarded and could never turn the loading state off.
+      const settleLoading = () => {
+        const { loadingRequestId } = get();
+        return loadingRequestId !== null && loadingRequestId <= requestId
+          ? { isFetching: false, loadingRequestId: null }
+          : {};
+      };
 
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();
@@ -659,7 +700,9 @@ export const useTableStore = create<TableState>()(
       }
 
       set({
-        isFetching: skipLoadingState ? get().isFetching : true,
+        ...(skipLoadingState
+          ? {}
+          : { isFetching: true, loadingRequestId: requestId, lastTableView: view }),
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
@@ -732,7 +775,7 @@ export const useTableStore = create<TableState>()(
             version: data.version,
             author: data.author,
             evalId: skipSettingEvalId ? get().evalId : id,
-            isFetching: skipLoadingState ? prevState.isFetching : false,
+            ...settleLoading(),
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
@@ -754,8 +797,8 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
-        if (!skipLoadingState && isLatestRequest()) {
-          set({ isFetching: false });
+        if (isLatestRequest()) {
+          set(settleLoading());
         }
         return null;
       } catch (error) {
@@ -764,7 +807,7 @@ export const useTableStore = create<TableState>()(
           return null;
         }
         set({
-          isFetching: skipLoadingState ? get().isFetching : false,
+          ...settleLoading(),
           isStreaming: false,
           metadataKeysLoading: false,
           currentMetadataKeysRequest: null,

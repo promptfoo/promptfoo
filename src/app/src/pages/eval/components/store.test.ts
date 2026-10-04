@@ -1166,6 +1166,156 @@ describe('useTableStore', () => {
       await expect(stale).resolves.toMatchObject({ filteredCount: 1 });
     });
 
+    describe('background refreshes that overlap table requests', () => {
+      const mockEvalId = 'background-refresh-eval';
+      const tableWith = (output: string) => ({
+        table: { head: { prompts: [] }, body: [{ outputs: [{ text: output }], vars: [] }] },
+        totalCount: 120,
+        filteredCount: 120,
+      });
+      type Pending = { url: URL; respond: (body: unknown, ok?: boolean) => void };
+
+      function deferRequests(): Pending[] {
+        const pending: Pending[] = [];
+        vi.mocked(callApi).mockImplementation(
+          (url: string) =>
+            new Promise((resolve) => {
+              pending.push({
+                url: new URL(url, 'http://localhost'),
+                respond: (body, ok = true) => resolve({ ok, json: async () => body } as any),
+              });
+            }),
+        );
+        return pending;
+      }
+
+      it.each([
+        ['succeeds', true],
+        ['fails', false],
+      ])(
+        'turns off the loading state of the table request it supersedes when it %s',
+        async (_name, ok) => {
+          const pending = deferRequests();
+          let foreground!: Promise<unknown>;
+          let background!: Promise<unknown>;
+          await act(async () => {
+            foreground = useTableStore.getState().fetchEvalData(mockEvalId, { pageIndex: 1 });
+            background = useTableStore
+              .getState()
+              .fetchEvalData(mockEvalId, { skipLoadingState: true });
+          });
+          expect(useTableStore.getState().isFetching).toBe(true);
+
+          await act(async () => {
+            pending[1].respond(tableWith('refreshed'), ok);
+            await background;
+          });
+
+          // The table request's own response is now stale and will not be applied, so only
+          // the refresh can end the loading state.
+          expect(useTableStore.getState().isFetching).toBe(false);
+
+          await act(async () => {
+            pending[0].respond(tableWith('stale'));
+            await foreground;
+          });
+          expect(useTableStore.getState().isFetching).toBe(false);
+          expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe(
+            ok ? 'refreshed' : undefined,
+          );
+        },
+      );
+
+      it('keeps loading while a table request issued after the refresh is still in flight', async () => {
+        const pending = deferRequests();
+        let background!: Promise<unknown>;
+        let foreground!: Promise<unknown>;
+        await act(async () => {
+          background = useTableStore
+            .getState()
+            .fetchEvalData(mockEvalId, { skipLoadingState: true });
+          foreground = useTableStore.getState().fetchEvalData(mockEvalId, { searchText: 'four' });
+        });
+
+        await act(async () => {
+          pending[0].respond(tableWith('refreshed'));
+          await background;
+        });
+        expect(useTableStore.getState().isFetching).toBe(true);
+        expect(useTableStore.getState().table).toBeNull();
+
+        await act(async () => {
+          pending[1].respond(tableWith('matches the search'));
+          await foreground;
+        });
+        expect(useTableStore.getState().isFetching).toBe(false);
+        expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe('matches the search');
+      });
+
+      it('reloads the page, search and filters the table last asked for', async () => {
+        const filter: ResultsFilter = {
+          id: 'metric-filter',
+          type: 'metric',
+          operator: 'equals',
+          value: 'accuracy',
+          logicOperator: 'and',
+          sortIndex: 0,
+        };
+        const pending = deferRequests();
+        await act(async () => {
+          const foreground = useTableStore.getState().fetchEvalData(mockEvalId, {
+            pageIndex: 2,
+            pageSize: 25,
+            filterMode: 'failures',
+            searchText: 'four',
+            filters: [filter],
+          });
+          pending[0].respond(tableWith('page three'));
+          await foreground;
+        });
+
+        // A socket update describes none of this: it asks for the first page, unfiltered.
+        await act(async () => {
+          const background = useTableStore
+            .getState()
+            .fetchEvalData(mockEvalId, { skipLoadingState: true, filterMode: 'all' });
+          pending[1].respond(tableWith('page three, refreshed'));
+          await background;
+        });
+
+        expect(pending[1].url.search).toBe(pending[0].url.search);
+        expect(Object.fromEntries(pending[1].url.searchParams)).toMatchObject({
+          offset: '50',
+          limit: '25',
+          filterMode: 'failures',
+          search: 'four',
+        });
+        expect(useTableStore.getState().shouldHighlightSearchText).toBe(true);
+      });
+
+      it('uses its own options when the table has not asked for this eval', async () => {
+        const pending = deferRequests();
+        await act(async () => {
+          const foreground = useTableStore
+            .getState()
+            .fetchEvalData('another-eval', { pageIndex: 3, searchText: 'four' });
+          pending[0].respond(tableWith('another eval'));
+          await foreground;
+          const background = useTableStore
+            .getState()
+            .fetchEvalData(mockEvalId, { skipLoadingState: true, filterMode: 'errors' });
+          pending[1].respond(tableWith('first page'));
+          await background;
+        });
+
+        expect(Object.fromEntries(pending[1].url.searchParams)).toEqual({
+          offset: '0',
+          limit: '50',
+          filterMode: 'errors',
+        });
+      });
+    });
+
     it('should properly handle filters with special characters in their values when building the API request URL', async () => {
       const evalId = 'test-eval-id';
       const filterValue = 'test value with !@#$%^&*()_+=-`~[]\{}|;\':",./<>? special characters';
