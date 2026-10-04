@@ -256,7 +256,12 @@ function isCompoundSecretObjectField(name: string, value: unknown): boolean {
   const normalized = normalizeFieldName(name);
   const textValue =
     typeof value === 'string' || typeof value === 'boolean' ? String(value) : undefined;
-  if (isBooleanCredentialControl(name, textValue)) {
+  if (
+    isBooleanCredentialControl(name, textValue) ||
+    // MCP presence/capability flags are data. String values with the same names
+    // can still carry credentials; URL/form parameter policy stays unchanged.
+    (typeof value === 'boolean' && /^(?:has|is|needs|supports)/.test(normalized))
+  ) {
     return false;
   }
   // Preserve the existing value-bearing aliases and numeric versions, including

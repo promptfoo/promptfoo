@@ -194,6 +194,37 @@ describe('sanitizeMcpToolData', () => {
     ).toEqual({ tokenUsage: { input: 4, output: 9, databasePassword: '[REDACTED]' } });
   });
 
+  it.each(['hasCredentials', 'isSecret', 'requiresCredentials', 'needsPassword', 'supportsApiKey'])(
+    'preserves typed boolean %s while protecting same-name credentials',
+    (name) => {
+      for (const value of [true, false, 'credential-fixture']) {
+        const fields = { [name]: value, password: false, apiKey: true };
+        const expected = {
+          [name]: typeof value === 'boolean' ? value : '[REDACTED]',
+          password: '[REDACTED]',
+          apiKey: '[REDACTED]',
+        };
+        expect(sanitizeMcpToolData({ nested: fields })).toEqual({ nested: expected });
+        expect(sanitizeMcpToolData({ json: JSON.stringify(fields) })).toEqual({
+          json: JSON.stringify(expected),
+        });
+        expect(
+          sanitizeMcpToolData({
+            callbackUrl: `data=${encodeURIComponent(JSON.stringify(fields))}`,
+          }),
+        ).toEqual({ callbackUrl: `data=${encodeURIComponent(JSON.stringify(expected))}` });
+        expect(fields).toEqual({ [name]: value, password: false, apiKey: true });
+      }
+    },
+  );
+
+  it.each(['hasCredentials', 'isSecret', 'needsPassword', 'supportsApiKey'])(
+    'does not extend typed boolean %s handling to string values',
+    (name) => {
+      expect(sanitizeMcpToolData({ [name]: 'true' })).toEqual({ [name]: '[REDACTED]' });
+    },
+  );
+
   it('walks nested form-valued URL fields once while preserving their public data', () => {
     let args = { password: 'fixture', value: 1 } as Record<string, unknown>;
     let expected = { password: '[REDACTED]', value: 1 } as Record<string, unknown>;
