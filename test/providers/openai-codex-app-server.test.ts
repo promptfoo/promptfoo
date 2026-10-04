@@ -1,4 +1,7 @@
 import { EventEmitter } from 'events';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { PassThrough } from 'stream';
 
 import { trace } from '@opentelemetry/api';
@@ -205,6 +208,20 @@ describe('OpenAICodexAppServerProvider', () => {
     expect((provider as any).getAttributesForItem(item)).toMatchObject({
       'gen_ai.operation.name': 'execute_tool',
       'gen_ai.tool.name': expectedToolName,
+    });
+  });
+
+  it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
+    const provider = new OpenAICodexAppServerProvider({ config: {} });
+    cliState.withEnvFileOverrides({ PATH: 'file-path', PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () => {
+      const env = (provider as any).prepareEnvironment({ inherit_process_env: inheritProcessEnv });
+      expect(env.PATH).toBe('file-path');
+      expect(env.PROMPTFOO_REVIEW_ENV_PROBE).toBe(inheritProcessEnv ? 'file' : undefined);
+      const explicit = (provider as any).prepareEnvironment({
+        inherit_process_env: inheritProcessEnv,
+        cli_env: { PROMPTFOO_REVIEW_ENV_PROBE: 'explicit' },
+      });
+      expect(explicit.PROMPTFOO_REVIEW_ENV_PROBE).toBe('explicit');
     });
   });
 
@@ -567,6 +584,302 @@ describe('OpenAICodexAppServerProvider', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
       }),
     );
+  });
+
+  describe('on Windows', () => {
+    const originalPlatform = process.platform;
+    let npmBinDir: string;
+    let entrypoint: string;
+    let restoreEnvironment: () => void;
+
+    beforeEach(() => {
+      restoreEnvironment = mockProcessEnv(
+        Object.fromEntries(
+          Object.keys(process.env)
+            .filter((key) =>
+              ['PATH', 'NODEFAULTCURRENTDIRECTORYINEXEPATH'].includes(key.toUpperCase()),
+            )
+            .map((key) => [key, undefined]),
+        ),
+      );
+      npmBinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo codex & npm-'));
+      entrypoint = path.join(npmBinDir, 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
+      fs.mkdirSync(path.dirname(entrypoint), { recursive: true });
+      fs.writeFileSync(entrypoint, '');
+      fs.writeFileSync(path.join(npmBinDir, 'codex.cmd'), '');
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    });
+
+    afterEach(() => {
+      restoreEnvironment();
+      Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+      fs.rmSync(npmBinDir, { recursive: true, force: true });
+    });
+
+    async function getSpawnCall(config: Record<string, unknown>) {
+      mocks.spawn.mockImplementation(() => {
+        throw new Error('spawn stub');
+      });
+      await new OpenAICodexAppServerProvider({ config }).callApi('Hello');
+      return mocks.spawn.mock.calls[0];
+    }
+
+    it.each(['global', '.bin', '.BIN'])(
+      'runs a %s npm installation with Node',
+      async (directory) => {
+        const binDirectory =
+          directory === 'global' ? npmBinDir : path.join(npmBinDir, 'node_modules', directory);
+        fs.mkdirSync(binDirectory, { recursive: true });
+        fs.writeFileSync(path.join(binDirectory, 'codex.cmd'), '');
+
+        const [command, args, options] = await getSpawnCall({ cli_env: { PATH: binDirectory } });
+
+        expect(command).toBe(process.execPath);
+        expect(args).toEqual([entrypoint, 'app-server', '--listen', 'stdio://']);
+        expect(options).toEqual({
+          env: expect.objectContaining({ PATH: binDirectory }),
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+      },
+    );
+
+    it('discovers npm through an inherited mixed-case PATH name', async () => {
+      mockProcessEnv({ PaTh: npmBinDir });
+
+      const [command, args] = await getSpawnCall({ inherit_process_env: true });
+
+      expect(command).toBe(process.execPath);
+      expect(args[0]).toBe(entrypoint);
+    });
+
+    it.each([
+      ['PATH', 'PaTh'],
+      ['PaTh', 'Path'],
+    ])('uses %s before %s when child PATH keys conflict', async (firstKey, laterKey) => {
+      const nativeBinDir = path.join(npmBinDir, 'native');
+      fs.mkdirSync(nativeBinDir);
+      fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+
+      const [command, args] = await getSpawnCall({
+        cli_env: { [laterKey]: nativeBinDir, [firstKey]: npmBinDir },
+      });
+
+      expect(command).toBe(process.execPath);
+      expect(args[0]).toBe(entrypoint);
+    });
+
+    it('falls back to parent PATH when a file env leaves child PATH absent', async () => {
+      mockProcessEnv({ PaTh: npmBinDir });
+
+      const [command, args, options] = await cliState.withEnvFileOverrides(
+        { PATH: undefined },
+        () => getSpawnCall({}),
+      );
+
+      expect(Object.keys(options.env).some((key) => key.toUpperCase() === 'PATH')).toBe(false);
+      expect(command).toBe(process.execPath);
+      expect(args[0]).toBe(entrypoint);
+    });
+
+    it('preserves an explicitly empty child PATH instead of using parent PATH', async () => {
+      mockProcessEnv({ PaTh: npmBinDir });
+
+      const [command] = await getSpawnCall({ cli_env: { PATH: '' } });
+
+      expect(command).toBe('codex');
+    });
+
+    it('passes shell metacharacters literally to Node without a shell', async () => {
+      const value = 'spaces & | < > ^ %PATH% "quotes"';
+      const [command, args, options] = await getSpawnCall({
+        cli_env: { PATH: npmBinDir },
+        cli_config: { model: value },
+      });
+
+      expect(command).toBe(process.execPath);
+      expect(args).toEqual([
+        entrypoint,
+        'app-server',
+        '--listen',
+        'stdio://',
+        '-c',
+        `model=${JSON.stringify(value)}`,
+      ]);
+      expect(options.shell).toBeUndefined();
+    });
+
+    it.each([
+      ['a bare Codex command', () => 'codex'],
+      ['a bare Codex shim', () => 'codex.cmd'],
+      ['a custom Codex wrapper', () => path.join(npmBinDir, 'codex.cmd')],
+      ['a bare interpreter command', () => 'interpreter'],
+      ['an interpreter wrapper', () => path.join(npmBinDir, 'interpreter.cmd')],
+      ['a native executable', () => path.join(npmBinDir, 'codex.exe')],
+    ])('preserves %s supplied as an explicit override', async (_label, getCommand) => {
+      // A custom wrapper can set environment variables before launching its adjacent npm package.
+      fs.writeFileSync(path.join(npmBinDir, 'codex.cmd'), '@set CUSTOM_CODEX_ENV=enabled');
+      const command = getCommand();
+
+      const [spawnCommand, args] = await getSpawnCall({
+        codex_path_override: command,
+        cli_env: { PATH: npmBinDir },
+      });
+
+      expect(spawnCommand).toBe(command);
+      expect(args).toEqual(['app-server', '--listen', 'stdio://']);
+    });
+
+    it('preserves the command when the npm entrypoint is missing', async () => {
+      fs.unlinkSync(entrypoint);
+
+      const [command] = await getSpawnCall({ cli_env: { PATH: npmBinDir } });
+
+      expect(command).toBe('codex');
+    });
+
+    it.each([
+      ['cwd', 'codex.exe'],
+      ['cwd', 'codex.com'],
+      ['earlier PATH', 'codex.exe'],
+      ['later PATH', 'codex.exe'],
+      ['relative PATH', 'codex.exe'],
+      ['quoted PATH', 'codex.exe'],
+    ])('preserves a native %s %s ahead of npm discovery', async (location, executable) => {
+      const cwd = process.cwd();
+      const nativeBinDir = path.join(npmBinDir, 'native');
+      fs.mkdirSync(nativeBinDir);
+      fs.writeFileSync(path.join(nativeBinDir, executable), '');
+      let searchPath = npmBinDir;
+      if (location === 'cwd') {
+        process.chdir(nativeBinDir);
+      } else {
+        if (location === 'relative PATH') {
+          process.chdir(npmBinDir);
+        }
+        const nativePath =
+          location === 'relative PATH'
+            ? 'native'
+            : location === 'quoted PATH'
+              ? `"${nativeBinDir}"`
+              : nativeBinDir;
+        searchPath =
+          location === 'earlier PATH'
+            ? [nativePath, npmBinDir].join(path.delimiter)
+            : [npmBinDir, nativePath].join(path.delimiter);
+      }
+      try {
+        const [command, args] = await getSpawnCall({
+          working_dir: cwd,
+          cli_env: { PATH: searchPath },
+        });
+
+        expect(command).toBe('codex');
+        expect(args).toEqual(['app-server', '--listen', 'stdio://']);
+      } finally {
+        process.chdir(cwd);
+      }
+    });
+
+    it.each([
+      ['NoDefaultCurrentDirectoryInExePath', ''],
+      ['NoDefaultCurrentDirectoryInExePath', '0'],
+      ['nodefaultcurrentdirectoryinexepath', '0'],
+    ])('honors the parent cwd opt-out %s=%j', async (key, value) => {
+      mockProcessEnv({ [key]: value });
+      const cwd = process.cwd();
+      const nativeBinDir = path.join(npmBinDir, 'native');
+      fs.mkdirSync(nativeBinDir);
+      fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+      process.chdir(nativeBinDir);
+      try {
+        const [command, args] = await getSpawnCall({
+          working_dir: cwd,
+          // Unquoted empty PATH entries must not reintroduce cwd searching.
+          cli_env: { PATH: `${path.delimiter}${npmBinDir}${path.delimiter}${path.delimiter}` },
+        });
+
+        expect(command).toBe(process.execPath);
+        expect(args[0]).toBe(entrypoint);
+      } finally {
+        process.chdir(cwd);
+      }
+    });
+
+    it.each(['.', '""', "''", 'drive-relative'])(
+      'preserves native cwd lookup explicitly requested by PATH entry %s',
+      async (directory) => {
+        mockProcessEnv({ NoDefaultCurrentDirectoryInExePath: '1' });
+        const cwd = process.cwd();
+        const nativeBinDir = path.join(npmBinDir, 'native');
+        fs.mkdirSync(nativeBinDir);
+        fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+        process.chdir(nativeBinDir);
+        try {
+          const pathEntry =
+            directory === 'drive-relative'
+              ? (path.parse(nativeBinDir).root.match(/^[a-z]:/i)?.[0] ?? '.')
+              : directory;
+          const [command] = await getSpawnCall({
+            working_dir: cwd,
+            cli_env: { PATH: [pathEntry, npmBinDir].join(path.delimiter) },
+          });
+
+          expect(command).toBe('codex');
+        } finally {
+          process.chdir(cwd);
+        }
+      },
+    );
+
+    it('does not use a child-only cwd opt-out to change parent executable lookup', async () => {
+      const cwd = process.cwd();
+      const nativeBinDir = path.join(npmBinDir, 'native');
+      fs.mkdirSync(nativeBinDir);
+      fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+      process.chdir(nativeBinDir);
+      try {
+        const [command, , options] = await getSpawnCall({
+          working_dir: cwd,
+          cli_env: { PATH: npmBinDir, NoDefaultCurrentDirectoryInExePath: '1' },
+        });
+
+        expect(command).toBe('codex');
+        expect(options.env.NoDefaultCurrentDirectoryInExePath).toBe('1');
+      } finally {
+        process.chdir(cwd);
+      }
+    });
+
+    it.each([
+      ['"', `native${path.delimiter}directory`],
+      ["'", `native${path.delimiter}directory`],
+      ["'", "O'Brien"],
+    ])(
+      'preserves native binaries in PATH entries quoted with %s and named %s',
+      async (quote, directory) => {
+        const nativeBinDir = path.join(npmBinDir, directory);
+        fs.mkdirSync(nativeBinDir);
+        fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+
+        const [command] = await getSpawnCall({
+          cli_env: { PATH: `${quote}${nativeBinDir}${quote}${path.delimiter}${npmBinDir}` },
+        });
+
+        expect(command).toBe('codex');
+      },
+    );
+
+    it('ignores relative PATH entries that would discover npm in the cwd', async () => {
+      const cwd = process.cwd();
+      process.chdir(npmBinDir);
+      try {
+        const [command] = await getSpawnCall({ working_dir: cwd, cli_env: { PATH: '.' } });
+
+        expect(command).toBe('codex');
+      } finally {
+        process.chdir(cwd);
+      }
+    });
   });
 
   it('emits a protocol turn span with nested usage when no turn/started notification arrives', async () => {
@@ -4983,7 +5296,7 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'command_execution',
-          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
+          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=%5BREDACTED%5D',
           exit_code: 0,
         }),
         expect.objectContaining({
