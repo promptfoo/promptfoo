@@ -22,14 +22,25 @@ import type { EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/ind
 const dbMocks = vi.hoisted(() => {
   const errorRows: Array<{ id: string }> = [];
   const affectedEvalRows: Array<{ evalId: string }> = [];
+  // The captured errors whose cell got no other result. Every other one was retried.
+  const notRetried: string[] = [];
   const errorRowsAll = vi.fn(async () => errorRows);
+  // The results of the eval once the retry has run.
+  const resultRowsAll = vi.fn(async () =>
+    errorRows.flatMap(({ id }, testIdx) => [
+      { id, testIdx, promptIdx: 0, provider: 'echo' },
+      ...(notRetried.includes(id)
+        ? []
+        : [{ id: `${id}-retried`, testIdx, promptIdx: 0, provider: 'echo' }]),
+    ]),
+  );
   const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
   const deleteRun = vi.fn(async () => undefined);
   const db = {
-    select: vi.fn(() => ({
+    select: vi.fn((fields: Record<string, unknown>) => ({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
-          all: errorRowsAll,
+          all: 'testIdx' in fields ? resultRowsAll : errorRowsAll,
         })),
       })),
     })),
@@ -52,6 +63,7 @@ const dbMocks = vi.hoisted(() => {
     db,
     deleteRun,
     errorRows,
+    notRetried,
   };
 });
 
@@ -116,6 +128,7 @@ describe('retryCommand', () => {
     vi.resetAllMocks();
     dbMocks.errorRows.splice(0);
     dbMocks.affectedEvalRows.splice(0);
+    dbMocks.notRetried.splice(0);
     cliState.resume = false;
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
@@ -127,6 +140,7 @@ describe('retryCommand', () => {
     vi.resetAllMocks();
     dbMocks.errorRows.splice(0);
     dbMocks.affectedEvalRows.splice(0);
+    dbMocks.notRetried.splice(0);
     cliState.resume = false;
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
@@ -740,6 +754,54 @@ describe('retryCommand', () => {
       'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
       expect.objectContaining({ outputPaths: ['results.jsonl'] }),
     );
+  });
+
+  it('keeps the errors whose cell did not run again', async () => {
+    const originalEval = createEval();
+    const retriedEval = createEval();
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' }, { id: 'error-result-2' });
+    dbMocks.notRetried.push('error-result-2');
+    mockResolvedConfig();
+    vi.mocked(evaluate).mockResolvedValue(retriedEval);
+
+    await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
+
+    expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Kept 1 ERROR result without a retried result: the test, prompt or provider did not run again.',
+    );
+  });
+
+  it('deletes nothing when the retry replaced no error', async () => {
+    const originalEval = createEval();
+    const retriedEval = createEval();
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' }, { id: 'error-result-2' });
+    dbMocks.notRetried.push('error-result-1', 'error-result-2');
+    mockResolvedConfig();
+    vi.mocked(evaluate).mockResolvedValue(retriedEval);
+
+    await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
+
+    expect(dbMocks.db.delete).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Kept 2 ERROR results without a retried result: the test, prompt or provider did not run again.',
+    );
+  });
+
+  it('says nothing about kept errors when every one was replaced', async () => {
+    const originalEval = createEval();
+    const retriedEval = createEval();
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    vi.mocked(evaluate).mockResolvedValue(retriedEval);
+
+    await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
+
+    expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('keeps a successful retry when post-retry cleanup fails', async () => {

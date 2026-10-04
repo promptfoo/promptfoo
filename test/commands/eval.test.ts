@@ -33,8 +33,10 @@ import {
 } from '../../src/node/doEval';
 import {
   deleteErrorResults,
+  findReplacedErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
+  warnAboutKeptErrorResults,
 } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
@@ -72,8 +74,10 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
 vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
+  findReplacedErrorResults: vi.fn(),
   getErrorResultIds: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
+  warnAboutKeptErrorResults: vi.fn(),
 }));
 vi.mock('../../src/providers');
 vi.mock('../../src/redteam/shared', async (importOriginal) => {
@@ -207,6 +211,11 @@ describe('evalCommand', () => {
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
     vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
+    // Every captured error was retried, unless a test says otherwise.
+    vi.mocked(findReplacedErrorResults).mockImplementation(async (_evalId, errorResultIds) => ({
+      replaced: errorResultIds,
+      kept: [],
+    }));
     vi.mocked(getErrorResultIds).mockResolvedValue([]);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
   });
@@ -2218,6 +2227,52 @@ describe('evalCommand', () => {
 
       expect(result).toBe(latestEval);
       expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      latestSpy.mockRestore();
+    }
+  });
+
+  it('should only delete the error results that the retry replaced', async () => {
+    const column = { raw: 'retry prompt', label: 'Retry', config: {} };
+    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+    latestEval.prompts = [
+      { ...column, provider: 'first-target' },
+      { ...column, provider: 'second-target' },
+    ];
+    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
+    vi.mocked(findReplacedErrorResults).mockResolvedValueOnce({
+      replaced: ['result-2'],
+      kept: ['result-1'],
+    });
+    // The first provider of the saved eval no longer resolves.
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [{ id: () => 'echo', label: 'second-target', callApi: vi.fn() } as ApiProvider],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      // The evaluator gives the eval record the columns of this run.
+      const retried = evalRecord as Eval;
+      retried.prompts = [{ ...column, provider: 'second-target' }];
+      return retried;
+    });
+
+    try {
+      await doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {});
+
+      // The columns are the ones the eval had before the retry.
+      expect(findReplacedErrorResults).toHaveBeenCalledWith(
+        latestEval.id,
+        ['result-1', 'result-2'],
+        ['first-target', 'second-target'],
+      );
+      expect(deleteErrorResults).toHaveBeenCalledWith(['result-2']);
+      expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
+      expect(warnAboutKeptErrorResults).toHaveBeenCalledWith(['result-1']);
     } finally {
       latestSpy.mockRestore();
     }

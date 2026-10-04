@@ -61,7 +61,13 @@ import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import {
+  deleteErrorResults,
+  findReplacedErrorResults,
+  getErrorResultIds,
+  recalculatePromptMetrics,
+  warnAboutKeptErrorResults,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -680,6 +686,7 @@ async function doEvalWithEnv(
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
     let resumeEval: Eval | undefined;
     let retryErrorResultIds: string[] | undefined;
+    let retryErrorColumnProviders: string[] | undefined;
     const resumeId =
       resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
     if (resumeRaw) {
@@ -735,6 +742,11 @@ async function doEvalWithEnv(
         logger.info('✅ No ERROR results found in the latest evaluation');
         return latestEval;
       }
+
+      // The evaluator replaces the columns of the eval record, so they are noted before it runs.
+      retryErrorColumnProviders = Array.isArray(latestEval.prompts)
+        ? latestEval.prompts.map((prompt) => prompt.provider)
+        : [];
 
       logger.info(`Found ${retryErrorResultIds.length} ERROR results to retry`);
 
@@ -1194,11 +1206,17 @@ async function doEvalWithEnv(
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
         try {
-          await deleteErrorResults(errorResultIds);
-          await recalculatePromptMetrics(ret);
-          logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+          // Only an error that another result has replaced is removed. A cell that did not
+          // run again, for example because its provider no longer resolves, keeps its error.
+          const { replaced, kept } = await findReplacedErrorResults(
+            ret.id,
+            errorResultIds,
+            retryErrorColumnProviders,
           );
+          await deleteErrorResults(replaced);
+          await recalculatePromptMetrics(ret);
+          logger.debug(`Cleaned up ${replaced.length} old ERROR results after successful retry`);
+          warnAboutKeptErrorResults(kept);
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded
           logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
