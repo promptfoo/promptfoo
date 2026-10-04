@@ -426,6 +426,42 @@ describe('Eval', () => {
     expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
   });
 
+  it('should show the table that a later request delivers after its own load failed', async () => {
+    const fetchEvalDataMock = vi.fn().mockResolvedValue(null);
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    const { container, queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(queryByText('404 Eval not found')).toBeInTheDocument();
+
+    // A search or display request that was still in flight fills the store afterwards.
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      table: { ...mockTable },
+      fetchEvalData: fetchEvalDataMock,
+    });
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="test-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+    });
+
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="results-view"]')).toBeInTheDocument();
+  });
+
   it('should correctly display the most recent eval data when rapidly switching between fetchIds', async () => {
     const fetchEvalDataMock = vi.fn();
     vi.mocked(useTableStore).mockReturnValue({

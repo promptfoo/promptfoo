@@ -537,6 +537,16 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
   }, [table, loaded]);
 
+  /**
+   * A failed load is not the last word while a request issued after it is still in flight.
+   * When that one puts a table in the store, the page shows it instead of the error.
+   */
+  useEffect(() => {
+    if (table) {
+      setFailed(false);
+    }
+  }, [table]);
+
   // ================================
   // Rendering
   // ================================
