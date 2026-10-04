@@ -922,6 +922,10 @@ describe('MCPClient', () => {
           'record.key': 'field-name',
           tokenCount: 12,
           credentialsRequired: false,
+          authHeaders: {
+            'User-Agent': '{"databasePassword":"header-fixture","page":2}',
+            Accept: 'https://example.test/?api_key=header-fixture',
+          },
           form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: 'encoded-fixture', tokenCount: 12 }))}`,
           callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: 'encoded-fixture', credentialsRequired: false }))}`,
           url: 'redirect=https://alice:fixture-password@example.test/path',
@@ -967,6 +971,10 @@ describe('MCPClient', () => {
                           clientSecrets: ['[REDACTED]', '[REDACTED]'],
                           apiKeysByTenant: { tenant: '[REDACTED]', count: '[REDACTED]' },
                           dbPassword: '[REDACTED]',
+                          authHeaders: {
+                            'User-Agent': '{"databasePassword":"[REDACTED]","page":2}',
+                            Accept: 'https://example.test/?api_key=%5BREDACTED%5D',
+                          },
                           form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: '[REDACTED]', tokenCount: 12 }))}`,
                           callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: '[REDACTED]', credentialsRequired: false }))}`,
                           url: '[REDACTED]',

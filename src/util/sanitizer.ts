@@ -1260,11 +1260,13 @@ function decodeFormComponent(component: string): string | undefined {
  * it and return the serialized result — but only if sanitization actually
  * changed something. Returns `null` when there is no JSON to sanitize or when
  * the value is JSON but contains no secrets (so callers can preserve the
- * original byte-for-byte).
+ * original byte-for-byte). URL-named MCP data can request canonical output even
+ * when unchanged, matching the generic JSON-string traversal it replaces.
  */
 function redactNestedJsonValue(
   decoded: string | undefined,
   compoundContext?: CompoundKeyContext,
+  preserveUnchanged = true,
 ): string | null {
   if (decoded === undefined) {
     return null;
@@ -1298,7 +1300,9 @@ function redactNestedJsonValue(
   }
   const originalSerialized = JSON.stringify(parsed);
   const sanitizedSerialized = JSON.stringify(sanitized);
-  return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
+  return preserveUnchanged && sanitizedSerialized === originalSerialized
+    ? null
+    : sanitizedSerialized;
 }
 
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
@@ -1449,7 +1453,9 @@ function sanitizePlainObject(
               !isTracingCredentialHeader(name, item) &&
               (isNonCredentialHeader(name) ||
                 SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()))))
-            ? item
+            ? redactCompoundKeys && normalizeFieldName(key) === 'authheaders'
+              ? recursiveSanitize(item, depth + 2, maxDepth, sanitizeUrls, false, true)
+              : item
             : REDACTED,
         ]);
       }
@@ -1497,13 +1503,15 @@ function sanitizePlainObject(
     } else if (
       compoundContext &&
       typeof value === 'string' &&
-      looksLikeUrlEncodedFormData(value) &&
       (key.toLowerCase() === 'url' ||
         (sanitizeUrls && /(?:url|uri|host|endpoint|proxy)$/i.test(key)))
     ) {
-      // The URL path owns this form's decoded JSON traversal. Running the generic
-      // recursive pass first would visit every nested form twice at each level.
-      sanitized[key] = sanitizeUrlWithContext(value, compoundContext);
+      // Own JSON/form traversal once for MCP URL fields. A generic recursive pass
+      // followed by URL sanitization would revisit every nested payload. Direct
+      // JSON strings keep the generic string path's canonical serialization.
+      sanitized[key] =
+        redactNestedJsonValue(value, compoundContext, false) ??
+        sanitizeUrlWithContext(value, compoundContext);
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.

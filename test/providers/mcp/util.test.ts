@@ -14,6 +14,7 @@ import {
   renderAuthVars,
   sanitizeMcpToolData,
 } from '../../../src/providers/mcp/util';
+import { sanitizeObject } from '../../../src/util/sanitizer';
 
 import type {
   MCPOAuthClientCredentialsAuth,
@@ -375,6 +376,83 @@ describe('sanitizeMcpToolData', () => {
       expected = { callbackUrl: `data=${encodeURIComponent(JSON.stringify(expected))}` };
     }
     expect(sanitizeMcpToolData(args)).toEqual(expected);
+  });
+
+  it.each(['callbackUrl', 'callbackUri', 'callbackHost', 'callbackEndpoint', 'callbackProxy'])(
+    'walks nested JSON-valued %s fields once',
+    (name) => {
+      let args: Record<string, unknown> = { databasePassword: 'fixture', value: 1 };
+      let expected: Record<string, unknown> = { databasePassword: '[REDACTED]', value: 1 };
+      for (let level = 0; level < 12; level++) {
+        args = { [name]: JSON.stringify(args) };
+        expected = { [name]: JSON.stringify(expected) };
+      }
+      const parse = vi.spyOn(JSON, 'parse');
+      let result: unknown;
+      let calls: number;
+      try {
+        result = sanitizeMcpToolData(args);
+        calls = parse.mock.calls.length;
+      } finally {
+        parse.mockRestore();
+      }
+      expect(result).toEqual(expected);
+      expect(calls).toBeLessThan(100);
+      expect(JSON.stringify(args)).toContain('fixture');
+    },
+  );
+
+  it.each([
+    [' \n{ "page": 2 }\t', '{"page":2}'],
+    [
+      '{ "page": "{{ page }}", "databasePassword": "fixture" }',
+      '{"page":"{{ page }}","databasePassword":"[REDACTED]"}',
+    ],
+    ['{"page":', '{"page":'],
+    ['ordinary relative path', 'ordinary relative path'],
+    ['/callback?api_key=fixture', '/callback?api_key=%5BREDACTED%5D'],
+    ['https://example.test/?page=2', 'https://example.test/?page=2'],
+    ['https://{{ host }}/?api_key=fixture', 'https://{{ host }}/?api_key=%5BREDACTED%5D'],
+    [
+      'az://account/container/data?sp=r&sig=fixture',
+      'az://account/container/data?sp=r&sig=%5BREDACTED%5D',
+    ],
+  ])('preserves URL-field parsing semantics for %s', (value, expected) => {
+    expect(sanitizeMcpToolData({ callbackUrl: value })).toEqual({ callbackUrl: expected });
+  });
+
+  it('sanitizes embedded credentials in allowed authHeaders values without changing generic headers', () => {
+    const authHeaders = {
+      'User-Agent': '{"databasePassword":"fixture","page":2}',
+      Accept: 'https://example.test/?api_key=fixture',
+      'Content-Type': 'data=%7B%22dbPassword%22%3A%22fixture%22%7D',
+      'X-Tenant-Id': 'tenant-1',
+      Authorization: '{{ env.API_TOKEN }}',
+    };
+    const args = { one: { two: { three: { four: { five: { authHeaders } } } } } };
+    const original = structuredClone(args);
+    expect(sanitizeMcpToolData(args)).toEqual({
+      one: {
+        two: {
+          three: {
+            four: {
+              five: {
+                authHeaders: {
+                  ...authHeaders,
+                  'User-Agent': '{"databasePassword":"[REDACTED]","page":2}',
+                  Accept: 'https://example.test/?api_key=%5BREDACTED%5D',
+                  'Content-Type': 'data=%7B%22dbPassword%22%3A%22%5BREDACTED%5D%22%7D',
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(args).toEqual(original);
+    expect(sanitizeObject({ headers: authHeaders }, { sanitizeUrls: true })).toEqual({
+      headers: authHeaders,
+    });
   });
 
   /** Arguments with `levels` nested objects and a secret in the innermost one. */
