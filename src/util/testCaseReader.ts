@@ -761,11 +761,43 @@ export async function readTests(
 }
 
 /**
+ * Prepares the file references in a row's vars for the evaluation.
+ *
+ * Only top-level strings and the members of top-level arrays are file references; strings
+ * nested inside objects are data and stay as written. Environment templates in a reference
+ * are rendered. With `pinTo`, a relative reference is made absolute from that directory;
+ * without it the reference keeps its authored, relative form.
+ */
+function prepareVarsFileReferences(vars: TestCase['vars'], pinTo?: string): TestCase['vars'] {
+  if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
+    return vars;
+  }
+  let changed = false;
+  const prepare = (value: unknown): unknown => {
+    if (typeof value !== 'string' || !value.startsWith('file://')) {
+      return value;
+    }
+    const reference = renderEnvOnlyInObject(value);
+    const prepared =
+      pinTo === undefined ? reference : `file://${path.resolve(pinTo, reference.slice(7))}`;
+    changed ||= prepared !== value;
+    return prepared;
+  };
+  const prepared = Object.fromEntries(
+    Object.entries(vars).map(([name, value]) => [
+      name,
+      Array.isArray(value) ? value.map(prepare) : prepare(value),
+    ]),
+  );
+  return changed ? (prepared as TestCase['vars']) : vars;
+}
+
+/**
  * Parse source files once and retain declarative rows for persistence and replay.
  *
  * `file://` vars are resolved from `suiteBasePath` when the evaluation runs. Rows read from
- * that same directory keep their references exactly as authored, so results, exports and
- * test identity do not depend on where the project is checked out. Rows read from another
+ * that same directory keep their references as authored, so results, exports and test
+ * identity do not depend on where the project is checked out. Rows read from another
  * directory (an additional config file) would resolve from the wrong place, so their
  * references are pinned to the directory they were authored in.
  */
@@ -778,14 +810,14 @@ export async function readTestConfigs(
   return cliState.withBasePath(basePath, () =>
     cliState.withEnv(env, async () => {
       const rows = await readTestsWithEnv(tests, basePath, env, false);
-      if (path.resolve(basePath) === path.resolve(suiteBasePath)) {
-        return rows;
-      }
-      return rows.map((row) =>
-        isRemoteTestCase(row)
-          ? row
-          : { ...row, vars: resolveVarsFileReferences(row.vars, basePath) as TestCase['vars'] },
-      );
+      const pinTo = path.resolve(basePath) === path.resolve(suiteBasePath) ? undefined : basePath;
+      return rows.map((row) => {
+        if (isRemoteTestCase(row)) {
+          return row;
+        }
+        const vars = prepareVarsFileReferences(row.vars, pinTo);
+        return vars === row.vars ? row : { ...row, vars };
+      });
     }),
   );
 }
@@ -1087,6 +1119,9 @@ function collectConfigFileReferences(
 export function resolveTestsWatchPaths(
   tests: TestSuiteConfig['tests'],
   basePath: string = cliState.basePath || '',
+  // Directory the evaluation resolves inline `file://` vars from. It differs from
+  // `basePath` for `--tests`, which is located from the working directory.
+  inlineVarsBasePath: string = basePath,
 ): string[] {
   if (tests == null) {
     return [];
@@ -1108,7 +1143,7 @@ export function resolveTestsWatchPaths(
         file,
         ...collectNestedFileReferences(
           file,
-          basePath,
+          inlineVarsBasePath,
           useSourceDirectory ? path.dirname(file) : basePath,
         ),
       ]);

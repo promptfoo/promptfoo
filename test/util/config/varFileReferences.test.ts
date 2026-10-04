@@ -7,6 +7,7 @@ import cliState from '../../../src/cliState';
 import { generateVarCombinations } from '../../../src/evaluator';
 import { resolveConfigs } from '../../../src/util/config/load';
 import { readTestConfigs } from '../../../src/util/testCaseReader';
+import { mockProcessEnv } from '../utils';
 
 import type { CommandLineOptions, Scenario, TestCase } from '../../../src/types/index';
 
@@ -95,6 +96,93 @@ describe('file:// var references in loaded configs', () => {
     );
   });
 
+  it('pins only the file vars of rows from another config, leaving nested values as data', async () => {
+    const first = writeProject('first', { tests: [] });
+    const second = writeProject('second', {
+      tests: [
+        {
+          vars: {
+            doc: 'file://docs/a.txt',
+            list: ['file://docs/a.txt', { source: 'file://docs/a.txt' }],
+            meta: { source: 'file://docs/a.txt', files: ['file://docs/a.txt'] },
+          },
+        },
+      ],
+      scenarios: [
+        {
+          config: [{}],
+          tests: [{ vars: { doc: 'file://docs/a.txt', meta: { source: 'file://docs/a.txt' } } }],
+        },
+      ],
+    });
+    const pinned = `file://${path.join(second, 'docs', 'a.txt')}`;
+
+    const { testSuite } = await resolve({
+      config: [path.join(first, 'promptfooconfig.json'), path.join(second, 'promptfooconfig.json')],
+    });
+
+    // The evaluation loads top-level strings and array members as files. A string inside
+    // an object is rendered into the prompt as written, so pinning it would change the data.
+    expect((testSuite.tests as TestCase[])[0].vars).toEqual({
+      doc: pinned,
+      list: [pinned, { source: 'file://docs/a.txt' }],
+      meta: { source: 'file://docs/a.txt', files: ['file://docs/a.txt'] },
+    });
+    const [scenario] = testSuite.scenarios as Scenario[];
+    expect((scenario.tests as TestCase[])[0].vars).toEqual({
+      doc: pinned,
+      meta: { source: 'file://docs/a.txt' },
+    });
+  });
+
+  it('renders an env template in a file var with the env of a later config and keeps it relative', async () => {
+    const first = writeProject('first', {
+      tests: [
+        {
+          vars: { doc: 'file://{{ env.DOC_PATH }}', meta: { source: 'file://{{ env.DOC_PATH }}' } },
+        },
+      ],
+    });
+    fs.writeFileSync(
+      path.join(first, 'env.json'),
+      JSON.stringify({ env: { DOC_PATH: 'docs/a.txt' }, tests: [] }),
+    );
+
+    const { testSuite } = await resolve({
+      config: [path.join(first, 'promptfooconfig.json'), path.join(first, 'env.json')],
+    });
+
+    const [test] = testSuite.tests as TestCase[];
+    expect(test.vars?.doc).toBe('file://docs/a.txt');
+    expect(cliState.withBasePath(first, () => generateVarCombinations(test.vars ?? {}))).toEqual([
+      expect.objectContaining({ doc: 'file://docs/a.txt' }),
+    ]);
+  });
+
+  it('renders an env template in --tests before locating it from the working directory', async () => {
+    const project = writeProject('project', {});
+    fs.writeFileSync(
+      path.join(directory, 'cli-tests.yaml'),
+      '- vars:\n    doc: file://docs/a.txt\n',
+    );
+    process.chdir(directory);
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_TEST_CLI_TESTS: 'cli-tests.yaml' });
+
+    try {
+      const { testSuite, basePath } = await resolve({
+        config: [path.join('project', 'promptfooconfig.json')],
+        tests: '{{ env.PROMPTFOO_TEST_CLI_TESTS }}',
+      });
+
+      expect(basePath).toBe(project);
+      expect((testSuite.tests as TestCase[]).map((test) => test.vars)).toEqual([
+        { doc: 'file://docs/a.txt' },
+      ]);
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('locates --tests from the working directory and resolves its rows from the config directory', async () => {
     const project = writeProject('project', {});
     fs.writeFileSync(path.join(project, 'expected.txt'), 'expected from project');
@@ -129,12 +217,27 @@ describe('file:// var references in loaded configs', () => {
     const sameDirectory = await readTestConfigs(tests, project, {});
     const otherDirectory = await readTestConfigs(tests, project, {}, other);
 
-    expect(sameDirectory[0].vars).toEqual(tests[0].vars);
+    expect(sameDirectory[0].vars).toBe(tests[0].vars);
     expect(otherDirectory[0].vars).toEqual({
       doc: `file://${path.join(project, 'docs', 'a.txt')}`,
       list: [`file://${path.join(project, 'docs', 'a.txt')}`, 'plain'],
       text: 'plain',
     });
+  });
+
+  it('expands a pinned glob beneath a directory whose name contains glob characters', async () => {
+    const project = writeProject('client [acme] evals', {});
+    fs.writeFileSync(path.join(project, 'docs', 'b.txt'), 'second doc\n');
+
+    // A row pinned to its own config directory carries an absolute pattern.
+    const combinations = cliState.withBasePath(directory, () =>
+      generateVarCombinations({ doc: `file://${path.join(project, 'docs', '*.txt')}` }),
+    );
+
+    expect(combinations.map((combination) => combination.doc).sort()).toEqual([
+      `file://${path.join(project, 'docs', 'a.txt')}`,
+      `file://${path.join(project, 'docs', 'b.txt')}`,
+    ]);
   });
 
   it('treats an existing var file as a literal path when its directory contains glob characters', async () => {

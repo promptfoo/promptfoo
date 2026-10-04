@@ -154,6 +154,21 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
 
+  it('resolves inline file vars of a --tests file from the config directory', () => {
+    // --tests is located from the working directory, but the vars in its rows are read
+    // from the config directory, so that is the copy to watch.
+    const configDirectory = path.join(base, 'nested');
+    fs.writeFileSync(path.join(base, 'cli-tests.yaml'), '- vars:\n    doc: file://doc.txt\n');
+
+    expect(
+      resolveTestsWatchPaths('cli-tests.yaml' as TestSuiteConfig['tests'], base, configDirectory),
+    ).toEqual([path.join(base, 'cli-tests.yaml'), path.join(configDirectory, 'doc.txt')]);
+    expect(resolve('cli-tests.yaml' as TestSuiteConfig['tests'])).toEqual([
+      path.join(base, 'cli-tests.yaml'),
+      path.join(base, 'doc.txt'),
+    ]);
+  });
+
   it('watches file references nested inside a .jsonl tests file', () => {
     fs.writeFileSync(
       path.join(base, 'nested/cases.jsonl'),

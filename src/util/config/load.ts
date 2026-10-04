@@ -547,6 +547,14 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 
 type TestSource = { tests: TestSuiteConfig['tests']; basePath: string };
 
+/** Locates the `--tests` reference from the working directory, once its env templates are rendered. */
+function resolveCliTestsReference(reference: string, env: TestSuite['env']): string {
+  const rendered = reference.includes('{{')
+    ? cliState.withEnv(env, () => renderEnvOnlyInObject(reference))
+    : reference;
+  return resolveReferenceFromDirectory(process.cwd(), rendered);
+}
+
 /** Resolves a local path or `file://` reference from a directory; remote and templated references pass through. */
 function resolveReferenceFromDirectory(directory: string, reference: string): string {
   if (reference.includes('{{') || isRemoteTestsReference(reference)) {
@@ -721,6 +729,22 @@ async function prepareCombinedConfig(
     throw new Error(`Invalid prompt object: ${JSON.stringify(prompt)}`);
   };
 
+  // In vars, only top-level strings and the members of top-level arrays are file references.
+  // Strings nested inside objects are data and stay as written.
+  const resolveVarFileReferences = (basePath: string, vars: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(vars).map(([name, value]) => [
+        name,
+        typeof value === 'string'
+          ? resolveNestedFileReferences(basePath, value)
+          : Array.isArray(value)
+            ? value.map((item) =>
+                typeof item === 'string' ? resolveNestedFileReferences(basePath, item) : item,
+              )
+            : value,
+      ]),
+    );
+
   const suiteBasePath = configSources[0] ? path.resolve(configSources[0].basePath) : undefined;
   const makeTestAbsolute = (basePath: string, test: unknown): unknown => {
     if (typeof test === 'string') {
@@ -750,7 +774,7 @@ async function prepareCombinedConfig(
               ? resolveConfigPath(basePath, source.vars)
               : Array.isArray(source.vars)
                 ? source.vars.map((value) => resolveConfigPath(basePath, value))
-                : resolveNestedFileReferences(basePath, source.vars),
+                : resolveVarFileReferences(basePath, source.vars),
         }),
       ...(typeof source.provider === 'string' &&
         source.provider.startsWith('file://') && {
@@ -1181,7 +1205,7 @@ async function resolveLoadedConfig(
             // rows resolve from the config directory like every other test.
             tests:
               typeof cmdObj.tests === 'string'
-                ? resolveReferenceFromDirectory(process.cwd(), cmdObj.tests)
+                ? resolveCliTestsReference(cmdObj.tests, config.env)
                 : config.tests || [],
             basePath,
           },
