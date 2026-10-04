@@ -22,6 +22,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   ssrf: `${BASE_DOCS_URL}/ssrf/`,
   'tool-discovery': `${BASE_DOCS_URL}/tool-discovery/`,
   mcp: `${BASE_DOCS_URL}/mcp/`,
+  'mcp:tool-response-poisoning': `${BASE_DOCS_URL}/mcp-tool-response-poisoning/`,
   'cross-session-leak': `${BASE_DOCS_URL}/cross-session-leak/`,
   'divergent-repetition': `${BASE_DOCS_URL}/divergent-repetition/`,
   'pii:api-db': `${BASE_DOCS_URL}/pii/`,
