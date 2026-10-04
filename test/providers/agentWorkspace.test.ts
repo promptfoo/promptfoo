@@ -40,6 +40,7 @@ function git(cwd: string, ...args: string[]): string {
 /**
  * Listens on a socket named `name` in `directory`. The socket is bound through a relative
  * path, because the absolute one can exceed the platform's limit for socket paths.
+ * Returns cleanup that closes in the same directory: libuv unlinks that relative path.
  */
 async function listenIn(directory: string, name: string) {
   const previous = process.cwd();
@@ -53,7 +54,15 @@ async function listenIn(directory: string, name: string) {
   } finally {
     process.chdir(previous);
   }
-  return socket;
+  return async () => {
+    const previous = process.cwd();
+    process.chdir(directory);
+    try {
+      await new Promise<void>((resolve) => socket.close(() => resolve()));
+    } finally {
+      process.chdir(previous);
+    }
+  };
 }
 
 function listFiles(dir: string): string[] {
@@ -149,6 +158,28 @@ describe('agent workspaces', () => {
     await Promise.all(workspaces.map((workspace) => workspace.remove()));
     cliState.basePath = restoreBasePath;
     fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('closes relative fixture sockets without deleting a same-named file in another directory', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+    const fixture = path.join(root, 'fixture');
+    const other = path.join(root, 'other');
+    fs.mkdirSync(fixture);
+    write(path.join(other, 'policy.txt'), 'keep me');
+    const previous = process.cwd();
+    process.chdir(other);
+    try {
+      const close = await listenIn(fixture, 'policy.txt');
+      expect(process.cwd()).toBe(other);
+      await close();
+      expect(process.cwd()).toBe(other);
+      expect(fs.existsSync(path.join(fixture, 'policy.txt'))).toBe(false);
+      expect(fs.readFileSync(path.join(other, 'policy.txt'), 'utf8')).toBe('keep me');
+    } finally {
+      process.chdir(previous);
+    }
   });
 
   describe('process cleanup', () => {
@@ -348,7 +379,7 @@ describe('agent workspaces', () => {
     });
 
     it.each(['modified', 'added', 'deleted', 'attributes'] as const)(
-      'marks omitted binary content incomplete for a %s file',
+      'records binary completeness for a %s file',
       async (kind) => {
         const source = path.join(root, 'repo');
         makeRepository(source, {
@@ -369,13 +400,15 @@ describe('agent workspaces', () => {
         const metadata = await workspace.metadata();
 
         expect(metadata.workspaceDiffError).toBeUndefined();
-        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiffIncomplete).toBe(kind === 'deleted' ? undefined : true);
         expect(metadata.workspaceDiff).toContain('Binary files');
         expect(metadata.workspaceDiff).not.toContain('forbidden');
         expect(metadata.workspaceDiff).toContain('+visible change');
-        expect(metadata.workspaceDiff).toContain(
-          '[diff incomplete: binary file contents are not included]',
-        );
+        if (kind !== 'deleted') {
+          expect(metadata.workspaceDiff).toContain(
+            '[diff incomplete: binary file contents are not included]',
+          );
+        }
         expect(fs.readFileSync(path.join(source, 'policy.txt'), 'utf8')).toBe(
           kind === 'deleted' ? 'safe\0original\n' : 'safe\n',
         );
@@ -1446,8 +1479,8 @@ describe('agent workspaces', () => {
             /\[diff incomplete: 2 changed path\(s\) could not be included: (policy\.txt, notes\/policy\.txt|notes\/policy\.txt, policy\.txt)\]$/,
           );
         } finally {
-          for (const socket of sockets) {
-            await new Promise<void>((resolve) => socket.close(() => resolve()));
+          for (const close of sockets) {
+            await close();
           }
         }
       },
@@ -1888,9 +1921,7 @@ describe('agent workspaces', () => {
       expect(workspaceDiff).toContain('+visible change');
       expect(workspaceDiff).not.toContain('hidden payload');
       expect(workspaceDiffIncomplete).toBe(true);
-      expect(workspaceDiff).toMatch(
-        /\[diff incomplete: the contents of 2 binary file\(s\) are not shown: README\.md, src\/new\.bin\]$/,
-      );
+      expect(workspaceDiff).toContain('[diff incomplete: binary file contents are not included]');
     });
 
     it('does not mark the diff incomplete for a deleted binary file', async () => {
@@ -2045,6 +2076,53 @@ describe('agent workspaces', () => {
         /\[diff incomplete: the files of 1 nested repository are not included: newproj\]$/,
       );
     });
+
+    it.each(['filter', 'hook'] as const)(
+      'does not run a nested repository %s when recovering skipped paths',
+      async (kind) => {
+        if (kind === 'hook' && process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const workspace = await create(source);
+        const nested = path.join(workspace.dir, 'nested');
+        makeRepository(nested);
+        const marker = path.join(root, `${kind}-ran`);
+        const script = path.join(root, `${kind}.cjs`);
+        write(
+          script,
+          `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');\n` +
+            (kind === 'filter' ? 'process.stdin.pipe(process.stdout);\n' : ''),
+        );
+        const command = `"${process.execPath.split(path.sep).join('/')}" "${script.split(path.sep).join('/')}"`;
+        if (kind === 'filter') {
+          git(nested, 'config', 'filter.agent.clean', command);
+          write(path.join(nested, '.git', 'info', 'attributes'), '*.txt filter=agent\n');
+          write(path.join(nested, 'src', 'app.txt'), 'APP\n');
+        } else {
+          const hook = path.join(nested, '.git', 'hooks', 'post-index-change');
+          write(hook, `#!/bin/sh\n${command}\n`);
+          fs.chmodSync(hook, 0o755);
+          // Git status refreshes a stale stat entry even when the bytes did not change.
+          fs.utimesSync(path.join(nested, 'README.md'), 1, 1);
+        }
+        const unaddable = path.join(workspace.dir, 'unborn');
+        fs.mkdirSync(unaddable);
+        git(unaddable, 'init', '-q');
+        write(path.join(workspace.dir, 'README.md'), 'original\nvisible change\n');
+
+        const metadata = await workspace.metadata();
+
+        expect(fs.existsSync(marker)).toBe(false);
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('+visible change');
+        expect(metadata.workspaceDiff).toContain('unborn/');
+        expect(metadata.workspaceDiff).toContain('nested repository are not included: nested');
+        expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('original\n');
+      },
+    );
 
     it('does not report an unchanged ignored file the repository already tracks', async () => {
       const source = path.join(root, 'repo');
@@ -2476,7 +2554,7 @@ describe('agent workspaces', () => {
       // An untracked file makes automatic mode copy instead of clone.
       write(path.join(source, 'untracked.txt'), 'local\n');
       // The built-in fsmonitor daemon keeps this socket here while it runs.
-      const socket = await listenIn(path.join(source, '.git'), 'fsmonitor--daemon.ipc');
+      const close = await listenIn(path.join(source, '.git'), 'fsmonitor--daemon.ipc');
       try {
         const workspace = await create(source);
 
@@ -2487,7 +2565,7 @@ describe('agent workspaces', () => {
           false,
         );
       } finally {
-        await new Promise<void>((resolve) => socket.close(() => resolve()));
+        await close();
       }
     });
 
@@ -2503,11 +2581,11 @@ describe('agent workspaces', () => {
         const source = path.join(root, 'repo');
         makeRepository(source);
         write(path.join(source, 'untracked.txt'), 'local\n');
-        const socket = await listenIn(path.join(source, directory), name);
+        const close = await listenIn(path.join(source, directory), name);
         try {
           await expect(create(source)).rejects.toThrow('it is not a regular file or directory');
         } finally {
-          await new Promise<void>((resolve) => socket.close(() => resolve()));
+          await close();
         }
       },
     );

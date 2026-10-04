@@ -903,29 +903,30 @@ async function getWorkspaceDiff(
     // The agent controls the workspace, so some paths may be impossible to add: a file it
     // made unreadable, or a repository it created. Add everything else rather than losing
     // the whole diff, and name the skipped paths below.
-    let skippedPaths = false;
+    // The baseline contains no gitlinks. Update it before staging new repositories, since
+    // `git add --update` inspects existing gitlinks using their agent-controlled config.
+    let skippedPaths = await addReadablePaths(
+      ['-c', 'core.fsmonitor=false', 'add', '--update', '--ignore-errors'],
+      { env, signal },
+    );
     if (newFiles.size > 0) {
-      skippedPaths = await addReadablePaths(
-        [
-          '--literal-pathspecs',
-          'add',
-          '--force',
-          '--ignore-errors',
-          '--pathspec-from-file=-',
-          '--pathspec-file-nul',
-        ],
-        {
-          env,
-          input: `${[...newFiles].join('\0')}\0`,
-          signal,
-        },
-      );
+      skippedPaths =
+        (await addReadablePaths(
+          [
+            '--literal-pathspecs',
+            'add',
+            '--force',
+            '--ignore-errors',
+            '--pathspec-from-file=-',
+            '--pathspec-file-nul',
+          ],
+          {
+            env,
+            input: `${[...newFiles].join('\0')}\0`,
+            signal,
+          },
+        )) || skippedPaths;
     }
-    skippedPaths =
-      (await addReadablePaths(
-        ['-c', 'core.fsmonitor=false', 'add', '--update', '--ignore-errors'],
-        { env, signal },
-      )) || skippedPaths;
     // The index entries, as "<mode> <object> <stage>\t<path>".
     const staged = (await git(['ls-files', '-z', '--stage'], { env, signal }))
       .split('\0')
@@ -946,8 +947,12 @@ async function getWorkspaceDiff(
       leftOut.length + reserved.length + unverified.length + emptyDirectories.length > 0
     ) {
       // Tracked files that still differ from the index are the ones `add --update` skipped.
+      // Nested repositories are reported separately; inspecting them would load agent config.
       const notUpdated = skippedPaths
-        ? await git(['-c', 'core.fsmonitor=false', 'diff', '--name-only', '-z'], { env, signal })
+        ? await git(
+            ['-c', 'core.fsmonitor=false', 'diff', '--ignore-submodules=all', '--name-only', '-z'],
+            { env, signal },
+          )
         : '';
       // A new path that is not in the index at all could not be added. Files the cloned
       // commit already tracks are in the index whether or not they changed, so an unchanged
@@ -994,38 +999,6 @@ async function getWorkspaceDiff(
           ']',
       );
     }
-    // For a binary file, the diff says that it changed and not how. A file is binary as soon
-    // as it holds a NUL byte, so an agent can make a text file one. Deleted files are shown
-    // in full by being deleted.
-    const binary = (
-      await git(
-        [
-          '-c',
-          'core.fsmonitor=false',
-          'diff',
-          '--cached',
-          '--numstat',
-          '-z',
-          '--no-renames',
-          '--diff-filter=d',
-          repo.head,
-        ],
-        { env, signal },
-      )
-    )
-      .split('\0')
-      .filter((entry) => entry.startsWith('-\t-\t'))
-      .map((entry) => entry.slice(4));
-    if (binary.length > 0) {
-      notes.push(
-        `[diff incomplete: the contents of ${binary.length} binary file(s) are not shown: ` +
-          binary.slice(0, MAX_INCOMPLETE_PATHS).map(quotePath).join(', ') +
-          (binary.length > MAX_INCOMPLETE_PATHS
-            ? `, and ${binary.length - MAX_INCOMPLETE_PATHS} more`
-            : '') +
-          ']',
-      );
-    }
     const diff = await git(
       [
         '-c',
@@ -1039,6 +1012,20 @@ async function getWorkspaceDiff(
       ],
       { env, signal },
     );
+    // Only whole patch lines carry these markers: content lines have a +, - or space
+    // prefix, and Git quotes newlines in filenames. Deletions, pure renames and mode
+    // changes fully describe their operation without any new binary bytes to inspect.
+    let deletedFile = false;
+    for (const line of diff.split('\n')) {
+      if (line.startsWith('diff --git ')) {
+        deletedFile = false;
+      } else if (line.startsWith('deleted file mode ')) {
+        deletedFile = true;
+      } else if (!deletedFile && /^Binary files .+ differ$/.test(line)) {
+        notes.push('[diff incomplete: binary file contents are not included]');
+        break;
+      }
+    }
     const truncated = diff.length > MAX_DIFF_LENGTH;
     const shown = truncated
       ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`
