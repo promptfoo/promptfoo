@@ -1620,15 +1620,20 @@ describe('agent workspaces', () => {
         return;
       }
 
-      const metadata = await workspace.metadata();
+      try {
+        const metadata = await workspace.metadata();
 
-      // Git's listing is read as text, which changes this name, so the file cannot be added
-      // under the name that was read. It must not disappear from the account of the changes.
-      expect(metadata.workspaceDiff ?? '').toContain('+tampered');
-      expect(metadata.workspaceDiffIncomplete).toBe(true);
-      expect(metadata.workspaceDiff).toMatch(
-        /\[diff incomplete: 1 changed path\(s\) could not be included: "policy/,
-      );
+        // Git's listing is read as text, which changes this name, so the file cannot be added
+        // under the name that was read. It must not disappear from the account of the changes.
+        expect(metadata.workspaceDiff ?? '').toContain('+tampered');
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toMatch(
+          /\[diff incomplete: 1 changed path\(s\) could not be included: "policy/,
+        );
+      } finally {
+        // Removing the workspace by its text name would not find this file either.
+        fs.rmSync(name);
+      }
     });
 
     it('reports a top-level directory whose name differs from .git only by case', async () => {
