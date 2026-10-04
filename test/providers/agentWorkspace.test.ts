@@ -1978,6 +1978,106 @@ describe('agent workspaces', () => {
       expect(metadata.workspaceDiffIncomplete).toBeUndefined();
     });
 
+    it.each([
+      ['.git', false],
+      ['.GIT', false],
+      ['.git', true],
+      ['.GIT', true],
+    ] as const)(
+      'keeps Unicode parent boundaries for %s (ignored parent: %s)',
+      async (name, ignored) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': ignored ? 'İİ/\n' : '.g\n' });
+        const workspace = await create(source);
+        write(path.join(workspace.dir, 'İİ', name, 'payload'), 'hidden\n');
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(ignored ? undefined : true);
+        if (ignored) {
+          expect(metadata.workspaceDiff).toBe('');
+        } else {
+          expect(metadata.workspaceDiff).toContain(`İİ/${name}`);
+        }
+      },
+    );
+
+    it('does not open ignored dependency subtrees or ignored empty directory trees', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'node_modules/\ncache/\n' });
+      const workspace = await create(source);
+      for (let i = 0; i < 24; i++) {
+        write(
+          path.join(workspace.dir, 'node_modules', `package-${i}`, 'lib', 'index.js'),
+          'module.exports = 1;\n',
+        );
+      }
+      fs.mkdirSync(path.join(workspace.dir, 'cache', 'empty', 'deep'), { recursive: true });
+      const opendir = vi.spyOn(fs.promises, 'opendir');
+      try {
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiff).toBe('');
+        expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+        expect(
+          opendir.mock.calls.some(([dir]) =>
+            ['node_modules', 'cache'].some((name) =>
+              String(dir).startsWith(path.join(workspace.dir, name)),
+            ),
+          ),
+        ).toBe(false);
+      } finally {
+        opendir.mockRestore();
+      }
+    });
+
+    it('preserves untracked descendants re-included by committed ignore rules', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitignore': 'vendor/*\n!vendor/keep/\n' });
+      const workspace = await create(source);
+      write(path.join(workspace.dir, 'vendor', 'ignored', 'file.txt'), 'ignored\n');
+      write(path.join(workspace.dir, 'vendor', 'keep', 'file.txt'), 'visible\n');
+      write(path.join(workspace.dir, 'vendor', 'keep', '.git', 'payload'), 'hidden\n');
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiff).toContain('+visible');
+      expect(metadata.workspaceDiff).not.toContain('vendor/ignored');
+      expect(metadata.workspaceDiff).toContain('vendor/keep/.git');
+      expect(metadata.workspaceDiffIncomplete).toBe(true);
+    });
+
+    it.each(['baseline', 'staged'] as const)(
+      'does not prune an ignored subtree with a %s file replaced by a FIFO',
+      async (kind) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': 'vendor/\n' });
+        if (kind === 'baseline') {
+          write(path.join(source, 'vendor', 'policy.txt'), 'tracked\n');
+          git(source, 'add', '--force', 'vendor/policy.txt');
+          git(source, 'commit', '-qm', 'track ignored file');
+        }
+        const workspace = await create(source);
+        const file = path.join(workspace.dir, 'vendor', 'policy.txt');
+        if (kind === 'staged') {
+          write(file, 'staged\n');
+          git(workspace.dir, 'add', '--force', 'vendor/policy.txt');
+        }
+        fs.rmSync(file);
+        execFileSync('mkfifo', [file]);
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toContain('vendor/policy.txt');
+      },
+    );
+
     it('names a new directory without files, which a diff cannot show', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source, { '.gitignore': 'tmp/\n' });

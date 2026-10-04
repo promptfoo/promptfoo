@@ -283,6 +283,7 @@ function getCoveredDirectories(paths: string[]): Set<string> {
 async function findPathsGitLeavesOut(
   dir: string,
   signal?: AbortSignal,
+  ignoredDirectories: ReadonlySet<string> = new Set(),
 ): Promise<{ leftOut: string[]; reserved: string[]; directories: string[] }> {
   const leftOut: string[] = [];
   const reserved: string[] = [];
@@ -290,6 +291,9 @@ async function findPathsGitLeavesOut(
   const pending = [''];
   for (let directory = pending.pop(); directory !== undefined; directory = pending.pop()) {
     signal?.throwIfAborted();
+    if (ignoredDirectories.has(directory)) {
+      continue;
+    }
     try {
       const entries = await fs.opendir(path.join(dir, directory));
       if (directory !== '') {
@@ -746,6 +750,22 @@ async function getWorkspaceDiff(
       });
     }
     const ignoreEnv = { ...env, GIT_WORK_TREE: ignoreDir };
+    const getIgnoredQueries = async (queries: string[]) => {
+      if (queries.length === 0) {
+        return new Set<string>();
+      }
+      const ignored = await git(['check-ignore', '--no-index', '-z', '--stdin'], {
+        env: ignoreEnv,
+        input: `${queries.join('\0')}\0`,
+        signal,
+      }).catch((error: unknown) => {
+        if (error instanceof Error && 'code' in error && error.code === 1) {
+          return ''; // check-ignore returns 1 when no paths are ignored.
+        }
+        throw error;
+      });
+      return new Set(ignored.split('\0').filter(Boolean));
+    };
     // Lines appended to the diff when it does not cover everything the agent changed.
     const notes: string[] = [];
     // Include ignored files the agent explicitly added, without loading its Git configuration.
@@ -797,17 +817,45 @@ async function getWorkspaceDiff(
     const baseline = (await git(['ls-files', '-z', '--cached'], { env, signal }))
       .split('\0')
       .filter(Boolean);
+    const referenced = [...baseline, ...ignoredTracked.split('\0').filter(Boolean)];
+    // Git can list untracked subtree roots without walking them. Prune only roots ignored
+    // by the committed rules, and keep any containing a tracked or explicitly staged path.
+    const protectedDirectories = getCoveredDirectories(referenced.map((file) => `${file}/`));
+    const untrackedDirectories = (
+      await git(['ls-files', '-z', '--others', '--directory'], { env, signal })
+    )
+      .split('\0')
+      .filter((file) => file.endsWith('/') && !protectedDirectories.has(file));
+    const directoryQueries = new Map(
+      untrackedDirectories.map((file) => [file, toIgnoreQuery(file)?.replace(/\/$/, '')]),
+    );
+    // A trailing slash can match `vendor/*` even when `vendor` itself is not ignored.
+    // Give Git the directory type in the trusted tree instead, so negations stay effective.
+    for (const query of new Set(directoryQueries.values())) {
+      if (query !== undefined) {
+        await fs.mkdir(path.join(ignoreDir, query), { recursive: true });
+      }
+    }
+    const ignoredDirectoryQueries = await getIgnoredQueries(
+      [...new Set(directoryQueries.values())].filter((query) => query !== undefined),
+    );
+    const ignoredDirectories = new Set(
+      untrackedDirectories.filter((file) => {
+        const query = directoryQueries.get(file);
+        return query !== undefined && ignoredDirectoryQueries.has(query);
+      }),
+    );
     // Git lists neither special files, nor the contents of directories it cannot read, nor
     // anything below a path called `.git`, nor a directory without files. An agent could
     // keep a change out of the diff with `mkfifo`, `chmod` or `mkdir`, so these are looked
     // for separately and reported below.
-    const found = await findPathsGitLeavesOut(dir, signal);
+    const found = await findPathsGitLeavesOut(dir, signal, ignoredDirectories);
     let leftOut = found.leftOut;
     // A reserved path cannot be tracked, so the directory that holds it decides whether it
     // is ignored.
     let reserved = found.reserved.map((file) => ({
       file,
-      parent: file.slice(0, file.toLowerCase().lastIndexOf('/.git') + 1),
+      parent: file.slice(0, file.lastIndexOf('/', file.length - 2) + 1),
     }));
     // A directory is new and empty when nothing lies in it that the cloned commit tracks,
     // that Git lists as untracked, or that was found above. Git lists a repository as one
@@ -842,22 +890,7 @@ async function getWorkspaceDiff(
       queries.set(file, toIgnoreQuery(file));
     }
     const asked = [...new Set(queries.values())].filter((query) => query !== undefined);
-    const ignoredQueries = new Set(
-      asked.length === 0
-        ? []
-        : (
-            await git(['check-ignore', '--no-index', '-z', '--stdin'], {
-              env: ignoreEnv,
-              input: `${asked.join('\0')}\0`,
-              signal,
-            }).catch((error: unknown) => {
-              if (error instanceof Error && 'code' in error && error.code === 1) {
-                return ''; // check-ignore returns 1 when no paths are ignored.
-              }
-              throw error;
-            })
-          ).split('\0'),
-    );
+    const ignoredQueries = await getIgnoredQueries(asked);
     const isIgnored = (file: string) => {
       const query = queries.get(file);
       return query !== undefined && ignoredQueries.has(query);
@@ -873,7 +906,6 @@ async function getWorkspaceDiff(
     // An ignored path is still part of the diff when the cloned commit tracks it or the agent
     // added it to its index. What replaced a directory, such as a FIFO, stands for the files
     // that were below it.
-    const referenced = [...baseline, ...ignoredTracked.split('\0').filter(Boolean)];
     leftOut = leftOut.filter(
       (file) =>
         !isIgnored(file) ||
