@@ -2114,6 +2114,16 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
+      let restoreEnv: () => void;
+
+      beforeEach(() => {
+        restoreEnv = mockProcessEnv({ OTEL_RESOURCE_ATTRIBUTES: undefined });
+      });
+
+      afterEach(() => {
+        restoreEnv();
+      });
+
       it('passes file defaults below explicit subprocess environment values', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
         const provider = new ClaudeCodeSDKProvider({
