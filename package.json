@@ -180,7 +180,7 @@
       "ws": "$ws"
     },
     "engine.io-client": {
-      ".": "6.6.6",
+      ".": "6.6.7",
       "ws": "$ws"
     },
     "socket.io-adapter": {
@@ -250,7 +250,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsdom": "^30.0.0",
-    "@types/node": "^24.13.5",
+    "@types/node": "^24.13.6",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/pem": "^1.14.4",
@@ -301,10 +301,10 @@
     "@modelcontextprotocol/sdk": "^1.32.0",
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@openai/codex-sdk": "^0.156.1",
-    "@opencode-ai/sdk": "^1.18.31",
+    "@opencode-ai/sdk": "^1.18.32",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.1.0",
-    "hono": "^4.13.8",
+    "hono": "^4.13.9",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
@@ -382,7 +382,7 @@
     "signal-exit": "4.1.0",
     "simple-git": "^3.33.0",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
+    "socket.io-client": "^4.8.4",
     "text-extensions": "^3.1.0",
     "tsx": "^4.23.11",
     "undici": ">=7.29.1 <8",
