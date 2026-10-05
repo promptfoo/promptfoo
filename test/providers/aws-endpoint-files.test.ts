@@ -14,15 +14,25 @@ import cliState from '../../src/cliState';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 import { AwsBedrockKnowledgeBaseProvider } from '../../src/providers/bedrock/knowledgeBase';
+import { LumaRayVideoProvider } from '../../src/providers/bedrock/luma-ray';
+import { NovaReelVideoProvider } from '../../src/providers/bedrock/nova-reel';
 import { NovaSonicProvider } from '../../src/providers/bedrock/nova-sonic';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import { mockProcessEnv } from '../util/utils';
 
 import type { EnvOverrides } from '../../src/contracts/env';
 
+vi.mock('@aws-sdk/credential-provider-sso', () => ({
+  fromSSO: (options: { profile: string }) => async () => ({
+    accessKeyId: `sso-${options.profile}`,
+    secretAccessKey: 'fixture-sso-secret',
+  }),
+}));
+
 let directory: string;
 let restore: () => void;
 let destinations: string[];
+let authorizations: string[];
 
 beforeEach(() => {
   directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-sdk-endpoint-files-'));
@@ -41,8 +51,10 @@ beforeEach(() => {
     { clear: true },
   );
   destinations = [];
-  const handle = async (request: { hostname: string }) => {
+  authorizations = [];
+  const handle = async (request: { hostname: string; headers: Record<string, string> }) => {
     destinations.push(request.hostname);
+    authorizations.push(request.headers.authorization);
     throw new Error('Stopped after SDK endpoint resolution');
   };
   vi.spyOn(NodeHttpHandler.prototype, 'handle').mockImplementation(handle);
@@ -250,4 +262,119 @@ describe.each(providers)('%s scoped endpoint files', (_name, createProvider, met
       expect(expected.destination).toBe('explicit.invalid');
     });
   }
+  it.each(
+    ['flags', 'endpoint'].flatMap((dimension) =>
+      ['none', 'provider', 'suite', 'file'].flatMap((scope) =>
+        (scope === 'none' ? ['ambient'] : ['selected', 'configured', 'clear', 'config-file']).map(
+          (selection) => ({ dimension, scope, selection }),
+        ),
+      ),
+    ),
+  )(
+    'keeps configured SSO identity with $scope $selection $dimension settings',
+    async ({ dimension, scope, selection }) => {
+      const profileText = (prefix: string, configuredFlags: boolean) =>
+        ['default', 'host', 'configured', 'selected']
+          .map((name) => {
+            const flags =
+              dimension === 'flags' && (name === 'configured' ? configuredFlags : !configuredFlags);
+            return `${name === 'default' ? '[default]' : `[profile ${name}]`}\nuse_fips_endpoint=${flags}\nuse_dualstack_endpoint=${flags}\n${dimension === 'endpoint' ? `endpoint_url=https://${prefix}-${name}.invalid\n` : ''}`;
+          })
+          .join('');
+      fs.writeFileSync(path.join(directory, 'host-config'), profileText('host', true));
+      const selectedFile = path.join(directory, 'configured-sso-endpoints');
+      fs.writeFileSync(selectedFile, profileText('scoped', false));
+      const env =
+        selection === 'config-file'
+          ? { AWS_CONFIG_FILE: selectedFile }
+          : selection === 'ambient'
+            ? {}
+            : { AWS_PROFILE: selection === 'clear' ? '' : selection };
+      const run = () => inspect(scope === 'provider' ? env : undefined, { profile: 'configured' });
+      const actual = await (scope === 'suite'
+        ? cliState.withEnv(env, run)
+        : scope === 'file'
+          ? cliState.withEnvFileOverrides(env, run)
+          : run());
+      const selectedProfile =
+        selection === 'ambient' || selection === 'config-file'
+          ? 'host'
+          : selection === 'clear'
+            ? 'default'
+            : selection;
+      const flags =
+        dimension === 'flags' && (selection === 'config-file' || selectedProfile === 'configured');
+      expect(actual).toMatchObject({
+        accessKeyId: 'sso-configured',
+        fips: flags,
+        dualstack: flags,
+      });
+      if (dimension === 'endpoint') {
+        expect(actual.destination).toBe(
+          `${selection === 'config-file' ? 'scoped' : 'host'}-${selectedProfile}.invalid`,
+        );
+      } else if (flags) {
+        expect(actual.destination).toContain('-fips.');
+        expect(actual.destination).toContain('.api.aws');
+      } else {
+        expect(actual.destination).not.toContain('-fips.');
+        expect(actual.destination).toContain('.amazonaws.com');
+      }
+    },
+  );
+});
+
+describe.each([
+  ['luma', LumaRayVideoProvider],
+  ['reel', NovaReelVideoProvider],
+] as const)('%s configured SSO media endpoint profiles', (_name, Provider) => {
+  it.each(
+    ['startVideoGeneration', 'pollForCompletion', 'downloadAndStoreVideo'].flatMap((method) =>
+      [false, true].map((scoped) => ({ method, scoped })),
+    ),
+  )(
+    'keeps IAM and endpoint profiles separate for $method scoped=$scoped',
+    async ({ method, scoped }) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        fs.writeFileSync(
+          path.join(directory, 'host-config'),
+          '[profile host]\nuse_fips_endpoint=false\nuse_dualstack_endpoint=false\n[profile configured]\nuse_fips_endpoint=true\nuse_dualstack_endpoint=true\n',
+        );
+        const configFile = path.join(directory, 'media-config');
+        fs.writeFileSync(
+          configFile,
+          '[profile host]\nuse_fips_endpoint=true\nuse_dualstack_endpoint=true\n[profile configured]\nuse_fips_endpoint=false\nuse_dualstack_endpoint=false\n',
+        );
+        const provider = new Provider('fixture', {
+          config: {
+            region: 'us-east-1',
+            profile: 'configured',
+            s3OutputUri: 's3://fixture-bucket/output',
+          },
+        });
+        const args =
+          method === 'startVideoGeneration'
+            ? [{}, 's3://fixture-bucket/output']
+            : method === 'pollForCompletion'
+              ? ['arn:aws:bedrock:us-east-1:123456789012:async-invoke/fixture', 1, 100]
+              : ['s3://fixture-bucket/output'];
+        const invoke = () => Reflect.get(provider, method).apply(provider, args);
+        const result = await (scoped
+          ? cliState.withEnvFileOverrides({ AWS_CONFIG_FILE: configFile }, invoke)
+          : invoke());
+        expect(result.error).toContain('Stopped after SDK endpoint resolution');
+        expect(authorizations).toHaveLength(1);
+        expect(authorizations[0]).toContain('Credential=sso-configured/');
+        expect(destinations).toHaveLength(1);
+        if (scoped) {
+          expect(destinations[0]).toContain('-fips.');
+        } else {
+          expect(destinations[0]).not.toContain('-fips.');
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 });

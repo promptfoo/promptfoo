@@ -153,8 +153,8 @@ describe.each(providers)('%s SDK profile endpoint selection', (_name, createProv
     },
   );
 
-  it('retains an explicitly selected profile when no configured key pair bypasses it', async () => {
-    expect(await useFips({ profile: 'configured' })).toBe(true);
+  it('keeps a configured SSO credential profile out of endpoint discovery', async () => {
+    expect(await useFips({ profile: 'configured' })).toBe(false);
   });
 
   it('retains a scoped profile as both the credential and endpoint source', async () => {

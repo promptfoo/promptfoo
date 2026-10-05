@@ -136,15 +136,16 @@ export function getScopedAwsCredentialConfig(
   };
 }
 
-/** Preserve endpoint-profile discovery when configured keys bypass a configured profile. */
+/** Keep configured SSO credential selection separate from SDK endpoint-profile discovery. */
 export function getAwsSdkProfile(
   config: AwsCredentialConfig = {},
   env?: EnvOverrides,
 ): string | undefined {
-  if (config.accessKeyId && config.secretAccessKey) {
+  if ((config.accessKeyId && config.secretAccessKey) || config.profile) {
     const scopedProfile = getMergedEnvOverrides(env).AWS_PROFILE;
-    // The SDK still reads ambient profile settings with explicit keys. Forward
-    // invocation overrides, but do not activate the bypassed config.profile.
+    // Explicit credentials and fromSSO(config.profile) historically left SDK
+    // endpoint settings on the ambient profile. Forward invocation overrides
+    // without selecting the separate credential profile for endpoint settings.
     return scopedProfile === undefined ? undefined : scopedProfile || 'default';
   }
   const profile = getScopedAwsCredentialConfig(config, env)?.profile;
