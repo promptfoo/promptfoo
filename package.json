@@ -304,7 +304,7 @@
     "@opencode-ai/sdk": "^1.18.32",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.1.0",
-    "hono": "^4.13.8",
+    "hono": "^4.13.9",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
