@@ -259,7 +259,7 @@
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^7.0.0",
     "@types/ws": "^8.18.1",
-    "@vitest/coverage-v8": "^5.0.0",
+    "@vitest/coverage-v8": "^5.0.2",
     "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.3",
     "drizzle-kit": "^0.31.11",
@@ -281,7 +281,7 @@
     "ts-dedent": "^2.2.0",
     "tsdown": "0.23.0",
     "typescript": "^7.0.0",
-    "vitest": "^5.0.0",
+    "vitest": "^5.0.2",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
