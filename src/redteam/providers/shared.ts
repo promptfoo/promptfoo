@@ -5,6 +5,7 @@ import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import { trackConfiguredProviders, trackProvider } from '../../providers/lifecycle';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
@@ -314,6 +315,7 @@ class RedteamProviderManager {
       jsonOnly,
       preferSmallModel,
     });
+    trackConfiguredProviders([loaded], candidate.provider);
     logger.debug(
       '[RedteamProviderManager] Loaded ' + candidate.source + ' redteam provider: ' + loaded.id(),
     );
@@ -362,7 +364,7 @@ class RedteamProviderManager {
     preferSmallModel?: boolean;
   } = {}): Promise<ApiProvider> {
     const provider = await loadRedteamProvider({ jsonOnly, preferSmallModel });
-    return this.wrapProvider(provider);
+    return this.wrapProvider(trackProvider(provider));
   }
 
   async setMultilingualProvider(provider: RedteamFileConfig['provider']) {
@@ -415,6 +417,7 @@ class RedteamProviderManager {
     // 1) Explicit provider argument
     if (provider) {
       const loaded = await loadRedteamProvider({ provider, jsonOnly, purpose: 'grading' });
+      trackConfiguredProviders([loaded], provider);
       return this.wrapProvider(loaded);
     }
 
@@ -438,6 +441,7 @@ class RedteamProviderManager {
 
     if (cfg) {
       const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly, purpose: 'grading' });
+      trackConfiguredProviders([loaded], cfg);
       logger.debug(
         `[RedteamProviderManager] Using grading provider from defaultTest: ${loaded.id()}`,
       );
