@@ -250,7 +250,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsdom": "^30.0.0",
-    "@types/node": "^24.13.5",
+    "@types/node": "^24.13.6",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/pem": "^1.14.4",
