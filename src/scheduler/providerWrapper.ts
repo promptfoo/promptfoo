@@ -132,7 +132,7 @@ export function wrapProviderWithRateLimiting(
           options?.abortSignal?.throwIfAborted();
           return originalCallApi(prompt, context, options);
         },
-        createProviderRateLimitOptions(),
+        { ...createProviderRateLimitOptions(), abortSignal: options?.abortSignal },
       );
     },
   };

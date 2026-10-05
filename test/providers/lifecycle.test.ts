@@ -1,17 +1,22 @@
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import chokidar from 'chokidar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { enableCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import * as esm from '../../src/esm';
 import { evaluateWithSource } from '../../src/evaluate';
 import logger from '../../src/logger';
+import { doEval } from '../../src/node/doEval';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { cleanupProvider, trackProvider, withProviderCleanup } from '../../src/providers/lifecycle';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { VoiceCrescendoProvider } from '../../src/redteam/providers/voiceCrescendo/index';
+import { clearConfigCache } from '../../src/util/config/default';
 import { createDeferred } from '../util/utils';
 
 import type { EvaluateTestSuite } from '../../src/types/index';
@@ -63,6 +68,98 @@ afterEach(() => {
 });
 
 describe('provider cleanup ownership', () => {
+  it.each([false, true])(
+    'cleans real config providers and leaves borrowed instances open (setupFails=%s)',
+    async (setupFails) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-do-eval-cleanup-'));
+      const cacheEnabled = isCacheEnabled();
+      const previousExitCode = process.exitCode;
+      const cleanup = vi.fn().mockResolvedValue(undefined);
+      const call = vi.fn();
+      const borrowed = makeProvider();
+      try {
+        const evaluation = doEval(
+          { write: false, share: false, table: false, progressBar: false },
+          {
+            prompts: ['hello'],
+            // File-config types omit the caller instances accepted by the runtime loader.
+            providers: [providerOptions({ cleanup, call }), borrowed as unknown as ProviderOptions],
+            tests: setupFails
+              ? path.join(directory, 'missing-tests.json')
+              : [{ assert: [{ type: 'equals', value: 'ok' }] }],
+          },
+          undefined,
+          { eventSource: 'library', cache: false },
+        );
+        if (setupFails) {
+          await expect(evaluation).rejects.toThrow('missing-tests.json');
+          expect(call).not.toHaveBeenCalled();
+        } else {
+          const results = await (await evaluation).getResults();
+          expect(results.map((result) => result.success)).toEqual([true, true]);
+          expect(call).toHaveBeenCalledOnce();
+        }
+        expect(cleanup).toHaveBeenCalledOnce();
+        expect(borrowed.cleanup).not.toHaveBeenCalled();
+        expect(process.exitCode).toBe(previousExitCode);
+      } finally {
+        process.exitCode = previousExitCode;
+        if (cacheEnabled) {
+          enableCache();
+        }
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('cleans fresh config providers after every real watch evaluation', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-do-eval-watch-'));
+    const configPath = path.join(directory, 'promptfooconfig.json');
+    const cacheEnabled = isCacheEnabled();
+    const previousExitCode = process.exitCode;
+    try {
+      const watcher = new EventEmitter();
+      vi.spyOn(chokidar, 'watch').mockReturnValue(watcher as ReturnType<typeof chokidar.watch>);
+      const FixtureProvider = await esm.importModule(providerPath);
+      // JSON cannot carry the fixture's cleanup callback; observe the real instances here.
+      const cleanup = vi.spyOn(FixtureProvider.prototype, 'cleanup').mockResolvedValue(undefined);
+      const call = vi.spyOn(FixtureProvider.prototype, 'callApi');
+      const config = {
+        prompts: ['first'],
+        providers: [providerOptions()],
+        tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
+      };
+      fs.writeFileSync(configPath, JSON.stringify(config));
+      const result = await doEval(
+        { watch: true, write: false, share: false, table: false, progressBar: false },
+        {},
+        configPath,
+        { eventSource: 'library', cache: false },
+      );
+      expect((await result.getResults()).map((row) => row.success)).toEqual([true]);
+      expect(cleanup).toHaveBeenCalledOnce();
+
+      config.prompts = ['second'];
+      fs.writeFileSync(configPath, JSON.stringify(config));
+      const [onChange] = watcher.listeners('change');
+      expect(onChange).toBeTypeOf('function');
+      await onChange(configPath);
+
+      expect(call.mock.calls.map(([prompt]) => prompt)).toEqual(['first', 'second']);
+      expect(cleanup).toHaveBeenCalledTimes(2);
+      expect(cleanup.mock.contexts).toEqual(call.mock.contexts);
+      expect(cleanup.mock.contexts[1]).not.toBe(cleanup.mock.contexts[0]);
+      expect(process.exitCode).toBe(previousExitCode);
+    } finally {
+      process.exitCode = previousExitCode;
+      clearConfigCache();
+      if (cacheEnabled) {
+        enableCache();
+      }
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it.each(['caller-owned', 'evaluation-owned', 'nested-owner', 'preloaded'] as const)(
     'preserves %s strategy delegate ownership across real evaluations',
     async (ownership) => {
@@ -306,6 +403,69 @@ describe('provider cleanup ownership', () => {
       providerRegistry.unregister(provider);
     }
   });
+
+  it('retains a failed registered shutdown for global cleanup retry', async () => {
+    const error = new Error('resource is still open');
+    const close = vi.fn();
+    const provider = {
+      ...makeProvider(),
+      shutdown: vi
+        .fn()
+        .mockRejectedValueOnce(error)
+        .mockImplementation(async () => close()),
+    };
+    providerRegistry.register(provider);
+    try {
+      await expect(
+        withProviderCleanup(async () => {
+          trackProvider(provider);
+        }),
+      ).rejects.toBe(error);
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      expect(provider.cleanup).not.toHaveBeenCalled();
+      expect(close).not.toHaveBeenCalled();
+      expect.soft(providerRegistry.has(provider)).toBe(true);
+
+      await providerRegistry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledTimes(2);
+      expect(close).toHaveBeenCalledOnce();
+      expect(providerRegistry.has(provider)).toBe(false);
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it.each([false, true])(
+    'deduplicates targeted shutdown without removing re-registration (reregister=%s)',
+    async (reregister) => {
+      const release = createDeferred<void>();
+      const provider = {
+        ...makeProvider(),
+        shutdown: vi.fn().mockReturnValueOnce(release.promise).mockResolvedValue(undefined),
+      };
+      providerRegistry.register(provider);
+      const pending = providerRegistry.shutdown(provider);
+      try {
+        expect(providerRegistry.has(provider)).toBe(false);
+        await providerRegistry.shutdown(provider);
+        expect(provider.shutdown).toHaveBeenCalledOnce();
+        if (reregister) {
+          providerRegistry.register(provider);
+        }
+        release.resolve();
+        await pending;
+        expect(providerRegistry.has(provider)).toBe(reregister);
+
+        await providerRegistry.shutdownAll();
+        expect(provider.shutdown).toHaveBeenCalledTimes(reregister ? 2 : 1);
+        expect(providerRegistry.has(provider)).toBe(false);
+      } finally {
+        release.resolve();
+        await pending;
+        providerRegistry.unregister(provider);
+      }
+    },
+  );
 
   it('reports cleanup failure without replacing a batch load failure', async () => {
     const error = new Error('cleanup failed');

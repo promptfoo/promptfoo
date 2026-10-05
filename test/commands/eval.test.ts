@@ -2285,36 +2285,6 @@ describe('evalCommand', () => {
     }
   });
 
-  it.each([
-    { id: 'cleanup-provider', constructed: true, expectedCleanup: 1 },
-    { id: 'caller-provider', constructed: false, expectedCleanup: 0 },
-  ])(
-    'cleans only constructed providers after evaluation ($id)',
-    async ({ id, constructed, expectedCleanup }) => {
-      const cleanup = vi.fn().mockResolvedValue(undefined);
-      const provider = {
-        id: () => id,
-        callApi: async () => ({ output: 'ok' }),
-        cleanup,
-      };
-      vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
-        if (constructed) {
-          trackProvider(provider);
-        }
-        return {
-          config: {} as UnifiedConfig,
-          testSuite: { prompts: [], providers: [provider] },
-          basePath: path.resolve('/'),
-        };
-      });
-      vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
-
-      await doEval({}, defaultConfig, defaultConfigPath, {});
-
-      expect(cleanup).toHaveBeenCalledTimes(expectedCleanup);
-    },
-  );
-
   it('cleans constructed providers after evaluation fails', async () => {
     const cleanup = vi.fn();
     const provider = {

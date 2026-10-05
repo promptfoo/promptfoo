@@ -160,6 +160,10 @@ describe('generation provider cleanup ownership', () => {
 
       try {
         await started.promise;
+        if (registry) {
+          releaseSecond.resolve();
+          await vi.advanceTimersByTimeAsync(0);
+        }
         controller.abort();
         releaseFirst.resolve();
         await vi.advanceTimersByTimeAsync(0);
