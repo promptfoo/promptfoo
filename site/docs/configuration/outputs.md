@@ -274,7 +274,9 @@ promptfoo eval --output results.csv
 
 :::warning
 
-`json`, `yaml`, `yml`, `txt`, `html`, and Promptfoo XML outputs include the eval `config`. Sensitive fields are redacted using Promptfoo's sanitizer rules on a best-effort basis (not comprehensive). Non-sensitive `config.env` values may still appear in exports.
+Local outputs preserve eval content, including prompt whitespace, test variables, response metadata, and inline provider credentials. `json`, `yaml`, `yml`, `txt`, `html`, and Promptfoo XML outputs also include the eval `config`. Local exports do not infer secrets from field names or string patterns; the existing tracing-provider credential handling still applies.
+
+Use the `PROMPTFOO_STRIP_*` environment variables to explicitly omit content. Sharing prepares a separate copy with best-effort credential redaction; it does not alter the local results or guarantee removal of secrets from target responses.
 
 JUnit XML omits the eval config, prompts, variables, raw model outputs, assertion reasons, and provider error payloads by design so CI test-report viewers stay compact and do not become a second full export surface.
 
