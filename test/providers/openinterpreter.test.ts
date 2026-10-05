@@ -7,6 +7,7 @@ import { PassThrough } from 'stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { loadApiProvider } from '../../src/providers/index';
+import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { OpenInterpreterProvider } from '../../src/providers/openinterpreter';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
@@ -1170,6 +1171,94 @@ describe('OpenInterpreterProvider', () => {
     expect(threadStart.params.cwd).toContain('promptfoo-openinterpreter-workspace-');
     completeTurn(server, 'temporary');
     await expect(defaultPromise).resolves.toMatchObject({ output: 'temporary' });
+  });
+
+  it('renders prompt-level config templates before validating structured input paths', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-rendered-config-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(workspace, 'inside.png'), 'fake image');
+
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const providerId = vi.fn(() => 'attached-provider');
+    const attachedProvider: Record<string, unknown> = { id: providerId };
+    attachedProvider.self = attachedProvider;
+    const provider = new OpenInterpreterProvider();
+
+    const resultPromise = provider.callApi(
+      JSON.stringify([{ type: 'local_image', path: 'inside.png' }]),
+      {
+        vars: { envValue: 'rendered-env', workspaceDir: workspace },
+        prompt: {
+          raw: 'Rendered structured input',
+          config: {
+            working_dir: '{{ workspaceDir }}',
+            skip_git_repo_check: true,
+            provider: attachedProvider,
+            cli_env: { RENDERED_VALUE: '{{ envValue }}' },
+          },
+        },
+      } as any,
+    );
+
+    const { threadStart, turnStart } = await startTurn(server);
+    expect(threadStart.params.cwd).toBe(workspace);
+    expect(turnStart.params.input).toEqual([
+      { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
+    ]);
+    expect(mocks.spawn.mock.calls[0][2].env.RENDERED_VALUE).toBe('rendered-env');
+    expect(providerId).not.toHaveBeenCalled();
+    completeTurn(server, 'rendered structured input');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'rendered structured input' });
+  });
+
+  it('delegates the complete validated config without discarding the caller context', async () => {
+    const renderingEntry = vi.spyOn(OpenAICodexAppServerProvider.prototype, 'callApi');
+    const resolvedEntry = vi
+      .spyOn(OpenAICodexAppServerProvider.prototype, 'callApiWithRenderedConfig')
+      .mockResolvedValue({ output: 'done' });
+    const provider = new OpenInterpreterProvider();
+    const vars = { ordinary: 'stable' };
+    const context = {
+      vars,
+      prompt: { raw: 'status', label: 'preserved label', config: { harness: 'native' } },
+    };
+
+    await expect(provider.callApi('status', context)).resolves.toMatchObject({ output: 'done' });
+
+    expect(renderingEntry).not.toHaveBeenCalled();
+    expect(resolvedEntry).toHaveBeenCalledOnce();
+    const [, config, delegatedContext] = resolvedEntry.mock.calls[0];
+    expect(config).toEqual(
+      expect.objectContaining({ approval_policy: 'untrusted', sandbox_mode: 'read-only' }),
+    );
+    expect(delegatedContext?.vars).toBe(vars);
+    expect(delegatedContext?.prompt).toEqual(
+      expect.objectContaining({ raw: 'status', label: 'preserved label', config }),
+    );
+  });
+
+  it('validates row values before recreating an inactive temporary home', async () => {
+    const provider = new OpenInterpreterProvider();
+    const home = (provider as unknown as { temporaryHome: string }).temporaryHome;
+    await provider.cleanup();
+    expect(fs.existsSync(home)).toBe(false);
+
+    await expect(
+      provider.callApi('status', {
+        vars: { timeout: 'not-a-timeout' },
+        prompt: {
+          raw: 'status',
+          label: 'invalid setting',
+          config: { request_timeout_ms: '{{ timeout }}' },
+        },
+      }),
+    ).resolves.toMatchObject({ error: expect.stringContaining('request_timeout_ms') });
+    expect(fs.existsSync(home)).toBe(false);
+    expect(mocks.spawn).not.toHaveBeenCalled();
   });
 
   it.each([
