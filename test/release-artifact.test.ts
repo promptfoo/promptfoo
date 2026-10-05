@@ -15,6 +15,7 @@ type Step = {
   with?: Record<string, unknown>;
 };
 type Job = {
+  name?: string;
   needs?: string | string[];
   if?: string;
   permissions: Record<string, string>;
@@ -44,12 +45,12 @@ afterEach(() => {
 });
 
 describe('exact artifact release', () => {
-  it('runs smoke examples after the build', () => {
+  it.each(['build', 'package-build'])('runs smoke examples after %s', (jobName) => {
     const ci = yaml.load(
       fs.readFileSync(path.resolve(__dirname, '../.github/workflows/main.yml'), 'utf8'),
     ) as { jobs: Record<string, Job> };
     const smokeCommand = 'npm run test:smoke -- test/smoke/agent-skill-examples.test.ts';
-    const buildSteps = ci.jobs.build.steps;
+    const buildSteps = ci.jobs[jobName].steps;
     const buildIndex = buildSteps.findIndex((step) => step.run === 'npm run build');
     const smokeIndex = buildSteps.findIndex((step) => step.run === smokeCommand);
     expect(buildIndex).toBeGreaterThan(-1);
@@ -57,6 +58,78 @@ describe('exact artifact release', () => {
     expect(ci.jobs['artifact-consumer'].steps.some((step) => step.run === smokeCommand)).toBe(
       false,
     );
+  });
+
+  it.each(['success', 'failure', 'cancelled', 'skipped', ''])(
+    'requires a successful package producer when its result is %j',
+    (result) => {
+      const ci = yaml.load(
+        fs.readFileSync(path.resolve(__dirname, '../.github/workflows/main.yml'), 'utf8'),
+      ) as { jobs: Record<string, Job> };
+      const producer = ci.jobs['package-build'];
+      const acceptance = ci.jobs['package-acceptance'];
+      expect(acceptance.name).toBe('Build on Node 24.x');
+      const upload = producer.steps.find((step) =>
+        step.uses?.startsWith('actions/upload-artifact@'),
+      )!;
+      expect(upload.with?.['if-no-files-found']).toBe('error');
+
+      for (const consumer of [acceptance, ci.jobs['artifact-consumer']]) {
+        expect(consumer.needs).toBe('package-build');
+        // A skipped required job is accepted by branch protection. Run the guard
+        // after producer failures/skips, while letting workflow cancellation stop it.
+        expect(consumer.if).toBe('${{ !cancelled() }}');
+        expect(consumer.permissions).toEqual({ contents: 'read' });
+        const guard = consumer.steps[0];
+        expect(guard.env).toEqual({ PACKAGE_BUILD_RESULT: '${{ needs.package-build.result }}' });
+        const checked = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+          input: guard.run,
+          env: { ...process.env, PACKAGE_BUILD_RESULT: result },
+          encoding: 'utf8',
+        });
+        expect(checked.status, checked.stderr).toBe(result === 'success' ? 0 : 1);
+        const download = consumer.steps.find((step) =>
+          step.uses?.startsWith('actions/download-artifact@'),
+        )!;
+        expect(download.with).toEqual({
+          name: upload.with?.name,
+          path: '${{ runner.temp }}/package-artifact',
+        });
+      }
+      expect(ci.jobs['sbom-comparison'].needs).toContain('package-acceptance');
+    },
+  );
+
+  it.each([0, 1, 2])('accepts exactly one downloaded archive when given %i', (count) => {
+    const ci = yaml.load(
+      fs.readFileSync(path.resolve(__dirname, '../.github/workflows/main.yml'), 'utf8'),
+    ) as { jobs: Record<string, Job> };
+    const locate = ci.jobs['package-acceptance'].steps.find(
+      (step) => step.name === 'Locate downloaded package',
+    )!;
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-package-locate-'));
+    directories.push(root);
+    for (let index = 0; index < count; index++) {
+      fs.writeFileSync(path.join(root, `package ${index}.tgz`), 'fixture archive');
+    }
+    const output = path.join(root, 'outputs');
+    const checked = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+      input: locate.run,
+      env: {
+        ...process.env,
+        ARTIFACT_DIRECTORY: root.replaceAll('\\', '/'),
+        GITHUB_OUTPUT: output.replaceAll('\\', '/'),
+      },
+      encoding: 'utf8',
+    });
+    expect(checked.status, checked.stderr).toBe(count === 1 ? 0 : 1);
+    if (count === 1) {
+      expect(fs.readFileSync(output, 'utf8').trim()).toBe(
+        `tarball=${root.replaceAll('\\', '/')}/package 0.tgz`,
+      );
+    } else {
+      expect(fs.existsSync(output)).toBe(false);
+    }
   });
 
   it('isolates validation from immutable uploads and the OIDC-only publisher', () => {
