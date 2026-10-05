@@ -261,7 +261,7 @@ jobs:
   # Publish the Node 24 archive before Linux acceptance so platform checks can
   # validate the same immutable upload without waiting for any other build lane.
   package-build:
-    name: Prepare package on Node 24.x
+    name: Prepare package on Node ${{ matrix.node }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions: *read-only-permissions
@@ -290,7 +290,7 @@ jobs:
 
   package-acceptance:
     # Preserve the required check name, including failures before an upload exists.
-    name: Build on Node 24.x
+    name: Build on Node ${{ matrix.node }}
     needs: package-build
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest

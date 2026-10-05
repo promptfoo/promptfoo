@@ -16,6 +16,7 @@ type Step = {
 };
 type Job = {
   name?: string;
+  strategy?: { matrix: { node: string[] } };
   needs?: string | string[];
   if?: string;
   permissions: Record<string, string>;
@@ -68,7 +69,12 @@ describe('exact artifact release', () => {
       ) as { jobs: Record<string, Job> };
       const producer = ci.jobs['package-build'];
       const acceptance = ci.jobs['package-acceptance'];
-      expect(acceptance.name).toBe('Build on Node 24.x');
+      expect(producer.name).toBe('Prepare package on Node ${{ matrix.node }}');
+      expect(acceptance.name).toBe('Build on Node ${{ matrix.node }}');
+      for (const job of [producer, acceptance]) {
+        expect(job.strategy?.matrix.node).toEqual(['24.x']);
+      }
+      expect(acceptance.name?.replace('${{ matrix.node }}', '24.x')).toBe('Build on Node 24.x');
       const upload = producer.steps.find((step) =>
         step.uses?.startsWith('actions/upload-artifact@'),
       )!;
