@@ -1083,6 +1083,11 @@ async function doEvalWithEnv(
 
     // Check if scan was aborted due to target error (efficient DB query, not loading all results)
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+    const observedRepeatStability = evalRecord.getObservedRepeatStability();
+    const repeatStability =
+      resumeEval && observedRepeatStability
+        ? await evalRecord.getRepeatStability()
+        : observedRepeatStability;
 
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
@@ -1102,6 +1107,7 @@ async function doEvalWithEnv(
       maxConcurrency,
       tracker,
       targetErrorStatus,
+      repeatStability,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't

@@ -30,6 +30,7 @@ import {
   type EvaluateTable,
   type EvaluateTableRow,
   type Prompt,
+  type RepeatStabilitySummary,
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
@@ -37,6 +38,7 @@ import {
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import { calculateRepeatStability, RepeatStabilityCalculator } from '../util/eval/repeatStability';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
@@ -65,6 +67,7 @@ import EvalResult, {
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
+  persistRepeatMetadata,
   persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
@@ -339,6 +342,7 @@ export default class Eval {
   // instance is what lets later grading build on earlier grading instead of a stale row.
   private failedEvalResults = new Map<string, EvalResult>();
   private finalJsonlResults = new Map<string, EvaluateResult>();
+  private observedRepeatResults = new Map<string, EvaluateResult>();
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -549,7 +553,11 @@ export default class Eval {
           .values(
             opts.results?.map((r) => ({
               ...r,
-              metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              metadata: persistTraceMetadata(
+                persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+                r.traceId,
+                r.evaluationId,
+              ),
               evalId,
               id: crypto.randomUUID(),
             })),
@@ -755,6 +763,9 @@ export default class Eval {
   }
 
   async addResult(result: EvaluateResult) {
+    if (result.repeatGroupId !== undefined) {
+      this.observedRepeatResults.set(getResultIndexKey(result), result);
+    }
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
     });
@@ -771,10 +782,17 @@ export default class Eval {
 
   recordFinalJsonlResult(result: EvaluateResult) {
     this.finalJsonlResults.set(getResultIndexKey(result), result);
+    if (result.repeatGroupId !== undefined) {
+      this.observedRepeatResults.set(getResultIndexKey(result), result);
+    }
   }
 
   getFinalJsonlResults() {
     return Array.from(this.finalJsonlResults.values());
+  }
+
+  getObservedRepeatStability(): RepeatStabilitySummary | undefined {
+    return calculateRepeatStability(this.observedRepeatResults.values());
   }
 
   recordResultPersistenceFailure(result: EvaluateResult) {
@@ -1375,7 +1393,11 @@ export default class Eval {
         .values(
           results.map((r) => ({
             ...r,
-            metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            metadata: persistTraceMetadata(
+              persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+              r.traceId,
+              r.evaluationId,
+            ),
             evalId: this.id,
           })),
         )
@@ -1434,6 +1456,18 @@ export default class Eval {
     return stats;
   }
 
+  async getRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
+    if (this.useOldResults()) {
+      return calculateRepeatStability(this.oldResults?.results ?? []);
+    }
+
+    const calculator = new RepeatStabilityCalculator();
+    for await (const batch of this.fetchResultsBatched()) {
+      calculator.addResults(batch);
+    }
+    return calculator.getSummary();
+  }
+
   async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
@@ -1454,12 +1488,16 @@ export default class Eval {
 
     const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
+    const results = this.results.map((r) => r.toEvaluateResult(stripFlags));
+    const repeatStability = calculateRepeatStability(results);
+
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
+      results,
       stats,
+      ...(repeatStability && { repeatStability }),
     };
   }
 
