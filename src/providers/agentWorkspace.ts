@@ -9,6 +9,7 @@
  *
  * A workspace keeps one call from affecting another; it is not a security sandbox.
  */
+import { isUtf8 } from 'node:buffer';
 import { execFile } from 'node:child_process';
 import { constants, type Dirent, lstatSync, realpathSync, rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -1283,19 +1284,32 @@ async function getWorkspaceDiff(
           ']',
       );
     }
-    const diff = await git(
-      [
-        '-c',
-        'core.fsmonitor=false',
-        'diff',
-        '--cached',
-        '--no-color',
-        '--no-ext-diff',
-        '--no-textconv',
-        repo.head,
-      ],
-      { env, signal },
+    // The diff is read byte for byte first. Git takes a file for text as long as it holds
+    // no NUL byte, and a byte that is not valid UTF-8 becomes U+FFFD when it is read as
+    // text, so what the file holds could no longer be told from the diff.
+    const diffBytes = Buffer.from(
+      await git(
+        [
+          '-c',
+          'core.fsmonitor=false',
+          'diff',
+          '--cached',
+          '--no-color',
+          '--no-ext-diff',
+          '--no-textconv',
+          repo.head,
+        ],
+        { env, signal, encoding: 'latin1' },
+      ),
+      'latin1',
     );
+    if (!isUtf8(diffBytes)) {
+      notes.push(
+        '[diff incomplete: some changed content is not valid UTF-8 and is shown with ' +
+          'replacement characters]',
+      );
+    }
+    const diff = diffBytes.toString();
     // Only whole patch lines carry these markers: content lines have a +, - or space
     // prefix, and Git quotes newlines in filenames. Deletions, pure renames and mode
     // changes fully describe their operation without any new binary bytes to inspect.
