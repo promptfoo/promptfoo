@@ -39,6 +39,29 @@ function hasUrlUserinfo(url: string): boolean {
   return atIndex > 0;
 }
 
+// Remove public mailto paths only from the host authority inspection copy.
+// The bounded form owner still inspects the original component's keys/values.
+function hostUserinfoInspectionValue(value: string): string {
+  return value.replace(URL_ENCODED_PAIR_RE, (match, separator, key, rawValue) => {
+    if (!/^[A-Za-z0-9._~+%\[\]\-]+$/.test(key)) {
+      return match;
+    }
+    const colon = rawValue.indexOf(':');
+    const equals = rawValue.lastIndexOf('=', colon);
+    const prefix = rawValue.slice(0, equals + 1);
+    if (
+      rawValue.slice(equals + 1, colon).toLowerCase() !== 'mailto' ||
+      (equals !== -1 &&
+        (!/^[A-Za-z0-9._~+%\[\]=\-]+$/.test(prefix) ||
+          prefix.startsWith('=') ||
+          prefix.includes('==')))
+    ) {
+      return match;
+    }
+    return `${separator}${key}=`;
+  });
+}
+
 // Decoded URL payloads also accept the special-scheme spellings recognized by
 // the platform parser, such as a single slash or backslash authority. Keep the
 // generic sanitizer's lexical policy unchanged outside this inherited context.
@@ -61,6 +84,7 @@ function hasUrlPayloadUserinfo(value: string, guard?: UrlPayloadGuard): boolean 
     // original host field; ordinary URL payloads do not acquire that policy.
   }
   if (guard === 'host') {
+    value = hostUserinfoInspectionValue(value);
     try {
       const parsed = new URL(`https://${value}`);
       // A bare email address is public data, not evidence of a password.
@@ -484,7 +508,7 @@ type UrlPayloadGuard = boolean | 'logging' | 'host';
 type CompoundKeyContext = {
   maxDepth: number;
   guardUrlPayload?: UrlPayloadGuard;
-  pendingFormDecode?: boolean;
+  pendingFormDecode?: number;
 };
 
 function isLoggingUrlPayload(guard?: UrlPayloadGuard): boolean {
@@ -496,14 +520,20 @@ function isSecretParameterWithContext(
   value: string | undefined,
   compoundContext?: CompoundKeyContext,
 ): boolean {
-  if (compoundContext?.pendingFormDecode && value !== undefined && isPureTemplateValue(value)) {
+  if (
+    compoundContext?.pendingFormDecode &&
+    value !== undefined &&
+    isPureTemplateValue(
+      decodePendingComponent(value, compoundContext.pendingFormDecode - 1) ?? value,
+    )
+  ) {
     return false;
   }
   // Predicates must see the same pending value interpretation as the owner.
   // Invalid escapes cannot form a true/false control, so retain their bytes.
   const inspectedValue =
     compoundContext?.pendingFormDecode && value !== undefined
-      ? (decodeFormComponent(value) ?? value)
+      ? (decodePendingComponent(value, compoundContext.pendingFormDecode) ?? value)
       : value;
   return (
     isSecretParameter(name, inspectedValue) ||
@@ -1419,14 +1449,55 @@ function sanitizeJsonString(
   const loggingScalar = isLoggingUrlPayload(guardUrlPayload)
     ? getUrlPayloadScalar(scalar, maxDepth - depth)
     : null;
-  return guardUrlPayload &&
+  if (
+    guardUrlPayload &&
     (unparseableUrlMightLeakSecret(scalar, !isLoggingUrlPayload(guardUrlPayload), {
       maxDepth: maxDepth - depth,
       guardUrlPayload,
     }) ||
       (loggingScalar !== null && hasOpaqueLoggingPath(loggingScalar, true)))
-    ? REDACTED
-    : str;
+  ) {
+    return REDACTED;
+  }
+  if (
+    guardUrlPayload &&
+    parsedJson &&
+    scalar !== str &&
+    /[?#]/.test(scalar.replace(NUNJUCKS_PLACEHOLDER, ''))
+  ) {
+    if (maxDepth <= depth) {
+      return REDACTED;
+    }
+    let remaining = maxDepth - depth - 1;
+    let quotedScalar = scalar;
+    let stringLayers = 1;
+    // Inspect only additional JSON string layers, never a container twice.
+    while (quotedScalar.trimStart().startsWith('"')) {
+      if (remaining-- <= 0) {
+        return REDACTED;
+      }
+      try {
+        const parsed: unknown = JSON.parse(quotedScalar);
+        if (typeof parsed !== 'string') {
+          break;
+        }
+        quotedScalar = parsed;
+        stringLayers++;
+      } catch {
+        break;
+      }
+    }
+    const context = { maxDepth: remaining, guardUrlPayload };
+    let sanitized = sanitizeTemplatedUrl(quotedScalar, context, context);
+    if (sanitized === quotedScalar) {
+      return str;
+    }
+    for (let layer = 0; layer < stringLayers; layer++) {
+      sanitized = JSON.stringify(sanitized);
+    }
+    return sanitized;
+  }
+  return str;
 }
 
 // `key=value` where the key is a typical form-data identifier (allow brackets
@@ -1463,6 +1534,21 @@ const URL_ENCODED_PAIR_RE = /(^|[&;])([^=&;]+)=([^&;]*)/g;
 // so one already-selected component retains that exact decoder behavior.
 function decodeQueryComponent(component: string): string {
   return new URLSearchParams(`value=${component.replace(/&/g, '%26')}`).get('value')!;
+}
+
+function decodePendingComponent(
+  value: string | undefined,
+  count: number,
+  decode: (component: string) => string | undefined = decodeFormComponent,
+): string | undefined {
+  for (let index = 0; index < count && value !== undefined; index++) {
+    const next = decode(value);
+    if (next === value) {
+      break;
+    }
+    value = next;
+  }
+  return value;
 }
 
 function decodeFormComponent(component: string): string | undefined {
@@ -1539,52 +1625,53 @@ function redactUrlPayloadValue(
   rawValue?: string,
 ): string | null {
   const originalDecoded = decoded;
-  const hadPendingDecode = compoundContext?.pendingFormDecode === true;
-  if (compoundContext?.pendingFormDecode) {
-    // The containing URI retained its component boundaries before one outer
-    // decode. Consume that pending layer at this component, not on the URI.
-    compoundContext = { ...compoundContext, pendingFormDecode: false };
-    rawValue = decoded;
-    decoded =
-      decoded === undefined
-        ? undefined
-        : isParsedQueryValue
-          ? decodeQueryComponent(decoded)
-          : decodeFormComponent(decoded);
+  const pendingDecodes = compoundContext?.pendingFormDecode ?? 0;
+  const interpretations = [decoded];
+  for (let index = 0; index < pendingDecodes && decoded !== undefined; index++) {
+    decoded = isParsedQueryValue ? decodeQueryComponent(decoded) : decodeFormComponent(decoded);
+    interpretations.push(decoded);
   }
-  const nestedJson = redactNestedJsonValue(
-    decoded,
-    compoundContext,
-    compoundContext?.guardUrlPayload ? 'original' : 'null',
-  );
-  if (nestedJson !== null) {
-    // An extra interpretation alone is not a redaction. Preserve the bytes
-    // seen by the caller when the selected container was unchanged.
-    return hadPendingDecode && nestedJson === decoded ? originalDecoded! : nestedJson;
+  if (pendingDecodes) {
+    compoundContext = { ...compoundContext!, pendingFormDecode: 0 };
   }
-  if (compoundContext?.guardUrlPayload && rawValue !== undefined && rawValue !== decoded) {
-    const rawJson = redactNestedJsonValue(rawValue, compoundContext, 'original');
-    if (rawJson !== null) {
-      return rawJson;
+  if (compoundContext?.guardUrlPayload && rawValue !== undefined) {
+    interpretations.unshift(rawValue);
+  }
+  // Choose the most decoded valid container before traversing it once. An
+  // invalid later spelling must not discard a valid earlier JSON container.
+  for (let index = interpretations.length - 1; index >= 0; index--) {
+    const candidate = interpretations[index];
+    const nestedJson = redactNestedJsonValue(
+      candidate,
+      compoundContext,
+      compoundContext?.guardUrlPayload ? 'original' : 'null',
+    );
+    if (nestedJson !== null) {
+      return nestedJson === candidate ? (originalDecoded ?? rawValue ?? nestedJson) : nestedJson;
     }
   }
-  if (compoundContext?.guardUrlPayload && decoded !== undefined) {
-    if (rawValue !== undefined && rawValue !== decoded) {
-      const rawBoundary = rawValue.search(/[?#]/);
-      const decodedBoundary = decoded.search(/[?#]/);
+  if (compoundContext?.guardUrlPayload) {
+    for (let index = 0; index < interpretations.length - 1; index++) {
+      const rawScalar = interpretations[index];
+      const decodedScalar = interpretations[index + 1];
+      if (rawScalar === undefined || decodedScalar === undefined || rawScalar === decodedScalar) {
+        continue;
+      }
+      const rawBoundary = rawScalar.search(/[?#]/);
+      const decodedBoundary = decodedScalar.search(/[?#]/);
       if (
         rawBoundary >= 0 &&
         decodedBoundary >= 0 &&
-        decodeFormComponent(rawValue.slice(0, rawBoundary)) === decoded.slice(0, decodedBoundary)
+        decodeFormComponent(rawScalar.slice(0, rawBoundary)) ===
+          decodedScalar.slice(0, decodedBoundary)
       ) {
-        const rawChild = decoded.slice(0, decodedBoundary) + rawValue.slice(rawBoundary);
-        // Preserve the scalar dispatcher's stricter inherited logging guard
-        // before choosing the raw URL's component boundaries.
+        const rawChild = decodedScalar.slice(0, decodedBoundary) + rawScalar.slice(rawBoundary);
+        const effectiveScalar = decoded ?? originalDecoded ?? decodedScalar;
         if (
           isLoggingUrlPayload(compoundContext.guardUrlPayload) &&
-          !URL_REFERENCE.test(decoded) &&
-          !(isParsedQueryValue && hasOnlyTemplateUserinfo(decoded)) &&
-          unparseableUrlMightLeakSecret(decoded, false, compoundContext)
+          !URL_REFERENCE.test(effectiveScalar) &&
+          !(isParsedQueryValue && hasOnlyTemplateUserinfo(effectiveScalar)) &&
+          unparseableUrlMightLeakSecret(effectiveScalar, false, compoundContext)
         ) {
           return REDACTED;
         }
@@ -1594,7 +1681,7 @@ function redactUrlPayloadValue(
         const context = {
           ...compoundContext,
           maxDepth: compoundContext.maxDepth - 1,
-          pendingFormDecode: true,
+          pendingFormDecode: interpretations.length - index - 1,
         };
         const preserveUserinfo = isParsedQueryValue && hasOnlyTemplateUserinfo(rawChild);
         const sanitized = preserveUserinfo
@@ -1608,6 +1695,9 @@ function redactUrlPayloadValue(
             : sanitized;
         return guarded === rawChild ? null : guarded;
       }
+    }
+    if (decoded === undefined) {
+      return null;
     }
     if (isParsedQueryValue) {
       const scalar = getUrlPayloadScalar(decoded, compoundContext.maxDepth);
@@ -1708,7 +1798,9 @@ function sanitizeUrlEncodedStringWithContext(
     // key smuggles its secret value past redaction (e.g. `api%ZZkey=AKIA...`).
     const key = decodeFormComponent(rawKey);
     const decodedKey =
-      compoundContext?.pendingFormDecode && key !== undefined ? decodeFormComponent(key) : key;
+      compoundContext?.pendingFormDecode && key !== undefined
+        ? decodePendingComponent(key, compoundContext.pendingFormDecode)
+        : key;
     const decodedValue = decodeFormComponent(rawValue);
     const keyIsSecret =
       decodedKey !== undefined &&
@@ -1916,7 +2008,9 @@ function sanitizePlainObject(
           }
           let hasHostComponents = hasUrlUserinfo(normalizedHost);
           try {
-            const parsed = new URL(normalizedHost);
+            const parsed = new URL(
+              hasScheme ? value : `https://${hostUserinfoInspectionValue(value)}`,
+            );
             hasHostComponents = Boolean(
               parsed.username || parsed.password || parsed.search || parsed.hash,
             );
@@ -2393,7 +2487,10 @@ function sanitizeUrlWithContext(
         sanitizedUrl.searchParams.entries(),
       ).entries()) {
         const rawValue = rawQueryValues[index];
-        const inspectedKey = payloadContext?.pendingFormDecode ? decodeQueryComponent(key) : key;
+        const inspectedKey = payloadContext?.pendingFormDecode
+          ? (decodePendingComponent(key, payloadContext.pendingFormDecode, decodeQueryComponent) ??
+            key)
+          : key;
         if (
           isSecretParameterWithContext(inspectedKey, value, compoundContext) ||
           rawSecretParamKeys.has(key) ||

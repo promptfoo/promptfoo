@@ -39,6 +39,190 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 describe('sanitizeMcpToolData', () => {
+  it('inspects repeatedly quoted URI components without requiring a template', () => {
+    for (const prefix of [
+      'mailto:alice@example.test?data=',
+      'callback?data=',
+      'https://example.test/#data=',
+    ]) {
+      for (const quoteDepth of [1, 2, 3]) {
+        const fields = {
+          password: 'non-template-quoted-fixture',
+          label: 'a&b;public#tag',
+          page: 2,
+        };
+        let value = prefix + encodeURIComponent(JSON.stringify(fields));
+        let expected =
+          prefix + encodeURIComponent(JSON.stringify({ ...fields, password: '[REDACTED]' }));
+        let publicValue =
+          prefix + encodeURIComponent(JSON.stringify({ label: 'public%22&a;b#c', page: 2 }));
+        for (let i = 0; i < quoteDepth; i++) {
+          value = JSON.stringify(value);
+          expected = JSON.stringify(expected);
+          publicValue = JSON.stringify(publicValue);
+        }
+        for (const role of ['apiHost', 'url', 'callbackUrl']) {
+          const args = { [role]: JSON.stringify({ target: value, page: 2 }) };
+          const original = structuredClone(args);
+          expect(sanitizeMcpToolData(args)).toEqual({
+            [role]: JSON.stringify({ target: expected, page: 2 }),
+          });
+          expect(args).toEqual(original);
+          const publicArgs = { [role]: JSON.stringify({ target: publicValue, page: 2 }) };
+          expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+        }
+      }
+    }
+  });
+
+  it('sanitizes quoted URL/form payloads within decoded objects and arrays', () => {
+    for (const role of ['url', 'apiBaseUrl', 'apiHost', 'callbackUrl']) {
+      for (const prefix of ['https://example.test/?data=', 'callback?data=', 'callback#data=']) {
+        for (const quoteDepth of [1, 2]) {
+          const fields = { password: 'quoted-fixture', page: 2 };
+          let payload = `${prefix}${encodeURIComponent(JSON.stringify(fields))}&label={{ x }}`;
+          let expected = `${prefix}${encodeURIComponent(JSON.stringify({ ...fields, password: '[REDACTED]' }))}&label={{ x }}`;
+          for (let i = 0; i < quoteDepth; i++) {
+            payload = JSON.stringify(payload);
+            expected = JSON.stringify(expected);
+          }
+          for (const wrap of [
+            (value: string) => ({ data: value, page: 2 }),
+            (value: string) => [value],
+          ]) {
+            const input = { [role]: JSON.stringify(wrap(payload)) };
+            const original = structuredClone(input);
+            expect(sanitizeMcpToolData(input)).toEqual({ [role]: JSON.stringify(wrap(expected)) });
+            expect(input).toEqual(original);
+          }
+        }
+      }
+    }
+  });
+
+  it('retains raw provenance across an additional form layer', () => {
+    for (const role of ['url', 'apiBaseUrl', 'callbackUrl']) {
+      for (const password of [
+        'extra-fixture%22',
+        'extra-fixture%5c',
+        'extra-fixture%ZZ',
+        'extra-fixture&a;b#c',
+      ]) {
+        const fields = { password, label: 'public&a;b#c', page: 2 };
+        const payload = `data=redirect=callback?data=${encodeURIComponent(JSON.stringify(fields))}&label={{ x }}`;
+        const safeChild = `callback?data=${encodeURIComponent(JSON.stringify({ ...fields, password: '[REDACTED]' }))}`;
+        const expected = `data=${encodeURIComponent(`redirect=${encodeURIComponent(safeChild)}`)}&label={{ x }}`;
+        const input = { [role]: payload };
+        const original = structuredClone(input);
+        expect(sanitizeMcpToolData(input)).toEqual({ [role]: expected });
+        expect(input).toEqual(original);
+      }
+    }
+  });
+
+  it('preserves public quoted and nested-form components byte for byte', () => {
+    const fields = { '%70age': 2, note: 'public%20safe&a;b#c' };
+    const value = `data=redirect=callback?data=${encodeURIComponent(JSON.stringify(fields))}&label={{ x }}`;
+    for (const role of ['url', 'apiBaseUrl', 'callbackUrl']) {
+      for (const payload of [value, JSON.stringify({ data: JSON.stringify(value) })]) {
+        const input = { [role]: payload };
+        expect(sanitizeMcpToolData(input)).toEqual(input);
+      }
+    }
+  });
+
+  it('keeps pending decode controls aligned across multiple form owners', () => {
+    for (const wrappers of [1, 2, 3]) {
+      for (const value of [
+        'includeCredentials=%2574rue',
+        'withPassword=%2566alse',
+        'password=%7B%7B%20password%20%7D%7D',
+      ]) {
+        const input = {
+          url: `https://outer.test/?data=${'data='.repeat(wrappers)}redirect=callback?${value}&page=2`,
+        };
+        expect(sanitizeMcpToolData(input)).toEqual(input);
+      }
+      const data = JSON.stringify({ '%70assword': 'pending-key-fixture', label: 'a;b' });
+      const input = {
+        url: `${'data='.repeat(wrappers)}redirect=https://example.test/?data=${encodeURIComponent(data)}&label={{ x }}`,
+      };
+      expect(JSON.stringify(sanitizeMcpToolData(input))).not.toContain('pending-key-fixture');
+    }
+  });
+
+  it('distinguishes public mailbox form paths from actual host credentials', () => {
+    for (const value of [
+      'data=data%3Dmailto%3Aalice%40example.test',
+      'data=mailto:alice@example.test',
+      'data=data=mailto:{{ user }}@example.test',
+      'data=jdbc%3Adb%3Bdata%3Dmailto%3Aalice%40example.test',
+      'https://host/?data=data%3Dmailto%3Aalice%40example.test',
+      'https://host/#data=data%3Dmailto%3Aalice%40example.test',
+    ]) {
+      const args = {
+        apiHost: value,
+        env: { SERVICE_HOST: value },
+        url: JSON.stringify({ apiHost: value, page: 2 }),
+      };
+      const original = structuredClone(args);
+      expect(sanitizeMcpToolData(args)).toEqual(args);
+      expect(args).toEqual(original);
+    }
+    for (const value of [
+      'data=mailto:alice@example.test?password=mailbox-fixture',
+      'data=mailto:alice@example.test?token=mailbox-fixture',
+      'data=alice:mailbox-fixture@example.test',
+      'data=data=alice:mailbox-fixture@example.test%ZZ',
+      'data=data=alice:mailbox-fixture@example.test%FF',
+      'data=alice:mailbox-fixture=mailto:other@example.test',
+    ]) {
+      const args = {
+        apiHost: value,
+        env: { SERVICE_HOST: value },
+        url: JSON.stringify({ apiHost: value, page: 2 }),
+      };
+      const original = structuredClone(args);
+      expect(JSON.stringify(sanitizeMcpToolData(args))).not.toContain('mailbox-fixture');
+      expect(args).toEqual(original);
+    }
+    // The existing generic helper does not opt into the mailbox interpretation.
+    expect(
+      sanitizeObject(
+        { apiHost: 'data=data%3Dmailto%3Aalice%40example.test' },
+        { sanitizeUrls: true },
+      ),
+    ).toEqual({ apiHost: 'data=data%3Dmailto%3Aalice%40example.test' });
+  });
+
+  it('bounds nested mailbox and pending form ownership without changing public bytes', () => {
+    for (const levels of [1, 4, 12, 24]) {
+      let value = 'mailto:alice@example.test';
+      for (let i = 0; i < levels; i++) {
+        value = `data=${encodeURIComponent(value)}`;
+      }
+      const input = { apiHost: value };
+      const parse = vi.spyOn(JSON, 'parse');
+      let result: unknown;
+      let calls = 0;
+      try {
+        result = sanitizeMcpToolData(input);
+        calls = parse.mock.calls.length;
+      } finally {
+        parse.mockRestore();
+      }
+      expect(result).toEqual(input);
+      expect(calls).toBeLessThan(levels * 3 + 10);
+    }
+    let privateValue = 'alice:bounded-mailbox-fixture@example.test';
+    for (let i = 0; i < 65; i++) {
+      privateValue = `data=${encodeURIComponent(privateValue)}`;
+    }
+    expect(JSON.stringify(sanitizeMcpToolData({ apiHost: privateValue }))).not.toContain(
+      'bounded-mailbox-fixture',
+    );
+  });
+
   it('retains valid JSON provenance through nested form URL decoding', () => {
     for (const prefix of [
       'callback?data=',
