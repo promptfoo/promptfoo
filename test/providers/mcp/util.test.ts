@@ -618,6 +618,33 @@ describe('sanitizeMcpToolData', () => {
     },
   );
 
+  it.each(['tokenUsages', 'tokenBudgets', 'signatureAlgorithms', 'passwordPolicies'])(
+    'preserves ordinary plural %s metadata and protects nested credentials',
+    (name) => {
+      const fields = { [name]: [{ count: 4, label: 'public', databasePassword: 'fixture' }] };
+      const expected = { [name]: [{ count: 4, label: 'public', databasePassword: '[REDACTED]' }] };
+      for (const encode of [
+        (value: unknown) => value,
+        (value: unknown) => ({ payload: JSON.stringify(value) }),
+        (value: unknown) => ({ payload: `data=${encodeURIComponent(JSON.stringify(value))}` }),
+      ]) {
+        const args = { one: { two: { three: { four: { five: encode(fields) } } } } };
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(encode(fields))).toEqual(encode(expected));
+        expect(sanitizeMcpToolData(args)).toEqual({
+          one: { two: { three: { four: { five: encode(expected) } } } },
+        });
+        expect(args).toEqual(original);
+      }
+      expect(sanitizeObject(fields, { sanitizeUrls: true, maxDepth: 64 })).toEqual(fields);
+      expect(sanitizeMcpToolData({ clientSecrets: fields })).toEqual({
+        clientSecrets: {
+          [name]: [{ count: '[REDACTED]', label: '[REDACTED]', databasePassword: '[REDACTED]' }],
+        },
+      });
+    },
+  );
+
   it.each(['apiHost', 'env.SERVICE_HOST', 'env.service_host'])(
     'sanitizes raw MCP payloads before normalizing %s',
     (name) => {

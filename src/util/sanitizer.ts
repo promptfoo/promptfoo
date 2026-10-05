@@ -321,7 +321,9 @@ function getCompoundSecretObjectFieldKind(
     return 'credential';
   }
   if (
-    /(?:tokenusage|tokenbudget|tokenids|signaturealgorithm|passwordpolicy)$/.test(normalized) ||
+    /(?:tokenusages?|tokenbudgets?|tokenids|signaturealgorithms?|passwordpolic(?:y|ies))$/.test(
+      normalized,
+    ) ||
     /(?:url|uri|host|endpoint|proxy)$/.test(normalized) ||
     isBooleanCredentialControl(name, typeof value === 'string' ? value : undefined)
   ) {
