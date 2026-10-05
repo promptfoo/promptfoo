@@ -1339,6 +1339,22 @@ describe('logger', () => {
       expect(call).toContain('123');
     });
 
+    it.each(['debug', 'info', 'warn', 'error'] as const)(
+      'preserves the caller message for custom %s logging',
+      (level) => {
+        logger.setStructuredLogging(true);
+        const context = { message: 'Context message', requestId: 'request-123' };
+
+        logger.default[level]('Caller message', context);
+
+        expect(customLogger[level]).toHaveBeenCalledWith({
+          message: 'Caller message',
+          requestId: 'request-123',
+        });
+        expect(context.message).toBe('Context message');
+      },
+    );
+
     it('should include all context fields in structured output', () => {
       logger.setStructuredLogging(true);
 
