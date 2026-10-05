@@ -18,6 +18,8 @@ import {
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
+import { isPromptAllowed } from '../util/promptMatching';
+import { getProviderIdentifier } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import {
   accumulateGradingTokenUsage,
@@ -25,7 +27,7 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 
-import type { TokenUsage } from '../types/index';
+import type { TestSuite, TokenUsage } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -138,6 +140,34 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
     .all();
 
   return errorResults.map((r) => r.id);
+}
+
+/**
+ * Why the ERROR results of a saved eval cannot be retried with a test suite, if they cannot.
+ *
+ * Results are addressed by column, and a retry removes the errors it replaces. With another
+ * number of columns, for example because a provider no longer resolves, the retried results
+ * would land in the columns of other providers. An extension can still change the providers
+ * and prompts before the run, so a suite with extensions is not judged.
+ */
+export function getRetryColumnMismatch(
+  evalRecord: Pick<Eval, 'id' | 'prompts'>,
+  testSuite: TestSuite,
+): string | undefined {
+  if (testSuite.extensions?.length) {
+    return undefined;
+  }
+  const savedColumns = Array.isArray(evalRecord.prompts) ? evalRecord.prompts.length : 0;
+  // The columns the evaluator builds: for each provider, the prompts it is allowed to run.
+  let columns = 0;
+  for (const provider of testSuite.providers) {
+    const allowed = testSuite.providerPromptMap?.[getProviderIdentifier(provider)];
+    columns += testSuite.prompts.filter((prompt) => isPromptAllowed(prompt, allowed)).length;
+  }
+  if (savedColumns === 0 || columns === savedColumns) {
+    return undefined;
+  }
+  return `Cannot retry errors for evaluation ${evalRecord.id}: it has ${savedColumns} result ${savedColumns === 1 ? 'column' : 'columns'}, but its providers and prompts now make ${columns}, so retried results would not line up with the saved ones. The evaluation was not changed.`;
 }
 
 /**
@@ -436,6 +466,13 @@ async function retryWithConfig(
   { testSuite, commandLineOptions, config }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
 ) {
   const evalId = originalEval.id;
+
+  // An explicit config, or a provider that no longer resolves, can make other columns than
+  // the eval has. Nothing is run then.
+  const columnMismatch = getRetryColumnMismatch(originalEval, testSuite);
+  if (columnMismatch) {
+    throw new ConfigResolutionError(columnMismatch);
+  }
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:

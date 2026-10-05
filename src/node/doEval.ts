@@ -65,6 +65,7 @@ import {
   deleteErrorResults,
   findReplacedErrorResults,
   getErrorResultIds,
+  getRetryColumnMismatch,
   recalculatePromptMetrics,
   warnAboutKeptErrorResults,
 } from './retry';
@@ -351,16 +352,6 @@ function getReplayPrompts(
     providers: providerKeys.length,
   });
   return { prompts: closest ?? columns.map(toReplayPrompt) };
-}
-
-/** How many results-table columns the evaluator builds for a test suite. */
-function countColumns(testSuite: TestSuite): number {
-  let count = 0;
-  for (const provider of testSuite.providers) {
-    const allowed = testSuite.providerPromptMap?.[getProviderIdentifier(provider)];
-    count += testSuite.prompts.filter((prompt) => isPromptAllowed(prompt, allowed)).length;
-  }
-  return count;
 }
 
 /** Makes a resumed or retried eval build the prompt columns of its first run again. */
@@ -809,19 +800,11 @@ async function doEvalWithEnv(
         isCliInvocation,
       );
     }
-    // Results are addressed by column, and a retry removes the errors it replaces. With
-    // another number of columns, for example because a provider no longer resolves, the
-    // retried results would land in the columns of other providers. An extension can still
-    // change the providers and prompts before the run, so such a suite is not judged here.
-    if (resumeEval && retryErrorResultIds && !testSuite.extensions?.length) {
-      const savedColumns = Array.isArray(resumeEval.prompts) ? resumeEval.prompts.length : 0;
-      const columns = countColumns(testSuite);
-      if (savedColumns > 0 && columns !== savedColumns) {
-        return failEvalRun(
-          `Cannot retry errors for evaluation ${resumeEval.id}: it has ${savedColumns} result ${savedColumns === 1 ? 'column' : 'columns'}, but its providers and prompts now make ${columns}. A provider or prompt of the first run is no longer part of it. The evaluation was not changed.`,
-          isCliInvocation,
-        );
-      }
+    // A retry whose providers and prompts make other columns than the eval has is not run.
+    const columnMismatch =
+      resumeEval && retryErrorResultIds ? getRetryColumnMismatch(resumeEval, testSuite) : undefined;
+    if (columnMismatch) {
+      return failEvalRun(columnMismatch, isCliInvocation);
     }
     if (resumeEval) {
       cliState.resume = true;

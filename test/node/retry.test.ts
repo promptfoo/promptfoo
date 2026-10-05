@@ -8,6 +8,7 @@ import { notifyEvaluationChanged } from '../../src/models/evalMutation';
 import {
   deleteErrorResults,
   getErrorResultIds,
+  getRetryColumnMismatch,
   recalculatePromptMetrics,
   retryCommand,
 } from '../../src/node/retry';
@@ -752,6 +753,102 @@ describe('retryCommand', () => {
       'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
       expect.objectContaining({ outputPaths: ['results.jsonl'] }),
     );
+  });
+
+  describe('when the providers and prompts make other columns than the eval has', () => {
+    const prompt = { raw: 'Say {{word}}', label: 'Say {{word}}' };
+    const provider = (label: string) => ({ id: () => 'echo', label, callApi: vi.fn() });
+    const savedColumns = [
+      { ...prompt, provider: 'first-target' },
+      { ...prompt, provider: 'second-target' },
+    ];
+    const suite = (overrides: Partial<TestSuite> = {}) =>
+      ({
+        prompts: [prompt],
+        providers: [provider('first-target'), provider('second-target')],
+        tests: [],
+        ...overrides,
+      }) as unknown as TestSuite;
+    const evalWithColumns = () => createEval({ prompts: savedColumns } as Partial<Eval>);
+
+    it('finds no mismatch when the suite makes the saved number of columns', () => {
+      expect(getRetryColumnMismatch(evalWithColumns(), suite())).toBeUndefined();
+      // A provider under another name still makes its column.
+      expect(
+        getRetryColumnMismatch(
+          evalWithColumns(),
+          suite({ providers: [provider('first-target'), provider('renamed')] as never }),
+        ),
+      ).toBeUndefined();
+      // Two prompts for one provider and none for the other are two columns as well.
+      expect(
+        getRetryColumnMismatch(
+          evalWithColumns(),
+          suite({
+            prompts: [prompt, { raw: 'Shout {{word}}', label: 'Shout {{word}}' }],
+            providerPromptMap: {
+              'first-target': ['Say {{word}}', 'Shout {{word}}'],
+              'second-target': [],
+            },
+          }),
+        ),
+      ).toBeUndefined();
+    });
+
+    it.each([
+      ['a provider no longer resolves', { providers: [provider('second-target')] }, 1],
+      [
+        'a provider was added',
+        { providers: ['first-target', 'second-target', 'third-target'].map(provider) },
+        3,
+      ],
+      ['a prompt was added', { prompts: [prompt, { raw: 'Shout', label: 'Shout' }] }, 4],
+      [
+        'a prompt filter leaves a provider without prompts',
+        { providerPromptMap: { 'first-target': [] } },
+        1,
+      ],
+    ])('names both counts when %s', (_name, overrides, columns) => {
+      expect(getRetryColumnMismatch(evalWithColumns(), suite(overrides as never))).toBe(
+        `Cannot retry errors for evaluation eval-123: it has 2 result columns, but its providers and prompts now make ${columns}, so retried results would not line up with the saved ones. The evaluation was not changed.`,
+      );
+    });
+
+    it('does not judge a suite whose extensions can still change it', () => {
+      expect(
+        getRetryColumnMismatch(
+          evalWithColumns(),
+          suite({
+            providers: [provider('second-target')] as never,
+            extensions: ['file://hooks.js:beforeAll'],
+          }),
+        ),
+      ).toBeUndefined();
+    });
+
+    it('does not judge an eval without saved columns', () => {
+      expect(getRetryColumnMismatch(createEval(), suite())).toBeUndefined();
+    });
+
+    it('does not run the retry command', async () => {
+      const originalEval = evalWithColumns();
+      vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+      dbMocks.errorRows.push({ id: 'error-result-1' });
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        basePath: '/workspace',
+        config: {} as UnifiedConfig,
+        testSuite: suite({ providers: [provider('second-target')] as never }),
+      });
+
+      await expect(retryCommand(originalEval.id, {})).rejects.toThrow(
+        'Cannot retry errors for evaluation eval-123: it has 2 result columns, but its providers and prompts now make 1',
+      );
+
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(dbMocks.db.delete).not.toHaveBeenCalled();
+      expect(cliState.resume).toBe(false);
+      expect(cliState.retryMode).toBe(false);
+    });
   });
 
   it('keeps the errors whose cell did not run again', async () => {

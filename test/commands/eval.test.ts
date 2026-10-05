@@ -35,6 +35,7 @@ import {
   deleteErrorResults,
   findReplacedErrorResults,
   getErrorResultIds,
+  getRetryColumnMismatch,
   recalculatePromptMetrics,
   warnAboutKeptErrorResults,
 } from '../../src/node/retry';
@@ -76,6 +77,7 @@ vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
   findReplacedErrorResults: vi.fn(),
   getErrorResultIds: vi.fn(),
+  getRetryColumnMismatch: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
   warnAboutKeptErrorResults: vi.fn(),
 }));
@@ -217,6 +219,7 @@ describe('evalCommand', () => {
       kept: [],
     }));
     vi.mocked(getErrorResultIds).mockResolvedValue([]);
+    vi.mocked(getRetryColumnMismatch).mockReturnValue(undefined);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
   });
 
@@ -2273,68 +2276,73 @@ describe('evalCommand', () => {
     }
   });
 
-  describe('retrying errors when the saved columns cannot be laid out again', () => {
-    const column = { raw: 'retry prompt', label: 'Retry', config: {} };
-    const secondTarget = () =>
-      ({ id: () => 'echo', label: 'second-target', callApi: vi.fn() }) as ApiProvider;
-
-    /** A saved eval with a column for each of two providers, of which only the second resolves. */
-    function mockEvalWithMissingProvider(testSuite: Partial<TestSuite> = {}) {
-      const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
-      latestEval.prompts = [
-        { ...column, provider: 'first-target' },
-        { ...column, provider: 'second-target' },
-      ];
-      const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
-      vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
-      vi.mocked(resolveConfigs).mockResolvedValueOnce({
-        config: {} as UnifiedConfig,
-        testSuite: { prompts: [], providers: [secondTarget()], ...testSuite },
-        basePath: path.resolve('/'),
-      });
-      return { latestEval, latestSpy };
-    }
-
-    it('should not run, so that no result lands in the column of another provider', async () => {
-      const { latestEval, latestSpy } = mockEvalWithMissingProvider();
-
-      try {
-        await expect(
-          doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
-        ).rejects.toThrow(
-          `Cannot retry errors for evaluation ${latestEval.id}: it has 2 result columns, but its providers and prompts now make 1. A provider or prompt of the first run is no longer part of it. The evaluation was not changed.`,
-        );
-
-        expect(evaluate).not.toHaveBeenCalled();
-        expect(findReplacedErrorResults).not.toHaveBeenCalled();
-        expect(deleteErrorResults).not.toHaveBeenCalled();
-        expect(recalculatePromptMetrics).not.toHaveBeenCalled();
-        expect(cliState.resume).toBe(false);
-        expect(cliState.retryMode).toBe(false);
-        expect(cliState._retryErrorResultIds).toBeUndefined();
-      } finally {
-        latestSpy.mockRestore();
-      }
+  it('should not retry errors when the saved columns cannot be laid out again', async () => {
+    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+    latestEval.prompts = [
+      { raw: 'retry prompt', label: 'Retry', config: {}, provider: 'first-target' },
+      { raw: 'retry prompt', label: 'Retry', config: {}, provider: 'second-target' },
+    ];
+    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
+    // Only the second provider of the saved eval still resolves.
+    const testSuite = {
+      prompts: [],
+      providers: [{ id: () => 'echo', label: 'second-target', callApi: vi.fn() } as ApiProvider],
+    };
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite,
+      basePath: path.resolve('/'),
     });
+    vi.mocked(getRetryColumnMismatch).mockReturnValueOnce('The columns do not line up.');
 
-    it('should leave it to the run when an extension can still change the suite', async () => {
-      const { latestEval, latestSpy } = mockEvalWithMissingProvider({
-        extensions: ['file://hooks.js:beforeAll'],
-      });
-      vi.mocked(evaluate).mockImplementationOnce(
-        async (_testSuite, evalRecord) => evalRecord as Eval,
+    try {
+      await expect(
+        doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+      ).rejects.toThrow('The columns do not line up.');
+
+      // Asked about the suite as it will run, with the prompts rebuilt from the saved columns.
+      expect(getRetryColumnMismatch).toHaveBeenCalledWith(latestEval, testSuite);
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(findReplacedErrorResults).not.toHaveBeenCalled();
+      expect(deleteErrorResults).not.toHaveBeenCalled();
+      expect(recalculatePromptMetrics).not.toHaveBeenCalled();
+      expect(cliState.resume).toBe(false);
+      expect(cliState.retryMode).toBe(false);
+      expect(cliState._retryErrorResultIds).toBeUndefined();
+    } finally {
+      latestSpy.mockRestore();
+    }
+  });
+
+  it('should not ask whether the columns line up when it resumes', async () => {
+    const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
+    const findSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [{ id: () => 'echo', label: 'target', callApi: vi.fn() } as ApiProvider],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    try {
+      await doEval(
+        { resume: resumeEval.id } as Parameters<typeof doEval>[0],
+        defaultConfig,
+        defaultConfigPath,
+        {},
       );
 
-      try {
-        await expect(
-          doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
-        ).resolves.toBe(latestEval);
-
-        expect(evaluate).toHaveBeenCalledTimes(1);
-      } finally {
-        latestSpy.mockRestore();
-      }
-    });
+      expect(getRetryColumnMismatch).not.toHaveBeenCalled();
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    } finally {
+      findSpy.mockRestore();
+    }
   });
 
   it('should preserve error results when the stored provider filter matches no providers', async () => {
