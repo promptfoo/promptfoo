@@ -1384,6 +1384,7 @@ function sanitizeJsonString(
   sanitizeUrls = false,
   redactCompoundKeys = false,
   guardUrlPayload: UrlPayloadGuard = false,
+  pendingFormDecode = 0,
 ): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
@@ -1418,7 +1419,7 @@ function sanitizeJsonString(
       throw error;
     }
     if (guardUrlPayload) {
-      const context = { maxDepth: maxDepth - depth, guardUrlPayload };
+      const context = { maxDepth: maxDepth - depth, guardUrlPayload, pendingFormDecode };
       if (
         looksLikeSecret(str) ||
         (isLoggingUrlPayload(guardUrlPayload) && unparseableUrlMightLeakSecret(str, false, context))
@@ -1454,6 +1455,7 @@ function sanitizeJsonString(
     (unparseableUrlMightLeakSecret(scalar, !isLoggingUrlPayload(guardUrlPayload), {
       maxDepth: maxDepth - depth,
       guardUrlPayload,
+      pendingFormDecode,
     }) ||
       (loggingScalar !== null && hasOpaqueLoggingPath(loggingScalar, true)))
   ) {
@@ -1487,7 +1489,7 @@ function sanitizeJsonString(
         break;
       }
     }
-    const context = { maxDepth: remaining, guardUrlPayload };
+    const context = { maxDepth: remaining, guardUrlPayload, pendingFormDecode };
     let sanitized = sanitizeTemplatedUrl(quotedScalar, context, context);
     if (sanitized === quotedScalar) {
       return str;
@@ -1571,12 +1573,20 @@ function redactNestedJsonValue(
   decoded: string | undefined,
   compoundContext?: CompoundKeyContext,
   unchangedResult: 'null' | 'canonical' | 'original' = 'null',
+  // Whole URL fields own quoted scalars; form/query candidates retain their
+  // dedicated scalar owner so decoding and quote layers are handled once.
+  allowQuotedScalar = false,
 ): string | null {
   if (decoded === undefined) {
     return null;
   }
   const trimmed = decoded.trim();
-  if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+  if (
+    !trimmed ||
+    (trimmed[0] !== '{' &&
+      trimmed[0] !== '[' &&
+      !(allowQuotedScalar && compoundContext?.guardUrlPayload && trimmed[0] === '"'))
+  ) {
     return null;
   }
   let parsed: unknown;
@@ -1584,6 +1594,27 @@ function redactNestedJsonValue(
     parsed = JSON.parse(trimmed);
   } catch {
     return null;
+  }
+  const quotedScalar =
+    typeof parsed === 'string' && compoundContext?.guardUrlPayload
+      ? getUrlPayloadScalar(decoded, compoundContext.maxDepth)
+      : null;
+  if (
+    quotedScalar !== null &&
+    !/^[{\[]/.test(quotedScalar.trimStart()) &&
+    /[?#]/.test(quotedScalar.replace(NUNJUCKS_PLACEHOLDER, '')) &&
+    compoundContext?.guardUrlPayload
+  ) {
+    const sanitized = sanitizeJsonString(
+      decoded,
+      0,
+      compoundContext.maxDepth,
+      true,
+      true,
+      compoundContext.guardUrlPayload,
+      compoundContext.pendingFormDecode,
+    );
+    return sanitized !== decoded || unchangedResult !== 'null' ? sanitized : null;
   }
   if (!parsed || typeof parsed !== 'object') {
     return null;
@@ -2043,6 +2074,7 @@ function sanitizePlainObject(
           value,
           { ...compoundContext, guardUrlPayload: 'host' },
           'original',
+          true,
         );
         if (sanitizedJson !== null) {
           sanitized[key] = sanitizeUrlForLoggingWithContext(sanitizedJson, compoundContext, true);
@@ -2133,6 +2165,7 @@ function sanitizePlainObject(
         value,
         { ...compoundContext, guardUrlPayload: compoundContext.guardUrlPayload || true },
         'canonical',
+        true,
       );
       sanitized[key] = sanitizeUrlValueWithContext(
         sanitizedJson ?? value,
@@ -2459,7 +2492,7 @@ function sanitizeUrlWithContext(
     // Own whole JSON before template handling, then retain the remaining URL
     // guards without recursively decoding that same payload a second time.
     if (compoundContext && !jsonAlreadySanitized) {
-      const nestedJson = redactNestedJsonValue(url, payloadContext, 'original');
+      const nestedJson = redactNestedJsonValue(url, payloadContext, 'original', true);
       if (nestedJson !== null) {
         return nestedJson;
       }
@@ -2498,6 +2531,18 @@ function sanitizeUrlWithContext(
       compoundContext?.guardUrlPayload &&
       (hasUrlPayloadUserinfo(url, compoundContext.guardUrlPayload) ||
         hasUrlPayloadUserinfo(parsedUrl.pathname) ||
+        // URL.host decodes escapes. Inspect raw separators and retain its value-decode
+        // context so encoded public labels, templates, and boolean controls survive.
+        (parsedUrl.host &&
+          hasSecretFormSegment(
+            url
+              .trim()
+              .replace(/[\t\r\n]/g, '')
+              .replace(/^[a-z][a-z\d+.-]*:[\\/]*/i, '')
+              .split(/[\\/?#]/, 1)[0],
+            true,
+            { ...compoundContext, pendingFormDecode: (compoundContext.pendingFormDecode ?? 0) + 1 },
+          )) ||
         hasSecretFormSegment(parsedUrl.pathname, false, compoundContext))
     ) {
       return REDACTED;
@@ -2626,6 +2671,7 @@ function sanitizeUrlForLoggingWithContext(
           url,
           { ...compoundContext, guardUrlPayload: payloadGuard },
           'original',
+          true,
         );
     if (nestedJson !== null) {
       return hasOpaqueLoggingPath(url, true) ? REDACTED : nestedJson;

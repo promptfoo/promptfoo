@@ -39,6 +39,101 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 describe('sanitizeMcpToolData', () => {
+  it('checks form credentials in parsed URL authorities within MCP payloads', () => {
+    for (const prefix of ['https:', 'https:/', 'https://host']) {
+      for (const key of ['password', '%70assword', 'clientSecret']) {
+        const args = {
+          url: JSON.stringify({ target: `${prefix};${key}=authority-fixture`, page: 2 }),
+        };
+        const original = structuredClone(args);
+        const sanitized = sanitizeMcpToolData(args) as typeof args;
+        expect(JSON.stringify(sanitized)).not.toContain('authority-fixture');
+        expect(JSON.parse(sanitized.url).page).toBe(2);
+        expect(args).toEqual(original);
+      }
+    }
+  });
+
+  it('preserves public authority components and generic URL behavior', () => {
+    for (const target of [
+      'https://host;page=2/public',
+      'https://host;includeCredentials=true/public',
+      'https://host;includeCredentials=false/public',
+      'https:;password={{ password }}',
+      'https:;password=%7B%7Bpassword%7D%7D',
+      'https://host;label=public%3Bpassword%3Dpublic/path',
+    ]) {
+      const args = { url: JSON.stringify({ target, page: 2 }) };
+      expect(sanitizeMcpToolData(args)).toEqual(args);
+    }
+    const args = { url: JSON.stringify({ target: 'https:;password=authority-fixture', page: 2 }) };
+    expect(sanitizeObject(args, { sanitizeUrls: true })).toEqual({ url: '[REDACTED]' });
+  });
+
+  it('preserves quote layers while checking nested URL-named scalar payloads', () => {
+    for (const role of ['url', 'apiBaseUrl', 'callbackUrl']) {
+      for (const layers of [2, 3, 1]) {
+        const fields = { token: 'quoted-role-fixture', label: 'a&b;c#d', page: 2 };
+        const prefix = 'mailto:alice@example.test?data=';
+        let value = prefix + encodeURIComponent(JSON.stringify(fields));
+        let expected =
+          prefix + encodeURIComponent(JSON.stringify({ ...fields, token: '[REDACTED]' }));
+        for (let layer = 0; layer < layers; layer++) {
+          value = JSON.stringify(value);
+          expected = JSON.stringify(expected);
+        }
+        const args = { apiHost: JSON.stringify({ [role]: value, page: 2 }) };
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(args)).toEqual({
+          apiHost: JSON.stringify({ [role]: expected, page: 2 }),
+        });
+        expect(args).toEqual(original);
+        for (const maxDepth of [1, 2, 4, 64]) {
+          expect(
+            JSON.stringify(
+              sanitizeObject(args, {
+                sanitizeUrls: true,
+                redactCompoundKeys: true,
+                maxDepth,
+              }),
+            ),
+          ).not.toContain('quoted-role-fixture');
+        }
+      }
+    }
+  });
+
+  it('keeps harmless quoted URI and non-URI scalar spellings unchanged', () => {
+    for (const value of [
+      'https://h/?data=' +
+        encodeURIComponent(JSON.stringify({ label: 'public&value;a#b', page: 2 })),
+      'callback?includeCredentials=true&label=%ZZ',
+      'public prose',
+    ]) {
+      for (const role of ['url', 'apiBaseUrl', 'callbackUrl']) {
+        for (const layers of [1, 2, 3]) {
+          let quoted = value;
+          for (let layer = 0; layer < layers; layer++) {
+            quoted = JSON.stringify(quoted);
+          }
+          const args = { apiHost: JSON.stringify({ [role]: quoted, page: 2 }) };
+          expect(sanitizeMcpToolData(args)).toEqual(args);
+        }
+      }
+    }
+  });
+
+  it('keeps quoted JSON container routing separate from quoted URI ownership', () => {
+    expect(
+      sanitizeMcpToolData({ apiHost: '"{\\"data\\":\\"mailto:alice@example.test\\"}"' }),
+    ).toEqual({ apiHost: '"{\\"data\\":\\"mailto:alice@example.test\\"}"' });
+    expect(
+      sanitizeMcpToolData({
+        url: '{"apiHost":"\\"{\\\\\\"data\\\\\\":\\\\\\"https:\\\\\\\\\\\\\\\\u:fixture-private@host.test\\\\\\"}\\""}',
+      }),
+    ).toEqual({ url: '{"apiHost":"[REDACTED]"}' });
+  });
+
   it('inspects raw inherited fragment values when percent decoding fails', () => {
     for (const role of ['url', 'apiBaseUrl', 'apiHost', 'callbackUrl']) {
       for (const suffix of ['%ZZ', '%FF', '%E0%A4']) {
