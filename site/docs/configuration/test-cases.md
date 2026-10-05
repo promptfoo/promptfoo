@@ -393,11 +393,23 @@ promptfoo eval --filter-metadata tags=ai
 # Multiple filters use AND logic (tests must match ALL conditions)
 promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
 
-# Match a literal comma in a metadata value
-promptfoo eval --filter-metadata tags=global,warming
+# Comma-separated values use OR logic within one key
+promptfoo eval --filter-metadata category=math,science
 ```
 
-Each value uses case-sensitive literal substring matching, including for array metadata. Commas, backslashes, whitespace, and additional equals signs are part of the value; leading, trailing, or consecutive commas are valid. Repeated flags use AND even for the same key. Quote values as needed for your shell.
+Each value uses case-sensitive substring matching, including for array metadata. Repeated flags use AND even for the same key. Whitespace is significant. Commas separate alternatives, and leading, trailing, or consecutive commas are invalid. To match a value that contains a comma, escape it as `\,`:
+
+```bash
+promptfoo eval --filter-metadata 'title=Hello\, world'
+```
+
+Other backslashes are literal, so a value such as `C:\data` needs no escaping. Only when a value ends with a backslash and another alternative follows, double that backslash. This matches `C:\data\` or `D:\data`:
+
+```bash
+promptfoo eval --filter-metadata 'path=C:\data\\,D:\data'
+```
+
+Quote the argument, as in these examples, so that the shell passes the backslashes on.
 
 ### JSON in CSV
 
