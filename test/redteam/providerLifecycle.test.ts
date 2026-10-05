@@ -68,37 +68,30 @@ describe('generation provider cleanup ownership', () => {
     },
   );
 
-  it('cleans an owned provider when plugin generation fails', async () => {
-    const cleanup = vi.fn();
-    const call = vi.fn().mockRejectedValue(new Error('generation failed'));
-
-    const result = await synthesize({
-      ...options,
-      provider: providerOptions({ cleanup, call }),
-    });
-
-    expect(result.testCases).toEqual([]);
-    expect(result.failedPlugins).toEqual([{ pluginId: 'overreliance', requested: 1 }]);
-    expect(call).toHaveBeenCalledOnce();
-    expect(cleanup).toHaveBeenCalledOnce();
-  });
-
-  it('cleans an owned provider and preserves a rejected extraction error', async () => {
-    const error = new Error('purpose extraction failed');
-    const cleanup = vi.fn();
-    const call = vi.fn().mockRejectedValue(error);
-
-    await expect(
-      synthesize({
+  it.each(['plugin', 'extraction'] as const)(
+    'cleans an owned provider when %s generation fails',
+    async (phase) => {
+      const error = new Error('generation failed');
+      const cleanup = vi.fn();
+      const call = vi.fn().mockRejectedValue(error);
+      const result = synthesize({
         ...options,
-        purpose: undefined,
+        purpose: phase === 'extraction' ? undefined : options.purpose,
         provider: providerOptions({ cleanup, call }),
-      }),
-    ).rejects.toBe(error);
+      });
 
-    expect(call).toHaveBeenCalledOnce();
-    expect(cleanup).toHaveBeenCalledOnce();
-  });
+      if (phase === 'extraction') {
+        await expect(result).rejects.toBe(error);
+      } else {
+        await expect(result).resolves.toMatchObject({
+          testCases: [],
+          failedPlugins: [{ pluginId: 'overreliance', requested: 1 }],
+        });
+      }
+      expect(call).toHaveBeenCalledOnce();
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
 
   it('cleans an owned provider when cancelled after generation starts', async () => {
     const controller = new AbortController();
@@ -171,6 +164,7 @@ describe('generation provider cleanup ownership', () => {
         // The third queued plugin and the second plugin's late retry must never call the provider.
         expect(call).toHaveBeenCalledTimes(2);
         expect(cleanupWhileSecondPending).toBe(0);
+        expect(vi.getTimerCount()).toBe(0);
       } finally {
         releaseFirst.resolve();
         releaseSecond.resolve();

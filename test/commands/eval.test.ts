@@ -2276,32 +2276,35 @@ describe('evalCommand', () => {
     }
   });
 
-  it('should await async provider cleanup after evaluation', async () => {
-    const cleanup = vi.fn().mockResolvedValue(undefined);
-    const provider = {
-      id: () => 'cleanup-provider',
-      callApi: async () => ({ output: 'ok' }),
-      cleanup,
-    } as ApiProvider;
-    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
-      trackProvider(provider);
-      return {
-        config: {} as UnifiedConfig,
-        testSuite: {
-          prompts: [],
-          providers: [provider],
-        },
-        basePath: path.resolve('/'),
+  it.each([
+    { id: 'cleanup-provider', constructed: true, expectedCleanup: 1 },
+    { id: 'caller-provider', constructed: false, expectedCleanup: 0 },
+  ])(
+    'cleans only constructed providers after evaluation ($id)',
+    async ({ id, constructed, expectedCleanup }) => {
+      const cleanup = vi.fn().mockResolvedValue(undefined);
+      const provider = {
+        id: () => id,
+        callApi: async () => ({ output: 'ok' }),
+        cleanup,
       };
-    });
-    vi.mocked(evaluate).mockImplementationOnce(
-      async (_testSuite, evalRecord) => evalRecord as Eval,
-    );
+      vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+        if (constructed) {
+          trackProvider(provider);
+        }
+        return {
+          config: {} as UnifiedConfig,
+          testSuite: { prompts: [], providers: [provider] },
+          basePath: path.resolve('/'),
+        };
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
 
-    await doEval({}, defaultConfig, defaultConfigPath, {});
+      await doEval({}, defaultConfig, defaultConfigPath, {});
 
-    expect(cleanup).toHaveBeenCalledTimes(1);
-  });
+      expect(cleanup).toHaveBeenCalledTimes(expectedCleanup);
+    },
+  );
 
   it('cleans constructed providers after evaluation fails', async () => {
     const cleanup = vi.fn();
@@ -2320,24 +2323,7 @@ describe('evalCommand', () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
-  it('leaves reusable caller-owned providers open', async () => {
-    const cleanup = vi.fn();
-    const provider = {
-      id: () => 'caller-provider',
-      callApi: async () => ({ output: 'ok' }),
-      cleanup,
-    };
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {},
-      testSuite: { prompts: [], providers: [provider] },
-      basePath: path.resolve('/'),
-    });
-    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
-    await doEval({}, defaultConfig, defaultConfigPath, {});
-    expect(cleanup).not.toHaveBeenCalled();
-  });
-
-  it('reports cleanup failure when the selected exit code is zero', async () => {
+  it.each([0, 42])('preserves exit code %s when cleanup fails', async (exitCode) => {
     const previousExitCode = process.exitCode;
     const provider = {
       id: () => 'cleanup-provider',
@@ -2346,34 +2332,17 @@ describe('evalCommand', () => {
     };
     vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
       trackProvider(provider);
-      process.exitCode = 0;
+      process.exitCode = exitCode;
       return record as Eval;
     });
     try {
-      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
-        'cleanup failed',
-      );
-      expect(provider.cleanup).toHaveBeenCalledOnce();
-    } finally {
-      process.exitCode = previousExitCode;
-    }
-  });
-
-  it('preserves configured failure exit codes when cleanup rejects', async () => {
-    const previousExitCode = process.exitCode;
-    const provider = {
-      id: () => 'cleanup-provider',
-      callApi: async () => ({ output: 'ok' }),
-      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
-    };
-    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
-      trackProvider(provider);
-      process.exitCode = 42;
-      return record as Eval;
-    });
-    try {
-      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).resolves.toBeDefined();
-      expect(process.exitCode).toBe(42);
+      const evaluation = doEval({}, defaultConfig, defaultConfigPath, {});
+      if (exitCode === 0) {
+        await expect(evaluation).rejects.toThrow('cleanup failed');
+      } else {
+        await expect(evaluation).resolves.toBeDefined();
+      }
+      expect(process.exitCode).toBe(exitCode);
       expect(provider.cleanup).toHaveBeenCalledOnce();
     } finally {
       process.exitCode = previousExitCode;

@@ -172,107 +172,99 @@ async function getOrCreatePipeline(
   providerRegistry.register(pipelineCleanup);
   const cacheKey = getPipelineCacheKey(task, model, options);
 
-  const cached = pipelineCache.get(cacheKey);
-  if (cached) {
-    owned.add(cached);
-    cached.owners.add(owned);
+  let entry = pipelineCache.get(cacheKey);
+  if (entry) {
     logger.debug(`[Transformers] Using shared pipeline: ${cacheKey}`);
-    return getOwnedPipeline(cached, owned);
-  }
+  } else {
+    // Start new initialization
+    const initPromise = (async (): Promise<Pipeline> => {
+      type PipelineFn = (
+        task: string,
+        model: string,
+        options?: Record<string, unknown>,
+      ) => Promise<Pipeline>;
 
-  // Start new initialization
-  const initPromise = (async (): Promise<Pipeline> => {
-    type PipelineFn = (
-      task: string,
-      model: string,
-      options?: Record<string, unknown>,
-    ) => Promise<Pipeline>;
+      // The shared loader validates the optional SDK before initializing its pipelines.
+      const transformers = (await loadTransformers()) as { pipeline: PipelineFn };
+      const pipelineFn = transformers.pipeline;
 
-    // The shared loader validates the optional SDK before initializing its pipelines.
-    const transformers = (await loadTransformers()) as { pipeline: PipelineFn };
-    const pipelineFn = transformers.pipeline;
+      const pipelineOptions: Record<string, unknown> = {
+        progress_callback: (progress: {
+          status: string;
+          name?: string;
+          file?: string;
+          progress?: number;
+          loaded?: number;
+          total?: number;
+          task?: string;
+          model?: string;
+        }) => {
+          if (progress.status === 'progress' && progress.file) {
+            const percent = progress.progress?.toFixed(1) || '?';
+            logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
+          } else if (progress.status === 'ready') {
+            logger.debug(`[Transformers] Model ready: ${progress.model || model}`);
+          }
+        },
+      };
 
-    const pipelineOptions: Record<string, unknown> = {
-      progress_callback: (progress: {
-        status: string;
-        name?: string;
-        file?: string;
-        progress?: number;
-        loaded?: number;
-        total?: number;
-        task?: string;
-        model?: string;
-      }) => {
-        if (progress.status === 'progress' && progress.file) {
-          const percent = progress.progress?.toFixed(1) || '?';
-          logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
-        } else if (progress.status === 'ready') {
-          logger.debug(`[Transformers] Model ready: ${progress.model || model}`);
-        }
-      },
-    };
-
-    // Apply options
-    if (options.device) {
-      pipelineOptions.device = options.device;
-    }
-    if (options.dtype) {
-      pipelineOptions.dtype = options.dtype;
-    }
-    if (options.cacheDir) {
-      pipelineOptions.cache_dir = options.cacheDir;
-    }
-    if (options.localFilesOnly) {
-      pipelineOptions.local_files_only = true;
-    }
-    if (options.revision) {
-      pipelineOptions.revision = options.revision;
-    }
-    if (options.sessionOptions) {
-      pipelineOptions.session_options = options.sessionOptions;
-    }
-
-    logger.debug(`[Transformers] Loading pipeline: ${task}:${model}`, {
-      device: pipelineOptions.device,
-      dtype: pipelineOptions.dtype,
-    });
-
-    const startTime = Date.now();
-    const pipe = await pipelineFn(task, model, pipelineOptions);
-    const loadTime = Date.now() - startTime;
-
-    logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
-
-    return pipe;
-  })();
-
-  const entry: PipelineEntry = {
-    key: cacheKey,
-    pipeline: initPromise,
-    owners: new Set([owned]),
-  };
-  pipelineCache.set(cacheKey, entry);
-  owned.add(entry);
-  entry.pipeline = initPromise.then(
-    async (pipe) => {
-      entry.value = pipe;
-      if (entry.owners.size === 0) {
-        await disposePipeline(entry);
+      // Apply options
+      if (options.device) {
+        pipelineOptions.device = options.device;
       }
-      return pipe;
-    },
-    (error) => {
-      forgetPipelineEntry(entry);
-      throw error;
-    },
-  );
-  return getOwnedPipeline(entry, owned);
-}
+      if (options.dtype) {
+        pipelineOptions.dtype = options.dtype;
+      }
+      if (options.cacheDir) {
+        pipelineOptions.cache_dir = options.cacheDir;
+      }
+      if (options.localFilesOnly) {
+        pipelineOptions.local_files_only = true;
+      }
+      if (options.revision) {
+        pipelineOptions.revision = options.revision;
+      }
+      if (options.sessionOptions) {
+        pipelineOptions.session_options = options.sessionOptions;
+      }
 
-async function getOwnedPipeline(
-  entry: PipelineEntry,
-  owned: Set<PipelineEntry>,
-): Promise<Pipeline> {
+      logger.debug(`[Transformers] Loading pipeline: ${task}:${model}`, {
+        device: pipelineOptions.device,
+        dtype: pipelineOptions.dtype,
+      });
+
+      const startTime = Date.now();
+      const pipe = await pipelineFn(task, model, pipelineOptions);
+      const loadTime = Date.now() - startTime;
+
+      logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
+
+      return pipe;
+    })();
+
+    const newEntry: PipelineEntry = {
+      key: cacheKey,
+      pipeline: initPromise,
+      owners: new Set(),
+    };
+    pipelineCache.set(cacheKey, newEntry);
+    newEntry.pipeline = initPromise.then(
+      async (pipe) => {
+        newEntry.value = pipe;
+        if (newEntry.owners.size === 0) {
+          await disposePipeline(newEntry);
+        }
+        return pipe;
+      },
+      (error) => {
+        forgetPipelineEntry(newEntry);
+        throw error;
+      },
+    );
+    entry = newEntry;
+  }
+  owned.add(entry);
+  entry.owners.add(owned);
   const pipe = await entry.pipeline;
   if (!owned.has(entry)) {
     throw new Error('Transformers pipeline was released during initialization');
@@ -339,7 +331,7 @@ const pipelineCleanup = { shutdown: disposePipelines };
 export class TransformersEmbeddingProvider implements ApiProvider {
   modelName: string;
   config: TransformersEmbeddingOptions;
-  private readonly pipelines = new Set<PipelineEntry>();
+  private pipelines = new Set<PipelineEntry>();
 
   constructor(
     modelName: string,
@@ -360,7 +352,10 @@ export class TransformersEmbeddingProvider implements ApiProvider {
   }
 
   cleanup(): Promise<void> {
-    return releasePipelines(this.pipelines);
+    const pipelines = this.pipelines;
+    // Reuse gets a fresh owner token so released pending calls stay canceled.
+    this.pipelines = new Set<PipelineEntry>();
+    return releasePipelines(pipelines);
   }
 
   async callApi(_prompt: string): Promise<ProviderResponse> {
@@ -449,7 +444,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
 export class TransformersTextGenerationProvider implements ApiProvider {
   modelName: string;
   config: TransformersTextGenerationOptions;
-  private readonly pipelines = new Set<PipelineEntry>();
+  private pipelines = new Set<PipelineEntry>();
 
   constructor(
     modelName: string,
@@ -470,7 +465,10 @@ export class TransformersTextGenerationProvider implements ApiProvider {
   }
 
   cleanup(): Promise<void> {
-    return releasePipelines(this.pipelines);
+    const pipelines = this.pipelines;
+    // Reuse gets a fresh owner token so released pending calls stay canceled.
+    this.pipelines = new Set<PipelineEntry>();
+    return releasePipelines(pipelines);
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {

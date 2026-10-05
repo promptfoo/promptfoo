@@ -7,6 +7,7 @@ import { trackProvider, withProviderCleanup } from '../providers/lifecycle';
 import { sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
+import { waitForSettled } from '../util/time';
 import type { SingleBar } from 'cli-progress';
 
 import type { ApiProvider, Assertion, TestCase, TestSuite } from '../types/index';
@@ -520,18 +521,7 @@ async function synthesizeWithProvider({
     return assertions;
   } catch (error) {
     controller.abort(error);
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    try {
-      // Drain cancelled calls before cleanup, with a bound for providers that ignore cancellation.
-      await Promise.race([
-        Promise.allSettled(conversions),
-        new Promise<void>((resolve) => {
-          timeout = setTimeout(resolve, 1000);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timeout);
-    }
+    await waitForSettled(conversions, 1000);
     throw error;
   } finally {
     progressBar?.stop();

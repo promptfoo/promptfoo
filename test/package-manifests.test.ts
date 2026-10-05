@@ -59,6 +59,8 @@ const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const KNOWN_BAD_RELEASES = new Map([
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
   ['@hono/node-server', '<1.19.15 || >=2.0.0 <2.0.10'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg
+  ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
+  ['@simple-git/argv-parser', '<2.0.1'], // GHSA-v5rq-49vh-5v5c; upstream fixes VISUAL in 2.0.1
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
   ['csv-parse', '<7.0.2'], // GHSA-8cw4-87c7-c6xx
@@ -71,6 +73,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
   ['serialize-javascript', '7.1.1'], // GHSA-gfhx-hw2g-v5hg
+  ['simple-git', '<=3.36.0'], // GHSA-858h-whjf-mvg5
   ['undici', '<7.29.1 || >=8.0.0 <8.10.2'], // GHSA-3xpg-4rpp-hhhm and the 7.29.1/8.10.2 fixes
   ['ws', '<5.2.5 || >=6.0.0 <6.2.4 || >=7.0.0 <7.5.11 || >=8.0.0 <8.21.0'], // GHSA-96hv-2xvq-fx4p
 ]);

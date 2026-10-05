@@ -28,6 +28,11 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('synthesize', () => {
+  const questions = [
+    { label: 'Greeting', question: 'Does the response include a greeting?' },
+    { label: 'Length', question: 'Is the response under ten words?' },
+  ];
+
   it('should generate assertions based on config prompts and existing assertions', async () => {
     let i = 0;
     const mockProvider = createMockProvider({
@@ -59,14 +64,7 @@ describe('synthesize', () => {
   it('cleans an owned provider after both assertion conversions finish', async () => {
     const provider = createMockProvider({ cleanup: true });
     provider.callApi
-      .mockResolvedValueOnce({
-        output: {
-          questions: [
-            { label: 'Greeting', question: 'Does the response include a greeting?' },
-            { label: 'Length', question: 'Is the response under ten words?' },
-          ],
-        },
-      })
+      .mockResolvedValueOnce({ output: { questions } })
       .mockImplementation(async (prompt) => ({
         output: prompt.includes('Is the response under ten words?')
           ? 'return len(output.split()) < 10'
@@ -114,28 +112,6 @@ describe('synthesize', () => {
     expect(provider.cleanup).toHaveBeenCalledOnce();
   });
 
-  it('preserves a conversion error when cleanup also fails', async () => {
-    const conversionError = new Error('fixture conversion failed');
-    const provider = createMockProvider({
-      cleanup: async () => {
-        throw new Error('fixture cleanup failed');
-      },
-    });
-    provider.callApi
-      .mockResolvedValueOnce({
-        output: { questions: [{ label: 'Greeting', question: 'Does it include a greeting?' }] },
-      })
-      .mockRejectedValueOnce(conversionError);
-    vi.mocked(loadApiProvider).mockResolvedValue(provider);
-
-    await expect(
-      synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
-    ).rejects.toBe(conversionError);
-
-    expect(provider.callApi).toHaveBeenCalledTimes(2);
-    expect(provider.cleanup).toHaveBeenCalledOnce();
-  });
-
   it('reports a cleanup failure after successful synthesis', async () => {
     const cleanupError = new Error('fixture cleanup failed');
     const provider = createMockProvider({
@@ -152,40 +128,40 @@ describe('synthesize', () => {
     expect(provider.cleanup).toHaveBeenCalledOnce();
   });
 
-  it('waits for other conversions before cleanup when one conversion fails', async () => {
-    const conversionError = new Error('fixture conversion failed');
-    const provider = createMockProvider({ cleanup: true });
-    let cleanedBeforeLastResponse: boolean | undefined;
-    provider.callApi
-      .mockResolvedValueOnce({
-        output: {
-          questions: [
-            { label: 'Greeting', question: 'Does it include a greeting?' },
-            { label: 'Length', question: 'Is it short?' },
-          ],
-        },
-      })
-      .mockImplementation(async (prompt) => {
-        if (prompt.includes('Does it include a greeting?')) {
-          throw conversionError;
-        }
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        cleanedBeforeLastResponse = provider.cleanup!.mock.calls.length > 0;
-        return { output: 'None' };
-      });
-    vi.mocked(loadApiProvider).mockResolvedValue(provider);
+  it.each([false, true])(
+    'drains conversions and preserves their error (cleanup fails: %s)',
+    async (cleanupFails) => {
+      const conversionError = new Error('fixture conversion failed');
+      const provider = createMockProvider({ cleanup: true });
+      if (cleanupFails) {
+        provider.cleanup!.mockRejectedValue(new Error('fixture cleanup failed'));
+      }
+      let cleanedBeforeLastResponse: boolean | undefined;
+      provider.callApi
+        .mockResolvedValueOnce({ output: { questions } })
+        .mockImplementation(async (prompt) => {
+          if (prompt.includes('Does the response include a greeting?')) {
+            throw conversionError;
+          }
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          cleanedBeforeLastResponse = provider.cleanup!.mock.calls.length > 0;
+          return { output: 'None' };
+        });
+      vi.mocked(loadApiProvider).mockResolvedValue(provider);
 
-    await expect(
-      synthesize({
-        provider: 'fixture-provider',
-        prompts: ['Return a greeting.'],
-        tests: [],
-        numQuestions: 2,
-      }),
-    ).rejects.toBe(conversionError);
-    expect(cleanedBeforeLastResponse).toBe(false);
-    expect(provider.cleanup).toHaveBeenCalledOnce();
-  });
+      await expect(
+        synthesize({
+          provider: 'fixture-provider',
+          prompts: ['Return a greeting.'],
+          tests: [],
+          numQuestions: 2,
+        }),
+      ).rejects.toBe(conversionError);
+      expect(cleanedBeforeLastResponse).toBe(false);
+      expect(provider.callApi).toHaveBeenCalledTimes(3);
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+    },
+  );
 
   it('bounds cleanup when a failed conversion has a sibling that ignores cancellation', async () => {
     vi.useFakeTimers();
@@ -194,17 +170,10 @@ describe('synthesize', () => {
     const signals: AbortSignal[] = [];
     const provider = createMockProvider({ cleanup: true });
     provider.callApi
-      .mockResolvedValueOnce({
-        output: {
-          questions: [
-            { label: 'Fail', question: 'Fail?' },
-            { label: 'Wait', question: 'Wait?' },
-          ],
-        },
-      })
+      .mockResolvedValueOnce({ output: { questions } })
       .mockImplementation(async (prompt, _context, options) => {
         signals.push(options!.abortSignal!);
-        if (prompt.includes('Fail?')) {
+        if (prompt.includes('Does the response include a greeting?')) {
           throw conversionError;
         }
         stalled.resolve();

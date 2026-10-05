@@ -999,62 +999,30 @@ describe('PythonProvider', () => {
     });
   });
 
-  describe('cleanup', () => {
-    it('exposes worker-pool teardown through the public cleanup hook', async () => {
-      const provider = new PythonProvider('script.py', { config: { basePath: process.cwd() } });
-      try {
-        await provider.initialize();
+  describe.each(['cleanup', 'shutdown'] as const)('%s', (method) => {
+    it.each([
+      ['callApi', { output: 'response' }],
+      ['callEmbeddingApi', { embedding: [0.1, 0.2] }],
+      ['callClassificationApi', { classification: { label: 'test' } }],
+    ] as const)('recreates the worker pool for %s after cleanup', async (api, response) => {
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+      mockPoolInstance.execute.mockResolvedValue(response);
+
+      for (const round of [1, 2]) {
+        await expect(provider[api]('prompt')).resolves.toMatchObject(response);
+        expect(mockPythonWorkerPool).toHaveBeenCalledTimes(round);
+        expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(round);
+        expect(mockPoolInstance.execute).toHaveBeenCalledTimes(round);
         expect(providerRegistry.has(provider)).toBe(true);
-        await provider.cleanup();
-        expect(mockPoolInstance.shutdown).toHaveBeenCalledOnce();
+
+        await provider[method]();
         expect(providerRegistry.has(provider)).toBe(false);
-        expect((provider as any).isInitialized).toBe(false);
-        await provider.cleanup();
-        expect(mockPoolInstance.shutdown).toHaveBeenCalledOnce();
-      } finally {
-        await provider.shutdown();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(round);
+        await provider[method]();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(round);
       }
-    });
-
-    it('should cleanup worker pool on shutdown', async () => {
-      const provider = new PythonProvider('script.py', {
-        config: { basePath: process.cwd() },
-      });
-
-      await provider.initialize();
-      expect((provider as any).pool).not.toBeNull();
-
-      await provider.shutdown();
-      expect((provider as any).pool).toBeNull();
-      expect(mockPoolInstance.shutdown).toHaveBeenCalled();
-    });
-
-    it('should register provider for global cleanup', async () => {
-      const provider = new PythonProvider('script.py', {
-        config: { basePath: process.cwd() },
-      });
-
-      await provider.initialize();
-
-      // Provider should be registered
-      expect((providerRegistry as any).providers.has(provider)).toBe(true);
-
-      await provider.shutdown();
-
-      // Should be unregistered
-      expect((providerRegistry as any).providers.has(provider)).toBe(false);
-    });
-
-    it('should set isInitialized to false after shutdown', async () => {
-      const provider = new PythonProvider('script.py', {
-        config: { basePath: process.cwd() },
-      });
-
-      await provider.initialize();
-      expect((provider as any).isInitialized).toBe(true);
-
-      await provider.shutdown();
-      expect((provider as any).isInitialized).toBe(false);
     });
   });
 });

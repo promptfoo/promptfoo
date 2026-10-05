@@ -4327,6 +4327,71 @@ describe('OpenAICodexSDKProvider', () => {
       expect((provider as any).threads.size).toBe(0);
     });
 
+    it.each([
+      { threadId: undefined, finishCleanupFirst: true },
+      { threadId: 'explicit-thread', finishCleanupFirst: true },
+      { threadId: undefined, finishCleanupFirst: false },
+      { threadId: 'explicit-thread', finishCleanupFirst: false },
+    ])(
+      'restores queued thread cleanup coverage (threadId=$threadId, finishCleanupFirst=$finishCleanupFirst)',
+      async ({ threadId, finishCleanupFirst }) => {
+        const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const destruction = createDeferred<void>();
+        mockRun
+          .mockReturnValueOnce(firstRun.promise)
+          .mockResolvedValueOnce(createMockResponse('Queued response'));
+        MockCodex.mockImplementation(function () {
+          return {
+            startThread: mockStartThread.mockReturnValue(mockThread),
+            resumeThread: mockResumeThread.mockReturnValue(mockThread),
+            destroy: () => destruction.promise,
+          };
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { persist_threads: true, thread_id: threadId },
+        });
+        const firstCall = provider.callApi('Shared prompt');
+        let queuedCall: ReturnType<typeof provider.callApi> | undefined;
+        let cleanup: Promise<void> | undefined;
+
+        try {
+          await vi.waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+          const queues = (provider as any).threadRunQueues as Map<string, Promise<void>>;
+          const firstQueue = [...queues.values()][0];
+          queuedCall = provider.callApi('Shared prompt');
+          await vi.waitFor(() => expect([...queues.values()][0]).not.toBe(firstQueue));
+          expect(mockRun).toHaveBeenCalledTimes(1);
+
+          cleanup = provider.cleanup();
+          expect(providerRegistry.has(provider)).toBe(true);
+          expect((provider as any).threads.size).toBe(0);
+          if (finishCleanupFirst) {
+            destruction.resolve();
+            await cleanup;
+            expect(providerRegistry.has(provider)).toBe(false);
+          }
+
+          firstRun.resolve(createMockResponse('First response'));
+          expect(await firstCall).toMatchObject({ output: 'First response' });
+          expect(await queuedCall).toMatchObject({ output: 'Queued response' });
+          destruction.resolve();
+          await cleanup;
+          expect(mockRun).toHaveBeenCalledTimes(2);
+          expect((provider as any).threads.size).toBe(1);
+          expect.soft(providerRegistry.has(provider)).toBe(true);
+
+          await providerRegistry.shutdownAll();
+          expect((provider as any).threads.size).toBe(0);
+          expect(providerRegistry.has(provider)).toBe(false);
+        } finally {
+          destruction.resolve();
+          firstRun.resolve(createMockResponse('First response'));
+          await Promise.all([firstCall, queuedCall, cleanup]);
+          await provider.cleanup();
+        }
+      },
+    );
+
     it.each([false, true])(
       'releases cleanup registration and restores it on reuse unless shutdown=%s',
       async (shutdown) => {

@@ -14,19 +14,26 @@ function createProvider(callApi: ApiProvider['callApi']): ApiProvider {
 }
 
 describe('generation token usage', () => {
-  it('blocks a cancelled generation call without recording a request', async () => {
-    const controller = new AbortController();
-    const error = new Error('generation cancelled');
-    const callApi = vi.fn().mockResolvedValue({ output: 'unused' });
-    const usage: TokenUsage = {};
-    const provider = trackGenerationTokenUsage(createProvider(callApi), usage, controller.signal);
-    controller.abort(error);
+  it.each(['direct', 'specialized'] as const)(
+    'blocks a cancelled %s generation call without recording a request',
+    async (source) => {
+      const controller = new AbortController();
+      const error = new Error('generation cancelled');
+      const callApi = vi.fn().mockResolvedValue({ output: 'unused' });
+      const usage: TokenUsage = {};
+      const parent = trackGenerationTokenUsage(createProvider(callApi), usage, controller.signal);
+      const provider =
+        source === 'specialized'
+          ? trackAdditionalGenerationProvider(createProvider(callApi), parent)
+          : parent;
+      controller.abort(error);
 
-    await expect(provider.callApi('generate')).rejects.toBe(error);
+      await expect(provider.callApi('generate')).rejects.toBe(error);
 
-    expect(callApi).not.toHaveBeenCalled();
-    expect(usage).toEqual({});
-  });
+      expect(callApi).not.toHaveBeenCalled();
+      expect(usage).toEqual({});
+    },
+  );
 
   it.each(['generation', 'request'] as const)(
     'forwards cancellation from the %s signal while preserving call options',
@@ -75,25 +82,6 @@ describe('generation token usage', () => {
     await expect(second.callApi('continue')).resolves.toMatchObject({ output: 'completed' });
     await expect(borrowed.callApi('later run')).resolves.toMatchObject({ output: 'completed' });
     expect(callApi).toHaveBeenCalledTimes(4);
-  });
-
-  it('propagates cancellation to a specialized generation provider', async () => {
-    const controller = new AbortController();
-    const usage: TokenUsage = {};
-    const parent = trackGenerationTokenUsage(
-      createProvider(vi.fn<ApiProvider['callApi']>()),
-      usage,
-      controller.signal,
-    );
-    const callApi = vi.fn().mockResolvedValue({ output: 'unused' });
-    const child = trackAdditionalGenerationProvider(createProvider(callApi), parent);
-    const error = new Error('generation cancelled');
-    controller.abort(error);
-
-    await expect(child.callApi('generate')).rejects.toBe(error);
-
-    expect(callApi).not.toHaveBeenCalled();
-    expect(usage).toEqual({});
   });
 
   it('records incurred usage when an active call completes after cancellation', async () => {

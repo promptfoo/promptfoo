@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import * as esm from '../../src/esm';
 import { evaluateWithSource } from '../../src/evaluate';
@@ -12,8 +12,9 @@ import { cleanupProvider, trackProvider, withProviderCleanup } from '../../src/p
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { VoiceCrescendoProvider } from '../../src/redteam/providers/voiceCrescendo/index';
-import { createDeferred, mockProcessEnv } from '../util/utils';
+import { createDeferred } from '../util/utils';
 
+import type { EvaluateTestSuite } from '../../src/types/index';
 import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
 
 vi.mock('../../src/telemetry');
@@ -29,17 +30,42 @@ const makeProvider = (cleanup = vi.fn()): ApiProvider => ({
   cleanup,
 });
 
+type StrategyProvider = ApiProvider & {
+  getRedTeamProvider(): Promise<ApiProvider>;
+  getScoringProvider(): Promise<ApiProvider>;
+};
+
+function loadStrategy(name: string, config: ProviderOptions['config']) {
+  const id = 'promptfoo:redteam:' + name;
+  return loadApiProvider(id, { options: { id, config } }) as Promise<StrategyProvider>;
+}
+
+function evaluateFixture(config: Omit<EvaluateTestSuite, 'prompts'> & { prompts?: string[] }) {
+  return evaluateWithSource(
+    {
+      prompts: ['hello'],
+      tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
+      ...config,
+    },
+    { cache: false },
+  );
+}
+
+beforeEach(() => {
+  vi.stubEnv('PROMPTFOO_DISABLE_REMOTE_GENERATION', 'true');
+});
+
 afterEach(() => {
   redteamProviderManager.clearProvider();
   redteamProviderManager.setRateLimitRegistry(undefined);
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('provider cleanup ownership', () => {
   it.each(['caller-owned', 'evaluation-owned', 'nested-owner', 'preloaded'] as const)(
     'preserves %s strategy delegate ownership across real evaluations',
     async (ownership) => {
-      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
       let closed = false;
       const cleanup = vi.fn(async () => {
         closed = true;
@@ -65,26 +91,23 @@ describe('provider cleanup ownership', () => {
         id: 'promptfoo:redteam:crescendo',
         config: { redteamProvider: delegate, injectVar: 'query', maxTurns: 1 },
       };
-      const strategy = await loadApiProvider(strategyConfig.id, { options: strategyConfig });
+      const strategy = await loadStrategy('crescendo', strategyConfig.config);
       const evaluations = async () => {
         const runs = ownership === 'evaluation-owned' ? 1 : 2;
         const passes = [];
         for (let run = 0; run < runs; run++) {
-          const result = await evaluateWithSource(
-            {
-              prompts: ['{{query}}'],
-              providers: [makeProvider()],
-              defaultTest: { options: { provider: scorer } },
-              tests: [
-                {
-                  provider: ownership === 'evaluation-owned' ? strategyConfig : strategy,
-                  vars: { query: 'hello' },
-                  assert: [{ type: 'equals', value: 'ok' }],
-                },
-              ],
-            },
-            { cache: false },
-          );
+          const result = await evaluateFixture({
+            prompts: ['{{query}}'],
+            providers: [makeProvider()],
+            defaultTest: { options: { provider: scorer } },
+            tests: [
+              {
+                provider: ownership === 'evaluation-owned' ? strategyConfig : strategy,
+                vars: { query: 'hello' },
+                assert: [{ type: 'equals', value: 'ok' }],
+              },
+            ],
+          });
           passes.push(result.prompts[0].metrics?.testPassCount);
         }
         expect(passes).toEqual(Array(runs).fill(1));
@@ -92,30 +115,24 @@ describe('provider cleanup ownership', () => {
           expect(cleanup).not.toHaveBeenCalled();
         }
       };
-      try {
-        if (ownership === 'preloaded') {
-          await (
-            strategy as ApiProvider & { getRedTeamProvider(): Promise<ApiProvider> }
-          ).getRedTeamProvider();
-        }
-        if (ownership === 'nested-owner' || ownership === 'preloaded') {
-          await withProviderCleanup(async () => {
-            trackProvider(strategy);
-            await evaluations();
-            expect(cleanup).not.toHaveBeenCalled();
-          });
-        } else {
+      if (ownership === 'preloaded') {
+        await strategy.getRedTeamProvider();
+      }
+      if (ownership === 'nested-owner' || ownership === 'preloaded') {
+        await withProviderCleanup(async () => {
+          trackProvider(strategy);
           await evaluations();
-        }
-        expect(cleanup).toHaveBeenCalledTimes(ownership === 'caller-owned' ? 0 : 1);
-        if (ownership === 'caller-owned') {
-          expect(strategy.cleanup).toBeTypeOf('function');
-          await strategy.cleanup!();
-          await strategy.cleanup!();
-          expect(cleanup).toHaveBeenCalledOnce();
-        }
-      } finally {
-        restoreEnv();
+          expect(cleanup).not.toHaveBeenCalled();
+        });
+      } else {
+        await evaluations();
+      }
+      expect(cleanup).toHaveBeenCalledTimes(ownership === 'caller-owned' ? 0 : 1);
+      if (ownership === 'caller-owned') {
+        expect(strategy.cleanup).toBeTypeOf('function');
+        await strategy.cleanup!();
+        await strategy.cleanup!();
+        expect(cleanup).toHaveBeenCalledOnce();
       }
     },
   );
@@ -123,132 +140,86 @@ describe('provider cleanup ownership', () => {
   it.each(['crescendo', 'custom', 'voice-crescendo'])(
     'releases only configured %s delegates through public terminal cleanup',
     async (name) => {
-      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
       const cleanup = vi.fn();
       const borrowed = makeProvider();
-      const id = 'promptfoo:redteam:' + name;
       const loaded: ApiProvider =
         name === 'voice-crescendo'
           ? new VoiceCrescendoProvider({ injectVar: 'query' })
-          : await loadApiProvider(id, {
-              options: {
-                id,
-                config: {
-                  strategyText: 'local strategy',
-                  redteamProvider: providerOptions({ cleanup }),
-                },
-              },
+          : await loadStrategy(name, {
+              strategyText: 'local strategy',
+              redteamProvider: providerOptions({ cleanup }),
             });
-      const strategy = loaded as ApiProvider & {
-        getRedTeamProvider(): Promise<ApiProvider>;
-        getScoringProvider(): Promise<ApiProvider>;
-      };
-      try {
-        await cliState.withConfig(
-          {
-            redteam: { provider: providerOptions({ cleanup }) },
-            defaultTest: { options: { provider: borrowed } },
-          },
-          async () => {
-            await strategy.getRedTeamProvider();
-            await strategy.getScoringProvider();
-          },
-        );
-        expect(cleanup).not.toHaveBeenCalled();
-        expect(strategy.cleanup).toBeTypeOf('function');
-        await strategy.cleanup!();
-        await strategy.cleanup!();
-        expect(cleanup).toHaveBeenCalledTimes(name === 'custom' ? 2 : 1);
-        expect(borrowed.cleanup).not.toHaveBeenCalled();
-        await expect(strategy.getRedTeamProvider()).rejects.toThrow(
-          'Provider cleanup scope is closed',
-        );
-      } finally {
-        restoreEnv();
-      }
+      const strategy = loaded as StrategyProvider;
+      await cliState.withConfig(
+        {
+          redteam: { provider: providerOptions({ cleanup }) },
+          defaultTest: { options: { provider: borrowed } },
+        },
+        async () => {
+          await strategy.getRedTeamProvider();
+          await strategy.getScoringProvider();
+        },
+      );
+      expect(cleanup).not.toHaveBeenCalled();
+      expect(strategy.cleanup).toBeTypeOf('function');
+      await strategy.cleanup!();
+      await strategy.cleanup!();
+      expect(cleanup).toHaveBeenCalledTimes(name === 'custom' ? 2 : 1);
+      expect(borrowed.cleanup).not.toHaveBeenCalled();
+      await expect(strategy.getRedTeamProvider()).rejects.toThrow(
+        'Provider cleanup scope is closed',
+      );
     },
   );
 
   it.each(['supplied', 'cached'] as const)(
     'keeps %s delegates borrowed when a strategy is disposed',
     async (source) => {
-      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
       const borrowed = makeProvider();
       if (source === 'cached') {
         await redteamProviderManager.setProvider(borrowed);
       }
-      const id = 'promptfoo:redteam:custom';
-      const strategy = (await loadApiProvider(id, {
-        options: {
-          id,
-          config: {
-            strategyText: 'local strategy',
-            ...(source === 'supplied' ? { redteamProvider: borrowed } : {}),
-          },
-        },
-      })) as ApiProvider & {
-        getRedTeamProvider(): Promise<ApiProvider>;
-        getScoringProvider(): Promise<ApiProvider>;
-      };
-      try {
-        await strategy.getRedTeamProvider();
-        await strategy.getScoringProvider();
-        expect(strategy.cleanup).toBeTypeOf('function');
-        await strategy.cleanup!();
-        expect(borrowed.cleanup).not.toHaveBeenCalled();
-        await expect(borrowed.callApi('still usable')).resolves.toMatchObject({ output: 'ok' });
-      } finally {
-        restoreEnv();
-      }
+      const strategy = await loadStrategy('custom', {
+        strategyText: 'local strategy',
+        ...(source === 'supplied' ? { redteamProvider: borrowed } : {}),
+      });
+      await strategy.getRedTeamProvider();
+      await strategy.getScoringProvider();
+      expect(strategy.cleanup).toBeTypeOf('function');
+      await strategy.cleanup!();
+      expect(borrowed.cleanup).not.toHaveBeenCalled();
+      await expect(borrowed.callApi('still usable')).resolves.toMatchObject({ output: 'ok' });
     },
   );
 
   it('settles every strategy delegate cleanup and reports a failure', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
     const error = new Error('delegate cleanup failed');
     const cleanup = vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined);
-    const id = 'promptfoo:redteam:custom';
-    const strategy = (await loadApiProvider(id, {
-      options: {
-        id,
-        config: { strategyText: 'local strategy', redteamProvider: providerOptions({ cleanup }) },
-      },
-    })) as ApiProvider & {
-      getRedTeamProvider(): Promise<ApiProvider>;
-      getScoringProvider(): Promise<ApiProvider>;
-    };
-    try {
-      await strategy.getRedTeamProvider();
-      await strategy.getScoringProvider();
-      expect(strategy.cleanup).toBeTypeOf('function');
-      await expect(strategy.cleanup!()).rejects.toBe(error);
-      expect(cleanup).toHaveBeenCalledTimes(2);
-    } finally {
-      restoreEnv();
-    }
+    const strategy = await loadStrategy('custom', {
+      strategyText: 'local strategy',
+      redteamProvider: providerOptions({ cleanup }),
+    });
+    await strategy.getRedTeamProvider();
+    await strategy.getScoringProvider();
+    expect(strategy.cleanup).toBeTypeOf('function');
+    await expect(strategy.cleanup!()).rejects.toBe(error);
+    expect(cleanup).toHaveBeenCalledTimes(2);
   });
 
   it('disposes a pending delegate after public terminal cleanup instead of returning it', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
     const load = createDeferred<void>();
     const started = createDeferred<void>();
     const cleaned = createDeferred<void>();
     const cleanup = vi.fn(() => cleaned.resolve());
-    const id = 'promptfoo:redteam:crescendo';
-    const strategy = (await loadApiProvider(id, {
-      options: {
-        id,
-        config: {
-          redteamProvider: providerOptions({
-            cleanup,
-            waitForLoad: () => {
-              started.resolve();
-              return load.promise;
-            },
-          }),
+    const strategy = await loadStrategy('crescendo', {
+      redteamProvider: providerOptions({
+        cleanup,
+        waitForLoad: () => {
+          started.resolve();
+          return load.promise;
         },
-      },
-    })) as ApiProvider & { getRedTeamProvider(): Promise<ApiProvider> };
+      }),
+    });
     const pending = strategy.getRedTeamProvider().catch((error: unknown) => error);
     try {
       await started.promise;
@@ -262,7 +233,6 @@ describe('provider cleanup ownership', () => {
     } finally {
       load.resolve();
       await pending;
-      restoreEnv();
     }
   });
 
@@ -291,14 +261,9 @@ describe('provider cleanup ownership', () => {
       };
       try {
         for (let run = 0; run < 2; run++) {
-          const result = await evaluateWithSource(
-            {
-              prompts: ['hello'],
-              providers: [caller],
-              tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
-            },
-            { cache: false },
-          );
+          const result = await evaluateFixture({
+            providers: [caller],
+          });
           expect(result.prompts[0].metrics?.testPassCount).toBe(1);
           expect(cleanup).not.toHaveBeenCalled();
         }
@@ -313,15 +278,11 @@ describe('provider cleanup ownership', () => {
     const provider = { ...makeProvider(), shutdown: vi.fn(async () => {}) };
     providerRegistry.register(provider);
     try {
-      await evaluateWithSource(
-        {
-          prompts: ['hello'],
-          providers: [provider],
-          tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
-        },
-        { cache: false },
-      );
+      await evaluateFixture({
+        providers: [provider],
+      });
       expect(provider.shutdown).not.toHaveBeenCalled();
+      expect(provider.cleanup).not.toHaveBeenCalled();
       expect(providerRegistry.has(provider)).toBe(true);
     } finally {
       providerRegistry.unregister(provider);
@@ -360,39 +321,21 @@ describe('provider cleanup ownership', () => {
     });
   });
 
-  it('cleans a configured provider after programmatic evaluation', async () => {
-    const cleanup = vi.fn();
-    const result = await evaluateWithSource(
-      {
-        prompts: ['hello'],
-        providers: [providerOptions({ cleanup })],
-        tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
-      },
-      { cache: false },
-    );
-    expect(result.prompts[0].metrics?.testPassCount).toBe(1);
-    expect(cleanup).toHaveBeenCalledOnce();
-  });
-
   it('cleans a lazily constructed grading provider', async () => {
     const cleanup = vi.fn();
-    const result = await evaluateWithSource(
-      {
-        prompts: ['hello'],
-        providers: ['echo'],
-        tests: [
-          {
-            options: {
-              provider: {
-                text: providerOptions({ cleanup, output: '{"pass":true,"score":1,"reason":"ok"}' }),
-              },
+    const result = await evaluateFixture({
+      providers: ['echo'],
+      tests: [
+        {
+          options: {
+            provider: {
+              text: providerOptions({ cleanup, output: '{"pass":true,"score":1,"reason":"ok"}' }),
             },
-            assert: [{ type: 'llm-rubric', value: 'returns hello' }],
           },
-        ],
-      },
-      { cache: false },
-    );
+          assert: [{ type: 'llm-rubric', value: 'returns hello' }],
+        },
+      ],
+    });
     expect(result.prompts[0].metrics?.testPassCount).toBe(1);
     expect(cleanup).toHaveBeenCalledOnce();
   });
@@ -404,36 +347,28 @@ describe('provider cleanup ownership', () => {
       ...makeProvider(cleanup),
       callApi: async () => ({ output: '{"pass":true,"score":1,"reason":"ok"}' }),
     };
-    await evaluateWithSource(
-      {
-        prompts: ['hello'],
-        providers: [target],
-        tests: [
-          {
-            options: { provider: { text: grader } },
-            assert: [{ type: 'llm-rubric', value: 'ok' }],
-          },
-        ],
-      },
-      { cache: false },
-    );
+    await evaluateFixture({
+      providers: [target],
+      tests: [
+        {
+          options: { provider: { text: grader } },
+          assert: [{ type: 'llm-rubric', value: 'ok' }],
+        },
+      ],
+    });
     expect(cleanup).not.toHaveBeenCalled();
   });
 
   it('cleans constructed test providers when a later test cannot load', async () => {
     const cleanup = vi.fn();
     await expect(
-      evaluateWithSource(
-        {
-          prompts: ['hello'],
-          providers: ['echo'],
-          tests: [
-            { provider: providerOptions({ cleanup }) },
-            { provider: providerOptions({ fail: true }) },
-          ],
-        },
-        { cache: false },
-      ),
+      evaluateFixture({
+        providers: ['echo'],
+        tests: [
+          { provider: providerOptions({ cleanup }) },
+          { provider: providerOptions({ fail: true }) },
+        ],
+      }),
     ).rejects.toThrow('provider load failed');
     expect(cleanup).toHaveBeenCalledOnce();
   });
@@ -508,35 +443,28 @@ describe('provider cleanup ownership', () => {
     const enteredFirst = createDeferred<void>();
     const firstCleanup = vi.fn();
     const secondCleanup = vi.fn();
-    const first = evaluateWithSource(
-      {
-        prompts: ['first'],
-        providers: [
-          providerOptions({
-            cleanup: firstCleanup,
-            call: () => {
-              enteredFirst.resolve();
-              return releaseFirst.promise;
-            },
-          }),
-        ],
-        tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
-      },
-      { cache: false },
-    );
+    const first = evaluateFixture({
+      prompts: ['first'],
+      providers: [
+        providerOptions({
+          cleanup: firstCleanup,
+          call: () => {
+            enteredFirst.resolve();
+            return releaseFirst.promise;
+          },
+        }),
+      ],
+    });
     await enteredFirst.promise;
-    await evaluateWithSource(
-      {
-        prompts: ['second'],
-        providers: [providerOptions({ cleanup: secondCleanup })],
-        tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
-      },
-      { cache: false },
-    );
+    const second = await evaluateFixture({
+      prompts: ['second'],
+      providers: [providerOptions({ cleanup: secondCleanup })],
+    });
+    expect(second.prompts[0].metrics?.testPassCount).toBe(1);
     expect(secondCleanup).toHaveBeenCalledOnce();
     expect(firstCleanup).not.toHaveBeenCalled();
     releaseFirst.resolve();
-    await first;
+    expect((await first).prompts[0].metrics?.testPassCount).toBe(1);
     expect(firstCleanup).toHaveBeenCalledOnce();
   });
 
@@ -563,54 +491,34 @@ describe('provider cleanup ownership', () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
-  it('cleans every provider even when one synchronous hook throws', async () => {
-    const error = new Error('cleanup failed');
-    const second = makeProvider();
-    await expect(
-      withProviderCleanup(async () => {
-        trackProvider(
-          makeProvider(
-            vi.fn(() => {
-              throw error;
-            }),
-          ),
-        );
-        trackProvider(second);
-      }),
-    ).rejects.toBe(error);
-    expect(second.cleanup).toHaveBeenCalledOnce();
-  });
-
-  it('preserves the original operation failure when cleanup also fails', async () => {
-    const error = new Error('evaluation failed');
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-    await expect(
-      withProviderCleanup(async () => {
-        trackProvider(
-          makeProvider(
-            vi.fn(() => {
-              throw new Error('cleanup failed');
-            }),
-          ),
-        );
-        throw error;
-      }),
-    ).rejects.toBe(error);
-    expect(warn).toHaveBeenCalledWith('Provider cleanup failed after evaluation error', {
-      error: expect.any(Error),
-    });
-  });
-
-  it('does not clean untracked process-registered providers', async () => {
-    const provider = { ...makeProvider(), shutdown: vi.fn(async () => {}) };
-    providerRegistry.register(provider);
-    try {
-      await withProviderCleanup(async () => {
-        providerRegistry.unregister(provider);
-      });
-      expect(provider.cleanup).not.toHaveBeenCalled();
-    } finally {
-      providerRegistry.unregister(provider);
-    }
-  });
+  it.each([false, true])(
+    'drains failed cleanup and preserves operation errors (operationThrows=%s)',
+    async (operationThrows) => {
+      const cleanupError = new Error('cleanup failed');
+      const operationError = new Error('evaluation failed');
+      const second = makeProvider();
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      await expect(
+        withProviderCleanup(async () => {
+          trackProvider(
+            makeProvider(
+              vi.fn(() => {
+                throw cleanupError;
+              }),
+            ),
+          );
+          trackProvider(second);
+          if (operationThrows) {
+            throw operationError;
+          }
+        }),
+      ).rejects.toBe(operationThrows ? operationError : cleanupError);
+      expect(second.cleanup).toHaveBeenCalledOnce();
+      if (operationThrows) {
+        expect(warn).toHaveBeenCalledWith('Provider cleanup failed after evaluation error', {
+          error: cleanupError,
+        });
+      }
+    },
+  );
 });

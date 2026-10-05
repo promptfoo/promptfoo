@@ -13,17 +13,16 @@ vi.mock('../../src/providers/transformersAvailability', () => ({
 vi.mock('../../src/providers/providerRegistry', () => ({
   providerRegistry: {
     register: vi.fn(),
-    has: vi.fn(() => false),
   },
 }));
 
-import { trackProvider, withProviderCleanup } from '../../src/providers/lifecycle';
 import {
   disposePipelines,
   pipelineCache,
   TransformersEmbeddingProvider,
   TransformersTextGenerationProvider,
 } from '../../src/providers/transformers';
+import { createDeferred } from '../util/utils';
 
 describe('TransformersEmbeddingProvider', () => {
   let mockPipeline: ReturnType<typeof vi.fn>;
@@ -482,12 +481,11 @@ describe('provider-owned pipeline cleanup', () => {
     await disposePipelines();
   });
 
-  it('releases a configured provider when its cleanup scope finishes', async () => {
-    await withProviderCleanup(async () => {
-      const provider = trackProvider(new TransformersEmbeddingProvider('fixture'));
-      expect(await provider.callEmbeddingApi('hello')).toMatchObject({ embedding: [0.25] });
-      expect(dispose).not.toHaveBeenCalled();
-    });
+  it('releases an embedding pipeline when its provider is cleaned up', async () => {
+    const provider = new TransformersEmbeddingProvider('fixture');
+    expect(await provider.callEmbeddingApi('hello')).toMatchObject({ embedding: [0.25] });
+    expect(dispose).not.toHaveBeenCalled();
+    await provider.cleanup();
 
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(pipelineCache.size).toBe(0);
@@ -497,10 +495,9 @@ describe('provider-owned pipeline cleanup', () => {
     const caller = new TransformersEmbeddingProvider('fixture');
     await caller.callEmbeddingApi('caller');
 
-    await withProviderCleanup(async () => {
-      const configured = trackProvider(new TransformersEmbeddingProvider('fixture'));
-      await configured.callEmbeddingApi('configured');
-    });
+    const configured = new TransformersEmbeddingProvider('fixture');
+    await configured.callEmbeddingApi('configured');
+    await configured.cleanup();
 
     expect(pipeline).toHaveBeenCalledTimes(1);
     expect(dispose).not.toHaveBeenCalled();
@@ -540,16 +537,15 @@ describe('provider-owned pipeline cleanup', () => {
     expect(pipelineCache.size).toBe(0);
   });
 
-  it('releases text generation pipelines through the same scope', async () => {
+  it('releases text generation pipelines through provider cleanup', async () => {
     const generator = Object.assign(vi.fn().mockResolvedValue([{ generated_text: 'hello' }]), {
       dispose,
     });
     pipeline.mockResolvedValue(generator);
 
-    await withProviderCleanup(async () => {
-      const provider = trackProvider(new TransformersTextGenerationProvider('fixture'));
-      expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
-    });
+    const provider = new TransformersTextGenerationProvider('fixture');
+    expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
+    await provider.cleanup();
 
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(pipelineCache.size).toBe(0);
@@ -559,18 +555,15 @@ describe('provider-owned pipeline cleanup', () => {
     'finishes %s cleanup before pending initialization and disposes its late result',
     async (mode) => {
       vi.useFakeTimers();
-      let finish: (value: unknown) => void;
-      const initialized = new Promise<void>((resolve) => {
-        pipeline.mockImplementationOnce(() => {
-          resolve();
-          return new Promise((complete) => {
-            finish = complete;
-          });
-        });
+      const initialized = createDeferred<void>();
+      const ready = createDeferred<unknown>();
+      pipeline.mockImplementationOnce(() => {
+        initialized.resolve();
+        return ready.promise;
       });
       const provider = new TransformersEmbeddingProvider('fixture');
       const call = provider.callEmbeddingApi('hello');
-      await initialized;
+      await initialized.promise;
       const cleanup = mode === 'global' ? disposePipelines() : provider.cleanup();
       expect(pipelineCache.size).toBe(0);
       const cleaned = vi.fn();
@@ -580,7 +573,7 @@ describe('provider-owned pipeline cleanup', () => {
         expect(cleaned).toHaveBeenCalledOnce();
         expect(dispose).not.toHaveBeenCalled();
       } finally {
-        finish!(Object.assign(extractor, { dispose }));
+        ready.resolve(Object.assign(extractor, { dispose }));
         await Promise.all([call, cleanup]);
         vi.useRealTimers();
       }
@@ -596,29 +589,58 @@ describe('provider-owned pipeline cleanup', () => {
     },
   );
 
-  it('keeps pending initialization for its remaining owner', async () => {
-    let finish: (value: unknown) => void;
-    const initialized = new Promise<void>((started) => {
-      pipeline.mockImplementationOnce(() => {
-        started();
-        return new Promise((resolve) => {
-          finish = resolve;
-        });
-      });
+  it.each([
+    { kind: 'embedding', reuse: false },
+    { kind: 'embedding', reuse: true },
+    { kind: 'text generation', reuse: true },
+  ])('keeps released pending $kind calls canceled (reuse: $reuse)', async ({ kind, reuse }) => {
+    if (kind === 'text generation') {
+      extractor.mockResolvedValue([{ generated_text: 'hello' }]);
+    }
+    const initialized = createDeferred<void>();
+    const ready = createDeferred<unknown>();
+    pipeline.mockImplementationOnce(() => {
+      initialized.resolve();
+      return ready.promise;
     });
-    const first = new TransformersEmbeddingProvider('fixture');
-    const second = new TransformersEmbeddingProvider('fixture');
-    const calls = [first.callEmbeddingApi('released'), second.callEmbeddingApi('retained')];
-    await initialized;
+    const Provider =
+      kind === 'embedding' ? TransformersEmbeddingProvider : TransformersTextGenerationProvider;
+    const first = new Provider('fixture');
+    const second = new Provider('fixture');
+    const call = (provider: typeof first, text: string) =>
+      provider instanceof TransformersEmbeddingProvider
+        ? provider.callEmbeddingApi(text)
+        : provider.callApi(text);
+
+    const releasedCall = call(first, 'released');
+    const retainedCall = call(second, 'retained');
+    await initialized.promise;
     await first.cleanup();
-    finish!(Object.assign(extractor, { dispose }));
-    const [released, retained] = await Promise.all(calls);
+    const reusedCall = reuse ? call(first, 'reused') : undefined;
+    ready.resolve(Object.assign(extractor, { dispose }));
+
+    const [released, retained, reused] = await Promise.all([
+      releasedCall,
+      retainedCall,
+      reusedCall,
+    ]);
     expect(released).toMatchObject({ error: expect.stringContaining('released') });
-    expect(retained).toMatchObject({ embedding: [0.25] });
-    expect(extractor).toHaveBeenCalledOnce();
+    const expected = kind === 'embedding' ? { embedding: [0.25] } : { output: 'hello' };
+    expect(retained).toMatchObject(expected);
+    expect(pipeline).toHaveBeenCalledOnce();
+    expect(extractor).toHaveBeenCalledTimes(reuse ? 2 : 1);
     expect(extractor).toHaveBeenCalledWith('retained', expect.anything());
     expect(dispose).not.toHaveBeenCalled();
+    if (reuse) {
+      expect(reused).toMatchObject(expected);
+      expect(extractor).toHaveBeenCalledWith('reused', expect.anything());
+      await first.cleanup();
+      expect(dispose).not.toHaveBeenCalled();
+    }
     await second.cleanup();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(pipelineCache.size).toBe(0);
+    await first.cleanup();
     expect(dispose).toHaveBeenCalledOnce();
   });
 

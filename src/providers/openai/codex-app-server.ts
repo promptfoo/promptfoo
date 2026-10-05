@@ -1380,6 +1380,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    // New resource use during teardown consumes this flag and retains registration.
+    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
     this.cleanupGeneration++;
     this.resolveActiveTurns(new Error('codex app-server provider cleanup interrupted active turn'));
     this.threads.clear();
@@ -1406,9 +1408,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }),
       ),
     );
-    // Remember only our own registration; wrappers may own this provider instead.
-    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
-    providerRegistry.unregister(this);
+    if (this.restoreRegistrationOnUse) {
+      providerRegistry.unregister(this);
+    }
   }
 
   async shutdown(): Promise<void> {

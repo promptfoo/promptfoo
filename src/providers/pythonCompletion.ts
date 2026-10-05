@@ -129,10 +129,8 @@ export class PythonProvider implements ApiProvider {
 
         this.isInitialized = true;
         logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
-      } catch (error) {
-        // Reset the initialization promise so future calls can retry
+      } finally {
         this.initializationPromise = null;
-        throw error;
       }
     })();
 

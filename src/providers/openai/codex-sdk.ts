@@ -784,6 +784,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    // New resource use during teardown consumes this flag and retains registration.
+    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
     // Clean up threads
     this.threads.clear();
     this.threadRunQueues.clear();
@@ -797,9 +799,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
     this.codexInstances.clear();
-    // Remember only our own registration; wrappers may own this provider instead.
-    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
-    providerRegistry.unregister(this);
+    if (this.restoreRegistrationOnUse) {
+      providerRegistry.unregister(this);
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -2419,6 +2421,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
     return this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
+      if (this.restoreRegistrationOnUse) {
+        providerRegistry.register(this);
+        this.restoreRegistrationOnUse = false;
+      }
       const thread = await this.getOrCreateThread(
         resolvedConfig,
         cacheKey,

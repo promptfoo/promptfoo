@@ -12,6 +12,7 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
+import { waitForSettled } from '../util/time';
 import { loadYaml } from '../util/yamlLoad';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -1094,11 +1095,9 @@ async function synthesizeInternal({
     prompt: 0,
     total: 0,
   };
-  const redteamProvider = trackGenerationTokenUsage(
-    providerSelection.provider,
-    generationTokenUsage,
-    generationAbortSignal,
-  );
+  const wrapGenerationProvider = (providerToWrap: ApiProvider) =>
+    trackGenerationTokenUsage(providerToWrap, generationTokenUsage, generationAbortSignal);
+  const redteamProvider = wrapGenerationProvider(providerSelection.provider);
   const trackedProviderSelection = {
     ...providerSelection,
     provider: redteamProvider,
@@ -1702,18 +1701,7 @@ async function synthesizeInternal({
     });
   } catch (error) {
     generationController.abort(error);
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    try {
-      // Drain active plugins before cleanup, bounded for providers that ignore cancellation.
-      await Promise.race([
-        Promise.allSettled(inFlightPlugins),
-        new Promise<void>((resolve) => {
-          timeout = setTimeout(resolve, 1000);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timeout);
-    }
+    await waitForSettled(inFlightPlugins, 1000);
     throw error;
   }
 
@@ -1743,8 +1731,7 @@ async function synthesizeInternal({
       undefined,
       maxCharsPerMessage,
       redteamGenerationContext,
-      (providerToWrap) =>
-        trackGenerationTokenUsage(providerToWrap, generationTokenUsage, generationAbortSignal),
+      wrapGenerationProvider,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1770,8 +1757,7 @@ async function synthesizeInternal({
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
       redteamGenerationContext,
-      (providerToWrap) =>
-        trackGenerationTokenUsage(providerToWrap, generationTokenUsage, generationAbortSignal),
+      wrapGenerationProvider,
     );
 
   Object.assign(strategyResults, otherStrategyResults);
