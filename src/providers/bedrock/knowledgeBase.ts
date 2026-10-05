@@ -1,5 +1,5 @@
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt } from '../../envars';
+import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
@@ -131,6 +131,12 @@ export class AwsBedrockKnowledgeBaseProvider
 
   toString(): string {
     return `[Amazon Bedrock Knowledge Base Provider ${this.kbConfig.knowledgeBaseId}]`;
+  }
+
+  protected override getApiKey(): string | undefined {
+    // Provider-only bearer values were ignored by this SigV4 client. Preserve
+    // its existing config/invocation/ambient handler selection and IAM cache.
+    return this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
   }
 
   async getKnowledgeBaseClient() {

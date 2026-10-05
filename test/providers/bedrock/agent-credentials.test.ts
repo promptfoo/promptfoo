@@ -204,7 +204,7 @@ describe('Bedrock agent-runtime released IAM selection', () => {
         const handlerBearer =
           kind === 'knowledge-base' &&
           configured !== 'explicit' &&
-          !['absent', 'file-blank'].includes(bearer);
+          !['absent', 'file-blank', 'provider'].includes(bearer);
         expect(authorizations).toEqual([
           [iamKey, ...(handlerBearer ? ['Bearer fixture-token'] : [])],
         ]);

@@ -613,9 +613,14 @@ describe('scoped AWS SDK authentication', () => {
             }
           }
           expect(handle).toHaveBeenCalledOnce();
-          const authorization = new Headers(handle.mock.calls[0][0].headers).get('authorization');
+          const authorization = Object.entries(handle.mock.calls[0][0].headers)
+            .filter(([name]) => name.toLowerCase() === 'authorization')
+            .at(-1)?.[1];
           if (configuredKeys) {
             expect(authorization).toContain('Credential=explicit-access/');
+            expect(authorization).not.toContain('Bearer');
+          } else if (kind === 'knowledge-base' && source === 'provider') {
+            expect(authorization).toContain('Credential=host-access/');
             expect(authorization).not.toContain('Bearer');
           } else {
             expect(authorization).toContain('Bearer lower-bearer');
@@ -802,7 +807,7 @@ describe('scoped AWS SDK authentication', () => {
   });
 
   it.each(['host', 'file'])(
-    'partitions Knowledge Base caches by selected IAM keys when masking a %s bearer with a profile',
+    'partitions Knowledge Base IAM caches with a suite mask for the %s bearer and ignored provider tokens',
     async (source) => {
       mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: source === 'host' ? 'fixture-host-bearer' : undefined,
@@ -810,7 +815,7 @@ describe('scoped AWS SDK authentication', () => {
       await cliState.withEnvFileOverrides(
         source === 'file' ? { AWS_BEARER_TOKEN_BEDROCK: 'fixture-file-bearer' } : {},
         () =>
-          cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory' }, () =>
+          cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory', AWS_BEARER_TOKEN_BEDROCK: '' }, () =>
             withCacheEnabled(true, async () => {
               const requests: string[] = [];
               for (const [index, owner] of ['first', 'second', 'first'].entries()) {
@@ -818,9 +823,8 @@ describe('scoped AWS SDK authentication', () => {
                   config: {
                     knowledgeBaseId: `fixture-masked-${source}`,
                     region: 'us-east-1',
-                    profile: 'ignored-profile',
                   },
-                  env: { ...keys(owner), AWS_BEARER_TOKEN_BEDROCK: '' },
+                  env: { ...keys(owner), AWS_BEARER_TOKEN_BEDROCK: `ignored-${index}` },
                 });
                 const client = await provider.getKnowledgeBaseClient();
                 vi.spyOn(client.config.requestHandler, 'handle').mockImplementation(

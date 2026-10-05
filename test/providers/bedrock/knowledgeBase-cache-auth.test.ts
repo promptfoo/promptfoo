@@ -5,6 +5,10 @@ import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/
 import { sha256 } from '../../../src/util/createHash';
 import { mockProcessEnv } from '../../util/utils';
 
+vi.mock('@aws-sdk/credential-provider-sso', () => ({
+  fromSSO: () => async () => ({ accessKeyId: 'profile-access', secretAccessKey: 'profile-secret' }),
+}));
+
 const fixtures = vi.hoisted(() => ({ cache: new Map<string, unknown>() }));
 vi.mock('../../../src/cache', () => ({
   isCacheEnabled: () => true,
@@ -60,7 +64,10 @@ beforeEach(() => {
         .filter(([name]) => name.toLowerCase() === 'authorization')
         .at(-1)?.[1] ?? '';
     authorizations.push(authorization);
-    const output = authorization.startsWith('Bearer ') ? authorization.slice(7) : 'sigv4-fixture';
+    const scopedOwner = authorization.match(/Credential=(first|second)-access\//)?.[1];
+    const output = authorization.startsWith('Bearer ')
+      ? authorization.slice(7)
+      : scopedOwner || 'sigv4-fixture';
     return {
       response: {
         statusCode: 200,
@@ -83,35 +90,60 @@ afterEach(() => {
 });
 
 describe('Knowledge Base selected-auth cache partition', () => {
-  it('isolates new provider bearers from ambient cache entries and each other', async () => {
-    expect(await provider().callApi('fixture prompt')).toMatchObject({ output: 'sigv4-fixture' });
-    expect(await provider('fixture-one').callApi('fixture prompt')).toMatchObject({
-      output: 'fixture-one',
-    });
-    expect(await provider('fixture-two').callApi('fixture prompt')).toMatchObject({
-      output: 'fixture-two',
-    });
-    expect(await provider('fixture-one').callApi('fixture prompt')).toMatchObject({
-      output: 'fixture-one',
-      cached: true,
-    });
-    expect(authorizations).toHaveLength(3);
-    expect(
-      [...fixtures.cache.keys()].every(
-        (key) => !key.includes('fixture-one') && !key.includes('fixture-two'),
-      ),
-    ).toBe(true);
-  });
-  it('uses the same opaque partition across equivalent provider instances and evaluation scopes', async () => {
-    const first = await cliState.withEnv({}, () =>
-      provider('same-fixture').callApi('fixture prompt'),
-    );
-    const second = await cliState.withEnv({}, () =>
-      provider('same-fixture').callApi('fixture prompt'),
-    );
-    expect(first).toMatchObject({ output: 'same-fixture' });
-    expect(second).toMatchObject({ output: 'same-fixture', cached: true });
-    expect(authorizations).toEqual(['Bearer same-fixture']);
+  it.each(['', 'fixture-one', 'fixture-two'])(
+    'ignores provider-only bearer %s while reusing the selected ambient IAM cache',
+    async (bearer) => {
+      expect(await provider().callApi('fixture prompt')).toMatchObject({ output: 'sigv4-fixture' });
+      expect(await provider(bearer).callApi('fixture prompt')).toMatchObject({
+        output: 'sigv4-fixture',
+        cached: true,
+      });
+      expect(authorizations).toHaveLength(1);
+      expect(authorizations[0]).toContain('Credential=host-access/');
+      expect([...fixtures.cache.keys()]).toEqual([legacyKey()]);
+    },
+  );
+
+  it.each(['', 'fixture-one'])(
+    'retains configured-profile IAM credentials and cache with provider-only bearer %s',
+    async (bearer) => {
+      const config = { profile: 'fixture-profile' };
+      expect(await provider(bearer, config).callApi('fixture prompt')).toMatchObject({
+        output: 'sigv4-fixture',
+      });
+      expect(await provider(undefined, config).callApi('fixture prompt')).toMatchObject({
+        output: 'sigv4-fixture',
+        cached: true,
+      });
+      expect(authorizations).toHaveLength(1);
+      expect(authorizations[0]).toContain('Credential=profile-access/');
+      expect([...fixtures.cache.keys()]).toEqual([legacyKey(config)]);
+    },
+  );
+
+  it('partitions actual scoped IAM identities while ignoring provider bearer changes', async () => {
+    const rows = [];
+    for (const [owner, bearer] of [
+      ['first', 'ignored-one'],
+      ['second', 'ignored-two'],
+      ['first', 'ignored-three'],
+    ]) {
+      rows.push(
+        await cliState.withEnv(
+          { AWS_ACCESS_KEY_ID: `${owner}-access`, AWS_SECRET_ACCESS_KEY: `${owner}-secret` },
+          () => provider(bearer).callApi('fixture prompt'),
+        ),
+      );
+    }
+    expect(rows).toMatchObject([
+      { output: 'first' },
+      { output: 'second' },
+      { output: 'first', cached: true },
+    ]);
+    expect(authorizations).toHaveLength(2);
+    expect(authorizations[0]).toContain('Credential=first-access/');
+    expect(authorizations[1]).toContain('Credential=second-access/');
+    expect([...fixtures.cache.keys()].every((key) => !key.includes('ignored-'))).toBe(true);
   });
   it('ignores provider bearers when an explicit configured keypair wins', async () => {
     const config = { accessKeyId: 'config-access', secretAccessKey: 'config-secret' };
@@ -136,12 +168,16 @@ describe('Knowledge Base selected-auth cache partition', () => {
     expect(authorizations).toEqual(['Bearer configured-fixture']);
     expect([...fixtures.cache.keys()]).toEqual([legacyKey(config)]);
   });
-  it.each(['ambient', 'file', 'suite'] as const)(
-    'retains the exact released %s bearer cache key',
-    async (source) => {
+  it.each(
+    ['ambient', 'file', 'suite'].flatMap((source) =>
+      [undefined, '', 'ignored-provider'].map((bearer) => ({ source, bearer })),
+    ),
+  )(
+    'retains the exact released $source bearer cache key with provider-only value $bearer',
+    async ({ source, bearer }) => {
       const selected = { AWS_BEARER_TOKEN_BEDROCK: 'legacy-fixture' };
       const run = async () => {
-        await provider().callApi('fixture prompt');
+        await provider(bearer).callApi('fixture prompt');
         expect([...fixtures.cache.keys()]).toEqual([legacyKey()]);
         expect(authorizations).toEqual(['Bearer legacy-fixture']);
       };
