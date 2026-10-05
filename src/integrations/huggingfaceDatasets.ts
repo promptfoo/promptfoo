@@ -443,6 +443,14 @@ export async function fetchHuggingFaceDataset(
               continue;
             }
 
+            // `offset` advances by the rows taken here, so a page is usable only if it starts
+            // where those rows end. After a page that failed or came back short, taking this
+            // one would drop the rows in between and fetch it again on the next iteration.
+            // Stop instead: the main loop refetches the gap with its usual error handling.
+            if (result.value.offset !== offset + concurrentRowCount) {
+              break;
+            }
+
             if (!result.value.success) {
               const errorInfo = result.value.error
                 ? String(result.value.error)
