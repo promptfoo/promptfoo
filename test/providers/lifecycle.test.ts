@@ -175,6 +175,69 @@ describe('provider cleanup ownership', () => {
     }
   });
 
+  it('retains a failed registered shutdown for global cleanup retry', async () => {
+    const error = new Error('resource is still open');
+    const close = vi.fn();
+    const provider = {
+      ...makeProvider(),
+      shutdown: vi
+        .fn()
+        .mockRejectedValueOnce(error)
+        .mockImplementation(async () => close()),
+    };
+    providerRegistry.register(provider);
+    try {
+      await expect(
+        withProviderCleanup(async () => {
+          trackProvider(provider);
+        }),
+      ).rejects.toBe(error);
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      expect(provider.cleanup).not.toHaveBeenCalled();
+      expect(close).not.toHaveBeenCalled();
+      expect.soft(providerRegistry.has(provider)).toBe(true);
+
+      await providerRegistry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledTimes(2);
+      expect(close).toHaveBeenCalledOnce();
+      expect(providerRegistry.has(provider)).toBe(false);
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it.each([false, true])(
+    'deduplicates targeted shutdown without removing re-registration (reregister=%s)',
+    async (reregister) => {
+      const release = createDeferred<void>();
+      const provider = {
+        ...makeProvider(),
+        shutdown: vi.fn().mockReturnValueOnce(release.promise).mockResolvedValue(undefined),
+      };
+      providerRegistry.register(provider);
+      const pending = providerRegistry.shutdown(provider);
+      try {
+        expect(providerRegistry.has(provider)).toBe(false);
+        await providerRegistry.shutdown(provider);
+        expect(provider.shutdown).toHaveBeenCalledOnce();
+        if (reregister) {
+          providerRegistry.register(provider);
+        }
+        release.resolve();
+        await pending;
+        expect(providerRegistry.has(provider)).toBe(reregister);
+
+        await providerRegistry.shutdownAll();
+        expect(provider.shutdown).toHaveBeenCalledTimes(reregister ? 2 : 1);
+        expect(providerRegistry.has(provider)).toBe(false);
+      } finally {
+        release.resolve();
+        await pending;
+        providerRegistry.unregister(provider);
+      }
+    },
+  );
+
   it('reports cleanup failure without replacing a batch load failure', async () => {
     const error = new Error('cleanup failed');
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
