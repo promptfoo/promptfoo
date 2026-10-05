@@ -39,6 +39,83 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 describe('sanitizeMcpToolData', () => {
+  it('inspects raw inherited fragment values when percent decoding fails', () => {
+    for (const role of ['url', 'apiBaseUrl', 'apiHost', 'callbackUrl']) {
+      for (const suffix of ['%ZZ', '%FF', '%E0%A4']) {
+        for (const child of [
+          `https://host/#next=callback?token=malformed-fragment-fixture${suffix}`,
+          `https://host/#next=https://inner.test/?token=malformed-fragment-fixture${suffix}`,
+          `https://host/#next=${suffix}https://inner.test/?token=malformed-fragment-fixture`,
+          `https://host/#next=${JSON.stringify(`https://inner.test/?token=malformed-fragment-fixture${suffix}`)}`,
+        ]) {
+          const input = { [role]: JSON.stringify({ target: child, page: 2 }) };
+          const original = structuredClone(input);
+          const sanitized = sanitizeMcpToolData(input) as Record<string, string>;
+          expect(JSON.stringify(sanitized)).not.toContain('malformed-fragment-fixture');
+          expect(JSON.parse(sanitized[role]).page).toBe(2);
+          expect(input).toEqual(original);
+        }
+      }
+    }
+  });
+
+  it('preserves harmless malformed fragment payloads', () => {
+    for (const child of [
+      'https://host/#next=callback?page=public%ZZ',
+      'https://host/#next=callback?page=public%FF',
+      'https://host/#next=mailto:alice@example.test?body=public%ZZ',
+      'https://host/#next=callback?password={{ password }}&note=public%ZZ',
+    ]) {
+      const input = { url: JSON.stringify({ target: child, page: 2 }) };
+      expect(sanitizeMcpToolData(input)).toEqual(input);
+    }
+  });
+
+  it('retains nested URI decoder ownership for encoded public placeholders', () => {
+    for (const suffix of ['%ZZ', '%FF']) {
+      const child = `https://outer/#data=https://outer/?data=https://host/${suffix}?password=%257B%257B%2520password%2520%257D%257D`;
+      const input = { url: JSON.stringify({ target: child, page: 2 }) };
+      const original = structuredClone(input);
+      expect(sanitizeMcpToolData(input)).toEqual(original);
+      expect(input).toEqual(original);
+    }
+  });
+
+  it('preserves quoted URI layers while sanitizing malformed fragment payloads', () => {
+    for (const role of ['url', 'apiHost']) {
+      for (const layers of [1, 2, 3]) {
+        let child = 'https://inner.test/%ZZ?token=quoted-fragment-fixture%ZZ';
+        for (let layer = 0; layer < layers; layer++) {
+          child = JSON.stringify(child);
+        }
+        const input = {
+          [role]: JSON.stringify({ target: `https://outer/#data=${child}`, page: 2 }),
+        };
+        const original = structuredClone(input);
+        const sanitized = sanitizeMcpToolData(input) as Record<string, string>;
+        const target = JSON.parse(sanitized[role]).target;
+        let output = decodeURIComponent(new URL(target).hash.slice('#data='.length));
+        for (let layer = 0; layer < layers; layer++) {
+          output = JSON.parse(output);
+        }
+        expect(new URL(output).searchParams.get('token')).toBe('[REDACTED]');
+        expect(JSON.parse(sanitized[role]).page).toBe(2);
+        expect(input).toEqual(original);
+        for (const maxDepth of [1, 2, 4, 8, 64]) {
+          expect(
+            JSON.stringify(
+              sanitizeObject(input, {
+                sanitizeUrls: true,
+                redactCompoundKeys: true,
+                maxDepth,
+              }),
+            ),
+          ).not.toContain('quoted-fragment-fixture');
+        }
+      }
+    }
+  });
+
   it('inspects repeatedly quoted URI components without requiring a template', () => {
     for (const prefix of [
       'mailto:alice@example.test?data=',

@@ -1697,7 +1697,54 @@ function redactUrlPayloadValue(
       }
     }
     if (decoded === undefined) {
-      return null;
+      // Keep the nearest raw spelling's structural guard after a failed decode.
+      // Its unapplied layers belong to leaf checks, never to delimiter splitting.
+      let index = interpretations.length - 1;
+      while (index >= 0 && interpretations[index] === undefined) {
+        index--;
+      }
+      const rawScalar = interpretations[index];
+      const context = {
+        ...compoundContext,
+        pendingFormDecode: pendingDecodes + (rawValue === undefined ? 0 : 1) - index,
+      };
+      if (rawScalar === undefined || !unparseableUrlMightLeakSecret(rawScalar, true, context)) {
+        return null;
+      }
+      if (compoundContext.maxDepth <= 0) {
+        return REDACTED;
+      }
+      let scalar = rawScalar;
+      let quotedLayers = 0;
+      while (scalar.trimStart().startsWith('"')) {
+        if (quotedLayers >= compoundContext.maxDepth) {
+          return REDACTED;
+        }
+        try {
+          const parsed: unknown = JSON.parse(scalar);
+          if (typeof parsed !== 'string') {
+            break;
+          }
+          scalar = parsed;
+          quotedLayers++;
+        } catch {
+          break;
+        }
+      }
+      if (quotedLayers >= compoundContext.maxDepth) {
+        return REDACTED;
+      }
+      let sanitized = sanitizeUrlValueWithContext(scalar, {
+        ...context,
+        maxDepth: compoundContext.maxDepth - quotedLayers - 1,
+      });
+      if (sanitized === scalar) {
+        return null;
+      }
+      for (let layer = 0; layer < quotedLayers; layer++) {
+        sanitized = JSON.stringify(sanitized);
+      }
+      return sanitized;
     }
     if (isParsedQueryValue) {
       const scalar = getUrlPayloadScalar(decoded, compoundContext.maxDepth);
