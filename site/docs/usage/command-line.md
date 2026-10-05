@@ -467,7 +467,7 @@ promptfoo retry eval-abc123 --share
 ```
 
 :::tip Data Safety
-If the retry operation fails (network error, API timeout, etc.), your original ERROR results are preserved. You can simply run the retry command again to continue. Old ERROR results are only removed after the retry succeeds, and only where the retry produced a result in their place.
+If the retry operation fails (network error, API timeout, etc.), your original ERROR results are preserved. You can simply run the retry command again to continue. Old ERROR results are only removed after the retry succeeds, and only where the retry produced a result in their place. A config passed with `-c` has to make the same result columns as the eval: with other providers or prompts the retry stops before it runs anything.
 :::
 
 :::tip
