@@ -4327,19 +4327,36 @@ describe('OpenAICodexSDKProvider', () => {
       expect((provider as any).threads.size).toBe(0);
     });
 
-    it('should keep the provider registered during cleanup and unregister it on shutdown', async () => {
-      const unregisterSpy = vi.spyOn(providerRegistry, 'unregister');
-      const provider = new OpenAICodexSDKProvider({
-        env: { OPENAI_API_KEY: 'test-api-key' },
-      });
+    it.each([false, true])(
+      'releases cleanup registration and restores it on reuse unless shutdown=%s',
+      async (shutdown) => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const destroy = vi.fn();
+        MockCodex.mockImplementation(function () {
+          return { startThread: mockStartThread.mockReturnValue(mockThread), destroy };
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { persist_threads: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
 
-      await provider.cleanup();
-      expect(unregisterSpy).not.toHaveBeenCalled();
+        expect(providerRegistry.has(provider)).toBe(true);
+        await provider.cleanup();
+        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+        if (shutdown) {
+          await provider.shutdown();
+        }
 
-      await provider.shutdown();
-
-      expect(unregisterSpy).toHaveBeenCalledWith(provider);
-    });
+        for (const prompt of ['First reuse', 'Second reuse']) {
+          expect(await provider.callApi(prompt)).toMatchObject({ output: 'Response' });
+          expect(providerRegistry.has(provider)).toBe(!shutdown);
+          await provider.cleanup();
+          expect(providerRegistry.has(provider)).toBe(false);
+        }
+        expect(destroy).toHaveBeenCalledTimes(2);
+      },
+    );
 
     it('should destroy cached Codex instances on shutdown', async () => {
       mockRun.mockResolvedValue(createMockResponse('Response'));

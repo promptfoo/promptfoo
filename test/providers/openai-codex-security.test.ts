@@ -1041,6 +1041,89 @@ describe('OpenAICodexSecurityProvider', () => {
   });
 
   describe('lifecycle', () => {
+    it.each([false, true])(
+      'releases cleanup registration and restores it on reuse unless shutdown=%s',
+      async (shutdown) => {
+        const provider = new OpenAICodexSecurityProvider();
+        expect(providerRegistry.has(provider)).toBe(true);
+        await provider.cleanup();
+        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+        if (shutdown) {
+          await provider.shutdown();
+        }
+
+        mockRun.mockImplementation(async () => {
+          expect(providerRegistry.has(provider)).toBe(!shutdown);
+          return createScanResult();
+        });
+        for (const prompt of ['First reuse', 'Second reuse']) {
+          expect((await provider.callApi(prompt)).error).toBeUndefined();
+          await provider.cleanup();
+          expect(providerRegistry.has(provider)).toBe(false);
+        }
+        expect(mockRun).toHaveBeenCalledTimes(2);
+        expect(mockClose).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it('interrupts SDK loads pending when cleanup starts and permits fresh reuse', async () => {
+      let finishActiveRun!: (result: ReturnType<typeof createScanResult>) => void;
+      const activeRun = new Promise<ReturnType<typeof createScanResult>>((resolve) => {
+        finishActiveRun = resolve;
+      });
+      let finishActiveClose!: () => void;
+      const activeClose = new Promise<void>((resolve) => {
+        finishActiveClose = resolve;
+      });
+      let finishPendingLoad!: (module: typeof mockModule) => void;
+      const pendingLoad = new Promise<typeof mockModule>((resolve) => {
+        finishPendingLoad = resolve;
+      });
+      mockRun.mockReturnValueOnce(activeRun);
+      mockClose.mockReturnValueOnce(activeClose);
+
+      const provider = new OpenAICodexSecurityProvider();
+      const activeCall = provider.callApi('Active scan');
+      await vi.waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+
+      vi.mocked(importModule).mockReturnValueOnce(pendingLoad);
+      const pendingCall = provider.callApi('Pending SDK load');
+      expect(importModule).toHaveBeenCalledTimes(2);
+      const cleanup = provider.cleanup();
+      expect(mockClose).toHaveBeenCalledTimes(1);
+
+      try {
+        finishPendingLoad(mockModule);
+        expect(await pendingCall).toEqual({
+          error: 'Codex Security operation was interrupted by cleanup.',
+        });
+        expect(MockCodexSecurity).toHaveBeenCalledTimes(1);
+        expect(mockRun).toHaveBeenCalledTimes(1);
+
+        finishActiveClose();
+        await cleanup;
+        expect(providerRegistry.has(provider)).toBe(false);
+        finishActiveRun(createScanResult());
+        expect((await activeCall).error).toBeUndefined();
+
+        mockRun.mockImplementationOnce(async () => {
+          expect(providerRegistry.has(provider)).toBe(true);
+          return createScanResult();
+        });
+        expect((await provider.callApi('Fresh scan')).error).toBeUndefined();
+        expect(MockCodexSecurity).toHaveBeenCalledTimes(2);
+        expect(mockRun).toHaveBeenCalledTimes(2);
+      } finally {
+        finishPendingLoad(mockModule);
+        finishActiveClose();
+        finishActiveRun(createScanResult());
+        await Promise.all([activeCall, pendingCall, cleanup]);
+        await provider.cleanup();
+      }
+      expect(providerRegistry.has(provider)).toBe(false);
+    });
+
     it('does not close completed SDK clients again during provider shutdown', async () => {
       const provider = new OpenAICodexSecurityProvider();
       await provider.callApi('Scan');

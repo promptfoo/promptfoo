@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
+import { OpenInterpreterProvider } from '../../src/providers/openinterpreter';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
 
@@ -6242,6 +6243,174 @@ describe('OpenAICodexAppServerProvider', () => {
 
     expect(server.proc.kill).toHaveBeenCalledWith('SIGKILL');
   });
+
+  it.each([false, true])(
+    'releases cleanup registration and restores it on reuse unless shutdown=%s',
+    async (shutdown) => {
+      const provider = new OpenAICodexAppServerProvider({
+        config: { thread_cleanup: 'none' },
+      });
+      expect(providerRegistry.has(provider)).toBe(true);
+      await provider.cleanup();
+      await provider.cleanup();
+      expect(providerRegistry.has(provider)).toBe(false);
+      if (shutdown) {
+        await provider.shutdown();
+      }
+
+      for (const prompt of ['First reuse', 'Second reuse']) {
+        const server = createMockAppServer();
+        mocks.spawn.mockReturnValue(server.proc);
+        const resultPromise = provider.callApi(prompt);
+        const initialize = await waitForMessage(
+          server,
+          (message) => message.method === 'initialize',
+        );
+        expect(providerRegistry.has(provider)).toBe(!shutdown);
+        server.send({ id: initialize.id, result: {} });
+        const threadStart = await waitForMessage(
+          server,
+          (message) => message.method === 'thread/start',
+        );
+        server.send({ id: threadStart.id, result: { thread: { id: 'thr_reuse' } } });
+        const turnStart = await waitForMessage(
+          server,
+          (message) => message.method === 'turn/start',
+        );
+        server.send({
+          id: turnStart.id,
+          result: { turn: { id: 'turn_reuse', status: 'inProgress' } },
+        });
+        server.send({
+          method: 'turn/completed',
+          params: {
+            threadId: 'thr_reuse',
+            turn: { id: 'turn_reuse', status: 'completed', items: [], error: null },
+          },
+        });
+        expect((await resultPromise).error).toBeUndefined();
+        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      }
+    },
+  );
+
+  it.each([
+    { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider, queued: true },
+    { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider, queued: false },
+    { name: 'OpenInterpreter', Provider: OpenInterpreterProvider, queued: true },
+    { name: 'OpenInterpreter', Provider: OpenInterpreterProvider, queued: false },
+  ])(
+    'interrupts an accepted $name turn during cleanup without reopening its process (queued=$queued)',
+    async ({ Provider, queued }) => {
+      vi.useFakeTimers();
+      const originalServer = createMockAppServer();
+      const replacementServer = createMockAppServer();
+      originalServer.proc.stdin.end = vi.fn(() => originalServer.proc.stdin);
+      originalServer.proc.kill = vi.fn(() => {
+        originalServer.proc.killed = true;
+        return true;
+      });
+      replacementServer.proc.stdin.write = vi.fn((chunk: unknown) => {
+        replacementServer.writes.push(String(chunk));
+        const message = JSON.parse(String(chunk));
+        queueMicrotask(() => {
+          const result =
+            message.method === 'turn/start'
+              ? { turn: { id: 'turn_cleanup_queue_2', status: 'inProgress' } }
+              : message.method === 'thread/resume'
+                ? { thread: { id: 'thr_cleanup_queue' } }
+                : {};
+          replacementServer.send({ id: message.id, result });
+          if (message.method === 'turn/start') {
+            replacementServer.send({
+              method: 'turn/completed',
+              params: {
+                threadId: 'thr_cleanup_queue',
+                turn: { id: 'turn_cleanup_queue_2', status: 'completed', items: [], error: null },
+              },
+            });
+          }
+        });
+        return true;
+      });
+      mocks.spawn
+        .mockReturnValueOnce(originalServer.proc)
+        .mockReturnValueOnce(replacementServer.proc);
+      const provider = new Provider({
+        config: {
+          working_dir: process.cwd(),
+          skip_git_repo_check: true,
+          thread_id: 'thr_cleanup_queue',
+          thread_cleanup: 'none',
+          reuse_server: true,
+        },
+      });
+      const delegate =
+        provider instanceof OpenInterpreterProvider ? (provider as any).delegate : provider;
+
+      try {
+        const firstResultPromise = provider.callApi('Active turn');
+        const initialize = await waitForMessageWithoutTimers(
+          originalServer,
+          (message) => message.method === 'initialize',
+        );
+        originalServer.send({ id: initialize.id, result: {} });
+        const resume = await waitForMessageWithoutTimers(
+          originalServer,
+          (message) => message.method === 'thread/resume',
+        );
+        originalServer.send({ id: resume.id, result: { thread: { id: 'thr_cleanup_queue' } } });
+        const firstTurn = await waitForMessageWithoutTimers(
+          originalServer,
+          (message) => message.method === 'turn/start',
+        );
+        originalServer.send({
+          id: firstTurn.id,
+          result: { turn: { id: 'turn_cleanup_queue_1', status: 'inProgress' } },
+        });
+        const firstQueue = delegate.threadRunQueues.get('thread_id:thr_cleanup_queue');
+        const secondResultPromise = provider.callApi('Already queued turn');
+        if (queued) {
+          await flushMicrotasks();
+          expect(delegate.threadRunQueues.get('thread_id:thr_cleanup_queue')).not.toBe(firstQueue);
+        } else {
+          expect(delegate.threadRunQueues.get('thread_id:thr_cleanup_queue')).toBe(firstQueue);
+        }
+        expect(mocks.spawn).toHaveBeenCalledTimes(1);
+
+        const cleanupPromise = provider.cleanup();
+        expect((await firstResultPromise).error).toContain('cleanup interrupted active turn');
+        expect((await secondResultPromise).error).toContain('cleanup interrupted queued turn');
+        expect(mocks.spawn).toHaveBeenCalledTimes(1);
+        expect(originalServer.proc.exitCode).toBeNull();
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await cleanupPromise;
+
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(delegate.connections.size).toBe(0);
+        if (delegate !== provider) {
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+
+        expect((await provider.callApi('Fresh turn after cleanup')).error).toBeUndefined();
+        expect(mocks.spawn).toHaveBeenCalledTimes(2);
+        expect(providerRegistry.has(provider)).toBe(true);
+        if (delegate !== provider) {
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(replacementServer.proc.exitCode).toBe(0);
+      } finally {
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await provider.shutdown();
+      }
+    },
+  );
 
   it('kills the app-server process during cleanup', async () => {
     const server = createMockAppServer();

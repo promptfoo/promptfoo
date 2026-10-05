@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
+import { createProviderCleanupScope } from '../../../providers/lifecycle';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject } from '../../../util/json';
@@ -181,6 +182,7 @@ export class CustomProvider implements ApiProvider {
   readonly config: CustomConfig;
   private readonly nunjucks: any;
   private userGoal: string | undefined;
+  private readonly providerCleanup = createProviderCleanupScope();
   private redTeamProvider: ApiProvider | undefined;
   private scoringProvider: ApiProvider | undefined;
   private memory: MemorySystem;
@@ -230,45 +232,51 @@ export class CustomProvider implements ApiProvider {
     logger.debug('[Custom] CustomProvider initialized with config', { config });
   }
 
-  private async getRedTeamProvider(): Promise<ApiProvider> {
-    if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
-        this.redTeamProvider = new PromptfooChatCompletionProvider({
-          task: 'crescendo',
-          jsonOnly: true,
-          preferSmallModel: false,
-          ...remoteGenerationContextPayload(this.config.targetId),
-        });
-      } else {
-        this.redTeamProvider = await redteamProviderManager.getProvider({
-          owner: this,
-          provider: this.config.redteamProvider,
-          preferSmallModel: false,
-          jsonOnly: true,
-        });
-      }
-    }
-    return this.redTeamProvider;
+  cleanup(): Promise<void> {
+    return this.providerCleanup.cleanup();
   }
 
-  private async getScoringProvider(): Promise<ApiProvider> {
-    if (!this.scoringProvider) {
-      if (shouldGenerateRemote()) {
-        this.scoringProvider = new PromptfooChatCompletionProvider({
-          task: 'crescendo',
-          jsonOnly: false,
-          preferSmallModel: false,
-          ...remoteGenerationContextPayload(this.config.targetId),
-        });
-      } else {
-        this.scoringProvider = await redteamProviderManager.getProvider({
-          owner: this,
-          provider: this.config.redteamProvider,
-          preferSmallModel: false,
-        });
+  private getRedTeamProvider(): Promise<ApiProvider> {
+    return this.providerCleanup.run(async () => {
+      if (!this.redTeamProvider) {
+        if (shouldGenerateRemote()) {
+          this.redTeamProvider = new PromptfooChatCompletionProvider({
+            task: 'crescendo',
+            jsonOnly: true,
+            preferSmallModel: false,
+            ...remoteGenerationContextPayload(this.config.targetId),
+          });
+        } else {
+          this.redTeamProvider = await redteamProviderManager.getProvider({
+            provider: this.config.redteamProvider,
+            preferSmallModel: false,
+            jsonOnly: true,
+          });
+        }
       }
-    }
-    return this.scoringProvider;
+      return this.redTeamProvider;
+    });
+  }
+
+  private getScoringProvider(): Promise<ApiProvider> {
+    return this.providerCleanup.run(async () => {
+      if (!this.scoringProvider) {
+        if (shouldGenerateRemote()) {
+          this.scoringProvider = new PromptfooChatCompletionProvider({
+            task: 'crescendo',
+            jsonOnly: false,
+            preferSmallModel: false,
+            ...remoteGenerationContextPayload(this.config.targetId),
+          });
+        } else {
+          this.scoringProvider = await redteamProviderManager.getProvider({
+            provider: this.config.redteamProvider,
+            preferSmallModel: false,
+          });
+        }
+      }
+      return this.scoringProvider;
+    });
   }
 
   id(): string {

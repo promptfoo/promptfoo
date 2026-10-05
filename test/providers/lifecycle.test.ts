@@ -3,12 +3,15 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import * as esm from '../../src/esm';
 import { evaluateWithSource } from '../../src/evaluate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { cleanupProvider, trackProvider, withProviderCleanup } from '../../src/providers/lifecycle';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { redteamProviderManager } from '../../src/redteam/providers/shared';
+import { VoiceCrescendoProvider } from '../../src/redteam/providers/voiceCrescendo/index';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
@@ -26,7 +29,11 @@ const makeProvider = (cleanup = vi.fn()): ApiProvider => ({
   cleanup,
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  redteamProviderManager.clearProvider();
+  redteamProviderManager.setRateLimitRegistry(undefined);
+  vi.restoreAllMocks();
+});
 
 describe('provider cleanup ownership', () => {
   it.each(['caller-owned', 'evaluation-owned', 'nested-owner', 'preloaded'] as const)(
@@ -100,8 +107,61 @@ describe('provider cleanup ownership', () => {
         } else {
           await evaluations();
         }
-        expect(cleanup).toHaveBeenCalledTimes(
-          ownership === 'evaluation-owned' || ownership === 'nested-owner' ? 1 : 0,
+        expect(cleanup).toHaveBeenCalledTimes(ownership === 'caller-owned' ? 0 : 1);
+        if (ownership === 'caller-owned') {
+          expect(strategy.cleanup).toBeTypeOf('function');
+          await strategy.cleanup!();
+          await strategy.cleanup!();
+          expect(cleanup).toHaveBeenCalledOnce();
+        }
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
+  it.each(['crescendo', 'custom', 'voice-crescendo'])(
+    'releases only configured %s delegates through public terminal cleanup',
+    async (name) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
+      const cleanup = vi.fn();
+      const borrowed = makeProvider();
+      const id = 'promptfoo:redteam:' + name;
+      const loaded: ApiProvider =
+        name === 'voice-crescendo'
+          ? new VoiceCrescendoProvider({ injectVar: 'query' })
+          : await loadApiProvider(id, {
+              options: {
+                id,
+                config: {
+                  strategyText: 'local strategy',
+                  redteamProvider: providerOptions({ cleanup }),
+                },
+              },
+            });
+      const strategy = loaded as ApiProvider & {
+        getRedTeamProvider(): Promise<ApiProvider>;
+        getScoringProvider(): Promise<ApiProvider>;
+      };
+      try {
+        await cliState.withConfig(
+          {
+            redteam: { provider: providerOptions({ cleanup }) },
+            defaultTest: { options: { provider: borrowed } },
+          },
+          async () => {
+            await strategy.getRedTeamProvider();
+            await strategy.getScoringProvider();
+          },
+        );
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(strategy.cleanup).toBeTypeOf('function');
+        await strategy.cleanup!();
+        await strategy.cleanup!();
+        expect(cleanup).toHaveBeenCalledTimes(name === 'custom' ? 2 : 1);
+        expect(borrowed.cleanup).not.toHaveBeenCalled();
+        await expect(strategy.getRedTeamProvider()).rejects.toThrow(
+          'Provider cleanup scope is closed',
         );
       } finally {
         restoreEnv();
@@ -109,25 +169,101 @@ describe('provider cleanup ownership', () => {
     },
   );
 
-  it('cleans late delegates in their closed owning scope exactly once', async () => {
-    const owner = makeProvider();
-    const delegate = makeProvider();
-    const load = createDeferred<ApiProvider>();
-    let pending: Promise<ApiProvider> | undefined;
-    await withProviderCleanup(async () => {
-      trackProvider(owner);
-      await withProviderCleanup(async () => {
-        pending = load.promise.then((provider) => {
-          trackProvider(provider, owner);
-          return trackProvider(provider, owner);
-        });
-      });
-      expect(delegate.cleanup).not.toHaveBeenCalled();
-    });
-    expect(owner.cleanup).toHaveBeenCalledOnce();
-    load.resolve(delegate);
-    await pending;
-    expect(delegate.cleanup).toHaveBeenCalledOnce();
+  it.each(['supplied', 'cached'] as const)(
+    'keeps %s delegates borrowed when a strategy is disposed',
+    async (source) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
+      const borrowed = makeProvider();
+      if (source === 'cached') {
+        await redteamProviderManager.setProvider(borrowed);
+      }
+      const id = 'promptfoo:redteam:custom';
+      const strategy = (await loadApiProvider(id, {
+        options: {
+          id,
+          config: {
+            strategyText: 'local strategy',
+            ...(source === 'supplied' ? { redteamProvider: borrowed } : {}),
+          },
+        },
+      })) as ApiProvider & {
+        getRedTeamProvider(): Promise<ApiProvider>;
+        getScoringProvider(): Promise<ApiProvider>;
+      };
+      try {
+        await strategy.getRedTeamProvider();
+        await strategy.getScoringProvider();
+        expect(strategy.cleanup).toBeTypeOf('function');
+        await strategy.cleanup!();
+        expect(borrowed.cleanup).not.toHaveBeenCalled();
+        await expect(borrowed.callApi('still usable')).resolves.toMatchObject({ output: 'ok' });
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
+  it('settles every strategy delegate cleanup and reports a failure', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
+    const error = new Error('delegate cleanup failed');
+    const cleanup = vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined);
+    const id = 'promptfoo:redteam:custom';
+    const strategy = (await loadApiProvider(id, {
+      options: {
+        id,
+        config: { strategyText: 'local strategy', redteamProvider: providerOptions({ cleanup }) },
+      },
+    })) as ApiProvider & {
+      getRedTeamProvider(): Promise<ApiProvider>;
+      getScoringProvider(): Promise<ApiProvider>;
+    };
+    try {
+      await strategy.getRedTeamProvider();
+      await strategy.getScoringProvider();
+      expect(strategy.cleanup).toBeTypeOf('function');
+      await expect(strategy.cleanup!()).rejects.toBe(error);
+      expect(cleanup).toHaveBeenCalledTimes(2);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('disposes a pending delegate after public terminal cleanup instead of returning it', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
+    const load = createDeferred<void>();
+    const started = createDeferred<void>();
+    const cleaned = createDeferred<void>();
+    const cleanup = vi.fn(() => cleaned.resolve());
+    const id = 'promptfoo:redteam:crescendo';
+    const strategy = (await loadApiProvider(id, {
+      options: {
+        id,
+        config: {
+          redteamProvider: providerOptions({
+            cleanup,
+            waitForLoad: () => {
+              started.resolve();
+              return load.promise;
+            },
+          }),
+        },
+      },
+    })) as ApiProvider & { getRedTeamProvider(): Promise<ApiProvider> };
+    const pending = strategy.getRedTeamProvider().catch((error: unknown) => error);
+    try {
+      await started.promise;
+      await strategy.cleanup!();
+      expect(cleanup).not.toHaveBeenCalled();
+      load.resolve();
+      expect(await pending).toMatchObject({ message: 'Provider cleanup scope is closed' });
+      await cleaned.promise;
+      await strategy.cleanup!();
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      load.resolve();
+      await pending;
+      restoreEnv();
+    }
   });
 
   it('keeps direct loader results caller-owned', async () => {

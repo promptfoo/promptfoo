@@ -1318,6 +1318,9 @@ class CodexAppServerConnection {
 }
 
 export class OpenAICodexAppServerProvider implements ApiProvider {
+  private restoreRegistrationOnUse = false;
+  private cleanupGeneration = 0;
+
   config: CodexAppServerConfig;
   env?: EnvOverrides;
   apiKey?: string;
@@ -1377,6 +1380,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    this.cleanupGeneration++;
     this.resolveActiveTurns(new Error('codex app-server provider cleanup interrupted active turn'));
     this.threads.clear();
     this.threadPromises.clear();
@@ -1402,12 +1406,16 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }),
       ),
     );
+    // Remember only our own registration; wrappers may own this provider instead.
+    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
+    providerRegistry.unregister(this);
   }
 
   async shutdown(): Promise<void> {
     try {
       await this.cleanup();
     } finally {
+      this.restoreRegistrationOnUse = false;
       providerRegistry.unregister(this);
     }
   }
@@ -1417,6 +1425,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     const mergedConfig = mergeCodexAppServerConfig(
       this.config,
       context?.prompt?.config as CodexAppServerConfig | undefined,
@@ -1431,7 +1440,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     return withGenAISpan(
       this.buildSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config),
+      () => this.callApiInternal(prompt, context, callOptions, config, cleanupGeneration),
       (response) => this.extractSpanResult(response, requestedModel),
     );
   }
@@ -1495,6 +1504,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: CodexAppServerConfig,
+    cleanupGeneration: number,
   ): Promise<ProviderResponse> {
     let config: CodexAppServerConfig;
     try {
@@ -1626,6 +1636,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
                 await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
               }
             },
+            cleanupGeneration,
           );
         } finally {
           this.unprotectThread(threadHandle.threadId);
@@ -1638,13 +1649,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }
       };
 
-      return explicitThreadQueueKey
-        ? await this.runSerializedThreadTurn(
-            explicitThreadQueueKey,
-            callOptions?.abortSignal,
-            runThreadTurn,
-          )
-        : await runThreadTurn();
+      return await this.runSerializedThreadTurn(
+        explicitThreadQueueKey,
+        callOptions?.abortSignal,
+        runThreadTurn,
+        cleanupGeneration,
+      );
     } catch (error: unknown) {
       const isAbort =
         (error instanceof Error && error.name === 'AbortError') ||
@@ -1861,6 +1871,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       onServerRequest: (message) => this.handleServerRequest(message, config),
       onClose: (error) => this.handleConnectionClose(connectionKey, connectionInstanceId, error),
     });
+
+    if (this.restoreRegistrationOnUse) {
+      providerRegistry.register(this);
+      this.restoreRegistrationOnUse = false;
+    }
 
     this.initializingConnections.add(connection);
     try {
@@ -3241,7 +3256,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     queueKey: string | undefined,
     abortSignal: AbortSignal | undefined,
     executeTurn: () => Promise<T>,
+    cleanupGeneration: number,
   ): Promise<T> {
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('codex app-server provider cleanup interrupted queued turn');
+    }
     if (!queueKey) {
       return executeTurn();
     }
@@ -3261,6 +3280,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     try {
       await this.waitForPreviousThreadRun(previousRun, abortSignal);
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('codex app-server provider cleanup interrupted queued turn');
+      }
       return await executeTurn();
     } finally {
       releaseCurrentRun();

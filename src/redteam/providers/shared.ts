@@ -294,11 +294,9 @@ class RedteamProviderManager {
   private async loadProviderCandidate(
     candidate: ReturnType<RedteamProviderManager['resolveProviderCandidate']>,
     {
-      owner,
       jsonOnly = false,
       preferSmallModel = false,
     }: {
-      owner?: ApiProvider;
       jsonOnly?: boolean;
       preferSmallModel?: boolean;
     } = {},
@@ -317,7 +315,7 @@ class RedteamProviderManager {
       jsonOnly,
       preferSmallModel,
     });
-    trackConfiguredProviders([loaded], candidate.provider, owner);
+    trackConfiguredProviders([loaded], candidate.provider);
     logger.debug(
       '[RedteamProviderManager] Loaded ' + candidate.source + ' redteam provider: ' + loaded.id(),
     );
@@ -330,14 +328,12 @@ class RedteamProviderManager {
    */
   async getProviderSelection({
     provider,
-    owner,
     fallbackProvider,
     ignoreCliState = false,
     jsonOnly = false,
     preferSmallModel = false,
   }: {
     provider?: RedteamFileConfig['provider'];
-    owner?: ApiProvider;
     fallbackProvider?: RedteamFileConfig['provider'];
     /** Skip process-global config for request-scoped callers such as Web UI previews. */
     ignoreCliState?: boolean;
@@ -350,7 +346,7 @@ class RedteamProviderManager {
       ignoreCliState,
     });
     return {
-      provider: await this.loadProviderCandidate(candidate, { owner, jsonOnly, preferSmallModel }),
+      provider: await this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel }),
       source: candidate.source,
       localProviderSpec: candidate.spec,
       persistableId: typeof candidate.spec === 'string' ? candidate.spec : undefined,
@@ -387,14 +383,12 @@ class RedteamProviderManager {
 
   async getProvider({
     provider,
-    owner,
     fallbackProvider,
     ignoreCliState = false,
     jsonOnly = false,
     preferSmallModel = false,
   }: {
     provider?: RedteamFileConfig['provider'];
-    owner?: ApiProvider;
     /** Optional request-scoped fallback used after the cache but before process-global CLI config. */
     fallbackProvider?: RedteamFileConfig['provider'];
     /** Skip process-global config for request-scoped callers such as Web UI previews. */
@@ -405,7 +399,6 @@ class RedteamProviderManager {
     return (
       await this.getProviderSelection({
         provider,
-        owner,
         fallbackProvider,
         ignoreCliState,
         jsonOnly,
@@ -416,17 +409,15 @@ class RedteamProviderManager {
 
   async getGradingProvider({
     provider,
-    owner,
     jsonOnly = false,
   }: {
     provider?: RedteamFileConfig['provider'];
-    owner?: ApiProvider;
     jsonOnly?: boolean;
   } = {}): Promise<ApiProvider> {
     // 1) Explicit provider argument
     if (provider) {
       const loaded = await loadRedteamProvider({ provider, jsonOnly, purpose: 'grading' });
-      trackConfiguredProviders([loaded], provider, owner);
+      trackConfiguredProviders([loaded], provider);
       return this.wrapProvider(loaded);
     }
 
@@ -450,7 +441,7 @@ class RedteamProviderManager {
 
     if (cfg) {
       const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly, purpose: 'grading' });
-      trackConfiguredProviders([loaded], cfg, owner);
+      trackConfiguredProviders([loaded], cfg);
       logger.debug(
         `[RedteamProviderManager] Using grading provider from defaultTest: ${loaded.id()}`,
       );
@@ -458,7 +449,7 @@ class RedteamProviderManager {
     }
 
     // 4) Fallback to redteam provider (already wraps)
-    return this.getProvider({ owner, jsonOnly });
+    return this.getProvider({ jsonOnly });
   }
 
   async getMultilingualProvider(): Promise<ApiProvider | undefined> {
