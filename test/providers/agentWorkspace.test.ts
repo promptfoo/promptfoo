@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type TestContext, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import {
@@ -74,6 +74,23 @@ function write(file: string, content: string) {
   fs.writeFileSync(file, content);
 }
 
+/** Some filesystems reject invalid UTF-8 directory names before the workspace can inspect them. */
+function createRawDirectory(directory: Buffer, context: TestContext): void {
+  try {
+    fs.mkdirSync(directory);
+  } catch (error) {
+    if (
+      !Buffer.from(directory.toString('utf8')).equals(directory) &&
+      error instanceof Error &&
+      'code' in error &&
+      (error.code === 'EILSEQ' || error.code === 'EINVAL')
+    ) {
+      context.skip(`Filesystem rejects invalid UTF-8 directory names (${error.code})`);
+    }
+    throw error;
+  }
+}
+
 /** Real directory listing with the entry types omitted, as on a filesystem without d_type. */
 function omitDirectoryEntryTypes() {
   const opendir = fs.promises.opendir;
@@ -101,24 +118,26 @@ function forceNativeUnknownDirectoryEntryTypes() {
   const opendir = fs.promises.opendir;
   return vi.spyOn(fs.promises, 'opendir').mockImplementation(async (...args) => {
     const directory = await opendir(...args);
-    // Node uses alternating filename/type pairs here. Unlike a Dirent Proxy, this
-    // runs before its native conversion attempts to join and stat each pathname.
-    const convert = Reflect.get(directory, 'processReadResult') as (
-      path: string | Buffer,
-      result: Array<string | Buffer | number>,
-    ) => void;
-    expect(typeof convert).toBe('function');
-    Reflect.set(
-      directory,
-      'processReadResult',
-      function (entryPath: string | Buffer, result: Array<string | Buffer | number>) {
-        for (let index = 1; index < result.length; index += 2) {
-          result[index] = 0; // libuv UV_DIRENT_UNKNOWN
-        }
-        return convert.call(directory, entryPath, result);
+    // Feed real entry names back through Node's Dir conversion as UV_DIRENT_UNKNOWN.
+    // A handle adapter keeps this working when Node makes processReadResult private.
+    type Request = {
+      oncomplete: (error: unknown, result?: Array<string | Buffer | number> | null) => void;
+    };
+    const handle = {
+      read(_encoding: BufferEncoding, _bufferSize: number, request: Request) {
+        void directory.read().then(
+          (entry) => request.oncomplete(null, entry ? [entry.name, 0] : null),
+          (error: unknown) => request.oncomplete(error),
+        );
       },
-    );
-    return directory;
+      close(request: Request) {
+        void directory.close().then(
+          () => request.oncomplete(null),
+          (error: unknown) => request.oncomplete(error),
+        );
+      },
+    };
+    return Reflect.construct(fs.Dir, [handle, ...args]) as fs.Dir;
   });
 }
 
@@ -1959,9 +1978,9 @@ describe('agent workspaces', () => {
       }
     });
 
-    it.each(['empty', 'reserved'] as const)(
+    it.for(['empty', 'reserved'] as const)(
       'does not traverse a valid sibling of an undecodable %s directory',
-      async (kind) => {
+      async (kind, context) => {
         if (process.platform === 'win32') {
           return;
         }
@@ -1972,7 +1991,7 @@ describe('agent workspaces', () => {
           Buffer.from(`${workspace.dir}${path.sep}policy`),
           Buffer.from([0xff]),
         ]);
-        fs.mkdirSync(raw);
+        createRawDirectory(raw, context);
         if (kind === 'reserved') {
           fs.mkdirSync(Buffer.concat([raw, Buffer.from('/.git')]));
           fs.writeFileSync(Buffer.concat([raw, Buffer.from('/.git/payload')]), 'hidden');
@@ -2137,9 +2156,9 @@ describe('agent workspaces', () => {
       },
     );
 
-    it.each([false, true])(
+    it.for([false, true])(
       'checks directory names without entry types (raw-byte collision: %s)',
-      async (collision) => {
+      async (collision, context) => {
         if (collision && process.platform === 'win32') {
           return;
         }
@@ -2149,7 +2168,7 @@ describe('agent workspaces', () => {
         write(path.join(workspace.dir, 'policy\uFFFD', 'keep.txt'), 'visible change\n');
         if (collision) {
           const raw = Buffer.concat([Buffer.from(`${workspace.dir}/policy`), Buffer.from([0xff])]);
-          fs.mkdirSync(raw);
+          createRawDirectory(raw, context);
           fs.mkdirSync(Buffer.concat([raw, Buffer.from('/.git')]));
           fs.writeFileSync(Buffer.concat([raw, Buffer.from('/.git/payload')]), 'hidden\n');
         }
@@ -2166,9 +2185,9 @@ describe('agent workspaces', () => {
       },
     );
 
-    it.each(['file', 'empty-directory', 'child', 'noncolliding-directory'] as const)(
+    it.for(['file', 'empty-directory', 'child', 'noncolliding-directory'] as const)(
       'keeps a new valid UTF-8 path beside a raw baseline path (%s)',
-      async (kind) => {
+      async (kind, context) => {
         if (process.platform === 'win32') {
           return;
         }
@@ -2179,7 +2198,7 @@ describe('agent workspaces', () => {
         if (kind === 'file') {
           fs.writeFileSync(rawSource, 'original\n');
         } else {
-          fs.mkdirSync(rawSource);
+          createRawDirectory(rawSource, context);
           fs.writeFileSync(Buffer.concat([rawSource, Buffer.from('/keep.txt')]), 'original\n');
         }
         git(source, 'add', '--all');
@@ -2258,9 +2277,9 @@ describe('agent workspaces', () => {
       },
     );
 
-    it.each(['unicode', 'raw-parent'] as const)(
+    it.for(['unicode', 'raw-parent'] as const)(
       'preserves exact pathnames in Node’s native unknown-type fallback (%s)',
-      async (kind) => {
+      async (kind, context) => {
         if (kind === 'raw-parent' && process.platform === 'win32') {
           return;
         }
@@ -2269,7 +2288,7 @@ describe('agent workspaces', () => {
         const rawName = Buffer.concat([Buffer.from('policy'), Buffer.from([0xff])]);
         if (kind === 'raw-parent') {
           const parent = Buffer.concat([Buffer.from(`${source}/`), rawName]);
-          fs.mkdirSync(parent);
+          createRawDirectory(parent, context);
           fs.writeFileSync(Buffer.concat([parent, Buffer.from('/café.txt')]), 'original\n');
           git(source, 'add', '--all');
           git(source, 'commit', '-qm', 'track raw parent');
@@ -2342,9 +2361,9 @@ describe('agent workspaces', () => {
       },
     );
 
-    it.each(['empty', 'child', 'colon-empty', 'colon-child'] as const)(
+    it.for(['empty', 'child', 'colon-empty', 'colon-child'] as const)(
       'ignores only the exact new Unicode directory beside a raw baseline (%s)',
-      async (kind) => {
+      async (kind, context) => {
         if (process.platform === 'win32') {
           return;
         }
@@ -2354,7 +2373,7 @@ describe('agent workspaces', () => {
         makeRepository(source, { '.gitignore': `${name}/\n` });
         const rawName = Buffer.concat([Buffer.from(prefix), Buffer.from([0xff])]);
         const rawSource = Buffer.concat([Buffer.from(`${source}/`), rawName]);
-        fs.mkdirSync(rawSource);
+        createRawDirectory(rawSource, context);
         fs.writeFileSync(Buffer.concat([rawSource, Buffer.from('/keep.txt')]), 'original\n');
         git(source, 'add', '--all');
         git(source, 'commit', '-qm', 'track raw directory');
@@ -2510,7 +2529,7 @@ describe('agent workspaces', () => {
       },
     );
 
-    it.each(
+    it.for(
       (['reserved', 'empty', 'unsearchable'] as const).flatMap((kind) =>
         (['ascii', 'valid', 'colon', 'raw', 'collision'] as const).flatMap((name) =>
           (name === 'collision' ? [true] : [false, true]).map((ignored) => ({
@@ -2522,7 +2541,7 @@ describe('agent workspaces', () => {
       ),
     )(
       'keeps ignore provenance for $kind paths ($name, ignored=$ignored)',
-      async ({ kind, name, ignored }) => {
+      async ({ kind, name, ignored }, context) => {
         if (
           process.platform === 'win32' &&
           (kind === 'unsearchable' || ['colon', 'raw', 'collision'].includes(name))
@@ -2540,7 +2559,7 @@ describe('agent workspaces', () => {
         makeRepository(source, { '.gitignore': ignored ? pattern : '' });
         for (const parent of parents) {
           const directory = Buffer.concat([Buffer.from(`${source}/`), parent]);
-          fs.mkdirSync(directory);
+          createRawDirectory(directory, context);
           fs.writeFileSync(Buffer.concat([directory, Buffer.from('/keep.txt')]), 'baseline\n');
         }
         git(source, 'add', '--all');
@@ -2629,7 +2648,7 @@ describe('agent workspaces', () => {
       }
     });
 
-    it.each([
+    it.for([
       'unchanged-file',
       'changed-file',
       'unchanged-parent',
@@ -2641,7 +2660,7 @@ describe('agent workspaces', () => {
       'file-symlink',
       'parent-symlink',
       'file-fifo',
-    ])('examines exact baseline raw-byte paths (%s)', async (scenario) => {
+    ])('examines exact baseline raw-byte paths (%s)', async (scenario, context) => {
       if (process.platform === 'win32') {
         return;
       }
@@ -2658,7 +2677,7 @@ describe('agent workspaces', () => {
         'parent-symlink',
       ].includes(scenario);
       if (directory) {
-        fs.mkdirSync(rawSource);
+        createRawDirectory(rawSource, context);
       }
       fs.writeFileSync(
         directory ? Buffer.concat([rawSource, Buffer.from('/keep.txt')]) : rawSource,
