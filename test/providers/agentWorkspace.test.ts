@@ -2656,6 +2656,9 @@ describe('agent workspaces', () => {
     )(
       'keeps ignore provenance for $kind paths ($name, ignored=$ignored)',
       async ({ kind, name, ignored }, context) => {
+        if (kind === 'unsearchable' && !canMakeUnreadable) {
+          context.skip('This runtime cannot make directories unsearchable with chmod');
+        }
         if (
           process.platform === 'win32' &&
           (kind === 'unsearchable' || ['colon', 'raw', 'collision'].includes(name))
