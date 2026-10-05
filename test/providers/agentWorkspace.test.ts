@@ -2150,7 +2150,17 @@ describe('agent workspaces', () => {
       },
     );
 
-    it.each(['file', 'symlink'] as const)(
+    it.each([
+      'file',
+      'symlink',
+      'deleted',
+      'recreated',
+      'unreadable',
+      'zero-inode',
+      'not-directory',
+      'timeout',
+      'abort',
+    ] as const)(
       'uses observed %s parents when filesystem and Git Unicode spellings differ',
       async (kind) => {
         if (kind === 'symlink' && process.platform === 'win32') {
@@ -2164,7 +2174,14 @@ describe('agent workspaces', () => {
           git(source, 'add', '--all');
           git(source, 'commit', '-qm', 'track link');
         }
-        const workspace = await create(source);
+        const controller = new AbortController();
+        const workspace = await create(source, 'git', controller.signal);
+        if (kind === 'recreated') {
+          fs.rmSync(path.join(workspace.dir, 'café'), { recursive: true });
+          fs.mkdirSync(path.join(workspace.dir, 'café'));
+        } else if (kind !== 'file' && kind !== 'symlink') {
+          fs.unlinkSync(path.join(workspace.dir, 'café', 'keep.txt'));
+        }
         const physicalPath = (value: fs.PathLike) => {
           const text = String(value);
           return text.startsWith(`${workspace.dir}${path.sep}`) ? text.normalize('NFC') : value;
@@ -2173,6 +2190,40 @@ describe('agent workspaces', () => {
         const access = vi
           .spyOn(fs.promises, 'access')
           .mockImplementation((file, mode) => originalAccess(physicalPath(file), mode));
+        const originalLstat = fs.promises.lstat;
+        const start = performance.now();
+        const now = vi.spyOn(performance, 'now').mockReturnValue(start);
+        let identityLookups = 0;
+        const lstat = vi
+          .spyOn(fs.promises, 'lstat')
+          .mockImplementation(async (file, ...options) => {
+            const result = await originalLstat(physicalPath(file), ...options);
+            if (String(file) === path.join(workspace.dir, 'café') && options[0]?.bigint) {
+              identityLookups++;
+              if (kind === 'unreadable') {
+                throw Object.assign(new Error('Unreadable baseline directory'), { code: 'EACCES' });
+              }
+              if (kind === 'timeout') {
+                now.mockReturnValue(start + 30_001);
+              } else if (kind === 'abort') {
+                controller.abort();
+              }
+              if (kind === 'zero-inode' || kind === 'not-directory') {
+                return new Proxy(result, {
+                  get(target, property, receiver) {
+                    if (kind === 'zero-inode' && property === 'ino') {
+                      return 0n;
+                    }
+                    if (kind === 'not-directory' && property === 'isDirectory') {
+                      return () => false;
+                    }
+                    return Reflect.get(target, property, receiver);
+                  },
+                });
+              }
+            }
+            return result;
+          });
         const originalOpendir = fs.promises.opendir;
         const opendir = vi
           .spyOn(fs.promises, 'opendir')
@@ -2195,38 +2246,71 @@ describe('agent workspaces', () => {
             } as fs.Dir;
           });
         try {
+          if (kind === 'abort') {
+            await expect(workspace.metadata()).rejects.toMatchObject({ name: 'AbortError' });
+            expect(identityLookups).toBe(1);
+            expect(fs.readdirSync(path.dirname(workspace.dir))).toEqual(['workspace']);
+            return;
+          }
           const metadata = await workspace.metadata();
+          if (kind === 'timeout') {
+            expect(metadata.workspaceDiffError).toContain(
+              'directory verification exceeded 30000 ms',
+            );
+            expect(metadata.workspaceDiff).toBeUndefined();
+            expect(identityLookups).toBe(1);
+            expect(fs.readdirSync(path.dirname(workspace.dir))).toEqual(['workspace']);
+            return;
+          }
           expect(metadata.workspaceDiffError).toBeUndefined();
-          expect(metadata.workspaceDiffIncomplete).toBeUndefined();
-          expect(metadata.workspaceDiff).toBe('');
+          const unconfirmed = ['unreadable', 'zero-inode', 'not-directory'].includes(kind);
+          expect(metadata.workspaceDiffIncomplete).toBe(unconfirmed ? true : undefined);
+          if (kind !== 'file' && kind !== 'symlink') {
+            expect(metadata.workspaceDiff).toContain('-safe');
+            expect(metadata.workspaceDiff).toContain('deleted file mode');
+          } else {
+            expect(metadata.workspaceDiff).toBe('');
+          }
         } finally {
           opendir.mockRestore();
+          lstat.mockRestore();
+          now.mockRestore();
           access.mockRestore();
         }
       },
     );
 
-    it('does not borrow coverage from a distinct Unicode directory', async () => {
-      const source = path.join(root, 'repo');
-      makeRepository(source, { 'café/keep.txt': 'safe\n' });
-      const workspace = await create(source);
-      const composed = path.join(workspace.dir, 'café');
-      const decomposed = path.join(workspace.dir, 'cafe\u0301');
-      fs.mkdirSync(decomposed, { recursive: true });
-      const sameDirectory = fs.statSync(composed).ino === fs.statSync(decomposed).ino;
+    it.each([false, true])(
+      'does not borrow coverage from a distinct Unicode directory (deleted child: %s)',
+      async (deleted) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, { 'café/keep.txt': 'safe\n' });
+        const workspace = await create(source);
+        const composed = path.join(workspace.dir, 'café');
+        const decomposed = path.join(workspace.dir, 'cafe\u0301');
+        fs.mkdirSync(decomposed, { recursive: true });
+        const sameDirectory = fs.statSync(composed).ino === fs.statSync(decomposed).ino;
+        if (deleted) {
+          fs.unlinkSync(path.join(composed, 'keep.txt'));
+        }
 
-      const metadata = await workspace.metadata();
+        const metadata = await workspace.metadata();
 
-      expect(metadata.workspaceDiffError).toBeUndefined();
-      // Byte-preserving filesystems have a new, genuinely empty directory. Normalizing
-      // filesystems resolve both spellings to the unchanged populated directory instead.
-      expect(metadata.workspaceDiffIncomplete).toBe(sameDirectory ? undefined : true);
-      if (sameDirectory) {
-        expect(metadata.workspaceDiff).toBe('');
-      } else {
-        expect(metadata.workspaceDiff).toContain('[diff incomplete:');
-      }
-    });
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        // Byte-preserving filesystems have a new, genuinely empty directory. Normalizing
+        // filesystems resolve both spellings to the unchanged populated directory instead.
+        expect(metadata.workspaceDiffIncomplete).toBe(sameDirectory ? undefined : true);
+        if (sameDirectory) {
+          if (deleted) {
+            expect(metadata.workspaceDiff).toContain('-safe');
+          } else {
+            expect(metadata.workspaceDiff).toBe('');
+          }
+        } else {
+          expect(metadata.workspaceDiff).toContain('[diff incomplete:');
+        }
+      },
+    );
 
     it.for([false, true])(
       'bounds omission checks for undecodable files (unknown entry types: %s)',

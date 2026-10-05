@@ -1022,6 +1022,69 @@ async function getWorkspaceDiff(
         )
         .map(({ file }) => file),
     );
+    if (withoutFiles.size > 0) {
+      const deadline = performance.now() + GIT_TIMEOUT_MS;
+      const checkDirectoryVerification = () => {
+        signal?.throwIfAborted();
+        if (performance.now() >= deadline) {
+          throw new Error(`workspace directory verification exceeded ${GIT_TIMEOUT_MS} ms`);
+        }
+      };
+      // Git's committed spelling can differ from a decomposing filesystem's spelling
+      // even after the last child is deleted. Normalization only selects candidates:
+      // the OS must confirm that both paths name the same directory.
+      const baselineBySpelling = new Map<string, string[]>();
+      for (const raw of getCoveredDirectories([...baselinePaths])) {
+        checkDirectoryVerification();
+        const file = Buffer.from(raw, 'latin1').toString('utf8');
+        if (Buffer.from(file).toString('latin1') !== raw) {
+          continue;
+        }
+        const spelling = file.normalize('NFC');
+        const candidates = baselineBySpelling.get(spelling);
+        if (candidates) {
+          candidates.push(file);
+        } else {
+          baselineBySpelling.set(spelling, [file]);
+        }
+      }
+      const directoryIdentity = async (file: string) => {
+        checkDirectoryVerification();
+        // Remove the trailing slash so lstat never treats a symlink as a directory.
+        const stat = await fs
+          .lstat(path.join(dir, file.slice(0, -1)), { bigint: true })
+          .catch(() => undefined);
+        checkDirectoryVerification();
+        return stat?.isDirectory() && stat.ino !== 0n ? `${stat.dev}:${stat.ino}` : undefined;
+      };
+      const identitiesBySpelling = new Map<string, Set<string>>();
+      for (const { file, raw } of found.directories) {
+        checkDirectoryVerification();
+        if (!withoutFiles.has(file) || Buffer.from(file).toString('latin1') !== raw) {
+          continue;
+        }
+        const spelling = file.normalize('NFC');
+        const candidates = baselineBySpelling.get(spelling);
+        if (!candidates) {
+          continue;
+        }
+        let identities = identitiesBySpelling.get(spelling);
+        if (!identities) {
+          identities = new Set<string>();
+          for (const candidate of candidates) {
+            const identity = await directoryIdentity(candidate);
+            if (identity !== undefined) {
+              identities.add(identity);
+            }
+          }
+          identitiesBySpelling.set(spelling, identities);
+        }
+        const identity = await directoryIdentity(file);
+        if (identity !== undefined && identities.has(identity)) {
+          withoutFiles.delete(file);
+        }
+      }
+    }
     let emptyDirectories = found.directories
       .filter(
         ({ file }) =>
