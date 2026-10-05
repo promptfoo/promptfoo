@@ -112,7 +112,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-range <start:end>`         | Only run tests whose zero-based index is in the range. The end index is exclusive.                       |
 | `--filter-sample <number>`           | Only run a random sample of N tests                                                                      |
 | `--filter-sample-seed <number>`      | Numeric seed used to make `--filter-sample` select the same tests on repeated runs                       |
-| `--filter-metadata <key=value>`      | Filter metadata by substring. Comma-separated values use OR; repeated flags always use AND for each key. |
+| `--filter-metadata <key=value>`      | Filter tests by metadata substring. Commas separate OR values (`\,` is a comma); repeated flags use AND. |
 | `--filter-pattern <pattern>`         | Only run tests whose description matches the regex pattern                                               |
 | `--filter-prompts <pattern>`         | Only run tests with prompts whose id or label matches the regex pattern                                  |
 | `--filter-providers <providers>`     | Only run tests with these providers (regex match on provider `id` or `label`)                            |
