@@ -136,6 +136,22 @@ export function getScopedAwsCredentialConfig(
   };
 }
 
+/** Preserve endpoint-profile discovery when configured keys bypass a configured profile. */
+export function getAwsSdkProfile(
+  config: AwsCredentialConfig = {},
+  env?: EnvOverrides,
+): string | undefined {
+  if (config.accessKeyId && config.secretAccessKey) {
+    const scopedProfile = getMergedEnvOverrides(env).AWS_PROFILE;
+    // The SDK still reads ambient profile settings with explicit keys. Forward
+    // invocation overrides, but do not activate the bypassed config.profile.
+    return scopedProfile === undefined ? undefined : scopedProfile || 'default';
+  }
+  const profile = getScopedAwsCredentialConfig(config, env)?.profile;
+  // An effective scoped clear must not let the SDK restore the host profile.
+  return profile === '' ? 'default' : profile;
+}
+
 /** Forward effective AWS credentials while keeping ambient SDK discovery as the fallback. */
 export async function resolveAwsCredentials(
   config: AwsCredentialConfig = {},

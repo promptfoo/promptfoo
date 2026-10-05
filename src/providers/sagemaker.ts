@@ -9,7 +9,7 @@ import { StringOrFunctionSchema } from '../validators/shared';
 import {
   getAwsCredentialCacheNamespace,
   getAwsCredentialProviderOptions,
-  getScopedAwsCredentialConfig,
+  getAwsSdkProfile,
   resolveAwsCredentials,
 } from './awsCredentials';
 import { createEnvironmentScopedState } from './scopedState';
@@ -204,7 +204,7 @@ abstract class SageMakerGenericProvider {
           },
         );
         const credentials = await this.getCredentials();
-        const profile = getScopedAwsCredentialConfig(this.config, this.env)?.profile;
+        const profile = getAwsSdkProfile(this.config, this.env);
 
         const runtime = new SageMakerRuntimeClient({
           ...getAwsCredentialProviderOptions(this.env),

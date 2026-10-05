@@ -13,7 +13,7 @@ import telemetry from '../../telemetry';
 import {
   getAwsCredentialCacheNamespace,
   getAwsCredentialProviderOptions,
-  getScopedAwsCredentialConfig,
+  getAwsSdkProfile,
   resolveAwsCredentials,
 } from '../awsCredentials';
 import { getOpaqueCredentialCacheNamespace } from '../credentialCache';
@@ -209,7 +209,11 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   protected getProfile(): string | undefined {
-    return getScopedAwsCredentialConfig(this.config, this.env)?.profile;
+    const config =
+      !(this.config.accessKeyId && this.config.secretAccessKey) && this.getApiKey()
+        ? { ...this.config, profile: undefined }
+        : this.config;
+    return getAwsSdkProfile(config, this.env);
   }
 
   async getCredentials(): Promise<
@@ -238,7 +242,7 @@ export abstract class AwsBedrockGenericProvider {
   protected async getIamCredentialOptions() {
     const config = this.getIamCredentialConfig();
     const credentials = await resolveAwsCredentials(config, this.env);
-    const profile = getScopedAwsCredentialConfig(config, this.env)?.profile;
+    const profile = getAwsSdkProfile(config, this.env);
     return {
       ...getAwsCredentialProviderOptions(this.env),
       ...(credentials ? { credentials } : {}),

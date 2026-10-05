@@ -5,7 +5,7 @@ import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   getAwsCredentialProviderOptions,
-  getScopedAwsCredentialConfig,
+  getAwsSdkProfile,
   resolveAwsCredentials,
 } from '../awsCredentials';
 import { createEnvironmentScopedState } from '../scopedState';
@@ -168,7 +168,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       // Bidirectional streaming requires IAM credentials, even when a bearer
       // token is present. Keep explicit configuration ahead of scoped discovery.
       const credentials = await resolveAwsCredentials(this.config, this.env);
-      const profile = getScopedAwsCredentialConfig(this.config, this.env)?.profile;
+      const profile = getAwsSdkProfile(this.config, this.env);
       try {
         const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
         const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
