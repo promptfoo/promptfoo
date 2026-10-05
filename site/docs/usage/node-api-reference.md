@@ -107,6 +107,11 @@ Load a single provider instance by path or identifier. You own the returned inst
 should call `await provider.cleanup?.()` when finished. Direct loads remain caller-owned even
 when made from a provider used by an evaluation.
 
+Crescendo, Custom, and Voice Crescendo strategy instances retain their configured attacker
+and scoring providers across evaluations. Their `cleanup()` method is terminal: call it after
+the final evaluation, then create a new strategy instance if needed. Provider instances you
+supplied or placed in the shared redteam cache remain yours to clean up.
+
 ```typescript
 async function loadApiProvider(
   providerPath: string,
