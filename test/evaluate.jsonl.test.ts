@@ -322,13 +322,13 @@ describe('programmatic JSONL output', () => {
     });
   });
 
-  it('exports non-persisted rows with sensitive HTTP metadata redacted', async () => {
+  it('preserves HTTP metadata in non-persisted local exports', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
       id: () => 'metadata-provider',
       config: {
-        apiKey: 'sk-provider-config-should-not-persist',
+        apiKey: 'sk-provider-config-fixture',
       },
       callApi: vi.fn().mockResolvedValue({
         output: {
@@ -342,8 +342,8 @@ describe('programmatic JSONL output', () => {
         },
         metadata: {
           headers: {
-            'x-request-id': 'legacy_req_should_not_persist',
-            'api-key': 'legacy-api-key-should-not-persist',
+            'x-request-id': 'legacy_req_fixture',
+            'api-key': 'legacy-api-key-fixture',
             'x-safe-debug': 'keep-legacy',
           },
           http: {
@@ -352,12 +352,12 @@ describe('programmatic JSONL output', () => {
             headers: {
               'content-type': 'application/json',
               'set-cookie': 'session=secret',
-              'x-request-id': 'req_should_not_persist',
+              'x-request-id': 'req_fixture',
             },
             requestHeaders: {
-              authorization: 'Bearer sk-should-not-persist',
-              'api-key': 'azure-api-key-should-not-persist',
-              'X-API-Key': 'custom-api-key-should-not-persist',
+              authorization: 'Bearer sk-fixture',
+              'api-key': 'azure-api-key-fixture',
+              'X-API-Key': 'custom-api-key-fixture',
               'x-safe-debug': 'keep-me',
             },
           },
@@ -375,45 +375,14 @@ describe('programmatic JSONL output', () => {
 
     const [result] = readJsonl(outputPath);
     expect(result.vars).toEqual({ topic: 'weather' });
-    // Legacy top-level response metadata headers are redacted (they echo the transport)
-    // — including api-key-style names via the request-header matcher — while a
-    // non-sensitive header survives.
-    expect(result.response.metadata.headers).toEqual({
-      'x-request-id': '[REDACTED]',
-      'api-key': '[REDACTED]',
-      'x-safe-debug': 'keep-legacy',
-    });
-    expect(result.response.metadata.http).toEqual({
-      status: 200,
-      statusText: 'OK',
-      headers: {
-        'content-type': 'application/json',
-        'set-cookie': '[REDACTED]',
-        'x-request-id': '[REDACTED]',
-      },
-      requestHeaders: {
-        authorization: '[REDACTED]',
-        'api-key': '[REDACTED]',
-        'X-API-Key': '[REDACTED]',
-        'x-safe-debug': 'keep-me',
-      },
-    });
+    const response = await vi.mocked(provider.callApi).mock.results[0].value;
+    expect(result.response.metadata).toEqual(response.metadata);
+    expect(result.response.output).toEqual(response.output);
     expect(result.provider).toEqual({ id: 'metadata-provider' });
-    // A user-controlled `http` key nested in model output must NOT be redacted.
-    expect(result.response.output.http.headers.authorization).toBe(
-      'model output should stay intact',
-    );
-    expect(JSON.stringify(result)).not.toContain('session=secret');
-    expect(JSON.stringify(result)).not.toContain('req_should_not_persist');
-    expect(JSON.stringify(result)).not.toContain('legacy_req_should_not_persist');
-    expect(JSON.stringify(result)).not.toContain('legacy-api-key-should-not-persist');
-    expect(JSON.stringify(result)).not.toContain('sk-should-not-persist');
-    expect(JSON.stringify(result)).not.toContain('azure-api-key-should-not-persist');
-    expect(JSON.stringify(result)).not.toContain('custom-api-key-should-not-persist');
-    expect(JSON.stringify(result)).not.toContain('sk-provider-config-should-not-persist');
+    expect(result.response.metadata.http.requestHeaders.authorization).toBe('Bearer sk-fixture');
   });
 
-  it('preserves vars and redacts legacy headers when finalizing persisted rows', async () => {
+  it('preserves vars and legacy headers when finalizing persisted rows', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
@@ -422,9 +391,9 @@ describe('programmatic JSONL output', () => {
         output: 'hello world',
         metadata: {
           headers: {
-            'set-cookie': ['legacy_persisted_session_should_not_persist'],
+            'set-cookie': ['legacy_persisted_session_fixture'],
             'x-request-id': {
-              value: 'legacy_persisted_req_should_not_persist',
+              value: 'legacy_persisted_req_fixture',
             },
             'x-safe-debug': 'keep-legacy',
           },
@@ -443,19 +412,9 @@ describe('programmatic JSONL output', () => {
 
     const [result] = readJsonl(outputPath);
     expect(result.vars).toEqual({ topic: 'weather' });
-    expect(result.response.metadata.headers).toEqual({
-      'set-cookie': '[REDACTED]',
-      'x-request-id': '[REDACTED]',
-      'x-safe-debug': 'keep-legacy',
-    });
-    // The result-level metadata.headers echoes the transport, so it is redacted too.
-    expect(result.metadata.headers).toEqual({
-      'set-cookie': '[REDACTED]',
-      'x-request-id': '[REDACTED]',
-      'x-safe-debug': 'keep-legacy',
-    });
-    expect(JSON.stringify(result)).not.toContain('legacy_persisted_session_should_not_persist');
-    expect(JSON.stringify(result)).not.toContain('legacy_persisted_req_should_not_persist');
+    const response = await vi.mocked(provider.callApi).mock.results[0].value;
+    expect(result.response.metadata.headers).toEqual(response.metadata?.headers);
+    expect(result.metadata.headers).toEqual(response.metadata?.headers);
   });
 
   it('preserves arbitrary test metadata headers when finalizing persisted rows', async () => {
@@ -486,13 +445,13 @@ describe('programmatic JSONL output', () => {
     });
 
     const [result] = readJsonl(outputPath);
-    // No transport provenance for these headers, so the provenance guard must preserve them.
+    // User-authored metadata is retained in local exports.
     expect(result.metadata.headers).toEqual({
       'x-request-id': 'user-defined-reporting-id',
     });
   });
 
-  it('preserves sanitized streamed rows for uppercase JSONL after persistence fails', async () => {
+  it('preserves streamed rows for uppercase JSONL after persistence fails', async () => {
     const outputPath = createOutputPath('.JSONL');
     outputPaths.push(outputPath);
     const provider: ApiProvider = {
@@ -505,7 +464,7 @@ describe('programmatic JSONL output', () => {
               'set-cookie': 'session=secret',
             },
             requestHeaders: {
-              authorization: 'Bearer sk-should-not-persist',
+              authorization: 'Bearer sk-fixture',
             },
           },
         },
@@ -523,10 +482,10 @@ describe('programmatic JSONL output', () => {
 
     const [result] = readJsonl(outputPath);
     expect(result.vars).toEqual({ topic: 'weather' });
-    expect(result.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
-    expect(result.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
-    expect(JSON.stringify(result)).not.toContain('session=secret');
-    expect(JSON.stringify(result)).not.toContain('sk-should-not-persist');
+    expect(result.response.metadata.http.headers['set-cookie']).toBe('session=secret');
+    expect(result.response.metadata.http.requestHeaders.authorization).toBe('Bearer sk-fixture');
+    expect(JSON.stringify(result)).toContain('session=secret');
+    expect(JSON.stringify(result)).toContain('sk-fixture');
   });
 
   it('applies strip projections to recovered streamed rows after persistence fails', async () => {

@@ -283,7 +283,7 @@ describe('evaluate SIGINT/abort handling', () => {
     expect(updateSignalFile).not.toHaveBeenCalled();
   });
 
-  it('should redact streamed JSONL rows when user aborts before final export', async () => {
+  it('should preserve streamed JSONL content when user aborts before final export', async () => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-abort-${randomUUID()}.jsonl`);
     const abortController = new AbortController();
     let providerCallCount = 0;
@@ -303,7 +303,7 @@ describe('evaluate SIGINT/abort handling', () => {
             },
             metadata: {
               headers: {
-                'x-request-id': 'legacy_abort_should_not_persist',
+                'x-request-id': 'legacy_abort_fixture',
                 'x-safe-debug': 'keep-legacy',
               },
               http: {
@@ -311,7 +311,7 @@ describe('evaluate SIGINT/abort handling', () => {
                 statusText: 'OK',
                 headers: {
                   'set-cookie': 'session=secret',
-                  'x-request-id': 'req_should_not_persist',
+                  'x-request-id': 'request_fixture',
                 },
               },
             },
@@ -322,7 +322,7 @@ describe('evaluate SIGINT/abort handling', () => {
       }),
     });
     // Abort right after the first row streams to disk, so finalization never runs and the
-    // on-disk artifact is the streamed (write-time-sanitized) row.
+    // on-disk artifact is the streamed row.
     const originalWrite = JsonlFileWriter.prototype.write;
     const writeSpy = vi
       .spyOn(JsonlFileWriter.prototype, 'write')
@@ -334,7 +334,7 @@ describe('evaluate SIGINT/abort handling', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
-      tests: [{ vars: { apiKey: 'sk-abort-vars-should-not-persist', safe: 'keep-me' } }, {}],
+      tests: [{ vars: { apiKey: 'fixture-api-key', safe: 'keep-me' } }, {}],
     };
 
     try {
@@ -350,28 +350,28 @@ describe('evaluate SIGINT/abort handling', () => {
         .map((line) => JSON.parse(line));
       expect(rows).toHaveLength(1);
       expect(rows[0].response.metadata.headers).toEqual({
-        'x-request-id': '[REDACTED]',
+        'x-request-id': 'legacy_abort_fixture',
         'x-safe-debug': 'keep-legacy',
       });
       expect(rows[0].response.metadata.http.headers).toEqual({
-        'set-cookie': '[REDACTED]',
-        'x-request-id': '[REDACTED]',
+        'set-cookie': 'session=secret',
+        'x-request-id': 'request_fixture',
       });
       expect(rows[0].response.output.http.headers.authorization).toBe(
         'model output should stay intact',
       );
       expect(rows[0].vars).toEqual({
-        apiKey: '[REDACTED]',
+        apiKey: 'fixture-api-key',
         safe: 'keep-me',
       });
       expect(rows[0].testCase.vars).toEqual({
-        apiKey: '[REDACTED]',
+        apiKey: 'fixture-api-key',
         safe: 'keep-me',
       });
-      expect(JSON.stringify(rows[0])).not.toContain('session=secret');
-      expect(JSON.stringify(rows[0])).not.toContain('req_should_not_persist');
-      expect(JSON.stringify(rows[0])).not.toContain('legacy_abort_should_not_persist');
-      expect(JSON.stringify(rows[0])).not.toContain('sk-abort-vars-should-not-persist');
+      expect(JSON.stringify(rows[0])).toContain('session=secret');
+      expect(JSON.stringify(rows[0])).toContain('request_fixture');
+      expect(JSON.stringify(rows[0])).toContain('legacy_abort_fixture');
+      expect(JSON.stringify(rows[0])).toContain('fixture-api-key');
     } finally {
       writeSpy.mockRestore();
       fs.rmSync(outputPath, { force: true });

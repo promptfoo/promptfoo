@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { sanitizeProvider } from '../../../src/models/evalResult';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { serializeEvalValue } from '../../../src/util/evalSerialization';
 import {
   createMockProvider,
   createProviderResponse,
@@ -429,14 +429,14 @@ describe('BestOfNProvider - Config Serialization', () => {
     );
   });
 
-  it('should preserve config through sanitizeProvider for database storage', () => {
+  it('should preserve config through serializeEvalValue for database storage', () => {
     const provider = new BestOfNProvider({
       injectVar: 'query',
       maxConcurrency: 5,
       nSteps: 10,
     });
 
-    const sanitized = sanitizeProvider(provider);
+    const sanitized = serializeEvalValue(provider);
 
     expect(sanitized.id).toBe('promptfoo:redteam:best-of-n');
     expect(sanitized.config).toEqual({
@@ -455,7 +455,7 @@ describe('BestOfNProvider - Config Serialization', () => {
     });
 
     // Simulate what happens when saved to database and loaded via retry strategy
-    const sanitized = sanitizeProvider(originalProvider);
+    const sanitized = serializeEvalValue(originalProvider);
     const recreatedProvider = new BestOfNProvider(sanitized.config);
 
     expect(recreatedProvider.config).toEqual(originalProvider.config);

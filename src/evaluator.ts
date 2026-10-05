@@ -24,7 +24,7 @@ import { selectMaxScore } from './matchers/comparison';
 import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
-  sanitizeResultForJsonlArtifact,
+  serializeResultForJsonlArtifact,
 } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
@@ -3780,7 +3780,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     for (const writer of this.fileWriters) {
-      await writer.write(sanitizeResultForJsonlArtifact(row));
+      await writer.write(serializeResultForJsonlArtifact(row));
     }
   }
 

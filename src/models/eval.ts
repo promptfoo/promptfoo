@@ -37,14 +37,11 @@ import {
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import { projectConfigForOutput } from '../util/evalSerialization';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import {
-  sanitizeConfigForOutput,
-  sanitizeRuntimeOptions,
-  sanitizeTracingConfigForPersistence,
-} from '../util/sanitizer';
+import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -1535,7 +1532,7 @@ export default class Eval {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: sanitizeConfigForOutput(this.config, stripFlags),
+      config: projectConfigForOutput(this.config, stripFlags),
       author: this.author || null,
       prompts: this.getPrompts().map((prompt) =>
         projectPrompt(prompt, stripFlags.shouldStripPromptText),

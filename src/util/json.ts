@@ -41,19 +41,25 @@ export function isValidJson(str: string): boolean {
  *
  * @param value - The value to truncate and stringify
  * @param prettyPrint - Whether to format the JSON with indentation
+ * @param replacer - Optional value projection applied before circular-reference handling
  * @returns A JSON string representation of the truncated value
  */
-function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): string {
+function safeJsonStringifyTruncated<T>(
+  value: T,
+  prettyPrint: boolean = false,
+  replacer?: (key: string, value: any) => any,
+): string {
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
 
-  const truncateValue = (val: any): any => {
+  const truncateValue = (value: any, key = ''): any => {
+    const val = replacer ? replacer(key, value) : value;
     if (typeof val === 'string') {
       return val.length > 1000 ? val.substring(0, 1000) + '...[truncated]' : val;
     }
 
     if (Array.isArray(val)) {
-      const truncated = val.slice(0, 10).map(truncateValue);
+      const truncated = val.slice(0, 10).map((item, index) => truncateValue(item, String(index)));
       if (val.length > 10) {
         truncated.push(`...[${val.length - 10} more items]`);
       }
@@ -74,7 +80,7 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
           truncated['...[truncated]'] = `${Object.keys(val).length - count} more keys`;
           break;
         }
-        truncated[k] = truncateValue(v);
+        truncated[k] = truncateValue(v, k);
         count++;
       }
       cache.delete(val);
@@ -96,9 +102,14 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
  *
  * @param value - The value to stringify
  * @param prettyPrint - Whether to format the JSON with indentation
+ * @param replacer - Optional value projection applied before circular-reference handling
  * @returns JSON string representation, or undefined if serialization fails
  */
-export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): string | undefined {
+export function safeJsonStringify<T>(
+  value: T,
+  prettyPrint: boolean = false,
+  replacer?: (key: string, value: any) => any,
+): string | undefined {
   const ancestors: any[] = [];
   const space = prettyPrint ? 2 : undefined;
 
@@ -106,7 +117,8 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
     return (
       JSON.stringify(
         value,
-        function (this: any, _key, val) {
+        function (this: any, key, value) {
+          const val = replacer ? replacer(key, value) : value;
           if (typeof val === 'object' && val !== null) {
             while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
               ancestors.pop();
@@ -123,7 +135,7 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
     );
   } catch (error) {
     if (error instanceof RangeError && error.message.includes('Invalid string length')) {
-      return safeJsonStringifyTruncated(value, prettyPrint);
+      return safeJsonStringifyTruncated(value, prettyPrint, replacer);
     }
     return undefined;
   }

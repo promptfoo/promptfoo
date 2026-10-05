@@ -1192,6 +1192,35 @@ describe('createShareableUrl', () => {
       }
     });
 
+    it('redacts raw local rows and prompt headers only in the upload copy', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const row = {
+        id: 'raw-local-row',
+        testCase: { vars: { password: 'private-fixture' } },
+        prompt: { raw: '{ "password": "private-fixture" }', label: 'test' },
+        provider: { id: 'echo', config: { apiKey: 'private-provider-key' } },
+        response: {
+          output: 'ok',
+          metadata: { http: { headers: { 'set-cookie': 'private-cookie' } } },
+        },
+      };
+      mockEval.prompts = [{ ...row.prompt, provider: 'echo', config: row.provider.config }];
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [row];
+      });
+      const before = structuredClone(row);
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      await createShareableUrl(mockEval as Eval);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      for (const [, request] of mockFetch.mock.calls) {
+        expect(request.body).not.toContain('private-');
+      }
+      expect(row).toEqual(before);
+      expect(mockEval.prompts![0].config.apiKey).toBe('private-provider-key');
+    });
+
     it('redacts gateway URL credentials from shared config without changing the live provider', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       const gateway = 'https://gateway.example/v1?tenantClientSecret=short-private-value';
