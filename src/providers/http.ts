@@ -325,10 +325,10 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     const parsedUrl = new URL(url, 'http://placeholder-base.com');
 
     // Replace the original URL in the first line
-    rawRequest = rawRequest.replace(
-      firstLine,
-      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
-    );
+    // Use a replacer function so `$` sequences in the rendered URL are not treated as
+    // replacement patterns.
+    const encodedFirstLine = `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`;
+    rawRequest = rawRequest.replace(firstLine, () => encodedFirstLine);
   } catch (err) {
     logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
     throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);

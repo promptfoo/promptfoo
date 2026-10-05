@@ -675,6 +675,37 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ result: 'success' });
     });
 
+    it('should keep $ sequences from the prompt in a raw GET request URL', async () => {
+      const rawRequest = dedent`
+        GET /api/data?q={{prompt}} HTTP/1.1
+        Host: example.com
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('turn $$ into $&');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://example.com/api/data?q=turn%20$$%20into%20$&',
+        expect.objectContaining({ method: 'GET' }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
     it('should handle multipart/form-data raw request with variable substitution', async () => {
       const rawRequest = dedent`
         POST /api/send-message HTTP/1.1
@@ -2784,6 +2815,12 @@ describe('urlEncodeRawRequestPath', () => {
     const rawRequest = 'GET /api/data?query=already%20encoded HTTP/1.1';
     const result = urlEncodeRawRequestPath(rawRequest);
     expect(result).toBe('GET /api/data?query=already%20encoded HTTP/1.1');
+  });
+
+  it('should keep $ replacement patterns in the URL unchanged', () => {
+    const rawRequest = "GET /api/data?query=turn $$ into $& or $` or $' HTTP/1.1";
+    const result = urlEncodeRawRequestPath(rawRequest);
+    expect(result).toBe('GET /api/data?query=turn%20$$%20into%20$&%20or%20$`%20or%20$%27 HTTP/1.1');
   });
 
   it('should not leak sensitive query values when logging URL encoding', () => {
