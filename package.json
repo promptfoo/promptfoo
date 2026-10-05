@@ -176,7 +176,7 @@
     },
     "launch-editor": "2.14.1",
     "engine.io": {
-      ".": "6.6.10",
+      ".": "6.6.11",
       "ws": "$ws"
     },
     "engine.io-client": {
