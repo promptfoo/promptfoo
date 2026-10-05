@@ -142,7 +142,10 @@ export abstract class AwsBedrockGenericProvider {
 
   protected selectResponseCacheNamespace(iamConfig = this.config): string | undefined {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
-      return getAwsEndpointCacheNamespace(this.env);
+      // Older clients could overwrite SigV4 with a bearer header but cache the
+      // response under these IAM keys. Migrate this family even after the bearer
+      // is removed, when the same legacy key could still identify that response.
+      return ['bedrock-iam-v1', getAwsEndpointCacheNamespace(this.env)].filter(Boolean).join(':');
     }
     const bearer = this.getApiKey();
     if (bearer) {

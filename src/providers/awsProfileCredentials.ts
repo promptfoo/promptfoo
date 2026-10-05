@@ -42,6 +42,52 @@ type CredentialChain = (
 
 const execAsync = promisify(exec);
 
+/** Preserve the native default chain's valid-credential background refresh policy. */
+function memoizeProfileCredentials(
+  resolve: AwsCredentialIdentityProvider,
+  needsRefresh: (identity: AwsCredentialIdentity) => boolean,
+): AwsCredentialIdentityProvider {
+  let current: AwsCredentialIdentity | undefined;
+  let initial: Promise<AwsCredentialIdentity> | undefined;
+  let background: Promise<void> | undefined;
+  let forced: Promise<AwsCredentialIdentity> | undefined;
+  const refresh: AwsCredentialIdentityProvider = async (properties) => {
+    const next = await resolve(properties);
+    current = next;
+    return next;
+  };
+  const provider: AwsCredentialIdentityProvider = async (properties) => {
+    if (properties?.forceRefresh) {
+      return (forced ??= refresh(properties).finally(() => {
+        forced = undefined;
+      }));
+    }
+    if (current?.expiration && current.expiration.getTime() < Date.now()) {
+      current = undefined;
+    }
+    if (initial) {
+      return initial;
+    }
+    if (!current) {
+      return (initial = refresh(properties).finally(() => {
+        initial = undefined;
+      }));
+    }
+    if (needsRefresh(current) && !background) {
+      background = refresh(properties)
+        .then(() => undefined)
+        // The existing credentials remain usable until their actual expiration.
+        .catch(() => undefined)
+        .finally(() => {
+          background = undefined;
+        });
+    }
+    return current;
+  };
+  // Prevent the SDK from replacing this policy with its blocking explicit-provider cache.
+  return Object.assign(provider, { memoized: true });
+}
+
 /** Resolve through an installed optional client, including with isolated pnpm layouts. */
 function loadProfileSdk() {
   const rootRequire = createRequire(import.meta.url);
@@ -60,6 +106,9 @@ function loadProfileSdk() {
     try {
       const clientRequire = createRequire(clientEntry);
       const nodeRequire = createRequire(clientRequire.resolve('@aws-sdk/credential-provider-node'));
+      const { credentialsTreatedAsExpired } = nodeRequire('@aws-sdk/credential-provider-node') as {
+        credentialsTreatedAsExpired?: (identity: AwsCredentialIdentity) => boolean;
+      };
       const iniEntry = nodeRequire.resolve('@aws-sdk/credential-provider-ini');
       const iniRequire = createRequire(iniEntry);
       const { fromIni } = iniRequire(iniEntry) as { fromIni?: CredentialFactory };
@@ -81,6 +130,7 @@ function loadProfileSdk() {
         ) => Error;
       };
       if (
+        typeof credentialsTreatedAsExpired !== 'function' ||
         typeof fromIni !== 'function' ||
         typeof parseKnownFiles !== 'function' ||
         typeof chain !== 'function' ||
@@ -105,6 +155,7 @@ function loadProfileSdk() {
         return factory;
       };
       return {
+        credentialsTreatedAsExpired,
         fromIni,
         setCredentialFeature,
         parseKnownFiles,
@@ -337,7 +388,7 @@ export async function getScopedAwsProfileCredentials(
   }
 
   let defaultRoleAssumer: RoleAssumer | undefined;
-  return async (properties) => {
+  const resolveCredentials: AwsCredentialIdentityProvider = async (properties) => {
     const profiles = await sdk.parseKnownFiles(options);
     const callerClientConfig = properties?.callerClientConfig as
       | Record<string, unknown>
@@ -419,4 +470,5 @@ export async function getScopedAwsProfileCredentials(
       },
     )();
   };
+  return memoizeProfileCredentials(resolveCredentials, sdk.credentialsTreatedAsExpired);
 }

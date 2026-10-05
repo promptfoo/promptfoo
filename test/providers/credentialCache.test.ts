@@ -194,19 +194,23 @@ describe('scoped SDK response cache compatibility', () => {
     expect(first).not.toContain('fixture-bearer');
   });
 
-  it('retains the exact ambient and explicit Bedrock cache partition', async () => {
+  it('retains ambient/bearer Bedrock keys and migrates configured IAM keys', async () => {
     restore = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined });
-    for (const config of [
-      {},
-      { accessKeyId: 'config-key', secretAccessKey: 'config-secret' },
-      { apiKey: 'config-bearer' },
+    for (const { config, expectedNamespace } of [
+      { config: {}, expectedNamespace: undefined },
+      {
+        config: { accessKeyId: 'config-key', secretAccessKey: 'config-secret' },
+        expectedNamespace: 'bedrock-iam-v1',
+      },
+      { config: { apiKey: 'config-bearer' }, expectedNamespace: undefined },
     ]) {
       const provider = new AwsBedrockCompletionProvider('fixture', { config });
       const cacheNamespace = Reflect.get(provider, 'responseCacheNamespace');
-      expect(cacheNamespace).toBeUndefined();
+      expect(cacheNamespace).toBe(expectedNamespace);
       const input = { config, region: 'us-east-1', params: { prompt: 'fixture' } };
+      const legacy = createBedrockCacheKeyHash(input);
       expect(createBedrockCacheKeyHash({ ...input, cacheNamespace })).toBe(
-        createBedrockCacheKeyHash(input),
+        expectedNamespace ? `${expectedNamespace}:${legacy}` : legacy,
       );
     }
   });

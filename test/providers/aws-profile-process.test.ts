@@ -248,14 +248,15 @@ describe('scoped credential_process environment', () => {
     });
   });
 
-  it('reloads profile changes and preserves static credentials ahead of process credentials', async () => {
+  it('reloads profile changes on forced refresh and preserves static credentials ahead of process credentials', async () => {
     const provider = await getScopedAwsProfileCredentials(options(), scoped());
     expect((await provider?.())?.accessKeyId).toBe('scoped-value');
     fs.appendFileSync(
       configFilepath,
       'aws_access_key_id=static-access\naws_secret_access_key=static-secret\n',
     );
-    expect(await provider?.()).toEqual(await fromIni(options())());
+    expect((await provider?.())?.accessKeyId).toBe('scoped-value');
+    expect(await provider?.({ forceRefresh: true })).toEqual(await fromIni(options())());
     expect((await provider?.())?.accessKeyId).toBe('static-access');
   });
 });

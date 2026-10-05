@@ -156,7 +156,9 @@ describe('Knowledge Base selected-auth cache partition', () => {
     });
     expect(authorizations).toHaveLength(1);
     expect(authorizations[0]).toContain('Credential=config-access/');
-    expect([...fixtures.cache.keys()]).toEqual([legacyKey(config)]);
+    expect([...fixtures.cache.keys()]).toEqual([
+      legacyKey(config).replace('bedrock-kb:v2:', 'bedrock-kb:v2:bedrock-iam-v1:'),
+    ]);
   });
   it('retains configured bearer priority and its existing key despite provider overrides', async () => {
     const config = { apiKey: 'configured-fixture' };
