@@ -94,10 +94,12 @@ providers:
           X-API-Key: 'your-api-key'
 ```
 
-Remote MCP connections reject redirects to a different origin to avoid forwarding credentials or
-request bodies to another destination. Configure `server.url` with the final MCP endpoint if your
-server redirects to a different host or port. POST requests support 307/308 redirects within the same
-origin, plus same-host HTTP-to-HTTPS upgrades when both URLs use their default ports.
+SDK requests to the MCP endpoint configured in `server.url` reject redirects to a different origin to
+avoid forwarding credentials or request bodies to another destination. Configure `server.url` with the
+final MCP endpoint if your server redirects to a different host or port. POST requests support 307/308
+redirects within the same origin, plus same-host HTTP-to-HTTPS upgrades when both URLs use their default
+ports. OAuth discovery and token requests use Promptfoo's separate OAuth helpers and are not covered by
+this SDK redirect policy.
 
 #### Multiple Servers
 
