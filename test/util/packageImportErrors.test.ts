@@ -8,7 +8,8 @@ describe('optionalPackageInstallHint', () => {
   it('gives the command for a project install and for a global one', () => {
     expect(optionalPackageInstallHint('npm install promptfoo @slack/web-api@^8.1.1')).toBe(
       'Install it with: npm install promptfoo @slack/web-api@^8.1.1 ' +
-        '(or, if Promptfoo is installed globally: npm install -g promptfoo @slack/web-api@^8.1.1)',
+        '(or, if Promptfoo is installed globally with npm: npm install -g promptfoo @slack/web-api@^8.1.1; ' +
+        'with pnpm, Yarn or Bun, use its global install instead)',
     );
   });
 
@@ -18,7 +19,7 @@ describe('optionalPackageInstallHint', () => {
         'npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2',
       ),
     ).toContain(
-      'npm install -g promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2)',
+      'with npm: npm install -g promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2;',
     );
   });
 });
