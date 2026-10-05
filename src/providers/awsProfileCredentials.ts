@@ -298,12 +298,6 @@ export async function getScopedAwsProfileCredentials(
     options.profile === undefined
       ? getEnvString('AWS_PROFILE') || 'default'
       : options.profile || 'default';
-  const effective = (key: string) => scoped[key] ?? getEnvString(key);
-  const environmentCredentials = {
-    accessKeyId: effective('AWS_ACCESS_KEY_ID'),
-    secretAccessKey: effective('AWS_SECRET_ACCESS_KEY'),
-    sessionToken: effective('AWS_SESSION_TOKEN'),
-  };
 
   async function resolveProcess(profiles: Profiles, name: string, fromProfile = false) {
     const command = profiles[name]?.credential_process;
@@ -358,7 +352,12 @@ export async function getScopedAwsProfileCredentials(
     }
   }
   function resolveEnvironmentCredentials(): AwsCredentialIdentity {
-    const { accessKeyId, secretAccessKey, sessionToken } = environmentCredentials;
+    // Keep invocation overrides bound, but follow native fromEnv when inherited
+    // host credentials rotate between role refreshes. Another invocation's
+    // active environment must not replace this provider's captured overrides.
+    const accessKeyId = scoped.AWS_ACCESS_KEY_ID ?? process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = scoped.AWS_SECRET_ACCESS_KEY ?? process.env.AWS_SECRET_ACCESS_KEY;
+    const sessionToken = scoped.AWS_SESSION_TOKEN ?? process.env.AWS_SESSION_TOKEN;
     if (!accessKeyId || !secretAccessKey) {
       // Unavailable Environment credentials are a skipped link in the SDK's
       // default chain. A selected but malformed tuple remains a terminal error.

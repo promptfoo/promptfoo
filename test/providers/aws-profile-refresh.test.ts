@@ -5,9 +5,12 @@ import path from 'node:path';
 
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { getScopedAwsProfileCredentials } from '../../src/providers/awsProfileCredentials';
 import { mockProcessEnv } from '../util/utils';
 import type { AwsCredentialIdentity } from '@smithy/types';
+
+import type { EnvOverrides } from '../../src/types/env';
 
 const rootRequire = createRequire(import.meta.url);
 const clientRequire = createRequire(rootRequire.resolve('@aws-sdk/client-bedrock-runtime'));
@@ -52,7 +55,10 @@ afterEach(() => {
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
-async function createClient(kind: string) {
+async function createClient(
+  kind: string,
+  env: EnvOverrides = { AWS_SESSION_TOKEN: 'scoped-session' },
+) {
   const state: { identity: AwsCredentialIdentity; failure?: Error } = {
     identity: {
       accessKeyId: 'original-access',
@@ -60,7 +66,7 @@ async function createClient(kind: string) {
       expiration: new Date(now + 600_000),
     },
   };
-  const roleAssumer = vi.fn(async () => {
+  const roleAssumer = vi.fn(async (_source: AwsCredentialIdentity) => {
     if (state.failure) {
       throw state.failure;
     }
@@ -79,9 +85,7 @@ async function createClient(kind: string) {
     ...(kind === 'native'
       ? { credentialDefaultProvider: () => defaultProvider(options) }
       : {
-          credentials: await getScopedAwsProfileCredentials(options, {
-            AWS_SESSION_TOKEN: 'scoped-session',
-          }),
+          credentials: await getScopedAwsProfileCredentials(options, env),
         }),
   });
   clients.push(client);
@@ -89,6 +93,39 @@ async function createClient(kind: string) {
 }
 
 describe.each(['native', 'scoped'])('%s AWS profile refresh contract', (kind) => {
+  it.each(['forced', 'expired', 'background'])(
+    'rereads inherited host credentials during %s role refresh',
+    async (refresh) => {
+      const { credentials, roleAssumer, state } = await createClient(kind);
+      await credentials();
+      expect(roleAssumer.mock.calls[0][0]).toMatchObject({ accessKeyId: 'fixture-source' });
+      mockProcessEnv({
+        AWS_ACCESS_KEY_ID: 'rotated-access',
+        AWS_SECRET_ACCESS_KEY: 'rotated-secret',
+        AWS_SESSION_TOKEN: 'rotated-session',
+      });
+      state.identity = {
+        accessKeyId: 'renewed-access',
+        secretAccessKey: 'renewed-secret',
+        expiration: new Date(now + 1_800_000),
+      };
+      if (refresh === 'forced') {
+        await credentials({ forceRefresh: true });
+      } else {
+        vi.setSystemTime(now + (refresh === 'expired' ? 600_001 : 400_000));
+        await credentials();
+        await vi.waitFor(() => expect(roleAssumer).toHaveBeenCalledTimes(2));
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      expect(roleAssumer.mock.calls[1][0]).toMatchObject({
+        accessKeyId: 'rotated-access',
+        secretAccessKey: 'rotated-secret',
+        sessionToken: kind === 'scoped' ? 'scoped-session' : 'rotated-session',
+      });
+      await expect(credentials()).resolves.toMatchObject({ accessKeyId: 'renewed-access' });
+    },
+  );
+
   it('returns valid credentials during a transient background refresh failure and recovers', async () => {
     const { credentials, roleAssumer, state } = await createClient(kind);
     const original = await credentials();
@@ -151,3 +188,35 @@ describe.each(['native', 'scoped'])('%s AWS profile refresh contract', (kind) =>
     expect(roleAssumer).toHaveBeenCalledTimes(1);
   });
 });
+
+it.each(['file', 'suite', 'provider'])(
+  'keeps %s role-source overrides bound while refreshing inherited values outside that scope',
+  async (scope) => {
+    const env = { AWS_ACCESS_KEY_ID: 'bound-access', AWS_SESSION_TOKEN: '' };
+    const create = () => createClient('scoped', scope === 'provider' ? env : {});
+    const { credentials, roleAssumer } = await (scope === 'file'
+      ? cliState.withEnvFileOverrides(env, create)
+      : scope === 'suite'
+        ? cliState.withEnv(env, create)
+        : create());
+    await credentials();
+    mockProcessEnv({
+      AWS_ACCESS_KEY_ID: 'rotated-access',
+      AWS_SECRET_ACCESS_KEY: 'rotated-secret',
+      AWS_SESSION_TOKEN: 'rotated-session',
+    });
+    await cliState.withEnv(
+      {
+        AWS_ACCESS_KEY_ID: 'foreign-access',
+        AWS_SECRET_ACCESS_KEY: 'foreign-secret',
+        AWS_SESSION_TOKEN: 'foreign-session',
+      },
+      () => credentials({ forceRefresh: true }),
+    );
+    expect(roleAssumer.mock.calls[1][0]).toMatchObject({
+      accessKeyId: 'bound-access',
+      secretAccessKey: 'rotated-secret',
+      sessionToken: undefined,
+    });
+  },
+);
