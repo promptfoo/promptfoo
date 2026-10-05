@@ -493,7 +493,7 @@ describe('sanitizeMcpToolData', () => {
   it.each([
     ['callback?token=fixture', '[REDACTED]'],
     ['callback#api_key=fixture', '[REDACTED]'],
-    ['https://user:fixture@host/', 'https://***:***@host/'],
+    ['https://user:fixture@host/', '[REDACTED]'],
   ])('preserves public JSON fields while sanitizing the URL leaf %s', (target, expectedTarget) => {
     const args = { callbackUrl: JSON.stringify({ target, page: 2 }) };
     expect(sanitizeMcpToolData(args)).toEqual({
@@ -1042,6 +1042,97 @@ describe('sanitizeMcpToolData', () => {
       expect(sanitizeMcpToolData(input)).toEqual(
         logging ? wrap(JSON.stringify({ target: '[REDACTED]', page: 2 })) : input,
       );
+    },
+  );
+
+  it.each(['url', 'callbackUrl', 'apiBaseUrl', 'apiHost', 'env.SERVICE_HOST'])(
+    'carries URL payload guards through composed %s scalar and member roles',
+    (role) => {
+      const wrap = (value: string) =>
+        role.startsWith('env.') ? { env: { [role.slice(4)]: value } } : { [role]: value };
+      const marker = 'privatefixture1234567890';
+      const payloads = [
+        { target: `https://alice:pw@example.test/token/${marker}` },
+        { [`https://alice:pw@example.test/token/${marker}`]: 'public', '[REDACTED]': 'authored' },
+        { target: `https://{{ host }}/db;password=${marker}` },
+        { items: [`https://{{ host }}/db;password=${marker}`] },
+        { apiHost: `jdbc:sqlserver://alice:${marker}@db` },
+        { env: { SERVICE_HOST: `jdbc:sqlserver://alice:${marker}@db` } },
+        { headers: { [`https://host/db;password=${marker}`]: 'x' } },
+        { authHeaders: { [`https://host/db;password=${marker}`]: 'x' } },
+      ];
+      for (const payload of payloads) {
+        const data = { ...payload, page: 2 };
+        for (const inner of [
+          data,
+          { callbackUrl: JSON.stringify(data) },
+          { callbackUrl: `data=${encodeURIComponent(JSON.stringify(data))}` },
+          { apiBaseUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify(data))}` },
+        ]) {
+          const input = wrap(JSON.stringify(inner));
+          const original = structuredClone(input);
+          const result = sanitizeMcpToolData(input);
+          expect(JSON.stringify(result)).not.toContain(marker);
+          expect(input).toEqual(original);
+        }
+      }
+      const publicInput = wrap(JSON.stringify({ items: ['public-path'], page: 2 }));
+      expect(sanitizeMcpToolData(publicInput)).toEqual(publicInput);
+    },
+  );
+
+  it.each(['target', 'url', 'callbackUrl'])(
+    'keeps inherited logging path checks for decoded %s leaves',
+    (member) => {
+      const input = {
+        apiBaseUrl: JSON.stringify({
+          [member]: 'https://alice:pw@example.test/token/privatefixture1234567890',
+          page: 2,
+        }),
+      };
+      expect(JSON.stringify(sanitizeMcpToolData(input))).not.toContain('privatefixture1234567890');
+      const publicInput = {
+        apiBaseUrl: JSON.stringify({ [member]: 'https://example.test/public', page: 2 }),
+      };
+      expect(sanitizeMcpToolData(publicInput)).toEqual(publicInput);
+    },
+  );
+
+  it.each(['headers', 'authHeaders'])(
+    'preserves recognized safe %s authorization references before scalar heuristics',
+    (headerRole) => {
+      for (const scheme of ['', 'Bearer ', 'Basic ', 'Token ', 'api-key ']) {
+        const fields = { [headerRole]: { Authorization: `${scheme}{{ env.MCP_API_KEY }}` } };
+        const input = { one: { two: { three: { four: { five: fields } } } } };
+        expect(sanitizeMcpToolData(fields)).toEqual(fields);
+        expect(sanitizeMcpToolData(input)).toEqual(input);
+        const encoded = { payload: JSON.stringify(fields) };
+        expect(sanitizeMcpToolData(encoded)).toEqual(encoded);
+        expect(sanitizeMcpToolData({ clientSecrets: fields })).toEqual({
+          clientSecrets: { [headerRole]: { Authorization: '[REDACTED]' } },
+        });
+      }
+      expect(
+        sanitizeMcpToolData({ [headerRole]: { Authorization: 'Bearer actual-private-fixture' } }),
+      ).toEqual({
+        [headerRole]: { Authorization: '[REDACTED]' },
+      });
+    },
+  );
+
+  it.each(['url', 'callbackUrl', 'apiBaseUrl', 'server_url', 'apiHost'])(
+    'keeps the direct %s policy distinct from decoded payload guards',
+    (role) => {
+      const values = [
+        'https://alice:fixture-password@example.test/public',
+        'https://example.test/public',
+        'https://{{ host }}/?password={{ password }}',
+        'jdbc:sqlserver://db;password={{ password }}',
+      ];
+      for (const value of values) {
+        const input = { [role]: value };
+        expect(sanitizeMcpToolData(input)).toEqual(sanitizeObject(input, { sanitizeUrls: true }));
+      }
     },
   );
 
