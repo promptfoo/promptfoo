@@ -333,6 +333,11 @@ This is easiest to miss on model-graded assertions, where the grader still retur
 pass or fail by judging the rest of the rubric. promptfoo logs a warning the first
 time it loads a file whose value still contains a Nunjucks tag.
 
+This applies to assertions in the main config. Tests loaded from a separate file
+(`tests: file://tests.yaml`) work differently: promptfoo resolves the `file://`
+reference while it loads them, so a text file's contents arrive as an ordinary string
+and are rendered like an inline value.
+
 Write the value inline if you need variables. This works for a string or a list of
 strings. A value that parses to an object, such as a JSON or YAML schema, is not
 interpolated even when inlined, so a template in one has to be resolved before
