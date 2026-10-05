@@ -2899,3 +2899,145 @@ describe('readBoundedText', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 });
+
+describe('Request cancellation through fetch wrappers', () => {
+  const wrappers = [
+    ['proxy', (request: Request, options: RequestInit) => fetchWithProxy(request, options)],
+    [
+      'timeout',
+      (request: Request, options: RequestInit) => fetchWithTimeout(request, options, 5000),
+    ],
+    [
+      'retries',
+      (request: Request, options: RequestInit) => fetchWithRetries(request, options, 5000, 2),
+    ],
+  ] as const;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response('ok'));
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
+    vi.useRealTimers();
+  });
+
+  it.each(wrappers)(
+    '%s aborts an in-flight Request without another attempt',
+    async (_name, run) => {
+      const controller = new AbortController();
+      let notifyStarted: () => void;
+      const started = new Promise<void>((resolve) => {
+        notifyStarted = resolve;
+      });
+      vi.mocked(global.fetch).mockImplementationOnce((_url, options) => {
+        const signal = options?.signal;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+          notifyStarted();
+        });
+      });
+      const pending = run(new Request('https://example.com', { signal: controller.signal }), {});
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await started;
+      controller.abort();
+      await rejected;
+      expect(global.fetch).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(wrappers)(
+    '%s honors a replacement signal instead of the Request signal',
+    async (_name, run) => {
+      const original = new AbortController();
+      const replacement = new AbortController();
+      original.abort();
+      let notifyStarted: () => void;
+      const started = new Promise<void>((resolve) => {
+        notifyStarted = resolve;
+      });
+      vi.mocked(global.fetch).mockImplementationOnce((_url, options) => {
+        const signal = options?.signal;
+        expect(signal?.aborted).toBe(false);
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+          notifyStarted();
+        });
+      });
+      const pending = run(new Request('https://example.com', { signal: original.signal }), {
+        signal: replacement.signal,
+      });
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await started;
+      replacement.abort();
+      await rejected;
+      expect(global.fetch).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(wrappers)('%s stops an already-aborted Request before dispatch', async (_name, run) => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      run(new Request('https://example.com', { signal: controller.signal }), {}),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('lets an explicit null signal mask Request cancellation across network retries', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    vi.mocked(global.fetch)
+      .mockRejectedValueOnce(new Error('temporary network failure'))
+      .mockResolvedValueOnce(new Response('ok'));
+    const response = await fetchWithRetries(
+      new Request('https://example.com', { signal: controller.signal }),
+      { signal: null },
+      5000,
+      1,
+    );
+    expect(await response.text()).toBe('ok');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cancels proxy backoff without dispatching another attempt', async () => {
+    const controller = new AbortController();
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(null, { status: 503, statusText: 'Service Unavailable' }),
+    );
+    const pending = fetchWithProxy(
+      new Request('https://example.com', { signal: controller.signal }),
+    );
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(1);
+    controller.abort();
+    await rejected;
+    expect(global.fetch).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['request', 'parameter'])(
+    'composes the proxy %s signal with the other signal',
+    async (source) => {
+      const requestController = new AbortController();
+      const parameterController = new AbortController();
+      await fetchWithProxy(
+        new Request('https://example.com', { signal: requestController.signal }),
+        {},
+        parameterController.signal,
+      );
+      const signal = vi.mocked(global.fetch).mock.calls[0][1]?.signal;
+      expect(signal?.aborted).toBe(false);
+      (source === 'request' ? requestController : parameterController).abort();
+      expect(signal?.aborted).toBe(true);
+    },
+  );
+});

@@ -204,6 +204,13 @@ function getFetchUrlString(url: RequestInfo): string | undefined {
   return undefined;
 }
 
+function getEffectiveFetchSignal(
+  url: RequestInfo,
+  options: Pick<RequestInit, 'signal'>,
+): AbortSignal | null | undefined {
+  return options.signal === undefined && url instanceof Request ? url.signal : options.signal;
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -217,12 +224,13 @@ export async function fetchWithProxy(
     throw new Error('Invalid URL');
   }
 
-  // Combine abort signals: incoming abortSignal parameter + any signal in options
+  // An explicit init.signal, including null, overrides the Request's signal.
+  const requestSignal = getEffectiveFetchSignal(url, options);
   const combinedSignal = abortSignal
-    ? options.signal
-      ? AbortSignal.any([options.signal, abortSignal])
+    ? requestSignal
+      ? AbortSignal.any([requestSignal, abortSignal])
       : abortSignal
-    : options.signal;
+    : requestSignal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const { getAuthHeaders, ...requestOptions } = options;
@@ -307,6 +315,7 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+    combinedSignal?.throwIfAborted();
     let attemptOptions = finalOptions;
     if (getAuthHeaders) {
       attemptOptions = {
@@ -325,7 +334,7 @@ export async function fetchWithProxy(
       logger.debug(
         `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
       );
-      await sleep(backoffMs);
+      await sleepWithAbort(backoffMs, combinedSignal);
       continue;
     }
 
@@ -344,10 +353,9 @@ export function fetchWithTimeout(
   return new Promise((resolve, reject) => {
     const timeoutController = new AbortController();
 
-    // Combine timeout signal with any incoming abort signal
-    // The composite signal will abort if EITHER signal aborts
-    const signal = options.signal
-      ? AbortSignal.any([options.signal, timeoutController.signal])
+    const requestSignal = getEffectiveFetchSignal(url, options);
+    const signal = requestSignal
+      ? AbortSignal.any([requestSignal, timeoutController.signal])
       : timeoutController.signal;
 
     const timeoutId = setTimeout(() => {
@@ -749,7 +757,7 @@ export async function fetchWithRetries(
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal = getEffectiveFetchSignal(url, options);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
