@@ -384,6 +384,13 @@ export class PythonWorker {
     );
     this.closeStreamsAfterExit(workerProcess);
     const killTimeout = setTimeout(() => workerProcess.kill('SIGKILL'), 5000).unref();
+    const handleShutdownError = (error: unknown) => {
+      logger.error(`Error during worker shutdown: ${error}`);
+      workerProcess.kill('SIGKILL');
+    };
+    // A startup peer can close stdin before its child close event. Stream errors
+    // from send() arrive asynchronously and cannot be caught by the try/catch.
+    workerProcess.childProcess.stdin?.on('error', handleShutdownError);
     try {
       if (this.pendingRequest) {
         this.pendingRequest.reject(new Error('Worker shutting down'));
@@ -392,11 +399,11 @@ export class PythonWorker {
       workerProcess.send('SHUTDOWN');
       await closed;
     } catch (error) {
-      logger.error(`Error during worker shutdown: ${error}`);
-      workerProcess.kill('SIGKILL');
+      handleShutdownError(error);
       await closed;
     } finally {
       clearTimeout(killTimeout);
+      workerProcess.childProcess.stdin?.off('error', handleShutdownError);
       if (this.process === workerProcess) {
         this.process = null;
       }

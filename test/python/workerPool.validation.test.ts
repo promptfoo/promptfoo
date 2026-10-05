@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import type { EventEmitter } from 'node:events';
+import type { Writable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
@@ -14,7 +15,12 @@ import type { MockInstance } from 'vitest';
 const { execFileAsync, shells, signals } = vi.hoisted(() => ({
   execFileAsync: vi.fn(),
   shells: [] as Array<
-    EventEmitter & { options: Options; send(command: string): void; kill(signal: string): void }
+    EventEmitter & {
+      options: Options;
+      stdin: Writable;
+      send(command: string): void;
+      kill(signal: string): void;
+    }
   >,
   signals: { autoReady: true },
 }));
@@ -26,12 +32,18 @@ vi.mock('child_process', () => ({
 }));
 vi.mock('python-shell', async () => {
   const { EventEmitter } = await import('node:events');
+  const { Writable } = await import('node:stream');
   return {
     PythonShell: class extends EventEmitter {
       childProcess = this;
       exitCode = null;
       signalCode = null;
       stderr = new EventEmitter();
+      stdin = new Writable({
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+      });
       constructor(
         _script: string,
         public options: Options,
@@ -141,6 +153,42 @@ describe('Python pool executable validation', () => {
       expect(pool.getWorkerCount()).toBe(2);
       expect(shells).toHaveLength(4);
       expect(execFileAsync).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each([
+    ['starting', 'EPIPE'],
+    ['ready', 'EPIPE'],
+    ['starting', 'ERR_STREAM_DESTROYED'],
+    ['ready', 'ERR_STREAM_DESTROYED'],
+  ])(
+    'handles asynchronous %s peer stdin failure (%s) during startup rollback',
+    async (state, code) => {
+      const pool = new PythonWorkerPool('fixture.py', 'call_api', 2, 'fixture-python');
+      pools.push(pool);
+      signals.autoReady = false;
+      const initialized = pool.initialize().catch((error) => error);
+      await setImmediate();
+      const peer = shells[1];
+      if (state === 'ready') {
+        peer.emit('message', 'READY');
+      }
+      const killed = vi.spyOn(peer, 'kill');
+      vi.spyOn(peer, 'send').mockImplementation(() => {
+        // A real Node stream emits this error asynchronously, after send returns.
+        peer.stdin.destroy(Object.assign(new Error(`write ${code}`), { code }));
+      });
+      shells[0].emit('close');
+
+      expect(await initialized).toEqual(new Error('Worker exited before becoming ready'));
+      expect(killed).toHaveBeenCalledWith('SIGKILL');
+      expect(peer.stdin.destroyed).toBe(true);
+      expect(peer.stdin.listenerCount('error')).toBe(0);
+      expect(pool.getWorkerCount()).toBe(0);
+
+      signals.autoReady = true;
+      await pool.initialize();
+      expect(pool.getWorkerCount()).toBe(2);
     },
   );
 
