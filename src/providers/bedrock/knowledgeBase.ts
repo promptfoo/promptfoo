@@ -5,6 +5,7 @@ import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
+import { getOpaqueCredentialCacheNamespace } from '../credentialCache';
 import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
@@ -90,11 +91,26 @@ export class AwsBedrockKnowledgeBaseProvider
     }
   }
   private readonly getClientState = createEnvironmentScopedState(
-    () => ({
-      cacheNamespace: this.selectResponseCacheNamespace(this.getIamCredentialConfig()),
-      client: undefined as BedrockAgentRuntimeClient | undefined,
-      initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
-    }),
+    () => {
+      const namespace = this.selectResponseCacheNamespace(this.getIamCredentialConfig());
+      // cacheConfig omits the IAM tuple. Partition configured identities in memory
+      // without persisting credentials or hashes derived from their secret values.
+      const configuredIdentity =
+        this.config.accessKeyId && this.config.secretAccessKey
+          ? getOpaqueCredentialCacheNamespace(
+              JSON.stringify([
+                this.config.accessKeyId,
+                this.config.secretAccessKey,
+                this.config.sessionToken,
+              ]),
+            )
+          : undefined;
+      return {
+        cacheNamespace: [namespace, configuredIdentity].filter(Boolean).join(':') || undefined,
+        client: undefined as BedrockAgentRuntimeClient | undefined,
+        initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
+      };
+    },
     async (state) => {
       // A construction already in flight still belongs to this invocation.
       await state.initialization?.catch(() => undefined);

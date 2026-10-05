@@ -65,9 +65,11 @@ beforeEach(() => {
         .at(-1)?.[1] ?? '';
     authorizations.push(authorization);
     const scopedOwner = authorization.match(/Credential=(first|second)-access\//)?.[1];
+    const sessionOwner =
+      request.headers['x-amz-security-token']?.match(/^(first|second)-session$/)?.[1];
     const output = authorization.startsWith('Bearer ')
       ? authorization.slice(7)
-      : scopedOwner || 'sigv4-fixture';
+      : sessionOwner || scopedOwner || 'sigv4-fixture';
     return {
       response: {
         statusCode: 200,
@@ -156,10 +158,68 @@ describe('Knowledge Base selected-auth cache partition', () => {
     });
     expect(authorizations).toHaveLength(1);
     expect(authorizations[0]).toContain('Credential=config-access/');
-    expect([...fixtures.cache.keys()]).toEqual([
-      legacyKey(config).replace('bedrock-kb:v2:', 'bedrock-kb:v2:bedrock-iam-v1:'),
-    ]);
+    const keys = [...fixtures.cache.keys()];
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).toMatch(/^bedrock-kb:v2:bedrock-iam-v1:[0-9a-f-]{36}:/);
+    expect(keys[0].endsWith(legacyKey(config).slice('bedrock-kb:v2:'.length))).toBe(true);
   });
+  it.each(
+    ['config', 'ambient', 'file', 'suite', 'none'].flatMap((bearer) =>
+      ['keys', 'session'].map((identity) => ({ bearer, identity })),
+    ),
+  )(
+    'partitions configured IAM $identity with a shared $bearer bearer',
+    async ({ bearer, identity }) => {
+      const selected = { AWS_BEARER_TOKEN_BEDROCK: 'shared-bearer' };
+      if (bearer === 'ambient') {
+        mockProcessEnv(selected);
+      }
+      const run = async () => {
+        const rows = [];
+        for (const owner of ['first', 'second', 'first']) {
+          rows.push(
+            await provider(undefined, {
+              accessKeyId: identity === 'keys' ? `${owner}-access` : 'session-access',
+              secretAccessKey: identity === 'keys' ? `${owner}-secret` : 'session-secret',
+              ...(identity === 'session' ? { sessionToken: `${owner}-session` } : {}),
+              ...(bearer === 'config' ? { apiKey: 'shared-bearer' } : {}),
+            }).callApi('fixture prompt'),
+          );
+        }
+        expect(rows).toMatchObject([
+          { output: 'first' },
+          { output: 'second' },
+          { output: 'first', cached: true },
+        ]);
+        expect(authorizations).toHaveLength(2);
+        expect(authorizations.every((value) => value.startsWith('AWS4-HMAC-SHA256'))).toBe(true);
+        const keys = [...fixtures.cache.keys()];
+        expect(keys).toHaveLength(2);
+        for (const key of keys) {
+          for (const credential of [
+            'first-access',
+            'second-access',
+            'first-secret',
+            'second-secret',
+            'session-access',
+            'session-secret',
+            'first-session',
+            'second-session',
+          ]) {
+            expect(key).not.toContain(credential);
+            expect(key).not.toContain(sha256(credential));
+          }
+        }
+      };
+      if (bearer === 'file') {
+        await cliState.withEnvFileOverrides(selected, run);
+      } else if (bearer === 'suite') {
+        await cliState.withEnv(selected, run);
+      } else {
+        await run();
+      }
+    },
+  );
   it('retains configured bearer priority and its existing key despite provider overrides', async () => {
     const config = { apiKey: 'configured-fixture' };
     await provider('fixture-one', config).callApi('fixture prompt');
