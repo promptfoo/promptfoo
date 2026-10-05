@@ -644,6 +644,51 @@ describe('provider-owned pipeline cleanup', () => {
     expect(dispose).toHaveBeenCalledOnce();
   });
 
+  it.each(['succeeds', 'fails'])(
+    'keeps a replacement cached when released initialization %s',
+    async (outcome) => {
+      const initialized = createDeferred<void>();
+      const ready = createDeferred<unknown>();
+      const lateDispose = vi.fn().mockResolvedValue(undefined);
+      const lateExtractor = Object.assign(vi.fn(), { dispose: lateDispose });
+      pipeline.mockImplementationOnce(() => {
+        initialized.resolve();
+        return ready.promise;
+      });
+
+      const provider = new TransformersEmbeddingProvider('fixture');
+      const releasedCall = provider.callEmbeddingApi('released');
+      await initialized.promise;
+      await provider.cleanup();
+      expect(await provider.callEmbeddingApi('replacement')).toMatchObject({ embedding: [0.25] });
+
+      if (outcome === 'succeeds') {
+        ready.resolve(lateExtractor);
+      } else {
+        ready.reject(new Error('fixture initialization failed'));
+      }
+      expect(await releasedCall).toMatchObject({
+        error: expect.stringContaining(
+          outcome === 'succeeds' ? 'released' : 'initialization failed',
+        ),
+      });
+      expect(lateExtractor).not.toHaveBeenCalled();
+      expect(lateDispose).toHaveBeenCalledTimes(outcome === 'succeeds' ? 1 : 0);
+      expect(pipelineCache.size).toBe(1);
+
+      const borrower = new TransformersEmbeddingProvider('fixture');
+      expect(await borrower.callEmbeddingApi('shared replacement')).toMatchObject({
+        embedding: [0.25],
+      });
+      expect(pipeline).toHaveBeenCalledTimes(2);
+      await provider.cleanup();
+      expect(dispose).not.toHaveBeenCalled();
+      await borrower.cleanup();
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(pipelineCache.size).toBe(0);
+    },
+  );
+
   it('removes failed initialization from every sharing owner', async () => {
     pipeline.mockRejectedValueOnce(new Error('fixture initialization failed'));
     const first = new TransformersEmbeddingProvider('fixture');

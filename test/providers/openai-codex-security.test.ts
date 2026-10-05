@@ -1042,25 +1042,26 @@ describe('OpenAICodexSecurityProvider', () => {
   });
 
   describe('lifecycle', () => {
-    it.each([false, true])(
-      'releases cleanup registration and restores it on reuse unless shutdown=%s',
-      async (shutdown) => {
+    it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
+      'registers reused resources after %s',
+      async (method) => {
         const provider = new OpenAICodexSecurityProvider();
         expect(providerRegistry.has(provider)).toBe(true);
         await provider.cleanup();
         await provider.cleanup();
         expect(providerRegistry.has(provider)).toBe(false);
-        if (shutdown) {
-          await provider.shutdown();
-        }
 
         mockRun.mockImplementation(async () => {
-          expect(providerRegistry.has(provider)).toBe(!shutdown);
+          expect(providerRegistry.has(provider)).toBe(true);
           return createScanResult();
         });
         for (const prompt of ['First reuse', 'Second reuse']) {
           expect((await provider.callApi(prompt)).error).toBeUndefined();
-          await provider.cleanup();
+          if (method === 'shutdownAll') {
+            await providerRegistry.shutdownAll();
+          } else {
+            await provider[method]();
+          }
           expect(providerRegistry.has(provider)).toBe(false);
         }
         expect(mockRun).toHaveBeenCalledTimes(2);
@@ -1116,9 +1117,13 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(providerRegistry.has(provider)).toBe(false);
     });
 
-    it.each([false, true])(
-      'keeps fresh clients registered while older cleanup completes with close failure=%s',
-      async (closeFails) => {
+    it.each(
+      (['cleanup', 'shutdown', 'shutdownAll'] as const).flatMap((method) =>
+        [false, true].map((closeFails) => ({ method, closeFails })),
+      ),
+    )(
+      'keeps fresh clients registered while older $method completes (closeFails=$closeFails)',
+      async ({ method, closeFails }) => {
         const activeRun = createDeferred<ReturnType<typeof createScanResult>>();
         const activeClose = createDeferred<void>();
         const freshRun = createDeferred<ReturnType<typeof createScanResult>>();
@@ -1139,7 +1144,8 @@ describe('OpenAICodexSecurityProvider', () => {
         const provider = new OpenAICodexSecurityProvider();
         const activeCall = provider.callApi('Active scan');
         await vi.waitFor(() => expect(activeClient.run).toHaveBeenCalledTimes(1));
-        const cleanup = provider.cleanup();
+        const cleanup =
+          method === 'shutdownAll' ? providerRegistry.shutdownAll() : provider[method]();
         expect(activeClient.close).toHaveBeenCalledTimes(1);
         const freshCall = provider.callApi('Fresh scan during cleanup');
 

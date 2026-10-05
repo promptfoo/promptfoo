@@ -263,7 +263,6 @@ function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage
 }
 
 export class OpenAICodexSecurityProvider implements ApiProvider {
-  private restoreRegistrationOnUse = false;
   private cleanupGeneration = 0;
 
   readonly config: OpenAICodexSecurityConfig;
@@ -295,8 +294,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
 
   async cleanup(): Promise<void> {
     this.cleanupGeneration++;
-    // Remember only our own registration; wrappers may own this provider instead.
-    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
+    providerRegistry.unregister(this);
     const clients = Array.from(this.activeClients);
     this.activeClients.clear();
     const results = await Promise.allSettled(clients.map((client) => client.close()));
@@ -305,19 +303,10 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         logger.warn('[CodexSecurity] Error while closing SDK client', { error: result.reason });
       }
     }
-    // A fresh call may have restored registration while these clients were closing.
-    if (this.restoreRegistrationOnUse) {
-      providerRegistry.unregister(this);
-    }
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      this.restoreRegistrationOnUse = false;
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   async callApi(
@@ -374,11 +363,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           : {}),
         ...(Object.keys(codexOverrides).length > 0 ? { codexOverrides } : {}),
       });
-      if (this.restoreRegistrationOnUse) {
-        providerRegistry.register(this);
-        this.restoreRegistrationOnUse = false;
-      }
-
+      providerRegistry.register(this);
       this.activeClients.add(client);
 
       try {

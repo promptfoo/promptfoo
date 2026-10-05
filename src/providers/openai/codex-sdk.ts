@@ -682,7 +682,7 @@ async function loadCodexSDK(): Promise<any> {
 }
 
 export class OpenAICodexSDKProvider implements ApiProvider {
-  private restoreRegistrationOnUse = false;
+  private cleanupGeneration = 0;
 
   static OPENAI_MODELS = [
     'gpt-6-astra',
@@ -784,33 +784,24 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    // New resource use during teardown consumes this flag and retains registration.
-    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
-    // Clean up threads
+    this.cleanupGeneration++;
+    providerRegistry.unregister(this);
+    const instances = [...this.codexInstances.values()];
+    this.codexInstances.clear();
     this.threads.clear();
     this.threadRunQueues.clear();
 
-    // Clean up Codex instances to release resources (child processes, file handles)
-    for (const instance of this.codexInstances.values()) {
+    for (const instance of instances) {
       try {
         await this.destroyInstance(instance);
       } catch (error) {
         logger.warn('[CodexSDK] Error during cleanup', { error });
       }
     }
-    this.codexInstances.clear();
-    if (this.restoreRegistrationOnUse) {
-      providerRegistry.unregister(this);
-    }
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      this.restoreRegistrationOnUse = false;
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   private prepareEnvironment(
@@ -2089,6 +2080,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     // Merge configs (prompt config takes precedence)
     const mergedConfig: OpenAICodexSDKConfig = {
       ...this.config,
@@ -2108,7 +2100,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // withGenAISpan handles both exceptions and { error: ... } responses
     return withGenAISpan(
       this.buildCodexSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config, inIsolatedWorkspace),
+      () =>
+        this.callApiInternal(
+          prompt,
+          context,
+          callOptions,
+          config,
+          inIsolatedWorkspace,
+          cleanupGeneration,
+        ),
       (response) => this.extractCodexSpanResult(response, requestedModel),
     );
   }
@@ -2223,6 +2223,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: OpenAICodexSDKConfig,
     inIsolatedWorkspace: boolean,
+    cleanupGeneration: number,
   ): Promise<ProviderResponse> {
     let config: OpenAICodexSDKConfig;
     try {
@@ -2287,7 +2288,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig.skip_git_repo_check,
       );
 
-      const codexInstance = await this.getCodexInstanceForTurn(env, resolvedConfig, apiKey);
+      const codexInstance = await this.getCodexInstanceForTurn(
+        env,
+        resolvedConfig,
+        apiKey,
+        cleanupGeneration,
+      );
       const activeInstance = codexInstance.activeInstance;
       localInstance = codexInstance.localInstance;
       useLocalInstance = codexInstance.useLocalInstance;
@@ -2304,6 +2310,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig,
         callOptions,
         skillRootPrefixes,
+        cleanupGeneration,
       );
 
       return this.buildCodexProviderResponse(turn, sessionId, skillRootPrefixes, resolvedConfig);
@@ -2344,6 +2351,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     env: Record<string, string>,
     resolvedConfig: OpenAICodexSDKConfig,
     apiKey: string | undefined,
+    cleanupGeneration: number,
   ): Promise<{
     activeInstance: any;
     instanceKey: string;
@@ -2354,10 +2362,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       this.codexModule = await loadCodexSDK();
     }
 
-    if (this.restoreRegistrationOnUse) {
-      providerRegistry.register(this);
-      this.restoreRegistrationOnUse = false;
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('Codex SDK call was interrupted by cleanup');
     }
+    providerRegistry.register(this);
 
     const stableEnv = { ...env };
     delete stableEnv.TRACEPARENT;
@@ -2416,14 +2424,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     resolvedConfig: OpenAICodexSDKConfig,
     callOptions: CallApiOptionsParams | undefined,
     skillRootPrefixes: readonly string[],
+    cleanupGeneration: number,
   ): Promise<{ turn: any; sessionId: string }> {
     const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey);
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
     return this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
-      if (this.restoreRegistrationOnUse) {
-        providerRegistry.register(this);
-        this.restoreRegistrationOnUse = false;
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Codex SDK call was interrupted by cleanup');
       }
       const thread = await this.getOrCreateThread(
         resolvedConfig,
@@ -2431,6 +2439,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         instanceKey,
         activeInstance,
       );
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Codex SDK call was interrupted by cleanup');
+      }
       const turn = resolvedConfig.enable_streaming
         ? await this.runStreaming(thread, promptInput, runOptions, callOptions, skillRootPrefixes)
         : await thread.run(promptInput, runOptions);
