@@ -81,6 +81,7 @@ afterEach(() => {
     provider.knowledgeBaseClient?.destroy();
   }
   restore();
+  vi.resetAllMocks();
   vi.restoreAllMocks();
   fs.rmSync(dir, { recursive: true, force: true });
 });

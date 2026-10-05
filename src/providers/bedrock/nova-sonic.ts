@@ -8,7 +8,6 @@ import {
   getAwsSdkProfile,
   resolveAwsCredentials,
 } from '../awsCredentials';
-import { getScopedAwsEndpointOptions } from '../awsEndpointConfig';
 import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
@@ -171,11 +170,10 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       const credentials = await resolveAwsCredentials(this.config, this.env);
       const profile = getAwsSdkProfile(this.config, this.env);
       const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
-      const endpointOptions = await getScopedAwsEndpointOptions(
-        'Bedrock Runtime',
-        { ...sdkOptions, endpoint: this.config.endpoint },
-        this.env,
-      );
+      const endpointOptions = await this.getScopedEndpointOptions('Bedrock Runtime', {
+        ...sdkOptions,
+        endpoint: this.config.endpoint,
+      });
       try {
         const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
         const { NodeHttp2Handler } = await import('@smithy/node-http-handler');

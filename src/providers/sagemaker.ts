@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
 import { z } from 'zod';
-import { getEnvString } from '../envars';
+import { getEnvString, getMergedEnvOverrides } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
@@ -210,7 +210,7 @@ abstract class SageMakerGenericProvider {
         const endpointOptions = await getScopedAwsEndpointOptions(
           'SageMaker Runtime',
           sdkOptions,
-          this.env,
+          getMergedEnvOverrides(this.env),
         );
 
         const runtime = new SageMakerRuntimeClient({

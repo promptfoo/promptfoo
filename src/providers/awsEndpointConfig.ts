@@ -1,9 +1,5 @@
 import { createRequire } from 'node:module';
 
-import { getMergedEnvOverrides } from '../envars';
-
-import type { EnvOverrides } from '../contracts/env';
-
 type Profile = Record<string, string | undefined>;
 interface FileOptions {
   profile?: string;
@@ -64,9 +60,8 @@ function loadConfigSdk(): ConfigSdk {
 export async function getScopedAwsEndpointOptions(
   serviceId: string,
   options: FileOptions,
-  env?: EnvOverrides,
+  scoped: Record<string, string | undefined>,
 ) {
-  const scoped = getMergedEnvOverrides(env);
   const serviceSuffix = serviceId
     .split(' ')
     .map((word) => word.toUpperCase())

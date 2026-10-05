@@ -65,6 +65,7 @@ beforeEach(() => {
   vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected network access'));
 });
 afterEach(() => {
+  vi.resetAllMocks();
   vi.restoreAllMocks();
   restore();
   fs.rmSync(directory, { recursive: true, force: true });

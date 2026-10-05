@@ -7,7 +7,7 @@
 
 import { createHmac } from 'crypto';
 
-import { getEnvInt, getEnvString } from '../../envars';
+import { getEnvInt, getEnvString, getMergedEnvOverrides } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import {
@@ -245,6 +245,13 @@ export abstract class AwsBedrockGenericProvider {
       : this.config;
   }
 
+  protected getScopedEndpointOptions(
+    serviceId: string,
+    options: Parameters<typeof getScopedAwsEndpointOptions>[1],
+  ) {
+    return getScopedAwsEndpointOptions(serviceId, options, getMergedEnvOverrides(this.env));
+  }
+
   /** Keep released IAM discovery for agent-runtime and async media/S3 clients. */
   protected async getIamCredentialOptions(serviceId = 'Bedrock Agent Runtime') {
     const config = this.getIamCredentialConfig();
@@ -253,7 +260,7 @@ export abstract class AwsBedrockGenericProvider {
     const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
     return {
       ...getAwsCredentialProviderOptions(this.env),
-      ...(await getScopedAwsEndpointOptions(serviceId, sdkOptions, this.env)),
+      ...(await this.getScopedEndpointOptions(serviceId, sdkOptions)),
       ...(credentials ? { credentials } : {}),
       ...(profile === undefined ? {} : { profile }),
     };
@@ -266,11 +273,10 @@ export abstract class AwsBedrockGenericProvider {
     const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
     return {
       ...getAwsCredentialProviderOptions(this.env),
-      ...(await getScopedAwsEndpointOptions(
-        'Bedrock Runtime',
-        { ...sdkOptions, endpoint: this.config.endpoint },
-        this.env,
-      )),
+      ...(await this.getScopedEndpointOptions('Bedrock Runtime', {
+        ...sdkOptions,
+        endpoint: this.config.endpoint,
+      })),
       ...(credentials ? { credentials } : {}),
       ...(profile === undefined ? {} : { profile }),
       // Explicitly represent an invocation's cleared bearer token so SDK
