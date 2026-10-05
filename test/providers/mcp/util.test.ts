@@ -41,6 +41,52 @@ vi.mock('../../../src/util/fetch/index', () => ({
 describe('sanitizeMcpToolData', () => {
   const omitted = '[MCP tool data omitted: it could not be sanitized]';
 
+  it('inspects encoded form payloads in structural URL keys with the remaining depth', () => {
+    for (const payload of [
+      'jdbc:db;password=encoded-key-fixture',
+      'data=' + encodeURIComponent('password=encoded-key-fixture'),
+      JSON.stringify({ databasePassword: 'encoded-key-fixture', page: 2 }),
+    ]) {
+      const key = `callback?data=${encodeURIComponent(payload)}`;
+      for (const fields of [
+        { [key]: 'GET', '[REDACTED]': 'authored' },
+        { headers: { [key]: 'GET', '[REDACTED]': 'authored' } },
+        { authHeaders: { [key]: 'GET', '[REDACTED]': 'authored' } },
+      ]) {
+        const args = { apiHost: JSON.stringify({ ...fields, page: 2 }) };
+        const original = structuredClone(args);
+        const result = sanitizeMcpToolData(args) as typeof args;
+        expect(result.apiHost).not.toContain('encoded-key-fixture');
+        expect(JSON.parse(result.apiHost).page).toBe(2);
+        expect(result.apiHost).toContain('[REDACTED]#1');
+        expect(args).toEqual(original);
+      }
+    }
+    for (const key of [
+      'callback?data=' + encodeURIComponent('jdbc:db;page=2'),
+      'callback?data=' + encodeURIComponent(JSON.stringify({ page: 2, label: 'public' })),
+      'callback?data=',
+      JSON.stringify({ target: 'callback?data=jdbc%3Adb%3Bpassword%3Dopaque-name' }),
+    ]) {
+      const args = { apiHost: JSON.stringify({ [key]: 'GET', page: 2 }) };
+      expect(sanitizeMcpToolData(args)).toEqual(args);
+    }
+    let payload = 'password=encoded-key-fixture';
+    for (let index = 0; index < 6; index++) {
+      payload = `data=${encodeURIComponent(payload)}`;
+    }
+    const args = { apiHost: JSON.stringify({ [`callback?${payload}`]: 'GET', page: 2 }) };
+    expect(
+      JSON.stringify(
+        sanitizeObject(args, {
+          redactCompoundKeys: true,
+          sanitizeUrls: true,
+          maxDepth: 3,
+        }),
+      ),
+    ).not.toContain('encoded-key-fixture');
+  });
+
   it('checks unquoted host form segments before hostname normalization', () => {
     for (const delimiter of [';', '&']) {
       for (const host of ['apiHost', 'SERVICE_HOST']) {

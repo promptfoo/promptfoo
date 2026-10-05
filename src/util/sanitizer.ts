@@ -1647,13 +1647,17 @@ function sanitizeUrlEncodedStringWithContext(
 function hasUrlPayloadKeyCredential(key: string, compoundContext?: CompoundKeyContext): boolean {
   const scalar = getUrlPayloadScalar(key, compoundContext?.maxDepth ?? MAX_DEPTH);
   let guard = compoundContext?.guardUrlPayload;
-  if (scalar !== null && guard === 'host' && /^[\[{]/.test(scalar.trimStart())) {
+  let containerName = false;
+  if (scalar !== null && /^[\[{]/.test(scalar.trimStart())) {
     try {
       const parsed = JSON.parse(scalar);
       if (parsed !== null && typeof parsed === 'object') {
         // A valid container used as a property name is not a schemeless host.
         // Keep the existing explicit URL/form checks without traversing it.
-        guard = 'logging';
+        containerName = true;
+        if (guard === 'host') {
+          guard = 'logging';
+        }
       }
     } catch {
       // Bracketed usernames and malformed names retain host authority checks.
@@ -1662,7 +1666,10 @@ function hasUrlPayloadKeyCredential(key: string, compoundContext?: CompoundKeyCo
   return (
     scalar === null ||
     hasUrlPayloadUserinfo(scalar, guard) ||
-    hasSecretFormSegment(scalar, false, compoundContext)
+    hasSecretFormSegment(scalar, false, compoundContext) ||
+    // Explicit encoded form/query payloads keep the same bounded value owner as
+    // scalar URLs; arbitrary containers used as names remain opaque identifiers.
+    (!containerName && sanitizeUrlEncodedStringWithContext(scalar, compoundContext) !== scalar)
   );
 }
 
