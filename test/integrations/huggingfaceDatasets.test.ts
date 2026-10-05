@@ -622,6 +622,45 @@ describe('huggingfaceDatasets', () => {
       expect(tests[0].vars?.text).toBe(largeRow.text);
     });
 
+    it('should keep small-row pages at the 100-row maximum the datasets server allows', async () => {
+      const rows = Array.from({ length: 546 }, (_, i) => ({ row: { text: `Item ${i + 1}` } }));
+
+      vi.mocked(fetchWithCache).mockImplementation(async (url) => {
+        const searchParams = new URL(String(url)).searchParams;
+        const offset = Number.parseInt(searchParams.get('offset') ?? '0', 10);
+        const length = Number.parseInt(searchParams.get('length') ?? '100', 10);
+
+        // Like the real server, reject a page longer than 100 rows
+        if (length > 100) {
+          return {
+            data: { error: "Parameter 'length' must not be greater than 100" },
+            cached: false,
+            status: 422,
+            statusText: 'Unprocessable Entity',
+          } as any;
+        }
+
+        return {
+          data: {
+            num_rows_total: rows.length,
+            features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+            rows: rows.slice(offset, offset + length),
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        } as any;
+      });
+
+      const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+      const requestedLengths = vi
+        .mocked(fetchWithCache)
+        .mock.calls.map(([url]) => new URL(String(url)).searchParams.get('length'));
+
+      expect(requestedLengths).toEqual(['100', '100', '100', '100', '100', '46']);
+      expect(tests.map((test) => test.vars)).toEqual(rows.map(({ row }) => row));
+    });
+
     it('should handle authentication tokens correctly', async () => {
       vi.mocked(getEnvString).mockImplementation((key) => {
         if (key === 'HF_TOKEN') {

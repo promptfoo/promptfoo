@@ -20,8 +20,8 @@ function castRowToVars(row: Record<string, unknown>): Vars {
 }
 
 // Constants for performance optimization thresholds
-/** Multiplier for increasing page size when rows are small (<256B each) */
-const SMALL_ROW_PAGE_SIZE_MULTIPLIER = 1.5;
+/** Largest page the datasets server returns; it rejects a larger `length` with 422 */
+const MAX_PAGE_SIZE = 100;
 
 /** Minimum pages remaining to trigger concurrent fetching */
 const CONCURRENT_FETCH_PAGES_THRESHOLD = 2;
@@ -162,7 +162,7 @@ export async function fetchHuggingFaceDataset(
 
   const tests: TestCase[] = [];
   let offset = 0;
-  let pageSize = 100; // Number of rows per request (adaptive)
+  let pageSize = MAX_PAGE_SIZE; // Number of rows per request (adaptive)
   const queryParamLimit = queryParams.get('limit');
   const userLimit = limit ?? (queryParamLimit ? Number.parseInt(queryParamLimit, 10) : undefined);
   let totalRows: number | undefined;
@@ -338,9 +338,6 @@ export async function fetchHuggingFaceDataset(
           } else if (avgRowSize > 1024) {
             // Medium rows (>1KB each)
             pageSize = Math.max(50, Math.min(pageSize, 75)); // Reduce to 50-75 rows
-          } else if (avgRowSize < 256) {
-            // Small rows (<256B each)
-            pageSize = Math.min(200, Math.round(pageSize * SMALL_ROW_PAGE_SIZE_MULTIPLIER)); // Can increase to up to 200 rows
           }
 
           if (pageSize !== previousPageSize) {
