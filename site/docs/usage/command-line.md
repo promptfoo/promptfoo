@@ -95,6 +95,8 @@ promptfoo eval --env-file .env,.env.local
 
 All specified files must exist or an error is thrown.
 
+Without `--env-file`, promptfoo loads `.env` from the current directory if it exists, and values already set in your shell take precedence over the file. Three environment variables change that default: `DOTENV_PATH` names a different file, `DOTENV_OVERRIDE=true` lets the file override your shell, and `DOTENV_ENCODING` sets its encoding. The older `DOTENV_CONFIG_PATH`, `DOTENV_CONFIG_OVERRIDE`, and `DOTENV_CONFIG_ENCODING` names are used when the newer one is unset. Files passed with `--env-file` are loaded afterwards and always override both.
+
 ## `promptfoo eval`
 
 By default the `eval` command will read the `promptfooconfig.yaml` configuration file in your current directory. But, if you're looking to override certain parameters you can supply optional arguments:
@@ -112,7 +114,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-range <start:end>`         | Only run tests whose zero-based index is in the range. The end index is exclusive.                       |
 | `--filter-sample <number>`           | Only run a random sample of N tests                                                                      |
 | `--filter-sample-seed <number>`      | Numeric seed used to make `--filter-sample` select the same tests on repeated runs                       |
-| `--filter-metadata <key=value>`      | Filter metadata by substring. Comma-separated values use OR; repeated flags always use AND for each key. |
+| `--filter-metadata <key=value>`      | Filter tests by metadata substring. Commas separate OR values (`\,` is a comma); repeated flags use AND. |
 | `--filter-pattern <pattern>`         | Only run tests whose description matches the regex pattern                                               |
 | `--filter-prompts <pattern>`         | Only run tests with prompts whose id or label matches the regex pattern                                  |
 | `--filter-providers <providers>`     | Only run tests with these providers (regex match on provider `id` or `label`)                            |
