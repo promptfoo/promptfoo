@@ -119,14 +119,18 @@ function isSecretParameter(
  * a benign name in a malformed URL, and `;`-separated query pairs (URLSearchParams
  * only splits on `&`). Linear: a single split plus per-segment checks.
  */
-function hasSecretFormSegment(text: string): boolean {
+function hasSecretFormSegment(
+  text: string,
+  preservePureTemplates = false,
+  compoundContext?: CompoundKeyContext,
+): boolean {
   for (const segment of text.split(/[?&;#]/)) {
     const equalsIndex = segment.indexOf('=');
     if (equalsIndex <= 0) {
       continue;
     }
     const rawValue = segment.slice(equalsIndex + 1);
-    if (!rawValue) {
+    if (!rawValue || (preservePureTemplates && isPureTemplateValue(rawValue))) {
       continue;
     }
     const decodedValue = decodeFormComponent(rawValue);
@@ -138,7 +142,7 @@ function hasSecretFormSegment(text: string): boolean {
     }
     const rawKey = segment.slice(0, equalsIndex);
     const key = decodeFormComponent(rawKey) ?? rawKey;
-    if (isSecretParameter(key, decodedValue)) {
+    if (isSecretParameterWithContext(key, decodedValue, compoundContext)) {
       return true;
     }
   }
@@ -161,8 +165,16 @@ function hasSecretFormSegment(text: string): boolean {
  * carry one of the structural markers above (the secret-named-key case is covered
  * by `hasSecretFormSegment`, which normalizes keys like `api_key` before matching).
  */
-function unparseableUrlMightLeakSecret(url: string): boolean {
-  return hasUrlUserinfo(url) || looksLikeSecret(url.trim()) || hasSecretFormSegment(url);
+function unparseableUrlMightLeakSecret(
+  url: string,
+  preservePureTemplates = false,
+  compoundContext?: CompoundKeyContext,
+): boolean {
+  return (
+    hasUrlUserinfo(url) ||
+    looksLikeSecret(url.trim()) ||
+    hasSecretFormSegment(url, preservePureTemplates, compoundContext)
+  );
 }
 
 /**
@@ -329,21 +341,48 @@ function getCompoundSecretObjectFieldKind(
   ) {
     return undefined;
   }
-  if (normalized === 'cookies' || normalized === 'cookiejar') {
+  if (/^(?:cookies|cookiejars?|basicauths|sessioncookies|subscriptionkeys)$/.test(normalized)) {
     return 'related';
   }
-  const kind = getCredentialFieldKind(name);
-  // Plural collections keep their shape even when a legacy secret suffix (such
-  // as `secrets`) also matches the name. Exact legacy fields are checked first.
-  if (kind === 'related' && normalized.endsWith('s')) {
-    return kind;
+  const singular = singularizeFieldName(name);
+  // Only actual credential collections inherit the private-value role. A
+  // credential word in tokenCounts/tokenSettings describes ordinary metadata.
+  if (normalizeFieldName(singular) !== normalized && isCompoundSecretObjectField(singular, value)) {
+    return 'related';
   }
-  return isCompoundSecretObjectField(name, value) ? 'credential' : kind;
+  if (isCompoundSecretObjectField(name, value)) {
+    return 'credential';
+  }
+  // Retain established qualified collections without treating every suffix as
+  // a credential qualifier. Inspect one bounded word-delimited By/For prefix.
+  const words = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+  const qualifier = /[-_\s=](?:by|for)[-_\s=]/i.exec(words);
+  if (qualifier && qualifier.index + qualifier[0].length < words.length) {
+    const prefix = words.slice(0, qualifier.index);
+    if (isCompoundSecretObjectField(singularizeFieldName(prefix), value)) {
+      return 'related';
+    }
+  }
+  return undefined;
 }
 
 // Carry the MCP-only policy and remaining object depth through existing encoded
 // JSON paths. Public URL/form sanitizers keep their established defaults.
-type CompoundKeyContext = { maxDepth: number };
+type CompoundKeyContext = { maxDepth: number; guardUrlPayload?: boolean };
+
+function isSecretParameterWithContext(
+  name: string,
+  value: string | undefined,
+  compoundContext?: CompoundKeyContext,
+): boolean {
+  return (
+    isSecretParameter(name, value) ||
+    (compoundContext !== undefined &&
+      name
+        .split(/[.\[\]]+/)
+        .some((part) => getCompoundSecretObjectFieldKind(part, value) !== undefined))
+  );
+}
 
 /**
  * Normalize field names for comparison (lowercase, drop hyphens, underscores,
@@ -1184,6 +1223,7 @@ function sanitizeJsonString(
   maxDepth: number,
   sanitizeUrls = false,
   redactCompoundKeys = false,
+  guardUrlPayload = false,
 ): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
@@ -1202,6 +1242,8 @@ function sanitizeJsonString(
         sanitizeUrls,
         false,
         redactCompoundKeys,
+        false,
+        guardUrlPayload,
       );
       return JSON.stringify(sanitized);
     }
@@ -1210,6 +1252,9 @@ function sanitizeJsonString(
       // A traversal/serialization failure is not a parse failure. Let MCP's
       // fail-closed boundary handle it instead of restoring the original JSON.
       throw error;
+    }
+    if (guardUrlPayload) {
+      return sanitizeUrlWithContext(str, { maxDepth: maxDepth - depth, guardUrlPayload });
     }
     if (looksLikeUrlEncodedFormData(str)) {
       const sanitizedUrlEncoded = sanitizeUrlEncodedStringWithContext(
@@ -1226,7 +1271,13 @@ function sanitizeJsonString(
       return REDACTED;
     }
   }
-  return str;
+  // JSON string/number literals are not containers, but their original quoted
+  // bytes can still carry URL credentials. Check the scalar without parsing or
+  // traversing its decoded value again.
+  return guardUrlPayload &&
+    unparseableUrlMightLeakSecret(str, false, { maxDepth: maxDepth - depth })
+    ? REDACTED
+    : str;
 }
 
 // `key=value` where the key is a typical form-data identifier (allow brackets
@@ -1298,12 +1349,16 @@ function redactNestedJsonValue(
   }
   let sanitizedSerialized: string | undefined;
   try {
-    const sanitized = sanitizeObject(parsed, {
-      sanitizeUrls: true,
-      maxDepth: compoundContext?.maxDepth ?? Number.POSITIVE_INFINITY,
-      redactCompoundKeys: compoundContext !== undefined,
-      throwOnError: compoundContext !== undefined,
-    });
+    const sanitized = sanitizeObjectWithContext(
+      parsed,
+      {
+        sanitizeUrls: true,
+        maxDepth: compoundContext?.maxDepth ?? Number.POSITIVE_INFINITY,
+        redactCompoundKeys: compoundContext !== undefined,
+        throwOnError: compoundContext !== undefined,
+      },
+      compoundContext?.guardUrlPayload,
+    );
     sanitizedSerialized = JSON.stringify(sanitized);
     // Canonical mode only serializes the bounded result, never the unbounded
     // original. A comparison failure must not discard already sanitized data.
@@ -1366,7 +1421,9 @@ function sanitizeUrlEncodedStringWithContext(
     // key smuggles its secret value past redaction (e.g. `api%ZZkey=AKIA...`).
     const decodedKey = decodeFormComponent(rawKey);
     const decodedValue = decodeFormComponent(rawValue);
-    const keyIsSecret = decodedKey !== undefined && isSecretParameter(decodedKey, decodedValue);
+    const keyIsSecret =
+      decodedKey !== undefined &&
+      isSecretParameterWithContext(decodedKey, decodedValue, compoundContext);
 
     // A secret-named key redacts its ENTIRE value before any template skip or
     // nested-JSON recursion, so a partial-template value (`password=abc{{x}}def`)
@@ -1415,11 +1472,14 @@ function sanitizePlainObject(
   isEnvMap: boolean,
   redactCompoundKeys: boolean,
   redactCredentialValues: boolean,
+  guardUrlPayload: boolean,
 ): any {
   const sanitized: any = {};
   let keySuffix = 0;
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
-  const compoundContext = redactCompoundKeys ? { maxDepth: maxDepth - depth - 1 } : undefined;
+  const compoundContext = redactCompoundKeys
+    ? { maxDepth: maxDepth - depth - 1, guardUrlPayload }
+    : undefined;
   for (const [rawKey, value] of Object.entries(obj)) {
     const isUrlKey = URL_REFERENCE.test(rawKey);
     const redactedKey =
@@ -1472,7 +1532,16 @@ function sanitizePlainObject(
               (isNonCredentialHeader(name) ||
                 SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()))))
             ? redactCompoundKeys
-              ? recursiveSanitize(item, depth + 2, maxDepth, sanitizeUrls, false, true)
+              ? recursiveSanitize(
+                  item,
+                  depth + 2,
+                  maxDepth,
+                  sanitizeUrls,
+                  false,
+                  true,
+                  false,
+                  guardUrlPayload,
+                )
               : item
             : REDACTED,
         ]);
@@ -1489,6 +1558,7 @@ function sanitizePlainObject(
         // A direct numeric related field can be a count. Once inside a
         // credential collection, numeric entries can themselves be credentials.
         redactCredentialValues || typeof value !== 'number',
+        guardUrlPayload,
       );
     } else if (
       typeof value === 'string' &&
@@ -1497,12 +1567,17 @@ function sanitizePlainObject(
       // Host fields may carry structured tool data. Inspect the original payload
       // before a synthetic scheme makes JSON/form recognition impossible.
       if (compoundContext) {
-        const sanitizedJson = redactNestedJsonValue(value, compoundContext, 'original');
+        const sanitizedJson = redactNestedJsonValue(
+          value,
+          { ...compoundContext, guardUrlPayload: true },
+          'original',
+        );
         if (sanitizedJson !== null || looksLikeUrlEncodedFormData(value)) {
           sanitized[key] = sanitizeUrlForLoggingWithContext(
             sanitizedJson ?? value,
             compoundContext,
             sanitizedJson !== null,
+            true,
           );
           continue;
         }
@@ -1540,7 +1615,11 @@ function sanitizePlainObject(
       // Own JSON/form traversal once for MCP URL fields. A generic recursive pass
       // followed by URL sanitization would revisit every nested payload. Direct
       // JSON strings keep the generic string path's canonical serialization.
-      const sanitizedJson = redactNestedJsonValue(value, compoundContext, 'canonical');
+      const sanitizedJson = redactNestedJsonValue(
+        value,
+        { ...compoundContext, guardUrlPayload: true },
+        'canonical',
+      );
       sanitized[key] = sanitizeUrlWithContext(
         sanitizedJson ?? value,
         compoundContext,
@@ -1556,6 +1635,8 @@ function sanitizePlainObject(
         sanitizeUrls,
         key === 'env',
         redactCompoundKeys,
+        false,
+        guardUrlPayload,
       );
       sanitized[key] =
         typeof sanitizedValue === 'string' &&
@@ -1579,6 +1660,7 @@ function recursiveSanitize(
   isEnvMap = false,
   redactCompoundKeys = false,
   redactCredentialValues = false,
+  guardUrlPayload = false,
 ): any {
   if (redactCredentialValues && (typeof obj === 'string' || typeof obj === 'number')) {
     return REDACTED;
@@ -1590,8 +1672,11 @@ function recursiveSanitize(
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
     return sanitizeUrls && URL_REFERENCE.test(obj)
-      ? sanitizeUrlWithContext(obj, redactCompoundKeys ? { maxDepth: maxDepth - depth } : undefined)
-      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactCompoundKeys);
+      ? sanitizeUrlWithContext(
+          obj,
+          redactCompoundKeys ? { maxDepth: maxDepth - depth, guardUrlPayload } : undefined,
+        )
+      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactCompoundKeys, guardUrlPayload);
   }
 
   // Handle primitives and null/undefined
@@ -1615,6 +1700,7 @@ function recursiveSanitize(
         false,
         redactCompoundKeys,
         redactCredentialValues,
+        guardUrlPayload,
       ),
     );
   }
@@ -1634,6 +1720,7 @@ function recursiveSanitize(
     isEnvMap,
     redactCompoundKeys,
     redactCredentialValues,
+    guardUrlPayload,
   );
 }
 
@@ -1656,6 +1743,14 @@ export function sanitizeObject(
     redactCompoundKeys?: boolean;
   } = {},
 ): any {
+  return sanitizeObjectWithContext(obj, options);
+}
+
+function sanitizeObjectWithContext(
+  obj: any,
+  options: NonNullable<Parameters<typeof sanitizeObject>[1]>,
+  guardUrlPayload = false,
+): any {
   const {
     context = 'object',
     throwOnError = false,
@@ -1672,7 +1767,16 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return recursiveSanitize(obj, 0, maxDepth, sanitizeUrls, false, redactCompoundKeys);
+      return recursiveSanitize(
+        obj,
+        0,
+        maxDepth,
+        sanitizeUrls,
+        false,
+        redactCompoundKeys,
+        false,
+        guardUrlPayload,
+      );
     }
 
     // Handle other primitives
@@ -1704,7 +1808,16 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth, sanitizeUrls, false, redactCompoundKeys);
+    return recursiveSanitize(
+      safeObj,
+      0,
+      maxDepth,
+      sanitizeUrls,
+      false,
+      redactCompoundKeys,
+      false,
+      guardUrlPayload,
+    );
   } catch (error) {
     if (throwOnError) {
       throw error;
@@ -1784,14 +1897,21 @@ function sanitizeUrlWithContext(
       return url;
     }
 
+    if (compoundContext && jsonAlreadySanitized) {
+      return url;
+    }
+
     // Exact URL fields reach this helper without the suffix-field JSON pass.
     // Own whole JSON before template handling, then retain the remaining URL
     // guards without recursively decoding that same payload a second time.
     if (compoundContext && !jsonAlreadySanitized) {
-      const nestedJson = redactNestedJsonValue(url, compoundContext, 'original');
+      const nestedJson = redactNestedJsonValue(
+        url,
+        { ...compoundContext, guardUrlPayload: true },
+        'original',
+      );
       if (nestedJson !== null) {
-        url = nestedJson;
-        jsonAlreadySanitized = true;
+        return nestedJson;
       }
     }
 
@@ -1800,7 +1920,7 @@ function sanitizeUrlWithContext(
     if (compoundContext && looksLikeUrlEncodedFormData(url)) {
       // Form values can contain an embedded URL. Keep the existing URL fallback
       // guard for its userinfo/query/fragment before taking the form-only path.
-      return unparseableUrlMightLeakSecret(url)
+      return unparseableUrlMightLeakSecret(url, true, compoundContext)
         ? REDACTED
         : sanitizeUrlEncodedStringWithContext(url, compoundContext);
     }
@@ -1836,13 +1956,13 @@ function sanitizeUrlWithContext(
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
-          isSecretParameter(key, value) ||
+          isSecretParameterWithContext(key, value, compoundContext) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
           // (`data=ok;api_key=sk-...`, legacy but still accepted by some stacks)
           // hides inside one value. Redact the whole value when it conceals one.
-          (value.includes(';') && hasSecretFormSegment(value))
+          (value.includes(';') && hasSecretFormSegment(value, false, compoundContext))
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         } else {
@@ -1887,7 +2007,7 @@ function sanitizeUrlWithContext(
     // sanitizeObject runs this on any field literally named `url`, so blanket
     // redaction would destroy non-secret bare domains, relative paths, and prose
     // in persisted eval results and user-facing config error messages.
-    return unparseableUrlMightLeakSecret(url) ? REDACTED : url;
+    return unparseableUrlMightLeakSecret(url, false, compoundContext) ? REDACTED : url;
   }
 }
 
@@ -1904,7 +2024,16 @@ function sanitizeUrlForLoggingWithContext(
   url: string,
   compoundContext?: CompoundKeyContext,
   jsonAlreadySanitized = false,
+  preserveFormTemplates = false,
 ): string {
+  if (compoundContext) {
+    const nestedJson = jsonAlreadySanitized
+      ? url
+      : redactNestedJsonValue(url, { ...compoundContext, guardUrlPayload: true }, 'original');
+    if (nestedJson !== null) {
+      return hasOpaqueLoggingPath(url) ? REDACTED : nestedJson;
+    }
+  }
   const sanitized = sanitizeUrlWithContext(url, compoundContext, jsonAlreadySanitized);
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
@@ -1937,11 +2066,17 @@ function sanitizeUrlForLoggingWithContext(
     parsed.pathname = sanitizedPathname;
     return isPathOnly ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
   } catch {
-    const hasOpaquePath = url
-      .split(/[/?#]/)
-      .some((segment) =>
-        OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decodeFormComponent(segment) ?? segment),
-      );
-    return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
+    return unparseableUrlMightLeakSecret(url, preserveFormTemplates, compoundContext) ||
+      hasOpaqueLoggingPath(url)
+      ? REDACTED
+      : sanitized;
   }
+}
+
+function hasOpaqueLoggingPath(url: string): boolean {
+  return url
+    .split(/[/?#]/)
+    .some((segment) =>
+      OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decodeFormComponent(segment) ?? segment),
+    );
 }

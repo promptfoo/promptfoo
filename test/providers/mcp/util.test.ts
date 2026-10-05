@@ -490,14 +490,17 @@ describe('sanitizeMcpToolData', () => {
     expect(sanitizeMcpToolData({ callbackUrl: value })).toEqual({ callbackUrl: expected });
   });
 
-  it.each(['callback?token=fixture', 'callback#api_key=fixture', 'https://user:fixture@host/'])(
-    'retains URL checks after sanitizing JSON containing %s',
-    (target) => {
-      const args = { callbackUrl: JSON.stringify({ target, page: 2 }) };
-      expect(sanitizeMcpToolData(args)).toEqual({ callbackUrl: '[REDACTED]' });
-      expect(args.callbackUrl).toContain('fixture');
-    },
-  );
+  it.each([
+    ['callback?token=fixture', '[REDACTED]'],
+    ['callback#api_key=fixture', '[REDACTED]'],
+    ['https://user:fixture@host/', 'https://***:***@host/'],
+  ])('preserves public JSON fields while sanitizing the URL leaf %s', (target, expectedTarget) => {
+    const args = { callbackUrl: JSON.stringify({ target, page: 2 }) };
+    expect(sanitizeMcpToolData(args)).toEqual({
+      callbackUrl: JSON.stringify({ target: expectedTarget, page: 2 }),
+    });
+    expect(args.callbackUrl).toContain('fixture');
+  });
 
   it('preserves public relative references in JSON-valued URL fields', () => {
     const args = { callbackUrl: JSON.stringify({ target: 'callback?page=2', page: 2 }) };
@@ -618,6 +621,166 @@ describe('sanitizeMcpToolData', () => {
     },
   );
 
+  it.each(['url', 'callbackUrl', 'callbackHost', 'apiHost', 'env.SERVICE_URL', 'env.SERVICE_HOST'])(
+    'preserves sanitized JSON and pure template forms in %s',
+    (name) => {
+      const wrap = (value: string) =>
+        name.startsWith('env.') ? { env: { [name.slice(4)]: value } } : { [name]: value };
+      const input = JSON.stringify({ target: 'https://example.test/?api_key=fixture', page: 2 });
+      const output = JSON.stringify({
+        target: 'https://example.test/?api_key=%5BREDACTED%5D',
+        page: 2,
+      });
+      expect(sanitizeMcpToolData(wrap(input))).toEqual(wrap(output));
+      expect(sanitizeMcpToolData(wrap('password={{password}}&page=2'))).toEqual(
+        wrap('password={{password}}&page=2'),
+      );
+      expect(sanitizeMcpToolData(wrap('password={{password}}&api_key=fixture&page=2'))).toEqual(
+        wrap('[REDACTED]'),
+      );
+    },
+  );
+
+  it.each(['tokenCount', 'tokenCounts', 'tokenSettings'])(
+    'preserves descriptive %s metadata while sanitizing descendants',
+    (name) => {
+      const input = { [name]: { input: 120, output: 30, databasePassword: 'fixture' } };
+      const output = { [name]: { input: 120, output: 30, databasePassword: '[REDACTED]' } };
+      expect(sanitizeMcpToolData(input)).toEqual(output);
+      expect(sanitizeMcpToolData({ [name]: 'public setting' })).toEqual({
+        [name]: 'public setting',
+      });
+      expect(sanitizeMcpToolData({ clientSecrets: input })).toEqual({
+        clientSecrets: {
+          [name]: { input: '[REDACTED]', output: '[REDACTED]', databasePassword: '[REDACTED]' },
+        },
+      });
+    },
+  );
+
+  it.each(['basicAuths', 'sessionCookies', 'subscriptionKeys', 'cookieJars'])(
+    'protects the explicit plural credential collection %s',
+    (name) => {
+      const input = { [name]: { sid: 'fixture', pin: 123456, enabled: false } };
+      expect(sanitizeMcpToolData(input)).toEqual({
+        [name]: { sid: '[REDACTED]', pin: '[REDACTED]', enabled: false },
+      });
+      expect(sanitizeObject(input, { sanitizeUrls: true, maxDepth: 64 })).toEqual(input);
+    },
+  );
+
+  it.each(['url', 'callbackUrl', 'apiHost'])(
+    'guards quoted JSON scalar URLs within %s without dropping public siblings',
+    (name) => {
+      for (const target of [
+        'callback?token=fixture-quote-secret',
+        'https://example.test/?token=fixture-quote-secret',
+      ]) {
+        const input = { [name]: JSON.stringify({ target: JSON.stringify(target), page: 2 }) };
+        const original = structuredClone(input);
+        expect(sanitizeMcpToolData(input)).toEqual({
+          [name]: JSON.stringify({ target: '[REDACTED]', page: 2 }),
+        });
+        expect(input).toEqual(original);
+      }
+      const input = { [name]: JSON.stringify({ target: JSON.stringify('public value'), page: 2 }) };
+      expect(sanitizeMcpToolData(input)).toEqual(input);
+    },
+  );
+
+  it.each(['apiBaseUrl', 'server_url', 'env.OPENAI_BASE_URL'])(
+    'retains the existing stricter logging template policy for %s',
+    (name) => {
+      const value = 'password={{password}}&page=2';
+      const input = name.startsWith('env.')
+        ? { env: { [name.slice(4)]: value } }
+        : { [name]: value };
+      const expected = name.startsWith('env.')
+        ? { env: { [name.slice(4)]: '[REDACTED]' } }
+        : { [name]: '[REDACTED]' };
+      expect(sanitizeMcpToolData(input)).toEqual(expected);
+      expect(sanitizeObject(input, { sanitizeUrls: true })).toEqual(expected);
+    },
+  );
+
+  it.each([
+    'basicAuth',
+    'basicAuths',
+    'sessionCookie',
+    'sessionCookies',
+    'subscriptionKey',
+    'subscriptionKeys',
+    'authHeaders',
+    'cookies',
+    'cookieJar',
+    'cookieJars',
+    'sessionCookies[0]',
+    'auth.subscriptionKey',
+  ])('protects the explicit MCP alias %s across form and URL channels', (name) => {
+    const pair = `${name}=short-fixture`;
+    const safePair = `${name}=%5BREDACTED%5D`;
+    for (const [value, expected] of [
+      [pair, safePair],
+      [
+        `https://example.test/?${pair}`,
+        new URL(`https://example.test/?${safePair}`).href.replace(
+          'sessionCookies[0]',
+          'sessionCookies%5B0%5D',
+        ),
+      ],
+      [`https://example.test/#${pair}`, `https://example.test/#${safePair}`],
+      [`https://{{ host }}/?${pair}`, `https://{{ host }}/?${safePair}`],
+    ]) {
+      const input = { one: { two: { three: { four: { five: { value } } } } } };
+      const original = structuredClone(input);
+      expect(sanitizeMcpToolData(input)).toEqual({
+        one: { two: { three: { four: { five: { value: expected } } } } },
+      });
+      // The legacy generic `auth` segment is already credential-bearing.
+      expect(sanitizeObject(input, { sanitizeUrls: true, maxDepth: 64 })).toEqual(
+        name === 'auth.subscriptionKey'
+          ? { one: { two: { three: { four: { five: { value: expected } } } } } }
+          : input,
+      );
+      expect(input).toEqual(original);
+    }
+    const template = { payload: `${name}={{ credential }}` };
+    expect(sanitizeMcpToolData(template)).toEqual(template);
+  });
+
+  it.each([
+    'cookieSettings',
+    'cookieJarSettings',
+    'basicAuthSettings',
+    'sessionCookieSettings',
+    'subscriptionKeySettings',
+    'authHeaderSettings',
+    'authHeader',
+    'tokenSettings',
+    'tokenCount',
+    'tokenCounts',
+  ])('preserves descriptive %s fields while recursively checking credential children', (name) => {
+    const input = { [name]: { label: 'public', count: 3, databasePassword: 'fixture' } };
+    const expected = { [name]: { label: 'public', count: 3, databasePassword: '[REDACTED]' } };
+    for (const encode of [
+      (value: unknown) => value,
+      (value: unknown) => ({ payload: JSON.stringify(value) }),
+      (value: unknown) => ({ payload: `data=${encodeURIComponent(JSON.stringify(value))}` }),
+    ]) {
+      expect(sanitizeMcpToolData(encode(input))).toEqual(encode(expected));
+    }
+    expect(sanitizeMcpToolData({ [name]: 'public setting' })).toEqual({ [name]: 'public setting' });
+  });
+
+  it.each(['apiKeysByTenant', 'apiKeyForTenant', 'api_keys_by_tenant', 'api-key-for-tenant'])(
+    'retains word-delimited qualified credential collections for %s',
+    (name) => {
+      expect(sanitizeMcpToolData({ [name]: { a: 'fixture', count: 3 } })).toEqual({
+        [name]: { a: '[REDACTED]', count: '[REDACTED]' },
+      });
+    },
+  );
+
   it.each(['tokenUsages', 'tokenBudgets', 'signatureAlgorithms', 'passwordPolicies'])(
     'preserves ordinary plural %s metadata and protects nested credentials',
     (name) => {
@@ -656,7 +819,7 @@ describe('sanitizeMcpToolData', () => {
         [json, safeJson],
         [`data=${encodeURIComponent(json)}`, `data=${encodeURIComponent(safeJson)}`],
         ['databasePassword=host-fixture', '[REDACTED]'],
-        ['{"target":"callback?token=host-fixture"}', '[REDACTED]'],
+        ['{"target":"callback?token=host-fixture"}', '{"target":"[REDACTED]"}'],
       ]) {
         const fields = wrap(value);
         const args = { one: { two: { three: { four: { five: fields } } } } };
