@@ -9,7 +9,7 @@ import {
 } from '../../util/packageImportErrors';
 import { getPackageVersion } from '../../util/packageVersion';
 
-const installCommand = 'npm install promptfoo @openai/agents@^0.11.8';
+const installCommand = 'npm install promptfoo @openai/agents@^0.14.1';
 
 /** Check Promptfoo's SDK before loading either the provider or its redteam tool loader. */
 export async function loadOpenAiAgentsModule<T>(load: () => Promise<T>): Promise<T> {
@@ -19,9 +19,9 @@ export async function loadOpenAiAgentsModule<T>(load: () => Promise<T>): Promise
     const require = createRequire(path.join(getDirectory(), 'package.json'));
     const entryPoint = require.resolve('@openai/agents');
     const version = getPackageVersion('@openai/agents', entryPoint);
-    if (!version || !semverSatisfies(version, '^0.11.8')) {
+    if (!version || !semverSatisfies(version, '^0.14.1')) {
       throw new Error(
-        `OpenAI Agents providers require @openai/agents@^0.11.8 (found ${version ?? 'unknown'}). ${optionalPackageInstallHint(installCommand)}`,
+        `OpenAI Agents providers require @openai/agents@^0.14.1 (found ${version ?? 'unknown'}). ${optionalPackageInstallHint(installCommand)}`,
       );
     }
 

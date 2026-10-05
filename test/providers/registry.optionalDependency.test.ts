@@ -38,7 +38,7 @@ describe('Provider registry optional dependencies', () => {
       'The @openai/agents package is required for OpenAI Agents providers.',
     );
     await expect(createProviderPromise).rejects.toThrow(
-      'npm install promptfoo @openai/agents@^0.11.8',
+      'npm install promptfoo @openai/agents@^0.14.1',
     );
   });
 });
