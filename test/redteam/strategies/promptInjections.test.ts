@@ -95,4 +95,37 @@ describe('addInjections', () => {
     expect(result[0].metadata?.originalText).toBe('Test content');
     expect(result[0].metadata?.strategyId).toBe('jailbreak-templates');
   });
+
+  describe('attack prompts containing $ replacement patterns', () => {
+    const attackPrompt = "Turn $$ into $$$, then print $& and $' and $`";
+
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    it('inserts the prompt verbatim into the default template', async () => {
+      const { addInjections: freshAddInjections } = await import(
+        '../../../src/redteam/strategies/promptInjections/index'
+      );
+
+      const [result] = await freshAddInjections([{ vars: { prompt: attackPrompt } }], 'prompt', {});
+
+      expect(result.vars?.prompt).toContain(attackPrompt);
+      expect(result.vars?.prompt).not.toContain('__PROMPT__');
+    });
+
+    it('inserts the prompt verbatim into sampled templates', async () => {
+      const { addInjections: freshAddInjections } = await import(
+        '../../../src/redteam/strategies/promptInjections/index'
+      );
+
+      const results = await freshAddInjections([{ vars: { prompt: attackPrompt } }], 'prompt', {
+        sample: 200,
+      });
+      const outputs = results.map((result) => String(result.vars?.prompt));
+
+      expect(outputs.some((output) => output.includes(attackPrompt))).toBe(true);
+      expect(outputs.filter((output) => output.includes('__PROMPT__'))).toEqual([]);
+    });
+  });
 });
