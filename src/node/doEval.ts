@@ -353,6 +353,16 @@ function getReplayPrompts(
   return { prompts: closest ?? columns.map(toReplayPrompt) };
 }
 
+/** How many results-table columns the evaluator builds for a test suite. */
+function countColumns(testSuite: TestSuite): number {
+  let count = 0;
+  for (const provider of testSuite.providers) {
+    const allowed = testSuite.providerPromptMap?.[getProviderIdentifier(provider)];
+    count += testSuite.prompts.filter((prompt) => isPromptAllowed(prompt, allowed)).length;
+  }
+  return count;
+}
+
 /** Makes a resumed or retried eval build the prompt columns of its first run again. */
 function applyReplayPrompts(testSuite: TestSuite, columns: SavedColumn[]): void {
   const { prompts, providerPromptMap } = getReplayPrompts(columns, testSuite);
@@ -686,7 +696,6 @@ async function doEvalWithEnv(
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
     let resumeEval: Eval | undefined;
     let retryErrorResultIds: string[] | undefined;
-    let retryErrorColumnProviders: string[] | undefined;
     const resumeId =
       resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
     if (resumeRaw) {
@@ -742,11 +751,6 @@ async function doEvalWithEnv(
         logger.info('✅ No ERROR results found in the latest evaluation');
         return latestEval;
       }
-
-      // The evaluator replaces the columns of the eval record, so they are noted before it runs.
-      retryErrorColumnProviders = Array.isArray(latestEval.prompts)
-        ? latestEval.prompts.map((prompt) => prompt.provider)
-        : [];
 
       logger.info(`Found ${retryErrorResultIds.length} ERROR results to retry`);
 
@@ -804,6 +808,20 @@ async function doEvalWithEnv(
         `Stored provider filter "${persistedProviderFilter}" matched no providers while ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id}. The evaluation was not changed.`,
         isCliInvocation,
       );
+    }
+    // Results are addressed by column, and a retry removes the errors it replaces. With
+    // another number of columns, for example because a provider no longer resolves, the
+    // retried results would land in the columns of other providers. An extension can still
+    // change the providers and prompts before the run, so such a suite is not judged here.
+    if (resumeEval && retryErrorResultIds && !testSuite.extensions?.length) {
+      const savedColumns = Array.isArray(resumeEval.prompts) ? resumeEval.prompts.length : 0;
+      const columns = countColumns(testSuite);
+      if (savedColumns > 0 && columns !== savedColumns) {
+        return failEvalRun(
+          `Cannot retry errors for evaluation ${resumeEval.id}: it has ${savedColumns} result ${savedColumns === 1 ? 'column' : 'columns'}, but its providers and prompts now make ${columns}. A provider or prompt of the first run is no longer part of it. The evaluation was not changed.`,
+          isCliInvocation,
+        );
+      }
     }
     if (resumeEval) {
       cliState.resume = true;
@@ -1207,12 +1225,8 @@ async function doEvalWithEnv(
         const errorResultIds = cliState._retryErrorResultIds;
         try {
           // Only an error that another result has replaced is removed. A cell that did not
-          // run again, for example because its provider no longer resolves, keeps its error.
-          const { replaced, kept } = await findReplacedErrorResults(
-            ret.id,
-            errorResultIds,
-            retryErrorColumnProviders,
-          );
+          // run again, for example because the run stopped early, keeps its error.
+          const { replaced, kept } = await findReplacedErrorResults(ret.id, errorResultIds);
           await deleteErrorResults(replaced);
           await recalculatePromptMetrics(ret);
           logger.debug(`Cleaned up ${replaced.length} old ERROR results after successful retry`);

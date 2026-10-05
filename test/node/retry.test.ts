@@ -28,10 +28,8 @@ const dbMocks = vi.hoisted(() => {
   // The results of the eval once the retry has run.
   const resultRowsAll = vi.fn(async () =>
     errorRows.flatMap(({ id }, testIdx) => [
-      { id, testIdx, promptIdx: 0, provider: 'echo' },
-      ...(notRetried.includes(id)
-        ? []
-        : [{ id: `${id}-retried`, testIdx, promptIdx: 0, provider: 'echo' }]),
+      { id, testIdx, promptIdx: 0 },
+      ...(notRetried.includes(id) ? [] : [{ id: `${id}-retried`, testIdx, promptIdx: 0 }]),
     ]),
   );
   const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);

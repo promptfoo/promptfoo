@@ -768,29 +768,7 @@ describe('retry command', () => {
       });
     });
 
-    it('does not count a result of a provider that had another column', async () => {
-      // The eval had a column for each of two providers. The first no longer resolves, so
-      // the second ran in the first column, where the result is not a retry of that cell.
-      const first = { id: 'first-provider' };
-      const second = { id: 'second-provider' };
-      const { evalId, id } = await insertRows([
-        { name: 'first-error', testIdx: 0, promptIdx: 0, provider: first, isError: true },
-        { name: 'second-error', testIdx: 0, promptIdx: 1, provider: second, isError: true },
-        { name: 'second-shifted', testIdx: 0, promptIdx: 0, provider: second },
-      ]);
-      const captured = [id('first-error'), id('second-error')];
-
-      await expect(
-        findReplacedErrorResults(evalId, captured, ['first-provider', 'second-provider']),
-      ).resolves.toEqual({ replaced: [], kept: captured });
-      // Without the saved columns, only the cell is known.
-      await expect(findReplacedErrorResults(evalId, captured)).resolves.toEqual({
-        replaced: [id('first-error')],
-        kept: [id('second-error')],
-      });
-    });
-
-    it('counts a result of a provider that the eval did not have before', async () => {
+    it('goes by the cell and not by the provider of the result in it', async () => {
       // A provider whose id comes from the environment, such as a URL that was corrected
       // for the retry, runs in its own column under a new id.
       const { evalId, id } = await insertRows([
@@ -804,50 +782,32 @@ describe('retry command', () => {
         { name: 'retried', testIdx: 0, promptIdx: 1, provider: { id: 'http://new.example/chat' } },
       ]);
 
-      await expect(
-        findReplacedErrorResults(
-          evalId,
-          [id('error')],
-          ['other-provider', 'http://old.example/chat'],
-        ),
-      ).resolves.toEqual({ replaced: [id('error')], kept: [] });
+      await expect(findReplacedErrorResults(evalId, [id('error')])).resolves.toEqual({
+        replaced: [id('error')],
+        kept: [],
+      });
     });
 
-    it('identifies a provider by its label when it has one', async () => {
+    it('finds the replaced errors of an eval with many other results', async () => {
+      const passing = Array.from({ length: 600 }, (_, index) => ({
+        name: `pass-${index}`,
+        testIdx: index + 10,
+        promptIdx: index % 3,
+        provider: target,
+      }));
       const { evalId, id } = await insertRows([
-        {
-          name: 'own-error',
-          testIdx: 0,
-          promptIdx: 0,
-          provider: { id: 'http://old.example/chat', label: 'target' },
-          isError: true,
-        },
-        // The same label under a new id is the same provider.
-        {
-          name: 'own-retried',
-          testIdx: 0,
-          promptIdx: 0,
-          provider: { id: 'http://new.example/chat', label: 'target' },
-        },
-        {
-          name: 'other-error',
-          testIdx: 1,
-          promptIdx: 1,
-          provider: { id: 'echo', label: 'other' },
-          isError: true,
-        },
-        // The label of the first column in the second one.
-        {
-          name: 'other-shifted',
-          testIdx: 1,
-          promptIdx: 1,
-          provider: { id: 'http://new.example/chat', label: 'target' },
-        },
+        ...passing,
+        { name: 'error-0', testIdx: 0, promptIdx: 0, provider: target, isError: true },
+        { name: 'retried-0', testIdx: 0, promptIdx: 0, provider: target },
+        { name: 'error-1', testIdx: 1, promptIdx: 2, provider: target, isError: true },
+        // The same test in another column, and the same column in another test.
+        { name: 'pass-near-1a', testIdx: 1, promptIdx: 1, provider: target },
+        { name: 'pass-near-1b', testIdx: 2, promptIdx: 2, provider: target },
       ]);
 
       await expect(
-        findReplacedErrorResults(evalId, [id('own-error'), id('other-error')], ['target', 'other']),
-      ).resolves.toEqual({ replaced: [id('own-error')], kept: [id('other-error')] });
+        findReplacedErrorResults(evalId, [id('error-0'), id('error-1')]),
+      ).resolves.toEqual({ replaced: [id('error-0')], kept: [id('error-1')] });
     });
 
     it('does no database work without captured errors', async () => {

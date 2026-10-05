@@ -144,64 +144,49 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
  * Splits the ERROR results captured before a retry into the ones another result has replaced
  * and the ones to keep.
  *
- * An error is replaced by another result in its cell, which is how the evaluator decides what
- * to run again. A cell that did not run, for example because its provider no longer resolves
- * or because the run stopped early, has nothing in place of its error.
- *
- * `savedColumnProviders` names the provider of each column before the retry. A result of a
- * provider that had a different column does not count: it is there because the columns no
- * longer line up with the saved ones, as happens when a provider before it is gone.
+ * An error is replaced by another result in its cell (test and column), which is how the
+ * evaluator decides what to run again. A cell that did not run, for example because the run
+ * stopped early, has nothing in place of its error.
  */
 export async function findReplacedErrorResults(
   evalId: string,
   errorResultIds: string[],
-  savedColumnProviders: string[] = [],
 ): Promise<{ replaced: string[]; kept: string[] }> {
   if (errorResultIds.length === 0) {
     return { replaced: [], kept: [] };
   }
 
   const db = await getDb();
+  // Only the cells that hold an ERROR result are read, so this grows with the errors and
+  // not with the eval.
   const rows = await db
     .select({
       id: evalResultsTable.id,
       testIdx: evalResultsTable.testIdx,
       promptIdx: evalResultsTable.promptIdx,
-      // What a column records for its provider: the label, or else the id.
-      provider: sql<
-        string | null
-      >`COALESCE(NULLIF(json_extract(${evalResultsTable.provider}, '$.label'), ''), json_extract(${evalResultsTable.provider}, '$.id'))`,
     })
     .from(evalResultsTable)
-    .where(eq(evalResultsTable.evalId, evalId))
+    .where(
+      and(
+        eq(evalResultsTable.evalId, evalId),
+        sql`(${evalResultsTable.testIdx}, ${evalResultsTable.promptIdx}) IN (
+          SELECT test_idx, prompt_idx FROM ${evalResultsTable}
+          WHERE eval_id = ${evalId} AND failure_reason = ${ResultFailureReason.ERROR}
+        )`,
+      ),
+    )
     .all();
 
   const captured = new Set(errorResultIds);
   const getCell = (row: { testIdx: number; promptIdx: number }) =>
     `${row.testIdx}:${row.promptIdx}`;
-  const otherResults = new Map<string, Array<string | null>>();
-  for (const row of rows) {
-    if (!captured.has(row.id)) {
-      const cell = getCell(row);
-      otherResults.set(cell, [...(otherResults.get(cell) ?? []), row.provider]);
-    }
-  }
-
+  const replacedCells = new Set(rows.filter((row) => !captured.has(row.id)).map(getCell));
   const replaced = new Set<string>();
   const kept = new Set<string>();
   for (const row of rows) {
-    if (!captured.has(row.id)) {
-      continue;
+    if (captured.has(row.id)) {
+      (replacedCells.has(getCell(row)) ? replaced : kept).add(row.id);
     }
-    const isReplaced = otherResults
-      .get(getCell(row))
-      ?.some(
-        (provider) =>
-          provider === null ||
-          provider === row.provider ||
-          !savedColumnProviders.includes(provider),
-      );
-    (isReplaced ? replaced : kept).add(row.id);
   }
 
   return {
@@ -451,10 +436,6 @@ async function retryWithConfig(
   { testSuite, commandLineOptions, config }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
 ) {
   const evalId = originalEval.id;
-  // The evaluator replaces the columns of the eval record, so they are noted before it runs.
-  const savedColumnProviders = Array.isArray(originalEval.prompts)
-    ? originalEval.prompts.map((prompt) => prompt.provider)
-    : [];
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
@@ -517,11 +498,7 @@ async function retryWithConfig(
     let errorRowsDeleted = false;
     try {
       // Only an error that another result has replaced is removed.
-      const { replaced, kept } = await findReplacedErrorResults(
-        evalId,
-        errorResultIds,
-        savedColumnProviders,
-      );
+      const { replaced, kept } = await findReplacedErrorResults(evalId, errorResultIds);
       await deleteErrorResults(replaced);
       errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);

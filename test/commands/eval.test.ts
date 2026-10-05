@@ -2233,49 +2233,108 @@ describe('evalCommand', () => {
   });
 
   it('should only delete the error results that the retry replaced', async () => {
-    const column = { raw: 'retry prompt', label: 'Retry', config: {} };
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
     latestEval.prompts = [
-      { ...column, provider: 'first-target' },
-      { ...column, provider: 'second-target' },
+      { raw: 'retry prompt', label: 'Retry', config: {}, provider: 'selected-target' },
     ];
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
     vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
+    // The run stopped before it reached the first of the two.
     vi.mocked(findReplacedErrorResults).mockResolvedValueOnce({
       replaced: ['result-2'],
       kept: ['result-1'],
     });
-    // The first provider of the saved eval no longer resolves.
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config: {} as UnifiedConfig,
       testSuite: {
         prompts: [],
-        providers: [{ id: () => 'echo', label: 'second-target', callApi: vi.fn() } as ApiProvider],
+        providers: [
+          { id: () => 'echo', label: 'selected-target', callApi: vi.fn() } as ApiProvider,
+        ],
       },
       basePath: path.resolve('/'),
     });
-    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
-      // The evaluator gives the eval record the columns of this run.
-      const retried = evalRecord as Eval;
-      retried.prompts = [{ ...column, provider: 'second-target' }];
-      return retried;
-    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
 
     try {
       await doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {});
 
-      // The columns are the ones the eval had before the retry.
-      expect(findReplacedErrorResults).toHaveBeenCalledWith(
-        latestEval.id,
-        ['result-1', 'result-2'],
-        ['first-target', 'second-target'],
-      );
+      expect(findReplacedErrorResults).toHaveBeenCalledWith(latestEval.id, [
+        'result-1',
+        'result-2',
+      ]);
       expect(deleteErrorResults).toHaveBeenCalledWith(['result-2']);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
       expect(warnAboutKeptErrorResults).toHaveBeenCalledWith(['result-1']);
     } finally {
       latestSpy.mockRestore();
     }
+  });
+
+  describe('retrying errors when the saved columns cannot be laid out again', () => {
+    const column = { raw: 'retry prompt', label: 'Retry', config: {} };
+    const secondTarget = () =>
+      ({ id: () => 'echo', label: 'second-target', callApi: vi.fn() }) as ApiProvider;
+
+    /** A saved eval with a column for each of two providers, of which only the second resolves. */
+    function mockEvalWithMissingProvider(testSuite: Partial<TestSuite> = {}) {
+      const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+      latestEval.prompts = [
+        { ...column, provider: 'first-target' },
+        { ...column, provider: 'second-target' },
+      ];
+      const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+      vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: { prompts: [], providers: [secondTarget()], ...testSuite },
+        basePath: path.resolve('/'),
+      });
+      return { latestEval, latestSpy };
+    }
+
+    it('should not run, so that no result lands in the column of another provider', async () => {
+      const { latestEval, latestSpy } = mockEvalWithMissingProvider();
+
+      try {
+        await expect(
+          doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+        ).rejects.toThrow(
+          `Cannot retry errors for evaluation ${latestEval.id}: it has 2 result columns, but its providers and prompts now make 1. A provider or prompt of the first run is no longer part of it. The evaluation was not changed.`,
+        );
+
+        expect(evaluate).not.toHaveBeenCalled();
+        expect(findReplacedErrorResults).not.toHaveBeenCalled();
+        expect(deleteErrorResults).not.toHaveBeenCalled();
+        expect(recalculatePromptMetrics).not.toHaveBeenCalled();
+        expect(cliState.resume).toBe(false);
+        expect(cliState.retryMode).toBe(false);
+        expect(cliState._retryErrorResultIds).toBeUndefined();
+      } finally {
+        latestSpy.mockRestore();
+      }
+    });
+
+    it('should leave it to the run when an extension can still change the suite', async () => {
+      const { latestEval, latestSpy } = mockEvalWithMissingProvider({
+        extensions: ['file://hooks.js:beforeAll'],
+      });
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+
+      try {
+        await expect(
+          doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+        ).resolves.toBe(latestEval);
+
+        expect(evaluate).toHaveBeenCalledTimes(1);
+      } finally {
+        latestSpy.mockRestore();
+      }
+    });
   });
 
   it('should preserve error results when the stored provider filter matches no providers', async () => {
