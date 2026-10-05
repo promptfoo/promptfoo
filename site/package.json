@@ -53,6 +53,7 @@
     "jsdom": "^29.0.0",
     "langium": "4.4.0",
     "lucide-react": "^1.0.0",
+    "monaco-editor": "0.57.0",
     "motion": "^12.34.3",
     "prism-react-renderer": "^2.4.1",
     "prismjs": "^1.30.0",

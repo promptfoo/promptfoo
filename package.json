@@ -222,12 +222,12 @@
     "webpack": "5.111.1",
     "dompurify": "3.4.16",
     "monaco-editor": {
-      ".": "0.56.0",
+      ".": "0.57.0",
       "dompurify": "3.4.16"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.280",
+    "@anthropic-ai/claude-agent-sdk": "0.3.282",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -285,7 +285,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.280",
+    "@anthropic-ai/claude-agent-sdk": "0.3.282",
     "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
