@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import { createServer } from 'node:net';
@@ -82,10 +83,19 @@ function createRawPath(file: Buffer, context: TestContext, create: () => void): 
     if (
       !Buffer.from(file.toString('utf8')).equals(file) &&
       error instanceof Error &&
-      'code' in error &&
-      (error.code === 'EILSEQ' || error.code === 'EINVAL')
+      'code' in error
     ) {
-      context.skip(`Filesystem rejects invalid UTF-8 names (${error.code})`);
+      if (error.code === 'EILSEQ' || error.code === 'EINVAL') {
+        context.skip(`Filesystem rejects invalid UTF-8 names (${error.code})`);
+      }
+      if (process.platform === 'win32' && error.code === 'ENOENT') {
+        // Windows may reject invalid UTF-8 as ENOENT. Prove the parent is writable
+        // with a valid name before treating that error as a fixture limitation.
+        const probe = path.join(path.dirname(file.toString('utf8')), `.raw-name-${randomUUID()}`);
+        fs.writeFileSync(probe, '', { flag: 'wx' });
+        fs.unlinkSync(probe);
+        context.skip('Filesystem rejects invalid UTF-8 names (ENOENT with a writable parent)');
+      }
     }
     throw error;
   }
