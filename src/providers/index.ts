@@ -123,8 +123,8 @@ async function createApiProvider(
   const providerOptions: ProviderOptions = {
     id: renderedId,
     config: {
+      ...(basePath !== undefined && { basePath }),
       ...renderedConfig,
-      basePath,
     },
     env: mergedEnv,
   };
@@ -362,41 +362,39 @@ export function resolveProviderConfigs(
   return results;
 }
 
-async function loadProviderBatch<T>(
-  loads: Promise<T>[],
-  providers: (value: T) => ApiProvider[],
+async function loadProviderBatch(
+  loads: Promise<ApiProvider | ApiProvider[]>[],
   callerOwned = new Set<ApiProvider>(),
-): Promise<T[]> {
+): Promise<ApiProvider[]> {
   const created = new Set<ApiProvider>();
+  let failed = false;
+  const cleanup = async (provider: ApiProvider) => {
+    try {
+      await cleanupProvider(provider);
+    } catch (error) {
+      logger.warn('Provider cleanup failed after provider load error', { error });
+    }
+  };
   const tracked = loads.map(async (load) => {
     const value = await load;
-    for (const provider of providers(value)) {
-      created.add(provider);
+    const providers = Array.isArray(value) ? value : [value];
+    const cleanups: Promise<void>[] = [];
+    for (const provider of providers) {
+      if (!callerOwned.has(provider) && !created.has(provider)) {
+        created.add(provider);
+        if (failed) {
+          cleanups.push(cleanup(provider));
+        }
+      }
     }
-    return value;
+    await Promise.all(cleanups);
+    return providers;
   });
   try {
-    return await Promise.all(tracked);
+    return (await Promise.all(tracked)).flat();
   } catch (error) {
-    const cleaned = new Set<ApiProvider>();
-    const cleanup = async (provider: ApiProvider) => {
-      if (callerOwned.has(provider) || cleaned.has(provider)) {
-        return;
-      }
-      cleaned.add(provider);
-      try {
-        await cleanupProvider(provider);
-      } catch (error) {
-        logger.warn('Provider cleanup failed after provider load error', { error });
-      }
-    };
-    await Promise.allSettled([...created].map(cleanup));
-    for (const load of tracked) {
-      void load.then(
-        (value) => Promise.allSettled(providers(value).map(cleanup)),
-        () => undefined,
-      );
-    }
+    failed = true;
+    await Promise.all([...created].map(cleanup));
     throw error;
   }
 }
@@ -421,7 +419,6 @@ async function loadProvidersFromFile(
       invariant(config.id, `Provider config in ${relativePath} must have an id`);
       return loadApiProvider(config.id, { options: config, basePath, env });
     }),
-    (provider) => [provider],
   );
 }
 
@@ -460,7 +457,7 @@ async function loadApiProvidersWithEnv(
   } else if (isApiProvider(providerPaths)) {
     return [providerPaths];
   } else if (Array.isArray(providerPaths)) {
-    const providerResults = await loadProviderBatch(
+    return loadProviderBatch(
       providerPaths.map(async (provider, idx) => {
         if (isApiProvider(provider)) {
           return [provider];
@@ -502,10 +499,8 @@ async function loadApiProvidersWithEnv(
           }
         }
       }),
-      (providers) => providers,
       new Set(providerPaths.filter(isApiProvider)),
     );
-    return providerResults.flat();
   }
   throw new Error('Invalid providers list');
 }

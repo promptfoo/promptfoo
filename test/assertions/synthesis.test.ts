@@ -9,6 +9,7 @@ import {
 import { getDefaultProviders } from '../../src/providers/defaults';
 import { loadApiProvider } from '../../src/providers/index';
 import { createMockProvider } from '../factories/provider';
+import { createDeferred } from '../util/utils';
 
 import type { ApiProvider, TestCase } from '../../src/types/index';
 
@@ -184,6 +185,53 @@ describe('synthesize', () => {
     ).rejects.toBe(conversionError);
     expect(cleanedBeforeLastResponse).toBe(false);
     expect(provider.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('bounds cleanup when a failed conversion has a sibling that ignores cancellation', async () => {
+    vi.useFakeTimers();
+    const stalled = createDeferred<void>();
+    const conversionError = new Error('conversion failed');
+    const signals: AbortSignal[] = [];
+    const provider = createMockProvider({ cleanup: true });
+    provider.callApi
+      .mockResolvedValueOnce({
+        output: {
+          questions: [
+            { label: 'Fail', question: 'Fail?' },
+            { label: 'Wait', question: 'Wait?' },
+          ],
+        },
+      })
+      .mockImplementation(async (prompt, _context, options) => {
+        signals.push(options!.abortSignal!);
+        if (prompt.includes('Fail?')) {
+          throw conversionError;
+        }
+        stalled.resolve();
+        return new Promise<never>(() => {});
+      });
+    vi.mocked(loadApiProvider).mockResolvedValue(provider);
+
+    try {
+      const result = synthesize({
+        provider: 'fixture-provider',
+        prompts: ['hello'],
+        tests: [],
+        numQuestions: 2,
+      });
+      const rejected = expect(result).rejects.toBe(conversionError);
+      await stalled.promise;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(signals).toHaveLength(2);
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(provider.cleanup).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await rejected;
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('leaves the shared default provider open after test-suite synthesis', async () => {

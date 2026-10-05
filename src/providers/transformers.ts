@@ -169,7 +169,7 @@ async function getOrCreatePipeline(
   options: TransformersBaseOptions,
   owned: Set<PipelineEntry>,
 ): Promise<Pipeline> {
-  ensureCleanupRegistered();
+  providerRegistry.register(pipelineCleanup);
   const cacheKey = getPipelineCacheKey(task, model, options);
 
   const cached = pipelineCache.get(cacheKey);
@@ -326,12 +326,6 @@ async function disposePipelines(): Promise<void> {
 }
 
 const pipelineCleanup = { shutdown: disposePipelines };
-
-function ensureCleanupRegistered(): void {
-  if (!providerRegistry.has(pipelineCleanup)) {
-    providerRegistry.register(pipelineCleanup);
-  }
-}
 
 /**
  * Provider for local text embeddings using Transformers.js feature extraction.

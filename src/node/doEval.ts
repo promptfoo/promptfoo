@@ -1271,11 +1271,12 @@ async function doEvalWithEnv(
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
-      if (
-        isCliInvocation &&
-        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)
-      ) {
-        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+      const belowThreshold =
+        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
+      // An eval stopped because its target is unavailable did not run every test, so it
+      // fails whatever the tests before the stop did.
+      if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
+        if (belowThreshold && getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
           logger.info(
             chalk.white(
               `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
@@ -1283,7 +1284,11 @@ async function doEvalWithEnv(
           );
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
+        // A run that failed its tests returns here, as it always has. A run stopped by its
+        // target goes on to clean up its providers, as it did when it still exited with 0.
+        if (targetErrorStatus == null) {
+          return ret;
+        }
       }
     }
     if (testSuite.redteam) {

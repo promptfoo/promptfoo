@@ -493,37 +493,49 @@ async function synthesizeWithProvider({
   providerModel.config = {
     maxTokens: 3000,
   };
-  const results = await Promise.allSettled(
-    questions.map(async (q) => {
-      const pythonConvertPrompt = convertQuestionToPythonPrompt(prompts, q.question);
-      const resp = await providerModel.callApi(pythonConvertPrompt);
-      const output: string = resp.output;
-      if (progressBar) {
-        progressBar.increment();
-      }
-
-      if (output.toLowerCase().trim() == 'none') {
-        return { type, metric: q.label, value: q.question };
-      } else {
-        return {
-          type: 'python' as Assertion['type'],
-          metric: q.label,
-          value: output,
-        };
-      }
-    }),
-  );
-  const assertions = results.map((result) => {
-    if (result.status === 'rejected') {
-      throw result.reason;
+  const controller = new AbortController();
+  const conversions = questions.map(async (q) => {
+    const pythonConvertPrompt = convertQuestionToPythonPrompt(prompts, q.question);
+    const resp = await providerModel.callApi(pythonConvertPrompt, undefined, {
+      abortSignal: controller.signal,
+    });
+    const output: string = resp.output;
+    if (progressBar) {
+      progressBar.increment();
     }
-    return result.value;
+
+    if (output.toLowerCase().trim() == 'none') {
+      return { type, metric: q.label, value: q.question };
+    } else {
+      return {
+        type: 'python' as Assertion['type'],
+        metric: q.label,
+        value: output,
+      };
+    }
   });
-  logger.debug(`Generated ${assertions.length} new assertions`);
-  if (progressBar) {
-    progressBar.stop();
+  try {
+    const assertions = await Promise.all(conversions);
+    logger.debug(`Generated ${assertions.length} new assertions`);
+    return assertions;
+  } catch (error) {
+    controller.abort(error);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // Drain cancelled calls before cleanup, with a bound for providers that ignore cancellation.
+      await Promise.race([
+        Promise.allSettled(conversions),
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(resolve, 1000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+    throw error;
+  } finally {
+    progressBar?.stop();
   }
-  return assertions;
 }
 
 export async function synthesizeFromTestSuite(

@@ -237,7 +237,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
+          'The Python script `call_api` function must return a dict with an own `output` or `error` property (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
         );
       });
 
@@ -253,7 +253,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue(null as never);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: null',
+          'The Python script `call_api` function must return a dict with an own `output` or `error` property (inherited prototype properties are rejected), instead got: null',
         );
       });
 
@@ -262,7 +262,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue('string result');
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: "string result"',
+          'The Python script `call_api` function must return a dict with an own `output` or `error` property (inherited prototype properties are rejected), instead got: "string result"',
         );
       });
 
@@ -272,7 +272,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue(inheritedResult);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {}',
+          'The Python script `call_api` function must return a dict with an own `output` or `error` property (inherited prototype properties are rejected), instead got: {}',
         );
       });
 
@@ -304,7 +304,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Python script `call_embedding_api` function must return a dict with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {"invalidKey":"invalid value"}',
+        'The Python script `call_embedding_api` function must return a dict with an own `embedding` or `error` property (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
       );
     });
 
@@ -314,7 +314,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue(inheritedResult);
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Python script `call_embedding_api` function must return a dict with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {}',
+        'The Python script `call_embedding_api` function must return a dict with an own `embedding` or `error` property (inherited prototype properties are rejected), instead got: {}',
       );
     });
   });
@@ -338,7 +338,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Python script `call_classification_api` function must return a dict with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {"invalidKey":"invalid value"}',
+        'The Python script `call_classification_api` function must return a dict with an own `classification` or `error` property (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
       );
     });
 
@@ -348,7 +348,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue(inheritedResult);
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Python script `call_classification_api` function must return a dict with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {}',
+        'The Python script `call_classification_api` function must return a dict with an own `classification` or `error` property (inherited prototype properties are rejected), instead got: {}',
       );
     });
   });

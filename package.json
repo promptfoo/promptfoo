@@ -176,7 +176,7 @@
     },
     "launch-editor": "2.14.1",
     "engine.io": {
-      ".": "6.6.10",
+      ".": "6.6.11",
       "ws": "$ws"
     },
     "engine.io-client": {
@@ -240,7 +240,7 @@
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
-    "@openai/agents": "^0.11.8",
+    "@openai/agents": "^0.14.1",
     "@openai/codex-security": "^0.1.31",
     "@slack/web-api": "^8.1.1",
     "@smithy/types": "^4.13.0",
@@ -297,7 +297,7 @@
     "@azure/msal-node": "^7.0.0",
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
-    "@googleapis/sheets": "^18.0.0",
+    "@googleapis/sheets": "^18.0.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@openai/codex-sdk": "^0.156.1",

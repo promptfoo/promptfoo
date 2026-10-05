@@ -1,6 +1,9 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as esm from '../../src/esm';
 import { evaluateWithSource } from '../../src/evaluate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
@@ -208,22 +211,57 @@ describe('provider cleanup ownership', () => {
     expect(borrowed.cleanup).not.toHaveBeenCalled();
   });
 
-  it('cleans a late load after a sibling fails without waiting for it', async () => {
+  it.each([false, true])('cleans late batch loads without waiting (scoped=%s)', async (scoped) => {
     const loaded = createDeferred<void>();
     const cleaned = createDeferred<void>();
     const cleanup = vi.fn(() => cleaned.resolve());
-    await expect(
-      withProviderCleanup(() =>
-        loadApiProviders([
-          providerOptions({ cleanup, waitForLoad: () => loaded.promise }),
-          providerOptions({ fail: true }),
-        ]),
-      ),
-    ).rejects.toThrow('provider load failed');
+    const load = () =>
+      loadApiProviders([
+        providerOptions({ cleanup, waitForLoad: () => loaded.promise }),
+        providerOptions({ fail: true }),
+      ]);
+    await expect(scoped ? withProviderCleanup(load) : load()).rejects.toThrow(
+      'provider load failed',
+    );
     expect(cleanup).not.toHaveBeenCalled();
     loaded.resolve();
     await cleaned.promise;
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('starts every cleanup in a late file-backed provider batch concurrently', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-lifecycle-'));
+    const file = path.join(directory, 'providers.json');
+    const loaded = createDeferred<void>();
+    const releaseCleanup = createDeferred<void>();
+    const firstCleanup = vi.fn(() => releaseCleanup.promise);
+    const secondCleanup = vi.fn();
+    vi.spyOn(esm, 'importModule').mockResolvedValue(function FixtureProvider(
+      options: ProviderOptions,
+    ) {
+      if (options.config?.fail) {
+        throw new Error('provider load failed');
+      }
+      return loaded.promise.then(() =>
+        makeProvider(options.config?.first ? firstCleanup : secondCleanup),
+      );
+    });
+    fs.writeFileSync(
+      file,
+      JSON.stringify([{ id: providerPath, config: { first: true } }, { id: providerPath }]),
+    );
+    try {
+      await expect(
+        loadApiProviders([`file://${file}`, providerOptions({ fail: true })]),
+      ).rejects.toThrow('provider load failed');
+      loaded.resolve();
+      await vi.waitFor(() => expect(secondCleanup).toHaveBeenCalledOnce());
+      expect(firstCleanup).toHaveBeenCalledOnce();
+    } finally {
+      loaded.resolve();
+      releaseCleanup.resolve();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('keeps simultaneous evaluation ownership separate', async () => {
