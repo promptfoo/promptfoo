@@ -3,7 +3,10 @@ import path from 'node:path';
 
 import semverSatisfies from 'semver/functions/satisfies.js';
 import { getDirectory } from '../esm';
-import { isMissingPackageImportError } from '../util/packageImportErrors';
+import {
+  isMissingPackageImportError,
+  optionalPackageInstallHint,
+} from '../util/packageImportErrors';
 import { getPackageVersion } from '../util/packageVersion';
 
 const installCommand = 'npm install promptfoo @slack/web-api@^8.1.1';
@@ -18,7 +21,7 @@ export async function loadSlackProviderModule<T>(load: () => Promise<T>): Promis
     const version = getPackageVersion('@slack/web-api', entryPoint);
     if (!version || !semverSatisfies(version, '^8.1.1')) {
       throw new Error(
-        `The Slack provider requires @slack/web-api@^8.1.1 (found ${version ?? 'unknown'}). Install it with: ${installCommand}`,
+        `The Slack provider requires @slack/web-api@^8.1.1 (found ${version ?? 'unknown'}). ${optionalPackageInstallHint(installCommand)}`,
       );
     }
 
@@ -26,7 +29,7 @@ export async function loadSlackProviderModule<T>(load: () => Promise<T>): Promis
   } catch (error) {
     if (isMissingPackageImportError(error, '@slack/web-api')) {
       throw new Error(
-        `The @slack/web-api package is required for the Slack provider. Install it with: ${installCommand}`,
+        `The @slack/web-api package is required for the Slack provider. ${optionalPackageInstallHint(installCommand)}`,
       );
     }
     throw error;

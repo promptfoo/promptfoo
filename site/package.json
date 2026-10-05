@@ -43,7 +43,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^6.0.1",
-    "@vitest/coverage-v8": "^5.0.0",
+    "@vitest/coverage-v8": "^5.0.2",
     "ajv": "^8.18.0",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
@@ -53,6 +53,7 @@
     "jsdom": "^29.0.0",
     "langium": "4.4.0",
     "lucide-react": "^1.0.0",
+    "monaco-editor": "0.57.0",
     "motion": "^12.34.3",
     "prism-react-renderer": "^2.4.1",
     "prismjs": "^1.30.0",
@@ -60,7 +61,7 @@
     "react-dom": "^19.3.0",
     "satori": "^0.26.0",
     "typescript": "^7.0.0",
-    "vitest": "^5.0.0",
+    "vitest": "^5.0.2",
     "webpack": "5.111.1"
   },
   "optionalDependencies": {

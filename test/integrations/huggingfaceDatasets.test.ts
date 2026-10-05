@@ -505,6 +505,76 @@ describe('huggingfaceDatasets', () => {
       expect(new Set(texts).size).toBe(totalRows);
     });
 
+    describe('when a prefetched page is unusable', () => {
+      const totalRows = 400;
+      // ~300-byte rows keep the page size at 100, so offsets 100 and 200 are prefetched together
+      const rowPrefix = 'x'.repeat(300);
+      const unavailable = {
+        data: null,
+        cached: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      };
+      const emptyPage = {
+        data: {
+          num_rows_total: totalRows,
+          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+          rows: [],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      function servePages(unusablePage: object, unusableRequests: number) {
+        let served = 0;
+        vi.mocked(fetchWithCache).mockImplementation(async (url) => {
+          const searchParams = new URL(String(url)).searchParams;
+          const offset = Number.parseInt(searchParams.get('offset') ?? '0', 10);
+          const length = Number.parseInt(searchParams.get('length') ?? '100', 10);
+
+          if (offset === 100 && served < unusableRequests) {
+            served++;
+            return unusablePage as any;
+          }
+
+          return {
+            data: {
+              num_rows_total: totalRows,
+              features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+              rows: Array.from({ length }, (_, i) => ({
+                row: { text: `${rowPrefix}${offset + i + 1}` },
+              })),
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          } as any;
+        });
+      }
+
+      it.each([
+        ['fails once', unavailable],
+        ['comes back empty once', emptyPage],
+      ])('should load the rows in order without gaps or duplicates when it %s', async (_, page) => {
+        servePages(page, 1);
+
+        const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+
+        expect(tests.map((test) => test.vars?.text)).toEqual(
+          Array.from({ length: totalRows }, (_, i) => `${rowPrefix}${i + 1}`),
+        );
+      });
+
+      it('should throw instead of leaving a gap when it keeps failing', async () => {
+        servePages(unavailable, Infinity);
+
+        await expect(
+          fetchHuggingFaceDataset('huggingface://datasets/test/dataset'),
+        ).rejects.toThrow('[HF Dataset] Failed to fetch dataset: Service Unavailable');
+      });
+    });
+
     it('should adapt page size based on row size', async () => {
       // Mock a dataset with large rows (>2KB each)
       const largeRow = { text: 'x'.repeat(3000) }; // ~3KB row
@@ -550,6 +620,45 @@ describe('huggingfaceDatasets', () => {
 
       expect(tests.length).toBeGreaterThan(0);
       expect(tests[0].vars?.text).toBe(largeRow.text);
+    });
+
+    it('should keep small-row pages at the 100-row maximum the datasets server allows', async () => {
+      const rows = Array.from({ length: 546 }, (_, i) => ({ row: { text: `Item ${i + 1}` } }));
+
+      vi.mocked(fetchWithCache).mockImplementation(async (url) => {
+        const searchParams = new URL(String(url)).searchParams;
+        const offset = Number.parseInt(searchParams.get('offset') ?? '0', 10);
+        const length = Number.parseInt(searchParams.get('length') ?? '100', 10);
+
+        // Like the real server, reject a page longer than 100 rows
+        if (length > 100) {
+          return {
+            data: { error: "Parameter 'length' must not be greater than 100" },
+            cached: false,
+            status: 422,
+            statusText: 'Unprocessable Entity',
+          } as any;
+        }
+
+        return {
+          data: {
+            num_rows_total: rows.length,
+            features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+            rows: rows.slice(offset, offset + length),
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        } as any;
+      });
+
+      const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+      const requestedLengths = vi
+        .mocked(fetchWithCache)
+        .mock.calls.map(([url]) => new URL(String(url)).searchParams.get('length'));
+
+      expect(requestedLengths).toEqual(['100', '100', '100', '100', '100', '46']);
+      expect(tests.map((test) => test.vars)).toEqual(rows.map(({ row }) => row));
     });
 
     it('should handle authentication tokens correctly', async () => {

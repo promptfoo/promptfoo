@@ -58,12 +58,13 @@ describe('processDiff with real git blobs', () => {
       ['binary.pfaudit', Buffer.alloc(8192)],
       ['oversized.pfaudit', Buffer.alloc(MAX_BLOB_SIZE_BYTES + 1, 'a')],
     ] as const;
-    const entries = await Promise.all(
-      fixtures.map(async ([filename, data]) => {
-        const hash = await git(['hash-object', '-w', '--stdin'], data);
-        return `100644 blob ${hash}\t${filename}\0`;
-      }),
-    );
+    // One at a time: several fixtures share their content, and on Windows concurrent writers
+    // of the same object fail with "unable to write file ...: Permission denied".
+    const entries: string[] = [];
+    for (const [filename, data] of fixtures) {
+      const hash = await git(['hash-object', '-w', '--stdin'], data);
+      entries.push(`100644 blob ${hash}\t${filename}\0`);
+    }
     const tree = await git(['mktree', '-z'], entries.join(''));
     const head = await git(['commit-tree', tree, '-p', base, '-m', 'add fixtures']);
 
