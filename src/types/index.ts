@@ -1343,7 +1343,7 @@ export const TestSuiteConfigSchema = z.object({
   // Envvar overrides
   env: z
     .union([
-      ProviderEnvOverridesSchema,
+      // Preserve primitive overrides before the known-key fallback can strip them.
       z.record(
         z.string(),
         z.union([
@@ -1352,6 +1352,7 @@ export const TestSuiteConfigSchema = z.object({
           z.boolean().transform((b) => String(b)),
         ]),
       ),
+      ProviderEnvOverridesSchema,
     ])
     .optional(),
 

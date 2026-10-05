@@ -1499,9 +1499,6 @@
     "__schema36": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema7"
-        },
-        {
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -1509,6 +1506,9 @@
           "additionalProperties": {
             "type": ["string", "number", "boolean"]
           }
+        },
+        {
+          "$ref": "#/definitions/__schema7"
         }
       ]
     },
