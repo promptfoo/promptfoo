@@ -1236,6 +1236,160 @@ describe('sanitizeMcpToolData', () => {
     ).toEqual({ url: JSON.stringify({ target: '[REDACTED]', page: 2 }) });
   });
 
+  it.each(['apiHost', 'env.SERVICE_HOST'])(
+    'retains every host credential stage for %s form-shaped and partially redacted values',
+    (role) => {
+      const host = (value: string) =>
+        role.startsWith('env.') ? { env: { [role.slice(4)]: value } } : { [role]: value };
+      const secrets = [
+        'alice=ops:stage-fixture@example.test',
+        'YWxpY2U=stage-fixture@example.test',
+        'alice:stage-fixture@example.test/?api_key=second-fixture',
+        'alice:stage-fixture@example.test/#api_key=second-fixture',
+        'az://account/container/token/stagefixture1234567890?sig=second-fixture',
+        'data=gateway.example/?data=' +
+          encodeURIComponent(JSON.stringify({ password: 'stage-fixture', page: 2 })),
+        'data=gateway.example/#data=' +
+          encodeURIComponent(JSON.stringify({ password: 'stage-fixture', page: 2 })),
+        'data=data=https:alice:stage-fixture@example.test/',
+        'data=https:\\alice:stage-fixture@example.test\\',
+        'data=data=' + encodeURIComponent('https:\\alice:stage-fixture@example.test\\'),
+      ];
+      for (const value of secrets) {
+        for (const input of [
+          host(value),
+          { url: JSON.stringify({ ...host(value), page: 2 }) },
+          { apiBaseUrl: JSON.stringify({ ...host(value), page: 2 }) },
+        ]) {
+          const original = structuredClone(input);
+          const output = JSON.stringify(sanitizeMcpToolData(input));
+          expect(output).not.toMatch(/stage-fixture|stagefixture1234567890|second-fixture/);
+          expect(input).toEqual(original);
+        }
+      }
+      for (const value of [
+        'gateway.example',
+        'data=public&page=2',
+        'data={{ value }}',
+        'data=https://example.test/public',
+        'data=gateway.example/?data=' +
+          encodeURIComponent(JSON.stringify({ page: 2, label: 'public' })),
+      ]) {
+        const input = host(value);
+        expect(sanitizeMcpToolData(input)).toEqual(input);
+      }
+    },
+  );
+
+  it.each(['url', 'apiBaseUrl', 'callbackUrl', 'apiHost'])(
+    'guards decoded non-JSON form scalar values in %s with a finite depth budget',
+    (role) => {
+      for (const value of [
+        'https:alice:form-fixture@example.test/',
+        'https:\\alice:form-fixture@example.test/',
+        JSON.stringify('https:alice:form-fixture@example.test/'),
+        'az://alice:form-fixture@account/container?sig=second-fixture',
+        'az://account/container/public?sig=form-fixture&password=second-fixture',
+      ]) {
+        for (const form of [
+          'data=' + value,
+          'data=' + encodeURIComponent(value),
+          'data=data=' + value,
+        ]) {
+          const input = { [role]: JSON.stringify({ target: form, page: 2 }) };
+          expect(JSON.stringify(sanitizeMcpToolData(input))).not.toMatch(
+            /form-fixture|second-fixture/,
+          );
+        }
+      }
+      for (const value of [
+        'data=public',
+        'data=null',
+        'data=42',
+        'data=false',
+        'data={{ value }}',
+        'data=' + encodeURIComponent(JSON.stringify('example.test/public')),
+      ]) {
+        const input = { [role]: JSON.stringify({ target: value, page: 2 }) };
+        expect(sanitizeMcpToolData(input)).toEqual(input);
+      }
+      const nested = 'data='.repeat(70) + 'public';
+      const input = { [role]: JSON.stringify({ target: nested, page: 2 }) };
+      expect(JSON.stringify(sanitizeMcpToolData(input))).toContain('REDACTED');
+      expect(sanitizeObject(input, { sanitizeUrls: true })).toEqual(
+        role === 'apiHost' ? input : { [role]: JSON.stringify({ target: '[REDACTED]', page: 2 }) },
+      );
+    },
+  );
+
+  it('retains the existing outer logging guard for SAS paths', () => {
+    const input = {
+      apiBaseUrl: JSON.stringify({
+        target: 'az://account/container/token/stagefixture1234567890?sig=second-fixture',
+        page: 2,
+      }),
+    };
+    const result = sanitizeMcpToolData(input);
+    expect(JSON.stringify(result)).not.toMatch(/stagefixture1234567890|second-fixture/);
+    expect(result).toEqual({ apiBaseUrl: '[REDACTED]' });
+  });
+
+  it('preserves tokenization metadata and authHeaders collection shapes', () => {
+    for (const name of [
+      'inputTokens',
+      'outputTokens',
+      'completionTokens',
+      'promptTokens',
+      'input_tokens',
+      'OUTPUT_TOKENS',
+    ]) {
+      const input = {
+        [name]: [
+          'hello',
+          123,
+          { databasePassword: 'nested-fixture', label: 'public' },
+          'AKIAABCDEFGHIJKLMNOP',
+        ],
+      };
+      const expected = {
+        [name]: ['hello', 123, { databasePassword: '[REDACTED]', label: 'public' }, '[REDACTED]'],
+      };
+      for (const encode of [
+        (v: unknown) => v,
+        (v: unknown) => JSON.stringify(v),
+        (v: unknown) => 'data=' + encodeURIComponent(JSON.stringify(v)),
+      ]) {
+        const args = { payload: encode(input) };
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(args)).toEqual({ payload: encode(expected) });
+        expect(args).toEqual(original);
+      }
+    }
+    for (const name of ['authHeaders', 'AUTH_HEADERS', 'auth-headers']) {
+      const args = {
+        [name]: [['Authorization', 'short-fixture'], { nested: [123, false, null] }],
+        headers: ['public'],
+        accessTokens: ['private'],
+        inputToken: 'private',
+        apiKeysByTenant: { inputTokens: ['private', 123] },
+      };
+      const original = structuredClone(args);
+      expect(sanitizeMcpToolData(args)).toEqual({
+        [name]: [['[REDACTED]', '[REDACTED]'], { nested: ['[REDACTED]', false, null] }],
+        headers: { 0: '[REDACTED]' },
+        accessTokens: ['[REDACTED]'],
+        inputToken: '[REDACTED]',
+        apiKeysByTenant: { inputTokens: ['[REDACTED]', '[REDACTED]'] },
+      });
+      expect(args).toEqual(original);
+      expect(sanitizeObject(args, { sanitizeUrls: true })).toEqual({
+        ...args,
+        headers: { 0: '[REDACTED]' },
+      });
+      expect(sanitizeMcpToolData({ [name]: [] })).toEqual({ [name]: [] });
+    }
+  });
+
   it.each(['apiHost', 'env.SERVICE_HOST'])('walks nested raw %s JSON payloads once', (name) => {
     const wrap = (value: string) =>
       name.startsWith('env.') ? { env: { [name.slice(4)]: value } } : { [name]: value };

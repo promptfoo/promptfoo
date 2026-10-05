@@ -381,6 +381,7 @@ function getCompoundSecretObjectFieldKind(
     return 'credential';
   }
   if (
+    /^(?:input|output|completion|prompt)tokens$/.test(normalized) ||
     /(?:tokenusages?|tokenbudgets?|tokenids|signaturealgorithms?|passwordpolic(?:y|ies))$/.test(
       normalized,
     ) ||
@@ -389,7 +390,10 @@ function getCompoundSecretObjectFieldKind(
   ) {
     return undefined;
   }
-  if (/^(?:cookies|cookiejars?|basicauths|sessioncookies|subscriptionkeys)$/.test(normalized)) {
+  if (
+    /^(?:cookies|cookiejars?|basicauths|sessioncookies|subscriptionkeys)$/.test(normalized) ||
+    (normalized === 'authheaders' && Array.isArray(value))
+  ) {
     return 'related';
   }
   // Retain terminal precedence: userCredentials is itself a credential field,
@@ -1509,10 +1513,40 @@ function sanitizeUrlEncodedStringWithContext(
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
     // redacted at the leaf rather than leaked as opaque bytes.
-    const nestedJson = redactNestedJsonValue(decodedValue, compoundContext);
+    const nestedJson = redactNestedJsonValue(
+      decodedValue,
+      compoundContext,
+      compoundContext?.guardUrlPayload ? 'original' : 'null',
+    );
     if (nestedJson !== null) {
+      if (nestedJson === decodedValue) {
+        return match;
+      }
       changed = true;
       return `${separator}${rawKey}=${encodeURIComponent(nestedJson)}`;
+    }
+
+    // Form values can be scalar URLs, quoted strings, or another form rather
+    // than JSON containers. Carry their enclosing policy with one less level;
+    // a handled container above must never be traversed for a second time.
+    if (compoundContext?.guardUrlPayload && decodedValue !== undefined) {
+      const guarded =
+        compoundContext.maxDepth <= 0
+          ? REDACTED
+          : recursiveSanitize(
+              decodedValue,
+              1,
+              compoundContext.maxDepth,
+              true,
+              false,
+              true,
+              false,
+              compoundContext.guardUrlPayload,
+            );
+      if (guarded !== decodedValue) {
+        changed = true;
+        return `${separator}${rawKey}=${encodeURIComponent(guarded)}`;
+      }
     }
 
     // Check both raw and decoded forms of the value so `+` decoding can't be
@@ -1585,7 +1619,9 @@ function sanitizePlainObject(
       sanitized[key] = REDACTED;
     } else if (
       (key.toLowerCase() === 'headers' ||
-        (redactCompoundKeys && normalizeFieldName(key) === 'authheaders')) &&
+        (redactCompoundKeys &&
+          normalizeFieldName(key) === 'authheaders' &&
+          !Array.isArray(value))) &&
       value &&
       typeof value === 'object'
     ) {
@@ -1650,46 +1686,63 @@ function sanitizePlainObject(
       typeof value === 'string' &&
       (key === 'apiHost' || (isEnvMap && key.toUpperCase().endsWith('_HOST')))
     ) {
-      // Host fields may carry structured tool data. Inspect the original payload
-      // before a synthetic scheme makes JSON/form recognition impossible.
+      const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
+      const hasScheme = scheme.test(value);
+      const normalizedHost = hasScheme ? value : `https://${value}`;
+      // Whole JSON has a single bounded owner before host normalization. A
+      // form-shaped value can also be a host with userinfo or a query/fragment;
+      // retain that established URL interpretation instead of returning early.
       if (compoundContext) {
         const sanitizedJson = redactNestedJsonValue(
           value,
           { ...compoundContext, guardUrlPayload: 'logging' },
           'original',
         );
-        if (sanitizedJson !== null || looksLikeUrlEncodedFormData(value)) {
-          sanitized[key] = sanitizeUrlForLoggingWithContext(
-            sanitizedJson ?? value,
-            compoundContext,
-            sanitizedJson !== null,
-            true,
-          );
+        if (sanitizedJson !== null) {
+          sanitized[key] = sanitizeUrlForLoggingWithContext(sanitizedJson, compoundContext, true);
           continue;
+        }
+        if (looksLikeUrlEncodedFormData(value)) {
+          if (unparseableUrlMightLeakSecret(value, true, compoundContext)) {
+            sanitized[key] = REDACTED;
+            continue;
+          }
+          let hasHostComponents = hasUrlUserinfo(normalizedHost);
+          try {
+            const parsed = new URL(normalizedHost);
+            hasHostComponents = Boolean(
+              parsed.username || parsed.password || parsed.search || parsed.hash,
+            );
+          } catch {
+            // The existing fallback guards still inspect malformed forms below.
+          }
+          if (!hasHostComponents) {
+            sanitized[key] = sanitizeUrlForLoggingWithContext(value, compoundContext, false, true);
+            continue;
+          }
         }
       }
       if (compoundContext?.guardUrlPayload) {
-        // Object/array payloads already returned above. Check remaining scalar
-        // data before host normalization can reinterpret a quoted form as DNS.
-        const guarded = sanitizeJsonString(
-          value,
-          depth + 1,
-          maxDepth,
-          sanitizeUrls,
-          redactCompoundKeys,
-          guardUrlPayload,
-        );
-        if (guarded !== value) {
-          sanitized[key] = guarded;
+        // Inspect scalar quoting/userinfo without recursively sanitizing URL
+        // children here. The host/logging stage below owns their one traversal.
+        const scalar = getUrlPayloadScalar(value, compoundContext.maxDepth);
+        if (
+          scalar === null ||
+          hasUrlPayloadUserinfo(scalar) ||
+          looksLikeSecret(scalar) ||
+          (scalar !== value &&
+            (unparseableUrlMightLeakSecret(
+              scalar,
+              guardUrlPayload !== 'logging',
+              compoundContext,
+            ) ||
+              (guardUrlPayload === 'logging' && hasOpaqueLoggingPath(scalar, true))))
+        ) {
+          sanitized[key] = REDACTED;
           continue;
         }
       }
-      const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
-      const hasScheme = scheme.test(value);
-      const endpoint = sanitizeUrlForLoggingWithContext(
-        hasScheme ? value : `https://${value}`,
-        compoundContext,
-      );
+      const endpoint = sanitizeUrlForLoggingWithContext(normalizedHost, compoundContext);
       const host = hasScheme ? endpoint : endpoint.replace(/^https:\/\//, '');
       const hasPath = value.replace(scheme, '').split(/[?#]/, 1)[0].includes('/');
       sanitized[key] = hasPath ? host : host.replace(/\/(?=[?#]|$)/, '');
