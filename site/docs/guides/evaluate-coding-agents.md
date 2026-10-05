@@ -315,7 +315,7 @@ Assertions can read these fields from the response metadata:
 
 - `workingDir`: the workspace directory. It exists until the call's assertions have run.
 - `workspaceDiff`: for a clone, the agent's changes as a unified diff against the cloned commit, including any commits the agent made. Diffs longer than 100,000 characters are truncated. If the diff can't show some changes, it covers the rest and ends with a `[diff incomplete: ...]` line that names them. That applies to a file or directory the agent made unreadable, a FIFO or socket, a new directory without files, anything below a path called `.git`, a repository the agent created (its files are not in the diff), new or changed binary content (Git shows that it changed, not how), changed content that is not valid UTF-8 (it is shown with replacement characters), and a Git index that can't be read.
-  Binary deletions, exact renames, and mode-only changes are complete because the diff describes the operation without new content to inspect.
+  Whole-file deletions (including binary and non-UTF-8 files), exact renames, and mode-only changes are complete because the diff describes the operation without new content to inspect.
 - `workspaceDiffIncomplete`: `true` when `workspaceDiff` doesn't show every change, because it was truncated or for one of those reasons.
 - `workspaceDiffError`: for a clone, why the diff couldn't be computed. It replaces `workspaceDiff`.
 
