@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
@@ -51,6 +52,97 @@ const providers = [
 ] as const;
 
 describe('SDK client lifecycle', () => {
+  it.each([
+    ['bedrock', providers[0][1], 'getBedrockInstance', BedrockRuntime.prototype],
+    ['sagemaker', providers[1][1], 'getSageMakerRuntimeInstance', SageMakerRuntimeClient.prototype],
+  ] as const)(
+    'releases a %s client first created after its scope finishes',
+    async (_name, create, method, prototype) => {
+      const provider = create();
+      const release = createDeferred<void>();
+      const destroy = vi.spyOn(prototype, 'destroy');
+      let pending!: Promise<unknown>;
+      await withLifecycle(async () => {
+        pending = release.promise.then(() => Reflect.get(provider, method).call(provider));
+      });
+      expect(destroy).not.toHaveBeenCalled();
+      release.resolve();
+      const retired = await pending;
+      await vi.waitFor(() => expect(destroy).toHaveBeenCalledOnce());
+      await withLifecycle(async () => {
+        const next = await Reflect.get(provider, method).call(provider);
+        expect(next).not.toBe(retired);
+        expect(destroy).toHaveBeenCalledOnce();
+      });
+      expect(destroy).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['throw', 'reject'] as const)(
+    'contains a late cleanup %s without installing signal handlers',
+    async (failure) => {
+      const release = createDeferred<void>();
+      const warn = vi.spyOn((await import('../../src/logger')).default, 'warn');
+      const shutdown = vi.fn(() => {
+        if (failure === 'throw') {
+          throw new Error('late cleanup failure');
+        }
+        return Promise.reject(new Error('late cleanup failure'));
+      });
+      const counts = ['SIGINT', 'SIGTERM', 'beforeExit'].map((signal) =>
+        process.listenerCount(signal),
+      );
+      let pending!: Promise<void>;
+      await withLifecycle(async () => {
+        pending = release.promise.then(() => providerRegistry.register({ shutdown }));
+      });
+      release.resolve();
+      await pending;
+      await vi.waitFor(() => expect(shutdown).toHaveBeenCalledOnce());
+      await vi.waitFor(() =>
+        expect(warn).toHaveBeenCalledWith('Error shutting down late provider', {
+          error: expect.any(Error),
+        }),
+      );
+      expect(
+        ['SIGINT', 'SIGTERM', 'beforeExit'].map((signal) => process.listenerCount(signal)),
+      ).toEqual(counts);
+    },
+  );
+
+  it('releases late resources while earlier scope cleanup is still pending', async () => {
+    const started = createDeferred<void>();
+    const finish = createDeferred<void>();
+    const release = createDeferred<void>();
+    const shutdown = vi.fn().mockResolvedValue(undefined);
+    let pending!: Promise<void>;
+    const scope = withLifecycle(async () => {
+      providerRegistry.register(
+        {
+          async shutdown() {
+            started.resolve();
+            await finish.promise;
+          },
+        },
+        undefined,
+        false,
+      );
+      pending = release.promise.then(() =>
+        providerRegistry.register({ shutdown }, undefined, false),
+      );
+    });
+    await started.promise;
+    try {
+      release.resolve();
+      await pending;
+      await vi.waitFor(() => expect(shutdown).toHaveBeenCalledOnce());
+    } finally {
+      finish.resolve();
+      await scope;
+    }
+    expect(shutdown).toHaveBeenCalledOnce();
+  });
+
   it('does not take over SIGTERM for standalone SDK-only consumers', () => {
     const source = pathToFileURL(path.resolve('src/providers/bedrock/index.ts')).href;
     const terminate = `
