@@ -380,7 +380,7 @@
     "saxes": "^6.0.0",
     "semver": "^7.7.4",
     "signal-exit": "4.1.0",
-    "simple-git": "^4.0.0",
+    "simple-git": "^4.0.2",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.4",
     "text-extensions": "^3.1.0",
