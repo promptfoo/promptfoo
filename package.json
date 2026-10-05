@@ -180,7 +180,7 @@
       "ws": "$ws"
     },
     "engine.io-client": {
-      ".": "6.6.6",
+      ".": "6.6.7",
       "ws": "$ws"
     },
     "socket.io-adapter": {
