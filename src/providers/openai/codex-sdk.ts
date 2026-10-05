@@ -682,6 +682,8 @@ async function loadCodexSDK(): Promise<any> {
 }
 
 export class OpenAICodexSDKProvider implements ApiProvider {
+  private restoreRegistrationOnUse = false;
+
   static OPENAI_MODELS = [
     'gpt-6-astra',
     'gpt-6-sol',
@@ -795,12 +797,16 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
     this.codexInstances.clear();
+    // Remember only our own registration; wrappers may own this provider instead.
+    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
+    providerRegistry.unregister(this);
   }
 
   async shutdown(): Promise<void> {
     try {
       await this.cleanup();
     } finally {
+      this.restoreRegistrationOnUse = false;
       providerRegistry.unregister(this);
     }
   }
@@ -2344,6 +2350,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }> {
     if (!this.codexModule) {
       this.codexModule = await loadCodexSDK();
+    }
+
+    if (this.restoreRegistrationOnUse) {
+      providerRegistry.register(this);
+      this.restoreRegistrationOnUse = false;
     }
 
     const stableEnv = { ...env };

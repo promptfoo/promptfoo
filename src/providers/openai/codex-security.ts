@@ -263,6 +263,9 @@ function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage
 }
 
 export class OpenAICodexSecurityProvider implements ApiProvider {
+  private restoreRegistrationOnUse = false;
+  private cleanupGeneration = 0;
+
   readonly config: OpenAICodexSecurityConfig;
   readonly env?: EnvOverrides;
 
@@ -291,6 +294,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    this.cleanupGeneration++;
     const clients = Array.from(this.activeClients);
     this.activeClients.clear();
     const results = await Promise.allSettled(clients.map((client) => client.close()));
@@ -299,12 +303,16 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         logger.warn('[CodexSecurity] Error while closing SDK client', { error: result.reason });
       }
     }
+    // Remember only our own registration; wrappers may own this provider instead.
+    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
+    providerRegistry.unregister(this);
   }
 
   async shutdown(): Promise<void> {
     try {
       await this.cleanup();
     } finally {
+      this.restoreRegistrationOnUse = false;
       providerRegistry.unregister(this);
     }
   }
@@ -314,6 +322,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     const observers: ScanObservers = { warnings: [] };
 
     try {
@@ -343,6 +352,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       }
 
       const module = await loadCodexSecurity();
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        return { error: 'Codex Security operation was interrupted by cleanup.' };
+      }
       const effort = config.model_reasoning_effort ?? config.reasoning_effort;
       const codexOverrides = {
         ...config.codex_overrides,
@@ -359,6 +371,11 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           : {}),
         ...(Object.keys(codexOverrides).length > 0 ? { codexOverrides } : {}),
       });
+      if (this.restoreRegistrationOnUse) {
+        providerRegistry.register(this);
+        this.restoreRegistrationOnUse = false;
+      }
+
       this.activeClients.add(client);
 
       try {

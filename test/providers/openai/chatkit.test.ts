@@ -8,6 +8,8 @@ import {
   cleanAssistantResponse,
   OpenAiChatKitProvider,
 } from '../../../src/providers/openai/chatkit';
+import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../../util/utils';
 
 const playwrightMetadata = vi.hoisted(() => ({ version: '1.63.0' }));
@@ -31,6 +33,7 @@ function resetBrowserMocks() {
   };
   const context = {
     newPage: vi.fn().mockResolvedValue(page),
+    setDefaultTimeout: vi.fn(),
     close: vi.fn().mockResolvedValue(undefined),
   };
   const browser = {
@@ -336,6 +339,73 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   describe('cleanup', () => {
+    it('closes the shared pool after its provider fails its first page', async () => {
+      const { page, context, browser, server } = resetBrowserMocks();
+      page.goto.mockRejectedValueOnce(new Error('fixture page initialization failed'));
+      const pool = ChatKitBrowserPool.getInstance();
+      try {
+        const provider = new OpenAiChatKitProvider('wf_fixture', {
+          config: { apiKey: 'fixture-key' },
+        });
+        expect(await provider.callApi('ordinary greeting')).toMatchObject({
+          error: expect.stringContaining('fixture page initialization failed'),
+        });
+        await provider.cleanup();
+        expect(context.close).toHaveBeenCalledOnce();
+        expect(browser.close).toHaveBeenCalledOnce();
+        expect(server.close).toHaveBeenCalledOnce();
+        expect(providerRegistry.has(pool)).toBe(false);
+      } finally {
+        await pool.shutdown();
+        ChatKitBrowserPool.resetInstance();
+      }
+    });
+
+    it('keeps a caller-owned shared pool while a peer cleans up', async () => {
+      const { page, browser, server } = resetBrowserMocks();
+      let failPage: () => void = () => {};
+      const started = new Promise<void>((ready) => {
+        page.goto
+          .mockImplementationOnce(
+            () =>
+              new Promise((_resolve, reject) => {
+                failPage = () => reject(new Error('fixture page initialization failed'));
+                ready();
+              }),
+          )
+          .mockRejectedValue(new Error('fixture page initialization failed'));
+      });
+      const caller = new OpenAiChatKitProvider('wf_caller', { config: { apiKey: 'fixture-key' } });
+      const callerCall = caller.callApi('ordinary greeting');
+      try {
+        await started;
+        const peer = new OpenAiChatKitProvider('wf_peer', { config: { apiKey: 'fixture-key' } });
+        expect((await peer.callApi('ordinary greeting')).error).toContain(
+          'fixture page initialization failed',
+        );
+        await peer.cleanup();
+        expect(browser.close).not.toHaveBeenCalled();
+        expect(server.close).not.toHaveBeenCalled();
+        failPage();
+        expect((await callerCall).error).toContain('fixture page initialization failed');
+        await caller.cleanup();
+        expect(browser.close).toHaveBeenCalledOnce();
+        expect(server.close).toHaveBeenCalledOnce();
+
+        const retry = resetBrowserMocks();
+        retry.page.goto.mockRejectedValueOnce(new Error('fixture retry failed'));
+        expect((await caller.callApi('ordinary greeting')).error).toContain('fixture retry failed');
+        await caller.cleanup();
+        expect(retry.browser.close).toHaveBeenCalledOnce();
+        expect(retry.server.close).toHaveBeenCalledOnce();
+      } finally {
+        failPage();
+        await callerCall;
+        await caller.cleanup();
+        ChatKitBrowserPool.resetInstance();
+      }
+    });
+
     it('closes unfinished HTTP requests before completing cleanup', async () => {
       const { createServer } = await vi.importActual<typeof http>('http');
       const server = createServer((_request, response) => response.end('ChatKit fixture'));
