@@ -1,48 +1,79 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
-import { describe, expect, it } from 'vitest';
-import type { JSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as assertions from '../../../src/assertions/index';
+import { startHttpMcpServer } from '../../../src/commands/mcp/server';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
+import type { JSONRPCRequest, JSONRPCResponse } from '@modelcontextprotocol/sdk/types.js';
+
+async function readMessages(response: Response): Promise<JSONRPCResponse[]> {
+  expect(response.headers.get('content-type')).toContain('text/event-stream');
+  return (await response.text())
+    .split('\n')
+    .filter((line) => line.startsWith('data: '))
+    .map((line) => JSON.parse(line.slice('data: '.length)));
+}
 
 describe('MCP HTTP transport', () => {
-  it('rejects oversized parsed batches without dispatching tools or breaking the session', async () => {
-    const server = new McpServer({ name: 'batch-test', version: '1.0.0' });
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => 'batch-test-session',
-      enableJsonResponse: true,
-    });
-    let calls = 0;
-    let nextId = 1;
-    server.registerTool('echo', {}, async () => {
-      calls += 1;
-      return { content: [{ type: 'text', text: 'ok' }] };
-    });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
+  });
 
-    function post(parsedBody: unknown) {
-      const request = new Request('http://localhost/mcp', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json, text/event-stream',
-          'Content-Type': 'application/json',
-          'mcp-session-id': 'batch-test-session',
-          'mcp-protocol-version': LATEST_PROTOCOL_VERSION,
-        },
-      });
-      // Promptfoo parses JSON with Express before passing it to the SDK.
-      return transport.handleRequest(request, { parsedBody });
-    }
+  it('rejects oversized HTTP batches before tool dispatch and keeps the session usable', async () => {
+    const restoreEnv = mockProcessEnv({ MCP_TRANSPORT: undefined });
+    const runAssertions = vi.spyOn(assertions, 'runAssertions');
+    const listening = createDeferred<Server>();
+    const listen = Server.prototype.listen;
+    let httpServer: Server | undefined;
+    // Keep the production listener, but let the OS reserve an available loopback port.
+    vi.spyOn(Server.prototype, 'listen').mockImplementationOnce(function (this: Server, ...args) {
+      httpServer = this;
+      this.once('listening', () => listening.resolve(this));
+      this.once('error', listening.reject);
+      return Reflect.apply(listen, this, [0, '127.0.0.1', args.at(-1)]);
+    });
+    const signals = ['SIGINT', 'SIGTERM'] as const;
+    const existingHandlers = new Set(signals.flatMap((signal) => process.listeners(signal)));
+    const running = startHttpMcpServer(3100);
+    let nextId = 1;
+    let sessionId: string | null = null;
 
     function batch(size: number): JSONRPCRequest[] {
       return Array.from({ length: size }, () => ({
         jsonrpc: '2.0',
         id: nextId++,
         method: 'tools/call',
-        params: { name: 'echo', arguments: {} },
+        params: {
+          name: 'run_assertion',
+          arguments: { output: 'ok', assertion: { type: 'equals', value: 'ok' } },
+        },
       }));
     }
 
     try {
-      await server.connect(transport);
+      const server = await Promise.race([
+        listening.promise,
+        running.then(() => {
+          throw new Error('MCP server stopped before listening');
+        }),
+      ]);
+      const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`;
+      function post(body: unknown) {
+        return fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json, text/event-stream',
+            'Content-Type': 'application/json',
+            'mcp-protocol-version': LATEST_PROTOCOL_VERSION,
+            ...(sessionId ? { 'mcp-session-id': sessionId } : {}),
+          },
+          body: JSON.stringify(body),
+        });
+      }
+
       const initialized = await post({
         jsonrpc: '2.0',
         id: 0,
@@ -54,27 +85,35 @@ describe('MCP HTTP transport', () => {
         },
       });
       expect(initialized.status).toBe(200);
-      expect(await initialized.json()).toMatchObject({ id: 0, result: { capabilities: {} } });
+      expect(await readMessages(initialized)).toMatchObject([
+        { id: 0, result: { capabilities: {} } },
+      ]);
+      sessionId = initialized.headers.get('mcp-session-id');
+      expect(sessionId).toBeTruthy();
       const ready = await post({ jsonrpc: '2.0', method: 'notifications/initialized' });
       expect(ready.status).toBe(202);
+      await ready.text();
 
       for (const size of [2, 100]) {
         const requests = batch(size);
         const response = await post(requests);
         expect(response.status).toBe(200);
-        const results = await response.json();
+        const results = await readMessages(response);
         expect(results).toHaveLength(size);
         expect(results).toEqual(
           expect.arrayContaining(
             requests.map(({ id }) => ({
               jsonrpc: '2.0',
               id,
-              result: { content: [{ type: 'text', text: 'ok' }] },
+              result: {
+                content: [{ type: 'text', text: expect.stringContaining('"pass": true') }],
+                isError: false,
+              },
             })),
           ),
         );
       }
-      expect(calls).toBe(102);
+      expect(runAssertions).toHaveBeenCalledTimes(102);
 
       const rejected = await post(batch(101));
       expect(rejected.status).toBe(400);
@@ -83,19 +122,33 @@ describe('MCP HTTP transport', () => {
         id: null,
         error: { code: -32600, message: 'Invalid Request: Batch must not exceed 100 messages' },
       });
-      expect(calls).toBe(102);
+      expect(runAssertions).toHaveBeenCalledTimes(102);
 
       const [request] = batch(1);
       const recovered = await post(request);
       expect(recovered.status).toBe(200);
-      expect(await recovered.json()).toEqual({
-        jsonrpc: '2.0',
-        id: request.id,
-        result: { content: [{ type: 'text', text: 'ok' }] },
-      });
-      expect(calls).toBe(103);
+      expect(await readMessages(recovered)).toMatchObject([
+        { id: request.id, result: { isError: false } },
+      ]);
+      expect(runAssertions).toHaveBeenCalledTimes(103);
     } finally {
-      await server.close();
+      const handlers = signals.flatMap((signal) =>
+        process
+          .listeners(signal)
+          .filter((handler) => !existingHandlers.has(handler))
+          .map((handler) => ({ signal, handler })),
+      );
+      try {
+        const shutdown = handlers[0];
+        shutdown?.handler(shutdown.signal);
+        httpServer?.closeAllConnections();
+        await running;
+      } finally {
+        for (const { signal, handler } of handlers) {
+          process.removeListener(signal, handler);
+        }
+        restoreEnv();
+      }
     }
   });
 });
