@@ -1000,47 +1000,29 @@ describe('PythonProvider', () => {
   });
 
   describe.each(['cleanup', 'shutdown'] as const)('%s', (method) => {
-    it('should clean up the worker pool only once', async () => {
+    it.each([
+      ['callApi', { output: 'response' }],
+      ['callEmbeddingApi', { embedding: [0.1, 0.2] }],
+      ['callClassificationApi', { classification: { label: 'test' } }],
+    ] as const)('recreates the worker pool for %s after cleanup', async (api, response) => {
       const provider = new PythonProvider('script.py', {
         config: { basePath: process.cwd() },
       });
+      mockPoolInstance.execute.mockResolvedValue(response);
 
-      await provider.initialize();
-      expect((provider as any).pool).not.toBeNull();
+      for (const round of [1, 2]) {
+        await expect(provider[api]('prompt')).resolves.toMatchObject(response);
+        expect(mockPythonWorkerPool).toHaveBeenCalledTimes(round);
+        expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(round);
+        expect(mockPoolInstance.execute).toHaveBeenCalledTimes(round);
+        expect(providerRegistry.has(provider)).toBe(true);
 
-      await provider[method]();
-      expect((provider as any).pool).toBeNull();
-      expect(mockPoolInstance.shutdown).toHaveBeenCalledOnce();
-      await provider[method]();
-      expect(mockPoolInstance.shutdown).toHaveBeenCalledOnce();
-    });
-
-    it('should register provider for global cleanup', async () => {
-      const provider = new PythonProvider('script.py', {
-        config: { basePath: process.cwd() },
-      });
-
-      await provider.initialize();
-
-      // Provider should be registered
-      expect((providerRegistry as any).providers.has(provider)).toBe(true);
-
-      await provider[method]();
-
-      // Should be unregistered
-      expect((providerRegistry as any).providers.has(provider)).toBe(false);
-    });
-
-    it('should set isInitialized to false', async () => {
-      const provider = new PythonProvider('script.py', {
-        config: { basePath: process.cwd() },
-      });
-
-      await provider.initialize();
-      expect((provider as any).isInitialized).toBe(true);
-
-      await provider[method]();
-      expect((provider as any).isInitialized).toBe(false);
+        await provider[method]();
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(round);
+        await provider[method]();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(round);
+      }
     });
   });
 });

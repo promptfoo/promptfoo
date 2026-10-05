@@ -4,13 +4,14 @@ import * as http from 'http';
 
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
+import * as browserDependencies from '../../../src/providers/browserDependencies';
 import {
   cleanAssistantResponse,
   OpenAiChatKitProvider,
 } from '../../../src/providers/openai/chatkit';
 import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 const playwrightMetadata = vi.hoisted(() => ({ version: '1.63.0' }));
 vi.mock('playwright/package.json', () => ({ default: playwrightMetadata }));
@@ -339,6 +340,169 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   describe('cleanup', () => {
+    it.each(['load', 'listen', 'launch'])(
+      'closes initialization that finishes after the last owner cleans up during %s',
+      async (stage) => {
+        const { browser, server } = resetBrowserMocks();
+        let listeningServer: http.Server | undefined;
+        const started = createDeferred<void>();
+        const resume = createDeferred<void>();
+        const loadPlaywright = browserDependencies.loadPlaywright;
+        const loader = vi.spyOn(browserDependencies, 'loadPlaywright');
+        if (stage === 'load') {
+          loader.mockImplementationOnce(async () => {
+            started.resolve();
+            await resume.promise;
+            return loadPlaywright();
+          });
+        } else if (stage === 'listen') {
+          const { createServer } = await vi.importActual<typeof http>('http');
+          listeningServer = createServer();
+          const realServer = listeningServer;
+          const listen = realServer.listen;
+          vi.spyOn(realServer, 'listen').mockImplementation((...args) => {
+            const result = Reflect.apply(listen, realServer, args);
+            started.resolve();
+            return result;
+          });
+          browserMocks.createServer.mockReturnValue(realServer);
+        } else {
+          browserMocks.launch.mockImplementationOnce(async () => {
+            started.resolve();
+            await resume.promise;
+            return browser;
+          });
+        }
+        const provider = new OpenAiChatKitProvider('wf_fixture', {
+          config: { apiKey: 'fixture-key' },
+        });
+        const call = provider.callApi('ordinary greeting');
+        const settled = vi.fn();
+        void call.then(settled);
+        const pool = ChatKitBrowserPool.getInstance();
+        try {
+          await started.promise;
+          await provider.cleanup();
+          resume.resolve();
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(settled).toHaveBeenCalledWith({
+            error: 'ChatKit provider error: ChatKit pool shut down',
+          });
+          expect(browser.close).toHaveBeenCalledTimes(stage === 'launch' ? 1 : 0);
+          expect(server.close).toHaveBeenCalledTimes(stage === 'launch' ? 1 : 0);
+          expect(browserMocks.createServer).toHaveBeenCalledTimes(stage === 'load' ? 0 : 1);
+          expect(browser.newContext).not.toHaveBeenCalled();
+          if (listeningServer) {
+            expect(listeningServer.listening).toBe(false);
+          }
+          expect(providerRegistry.has(pool)).toBe(false);
+        } finally {
+          resume.resolve();
+          // Settle the pre-fix listen race so a failed assertion cannot leave the test hanging.
+          listeningServer?.emit('error', new Error('fixture cleanup'));
+          await call;
+          await provider.cleanup();
+          await pool.shutdown();
+          loader.mockRestore();
+        }
+      },
+    );
+
+    it('settles queued calls and clears their timers when the last owner cleans up', async () => {
+      vi.useFakeTimers();
+      const { page, browser, server } = resetBrowserMocks();
+      const started = createDeferred<void>();
+      const resume = createDeferred<void>();
+      page.evaluate.mockImplementationOnce(async () => {
+        started.resolve();
+        await resume.promise;
+        throw new Error('fixture active call ended');
+      });
+      const provider = new OpenAiChatKitProvider('wf_fixture', {
+        config: { apiKey: 'fixture-key', poolSize: 1 },
+      });
+      const active = provider.callApi('first greeting');
+      const pool = ChatKitBrowserPool.getInstance();
+      let queued: ReturnType<typeof provider.callApi> | undefined;
+      try {
+        await started.promise;
+        const settled = vi.fn();
+        queued = provider.callApi('second greeting').then(settled);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(pool.getStats().waiting).toBe(1);
+        expect(vi.getTimerCount()).toBe(1);
+
+        const peer = {};
+        pool.retain(peer);
+        await pool.release(peer);
+        expect(settled).not.toHaveBeenCalled();
+        expect(browser.close).not.toHaveBeenCalled();
+
+        await provider.cleanup();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toHaveBeenCalledWith({
+          error: 'ChatKit provider error: ChatKit pool shut down',
+        });
+        expect(vi.getTimerCount()).toBe(0);
+        expect(browser.close).toHaveBeenCalledOnce();
+        expect(server.close).toHaveBeenCalledOnce();
+        resume.resolve();
+        expect((await active).error).toContain('fixture active call ended');
+        expect(page.reload).not.toHaveBeenCalled();
+      } finally {
+        resume.resolve();
+        await active;
+        await pool.shutdown();
+        await vi.runAllTimersAsync();
+        await queued;
+        vi.useRealTimers();
+      }
+    });
+
+    it('settles waiters while their replacement context is still being created', async () => {
+      vi.useFakeTimers();
+      const { page, context, browser } = resetBrowserMocks();
+      const pool = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      pool.setTemplate('first', '<html>first</html>');
+      pool.setTemplate('second', '<html>second</html>');
+      const active = await pool.acquirePage('first');
+      const started = createDeferred<void>();
+      const resume = createDeferred<void>();
+      const lateContext = { ...context, close: vi.fn().mockResolvedValue(undefined) };
+      browser.newContext
+        .mockRejectedValueOnce(new Error('fixture replacement failed'))
+        .mockImplementationOnce(async () => {
+          started.resolve();
+          await resume.promise;
+          return lateContext;
+        });
+      page.reload.mockRejectedValueOnce(new Error('fixture page closed'));
+      const settled = vi.fn();
+      const queued = pool.acquirePage('second').catch(settled);
+      await vi.advanceTimersByTimeAsync(0);
+      const releasing = pool.releasePage(active);
+      try {
+        await started.promise;
+        await pool.shutdown();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toHaveBeenCalledWith(new Error('ChatKit pool shut down'));
+        expect(vi.getTimerCount()).toBe(0);
+
+        resume.resolve();
+        await releasing;
+        expect(lateContext.close).toHaveBeenCalledOnce();
+        expect(pool.getStats()).toEqual({ total: 0, inUse: 0, waiting: 0, templates: 0 });
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        resume.resolve();
+        await releasing;
+        await pool.shutdown();
+        await vi.runAllTimersAsync();
+        await queued;
+        vi.useRealTimers();
+      }
+    });
+
     it('closes the shared pool after its provider fails its first page', async () => {
       const { page, context, browser, server } = resetBrowserMocks();
       page.goto.mockRejectedValueOnce(new Error('fixture page initialization failed'));

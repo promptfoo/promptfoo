@@ -54,6 +54,8 @@ export class ChatKitBrowserPool {
   private pages: PooledPage[] = [];
   private owners = new Set<object>();
   private waitQueue: Array<{ templateKey: string; resolve: (page: PooledPage) => void }> = [];
+  private pendingAcquisitions = new Set<(error: Error) => void>();
+  private generation = 0;
   private config: ChatKitPoolConfig;
   private templates: Map<string, string> = new Map(); // templateKey -> HTML
   private initialized: boolean = false;
@@ -196,15 +198,23 @@ export class ChatKitBrowserPool {
     }
   }
 
+  private checkGeneration(generation: number): void {
+    if (generation !== this.generation) {
+      throw new Error('ChatKit pool shut down');
+    }
+  }
+
   private async doInitialize(): Promise<void> {
+    const generation = this.generation;
     logger.debug('[ChatKitPool] Initializing browser pool', {
       maxConcurrency: this.config.maxConcurrency,
     });
 
     const { chromium } = await loadPlaywright();
+    this.checkGeneration(generation);
 
     // Create shared HTTP server with per-template routing
-    this.server = http.createServer((req, res) => {
+    const server = http.createServer((req, res) => {
       // Extract template key from URL path: /template/<key>
       const url = new URL(req.url || '/', `http://localhost`);
       const pathParts = url.pathname.split('/').filter(Boolean);
@@ -225,23 +235,29 @@ export class ChatKitBrowserPool {
       res.end('Template not found');
     });
 
+    this.server = server;
     await new Promise<void>((resolve, reject) => {
-      this.server!.once('error', (err: NodeJS.ErrnoException) => {
+      server.once('error', (err: NodeJS.ErrnoException) => {
         reject(new Error(`Failed to start ChatKit pool server: ${err.message}`));
       });
-      this.server!.listen(this.config.serverPort, () => {
-        const address = this.server!.address();
-        this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
-        logger.debug('[ChatKitPool] Server started', { port: this.serverPort });
-        resolve();
-      });
+      server.once('close', () => reject(new Error('ChatKit pool shut down')));
+      server.listen(this.config.serverPort, resolve);
     });
+    this.checkGeneration(generation);
+    const address = server.address();
+    this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
+    logger.debug('[ChatKitPool] Server started', { port: this.serverPort });
 
     // Launch single browser
     try {
-      this.browser = await chromium.launch({
+      const browser = await chromium.launch({
         headless: this.config.headless,
       });
+      if (generation !== this.generation) {
+        await browser.close().catch(() => {});
+        this.checkGeneration(generation);
+      }
+      this.browser = browser;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes("Executable doesn't exist")) {
@@ -263,7 +279,9 @@ export class ChatKitBrowserPool {
     // Cancel any pending idle shutdown since we're being used
     this.cancelIdleTimer();
 
+    const generation = this.generation;
     await this.initialize();
+    this.checkGeneration(generation);
 
     // Ensure template is registered
     if (!this.templates.has(templateKey)) {
@@ -287,6 +305,7 @@ export class ChatKitBrowserPool {
     );
     if (needsRefresh) {
       await this.refreshPooledPage(needsRefresh);
+      this.checkGeneration(generation);
       needsRefresh.inUse = true;
       logger.debug('[ChatKitPool] Acquired and refreshed page', {
         templateKey,
@@ -298,6 +317,7 @@ export class ChatKitBrowserPool {
     // Create new page if under limit
     if (this.pages.length < this.config.maxConcurrency) {
       const pooledPage = await this.createPooledPage(templateKey);
+      this.checkGeneration(generation);
       pooledPage.inUse = true;
       this.pages.push(pooledPage);
       logger.debug('[ChatKitPool] Created new page', {
@@ -320,7 +340,7 @@ export class ChatKitBrowserPool {
         if (index >= 0) {
           this.waitQueue.splice(index, 1);
         }
-        reject(
+        wrappedReject(
           new Error(
             `Timeout waiting for available page after ${PAGE_ACQUIRE_TIMEOUT_MS}ms. ` +
               `Pool has ${this.pages.length} pages, ${this.pages.filter((p) => p.inUse).length} in use.`,
@@ -330,9 +350,16 @@ export class ChatKitBrowserPool {
 
       const wrappedResolve = (page: PooledPage) => {
         clearTimeout(timeoutId);
+        this.pendingAcquisitions.delete(wrappedReject);
         resolve(page);
       };
+      const wrappedReject = (error: Error) => {
+        clearTimeout(timeoutId);
+        this.pendingAcquisitions.delete(wrappedReject);
+        reject(error);
+      };
 
+      this.pendingAcquisitions.add(wrappedReject);
       this.waitQueue.push({ templateKey, resolve: wrappedResolve });
     });
   }
@@ -341,6 +368,10 @@ export class ChatKitBrowserPool {
    * Release a page back to the pool
    */
   async releasePage(pooledPage: PooledPage): Promise<void> {
+    if (!this.initialized) {
+      return;
+    }
+    const generation = this.generation;
     const originalTemplateKey = pooledPage.templateKey;
 
     // Keep inUse=true during refresh to prevent race conditions
@@ -348,6 +379,9 @@ export class ChatKitBrowserPool {
     try {
       await this.refreshPooledPage(pooledPage);
     } catch (error) {
+      if (generation !== this.generation) {
+        return;
+      }
       logger.warn('[ChatKitPool] Failed to reset page, recreating', { error });
       // Page is broken, remove it from the pool
       const index = this.pages.indexOf(pooledPage);
@@ -364,6 +398,7 @@ export class ChatKitBrowserPool {
       // The pool will recover by creating new pages on demand
       try {
         const newPage = await this.createPooledPage(originalTemplateKey);
+        this.checkGeneration(generation);
         this.pages.push(newPage);
         pooledPage = newPage;
       } catch (createError) {
@@ -374,6 +409,10 @@ export class ChatKitBrowserPool {
         this.scheduleIdleShutdown();
         return;
       }
+    }
+
+    if (generation !== this.generation) {
+      return;
     }
 
     // If someone is waiting for this template, give them the page directly
@@ -396,6 +435,7 @@ export class ChatKitBrowserPool {
    * Try to serve waiting requests by creating new pages if we have capacity
    */
   private async tryServeWaiters(): Promise<void> {
+    const generation = this.generation;
     // Process waiters while we have capacity and waiters exist
     while (this.waitQueue.length > 0 && this.pages.length < this.config.maxConcurrency) {
       const waiter = this.waitQueue.shift();
@@ -405,6 +445,7 @@ export class ChatKitBrowserPool {
 
       try {
         const newPage = await this.createPooledPage(waiter.templateKey);
+        this.checkGeneration(generation);
         newPage.inUse = true;
         this.pages.push(newPage);
         waiter.resolve(newPage);
@@ -414,6 +455,9 @@ export class ChatKitBrowserPool {
           remainingWaiters: this.waitQueue.length,
         });
       } catch (error) {
+        if (generation !== this.generation) {
+          return;
+        }
         logger.warn('[ChatKitPool] Failed to create page for waiter', {
           templateKey: waiter.templateKey,
           error,
@@ -431,6 +475,10 @@ export class ChatKitBrowserPool {
   private scheduleIdleShutdown(): void {
     // Cancel any existing timer
     this.cancelIdleTimer();
+
+    if (!this.initialized) {
+      return;
+    }
 
     // Check if pool is completely idle (no pages in use, no waiters)
     const inUseCount = this.pages.filter((p) => p.inUse).length;
@@ -471,6 +519,7 @@ export class ChatKitBrowserPool {
    * Create a new pooled page with ChatKit initialized for a specific template
    */
   private async createPooledPage(templateKey: string): Promise<PooledPage> {
+    const generation = this.generation;
     if (!this.browser) {
       throw new Error('Browser not initialized');
     }
@@ -482,6 +531,7 @@ export class ChatKitBrowserPool {
     context.setDefaultTimeout(120000);
 
     try {
+      this.checkGeneration(generation);
       const page = await context.newPage();
 
       // Navigate to the template-specific URL
@@ -494,6 +544,7 @@ export class ChatKitBrowserPool {
         timeout: CHATKIT_READY_TIMEOUT_MS,
       });
 
+      this.checkGeneration(generation);
       return {
         context,
         page,
@@ -538,6 +589,8 @@ export class ChatKitBrowserPool {
    */
   async shutdown(): Promise<void> {
     logger.debug('[ChatKitPool] Shutting down');
+    this.generation++;
+    this.initialized = false;
     providerRegistry.unregister(this);
     this.owners.clear();
     if (ChatKitBrowserPool.instance === this) {
@@ -547,37 +600,38 @@ export class ChatKitBrowserPool {
     // Cancel any pending idle timer
     this.cancelIdleTimer();
 
-    // Clear pending waiters - they will timeout via PAGE_ACQUIRE_TIMEOUT_MS
-    if (this.waitQueue.length > 0) {
-      logger.debug('[ChatKitPool] Clearing pending waiters', { count: this.waitQueue.length });
-      this.waitQueue = [];
+    // Include waiters whose replacement page is still being created.
+    for (const reject of this.pendingAcquisitions) {
+      reject(new Error('ChatKit pool shut down'));
     }
+    this.waitQueue = [];
+
+    const { pages, browser, server } = this;
+    this.pages = [];
+    this.browser = null;
+    this.server = null;
+    this.serverPort = 0;
+    this.templates.clear();
 
     // Close all contexts
-    for (const pooledPage of this.pages) {
+    for (const pooledPage of pages) {
       try {
         await pooledPage.context.close();
       } catch {
         // Ignore errors during shutdown
       }
     }
-    this.pages = [];
-
     // Close browser
-    if (this.browser) {
+    if (browser) {
       try {
-        await this.browser.close();
+        await browser.close();
       } catch {
         // Ignore errors
       }
-      this.browser = null;
     }
 
     // Close server
-    if (this.server) {
-      const server = this.server;
-      this.server = null;
-      this.serverPort = 0;
+    if (server) {
       try {
         await new Promise<void>((resolve, reject) => {
           server.close((error) => (error ? reject(error) : resolve()));
@@ -588,8 +642,6 @@ export class ChatKitBrowserPool {
       }
     }
 
-    this.initialized = false;
-    this.templates.clear();
     logger.debug('[ChatKitPool] Shutdown complete');
   }
 }

@@ -295,6 +295,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
 
   async cleanup(): Promise<void> {
     this.cleanupGeneration++;
+    // Remember only our own registration; wrappers may own this provider instead.
+    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
     const clients = Array.from(this.activeClients);
     this.activeClients.clear();
     const results = await Promise.allSettled(clients.map((client) => client.close()));
@@ -303,9 +305,10 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         logger.warn('[CodexSecurity] Error while closing SDK client', { error: result.reason });
       }
     }
-    // Remember only our own registration; wrappers may own this provider instead.
-    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
-    providerRegistry.unregister(this);
+    // A fresh call may have restored registration while these clients were closing.
+    if (this.restoreRegistrationOnUse) {
+      providerRegistry.unregister(this);
+    }
   }
 
   async shutdown(): Promise<void> {

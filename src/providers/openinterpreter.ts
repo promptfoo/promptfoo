@@ -671,14 +671,15 @@ export class OpenInterpreterProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
     try {
       await this.delegate.cleanup();
     } finally {
       this.removeTemporaryHome();
     }
-    // Remember only our own registration; wrappers may own this provider instead.
-    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
-    providerRegistry.unregister(this);
+    if (this.restoreRegistrationOnUse) {
+      providerRegistry.unregister(this);
+    }
   }
 
   async shutdown(): Promise<void> {

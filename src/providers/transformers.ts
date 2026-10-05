@@ -331,7 +331,7 @@ const pipelineCleanup = { shutdown: disposePipelines };
 export class TransformersEmbeddingProvider implements ApiProvider {
   modelName: string;
   config: TransformersEmbeddingOptions;
-  private readonly pipelines = new Set<PipelineEntry>();
+  private pipelines = new Set<PipelineEntry>();
 
   constructor(
     modelName: string,
@@ -352,7 +352,10 @@ export class TransformersEmbeddingProvider implements ApiProvider {
   }
 
   cleanup(): Promise<void> {
-    return releasePipelines(this.pipelines);
+    const pipelines = this.pipelines;
+    // Reuse gets a fresh owner token so released pending calls stay canceled.
+    this.pipelines = new Set<PipelineEntry>();
+    return releasePipelines(pipelines);
   }
 
   async callApi(_prompt: string): Promise<ProviderResponse> {
@@ -441,7 +444,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
 export class TransformersTextGenerationProvider implements ApiProvider {
   modelName: string;
   config: TransformersTextGenerationOptions;
-  private readonly pipelines = new Set<PipelineEntry>();
+  private pipelines = new Set<PipelineEntry>();
 
   constructor(
     modelName: string,
@@ -462,7 +465,10 @@ export class TransformersTextGenerationProvider implements ApiProvider {
   }
 
   cleanup(): Promise<void> {
-    return releasePipelines(this.pipelines);
+    const pipelines = this.pipelines;
+    // Reuse gets a fresh owner token so released pending calls stay canceled.
+    this.pipelines = new Set<PipelineEntry>();
+    return releasePipelines(pipelines);
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
