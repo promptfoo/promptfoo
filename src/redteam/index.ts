@@ -7,6 +7,7 @@ import Table from 'cli-table3';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
+import { withProviderCleanup } from '../providers/lifecycle';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
@@ -960,7 +961,11 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
  */
-export async function synthesize({
+export async function synthesize(options: SynthesizeOptions) {
+  return withProviderCleanup(() => synthesizeInternal(options));
+}
+
+async function synthesizeInternal({
   abortSignal,
   cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
   delay,
@@ -1075,6 +1080,10 @@ export async function synthesize({
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
+  const generationController = new AbortController();
+  const generationAbortSignal = abortSignal
+    ? AbortSignal.any([abortSignal, generationController.signal])
+    : generationController.signal;
   const providerSelection = await redteamProviderManager.getProviderSelection({
     provider,
   });
@@ -1088,6 +1097,7 @@ export async function synthesize({
   const redteamProvider = trackGenerationTokenUsage(
     providerSelection.provider,
     generationTokenUsage,
+    generationAbortSignal,
   );
   const trackedProviderSelection = {
     ...providerSelection,
@@ -1363,7 +1373,7 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+  const generatePlugin = async (plugin: (typeof plugins)[number]) => {
     // Check for abort signal before generating tests
     checkAbort();
 
@@ -1677,7 +1687,35 @@ export async function synthesize({
       pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       progressBar?.increment(plugin.numTests);
     }
-  });
+  };
+
+  const inFlightPlugins = new Set<Promise<void>>();
+  try {
+    await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+      const pending = generatePlugin(plugin);
+      inFlightPlugins.add(pending);
+      try {
+        await pending;
+      } finally {
+        inFlightPlugins.delete(pending);
+      }
+    });
+  } catch (error) {
+    generationController.abort(error);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // Drain active plugins before cleanup, bounded for providers that ignore cancellation.
+      await Promise.race([
+        Promise.allSettled(inFlightPlugins),
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(resolve, 1000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+    throw error;
+  }
 
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
@@ -1705,7 +1743,8 @@ export async function synthesize({
       undefined,
       maxCharsPerMessage,
       redteamGenerationContext,
-      (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      (providerToWrap) =>
+        trackGenerationTokenUsage(providerToWrap, generationTokenUsage, generationAbortSignal),
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1731,7 +1770,8 @@ export async function synthesize({
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
       redteamGenerationContext,
-      (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      (providerToWrap) =>
+        trackGenerationTokenUsage(providerToWrap, generationTokenUsage, generationAbortSignal),
     );
 
   Object.assign(strategyResults, otherStrategyResults);

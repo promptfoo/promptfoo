@@ -606,6 +606,8 @@ describe('synthesize', () => {
 
       expect(mockProvider.callApi).toHaveBeenCalledWith(
         expect.stringContaining('Required keys: "user_message", "retrieved_context"'),
+        undefined,
+        { abortSignal: expect.any(AbortSignal) },
       );
       expect(result.injectVar).toBe(MULTI_INPUT_VAR);
       expect(result.testCases).toEqual([
@@ -1062,8 +1064,9 @@ describe('synthesize', () => {
       );
 
       expect(strategyTestCase).toBeDefined();
-      expect(mockProvider.callApi).toHaveBeenCalledWith(expect.stringContaining(strategyPayload));
-      expect(mockProvider.callApi).not.toHaveBeenCalledWith(expect.stringContaining(stalePayload));
+      const generationPrompts = mockProvider.callApi.mock.calls.map(([prompt]) => prompt);
+      expect(generationPrompts).toContainEqual(expect.stringContaining(strategyPayload));
+      expect(generationPrompts).not.toContainEqual(expect.stringContaining(stalePayload));
       expect(strategyTestCase?.vars?.document).toEqual(
         expect.stringMatching(
           /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/,

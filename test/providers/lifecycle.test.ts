@@ -9,9 +9,11 @@ import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { cleanupProvider, trackProvider, withProviderCleanup } from '../../src/providers/lifecycle';
 import { providerRegistry } from '../../src/providers/providerRegistry';
-import { createDeferred } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
+
+vi.mock('../../src/telemetry');
 
 const providerPath = path.resolve('test/fixtures/providers/cleanup-provider.mjs');
 const providerOptions = (config: Record<string, unknown> = {}): ProviderOptions => ({
@@ -27,6 +29,107 @@ const makeProvider = (cleanup = vi.fn()): ApiProvider => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe('provider cleanup ownership', () => {
+  it.each(['caller-owned', 'evaluation-owned', 'nested-owner', 'preloaded'] as const)(
+    'preserves %s strategy delegate ownership across real evaluations',
+    async (ownership) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
+      let closed = false;
+      const cleanup = vi.fn(async () => {
+        closed = true;
+      });
+      const delegate = providerOptions({
+        cleanup,
+        call: async () => {
+          if (closed) {
+            throw new Error('delegate is closed');
+          }
+        },
+        output: JSON.stringify({
+          generatedQuestion: 'hello',
+          rationaleBehindJailbreak: 'local fixture',
+          lastResponseSummary: '',
+          value: false,
+          metadata: 0,
+          rationale: 'local fixture',
+        }),
+      });
+      const scorer = await loadApiProvider(providerPath, { options: delegate });
+      const strategyConfig = {
+        id: 'promptfoo:redteam:crescendo',
+        config: { redteamProvider: delegate, injectVar: 'query', maxTurns: 1 },
+      };
+      const strategy = await loadApiProvider(strategyConfig.id, { options: strategyConfig });
+      const evaluations = async () => {
+        const runs = ownership === 'evaluation-owned' ? 1 : 2;
+        const passes = [];
+        for (let run = 0; run < runs; run++) {
+          const result = await evaluateWithSource(
+            {
+              prompts: ['{{query}}'],
+              providers: [makeProvider()],
+              defaultTest: { options: { provider: scorer } },
+              tests: [
+                {
+                  provider: ownership === 'evaluation-owned' ? strategyConfig : strategy,
+                  vars: { query: 'hello' },
+                  assert: [{ type: 'equals', value: 'ok' }],
+                },
+              ],
+            },
+            { cache: false },
+          );
+          passes.push(result.prompts[0].metrics?.testPassCount);
+        }
+        expect(passes).toEqual(Array(runs).fill(1));
+        if (ownership !== 'evaluation-owned') {
+          expect(cleanup).not.toHaveBeenCalled();
+        }
+      };
+      try {
+        if (ownership === 'preloaded') {
+          await (
+            strategy as ApiProvider & { getRedTeamProvider(): Promise<ApiProvider> }
+          ).getRedTeamProvider();
+        }
+        if (ownership === 'nested-owner' || ownership === 'preloaded') {
+          await withProviderCleanup(async () => {
+            trackProvider(strategy);
+            await evaluations();
+            expect(cleanup).not.toHaveBeenCalled();
+          });
+        } else {
+          await evaluations();
+        }
+        expect(cleanup).toHaveBeenCalledTimes(
+          ownership === 'evaluation-owned' || ownership === 'nested-owner' ? 1 : 0,
+        );
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
+  it('cleans late delegates in their closed owning scope exactly once', async () => {
+    const owner = makeProvider();
+    const delegate = makeProvider();
+    const load = createDeferred<ApiProvider>();
+    let pending: Promise<ApiProvider> | undefined;
+    await withProviderCleanup(async () => {
+      trackProvider(owner);
+      await withProviderCleanup(async () => {
+        pending = load.promise.then((provider) => {
+          trackProvider(provider, owner);
+          return trackProvider(provider, owner);
+        });
+      });
+      expect(delegate.cleanup).not.toHaveBeenCalled();
+    });
+    expect(owner.cleanup).toHaveBeenCalledOnce();
+    load.resolve(delegate);
+    await pending;
+    expect(delegate.cleanup).toHaveBeenCalledOnce();
+  });
+
   it('keeps direct loader results caller-owned', async () => {
     const cleanup = vi.fn();
     const provider = await loadApiProvider(providerPath, { options: providerOptions({ cleanup }) });

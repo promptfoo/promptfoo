@@ -13,6 +13,8 @@ import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../../util/utils';
 
+vi.mock('../../../src/telemetry');
+
 const playwrightMetadata = vi.hoisted(() => ({ version: '1.63.0' }));
 vi.mock('playwright/package.json', () => ({ default: playwrightMetadata }));
 

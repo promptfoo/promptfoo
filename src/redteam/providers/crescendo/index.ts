@@ -249,6 +249,7 @@ export class CrescendoProvider implements ApiProvider {
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
+          owner: this,
           provider: this.config.redteamProvider,
           preferSmallModel: false,
           jsonOnly: true,
@@ -269,7 +270,7 @@ export class CrescendoProvider implements ApiProvider {
         });
       } else {
         // Don't pass explicit provider - let getGradingProvider check CLI --grader first
-        this.scoringProvider = await redteamProviderManager.getGradingProvider({});
+        this.scoringProvider = await redteamProviderManager.getGradingProvider({ owner: this });
       }
     }
     return this.scoringProvider;

@@ -7,6 +7,7 @@ import { providerRegistry } from './providerRegistry';
 import type { ApiProvider } from '../types/providers';
 
 interface ProviderScope {
+  parent: ProviderScope | undefined;
   owned: Set<ApiProvider>;
   cleaned: Set<ApiProvider>;
   closed: boolean;
@@ -36,7 +37,12 @@ export async function withProviderCleanup<T>(
   operation: () => Promise<T>,
   hasFailure: () => boolean = () => false,
 ): Promise<T> {
-  const scope: ProviderScope = { owned: new Set(), cleaned: new Set(), closed: false };
+  const scope: ProviderScope = {
+    parent: providerScope.getStore(),
+    owned: new Set(),
+    cleaned: new Set(),
+    closed: false,
+  };
   return providerScope.run(scope, async () => {
     let failed = false;
     try {
@@ -58,29 +64,39 @@ export async function withProviderCleanup<T>(
   });
 }
 
-export function trackProvider<T extends ApiProvider>(provider: T): T {
-  const scope = providerScope.getStore();
+/** Cached delegates follow their owner, including an owner in an enclosing scope. */
+export function trackProvider<T extends ApiProvider>(provider: T, owner?: ApiProvider): T {
+  let scope = providerScope.getStore();
+  while (scope && owner && !scope.owned.has(owner)) {
+    scope = scope.parent;
+  }
   if (!scope) {
     return provider;
   }
   scope.owned.add(provider);
   if (scope.closed) {
     // A sibling load may finish after a failed Promise.all has returned.
-    void cleanupProvider(provider).catch((error) => {
-      logger.warn('Provider cleanup failed after evaluation error', { error });
-    });
+    void providerScope
+      .run(scope, () => cleanupProvider(provider))
+      .catch((error) => {
+        logger.warn('Provider cleanup failed after evaluation error', { error });
+      });
   }
   return provider;
 }
 
 /** Exclude provider instances supplied by the caller when enrolling a loaded config. */
-export function trackConfiguredProviders(providers: ApiProvider[], configured: unknown): void {
+export function trackConfiguredProviders(
+  providers: ApiProvider[],
+  configured: unknown,
+  owner?: ApiProvider,
+): void {
   const borrowed = new Set(
     (Array.isArray(configured) ? configured : [configured]).filter(isApiProvider),
   );
   for (const provider of providers) {
     if (!borrowed.has(provider)) {
-      trackProvider(provider);
+      trackProvider(provider, owner);
     }
   }
 }

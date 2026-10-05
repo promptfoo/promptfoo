@@ -5,6 +5,7 @@ import {
   trackGenerationTokenUsage,
 } from '../../src/redteam/generationTokenUsage';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { createDeferred } from '../util/utils';
 
 import type { ApiProvider, TokenUsage } from '../../src/types/index';
 
@@ -13,6 +14,105 @@ function createProvider(callApi: ApiProvider['callApi']): ApiProvider {
 }
 
 describe('generation token usage', () => {
+  it('blocks a cancelled generation call without recording a request', async () => {
+    const controller = new AbortController();
+    const error = new Error('generation cancelled');
+    const callApi = vi.fn().mockResolvedValue({ output: 'unused' });
+    const usage: TokenUsage = {};
+    const provider = trackGenerationTokenUsage(createProvider(callApi), usage, controller.signal);
+    controller.abort(error);
+
+    await expect(provider.callApi('generate')).rejects.toBe(error);
+
+    expect(callApi).not.toHaveBeenCalled();
+    expect(usage).toEqual({});
+  });
+
+  it.each(['generation', 'request'] as const)(
+    'forwards cancellation from the %s signal while preserving call options',
+    async (source) => {
+      const generation = new AbortController();
+      const request = new AbortController();
+      const callApi = vi.fn().mockResolvedValue({ output: 'generated' });
+      const provider = trackGenerationTokenUsage(createProvider(callApi), {}, generation.signal);
+      await provider.callApi('generate', undefined, {
+        abortSignal: request.signal,
+        includeLogProbs: true,
+      });
+      const forwarded = callApi.mock.calls[0][2];
+      expect(forwarded.includeLogProbs).toBe(true);
+      expect(forwarded.abortSignal.aborted).toBe(false);
+
+      const error = new Error('cancelled');
+      (source === 'generation' ? generation : request).abort(error);
+      expect(forwarded.abortSignal.reason).toBe(error);
+      await expect(
+        provider.callApi('retry', undefined, { abortSignal: request.signal }),
+      ).rejects.toBe(error);
+      expect(callApi).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('isolates simultaneous generation scopes sharing a borrowed provider', async () => {
+    const cancelled = new AbortController();
+    const active = new AbortController();
+    const response = createDeferred<{ output: string }>();
+    const callApi = vi.fn<ApiProvider['callApi']>().mockImplementation(() => response.promise);
+    const borrowed = createProvider(callApi);
+    const first = trackGenerationTokenUsage(borrowed, {}, cancelled.signal);
+    const second = trackGenerationTokenUsage(borrowed, {}, active.signal);
+    const firstCall = first.callApi('first');
+    const secondCall = second.callApi('second');
+
+    const error = new Error('first cancelled');
+    cancelled.abort(error);
+    expect(callApi.mock.calls[0][2]?.abortSignal?.aborted).toBe(true);
+    expect(callApi.mock.calls[1][2]?.abortSignal?.aborted).toBe(false);
+    response.resolve({ output: 'completed' });
+    await Promise.all([firstCall, secondCall]);
+
+    await expect(first.callApi('retry')).rejects.toBe(error);
+    await expect(second.callApi('continue')).resolves.toMatchObject({ output: 'completed' });
+    await expect(borrowed.callApi('later run')).resolves.toMatchObject({ output: 'completed' });
+    expect(callApi).toHaveBeenCalledTimes(4);
+  });
+
+  it('propagates cancellation to a specialized generation provider', async () => {
+    const controller = new AbortController();
+    const usage: TokenUsage = {};
+    const parent = trackGenerationTokenUsage(
+      createProvider(vi.fn<ApiProvider['callApi']>()),
+      usage,
+      controller.signal,
+    );
+    const callApi = vi.fn().mockResolvedValue({ output: 'unused' });
+    const child = trackAdditionalGenerationProvider(createProvider(callApi), parent);
+    const error = new Error('generation cancelled');
+    controller.abort(error);
+
+    await expect(child.callApi('generate')).rejects.toBe(error);
+
+    expect(callApi).not.toHaveBeenCalled();
+    expect(usage).toEqual({});
+  });
+
+  it('records incurred usage when an active call completes after cancellation', async () => {
+    const controller = new AbortController();
+    const response = createDeferred<{ output: string; tokenUsage: TokenUsage }>();
+    const usage: TokenUsage = {};
+    const provider = trackGenerationTokenUsage(
+      createProvider(() => response.promise),
+      usage,
+      controller.signal,
+    );
+    const call = provider.callApi('generate');
+    controller.abort(new Error('generation cancelled'));
+    response.resolve({ output: 'completed', tokenUsage: { total: 5, numRequests: 1 } });
+
+    await expect(call).resolves.toMatchObject({ output: 'completed' });
+    expect(usage).toMatchObject({ total: 5, numRequests: 1 });
+  });
+
   it('preserves cached generation in the logical footprint without incurring usage', async () => {
     const usage: TokenUsage = {};
     const provider = trackGenerationTokenUsage(

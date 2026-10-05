@@ -241,6 +241,7 @@ export class CustomProvider implements ApiProvider {
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
+          owner: this,
           provider: this.config.redteamProvider,
           preferSmallModel: false,
           jsonOnly: true,
@@ -261,6 +262,7 @@ export class CustomProvider implements ApiProvider {
         });
       } else {
         this.scoringProvider = await redteamProviderManager.getProvider({
+          owner: this,
           provider: this.config.redteamProvider,
           preferSmallModel: false,
         });

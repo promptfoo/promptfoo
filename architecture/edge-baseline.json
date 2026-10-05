@@ -43,7 +43,7 @@
   "redteam -> legacy-contracts": 152,
   "redteam -> legacy-runtime": 142,
   "redteam -> node": 209,
-  "redteam -> providers": 40,
+  "redteam -> providers": 41,
   "view-server -> core": 1,
   "view-server -> legacy-contracts": 21,
   "view-server -> legacy-runtime": 36,
