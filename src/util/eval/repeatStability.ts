@@ -1,12 +1,37 @@
-import {
-  type EvaluateResult,
-  type RepeatStabilityConfidenceInterval,
-  type RepeatStabilityGroup,
-  type RepeatStabilitySummary,
-  ResultFailureReason,
-} from '../../types';
-
 const WILSON_Z_95 = 1.959963984540054;
+// ResultFailureReason.ERROR's persisted value. Keep this aggregator structurally typed so it
+// does not add another node-to-legacy-contracts dependency solely for result projections.
+const ERROR_FAILURE_REASON = 2;
+
+interface RepeatStabilityConfidenceInterval {
+  confidenceLevel: 0.95;
+  lower: number;
+  upper: number;
+}
+
+interface RepeatStabilityGroup {
+  repeatGroupId: string;
+  promptIdx: number;
+  provider: { id?: string; label?: string };
+  description?: string;
+  promptLabel?: string;
+  repetitions: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  cached: number;
+  passRate?: number;
+  passRateConfidenceInterval?: RepeatStabilityConfidenceInterval;
+  unstable: boolean;
+}
+
+interface RepeatStabilitySummary {
+  totalGroups: number;
+  unstableGroups: number;
+  groupsWithErrors: number;
+  cachedResults: number;
+  groups: RepeatStabilityGroup[];
+}
 
 export function getWilsonScoreInterval(
   passed: number,
@@ -31,25 +56,19 @@ export function getWilsonScoreInterval(
   };
 }
 
-type RepeatStabilityResult = Omit<
-  Pick<
-    EvaluateResult,
-    | 'description'
-    | 'failureReason'
-    | 'gradingResult'
-    | 'prompt'
-    | 'promptIdx'
-    | 'provider'
-    | 'repeatGroupId'
-    | 'repeatIndex'
-    | 'response'
-    | 'success'
-    | 'testCase'
-  >,
-  'description'
-> & {
+interface RepeatStabilityResult {
   description?: string | null;
-};
+  failureReason: number;
+  gradingResult?: { metadata?: { cachedResponse?: boolean } } | null;
+  prompt: { label?: string };
+  promptIdx: number;
+  provider: { id?: string; label?: string };
+  repeatGroupId?: string;
+  repeatIndex?: number;
+  response?: { cached?: boolean };
+  success: boolean;
+  testCase: { description?: string };
+}
 
 type MutableRepeatStabilityGroup = RepeatStabilityGroup & { scored: number };
 
@@ -102,7 +121,7 @@ export class RepeatStabilityCalculator {
     if (isCachedResult(result)) {
       group.cached++;
     }
-    if (result.failureReason === ResultFailureReason.ERROR) {
+    if (result.failureReason === ERROR_FAILURE_REASON) {
       group.errors++;
     } else if (result.success) {
       group.passed++;
