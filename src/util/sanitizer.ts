@@ -54,6 +54,30 @@ function hasUrlPayloadUserinfo(value: string): boolean {
   }
 }
 
+// Scalar strings can retain JSON quoting at any URL/key fast path. Decode only
+// those string layers for the inherited guard, without interpreting containers
+// or changing the original public bytes. The existing depth budget also bounds
+// this iterative interpretation; exhaustion must not restore unchecked data.
+function getUrlPayloadScalar(value: string, maxDepth: number): string | null {
+  let scalar = value;
+  let remaining = maxDepth;
+  while (scalar.trimStart().startsWith('"')) {
+    if (remaining-- < 0) {
+      return null;
+    }
+    try {
+      const parsed: unknown = JSON.parse(scalar);
+      if (typeof parsed !== 'string') {
+        break;
+      }
+      scalar = parsed;
+    } catch {
+      break;
+    }
+  }
+  return scalar;
+}
+
 /**
  * Names that hold a credential word without being a credential: special tokens, cursors and
  * token limits, and settings. Takes a name from `normalizeFieldName`.
@@ -185,10 +209,14 @@ function unparseableUrlMightLeakSecret(
   preservePureTemplates = false,
   compoundContext?: CompoundKeyContext,
 ): boolean {
+  const scalar = compoundContext?.guardUrlPayload
+    ? getUrlPayloadScalar(url, compoundContext.maxDepth)
+    : url;
   return (
-    (compoundContext?.guardUrlPayload ? hasUrlPayloadUserinfo(url) : hasUrlUserinfo(url)) ||
-    looksLikeSecret(url.trim()) ||
-    hasSecretFormSegment(url, preservePureTemplates, compoundContext)
+    scalar === null ||
+    (compoundContext?.guardUrlPayload ? hasUrlPayloadUserinfo(scalar) : hasUrlUserinfo(scalar)) ||
+    looksLikeSecret(scalar.trim()) ||
+    hasSecretFormSegment(scalar, preservePureTemplates, compoundContext)
   );
 }
 
@@ -1507,7 +1535,12 @@ function sanitizeUrlEncodedStringWithContext(
 // Property names retain opaque public identifiers. Only the existing URL
 // userinfo/parameter guards apply to keys in an already-decoded URL payload.
 function hasUrlPayloadKeyCredential(key: string, compoundContext?: CompoundKeyContext): boolean {
-  return hasUrlPayloadUserinfo(key) || hasSecretFormSegment(key, false, compoundContext);
+  const scalar = getUrlPayloadScalar(key, compoundContext?.maxDepth ?? MAX_DEPTH);
+  return (
+    scalar === null ||
+    hasUrlPayloadUserinfo(scalar) ||
+    hasSecretFormSegment(scalar, false, compoundContext)
+  );
 }
 
 /**

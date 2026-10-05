@@ -917,6 +917,10 @@ describe('MCPClient', () => {
             headers: { 'https://host/db;password=context-fixture': 'x' },
             page: 2,
           }),
+          quotedScalarUrl: JSON.stringify({
+            url: JSON.stringify('https:alice:quoted-fixture@example.test/'),
+            page: 2,
+          }),
           quotedHostUrl: JSON.stringify({
             apiHost: JSON.stringify('password=scalar-fixture'),
             page: 2,
@@ -1027,6 +1031,7 @@ describe('MCPClient', () => {
                             headers: { '[REDACTED]': '[REDACTED]' },
                             page: 2,
                           }),
+                          quotedScalarUrl: JSON.stringify({ url: '[REDACTED]', page: 2 }),
                           quotedHostUrl: JSON.stringify({ apiHost: '[REDACTED]', page: 2 }),
                           parserKeyUrl: JSON.stringify({
                             headers: { '[REDACTED]': '[REDACTED]' },

@@ -1187,6 +1187,55 @@ describe('sanitizeMcpToolData', () => {
     },
   );
 
+  it.each(['url', 'callbackUrl', 'apiBaseUrl', 'apiHost'])(
+    'guards repeated JSON scalar quoting across %s payload surfaces',
+    (role) => {
+      const makePayloads = (value: string) => [
+        { target: value },
+        { items: [value] },
+        { url: value },
+        { callbackUrl: value },
+        { apiBaseUrl: value },
+        { apiHost: value },
+        { env: { SERVICE_HOST: value } },
+        { [value]: 'public' },
+        { headers: { [value]: 'x' } },
+        { authHeaders: { [value]: 'x' } },
+        { headers: { Accept: value } },
+        { authHeaders: { Accept: value } },
+      ];
+      for (const prefix of ['https:', 'https:\\', 'http:/', 'ftp:\\\\']) {
+        let secret = `${prefix}alice:quoted-fixture@example.test/public`;
+        let publicValue = `${prefix}example.test/public`;
+        for (let quotes = 0; quotes < 4; quotes++) {
+          for (const payload of makePayloads(secret)) {
+            const input = { [role]: JSON.stringify({ ...payload, page: 2 }) };
+            const original = structuredClone(input);
+            expect(JSON.stringify(sanitizeMcpToolData(input))).not.toContain('quoted-fixture');
+            expect(input).toEqual(original);
+          }
+          // Public quoted scalars keep their original spelling and quote depth.
+          const input = { [role]: JSON.stringify({ target: publicValue, page: 2 }) };
+          expect(sanitizeMcpToolData(input)).toEqual(input);
+          secret = JSON.stringify(secret);
+          publicValue = JSON.stringify(publicValue);
+        }
+      }
+    },
+  );
+
+  it('bounds quoted scalar interpretation while preserving default callers', () => {
+    let scalar = 'public';
+    for (let index = 0; index < 8; index++) {
+      scalar = JSON.stringify(scalar);
+    }
+    const input = { url: JSON.stringify({ target: scalar, page: 2 }) };
+    expect(sanitizeObject(input, { sanitizeUrls: true, maxDepth: 2 })).toEqual(input);
+    expect(
+      sanitizeObject(input, { sanitizeUrls: true, maxDepth: 2, redactCompoundKeys: true }),
+    ).toEqual({ url: JSON.stringify({ target: '[REDACTED]', page: 2 }) });
+  });
+
   it.each(['apiHost', 'env.SERVICE_HOST'])('walks nested raw %s JSON payloads once', (name) => {
     const wrap = (value: string) =>
       name.startsWith('env.') ? { env: { [name.slice(4)]: value } } : { [name]: value };
