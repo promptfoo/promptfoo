@@ -39,7 +39,7 @@ export const CODEX_SECURITY_OPERATIONS = [
   'validation',
 ] as const;
 
-const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.1.18';
+const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.1.31';
 
 const ReasoningEffortSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 
@@ -163,10 +163,10 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     try {
       const module = (await importModule(entryPoint)) as CodexSecurityModule;
       const version = typeof module.VERSION === 'string' ? module.VERSION : 'unknown';
-      if (!semverSatisfies(version, `>=${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)) {
+      if (!semverSatisfies(version, `^${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)) {
         incompatibleVersions.add(version);
         logger.warn(
-          `[CodexSecurity] Ignoring @openai/codex-security ${version}; version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for complete security operations and deep-scan usage accounting.`,
+          `[CodexSecurity] Ignoring @openai/codex-security ${version}; a compatible version ^${MINIMUM_CODEX_SECURITY_SDK_VERSION} is required for updated plugin archive extraction, finding validation, and deep-scan usage accounting.`,
         );
         continue;
       }
@@ -184,7 +184,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
 
       Promptfoo and the SDK require a supported even-numbered Node.js release: ^22.22.0, ^24.0.0, or ^26.0.0.
       Reinstall them together with:
-        npm install promptfoo @openai/codex-security
+        npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
 
       See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
     );
@@ -194,7 +194,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     throw new Error(
       dedent`The installed @openai/codex-security package is incompatible (${Array.from(incompatibleVersions).join(', ')}).
 
-      Version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for finding validation and accurate deep-worker cost tracking.
+      A compatible version ^${MINIMUM_CODEX_SECURITY_SDK_VERSION} is required for updated plugin archive extraction, finding validation, and accurate deep-worker cost tracking.
       Install the compatible SDK alongside Promptfoo with:
         npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
 
@@ -206,7 +206,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     dedent`The @openai/codex-security package is required but not installed.
 
     Install it alongside Promptfoo with:
-      npm install promptfoo @openai/codex-security
+      npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
 
     Requires Node.js ^22.22.0, ^24.0.0, or ^26.0.0.
     See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,

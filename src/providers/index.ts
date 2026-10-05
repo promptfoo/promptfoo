@@ -90,13 +90,16 @@ export async function loadApiProvider(
   const env = context.env ?? cliState.env;
   const basePath = context.basePath ?? cliState.basePath;
   return cliState.withBasePath(basePath, () =>
-    cliState.withEnv(env, () => createApiProvider(providerPath, { ...context, basePath, env })),
+    cliState.withEnv(env, () =>
+      createApiProvider(providerPath, { ...context, basePath, env }, context.env),
+    ),
   );
 }
 
 async function createApiProvider(
   providerPath: string,
   context: LoadApiProviderContext,
+  callerEnv: EnvOverrides | undefined,
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
 
@@ -119,8 +122,8 @@ async function createApiProvider(
   const providerOptions: ProviderOptions = {
     id: renderedId,
     config: {
+      ...(basePath !== undefined && { basePath }),
       ...renderedConfig,
-      basePath,
     },
     env: mergedEnv,
   };
@@ -203,20 +206,17 @@ async function createApiProvider(
 
     const resolvedFilePath = renderEnvOnlyInObject(
       fileContent.id,
-      mergeProviderEnv('', env, fileContent.env, options.env),
+      mergeProviderEnv('', env, fileContent.env, callerEnv, options.env),
     );
-    // Provider files own their defaults; Codex SDK explicitly gives suite key aliases precedence.
-    const mergedFileEnv = mergeProviderEnv(resolvedFilePath, env, fileContent.env, options.env);
-    if (mergedFileEnv && /^openai:(?:codex-sdk|codex)(?::|$)/.test(resolvedFilePath)) {
-      const aliases = [fileContent.env, env, options.env].map(
-        (scope) =>
-          scope && { OPENAI_API_KEY: scope.OPENAI_API_KEY, CODEX_API_KEY: scope.CODEX_API_KEY },
-      );
-      delete mergedFileEnv.OPENAI_API_KEY;
-      delete mergedFileEnv.CODEX_API_KEY;
-      Object.assign(mergedFileEnv, mergeProviderEnv(resolvedFilePath, ...aliases));
-    }
-
+    // Explicit callers can override file defaults. An inherited evaluation environment
+    // remains below file defaults, as it does for files expanded by loadApiProviders.
+    const mergedFileEnv = mergeProviderEnv(
+      resolvedFilePath,
+      env,
+      fileContent.env,
+      callerEnv,
+      options.env,
+    );
     return loadApiProvider(resolvedFilePath, {
       basePath,
       options: {

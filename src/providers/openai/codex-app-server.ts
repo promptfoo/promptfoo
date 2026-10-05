@@ -24,6 +24,7 @@ import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -825,6 +826,50 @@ function createAbortError(message: string): Error {
   const error = new Error(message);
   error.name = 'AbortError';
   return error;
+}
+
+/** Find npm's entrypoint only when Windows cannot launch a native Codex binary. */
+function getCodexNpmEntrypoint(env: Record<string, string>): string | undefined {
+  // Match Node's first, case-insensitive PATH key after sorting environment keys.
+  const pathKey = Object.keys(env)
+    .sort()
+    .find((key) => key.toUpperCase() === 'PATH');
+  const searchPath = pathKey
+    ? env[pathKey]
+    : (Object.entries(process.env).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? '');
+  // libuv skips quoted delimiters, then consumes the rest of the PATH component.
+  const directories = (
+    searchPath.match(
+      new RegExp(`(?:"[^"]*(?:"|$)|'[^']*(?:'|$)|[^${path.delimiter}]+)[^${path.delimiter}]*`, 'g'),
+    ) ?? []
+  ).map((directory) => directory.replace(/^["']|["']$/g, ''));
+  // libuv checks the parent process environment when deciding whether to search cwd.
+  const searchCwd = !Object.keys(process.env).some(
+    (key) => key.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH',
+  );
+  const nativeDirectories = searchCwd ? [process.cwd(), ...directories] : directories;
+  if (
+    nativeDirectories.some((directory) =>
+      ['codex.com', 'codex.exe'].some((file) =>
+        fs.existsSync(path.resolve(process.cwd(), directory, file)),
+      ),
+    )
+  ) {
+    return undefined;
+  }
+  // Only discover npm installations on absolute PATH entries, never in the workspace.
+  const binDirectory = directories.find(
+    (directory) => path.isAbsolute(directory) && fs.existsSync(path.join(directory, 'codex.cmd')),
+  );
+  if (!binDirectory) {
+    return undefined;
+  }
+  const nodeModulesDirectory =
+    path.basename(binDirectory).toLowerCase() === '.bin'
+      ? path.dirname(binDirectory)
+      : path.join(binDirectory, 'node_modules');
+  const entrypoint = path.join(nodeModulesDirectory, '@openai', 'codex', 'bin', 'codex.js');
+  return fs.existsSync(entrypoint) ? entrypoint : undefined;
 }
 
 class CodexAppServerConnection {
@@ -1665,6 +1710,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       delete sortedEnv.TRACEPARENT;
     }
 
+    if (config.working_dir && isAgentWorkspace(config.working_dir)) {
+      clearRepositoryEnv(sortedEnv);
+    }
+
     return sortedEnv;
   }
 
@@ -1745,10 +1794,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     config: CodexAppServerConfig,
   ): Promise<CodexAppServerConnection> {
     const connectionInstanceId = `${connectionKey}:${crypto.randomUUID()}`;
+    const entrypoint =
+      process.platform === 'win32' && config.codex_path_override === undefined
+        ? getCodexNpmEntrypoint(env)
+        : undefined;
+    const args = this.buildAppServerArgs(config, env);
     const connection = new CodexAppServerConnection({
       connectionInstanceId,
-      command: config.codex_path_override ?? 'codex',
-      args: this.buildAppServerArgs(config, env),
+      command: config.codex_path_override ?? (entrypoint ? process.execPath : 'codex'),
+      args: entrypoint ? [entrypoint, ...args] : args,
       env,
       requestTimeoutMs: this.getRequestTimeoutMs(config),
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,
@@ -2361,7 +2415,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
       ...(config.base_url
-        ? { config: { ...(config.cli_config ?? {}), base_url: config.base_url } }
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
         : {}),
       ephemeral: config.ephemeral ?? true,
       experimentalRawEvents: config.experimental_raw_events ?? false,
@@ -2388,6 +2442,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ? { developerInstructions: config.developer_instructions }
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
+      ...(config.base_url
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
+        : {}),
       persistExtendedHistory: config.persist_extended_history ?? false,
     };
   }
@@ -3455,7 +3512,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       input,
       output,
       cached: usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0,
-      cacheWrite: usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens,
+      cacheWrite:
+        typeof (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens) === 'number'
+          ? (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens)
+          : undefined,
       reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0,
     };
   }

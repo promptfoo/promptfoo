@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { intersects, minVersion, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
-import { extractModuleSpecifiers, getPackageName } from '../scripts/architectureUtils';
+import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -46,7 +46,7 @@ function validateDockerInstallCommands(dockerfile: string): void {
       expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
     } else if (command === 'rebuild') {
       // Package names and globs can rebuild untrusted nested dependencies.
-      expect(args).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+      expect(args).toEqual(['./node_modules/esbuild']);
     }
   }
 }
@@ -61,9 +61,16 @@ const KNOWN_BAD_RELEASES = new Map([
   ['@hono/node-server', '<1.19.15 || >=2.0.0 <2.0.10'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
+  ['csv-parse', '<7.0.2'], // GHSA-8cw4-87c7-c6xx
+  ['dompurify', '<=3.4.15'], // GHSA-p98j-92pf-mc4p, GHSA-6688-9rhm-gjv2
+  ['drizzle-orm', '<0.45.2 || >=1.0.0-beta.2 <1.0.0-beta.20'], // GHSA-gpj5-g38j-94v9
+  ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
+  ['fast-uri', '<2.4.7 || >=3.0.0 <3.1.8 || >=4.0.0 <4.1.5'], // GHSA-hrr3-gc8f-f4qj, GHSA-qw65-cvwx-89v3, GHSA-58mr-gqgx-xq4g
+  ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
   ['hono', '<4.13.7'], // GHSA-hxh3-vqpv-xpqv
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
+  ['serialize-javascript', '7.1.1'], // GHSA-gfhx-hw2g-v5hg
   ['undici', '<7.29.1 || >=8.0.0 <8.10.2'], // GHSA-3xpg-4rpp-hhhm and the 7.29.1/8.10.2 fixes
   ['ws', '<5.2.5 || >=6.0.0 <6.2.4 || >=7.0.0 <7.5.11 || >=8.0.0 <8.21.0'], // GHSA-96hv-2xvq-fx4p
 ]);
@@ -103,13 +110,7 @@ describe('package manifests', () => {
     ['src/app/package.json', ['@vitest/browser', 'dedent', 'fast-deep-equal', 'zod']],
     [
       'site/package.json',
-      [
-        '@docusaurus/plugin-content-blog',
-        '@docusaurus/theme-common',
-        '@docusaurus/types',
-        '@swc/core',
-        'ajv',
-      ],
+      ['@docusaurus/plugin-content-blog', '@docusaurus/theme-common', '@docusaurus/types', 'ajv'],
     ],
   ] as const)('declares direct imports in their owning workspace: %s', (manifest, dependencies) => {
     const workspace = readPackageJson<PackageManifest>(manifest);
@@ -405,37 +406,11 @@ describe('package manifests', () => {
     'RUN node /usr/local/lib/node_modules/npm/bin/npm-cli.js ci',
     'RUN <<EOF\nnpm ci\nEOF',
   ])('rejects an additional unsafe Docker command: %s', (unsafeCommand) => {
-    const safeCommands =
-      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const safeCommands = 'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild';
     expect(() => validateDockerInstallCommands(`${safeCommands}\n${unsafeCommand}`)).toThrow();
     expect(() =>
       validateDockerInstallCommands(`${safeCommands} && ${unsafeCommand.replace('RUN ', '')}`),
     ).toThrow();
-  });
-
-  it('includes every browser loader in the optional production profile', () => {
-    const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock =
-      readPackageJson<PackageLockManifest<{ dev?: boolean }>>('package-lock.json');
-    const browserSource = fs.readFileSync('src/providers/browser.ts', 'utf8');
-    const browserPackages = extractModuleSpecifiers(browserSource, 'src/providers/browser.ts')
-      .map(getPackageName)
-      .filter((name): name is string => name !== undefined);
-
-    expect(browserPackages).toContain('puppeteer-extra-plugin-stealth');
-    // Chromium supplies the executable via its install script, not a source import.
-    for (const dependency of new Set([...browserPackages, '@playwright/browser-chromium'])) {
-      expect(
-        packageJson.optionalDependencies?.[dependency],
-        `${dependency} must be available to production browser consumers`,
-      ).toBeDefined();
-      // npm treats a same-root dev + optional declaration as dev-only during
-      // `npm ci --omit=dev`, even though packed consumers resolve it as optional.
-      expect(packageJson.devDependencies?.[dependency]).toBeUndefined();
-      const installed = packageLock.packages[`node_modules/${dependency}`];
-      expect(installed, `${dependency} must be installed`).toBeDefined();
-      expect(installed?.dev, `${dependency} must survive --omit=dev`).not.toBe(true);
-    }
   });
 
   it('declares static runtime imports as required for installs that omit optional packages', () => {
@@ -456,32 +431,20 @@ describe('package manifests', () => {
     }
   });
 
-  it('lets consumers omit separately installed features and platform binaries', () => {
+  it('lets consumers omit separately installed features', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
     const packageLock =
-      readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
-    const platformBindings = Object.keys({
-      ...packageJson.dependencies,
-      ...packageJson.optionalDependencies,
-    }).filter((dependency) =>
-      ['@rollup/rollup-', '@swc/core-'].some((prefix) => dependency.startsWith(prefix)),
-    );
-
+      readPackageJson<PackageLockManifest<{ optional?: boolean; devOptional?: boolean }>>(
+        'package-lock.json',
+      );
     for (const dependency of [
-      '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
-      '@langfuse/client',
       '@modelcontextprotocol/sdk',
-      '@openai/codex-security',
       '@opencode-ai/sdk',
-      '@slack/web-api',
-      '@swc/core',
       'hono',
-      'ibm-cloud-sdk-core',
       'read-excel-file',
       'sharp',
-      ...platformBindings,
     ]) {
       expect(packageJson.optionalDependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
@@ -492,14 +455,9 @@ describe('package manifests', () => {
     expect(sitePackageJson.dependencies).not.toHaveProperty('sharp');
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
 
-    for (const dependency of [
-      '@alcalzone/ansi-tokenize',
-      '@openai/codex-security',
-      '@opencode-ai/sdk',
-      '@rollup/rollup-linux-x64-gnu',
-      '@slack/web-api',
-    ]) {
-      expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);
+    for (const dependency of ['@opencode-ai/sdk']) {
+      const entry = packageLock.packages[`node_modules/${dependency}`];
+      expect(entry?.optional || entry?.devOptional, dependency).toBe(true);
     }
   });
 

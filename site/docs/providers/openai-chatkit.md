@@ -47,6 +47,7 @@ Use `version="draft"` for testing, or omit version to use the latest published v
 ### Step 3: Create Your Eval Config
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ChatKit workflow eval
 
 prompts:
@@ -65,8 +66,11 @@ tests:
 
 ### Step 4: Run Your First Eval
 
+ChatKit browser support is optional. For a global CLI, use `npm install -g promptfoo "playwright@^1.63.0"` followed by `playwright install chromium`.
+
 ```bash
-# Install Playwright (first time only)
+# Install the optional SDK alongside Promptfoo and its matching browser
+npm install promptfoo "playwright@^1.63.0"
 npx playwright install chromium
 
 # Set your API key
@@ -165,7 +169,7 @@ Stateful mode requires `--max-concurrency 1` for reliable behavior. The conversa
 
 ### Using with Simulated User
 
-For comprehensive multi-turn testing, combine ChatKit with the [simulated user provider](/docs/providers/simulated-user):
+For multi-turn testing, combine ChatKit with the [simulated user provider](/docs/providers/simulated-user):
 
 ```yaml
 prompts:
@@ -237,6 +241,7 @@ Set `maxApprovals` to limit approval interactions per message (default: 5).
 Test changes between workflow versions by configuring multiple providers:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Compare workflow v2 vs v3
 
 prompts:
@@ -279,6 +284,7 @@ This helps verify that new versions maintain quality and don't regress on import
 ## Complete Example
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ChatKit customer support eval
 
 prompts:
@@ -318,10 +324,25 @@ npx promptfoo eval --max-concurrency 4
 ### Playwright not installed
 
 ```text
+This provider requires the optional Playwright package.
+```
+
+Install the SDK alongside Promptfoo in the same project:
+
+```bash
+npm install promptfoo "playwright@^1.63.0"
+npx playwright install chromium
+```
+
+For a global CLI, use `npm install -g promptfoo "playwright@^1.63.0"` and then `playwright install chromium`.
+
+### Chromium not installed
+
+```text
 Error: Playwright browser not installed
 ```
 
-Run `npx playwright install chromium`
+The SDK is available, but its matching browser binary is missing. Run `npx playwright install chromium` in the project, or `playwright install chromium` for a global installation.
 
 ### Timeout errors
 

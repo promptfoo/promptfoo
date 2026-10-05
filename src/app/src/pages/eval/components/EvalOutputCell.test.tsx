@@ -951,10 +951,18 @@ describe('EvalOutputCell', () => {
       await clipboard.writeText.mock.results[0]?.value;
     });
 
+    // Flush query notifications without advancing the three-second link feedback timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(1);
 
     unmount();
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -984,6 +992,10 @@ describe('EvalOutputCell', () => {
       await writeTextPromise;
     });
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -2413,6 +2425,10 @@ describe('isVideoProvider helper function', () => {
 
   it('should return true for Google Veo 3.1 provider', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
+  });
+
+  it('should return true for Google Veo on Vertex AI', () => {
+    expect(isVideoProvider('vertex:video:veo-3.1-generate-001')).toBe(true);
   });
 
   it('should return true for Google Veo 3.1 Fast provider', () => {
