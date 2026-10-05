@@ -41,6 +41,161 @@ vi.mock('../../../src/util/fetch/index', () => ({
 describe('sanitizeMcpToolData', () => {
   const omitted = '[MCP tool data omitted: it could not be sanitized]';
 
+  it('retains inherited host credential checks when authority parsing fails', () => {
+    for (const authority of [
+      'alice:host-fixture@db:badport',
+      'alice:host-fixture@bad host',
+      'alice:host-fixture@[bad]',
+      'alice:host-fixture@',
+      'alice:host-fixture@{{ host }}',
+    ]) {
+      for (const field of ['target', 'url', 'callbackUrl', 'apiBaseUrl']) {
+        const payload = JSON.stringify({ [field]: authority, page: 2 });
+        const args = { apiHost: payload, env: { SERVICE_HOST: payload } };
+        const original = structuredClone(args);
+        const expected = JSON.stringify({ [field]: '[REDACTED]', page: 2 });
+        expect(sanitizeMcpToolData(args)).toEqual({
+          apiHost: expected,
+          env: { SERVICE_HOST: expected },
+        });
+        expect(args).toEqual(original);
+      }
+    }
+    const payload = JSON.stringify({
+      'alice:host-fixture@db:badport': 'GET',
+      '[REDACTED]': 'authored',
+      page: 2,
+    });
+    expect(sanitizeMcpToolData({ apiHost: payload })).toEqual({
+      apiHost: JSON.stringify({ '[REDACTED]#1': 'GET', '[REDACTED]': 'authored', page: 2 }),
+    });
+  });
+
+  it('keeps inherited host checks on URL fields with unrelated template markers', () => {
+    for (const value of [
+      'alice:host-fixture@db/path?q={{ q }}',
+      'alice:host-fixture@db/{{ path }}',
+      'alice:host-fixture@db/path#{{ fragment }}',
+    ]) {
+      const payload = JSON.stringify({
+        url: value,
+        callbackUrl: value,
+        apiBaseUrl: value,
+        page: 2,
+      });
+      const expected = JSON.stringify({
+        url: '[REDACTED]',
+        callbackUrl: '[REDACTED]',
+        apiBaseUrl: '[REDACTED]',
+        page: 2,
+      });
+      const args = { apiHost: payload, env: { SERVICE_HOST: payload } };
+      const original = structuredClone(args);
+      expect(sanitizeMcpToolData(args)).toEqual({
+        apiHost: expected,
+        env: { SERVICE_HOST: expected },
+      });
+      expect(args).toEqual(original);
+      expect(sanitizeObject({ url: value }, { sanitizeUrls: true })).toEqual({ url: value });
+    }
+  });
+
+  it('checks repeatedly quoted form scalars with the bounded logging path policy', () => {
+    for (const quotes of [1, 2, 3]) {
+      let secret = 'https://host/token/loggingfixture123456';
+      let publicValue = 'https://host/public/page';
+      for (let count = 0; count < quotes; count++) {
+        secret = JSON.stringify(secret);
+        publicValue = JSON.stringify(publicValue);
+      }
+      const args = {
+        apiHost: `data=${secret}`,
+        apiBaseUrl: `data=${secret}`,
+        env: { SERVICE_HOST: `data=${secret}` },
+      };
+      const original = structuredClone(args);
+      expect(sanitizeMcpToolData(args)).toEqual({
+        apiHost: 'data=%5BREDACTED%5D',
+        apiBaseUrl: 'data=%5BREDACTED%5D',
+        env: { SERVICE_HOST: 'data=%5BREDACTED%5D' },
+      });
+      expect(args).toEqual(original);
+      const publicArgs = {
+        apiHost: `data=${publicValue}`,
+        apiBaseUrl: `data=${publicValue}`,
+        env: { SERVICE_HOST: `data=${publicValue}` },
+      };
+      expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+    }
+  });
+
+  it('preserves public host data and opaque container names with the inherited guard', () => {
+    const payload = JSON.stringify({
+      target: 'alice@bad host',
+      url: 'alice@example.test/public?q={{ q }}',
+      callbackUrl: 'mailto:alice@example.test',
+      apiBaseUrl: 'urn:example:public',
+      '{"target":"alice:opaque-name@db:badport"}': 'public',
+      page: 2,
+    });
+    const args = { apiHost: payload, env: { SERVICE_HOST: payload } };
+    expect(sanitizeMcpToolData(args)).toEqual(args);
+  });
+
+  it('preserves ordinary token count and piece families while checking descendants', () => {
+    for (const field of [
+      'logitTokens',
+      'reservedTokens',
+      'numTokens',
+      'num_tokens',
+      'numInputTokens',
+      'totalTokens',
+      'cachedTokens',
+      'reasoningTokens',
+      'cachedInputTokens',
+      'audioInputTokens',
+      'num_output_tokens',
+      'cacheReadInputTokens',
+      'cache_creation_input_tokens',
+      'cachedVideoPromptTokens',
+      'total_reasoning_tokens',
+      'num_input_image_tokens',
+      'max_output_tokens',
+      'prompt_cache_hit_tokens',
+      'accepted_prediction_tokens',
+    ]) {
+      const data = {
+        [field]: { count: 3, items: ['public', 12], databasePassword: 'nested-fixture' },
+      };
+      const safe = { [field]: { count: 3, items: ['public', 12], databasePassword: '[REDACTED]' } };
+      for (const encode of [
+        (value: unknown) => value,
+        (value: unknown) => JSON.stringify(value),
+        (value: unknown) => `data=${encodeURIComponent(JSON.stringify(value))}`,
+      ]) {
+        const args = { one: { two: { three: { four: { five: encode(data) } } } } };
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(args)).toEqual({
+          one: { two: { three: { four: { five: encode(safe) } } } },
+        });
+        expect(args).toEqual(original);
+      }
+      expect(
+        sanitizeMcpToolData({ apiKeysByTenant: { [field]: ['private-fixture', 123] } }),
+      ).toEqual({
+        apiKeysByTenant: { [field]: ['[REDACTED]', '[REDACTED]'] },
+      });
+      expect(sanitizeObject({ [field]: { count: 3, items: ['public', 12] } })).toEqual({
+        [field]: { count: 3, items: ['public', 12] },
+      });
+    }
+    for (const field of ['accessTokens', 'authTokens', 'sessionTokens', 'clientTokens']) {
+      expect(sanitizeMcpToolData({ [field]: ['private-fixture', 123] })).toEqual({
+        [field]: ['[REDACTED]', '[REDACTED]'],
+      });
+    }
+  });
+
   it('inspects encoded form payloads in structural URL keys with the remaining depth', () => {
     for (const payload of [
       'jdbc:db;password=encoded-key-fixture',

@@ -66,7 +66,14 @@ function hasUrlPayloadUserinfo(value: string, guard?: UrlPayloadGuard): boolean 
       // A bare email address is public data, not evidence of a password.
       return Boolean(parsed.password);
     } catch {
-      // Malformed text still receives the existing structural form checks.
+      // Retain the host field's authority interpretation even when its port or
+      // hostname is invalid. Require a password separator so public email data
+      // does not become a credential merely because parsing failed.
+      const authorityEnd = value.search(/[\\/?#]/);
+      const authority = authorityEnd === -1 ? value : value.slice(0, authorityEnd);
+      const atIndex = authority.lastIndexOf('@');
+      const colonIndex = authority.indexOf(':');
+      return colonIndex !== -1 && atIndex > colonIndex + 1;
     }
   }
   return false;
@@ -391,6 +398,24 @@ function isCompoundSecretObjectField(name: string, value: unknown): boolean {
   return terminal.length <= 3 || isSecretParameter(name, textValue, false);
 }
 
+// Provider usage and tokenization fields hold counts or token pieces. Match only
+// these finite metadata roles, not arbitrary prefixes such as access/auth/session.
+// Descendants still receive ordinary credential checks, and inherited private
+// collection roles take precedence over this MCP-only field classification.
+function isMcpTokenMetadataName(normalized: string): boolean {
+  return (
+    /^(?:input|output|completion|prompt|reasoning(?:output)?|thinking|thought|response|logit|reserved|budget|num(?:input(?:image|text)?|output)?|total(?:input|output|cached|reasoning|thought|tooluse)?)tokens$/.test(
+      normalized,
+    ) ||
+    /^(?:(?:audio|image|video|text)(?:input|output|completion|prompt)?|(?:cached|uncached)(?:audio|image|video|text|nontext)?(?:input|prompt|response)?|toolprompt)tokens$/.test(
+      normalized,
+    ) ||
+    /^(?:cache(?:read|write|creation)(?:input)?|promptcache(?:hit|miss)|billablecached|(?:accepted|rejected)prediction|(?:max|min)(?:completion|new|output|thinking|responseoutput)?)tokens$/.test(
+      normalized,
+    )
+  );
+}
+
 // Credential collections retain their structure but hide string and numeric
 // descendants; direct scalar counts stay intact. Metadata roles remain ordinary
 // and recurse through credential/URL checks. This policy is only enabled for MCP.
@@ -411,7 +436,7 @@ function getCompoundSecretObjectFieldKind(
     return 'credential';
   }
   if (
-    /^(?:input|output|completion|prompt)tokens$/.test(normalized) ||
+    isMcpTokenMetadataName(normalized) ||
     /(?:tokenusages?|tokenbudgets?|tokenids|signaturealgorithms?|passwordpolic(?:y|ies))$/.test(
       normalized,
     ) ||
@@ -1376,15 +1401,17 @@ function sanitizeJsonString(
       return REDACTED;
     }
   }
-  // Use the scalar already parsed above, without another decode/traversal. Its
-  // enclosing JSON quotes must not turn a pure placeholder into a credential.
-  // Logging roles retain their existing stricter placeholder policy.
+  // Keep public bytes unchanged while applying logging-path checks to the same
+  // bounded scalar interpretation as the structural credential guard below.
+  const loggingScalar = isLoggingUrlPayload(guardUrlPayload)
+    ? getUrlPayloadScalar(scalar, maxDepth - depth)
+    : null;
   return guardUrlPayload &&
     (unparseableUrlMightLeakSecret(scalar, !isLoggingUrlPayload(guardUrlPayload), {
       maxDepth: maxDepth - depth,
       guardUrlPayload,
     }) ||
-      (isLoggingUrlPayload(guardUrlPayload) && hasOpaqueLoggingPath(scalar, true)))
+      (loggingScalar !== null && hasOpaqueLoggingPath(loggingScalar, true)))
     ? REDACTED
     : str;
 }
@@ -2131,7 +2158,12 @@ function sanitizeTemplatedUrl(
   // parsing here because it encodes the remaining Nunjucks syntax, but still
   // scrub literal query and fragment credentials before the value is logged or
   // persisted.
-  if (!preserveTemplateUserinfo && hasUrlUserinfo(url)) {
+  if (
+    !preserveTemplateUserinfo &&
+    (compoundContext?.guardUrlPayload
+      ? hasUrlPayloadUserinfo(url, compoundContext.guardUrlPayload)
+      : hasUrlUserinfo(url))
+  ) {
     return REDACTED;
   }
 
