@@ -50,3 +50,23 @@ export function createEnvironmentScopedState<T>(
     },
   });
 }
+
+/** Release a completed SDK client without waiting for abandoned construction. */
+export function destroyScopedClient<T extends { destroy(): void }>(
+  client: T | undefined,
+  initialization: Promise<T> | undefined,
+  onError: (error: unknown) => void,
+): void {
+  if (client) {
+    client.destroy();
+    return;
+  }
+  // Evaluation timeouts must still return when initialization never settles.
+  // Retain cleanup ownership if the abandoned operation eventually succeeds.
+  void initialization
+    ?.then(
+      (initialized) => initialized.destroy(),
+      () => undefined,
+    )
+    .catch(onError);
+}

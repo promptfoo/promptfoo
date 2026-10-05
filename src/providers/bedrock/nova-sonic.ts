@@ -8,7 +8,7 @@ import {
   getAwsSdkProfile,
   resolveAwsCredentials,
 } from '../awsCredentials';
-import { createEnvironmentScopedState } from '../scopedState';
+import { createEnvironmentScopedState, destroyScopedClient } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
@@ -125,11 +125,10 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       client: undefined as BedrockRuntimeClient | undefined,
       initialization: undefined as Promise<BedrockRuntimeClient> | undefined,
     }),
-    async (state) => {
-      // A construction already in flight still belongs to this invocation.
-      await state.initialization?.catch(() => undefined);
-      state.client?.destroy();
-    },
+    (state) =>
+      destroyScopedClient(state.client, state.initialization, (error) =>
+        logger.warn('Error destroying late SDK client', { error }),
+      ),
   );
   private readonly inferenceConfiguration: typeof DEFAULT_CONFIG.inference;
   config: BedrockAmazonNovaSonicGenerationOptions;

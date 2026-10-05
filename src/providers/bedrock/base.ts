@@ -19,7 +19,7 @@ import {
 } from '../awsCredentials';
 import { getScopedAwsEndpointOptions } from '../awsEndpointConfig';
 import { getOpaqueCredentialCacheNamespace } from '../credentialCache';
-import { createEnvironmentScopedState } from '../scopedState';
+import { createEnvironmentScopedState, destroyScopedClient } from '../scopedState';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
@@ -130,11 +130,10 @@ export abstract class AwsBedrockGenericProvider {
       client: undefined as BedrockRuntime | undefined,
       initialization: undefined as Promise<BedrockRuntime> | undefined,
     }),
-    async (state) => {
-      // A construction already in flight still belongs to this invocation.
-      await state.initialization?.catch(() => undefined);
-      state.client?.destroy();
-    },
+    (state) =>
+      destroyScopedClient(state.client, state.initialization, (error) =>
+        logger.warn('Error destroying late SDK client', { error }),
+      ),
   );
   protected get responseCacheNamespace(): string | undefined {
     return this.getSdkState().cacheNamespace;

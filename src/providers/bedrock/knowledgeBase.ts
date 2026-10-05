@@ -6,7 +6,7 @@ import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { getOpaqueCredentialCacheNamespace } from '../credentialCache';
-import { createEnvironmentScopedState } from '../scopedState';
+import { createEnvironmentScopedState, destroyScopedClient } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
 import { createBedrockRequestHandler, hasProxyEnv, INFERENCE_PROFILE_PREFIX } from './util';
@@ -111,11 +111,10 @@ export class AwsBedrockKnowledgeBaseProvider
         initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
       };
     },
-    async (state) => {
-      // A construction already in flight still belongs to this invocation.
-      await state.initialization?.catch(() => undefined);
-      state.client?.destroy();
-    },
+    (state) =>
+      destroyScopedClient(state.client, state.initialization, (error) =>
+        logger.warn('Error destroying late SDK client', { error }),
+      ),
   );
   kbConfig: BedrockKnowledgeBaseOptions;
 

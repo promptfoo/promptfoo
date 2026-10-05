@@ -2,6 +2,8 @@
 
 Evaluation environment files are scoped to their invocation. AWS, Google and Azure SDKs receive the effective credential inputs through constructor options; evaluation setup does not copy them into `process.env`. Provider configuration and the public per-key environment precedence remain unchanged.
 
+Ready SDK clients are destroyed during evaluation cleanup. Cleanup does not wait for pending construction, so a timed-out evaluation can return promptly; an abandoned construction that later succeeds still has its client destroyed. Each SageMaker region is cleaned up independently.
+
 An undefined value in a higher-priority environment layer leaves a lower-priority value intact. Explicit empty strings still clear selected values. SDK credential options and cache identity selection use the same merged layers.
 
 AWS forwards static credentials, profile selection, shared/config file locations and web identity options. Without scoped credential inputs, the SDK retains its normal ambient discovery chain. Bedrock preserves explicit key-pair, bearer-token and configured-profile precedence. Agents and Knowledge Bases retain their SigV4 discovery behavior. Clearing a host Bedrock bearer token through an invocation environment forwards the SDK's empty-token option, so it cannot restore the host token; explicit credentials and selected SigV4 profiles retain their precedence.

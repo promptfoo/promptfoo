@@ -13,7 +13,7 @@ import {
   resolveAwsCredentials,
 } from './awsCredentials';
 import { getScopedAwsEndpointOptions } from './awsEndpointConfig';
-import { createEnvironmentScopedState } from './scopedState';
+import { createEnvironmentScopedState, destroyScopedClient } from './scopedState';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -104,12 +104,11 @@ abstract class SageMakerGenericProvider {
       client: undefined as any,
       runtimes: new Map<string, Promise<any>>(),
     }),
-    async (state) => {
-      const clients = await Promise.allSettled(state.runtimes.values());
-      for (const client of clients) {
-        if (client.status === 'fulfilled') {
-          client.value.destroy();
-        }
+    (state) => {
+      for (const initialization of state.runtimes.values()) {
+        destroyScopedClient(undefined, initialization, (error) =>
+          logger.warn('Error destroying late SDK client', { error }),
+        );
       }
     },
   );
