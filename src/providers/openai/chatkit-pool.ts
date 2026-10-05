@@ -187,6 +187,7 @@ export class ChatKitBrowserPool {
       return this.initPromise;
     }
 
+    providerRegistry.register(this);
     this.initPromise = this.doInitialize().catch(async (error) => {
       await this.shutdown();
       throw error;
