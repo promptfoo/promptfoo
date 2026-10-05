@@ -7,6 +7,7 @@ import {
   getTargetConversation,
   withGradingUsage,
 } from '../redteam/grading/storedResult';
+import { validateRedteamTargetResponse } from '../redteam/grading/validation';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import { isApiProvider, isProviderOptions } from '../types/providers';
@@ -296,7 +297,7 @@ export const handleRedteam = async (
   }
 
   try {
-    grader.validateTargetResponse(outputString, gradingContext);
+    validateRedteamTargetResponse(outputString, gradingContext);
     const { grade, rubric, suggestions } = await grader.getResult(
       effectivePrompt,
       outputString,

@@ -9,6 +9,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { validateRedteamTargetResponse } from '../grading/validation';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -434,12 +435,11 @@ export abstract class RedteamGraderBase {
     return [];
   }
 
-  validateTargetResponse(llmOutput: unknown, gradingContext?: RedteamGradingContext): void {
-    const imagesForGrading =
-      gradingContext?.imageOutputs ?? gradingContext?.providerResponse?.images;
-    if (!imagesForGrading?.length && isEmptyResponse(llmOutput)) {
-      throw new Error('Target provider returned an empty or nullish response');
-    }
+  protected validateTargetResponse(
+    llmOutput: unknown,
+    gradingContext?: RedteamGradingContext,
+  ): void {
+    validateRedteamTargetResponse(llmOutput, gradingContext);
   }
 
   async getResult(
