@@ -41,6 +41,140 @@ vi.mock('../../../src/util/fetch/index', () => ({
 describe('sanitizeMcpToolData', () => {
   const omitted = '[MCP tool data omitted: it could not be sanitized]';
 
+  it('checks unquoted host form segments before hostname normalization', () => {
+    for (const delimiter of [';', '&']) {
+      for (const host of ['apiHost', 'SERVICE_HOST']) {
+        const value = `db${delimiter}api_key=host-form-fixture`;
+        const fields = host === 'apiHost' ? { apiHost: value } : { env: { SERVICE_HOST: value } };
+        const args = { url: JSON.stringify({ ...fields, page: 2 }) };
+        const original = structuredClone(args);
+        expect(JSON.stringify(sanitizeMcpToolData(args))).not.toContain('host-form-fixture');
+        expect(args).toEqual(original);
+        const publicFields = JSON.parse(
+          JSON.stringify(fields).replace(value, `db${delimiter}page=2`),
+        );
+        const publicArgs = { url: JSON.stringify({ ...publicFields, page: 2 }) };
+        expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+      }
+    }
+  });
+
+  it('inspects scalar query payloads once with their inherited URL policy', () => {
+    for (const value of [
+      'https://alice:query-fixture@example.test/',
+      'https:alice:query-fixture@example.test/',
+      JSON.stringify('https:alice:query-fixture@example.test/'),
+      'data=https:alice:query-fixture@example.test/',
+      JSON.stringify({ target: 'https:alice:query-fixture@example.test/', page: 2 }),
+    ]) {
+      const target = `mailto:ops@example.test?body=${encodeURIComponent(value)}`;
+      const args = { url: JSON.stringify({ target, page: 2 }) };
+      const original = structuredClone(args);
+      expect(JSON.stringify(sanitizeMcpToolData(args))).not.toContain('query-fixture');
+      expect(args).toEqual(original);
+    }
+    const args = {
+      url: JSON.stringify({
+        target: 'mailto:ops@example.test?body=https://alice:query-fixture@example.test',
+        page: 2,
+      }),
+    };
+    expect(JSON.stringify(sanitizeMcpToolData(args))).not.toContain('query-fixture');
+    for (const value of ['https://example.test/public', 'A public message', '{"page":2}']) {
+      const target = `mailto:ops@example.test?body=${encodeURIComponent(value)}`;
+      const publicArgs = { url: JSON.stringify({ target, page: 2 }) };
+      expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+    }
+    for (const role of ['url', 'apiBaseUrl', 'apiHost']) {
+      const template = 'https://{{ user }}:{{ password }}@example.test/public';
+      for (const value of [template, JSON.stringify(template)]) {
+        const target = `mailto:ops@example.test?body=${encodeURIComponent(value)}`;
+        const publicArgs = { [role]: JSON.stringify({ target, page: 2 }) };
+        expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+      }
+      for (const value of [
+        `${template}?api_key=literal-fixture`,
+        `${template}#api_key=literal-fixture`,
+        'https://{{ user }}:literal-fixture@example.test/',
+        'https://alice:{{ password }}@example.test/?api_key=literal-fixture',
+      ]) {
+        const target = `mailto:ops@example.test?body=${encodeURIComponent(value)}`;
+        expect(
+          JSON.stringify(sanitizeMcpToolData({ [role]: JSON.stringify({ target, page: 2 }) })),
+        ).not.toContain('literal-fixture');
+      }
+    }
+    let nested = 'https://alice:query-budget-fixture@example.test/';
+    for (let index = 0; index < 6; index++) {
+      nested = `mailto:ops@example.test?body=${encodeURIComponent(nested)}`;
+    }
+    const bounded = sanitizeObject(
+      { url: JSON.stringify({ target: nested, page: 2 }) },
+      { sanitizeUrls: true, redactCompoundKeys: true, maxDepth: 3 },
+    );
+    expect(JSON.stringify(bounded)).not.toContain('query-budget-fixture');
+  });
+
+  it('retains schemeless authority checks only for decoded host payloads', () => {
+    const target = 'alice:host-authority-fixture@example.test/path';
+    for (const fields of [
+      { apiHost: JSON.stringify({ target, page: 2 }) },
+      { env: { SERVICE_HOST: JSON.stringify({ target, page: 2 }) } },
+    ]) {
+      expect(JSON.stringify(sanitizeMcpToolData(fields))).not.toContain('host-authority-fixture');
+    }
+    for (const username of ['[alice]', '{alice}']) {
+      const target = `${username}:bracketed-authority-fixture@example.test`;
+      for (const fields of [{ target }, { [target]: 'public' }]) {
+        const args = { apiHost: JSON.stringify({ ...fields, page: 2 }) };
+        expect(JSON.stringify(sanitizeMcpToolData(args))).not.toContain(
+          'bracketed-authority-fixture',
+        );
+      }
+    }
+    const ordinary = { url: JSON.stringify({ target, page: 2 }) };
+    expect(sanitizeMcpToolData(ordinary)).toEqual(ordinary);
+    const publicArgs = { apiHost: JSON.stringify({ target: 'example.test/public', page: 2 }) };
+    expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+    for (const target of ['mailto:alice@example.test', 'tel:+15551234567', 'urn:example:public']) {
+      const publicArgs = { apiHost: JSON.stringify({ target, page: 2 }) };
+      expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+    }
+    for (const value of [
+      'alice@example.test',
+      JSON.stringify({ target: 'alice:opaque-name-fixture@host/path' }),
+      JSON.stringify(['https:alice:opaque-name-fixture@host/']),
+    ]) {
+      const publicArgs = {
+        apiHost: JSON.stringify({ [value]: 'public', address: 'alice@example.test', page: 2 }),
+      };
+      expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+    }
+  });
+
+  it('checks embedded userinfo in malformed decoded form segments and structural keys', () => {
+    for (const prefix of ['relative&redirect=', 'db;redirect=', 'jdbc:db;redirect=']) {
+      const value = `${prefix}https:\\alice:embedded-fixture@example.test/`;
+      for (const fields of [
+        { target: value },
+        { items: [value] },
+        { [value]: 'public', '[REDACTED]': 'authored' },
+        { headers: { Accept: value } },
+      ]) {
+        const args = { apiHost: JSON.stringify({ ...fields, page: 2 }) };
+        const original = structuredClone(args);
+        const sanitized = sanitizeMcpToolData(args) as typeof args;
+        expect(JSON.stringify(sanitized)).not.toContain('embedded-fixture');
+        expect(JSON.parse(sanitized.apiHost).page).toBe(2);
+        expect(args).toEqual(original);
+      }
+      const publicArgs = {
+        apiHost: JSON.stringify({ target: `${prefix}https://example.test/public`, page: 2 }),
+      };
+      expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+    }
+  });
+
   it('keeps deeply nested arguments while redacting secrets at any depth', () => {
     const args = {
       query: {

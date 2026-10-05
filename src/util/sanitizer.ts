@@ -42,16 +42,34 @@ function hasUrlUserinfo(url: string): boolean {
 // Decoded URL payloads also accept the special-scheme spellings recognized by
 // the platform parser, such as a single slash or backslash authority. Keep the
 // generic sanitizer's lexical policy unchanged outside this inherited context.
-function hasUrlPayloadUserinfo(value: string): boolean {
+function hasUrlPayloadUserinfo(value: string, guard?: UrlPayloadGuard): boolean {
   if (hasUrlUserinfo(value)) {
     return true;
   }
   try {
     const parsed = new URL(value);
-    return Boolean(parsed.username || parsed.password);
+    if (parsed.username || parsed.password) {
+      return true;
+    }
+    if (parsed.protocol === 'mailto:') {
+      // The mailbox belongs to this URI's path, not to a host authority.
+      // Its query/path credential segments are still inspected separately.
+      return false;
+    }
   } catch {
-    return false;
+    // Host payloads retain the same schemeless authority interpretation as the
+    // original host field; ordinary URL payloads do not acquire that policy.
   }
+  if (guard === 'host') {
+    try {
+      const parsed = new URL(`https://${value}`);
+      // A bare email address is public data, not evidence of a password.
+      return Boolean(parsed.password);
+    } catch {
+      // Malformed text still receives the existing structural form checks.
+    }
+  }
+  return false;
 }
 
 // Scalar strings can retain JSON quoting at any URL/key fast path. Decode only
@@ -173,6 +191,16 @@ function hasSecretFormSegment(
       continue;
     }
     const decodedValue = decodeFormComponent(rawValue);
+    if (compoundContext?.guardUrlPayload) {
+      const scalar = getUrlPayloadScalar(decodedValue ?? rawValue, compoundContext.maxDepth);
+      if (
+        scalar === null ||
+        (!hasOnlyTemplateUserinfo(scalar) &&
+          hasUrlPayloadUserinfo(scalar, compoundContext.guardUrlPayload))
+      ) {
+        return true;
+      }
+    }
     if (
       looksLikeSecret(rawValue) ||
       (decodedValue !== undefined && looksLikeSecret(decodedValue))
@@ -214,7 +242,9 @@ function unparseableUrlMightLeakSecret(
     : url;
   return (
     scalar === null ||
-    (compoundContext?.guardUrlPayload ? hasUrlPayloadUserinfo(scalar) : hasUrlUserinfo(scalar)) ||
+    (compoundContext?.guardUrlPayload
+      ? hasUrlPayloadUserinfo(scalar, compoundContext.guardUrlPayload)
+      : hasUrlUserinfo(scalar)) ||
     looksLikeSecret(scalar.trim()) ||
     hasSecretFormSegment(scalar, preservePureTemplates, compoundContext)
   );
@@ -425,8 +455,12 @@ function getCompoundSecretObjectFieldKind(
 
 // Carry the MCP-only policy and remaining object depth through existing encoded
 // JSON paths. Public URL/form sanitizers keep their established defaults.
-type UrlPayloadGuard = boolean | 'logging';
+type UrlPayloadGuard = boolean | 'logging' | 'host';
 type CompoundKeyContext = { maxDepth: number; guardUrlPayload?: UrlPayloadGuard };
+
+function isLoggingUrlPayload(guard?: UrlPayloadGuard): boolean {
+  return guard === 'logging' || guard === 'host';
+}
 
 function isSecretParameterWithContext(
   name: string,
@@ -1319,11 +1353,11 @@ function sanitizeJsonString(
       const context = { maxDepth: maxDepth - depth, guardUrlPayload };
       if (
         looksLikeSecret(str) ||
-        (guardUrlPayload === 'logging' && unparseableUrlMightLeakSecret(str, false, context))
+        (isLoggingUrlPayload(guardUrlPayload) && unparseableUrlMightLeakSecret(str, false, context))
       ) {
         return REDACTED;
       }
-      return guardUrlPayload === 'logging'
+      return isLoggingUrlPayload(guardUrlPayload)
         ? sanitizeUrlForLoggingWithContext(str, context)
         : sanitizeUrlWithContext(str, context);
     }
@@ -1346,11 +1380,11 @@ function sanitizeJsonString(
   // enclosing JSON quotes must not turn a pure placeholder into a credential.
   // Logging roles retain their existing stricter placeholder policy.
   return guardUrlPayload &&
-    (unparseableUrlMightLeakSecret(scalar, guardUrlPayload !== 'logging', {
+    (unparseableUrlMightLeakSecret(scalar, !isLoggingUrlPayload(guardUrlPayload), {
       maxDepth: maxDepth - depth,
       guardUrlPayload,
     }) ||
-      (guardUrlPayload === 'logging' && hasOpaqueLoggingPath(scalar, true)))
+      (isLoggingUrlPayload(guardUrlPayload) && hasOpaqueLoggingPath(scalar, true)))
     ? REDACTED
     : str;
 }
@@ -1449,6 +1483,58 @@ function redactNestedJsonValue(
   }
 }
 
+// One owner for decoded form/query values: handle JSON containers once, then
+// inspect scalar values through the existing dispatcher with less depth. A
+// handled, unchanged container returns its decoded bytes to avoid a second pass.
+function redactUrlPayloadValue(
+  decoded: string | undefined,
+  compoundContext?: CompoundKeyContext,
+  preserveQueryTemplates = false,
+): string | null {
+  const nestedJson = redactNestedJsonValue(
+    decoded,
+    compoundContext,
+    compoundContext?.guardUrlPayload ? 'original' : 'null',
+  );
+  if (nestedJson !== null) {
+    return nestedJson;
+  }
+  if (compoundContext?.guardUrlPayload && decoded !== undefined) {
+    if (preserveQueryTemplates) {
+      const scalar = getUrlPayloadScalar(decoded, compoundContext.maxDepth);
+      if (scalar === null || compoundContext.maxDepth <= 0) {
+        return REDACTED;
+      }
+      if (hasOnlyTemplateUserinfo(scalar)) {
+        // Newly inspected query scalars retain unresolved authority references.
+        // Continue checking literal query/hash credentials and logging paths.
+        const context = { ...compoundContext, maxDepth: compoundContext.maxDepth - 1 };
+        const sanitized = sanitizeTemplatedUrl(scalar, context, context, true);
+        const guarded =
+          isLoggingUrlPayload(context.guardUrlPayload) && hasOpaqueLoggingPath(sanitized, true)
+            ? REDACTED
+            : sanitized;
+        return guarded === scalar ? null : guarded;
+      }
+    }
+    const guarded =
+      compoundContext.maxDepth <= 0
+        ? REDACTED
+        : recursiveSanitize(
+            decoded,
+            1,
+            compoundContext.maxDepth,
+            true,
+            false,
+            true,
+            false,
+            compoundContext.guardUrlPayload,
+          );
+    return guarded === decoded ? null : guarded;
+  }
+  return null;
+}
+
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
 // cannot backtrack against the closing `}}` (linear, no ReDoS).
 const NUNJUCKS_PLACEHOLDER = /\{\{[^{}]*\}\}/g;
@@ -1459,6 +1545,23 @@ const NUNJUCKS_PLACEHOLDER = /\{\{[^{}]*\}\}/g;
 // secret-named key must still redact it.
 function isPureTemplateValue(value: string): boolean {
   return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
+}
+
+function hasOnlyTemplateUserinfo(value: string): boolean {
+  if (!value.includes('{{') || !value.includes('}}')) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    return (
+      Boolean(parsed.username || parsed.password) &&
+      [parsed.username, parsed.password].every(
+        (part) => !part || isPureTemplateValue(decodeURIComponent(part)),
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function sanitizeUrlEncodedString(value: string): string {
@@ -1513,40 +1616,13 @@ function sanitizeUrlEncodedStringWithContext(
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
     // redacted at the leaf rather than leaked as opaque bytes.
-    const nestedJson = redactNestedJsonValue(
-      decodedValue,
-      compoundContext,
-      compoundContext?.guardUrlPayload ? 'original' : 'null',
-    );
-    if (nestedJson !== null) {
-      if (nestedJson === decodedValue) {
+    const guardedValue = redactUrlPayloadValue(decodedValue, compoundContext);
+    if (guardedValue !== null) {
+      if (guardedValue === decodedValue) {
         return match;
       }
       changed = true;
-      return `${separator}${rawKey}=${encodeURIComponent(nestedJson)}`;
-    }
-
-    // Form values can be scalar URLs, quoted strings, or another form rather
-    // than JSON containers. Carry their enclosing policy with one less level;
-    // a handled container above must never be traversed for a second time.
-    if (compoundContext?.guardUrlPayload && decodedValue !== undefined) {
-      const guarded =
-        compoundContext.maxDepth <= 0
-          ? REDACTED
-          : recursiveSanitize(
-              decodedValue,
-              1,
-              compoundContext.maxDepth,
-              true,
-              false,
-              true,
-              false,
-              compoundContext.guardUrlPayload,
-            );
-      if (guarded !== decodedValue) {
-        changed = true;
-        return `${separator}${rawKey}=${encodeURIComponent(guarded)}`;
-      }
+      return `${separator}${rawKey}=${encodeURIComponent(guardedValue)}`;
     }
 
     // Check both raw and decoded forms of the value so `+` decoding can't be
@@ -1570,9 +1646,22 @@ function sanitizeUrlEncodedStringWithContext(
 // userinfo/parameter guards apply to keys in an already-decoded URL payload.
 function hasUrlPayloadKeyCredential(key: string, compoundContext?: CompoundKeyContext): boolean {
   const scalar = getUrlPayloadScalar(key, compoundContext?.maxDepth ?? MAX_DEPTH);
+  let guard = compoundContext?.guardUrlPayload;
+  if (scalar !== null && guard === 'host' && /^[\[{]/.test(scalar.trimStart())) {
+    try {
+      const parsed = JSON.parse(scalar);
+      if (parsed !== null && typeof parsed === 'object') {
+        // A valid container used as a property name is not a schemeless host.
+        // Keep the existing explicit URL/form checks without traversing it.
+        guard = 'logging';
+      }
+    } catch {
+      // Bracketed usernames and malformed names retain host authority checks.
+    }
+  }
   return (
     scalar === null ||
-    hasUrlPayloadUserinfo(scalar) ||
+    hasUrlPayloadUserinfo(scalar, guard) ||
     hasSecretFormSegment(scalar, false, compoundContext)
   );
 }
@@ -1695,7 +1784,7 @@ function sanitizePlainObject(
       if (compoundContext) {
         const sanitizedJson = redactNestedJsonValue(
           value,
-          { ...compoundContext, guardUrlPayload: 'logging' },
+          { ...compoundContext, guardUrlPayload: 'host' },
           'original',
         );
         if (sanitizedJson !== null) {
@@ -1717,7 +1806,13 @@ function sanitizePlainObject(
             // The existing fallback guards still inspect malformed forms below.
           }
           if (!hasHostComponents) {
-            sanitized[key] = sanitizeUrlForLoggingWithContext(value, compoundContext, false, true);
+            sanitized[key] = sanitizeUrlForLoggingWithContext(
+              value,
+              compoundContext,
+              false,
+              true,
+              'host',
+            );
             continue;
           }
         }
@@ -1728,21 +1823,26 @@ function sanitizePlainObject(
         const scalar = getUrlPayloadScalar(value, compoundContext.maxDepth);
         if (
           scalar === null ||
-          hasUrlPayloadUserinfo(scalar) ||
+          hasUrlPayloadUserinfo(scalar, compoundContext?.guardUrlPayload) ||
           looksLikeSecret(scalar) ||
-          (scalar !== value &&
-            (unparseableUrlMightLeakSecret(
-              scalar,
-              guardUrlPayload !== 'logging',
-              compoundContext,
-            ) ||
-              (guardUrlPayload === 'logging' && hasOpaqueLoggingPath(scalar, true))))
+          unparseableUrlMightLeakSecret(
+            scalar,
+            !isLoggingUrlPayload(guardUrlPayload),
+            compoundContext,
+          ) ||
+          (isLoggingUrlPayload(guardUrlPayload) && hasOpaqueLoggingPath(scalar, true))
         ) {
           sanitized[key] = REDACTED;
           continue;
         }
       }
-      const endpoint = sanitizeUrlForLoggingWithContext(normalizedHost, compoundContext);
+      const endpoint = sanitizeUrlForLoggingWithContext(
+        normalizedHost,
+        compoundContext,
+        false,
+        false,
+        'host',
+      );
       const host = hasScheme ? endpoint : endpoint.replace(/^https:\/\//, '');
       const hasPath = value.replace(scheme, '').split(/[?#]/, 1)[0].includes('/');
       sanitized[key] = hasPath ? host : host.replace(/\/(?=[?#]|$)/, '');
@@ -2018,12 +2118,13 @@ function sanitizeTemplatedUrl(
   url: string,
   compoundContext?: CompoundKeyContext,
   payloadContext?: CompoundKeyContext,
+  preserveTemplateUserinfo = false,
 ): string {
   // A template may coexist with an already-rendered env credential. Avoid URL
   // parsing here because it encodes the remaining Nunjucks syntax, but still
   // scrub literal query and fragment credentials before the value is logged or
   // persisted.
-  if (hasUrlUserinfo(url)) {
+  if (!preserveTemplateUserinfo && hasUrlUserinfo(url)) {
     return REDACTED;
   }
 
@@ -2037,7 +2138,7 @@ function sanitizeTemplatedUrl(
     compoundContext?.guardUrlPayload &&
     hasSecretFormSegment(
       beforeQuery,
-      compoundContext.guardUrlPayload !== 'logging',
+      !isLoggingUrlPayload(compoundContext.guardUrlPayload),
       compoundContext,
     )
   ) {
@@ -2060,7 +2161,7 @@ function sanitizeUrlValueWithContext(
   compoundContext?: CompoundKeyContext,
   jsonAlreadySanitized = false,
 ): string {
-  return compoundContext?.guardUrlPayload === 'logging'
+  return isLoggingUrlPayload(compoundContext?.guardUrlPayload)
     ? sanitizeUrlForLoggingWithContext(url, compoundContext, jsonAlreadySanitized)
     : sanitizeUrlWithContext(url, compoundContext, jsonAlreadySanitized);
 }
@@ -2131,9 +2232,8 @@ function sanitizeUrlWithContext(
     // changes, since a changed query must not hide an unchanged private path.
     if (
       compoundContext?.guardUrlPayload &&
-      (parsedUrl.username ||
-        parsedUrl.password ||
-        hasUrlUserinfo(parsedUrl.pathname) ||
+      (hasUrlPayloadUserinfo(url, compoundContext.guardUrlPayload) ||
+        hasUrlPayloadUserinfo(parsedUrl.pathname) ||
         hasSecretFormSegment(parsedUrl.pathname, false, compoundContext))
     ) {
       return REDACTED;
@@ -2164,8 +2264,8 @@ function sanitizeUrlWithContext(
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         } else {
-          const nestedJson = redactNestedJsonValue(value, payloadContext);
-          if (nestedJson !== null) {
+          const nestedJson = redactUrlPayloadValue(value, payloadContext, true);
+          if (nestedJson !== null && nestedJson !== value) {
             sanitizedUrl.searchParams.set(key, nestedJson);
           }
         }
@@ -2223,16 +2323,27 @@ function sanitizeUrlForLoggingWithContext(
   compoundContext?: CompoundKeyContext,
   jsonAlreadySanitized = false,
   preserveFormTemplates = false,
+  decodedPayloadGuard: UrlPayloadGuard = 'logging',
 ): string {
+  const payloadGuard = compoundContext?.guardUrlPayload === 'host' ? 'host' : decodedPayloadGuard;
   if (compoundContext) {
     const nestedJson = jsonAlreadySanitized
       ? url
-      : redactNestedJsonValue(url, { ...compoundContext, guardUrlPayload: 'logging' }, 'original');
+      : redactNestedJsonValue(
+          url,
+          { ...compoundContext, guardUrlPayload: payloadGuard },
+          'original',
+        );
     if (nestedJson !== null) {
       return hasOpaqueLoggingPath(url, true) ? REDACTED : nestedJson;
     }
   }
-  const sanitized = sanitizeUrlWithContext(url, compoundContext, jsonAlreadySanitized, 'logging');
+  const sanitized = sanitizeUrlWithContext(
+    url,
+    compoundContext,
+    jsonAlreadySanitized,
+    payloadGuard,
+  );
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
