@@ -41,19 +41,19 @@ export function isValidJson(str: string): boolean {
  *
  * @param value - The value to truncate and stringify
  * @param prettyPrint - Whether to format the JSON with indentation
- * @param replacer - Optional value projection applied before circular-reference handling
+ * @param replacer - Value projection with access to the original value before toJSON
  * @returns A JSON string representation of the truncated value
  */
 function safeJsonStringifyTruncated<T>(
   value: T,
   prettyPrint: boolean = false,
-  replacer?: (key: string, value: any) => any,
+  replacer?: (key: string, value: any, originalValue: any) => any,
 ): string {
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
 
   const truncateValue = (value: any, key = ''): any => {
-    const val = replacer ? replacer(key, value) : value;
+    const val = replacer ? replacer(key, value, value) : value;
     if (typeof val === 'string') {
       return val.length > 1000 ? val.substring(0, 1000) + '...[truncated]' : val;
     }
@@ -102,13 +102,13 @@ function safeJsonStringifyTruncated<T>(
  *
  * @param value - The value to stringify
  * @param prettyPrint - Whether to format the JSON with indentation
- * @param replacer - Optional value projection applied before circular-reference handling
+ * @param replacer - Value projection with access to the original value before toJSON
  * @returns JSON string representation, or undefined if serialization fails
  */
 export function safeJsonStringify<T>(
   value: T,
   prettyPrint: boolean = false,
-  replacer?: (key: string, value: any) => any,
+  replacer?: (key: string, value: any, originalValue: any) => any,
 ): string | undefined {
   const ancestors: any[] = [];
   const space = prettyPrint ? 2 : undefined;
@@ -118,7 +118,7 @@ export function safeJsonStringify<T>(
       JSON.stringify(
         value,
         function (this: any, key, value) {
-          const val = replacer ? replacer(key, value) : value;
+          const val = replacer ? replacer(key, value, this[key]) : value;
           if (typeof val === 'object' && val !== null) {
             while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
               ancestors.pop();

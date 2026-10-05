@@ -105,7 +105,7 @@ describe('getStandaloneEvals', () => {
     const datasets = await getTestCases();
     expect(datasets).toHaveLength(1);
     expect(datasets[0].id).toBe(datasetId);
-    expect(JSON.stringify(datasets[0].testCases)).not.toContain('short-secret');
+    expect(datasets[0].testCases).toEqual(strip ? [{}] : tests);
     expect((await getDatasetFromHash(datasetId))?.id).toBe(datasetId);
     expect((await getPrompts())[0].evals[0].datasetId).toBe(datasetId);
     expect(await getPromptsForTestCasesHash(datasetId)).toHaveLength(1);

@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { LlamaApiProvider } from '../../src/providers/llamaApi';
+import { OpenClawToolInvokeProvider } from '../../src/providers/openclaw/tools';
 import { projectConfigForOutput, serializeEvalValue } from '../../src/util/evalSerialization';
 
 const payload = {
@@ -46,6 +48,24 @@ describe('local eval serialization', () => {
     expect(saved.assert[0].assert[0].provider).toEqual(expected);
     expect(JSON.stringify(saved)).not.toContain('implicit runtime credential');
     expect(provider.sdk.apiKey).toBe('implicit runtime credential');
+  });
+
+  it('snapshots providers with custom toJSON methods and preserves ordinary JSON conversion', () => {
+    const llama = new LlamaApiProvider('test-model', { config: { apiKey: 'fixture-key' } });
+    const openclaw = new OpenClawToolInvokeProvider('sessions_list');
+    const date = new Date('2026-01-01T00:00:00Z');
+    const input = { nested: { providers: [llama, openclaw] }, date };
+    expect(serializeEvalValue(input)).toEqual({
+      nested: {
+        providers: [{ id: llama.id(), config: llama.config }, { id: openclaw.id() }],
+      },
+      date: date.toISOString(),
+    });
+    expect(serializeEvalValue(llama)).toEqual({
+      id: llama.id(),
+      config: llama.config,
+    });
+    expect(llama.config.apiKey).toBe('fixture-key');
   });
 
   it('keeps SDK clients out of the oversized-value serialization fallback', () => {

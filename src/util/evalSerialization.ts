@@ -10,10 +10,11 @@ export function serializeEvalValue<T>(value: T): T {
     return value;
   }
   const providers = new WeakMap<object, ProviderOptions>();
-  const serialized = safeJsonStringify(value, false, (_key, item) => {
+  const serialized = safeJsonStringify(value, false, (_key, serializedItem, item) => {
     if (!isApiProvider(item)) {
-      return item;
+      return serializedItem;
     }
+    // Inspect the original value: provider toJSON() methods may omit config or identity.
     // Persist the provider's configuration, never its live SDK clients or transports.
     let snapshot = providers.get(item);
     if (!snapshot) {
