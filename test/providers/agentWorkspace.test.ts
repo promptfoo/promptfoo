@@ -1447,8 +1447,10 @@ describe('agent workspaces', () => {
         }
         const directory = path.join(
           workspace.dir,
-          ...Array.from({ length: 14 }, (_, index) => `${index}${'a'.repeat(199)}`),
+          // Escaping keeps the notes large without exceeding macOS pathname limits.
+          ...Array.from({ length: 2 }, (_, index) => `${index}${'\x01'.repeat(220)}`),
         );
+        expect(Buffer.byteLength(directory)).toBeLessThan(900);
         fs.mkdirSync(directory, { recursive: true });
         execFileSync(
           'mkfifo',
@@ -3047,6 +3049,100 @@ describe('agent workspaces', () => {
         }
       },
     );
+
+    it.each([
+      ['opendir', 'abort'],
+      ['opendir', 'timeout'],
+      ['lstat', 'abort'],
+      ['lstat', 'timeout'],
+    ] as const)('stops directory reads after %s causes %s', async (operation, kind) => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const controller = new AbortController();
+      const workspace = await create(source, 'git', controller.signal);
+      write(path.join(workspace.dir, 'README.md'), 'original\nvisible change\n');
+      const start = performance.now();
+      const now = vi.spyOn(performance, 'now').mockReturnValue(start);
+      const originalOpen = fs.promises.opendir;
+      const originalStat = fs.promises.lstat;
+      let stopped = false;
+      let readsAfterStop = 0;
+      const opened: fs.Dir[] = [];
+      const stop = () => {
+        stopped = true;
+        if (kind === 'abort') {
+          controller.abort();
+        } else {
+          now.mockReturnValue(start + 30_001);
+        }
+      };
+      const opendir = vi.spyOn(fs.promises, 'opendir').mockImplementation(async (...args) => {
+        const directory = await originalOpen(...args);
+        if (path.resolve(String(args[0])) === workspace.dir) {
+          opened.push(directory);
+          const iterator = directory[Symbol.asyncIterator].bind(directory);
+          directory[Symbol.asyncIterator] = async function* () {
+            const entries = iterator();
+            try {
+              while (true) {
+                if (stopped) {
+                  readsAfterStop++;
+                }
+                const entry = await entries.next();
+                if (entry.done) {
+                  return undefined;
+                }
+                if (operation === 'lstat' && String(entry.value.name) === 'README.md') {
+                  // Exercise the scanner's fallback using a real pathname and lstat.
+                  entry.value.isDirectory = () => false;
+                  entry.value.isFile = () => false;
+                  entry.value.isSymbolicLink = () => false;
+                }
+                yield entry.value;
+              }
+            } finally {
+              await entries.return?.(undefined);
+            }
+          };
+          if (operation === 'opendir') {
+            stop();
+          }
+        }
+        return directory;
+      });
+      const lstat = vi.spyOn(fs.promises, 'lstat').mockImplementation(async (...args) => {
+        const result = await originalStat(...args);
+        if (
+          operation === 'lstat' &&
+          opened.length > 0 &&
+          !stopped &&
+          path.resolve(String(args[0])) === path.join(workspace.dir, 'README.md')
+        ) {
+          stop();
+        }
+        return result;
+      });
+      try {
+        if (kind === 'abort') {
+          await expect(workspace.metadata()).rejects.toMatchObject({ name: 'AbortError' });
+        } else {
+          const metadata = await workspace.metadata();
+          expect(metadata.workspaceDiffError).toBeUndefined();
+          expect(metadata.workspaceDiffIncomplete).toBe(true);
+          expect(metadata.workspaceDiff).toContain('+visible change');
+          expect(metadata.workspaceDiff).toContain('workspace traversal exceeded 30000 ms');
+        }
+        expect(stopped).toBe(true);
+        expect(opened).toHaveLength(1);
+        expect(readsAfterStop).toBe(0);
+        await expect(opened[0].read()).rejects.toMatchObject({ code: 'ERR_DIR_CLOSED' });
+        expect(fs.readdirSync(path.dirname(workspace.dir))).toEqual(['workspace']);
+      } finally {
+        opendir.mockRestore();
+        lstat.mockRestore();
+        now.mockRestore();
+      }
+    });
 
     it('ends traversal at the Git deadline and closes open directory handles', async () => {
       const source = path.join(root, 'repo');

@@ -360,13 +360,19 @@ async function findPathsGitLeavesOut(
       }
       // Node must retain bytes for its own DT_UNKNOWN lstat fallback, before yielding an
       // entry. The installed Node typings omit opendir's supported Buffer-name option.
-      const entries = (await fs.opendir(physicalDirectory, {
+      const entries = await fs.opendir(physicalDirectory, {
         encoding: 'buffer' as BufferEncoding,
-      })) as unknown as AsyncIterable<Dirent<Buffer>>;
+      });
+      if (signal?.aborted || performance.now() >= deadline) {
+        // Iteration has not started, so its automatic handle cleanup cannot run yet.
+        await entries.close();
+        signal?.throwIfAborted();
+        return { leftOut, reserved, directories, populatedDirectories, timedOut: true };
+      }
       if (directory !== '') {
         directories.push({ file: directory, raw: rawDirectory });
       }
-      for await (const entry of entries) {
+      for await (const entry of entries as unknown as AsyncIterable<Dirent<Buffer>>) {
         signal?.throwIfAborted();
         if (performance.now() >= deadline) {
           return { leftOut, reserved, directories, populatedDirectories, timedOut: true };
@@ -383,6 +389,10 @@ async function findPathsGitLeavesOut(
           entry.isDirectory() || entry.isFile() || entry.isSymbolicLink()
             ? entry
             : await fs.lstat(filesystemPath(entryPath, rawEntryPath)).catch(() => undefined);
+        signal?.throwIfAborted();
+        if (performance.now() >= deadline) {
+          return { leftOut, reserved, directories, populatedDirectories, timedOut: true };
+        }
         if (stat?.isDirectory() && ignoredDirectories.has(`${rawEntryPath}/`)) {
           continue;
         }
