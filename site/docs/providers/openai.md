@@ -1070,6 +1070,8 @@ Prefer provider configuration when comparing different settings in the same eval
 | `PROMPTFOO_RETRY_5XX`          | Set to `true` to retry server errors                                                                                            |
 | `PROMPTFOO_DELAY_MS`           | Delay between calls in milliseconds; defaults to 0                                                                              |
 
+Reasoning Chat requests to OpenAI ignore `OPENAI_MAX_TOKENS`, because their limit also counts reasoning tokens; set `OPENAI_MAX_COMPLETION_TOKENS` for them. GPT-6 Chat requests still fall back to `OPENAI_MAX_TOKENS` when `reasoning_effort` is `none`, when they go through OpenRouter, and on Azure.
+
 Within endpoint environment settings, `OPENAI_API_HOST` is checked first. Provider `env` base URL overrides are checked before process base URL values. Explicit provider connection settings take precedence over these environment variables.
 
 </details>
