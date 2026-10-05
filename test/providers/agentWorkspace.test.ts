@@ -482,6 +482,41 @@ describe('agent workspaces', () => {
       },
     );
 
+    it('marks the diff incomplete when changed content is not valid UTF-8', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source, 'git');
+      // Without a NUL byte Git takes the file for text. The byte is lost when the diff is
+      // read as text, so other bytes in its place would look the same.
+      fs.writeFileSync(
+        path.join(workspace.dir, 'README.md'),
+        Buffer.concat([Buffer.from('original\nhi'), Buffer.from([0xff]), Buffer.from('den\n')]),
+      );
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiffError).toBeUndefined();
+      expect(metadata.workspaceDiff).toContain('+hi\uFFFDden');
+      expect(metadata.workspaceDiffIncomplete).toBe(true);
+      expect(metadata.workspaceDiff).toMatch(
+        /\[diff incomplete: some changed content is not valid UTF-8 and is shown with replacement characters\]$/,
+      );
+    });
+
+    it('does not mark the diff incomplete for content that holds the replacement character', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source, 'git');
+      // Valid UTF-8, shown as it is, next to other text that is not ASCII.
+      write(path.join(workspace.dir, 'README.md'), 'original\nna\u00EFve \uFFFD \u{1F600}\n');
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiff).toContain('+na\u00EFve \uFFFD \u{1F600}');
+      expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+      expect(metadata.workspaceDiffError).toBeUndefined();
+    });
+
     it('does not treat binary-marker text or renamed path names as binary content', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
