@@ -7,7 +7,7 @@ description: Red team cross-session data leaks by simulating sequential user int
 
 The Cross-Session Leak plugin tests an AI system's vulnerability to information leaks across different user sessions.
 
-## How it works
+## How It Works
 
 The plugin generates pairs of prompts simulating two separate user interactions:
 
@@ -16,7 +16,7 @@ The plugin generates pairs of prompts simulating two separate user interactions:
 
 It then evaluates if the AI system inappropriately reveals information from one session to another.
 
-![Cross-Session Leak](/img/docs/cross-session-leak.png)
+![Diagram showing one user storing a value and a separate user attempting to retrieve it in another session](/img/docs/cross-session-leak.png)
 
 ## Configuration
 
@@ -29,8 +29,7 @@ redteam:
 ```
 
 :::note Strategy exclusions
-The Crescendo and GOAT multi-turn strategies are incompatible with this plugin.
-They are automatically skipped when generating tests.
+All multi-turn strategies are incompatible with this plugin and are automatically skipped when generating tests. This includes Crescendo, GOAT, Hydra, Goblin, Custom Strategy, and Mischievous User.
 :::
 
 ## Example Test Cases

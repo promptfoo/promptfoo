@@ -15,7 +15,7 @@ The HarmBench plugin uses the [HarmBench dataset](https://github.com/centerforai
 - Cybercrime (e.g., malware, system exploitation)
 - Copyright violations
 
-Unlike many of our other plugins, the HarmBench plugin uses a statically generated dataset vs dynamically generating cases such as those for [Harmful behavior detection](harmful.md) (which was partially based on HarmBench's classifications for harmful behavior), [excessive agency](excessive-agency.md), [hallucination](hallucination.md) and others. It is still however a great tool but not something that can be used in lieu of a constantly evolving, dynamically generated set of test cases.
+HarmBench uses a fixed research dataset, while plugins such as [Harmful Content](harmful.md), [Excessive Agency](excessive-agency.md), and [Hallucination](hallucination.md) generate probes for the configured target. Use HarmBench for a repeatable baseline and dynamically generated plugins for target-specific coverage.
 
 ## Configuration
 
