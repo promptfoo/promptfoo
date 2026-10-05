@@ -299,6 +299,7 @@ async function findPathsGitLeavesOut(
   leftOut: WorkspacePath[];
   reserved: WorkspacePath[];
   directories: WorkspacePath[];
+  populatedDirectories: Set<string>;
   timedOut?: true;
 }> {
   const leftOut: WorkspacePath[] = [];
@@ -309,6 +310,7 @@ async function findPathsGitLeavesOut(
     });
   const reserved: WorkspacePath[] = [];
   const directories: WorkspacePath[] = [];
+  const populatedDirectories = new Set<string>();
   // Match Git's per-operation deadline. A pending OS call cannot be interrupted, but no
   // more entries are examined after it returns once this deadline has elapsed.
   const deadline = performance.now() + GIT_TIMEOUT_MS;
@@ -327,7 +329,7 @@ async function findPathsGitLeavesOut(
     const { directory, rawDirectory } = next;
     signal?.throwIfAborted();
     if (performance.now() >= deadline) {
-      return { leftOut, reserved, directories, timedOut: true };
+      return { leftOut, reserved, directories, populatedDirectories, timedOut: true };
     }
     if (ignoredDirectories.has(rawDirectory)) {
       continue;
@@ -349,7 +351,7 @@ async function findPathsGitLeavesOut(
       for await (const entry of entries) {
         signal?.throwIfAborted();
         if (performance.now() >= deadline) {
-          return { leftOut, reserved, directories, timedOut: true };
+          return { leftOut, reserved, directories, populatedDirectories, timedOut: true };
         }
         const name = entry.name.toString('utf8');
         const entryPath = `${directory}${name}`;
@@ -395,6 +397,10 @@ async function findPathsGitLeavesOut(
           pending.push({ directory: `${entryPath}/`, rawDirectory: `${rawEntryPath}/` });
         } else if (!stat?.isFile() && !stat?.isSymbolicLink()) {
           omit(entryPath, rawEntryPath);
+        } else {
+          // Git may precompose names that the filesystem lists as decomposed Unicode.
+          // A parent with an observed file is populated regardless of Git's spelling.
+          populatedDirectories.add(directory);
         }
       }
     } catch (error) {
@@ -406,7 +412,7 @@ async function findPathsGitLeavesOut(
       omit(directory, rawDirectory);
     }
   }
-  return { leftOut, reserved, directories };
+  return { leftOut, reserved, directories, populatedDirectories };
 }
 
 class UnsupportedGitAttributesError extends Error {}
@@ -843,7 +849,20 @@ async function getWorkspaceDiff(
             // Do not create directories through a copied ignore file or symbolic link.
             continue;
           }
-          await fs.mkdir(path.join(ignoreDir, directory), { recursive: true });
+          try {
+            await fs.mkdir(path.join(ignoreDir, directory), { recursive: true });
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              'code' in error &&
+              (error.code === 'EEXIST' || error.code === 'ENOTDIR')
+            ) {
+              // A filesystem-equivalent spelling can also collide with a copied ignore
+              // file. Leave that query unignored rather than discard the readable diff.
+              continue;
+            }
+            throw error;
+          }
           checkPreparation();
           normalized.set(query, directory);
         } else {
@@ -991,6 +1010,7 @@ async function getWorkspaceDiff(
       ...untracked,
       ...leftOut,
       ...found.reserved.map(({ file }) => file),
+      ...found.populatedDirectories,
     ]);
     const repositoryRoots = new Set(untracked.filter((file) => file.endsWith('/')));
     const withoutFiles = new Set(

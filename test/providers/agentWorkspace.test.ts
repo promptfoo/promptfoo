@@ -2109,6 +2109,125 @@ describe('agent workspaces', () => {
       expect(fs.readFileSync(path.join(source, '.gitignore'), 'utf8')).toBe('ignored/\n');
     });
 
+    it.each(['EEXIST', 'ENOTDIR', 'EACCES'] as const)(
+      'handles %s while preparing a case alias of a copied ignore file',
+      async (code) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': 'ignored/\n' });
+        const workspace = await create(source);
+        fs.unlinkSync(path.join(workspace.dir, '.gitignore'));
+        fs.mkdirSync(path.join(workspace.dir, '.GITIGNORE'));
+        write(path.join(workspace.dir, 'README.md'), 'visible change\n');
+        const original = fs.promises.mkdir;
+        let collisions = 0;
+        const mkdir = vi.spyOn(fs.promises, 'mkdir').mockImplementation(async (...args) => {
+          const directory = String(args[0]);
+          if (
+            path.basename(directory) === '.GITIGNORE' &&
+            path.basename(path.dirname(directory)) === 'ignore'
+          ) {
+            // Model the scratch file collision on a case-insensitive filesystem.
+            collisions++;
+            throw Object.assign(new Error(`${code}: copied ignore file collision`), { code });
+          }
+          return original(...args);
+        });
+        try {
+          const metadata = await workspace.metadata();
+          expect(collisions).toBeGreaterThan(0);
+          if (code === 'EACCES') {
+            expect(metadata.workspaceDiffError).toContain('EACCES');
+            expect(metadata.workspaceDiff).toBeUndefined();
+          } else {
+            expect(metadata.workspaceDiffError).toBeUndefined();
+            expect(metadata.workspaceDiff).toContain('+visible change');
+            expect(metadata.workspaceDiffIncomplete).toBe(true);
+            expect(metadata.workspaceDiff).toContain('.GITIGNORE/');
+          }
+        } finally {
+          mkdir.mockRestore();
+        }
+      },
+    );
+
+    it.each(['file', 'symlink'] as const)(
+      'uses observed %s parents when filesystem and Git Unicode spellings differ',
+      async (kind) => {
+        if (kind === 'symlink' && process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source, { 'café/keep.txt': 'safe\n' });
+        if (kind === 'symlink') {
+          fs.unlinkSync(path.join(source, 'café', 'keep.txt'));
+          fs.symlinkSync('../README.md', path.join(source, 'café', 'keep.txt'));
+          git(source, 'add', '--all');
+          git(source, 'commit', '-qm', 'track link');
+        }
+        const workspace = await create(source);
+        const physicalPath = (value: fs.PathLike) => {
+          const text = String(value);
+          return text.startsWith(`${workspace.dir}${path.sep}`) ? text.normalize('NFC') : value;
+        };
+        const originalAccess = fs.promises.access;
+        const access = vi
+          .spyOn(fs.promises, 'access')
+          .mockImplementation((file, mode) => originalAccess(physicalPath(file), mode));
+        const originalOpendir = fs.promises.opendir;
+        const opendir = vi
+          .spyOn(fs.promises, 'opendir')
+          .mockImplementation(async (file, options) => {
+            const directory = await originalOpendir(physicalPath(file), options);
+            return {
+              async *[Symbol.asyncIterator]() {
+                for await (const entry of directory) {
+                  yield new Proxy(entry, {
+                    get(target, property, receiver) {
+                      if (property === 'name') {
+                        // Model decomposing directory entries while real Git reports NFC.
+                        return Buffer.from(String(target.name).normalize('NFD'));
+                      }
+                      return Reflect.get(target, property, receiver);
+                    },
+                  });
+                }
+              },
+            } as fs.Dir;
+          });
+        try {
+          const metadata = await workspace.metadata();
+          expect(metadata.workspaceDiffError).toBeUndefined();
+          expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+          expect(metadata.workspaceDiff).toBe('');
+        } finally {
+          opendir.mockRestore();
+          access.mockRestore();
+        }
+      },
+    );
+
+    it('does not borrow coverage from a distinct Unicode directory', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { 'café/keep.txt': 'safe\n' });
+      const workspace = await create(source);
+      const composed = path.join(workspace.dir, 'café');
+      const decomposed = path.join(workspace.dir, 'cafe\u0301');
+      fs.mkdirSync(decomposed, { recursive: true });
+      const sameDirectory = fs.statSync(composed).ino === fs.statSync(decomposed).ino;
+
+      const metadata = await workspace.metadata();
+
+      expect(metadata.workspaceDiffError).toBeUndefined();
+      // Byte-preserving filesystems have a new, genuinely empty directory. Normalizing
+      // filesystems resolve both spellings to the unchanged populated directory instead.
+      expect(metadata.workspaceDiffIncomplete).toBe(sameDirectory ? undefined : true);
+      if (sameDirectory) {
+        expect(metadata.workspaceDiff).toBe('');
+      } else {
+        expect(metadata.workspaceDiff).toContain('[diff incomplete:');
+      }
+    });
+
     it.for([false, true])(
       'bounds omission checks for undecodable files (unknown entry types: %s)',
       async (unknownTypes, context) => {
