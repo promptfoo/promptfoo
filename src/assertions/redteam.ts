@@ -296,6 +296,7 @@ export const handleRedteam = async (
   }
 
   try {
+    grader.validateTargetResponse(outputString, gradingContext);
     const { grade, rubric, suggestions } = await grader.getResult(
       effectivePrompt,
       outputString,

@@ -434,10 +434,7 @@ export abstract class RedteamGraderBase {
     return [];
   }
 
-  protected validateTargetResponse(
-    llmOutput: unknown,
-    gradingContext?: RedteamGradingContext,
-  ): void {
+  validateTargetResponse(llmOutput: unknown, gradingContext?: RedteamGradingContext): void {
     const imagesForGrading =
       gradingContext?.imageOutputs ?? gradingContext?.providerResponse?.images;
     if (!imagesForGrading?.length && isEmptyResponse(llmOutput)) {

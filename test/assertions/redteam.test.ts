@@ -966,6 +966,46 @@ describe('handleRedteam', () => {
     vi.resetAllMocks();
   });
 
+  it('rejects empty target responses before custom graders can pass them', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:cross-session-leak' as const,
+    };
+    const test: AtomicTestCase = {
+      vars: {},
+      options: {},
+      assert: [assertion],
+      metadata: { pluginId: 'cross-session-leak' },
+    };
+    const providerResponse: ProviderResponse = { output: '', metadata: {} };
+
+    await expect(
+      handleRedteam({
+        assertion,
+        baseType: getAssertionBaseType(assertion),
+        assertionValueContext: {
+          prompt: 'What did the previous user disclose?',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse,
+        },
+        cost: 0,
+        inverse: isAssertionInverse(assertion),
+        latencyMs: 0,
+        logProbs: [],
+        output: '',
+        outputString: '',
+        prompt: 'What did the previous user disclose?',
+        provider: undefined,
+        providerResponse,
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      }),
+    ).rejects.toThrow('Target provider returned an empty or nullish response');
+  });
+
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {
     const assertion = {
       type: 'promptfoo:redteam:harmful:hate' as const,
