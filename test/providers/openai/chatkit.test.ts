@@ -593,6 +593,37 @@ describe('OpenAiChatKitProvider', () => {
       }
     });
 
+    it('releases a borrowed standalone provider from the registry after public eval and caller cleanup', async () => {
+      const { evaluateWithSource } = await import('../../../src/evaluate');
+      const { page, context, browser, server } = resetBrowserMocks();
+      const caller = new OpenAiChatKitProvider('wf_fixture', {
+        config: { apiKey: 'fixture-key', usePool: false },
+      });
+      page.evaluate.mockRejectedValueOnce(new Error('fixture prompt failed'));
+      try {
+        const result = await evaluateWithSource(
+          {
+            providers: [caller],
+            prompts: ['ordinary greeting'],
+            tests: [{ description: 'borrowed standalone provider' }],
+          },
+          { cache: false },
+        );
+        expect(result.prompts[0].metrics?.testErrorCount).toBe(1);
+        expect(providerRegistry.has(caller)).toBe(true);
+        expect(browser.close).not.toHaveBeenCalled();
+        expect(server.close).not.toHaveBeenCalled();
+
+        await caller.cleanup();
+        expect(context.close).toHaveBeenCalledOnce();
+        expect(browser.close).toHaveBeenCalledOnce();
+        expect(server.close).toHaveBeenCalledOnce();
+        expect(providerRegistry.has(caller)).toBe(false);
+      } finally {
+        await providerRegistry.shutdown(caller);
+      }
+    });
+
     it('closes unfinished HTTP requests before completing cleanup', async () => {
       const { createServer } = await vi.importActual<typeof http>('http');
       const server = createServer((_request, response) => response.end('ChatKit fixture'));
@@ -668,7 +699,7 @@ describe('OpenAiChatKitProvider', () => {
       expect(server.close).toHaveBeenCalledOnce();
     });
 
-    it('waits for server closure and allows a fresh retry', async () => {
+    it('waits for server closure without removing a fresh registration during cleanup', async () => {
       const { browser, server } = resetBrowserMocks();
       const provider = new OpenAiChatKitProvider('wf_test', {
         config: { apiKey: 'test-key', usePool: false },
@@ -683,20 +714,31 @@ describe('OpenAiChatKitProvider', () => {
       });
       const cleanup = provider.cleanup();
       await closing;
-      let settled = false;
-      void cleanup.then(() => {
-        settled = true;
-      });
-      await Promise.resolve();
-      expect(settled).toBe(false);
-      finishClose();
-      await cleanup;
+      try {
+        expect(providerRegistry.has(provider)).toBe(false);
+        let settled = false;
+        void cleanup.then(() => {
+          settled = true;
+        });
+        await Promise.resolve();
+        expect(settled).toBe(false);
 
-      resetBrowserMocks();
-      await (provider as any).initialize();
-      expect((provider as any).initialized).toBe(true);
-      expect((provider as any).browser).not.toBe(browser);
-      await provider.cleanup();
+        resetBrowserMocks();
+        await (provider as any).initialize();
+        expect((provider as any).initialized).toBe(true);
+        expect((provider as any).browser).not.toBe(browser);
+        expect(providerRegistry.has(provider)).toBe(true);
+        finishClose();
+        await cleanup;
+        expect(providerRegistry.has(provider)).toBe(true);
+
+        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+      } finally {
+        finishClose();
+        await cleanup;
+        await providerRegistry.shutdown(provider);
+      }
     });
 
     it('should close browser resources', async () => {

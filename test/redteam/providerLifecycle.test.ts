@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { synthesize } from '../../src/redteam/index';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { SynthesizeOptions } from '../../src/redteam/types';
@@ -33,7 +34,10 @@ describe('generation provider cleanup ownership', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' });
+    restoreEnv = mockProcessEnv({
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+      PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false',
+    });
     redteamProviderManager.clearProvider();
     redteamProviderManager.setRateLimitRegistry(undefined);
   });
@@ -110,10 +114,19 @@ describe('generation provider cleanup ownership', () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
-  it.each(['during drain', 'after drain timeout'] as const)(
-    'blocks retries and cleans once when a concurrent provider settles %s',
-    async (completion) => {
+  it.each([
+    ['plugin', 'during drain'],
+    ['plugin', 'after drain timeout'],
+    ['scheduler', 'after drain timeout'],
+  ] as const)(
+    'blocks %s retries and cleans once when a concurrent provider settles %s',
+    async (retry, completion) => {
       vi.useFakeTimers();
+      const registry =
+        retry === 'scheduler' ? new RateLimitRegistry({ maxConcurrency: 2 }) : undefined;
+      redteamProviderManager.setRateLimitRegistry(registry);
+      const retrying = vi.fn();
+      registry?.on('request:retrying', retrying);
       const controller = new AbortController();
       const started = createDeferred<void>();
       const releaseFirst = createDeferred<void>();
@@ -127,6 +140,10 @@ describe('generation provider cleanup ownership', () => {
         } else if (callNumber === 2) {
           started.resolve();
           await releaseSecond.promise;
+          if (registry) {
+            // The real scheduler retries this error after the cleanup deadline.
+            throw new Error('HTTP 429 retry after 2');
+          }
           // The real plugin will retry an empty response unless cancellation stops it.
           this.output = '';
         } else {
@@ -158,19 +175,39 @@ describe('generation provider cleanup ownership', () => {
 
         releaseSecond.resolve();
         await vi.advanceTimersByTimeAsync(0);
+        if (registry) {
+          expect(retrying).toHaveBeenCalledOnce();
+          expect(retrying.mock.calls[0][0]).toMatchObject({ reason: 'ratelimit' });
+          expect(retrying.mock.calls[0][0].delayMs).toBeGreaterThan(1000);
+          await vi.runAllTimersAsync();
+        }
 
         expect(await result).toMatchObject({ message: 'Operation cancelled' });
         expect(cleanup).toHaveBeenCalledOnce();
         // The third queued plugin and the second plugin's late retry must never call the provider.
         expect(call).toHaveBeenCalledTimes(2);
         expect(cleanupWhileSecondPending).toBe(0);
+        if (registry) {
+          expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+            completedRequests: 1,
+            failedRequests: 1,
+            retriedRequests: 1,
+            activeRequests: 0,
+            queueDepth: 0,
+          });
+        }
         expect(vi.getTimerCount()).toBe(0);
       } finally {
         releaseFirst.resolve();
         releaseSecond.resolve();
-        await vi.runAllTimersAsync();
-        await result;
-        vi.useRealTimers();
+        try {
+          await vi.runAllTimersAsync();
+          await result;
+        } finally {
+          registry?.dispose();
+          redteamProviderManager.setRateLimitRegistry(undefined);
+          vi.useRealTimers();
+        }
       }
     },
   );

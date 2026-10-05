@@ -912,6 +912,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     this.server = null;
     this.serverPort = 0;
     this.initialized = false;
+    providerRegistry.unregister(this);
 
     await pool?.release(this);
 
