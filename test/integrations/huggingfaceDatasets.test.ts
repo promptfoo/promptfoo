@@ -331,6 +331,73 @@ describe('huggingfaceDatasets', () => {
     expect(tests).toEqual([]);
   });
 
+  it.each(['foo', '2foo', '-1', '1.5', 'NaN', 'Infinity', '1e309', '', ' '])(
+    'should reject invalid query limit %j before fetching',
+    async (limit) => {
+      await expect(
+        fetchHuggingFaceDataset(
+          `huggingface://datasets/test/dataset?limit=${encodeURIComponent(limit)}`,
+        ),
+      ).rejects.toThrow('[HF Dataset] Invalid limit: expected a finite non-negative integer');
+
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'should reject invalid explicit limit %s before fetching even with a valid query limit',
+    async (limit) => {
+      await expect(
+        fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=2', limit),
+      ).rejects.toThrow('[HF Dataset] Invalid limit: expected a finite non-negative integer');
+
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it('should short-circuit and return [] when the query limit is 0', async () => {
+    await expect(
+      fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=0'),
+    ).resolves.toEqual([]);
+
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should use an explicit zero limit instead of an invalid query limit', async () => {
+    await expect(
+      fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=foo', 0),
+    ).resolves.toEqual([]);
+
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it.each(['0', '5', 'foo'])(
+    'should prefer an explicit limit to the query limit %j',
+    async (queryLimit) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          num_rows_total: 5,
+          features: [],
+          rows: [{ row: { text: 'First' } }, { row: { text: 'Second' } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const tests = await fetchHuggingFaceDataset(
+        `huggingface://datasets/test/dataset?limit=${queryLimit}`,
+        2,
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledExactlyOnceWith(
+        expect.stringContaining('&offset=0&length=2'),
+        expect.objectContaining({ headers: {} }),
+      );
+      expect(tests.map((test) => test.vars?.text)).toEqual(['First', 'Second']);
+    },
+  );
+
   it('should respect user-specified limit parameter (single request optimization)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {

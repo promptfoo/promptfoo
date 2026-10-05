@@ -209,6 +209,77 @@ describe('buildFunctionBody', () => {
     );
   });
 
+  it.each([
+    ['block comment before expression', 'const x = 1; /* ; */ x === 1'],
+    ['block comment in declaration', 'const x = 1 /* ; */; x === 1'],
+    ['trailing block comment', 'const x = 1; x === 1 /* ; */'],
+    ['trailing line comment', 'const x = 1; x === 1 // ;'],
+    ['semicolon before block comment', 'const x = 1; x === 1; /* ; */'],
+    ['empty statements before line comment', 'const x = 1; x === 1;; // ;'],
+    ['quotes in block comment', 'const x = 1; /* \' " ` ; */ x === 1'],
+    ['quotes in line comment', 'const x = 1; x === 1 // \' " ` ;'],
+    ['line marker in block comment', 'const x = 1; /* // ; */ x === 1'],
+    ['block marker in line comment', 'const x = 1; x === 1 // /* ;'],
+    ['block comment after division', 'const x = 2 / /* ; */ 2; x === 1'],
+    ['line markers in string', 'const x = "https://example.test/a;b"; x.includes(";")'],
+    ['block markers in string', 'const x = "/* ; */"; x.length === 7'],
+    ['comment markers in template', 'const x = `// ; /* */`; x.length === 10'],
+    [
+      'escaped slashes in regex',
+      String.raw`const x = /https?:\/\//; x.test("https://example.test")`,
+    ],
+    ['separate slash classes in regex', 'const x = /[/][/]/; x.test("//")'],
+    ['block markers in regex class', 'const x = /[/*]/; x.test("/")'],
+    ['line markers in regex class', 'const x = /[//]/; x.test("/")'],
+    ['block comment before regex', 'const x = /* ; */ /[/*]/; x.test("*")'],
+    ['semicolon in regex class', 'const x = /[;/*]/; x.test(";")'],
+    ['division before comment', 'const x = 8 / 2 /* ; */; x === 4'],
+    ['division after increment', 'let x = 4; const y = x++ / 2; y === 2'],
+    ['division after decrement', 'let x = 4; const y = x-- / 2; y === 2'],
+    ['regex after return', 'const x = (() => { return /[/*]/ })(); x.test("/")'],
+    ['regex after typeof', 'const type = typeof /[/*]/; type === "object"'],
+    ['regex after division', 'const x = 2 / /[/*]/.source.length; x === 0.5'],
+    ['division after regex', 'const x = /a/ / 2; Number.isNaN(x)'],
+    ['division after property keyword', 'const x = { return: 4 }; const y = x.return / 2; y === 2'],
+    ['division after contextual keyword', 'const of = 8; const n = of / 2; n === 4'],
+    ['division after await identifier', 'const await = 8; const n = await / 2; n === 4'],
+    ['division after yield identifier', 'const yield = 8; const n = yield / 2; n === 4'],
+    ['division after Unicode identifier', 'const étypeof = 8; const n = étypeof / 2; n === 4'],
+    ['spaced property keyword', 'const obj = { typeof: 4 }; const x = obj . typeof / 2; x === 2'],
+    [
+      'commented property keyword',
+      'const obj = { typeof: 4 }; const x = obj./* ; */ typeof / 2; x === 2',
+    ],
+    ['regex after postfix and addition', 'let x = 1; const n = x+++ /[/*]/.test("/"); n === 2'],
+    ['regex after comparison', 'const n = 0 < /[/*]/.test("/"); n === true'],
+    [
+      'regex statement after control condition',
+      'const fn = () => { if (true) /[/*]/.test("*") }; true',
+    ],
+    ['regex statement after block', 'const fn = () => { if (false) {} /[/*]/.test("*") }; true'],
+    ['semicolon inside nested function', 'const x = (() => { const y = 1; return y; })(); x === 1'],
+    ['semicolon inside template expression', 'const x = 1; `${(() => { return x; })()}` === "1"'],
+  ])('should evaluate %s without treating comment text as code', (_name, code) => {
+    expect(new Function(buildFunctionBody(code))()).toBe(true);
+  });
+
+  it.each(['\n', '\r', '\u2028', '\u2029'])(
+    'should end a line comment at %j when scanning statement separators',
+    (lineEnding) => {
+      const code = `const x = 1 // ; ' " \`${lineEnding}; x === 1`;
+      expect(new Function(buildFunctionBody(code))()).toBe(true);
+    },
+  );
+
+  it('should return an unparenthesized grading result object after a declaration', () => {
+    const code = 'const x = 1; { pass: x === 1, score: 1, reason: "ok" }';
+    expect(new Function(buildFunctionBody(code))()).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+    });
+  });
+
   it('should not modify expressions starting with const-like words', () => {
     // "constant" starts with "const" but isn't a declaration
     expect(buildFunctionBody('constant === true')).toBe('return constant === true');
@@ -1891,6 +1962,50 @@ describe('JavaScript file references', () => {
       });
 
       expect(result.pass).toBe(true);
+    });
+
+    it.each([
+      ['const x = output.length; /* ; */ x === 4', true],
+      ['const x = output.length; /* ; */ x === 5', false],
+      ['const x = output.length; x === 4 // ;', true],
+      ['const x = output.length; x === 4; /* ; */', true],
+      ['const x = output.length; x === 4;; // ;', true],
+      ['const x = output.length; /* \' " ` ; */ x === 4', true],
+    ])('should grade an inline assertion containing comments: %s', async (value, pass) => {
+      const assertion: Assertion = { type: 'javascript', value };
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test' },
+      });
+
+      expect(result).toMatchObject({
+        pass,
+        score: pass ? 1 : 0,
+        reason: pass ? 'Assertion passed' : `Custom function returned false\n${value}`,
+      });
+    });
+
+    it('should reject an unterminated block comment', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const x = output.length; /* ; x === 4',
+      };
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test' },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('Custom function threw error:'),
+      });
     });
 
     it('should handle trailing semicolon in assertion', async () => {
