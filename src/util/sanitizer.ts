@@ -304,6 +304,11 @@ function isCompoundSecretObjectField(name: string, value: unknown): boolean {
       materialName = materialName.replace(/(?:value|hash|encrypted)$/, '');
     }
   }
+  // Reuse the established terminal vocabulary (including credential, DSN and
+  // accessKey) without inheriting its broader descriptive `related` category.
+  if (getCredentialFieldKind(materialName) === 'credential') {
+    return true;
+  }
   const terminal = SECRET_PARAMETER_NAMES.find((secret) => materialName.endsWith(secret));
   if (!terminal) {
     return false;
@@ -343,6 +348,11 @@ function getCompoundSecretObjectFieldKind(
   }
   if (/^(?:cookies|cookiejars?|basicauths|sessioncookies|subscriptionkeys)$/.test(normalized)) {
     return 'related';
+  }
+  // Retain terminal precedence: userCredentials is itself a credential field,
+  // while clientSecrets is a collection of individual credentials.
+  if (getCredentialFieldKind(name) === 'credential' && isCompoundSecretObjectField(name, value)) {
+    return 'credential';
   }
   const singular = singularizeFieldName(name);
   // Only actual credential collections inherit the private-value role. A
@@ -1254,7 +1264,9 @@ function sanitizeJsonString(
       throw error;
     }
     if (guardUrlPayload) {
-      return sanitizeUrlWithContext(str, { maxDepth: maxDepth - depth, guardUrlPayload });
+      return looksLikeSecret(str)
+        ? REDACTED
+        : sanitizeUrlWithContext(str, { maxDepth: maxDepth - depth, guardUrlPayload });
     }
     if (looksLikeUrlEncodedFormData(str)) {
       const sanitizedUrlEncoded = sanitizeUrlEncodedStringWithContext(
@@ -1461,6 +1473,12 @@ function sanitizeUrlEncodedStringWithContext(
   return changed ? result : value;
 }
 
+// Property names retain opaque public identifiers. Only the existing URL
+// userinfo/parameter guards apply to keys in an already-decoded URL payload.
+function hasUrlPayloadKeyCredential(key: string, compoundContext?: CompoundKeyContext): boolean {
+  return hasUrlUserinfo(key) || hasSecretFormSegment(key, false, compoundContext);
+}
+
 /**
  * Sanitize plain object fields
  */
@@ -1487,7 +1505,9 @@ function sanitizePlainObject(
         ? REDACTED
         : sanitizeUrls && isUrlKey
           ? sanitizeUrlWithContext(rawKey, compoundContext)
-          : rawKey;
+          : guardUrlPayload && hasUrlPayloadKeyCredential(rawKey, compoundContext)
+            ? REDACTED
+            : rawKey;
     let key = redactedKey;
     while (
       Object.prototype.hasOwnProperty.call(sanitized, key) ||
@@ -1514,7 +1534,9 @@ function sanitizePlainObject(
             ? REDACTED
             : redactCompoundKeys && sanitizeUrls && URL_REFERENCE.test(name)
               ? sanitizeUrlWithContext(name, { maxDepth: maxDepth - depth - 2 })
-              : name;
+              : guardUrlPayload && hasUrlPayloadKeyCredential(name, compoundContext)
+                ? REDACTED
+                : name;
         let headerName = redactedName;
         while (
           usedNames.has(headerName) ||

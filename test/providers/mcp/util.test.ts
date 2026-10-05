@@ -781,6 +781,118 @@ describe('sanitizeMcpToolData', () => {
     },
   );
 
+  it.each(['url', 'callbackUrl', 'apiHost'])(
+    'guards URL-payload object and header names through collision-safe key handling for %s',
+    (role) => {
+      const longPublicName = 'tenant'.repeat(20);
+      const keys = {
+        'callback?token=first-fixture': 'first',
+        '[REDACTED]': 'authored',
+        'data=https://example.test/?token=second-fixture': 'second',
+        'callback?page=2': 'public',
+        [longPublicName]: 'public',
+      };
+      const sanitizedKeys = {
+        '[REDACTED]#1': 'first',
+        '[REDACTED]': 'authored',
+        '[REDACTED]#2': 'second',
+        'callback?page=2': 'public',
+        [longPublicName]: 'public',
+      };
+      for (const headerRole of [undefined, 'headers', 'authHeaders']) {
+        const data = headerRole
+          ? { [headerRole]: { ...keys, Accept: 'text/plain' }, page: 2 }
+          : { ...keys, page: 2 };
+        const expected = headerRole
+          ? {
+              [headerRole]: {
+                ...Object.fromEntries(
+                  Object.keys(sanitizedKeys).map((name) => [name, '[REDACTED]']),
+                ),
+                Accept: 'text/plain',
+              },
+              page: 2,
+            }
+          : { ...sanitizedKeys, page: 2 };
+        const input = { [role]: JSON.stringify(data) };
+        const original = structuredClone(input);
+        expect(sanitizeMcpToolData(input)).toEqual({ [role]: JSON.stringify(expected) });
+        expect(input).toEqual(original);
+      }
+    },
+  );
+
+  it.each([
+    'AKIAABCDEFGHIJKLMNOP:fixture',
+    'sk-123456789012345678901234:fixture',
+    'key-123456789012345678901234:fixture',
+    `AIza${'a'.repeat(35)}:fixture`,
+  ])('retains existing secret-format detection before opaque URL parsing for %s', (value) => {
+    for (const role of ['url', 'callbackUrl', 'apiHost']) {
+      const input = { [role]: JSON.stringify({ item: value, array: [value], page: 2 }) };
+      expect(sanitizeMcpToolData(input)).toEqual({
+        [role]: JSON.stringify({ item: '[REDACTED]', array: ['[REDACTED]'], page: 2 }),
+      });
+      const publicInput = {
+        [role]: JSON.stringify({ item: 'ordinary:public', array: ['ordinary:public'], page: 2 }),
+      };
+      expect(sanitizeMcpToolData(publicInput)).toEqual(publicInput);
+    }
+  });
+
+  it.each([
+    'databasePassword',
+    'databasePasswd',
+    'dbPwd',
+    'userCredential',
+    'userCredentials',
+    'clientSecret',
+    'accessToken',
+    'databaseDsn',
+    'userApiKey',
+    'awsAccessKey',
+    'certificatePrivateKey',
+    'userCredentialValue',
+    'dbDsnV2Encrypted',
+  ])('uses the existing terminal credential vocabulary for MCP %s', (name) => {
+    const fields = { [name]: 'short-fixture' };
+    for (const encode of [
+      (value: unknown) => value,
+      (value: unknown) => ({ payload: JSON.stringify(value) }),
+      (value: unknown) => ({ payload: `data=${encodeURIComponent(JSON.stringify(value))}` }),
+    ]) {
+      expect(sanitizeMcpToolData({ a: { b: { c: { d: { e: encode(fields) } } } } })).toEqual({
+        a: { b: { c: { d: { e: encode({ [name]: '[REDACTED]' }) } } } },
+      });
+    }
+    if (name !== 'clientSecret' && name !== 'accessToken') {
+      expect(sanitizeMcpToolData({ [name]: false })).toEqual({ [name]: false });
+    }
+  });
+
+  it('retains terminal precedence and qualified/plural roles without descriptive inheritance', () => {
+    expect(sanitizeMcpToolData({ userCredentials: { child: 'fixture' } })).toEqual({
+      userCredentials: '[REDACTED]',
+    });
+    expect(
+      sanitizeMcpToolData({ dbDsns: ['fixture'], userCredentialForTenant: { tenant: 'fixture' } }),
+    ).toEqual({ dbDsns: ['[REDACTED]'], userCredentialForTenant: { tenant: '[REDACTED]' } });
+    const publicInput = {
+      credentialSettings: { mode: 'public', count: 2 },
+      dsnSettings: { mode: 'public' },
+      accessKeySettings: { mode: 'public' },
+      pageToken: 'next',
+      maxTokens: 30,
+    };
+    expect(sanitizeMcpToolData(publicInput)).toEqual(publicInput);
+    expect(
+      sanitizeObject(
+        { userCredential: 'fixture', dbDsn: 'fixture', awsAccessKey: 'fixture' },
+        { sanitizeUrls: true, maxDepth: 64 },
+      ),
+    ).toEqual({ userCredential: 'fixture', dbDsn: 'fixture', awsAccessKey: 'fixture' });
+  });
+
   it.each(['tokenUsages', 'tokenBudgets', 'signatureAlgorithms', 'passwordPolicies'])(
     'preserves ordinary plural %s metadata and protects nested credentials',
     (name) => {

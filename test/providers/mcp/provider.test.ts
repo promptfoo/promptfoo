@@ -159,6 +159,11 @@ describe('MCPProvider', () => {
     });
     const fields = {
       databasePassword: 'database-fixture',
+      userCredential: 'credential-fixture',
+      databaseDsn: 'dsn-fixture',
+      awsAccessKey: 'access-fixture',
+      guardedJsonUrl: JSON.stringify({ 'callback?token=key-fixture': 'GET', page: 2 }),
+      formatUrl: JSON.stringify(['AKIAABCDEFGHIJKLMNOP:format-fixture']),
       dbPwd: 'pwd-fixture',
       clientSecrets: ['secret-one', 'secret-two'],
       apiKeysByTenant: { tenant: 'tenant-secret', count: 2 },
@@ -223,6 +228,11 @@ describe('MCPProvider', () => {
               five: {
                 ...fields,
                 databasePassword: '[REDACTED]',
+                userCredential: '[REDACTED]',
+                databaseDsn: '[REDACTED]',
+                awsAccessKey: '[REDACTED]',
+                guardedJsonUrl: JSON.stringify({ '[REDACTED]': 'GET', page: 2 }),
+                formatUrl: JSON.stringify(['[REDACTED]']),
                 dbPwd: '[REDACTED]',
                 clientSecrets: ['[REDACTED]', '[REDACTED]'],
                 apiKeysByTenant: { tenant: '[REDACTED]', count: '[REDACTED]' },
