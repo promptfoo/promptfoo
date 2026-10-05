@@ -35,7 +35,7 @@ import {
 } from '../util/database';
 import { redactAzureBlobSasTokens } from '../util/sanitizer';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
-import { csrfProtection } from './middleware/csrfProtection';
+import { csrfProtection, isAllowedOrigin } from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
@@ -120,7 +120,13 @@ export function createApp() {
 
   const staticDir = findStaticDir();
 
-  app.use(cors());
+  // Local evals retain their original content. Only trusted browser origins may read it.
+  app.use(
+    cors((req, callback) => {
+      const origin = req.headers.origin;
+      callback(null, { origin: !!origin && isAllowedOrigin(origin, req.headers.host || '') });
+    }),
+  );
   app.use(csrfProtection);
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));

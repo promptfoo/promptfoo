@@ -10,11 +10,10 @@ export function serializeEvalValue<T>(value: T): T {
     return value;
   }
   const providers = new WeakMap<object, ProviderOptions>();
-  const serialized = safeJsonStringify(value, false, (_key, serializedItem, item) => {
+  const snapshotProvider = (item: unknown): unknown => {
     if (!isApiProvider(item)) {
-      return serializedItem;
+      return item;
     }
-    // Inspect the original value: provider toJSON() methods may omit config or identity.
     // Persist the provider's configuration, never its live SDK clients or transports.
     let snapshot = providers.get(item);
     if (!snapshot) {
@@ -28,6 +27,39 @@ export function serializeEvalValue<T>(value: T): T {
       snapshot = provider;
     }
     return snapshot;
+  };
+  const containers = new WeakMap<object, object>();
+  const serialized = safeJsonStringify(snapshotProvider(value), false, (_key, item) => {
+    // A provider's own replacer runs after toJSON(), which can redact or throw. Project
+    // the root above and each container's children before JSON.stringify visits them.
+    // Ordinary values still use native toJSON behavior (dates, buffers, custom classes).
+    const projected = snapshotProvider(item);
+    if (
+      projected === null ||
+      typeof projected !== 'object' ||
+      projected instanceof Number ||
+      projected instanceof String ||
+      projected instanceof Boolean
+    ) {
+      return projected;
+    }
+    const container = Array.isArray(projected)
+      ? Array.from({ length: projected.length }, (_, index) => snapshotProvider(projected[index]))
+      : Object.fromEntries(
+          Object.entries(projected).map(([key, child]) => [key, snapshotProvider(child)]),
+        );
+    const cached = containers.get(projected);
+    if (cached) {
+      // toJSON(key) can update a shared object between occurrences. Refresh its contents
+      // while retaining the identity needed by safeJsonStringify's cycle detection.
+      for (const key of Object.keys(cached)) {
+        Reflect.deleteProperty(cached, key);
+      }
+      Object.defineProperties(cached, Object.getOwnPropertyDescriptors(container));
+      return cached;
+    }
+    containers.set(projected, container);
+    return container;
   });
   return serialized === undefined
     ? ((Array.isArray(value) ? [] : null) as T)

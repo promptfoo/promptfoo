@@ -87,6 +87,76 @@ describe('local eval serialization', () => {
     }
   });
 
+  it('never invokes provider toJSON, including nested, shared, and circular providers', () => {
+    const toJSON = vi.fn(() => {
+      throw new Error('Provider serialization must use its configuration');
+    });
+    const provider = {
+      id: () => 'custom',
+      callApi: async () => ({ output: 'ok' }),
+      config: { apiKey: 'fixture-key', self: undefined as unknown },
+      toJSON,
+    };
+    provider.config.self = provider;
+    const expected = { id: 'custom', config: { apiKey: 'fixture-key' } };
+    expect(serializeEvalValue(provider)).toEqual(expected);
+    expect(serializeEvalValue({ providers: [provider], nested: { provider }, payload })).toEqual({
+      providers: [expected],
+      nested: { provider: expected },
+      payload,
+    });
+    expect(toJSON).not.toHaveBeenCalled();
+    expect(provider.config.self).toBe(provider);
+  });
+
+  it('preserves native JSON conversions and data keys while projecting converted containers', () => {
+    const provider = {
+      id: () => 'custom',
+      callApi: async () => ({ output: 'ok' }),
+      toJSON: () => {
+        throw new Error('Must not run');
+      },
+    };
+    class CustomValue {
+      #value = 'private field';
+      toJSON(key: string) {
+        return { value: this.#value, key, provider };
+      }
+    }
+    const input = {
+      buffer: Buffer.from('hello'),
+      custom: new CustomValue(),
+      data: JSON.parse('{"__proto__":{"password":"fixture"}}'),
+      primitive: Object(7),
+    };
+    expect(serializeEvalValue(input)).toEqual({
+      buffer: { type: 'Buffer', data: [104, 101, 108, 108, 111] },
+      custom: { value: 'private field', key: 'custom', provider: { id: 'custom' } },
+      data: input.data,
+      primitive: 7,
+    });
+  });
+
+  it('serializes arrays by index even when their methods are shadowed by data', () => {
+    const output = Object.assign(['first', 'second'], { map: 'fixture metadata' });
+    expect(serializeEvalValue({ output })).toEqual({ output: ['first', 'second'] });
+  });
+
+  it('preserves per-occurrence toJSON results that reuse and mutate a shared object', () => {
+    const converted: Record<string, string> = {};
+    const keyed = {
+      toJSON(key: string) {
+        delete converted.first;
+        converted[key] = key;
+        return converted;
+      },
+    };
+    expect(serializeEvalValue({ first: keyed, second: keyed })).toEqual({
+      first: { first: 'first' },
+      second: { second: 'second' },
+    });
+  });
+
   it('handles circular providers without dropping shared non-circular data', () => {
     const provider = {
       id: () => 'custom',
