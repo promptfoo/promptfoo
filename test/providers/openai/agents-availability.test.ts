@@ -45,6 +45,9 @@ describe('optional OpenAI Agents modules', () => {
     await expect(loadOpenAiAgentsModule(load)).rejects.toThrow(
       'npm install promptfoo @openai/agents@^0.14.1',
     );
+    await expect(loadOpenAiAgentsModule(load)).rejects.toThrow(
+      'npm install -g promptfoo @openai/agents@^0.14.1',
+    );
     expect(load).not.toHaveBeenCalled();
   });
 

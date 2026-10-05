@@ -531,16 +531,17 @@ The following environment variables can be used to configure the Vertex AI provi
 
 \*At least one authentication method is required (ADC, service account, or API key)
 
-†The default region is `global` when authenticating with ADC or a service account, and
-`us-central1` in express mode (API key).
+†The Vertex chat provider defaults to `global` with ADC or a service account, and
+`us-central1` in express mode (API key). Choose a region supported by your model.
+Vertex embedding and Live providers default to `us-central1`.
 
 ### Region Selection
 
 Different models are available in different regions. Common regions include:
 
-- `global` - Default with ADC or service account credentials. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
+- `global` - Default for Vertex chat with ADC or service account credentials. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
-- `us-central1` - Default in express mode (API key), most models available
+- `us-central1` - Default for embeddings, Live, and chat in express mode (API key); most models available
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -802,7 +803,7 @@ defaultTest:
 | `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)        |
 | `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                        |
 
-‡With ADC or service account credentials the default region is `global` and the host is `aiplatform.googleapis.com`. In express mode (API key) the default region is `us-central1` and the host is `{region}-aiplatform.googleapis.com`.
+‡For the Vertex chat provider, ADC or service account credentials default to `global` with host `aiplatform.googleapis.com`; express mode (API key) defaults to `us-central1` with host `{region}-aiplatform.googleapis.com`. Choose a region supported by your model. Vertex embedding and Live providers default to `us-central1`.
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.

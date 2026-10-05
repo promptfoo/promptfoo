@@ -1073,7 +1073,7 @@ class CodexAppServerConnection {
     return this.closePromise;
   }
 
-  private handleLine(line: string): void {
+  private handleLine(line: string, retryBufferedMessage = true): void {
     const trimmed = line.trim();
     if (!trimmed && this.bufferedJsonRpcLines.length === 0) {
       return;
@@ -1081,7 +1081,7 @@ class CodexAppServerConnection {
 
     const candidateLines =
       this.bufferedJsonRpcLines.length > 0 ? [...this.bufferedJsonRpcLines, line] : [trimmed];
-    const candidate = candidateLines.join('\\n');
+    let candidate = candidateLines.join('\n');
     if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
       this.bufferedJsonRpcLines = [];
       this.handleProcessFailure(
@@ -1094,15 +1094,40 @@ class CodexAppServerConnection {
     }
     let message: JsonRpcMessage;
     try {
-      message = JSON.parse(candidate) as JsonRpcMessage;
+      try {
+        message = JSON.parse(candidate) as JsonRpcMessage;
+      } catch (error) {
+        if (
+          candidateLines.length <= 1 ||
+          !(error instanceof Error) ||
+          !/Bad control character/i.test(error.message)
+        ) {
+          throw error;
+        }
+        // Preserve compatibility with app-server output containing raw newlines inside strings.
+        candidate = this.escapeStringNewlines(candidate);
+        message = JSON.parse(candidate) as JsonRpcMessage;
+      }
     } catch (error) {
-      if (this.shouldBufferJsonRpcLine(error, trimmed)) {
+      if (this.shouldBufferJsonRpcLine(error, candidate)) {
         this.bufferedJsonRpcLines = candidateLines;
         return;
       }
 
       logger.warn('[CodexAppServer] Failed to parse JSON-RPC line', { error, line: candidate });
       this.bufferedJsonRpcLines = [];
+      if (retryBufferedMessage && candidateLines.length > 1) {
+        // A later object may begin a new record after an unfinished malformed message.
+        let restartIndex = candidateLines.length - 1;
+        for (let index = candidateLines.length - 1; index > 0; index--) {
+          if (candidateLines[index].trimStart().startsWith('{')) {
+            restartIndex = index;
+            break;
+          }
+        }
+        this.bufferedJsonRpcLines = candidateLines.slice(restartIndex, -1);
+        this.handleLine(line, false);
+      }
       return;
     }
 
@@ -1110,16 +1135,42 @@ class CodexAppServerConnection {
     this.handleMessage(message);
   }
 
-  private shouldBufferJsonRpcLine(error: unknown, trimmedLine: string): boolean {
-    if (this.bufferedJsonRpcLines.length > 0) {
-      return true;
+  private escapeStringNewlines(candidate: string): string {
+    const parts: string[] = [];
+    let inString = false;
+    let escaped = false;
+    let start = 0;
+
+    for (let index = 0; index < candidate.length; index++) {
+      const character = candidate[index];
+      if (inString && character === '\n' && !escaped) {
+        parts.push(candidate.slice(start, index), '\\n');
+        start = index + 1;
+      }
+      if (escaped) {
+        escaped = false;
+      } else if (inString && character === '\\') {
+        escaped = true;
+      } else if (character === '"') {
+        inString = !inString;
+      }
     }
-    if (!trimmedLine.startsWith('{')) {
+
+    parts.push(candidate.slice(start));
+    return parts.join('');
+  }
+
+  private shouldBufferJsonRpcLine(error: unknown, candidate: string): boolean {
+    if (!candidate.trimStart().startsWith('{')) {
       return false;
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    return /Unterminated string|Unexpected end of JSON input|Bad control character/i.test(message);
+    return (
+      /Unterminated string|Unexpected end of JSON input/i.test(message) ||
+      (message.startsWith('Expected ') &&
+        message.includes(` in JSON at position ${candidate.length} (line`))
+    );
   }
 
   private handleMessage(message: JsonRpcMessage): void {
