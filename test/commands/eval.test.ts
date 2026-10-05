@@ -1704,7 +1704,15 @@ describe('evalCommand', () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
     const mockEvalRecord = new Eval(defaultConfig);
-    vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
+    const cleanup = vi.fn().mockRejectedValue(new Error('cleanup failed'));
+    vi.mocked(evaluate).mockImplementationOnce(async () => {
+      trackProvider({
+        id: () => 'cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup,
+      });
+      return mockEvalRecord;
+    });
 
     try {
       const result = await doEval(
@@ -1719,6 +1727,7 @@ describe('evalCommand', () => {
       // would silently mis-report 0 tests / 0 successes for watch failures.
       expect(result).toBe(mockEvalRecord);
       expect(process.exitCode).toBe(1);
+      expect(cleanup).toHaveBeenCalledOnce();
     } finally {
       process.exitCode = previousExitCode;
     }
@@ -2323,31 +2332,58 @@ describe('evalCommand', () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
-  it.each([0, 42])('preserves exit code %s when cleanup fails', async (exitCode) => {
-    const previousExitCode = process.exitCode;
-    const provider = {
-      id: () => 'cleanup-provider',
-      callApi: async () => ({ output: 'ok' }),
-      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
-    };
-    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
-      trackProvider(provider);
-      process.exitCode = exitCode;
-      return record as Eval;
-    });
-    try {
-      const evaluation = doEval({}, defaultConfig, defaultConfigPath, {});
-      if (exitCode === 0) {
-        await expect(evaluation).rejects.toThrow('cleanup failed');
-      } else {
-        await expect(evaluation).resolves.toBeDefined();
+  it.each([
+    ['library', undefined, undefined],
+    ['library', 42, undefined],
+    ['cli', undefined, undefined],
+    ['cli', 42, undefined],
+    ['cli', undefined, 42],
+    ['cli', 42, 42],
+    ['cli', undefined, 0],
+    ['cli', 42, 0],
+  ] as const)(
+    'handles %s cleanup failure (initial exit=%s, selected failure=%s)',
+    async (eventSource, initialExitCode, failedExitCode) => {
+      const previousExitCode = process.exitCode;
+      const cleanupError = new Error('cleanup failed');
+      const provider = {
+        id: () => 'cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup: vi.fn().mockRejectedValue(cleanupError),
+      };
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+        trackProvider(provider);
+        (record as Eval).prompts = [
+          {
+            metrics: {
+              testPassCount: failedExitCode === undefined ? 1 : 0,
+              testFailCount: failedExitCode === undefined ? 0 : 1,
+              testErrorCount: 0,
+            },
+          },
+        ] as any;
+        return record as Eval;
+      });
+      try {
+        process.exitCode = initialExitCode;
+        vi.stubEnv('PROMPTFOO_PASS_RATE_THRESHOLD', '100');
+        vi.stubEnv('PROMPTFOO_FAILED_TEST_EXIT_CODE', String(failedExitCode ?? 42));
+        const evaluation = doEval({ write: false }, defaultConfig, defaultConfigPath, {
+          eventSource,
+        });
+        if (failedExitCode === 42) {
+          await expect(evaluation).resolves.toBeInstanceOf(Eval);
+        } else {
+          await expect(evaluation).rejects.toBe(cleanupError);
+        }
+        expect(process.exitCode).toBe(failedExitCode ?? initialExitCode);
+        expect(provider.cleanup).toHaveBeenCalledOnce();
+      } finally {
+        process.exitCode = previousExitCode;
+        vi.unstubAllEnvs();
       }
-      expect(process.exitCode).toBe(exitCode);
-      expect(provider.cleanup).toHaveBeenCalledOnce();
-    } finally {
-      process.exitCode = previousExitCode;
-    }
-  });
+    },
+  );
 
   it('should handle redteam config', async () => {
     const cmdObj = {};
