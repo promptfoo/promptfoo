@@ -27,6 +27,10 @@ export async function cleanupProvider(provider: ApiProvider): Promise<void> {
   }
 }
 
+export function hasProviderCleanupScope(): boolean {
+  return providerScope.getStore() !== undefined;
+}
+
 /**
  * Own providers across calls, until terminal cleanup. Pending loads retain this
  * scope so they are disposed even if they finish after cleanup.

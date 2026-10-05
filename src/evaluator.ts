@@ -31,6 +31,7 @@ import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/agentWorkspace';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { hasProviderCleanupScope, trackProvider } from './providers/lifecycle';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
@@ -2658,9 +2659,11 @@ async function resolveDefaultTestProvider(
     const { loadApiProvider } = await import('./providers');
     const providerId =
       typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
-    return loadApiProvider(providerId, {
-      options: defaultProvider as ProviderOptions,
-    });
+    return trackProvider(
+      await loadApiProvider(providerId, {
+        options: defaultProvider as ProviderOptions,
+      }),
+    );
   }
   return defaultProvider;
 }
@@ -5491,8 +5494,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
 
-        // Clean up Python worker pools to prevent resource leaks
-        await providerRegistry.shutdownAll();
+        // Evaluation scopes close only their own providers; direct evaluator callers keep
+        // the legacy process-registry cleanup.
+        if (!hasProviderCleanupScope()) {
+          await providerRegistry.shutdownAll();
+        }
 
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {

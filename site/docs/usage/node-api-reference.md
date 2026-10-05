@@ -41,6 +41,11 @@ async function evaluate(testSuite: EvaluateTestSuite, options?: EvaluateOptions)
 
 **Returns:** `Eval` record. Call `toEvaluateSummary()` when you need the serializable results summary.
 
+Providers created from configuration belong to that evaluation. Promptfoo awaits their
+`cleanup()` hooks when the run finishes, including failed runs. Provider instances
+passed in by the caller remain caller-owned; close them after all evaluations using
+them have finished.
+
 **Example:**
 
 ```typescript
@@ -98,12 +103,14 @@ interface EvaluateOptions {
 
 ### `loadApiProvider(providerPath, context?)`
 
-Load a single provider instance by path or identifier.
+Load a single provider instance by path or identifier. You own the returned instance and
+should call `await provider.cleanup?.()` when finished. Direct loads remain caller-owned even
+when made from a provider used by an evaluation.
 
-For manually loaded Crescendo, Custom, and Voice Crescendo strategies, call
-`await provider.cleanup?.()` after the final call. Their cleanup is terminal and
-releases configured attacker and scoring providers; it leaves directly supplied
-providers and shared redteam cache entries open.
+Crescendo, Custom, and Voice Crescendo strategy instances retain their configured attacker
+and scoring providers across evaluations. Their `cleanup()` method is terminal: call it after
+the final evaluation, then create a new strategy instance if needed. Provider instances you
+supplied or placed in the shared redteam cache remain yours to clean up.
 
 ```typescript
 async function loadApiProvider(

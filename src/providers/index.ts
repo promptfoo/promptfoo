@@ -19,7 +19,7 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
-import { cleanupProvider } from './lifecycle';
+import { cleanupProvider, trackProvider } from './lifecycle';
 import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -270,17 +270,19 @@ export async function resolveProvider(
     if (resolvedProviders[provider]) {
       return resolvedProviders[provider];
     }
-    return await loadApiProvider(provider, context);
+    return trackProvider(await loadApiProvider(provider, context));
   } else if (typeof provider === 'object') {
     const descriptor = normalizeProviderRef(provider);
     invariant(
       descriptor.kind === 'options' || descriptor.kind === 'map',
       `Provider object must have an 'id' field or be a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
     );
-    return await loadApiProvider(descriptor.loadProviderPath, {
-      ...context,
-      options: descriptor.loadOptions,
-    });
+    return trackProvider(
+      await loadApiProvider(descriptor.loadProviderPath, {
+        ...context,
+        options: descriptor.loadOptions,
+      }),
+    );
   } else if (typeof provider === 'function') {
     const descriptor = normalizeProviderRef(provider);
     return createProviderFromFunction(
