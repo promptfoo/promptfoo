@@ -62,6 +62,7 @@ export class PythonProvider implements ApiProvider {
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
+  private cleanupGeneration = 0;
   public label: string | undefined;
   private pool: PythonWorkerPool | null = null;
 
@@ -100,6 +101,7 @@ export class PythonProvider implements ApiProvider {
       return this.initializationPromise;
     }
 
+    const cleanupGeneration = this.cleanupGeneration;
     // Start initialization and store the promise
     this.initializationPromise = (async () => {
       try {
@@ -123,6 +125,9 @@ export class PythonProvider implements ApiProvider {
         );
 
         await this.pool.initialize();
+        if (cleanupGeneration !== this.cleanupGeneration) {
+          throw new Error('Python provider initialization interrupted by cleanup');
+        }
 
         // Register for cleanup
         providerRegistry.register(this);
@@ -301,8 +306,18 @@ export class PythonProvider implements ApiProvider {
   }
 
   async shutdown(): Promise<void> {
-    if (this.pool) {
-      await this.pool.shutdown();
+    this.cleanupGeneration++;
+    try {
+      await this.initializationPromise;
+    } catch {
+      // Failed initialization can still leave workers that need disposal.
+    }
+    const pool = this.pool;
+    if (pool) {
+      await pool.shutdown();
+      if (this.pool !== pool) {
+        return;
+      }
       this.pool = null;
     }
     providerRegistry.unregister(this);
