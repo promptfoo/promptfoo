@@ -481,7 +481,11 @@ function getCompoundSecretObjectFieldKind(
 // Carry the MCP-only policy and remaining object depth through existing encoded
 // JSON paths. Public URL/form sanitizers keep their established defaults.
 type UrlPayloadGuard = boolean | 'logging' | 'host';
-type CompoundKeyContext = { maxDepth: number; guardUrlPayload?: UrlPayloadGuard };
+type CompoundKeyContext = {
+  maxDepth: number;
+  guardUrlPayload?: UrlPayloadGuard;
+  pendingFormDecode?: boolean;
+};
 
 function isLoggingUrlPayload(guard?: UrlPayloadGuard): boolean {
   return guard === 'logging' || guard === 'host';
@@ -492,12 +496,21 @@ function isSecretParameterWithContext(
   value: string | undefined,
   compoundContext?: CompoundKeyContext,
 ): boolean {
+  if (compoundContext?.pendingFormDecode && value !== undefined && isPureTemplateValue(value)) {
+    return false;
+  }
+  // Predicates must see the same pending value interpretation as the owner.
+  // Invalid escapes cannot form a true/false control, so retain their bytes.
+  const inspectedValue =
+    compoundContext?.pendingFormDecode && value !== undefined
+      ? (decodeFormComponent(value) ?? value)
+      : value;
   return (
-    isSecretParameter(name, value) ||
+    isSecretParameter(name, inspectedValue) ||
     (compoundContext !== undefined &&
       name
         .split(/[.\[\]]+/)
-        .some((part) => getCompoundSecretObjectFieldKind(part, value) !== undefined))
+        .some((part) => getCompoundSecretObjectFieldKind(part, inspectedValue) !== undefined))
   );
 }
 
@@ -1446,6 +1459,12 @@ function looksLikeUrlEncodedFormData(value: string): boolean {
 // value run to the next pair separator (`&` or `;`).
 const URL_ENCODED_PAIR_RE = /(^|[&;])([^=&;]+)=([^&;]*)/g;
 
+// URLSearchParams tolerates malformed escapes. Escape only its pair delimiter
+// so one already-selected component retains that exact decoder behavior.
+function decodeQueryComponent(component: string): string {
+  return new URLSearchParams(`value=${component.replace(/&/g, '%26')}`).get('value')!;
+}
+
 function decodeFormComponent(component: string): string | undefined {
   try {
     return decodeURIComponent(component.replace(/\+/g, ' '));
@@ -1516,18 +1535,81 @@ function redactNestedJsonValue(
 function redactUrlPayloadValue(
   decoded: string | undefined,
   compoundContext?: CompoundKeyContext,
-  preserveQueryTemplates = false,
+  isParsedQueryValue = false,
+  rawValue?: string,
 ): string | null {
+  const originalDecoded = decoded;
+  const hadPendingDecode = compoundContext?.pendingFormDecode === true;
+  if (compoundContext?.pendingFormDecode) {
+    // The containing URI retained its component boundaries before one outer
+    // decode. Consume that pending layer at this component, not on the URI.
+    compoundContext = { ...compoundContext, pendingFormDecode: false };
+    rawValue = decoded;
+    decoded =
+      decoded === undefined
+        ? undefined
+        : isParsedQueryValue
+          ? decodeQueryComponent(decoded)
+          : decodeFormComponent(decoded);
+  }
   const nestedJson = redactNestedJsonValue(
     decoded,
     compoundContext,
     compoundContext?.guardUrlPayload ? 'original' : 'null',
   );
   if (nestedJson !== null) {
-    return nestedJson;
+    // An extra interpretation alone is not a redaction. Preserve the bytes
+    // seen by the caller when the selected container was unchanged.
+    return hadPendingDecode && nestedJson === decoded ? originalDecoded! : nestedJson;
+  }
+  if (compoundContext?.guardUrlPayload && rawValue !== undefined && rawValue !== decoded) {
+    const rawJson = redactNestedJsonValue(rawValue, compoundContext, 'original');
+    if (rawJson !== null) {
+      return rawJson;
+    }
   }
   if (compoundContext?.guardUrlPayload && decoded !== undefined) {
-    if (preserveQueryTemplates) {
+    if (rawValue !== undefined && rawValue !== decoded) {
+      const rawBoundary = rawValue.search(/[?#]/);
+      const decodedBoundary = decoded.search(/[?#]/);
+      if (
+        rawBoundary >= 0 &&
+        decodedBoundary >= 0 &&
+        decodeFormComponent(rawValue.slice(0, rawBoundary)) === decoded.slice(0, decodedBoundary)
+      ) {
+        const rawChild = decoded.slice(0, decodedBoundary) + rawValue.slice(rawBoundary);
+        // Preserve the scalar dispatcher's stricter inherited logging guard
+        // before choosing the raw URL's component boundaries.
+        if (
+          isLoggingUrlPayload(compoundContext.guardUrlPayload) &&
+          !URL_REFERENCE.test(decoded) &&
+          !(isParsedQueryValue && hasOnlyTemplateUserinfo(decoded)) &&
+          unparseableUrlMightLeakSecret(decoded, false, compoundContext)
+        ) {
+          return REDACTED;
+        }
+        if (compoundContext.maxDepth <= 0) {
+          return REDACTED;
+        }
+        const context = {
+          ...compoundContext,
+          maxDepth: compoundContext.maxDepth - 1,
+          pendingFormDecode: true,
+        };
+        const preserveUserinfo = isParsedQueryValue && hasOnlyTemplateUserinfo(rawChild);
+        const sanitized = preserveUserinfo
+          ? sanitizeTemplatedUrl(rawChild, context, context, true)
+          : sanitizeUrlValueWithContext(rawChild, context);
+        const guarded =
+          preserveUserinfo &&
+          isLoggingUrlPayload(context.guardUrlPayload) &&
+          hasOpaqueLoggingPath(sanitized, true)
+            ? REDACTED
+            : sanitized;
+        return guarded === rawChild ? null : guarded;
+      }
+    }
+    if (isParsedQueryValue) {
       const scalar = getUrlPayloadScalar(decoded, compoundContext.maxDepth);
       if (scalar === null || compoundContext.maxDepth <= 0) {
         return REDACTED;
@@ -1624,7 +1706,9 @@ function sanitizeUrlEncodedStringWithContext(
     // An undecodable key (stray `%` not forming %HH) only disables the key-NAME
     // match — the value-pattern checks below must still run, otherwise a malformed
     // key smuggles its secret value past redaction (e.g. `api%ZZkey=AKIA...`).
-    const decodedKey = decodeFormComponent(rawKey);
+    const key = decodeFormComponent(rawKey);
+    const decodedKey =
+      compoundContext?.pendingFormDecode && key !== undefined ? decodeFormComponent(key) : key;
     const decodedValue = decodeFormComponent(rawValue);
     const keyIsSecret =
       decodedKey !== undefined &&
@@ -1643,9 +1727,9 @@ function sanitizeUrlEncodedStringWithContext(
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
     // redacted at the leaf rather than leaked as opaque bytes.
-    const guardedValue = redactUrlPayloadValue(decodedValue, compoundContext);
+    const guardedValue = redactUrlPayloadValue(decodedValue, compoundContext, false, rawValue);
     if (guardedValue !== null) {
-      if (guardedValue === decodedValue) {
+      if (guardedValue === decodedValue || guardedValue === rawValue) {
         return match;
       }
       changed = true;
@@ -2290,10 +2374,28 @@ function sanitizeUrlWithContext(
     // Sanitize query parameters that might contain sensitive data
     const rawSecretParamKeys = getSecretLookingRawQueryKeys(parsedUrl.search);
 
+    const rawQueryValues = payloadContext?.guardUrlPayload
+      ? url
+          .replace(/[\t\r\n]/g, '')
+          .split('#', 1)[0]
+          .split('?')
+          .slice(1)
+          .join('?')
+          .split('&')
+          .filter(Boolean)
+          .map((part) => {
+            const equals = part.indexOf('=');
+            return equals < 0 ? '' : part.slice(equals + 1);
+          })
+      : [];
     try {
-      for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
+      for (const [index, [key, value]] of Array.from(
+        sanitizedUrl.searchParams.entries(),
+      ).entries()) {
+        const rawValue = rawQueryValues[index];
+        const inspectedKey = payloadContext?.pendingFormDecode ? decodeQueryComponent(key) : key;
         if (
-          isSecretParameterWithContext(key, value, compoundContext) ||
+          isSecretParameterWithContext(inspectedKey, value, compoundContext) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
@@ -2303,8 +2405,8 @@ function sanitizeUrlWithContext(
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         } else {
-          const nestedJson = redactUrlPayloadValue(value, payloadContext, true);
-          if (nestedJson !== null && nestedJson !== value) {
+          const nestedJson = redactUrlPayloadValue(value, payloadContext, true, rawValue);
+          if (nestedJson !== null && nestedJson !== value && nestedJson !== rawValue) {
             sanitizedUrl.searchParams.set(key, nestedJson);
           }
         }
@@ -2322,7 +2424,9 @@ function sanitizeUrlWithContext(
     // leading `#`, so reuse the same form-pair scrubbing as the query.
     if (sanitizedUrl.hash.length > 1) {
       const sanitizedHash = sanitizeUrlEncodedStringWithContext(
-        sanitizedUrl.hash.slice(1),
+        payloadContext?.guardUrlPayload && url.includes('#')
+          ? url.slice(url.indexOf('#') + 1).replace(/[\t\r\n]/g, '')
+          : sanitizedUrl.hash.slice(1),
         payloadContext,
       );
       sanitizedUrl.hash = sanitizedHash ? `#${sanitizedHash}` : '';

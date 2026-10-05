@@ -39,6 +39,167 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 describe('sanitizeMcpToolData', () => {
+  it('retains valid JSON provenance through nested form URL decoding', () => {
+    for (const prefix of [
+      'callback?data=',
+      '/callback?data=',
+      '//host/path?data=',
+      'https://host/path?data=',
+      'callback#data=',
+      'https://host/path#data=',
+    ]) {
+      for (const suffix of ['%22', '%5c', '%0A', '%ZZ']) {
+        const data = JSON.stringify({
+          password: `percent-fixture${suffix}`,
+          label: 'a&b;public#tag',
+          page: 2,
+        });
+        for (const encodeOuter of [(value: string) => value, encodeURIComponent]) {
+          const value = `redirect=${encodeOuter(`${prefix}${encodeURIComponent(data)}`)}&label={{ label }}`;
+          const args = { url: value, callbackUrl: value, env: { SERVICE_URL: value } };
+          const original = structuredClone(args);
+          expect(JSON.stringify(sanitizeMcpToolData(args))).not.toContain('percent-fixture');
+          expect(args).toEqual(original);
+          const publicData = JSON.stringify({ label: `a&b;public#tag${suffix}`, page: 2 });
+          const publicValue = `redirect=${encodeOuter(`${prefix}${encodeURIComponent(publicData)}`)}&label={{ label }}`;
+          const publicArgs = { url: publicValue, callbackUrl: publicValue };
+          expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+        }
+      }
+    }
+  });
+
+  it('preserves boolean credential controls through a pending component decode', () => {
+    for (const name of ['includeCredentials', 'requireApiKey', 'withPassword']) {
+      for (const value of ['%2574rue', '%2566alse']) {
+        const args = { url: `https://outer.test/?redirect=callback?${name}=${value}` };
+        expect(sanitizeMcpToolData(args)).toEqual(args);
+      }
+    }
+  });
+
+  it('preserves the existing template and logging roles during a pending decode', () => {
+    const value = 'https://outer.test/?redirect=callback?password=%7B%7B%20password%20%7D%7D';
+    expect(sanitizeMcpToolData({ url: value })).toEqual({ url: value });
+    expect(sanitizeMcpToolData({ apiBaseUrl: value })).toEqual({
+      apiBaseUrl: 'https://outer.test/?redirect=%5BREDACTED%5D',
+    });
+    const partial = `https://outer.test/?redirect=callback?password=${encodeURIComponent('pending-private-fixture{{ password }}')}`;
+    expect(JSON.stringify(sanitizeMcpToolData({ url: partial }))).not.toContain(
+      'pending-private-fixture',
+    );
+  });
+
+  it('prefers a valid decoded JSON container over its raw spelling', () => {
+    const publicData = JSON.stringify({ '%70age': 2, note: 'public%20safe' });
+    const publicArgs = {
+      url: `redirect=callback?data=${encodeURIComponent(publicData)}&label={{ label }}`,
+    };
+    expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+    for (const value of [
+      'data={"%70assword":"decoded-key-fixture","page":2}',
+      'redirect=callback?data={"%70assword":"decoded-key-fixture","page":2}&label={{ label }}',
+      'redirect=https://host/path?data={"%70assword":"decoded-key-fixture","page":2}&label={{ label }}',
+    ]) {
+      expect(JSON.stringify(sanitizeMcpToolData({ url: value }))).not.toContain(
+        'decoded-key-fixture',
+      );
+    }
+    for (const key of ['%70assword', 'api%4Bey']) {
+      const data = JSON.stringify({ [key]: 'decoded-key-fixture%ZZ', label: 'a;b' });
+      const value = `redirect=https://host/path?data=${encodeURIComponent(data)}&label={{ label }}`;
+      expect(JSON.stringify(sanitizeMcpToolData({ url: value }))).not.toContain(
+        'decoded-key-fixture',
+      );
+    }
+    const queryKey =
+      'redirect=https://host/path?%2570assword=decoded-key-fixture&label={{ label }}';
+    expect(JSON.stringify(sanitizeMcpToolData({ url: queryKey }))).not.toContain(
+      'decoded-key-fixture',
+    );
+    const value = `redirect=callback?data=${encodeURIComponent(JSON.stringify({ password: 'percent-fixture%22' }))}&label={{ label }}`;
+    const safeValue = `redirect=callback?data=${encodeURIComponent(JSON.stringify({ password: '[REDACTED]' }))}&label={{ label }}`;
+    expect(sanitizeObject({ url: value }, { sanitizeUrls: true })).toEqual({ url: safeValue });
+  });
+
+  it('aligns raw query JSON with duplicate and empty parsed entries', () => {
+    const data = JSON.stringify({ password: 'aligned-fixture%22', page: 2 });
+    for (const separator of ['&', '&&', '&\t&', '&\r\n&']) {
+      for (const query of [
+        `public=1${separator}data=${data}${separator}data={"page":2}`,
+        `data={"page":2}${separator}data=${data}${separator}empty=`,
+      ]) {
+        const args = { url: `https://host/path?${query}` };
+        expect(JSON.stringify(sanitizeMcpToolData(args))).not.toContain('aligned-fixture');
+      }
+      const publicArgs = {
+        url: `https://host/path?data={"label":"public%22"}${separator}data={"page":2}`,
+      };
+      expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+    }
+  });
+
+  it('keeps provenance fallback traversal bounded across nested containers', () => {
+    let value = 'public%22';
+    for (let depth = 0; depth < 9; depth++) {
+      value = `redirect=callback?data=${encodeURIComponent(JSON.stringify({ url: value }))}&label={{ label }}`;
+    }
+    const args = { url: value };
+    const parse = vi.spyOn(JSON, 'parse');
+    let result: unknown;
+    let calls = 0;
+    try {
+      result = sanitizeMcpToolData(args);
+      calls = parse.mock.calls.length;
+    } finally {
+      parse.mockRestore();
+    }
+    expect(result).toEqual(args);
+    expect(calls).toBeLessThan(200);
+    for (const maxDepth of [0, 1, 2, 4, 8, 64]) {
+      const input = { url: value };
+      // A private leaf has a declared field role at every supported depth.
+      const secret = {
+        url: `redirect=callback?data=${encodeURIComponent(JSON.stringify({ password: 'depth-fixture%22', child: input }))}`,
+      };
+      expect(
+        JSON.stringify(
+          sanitizeObject(secret, { sanitizeUrls: true, redactCompoundKeys: true, maxDepth }),
+        ),
+      ).not.toContain('depth-fixture');
+    }
+  });
+
+  it('preserves public sibling text while redacting a nested encoded credential', () => {
+    for (const password of ['fixture', 'fixture%22', 'fixture%5c']) {
+      for (const label of ['a&b', 'a;b', 'a#b']) {
+        const child = `https://example.test/callback?data=${encodeURIComponent(JSON.stringify({ password, label }))}`;
+        const result = sanitizeMcpToolData({ url: `redirect=${child}&label={{ label }}` }) as {
+          url: string;
+        };
+        const redirect = new URLSearchParams(result.url).get('redirect')!;
+        expect(JSON.parse(new URL(redirect).searchParams.get('data')!)).toEqual({
+          password: '[REDACTED]',
+          label,
+        });
+      }
+    }
+  });
+
+  it('retains unresolved query URL userinfo while checking the pending component decode', () => {
+    for (const role of ['url', 'apiBaseUrl', 'callbackUrl']) {
+      const prefix = encodeURIComponent('https://{{ user }}:{{ password }}@example.test/callback');
+      const publicChild = `${prefix}?data=${encodeURIComponent(JSON.stringify({ label: 'a&b' }))}`;
+      const publicArgs = { [role]: `https://outer.example/?redirect=${publicChild}` };
+      expect(sanitizeMcpToolData(publicArgs)).toEqual(publicArgs);
+      const privateChild = `${prefix}?data=${encodeURIComponent(JSON.stringify({ password: 'template-percent-fixture%22', label: 'a&b' }))}`;
+      expect(
+        JSON.stringify(
+          sanitizeMcpToolData({ [role]: `https://outer.example/?redirect=${privateChild}` }),
+        ),
+      ).not.toContain('template-percent-fixture');
+    }
+  });
   const omitted = '[MCP tool data omitted: it could not be sanitized]';
 
   it('checks relative query JSON within form-valued URLs without losing templates', () => {
