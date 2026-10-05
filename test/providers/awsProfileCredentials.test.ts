@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
   getAwsCredentialCacheNamespace,
+  getAwsEndpointCacheNamespace,
   resolveAwsCredentials,
 } from '../../src/providers/awsCredentials';
 import { getScopedAwsProfileCredentials } from '../../src/providers/awsProfileCredentials';
@@ -300,7 +301,6 @@ describe('scoped AWS profile source credentials', () => {
 
   it.each([
     'aws_access_key_id = profile-access\naws_secret_access_key = profile-secret',
-    'credential_process = fixture-command',
     'role_arn = arn:aws:iam::123456789012:role/Fixture\nweb_identity_token_file = /fixture/token',
     'role_arn = arn:aws:iam::123456789012:role/Fixture\ncredential_source = Ec2InstanceMetadata',
     'role_arn = arn:aws:iam::123456789012:role/Fixture\nsource_profile = fixture',
@@ -441,8 +441,13 @@ describe('scoped SSO profile files with the installed AWS SDK', () => {
       try {
         expect((await ambientClient.config.credentials()).accessKeyId).toBe('host-access');
         expect(handle).toHaveBeenCalledTimes(3);
-        expect(getAwsCredentialCacheNamespace({}, filesOnly)).toBeUndefined();
-        expect(Reflect.get(ambient, 'responseCacheNamespace')).toBeUndefined();
+        // Ambient IAM still wins, while newly scoped routing files partition responses.
+        expect(getAwsCredentialCacheNamespace({}, filesOnly)).toBe(
+          getAwsEndpointCacheNamespace(filesOnly),
+        );
+        expect(Reflect.get(ambient, 'responseCacheNamespace')).toBe(
+          getAwsEndpointCacheNamespace(filesOnly),
+        );
       } finally {
         ambientClient.destroy();
       }

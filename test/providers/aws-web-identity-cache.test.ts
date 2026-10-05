@@ -143,6 +143,14 @@ describe('AWS web identity response cache isolation', () => {
         expect(await invoke('source-secret')).toMatchObject(
           kind === 'completion' ? { output: 'second-access' } : { embedding: [2] },
         );
+        expect(await invoke('source-secret')).toMatchObject({ cached: true });
+        // A process fallback may read the secret, so changed scoped inputs use
+        // a fresh opaque partition even when this role resolves identically.
+        const rotated = await invoke('another-valid-secret');
+        expect(rotated).toMatchObject(
+          kind === 'completion' ? { output: 'second-access' } : { embedding: [2] },
+        );
+        expect(rotated.cached).not.toBe(true);
         expect(await invoke('another-valid-secret')).toMatchObject({ cached: true });
         const secretValues: Record<string, string | undefined> = { empty: '', whitespace: ' \t ' };
         const secret = secretValues[secretState];
@@ -150,15 +158,15 @@ describe('AWS web identity response cache isolation', () => {
         expect(fallback.cached).not.toBe(true);
         if (secretState === 'whitespace') {
           expect(fallback.error).toContain('AWS role source credentials are incomplete');
-          expect(assumedRoles).toEqual([roles.second]);
-          expect(endpointKeys).toEqual(['second-access']);
+          expect(assumedRoles).toEqual([roles.second, roles.second]);
+          expect(endpointKeys).toEqual(['second-access', 'second-access']);
         } else {
           expect(fallback).toMatchObject(
             kind === 'completion' ? { output: 'first-access' } : { embedding: [1] },
           );
           expect(await invoke(secret, secretState !== 'missing')).toMatchObject({ cached: true });
-          expect(assumedRoles).toEqual([roles.second, roles.first]);
-          expect(endpointKeys).toEqual(['second-access', 'first-access']);
+          expect(assumedRoles).toEqual([roles.second, roles.second, roles.first]);
+          expect(endpointKeys).toEqual(['second-access', 'second-access', 'first-access']);
         }
         expect(await invoke('source-secret')).toMatchObject({ cached: true });
       });

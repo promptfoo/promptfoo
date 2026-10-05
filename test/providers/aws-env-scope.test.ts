@@ -304,7 +304,7 @@ describe('scoped AWS SDK authentication', () => {
     { AWS_SESSION_TOKEN: ' \t ' },
     { AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '', AWS_SESSION_TOKEN: '' },
   ])(
-    'preserves default SDK discovery and cache identity for harmless placeholders %j',
+    'preserves default SDK discovery and stable opaque cache reuse for scoped placeholders %j',
     async (env) => {
       const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-empty-aws-'));
       const file = path.join(dir, 'credentials');
@@ -316,7 +316,9 @@ describe('scoped AWS SDK authentication', () => {
       try {
         await cliState.withEnvFileOverrides(env, async () => {
           expect(await resolveAwsCredentials()).toBeUndefined();
-          expect(getAwsCredentialCacheNamespace()).toBeUndefined();
+          const namespace = getAwsCredentialCacheNamespace();
+          expect(namespace).toMatch(/^aws-process:[a-f0-9-]+$/);
+          expect(getAwsCredentialCacheNamespace()).toBe(namespace);
           const provider = new AwsBedrockCompletionProvider('fixture');
           const client = await provider.getBedrockInstance();
           try {

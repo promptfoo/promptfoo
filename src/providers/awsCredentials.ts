@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { getEnvString, getMergedEnvOverrides } from '../envars';
 import { getScopedAwsProfileCredentials } from './awsProfileCredentials';
-import { getCredentialCacheNamespace } from './credentialCache';
+import { getCredentialCacheNamespace, getOpaqueCredentialCacheNamespace } from './credentialCache';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
 
 import type { EnvOverrides } from '../contracts/env';
@@ -159,7 +159,15 @@ export async function resolveAwsCredentials(
 ): Promise<AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined> {
   const source = getScopedAwsCredentialConfig(config, env);
   if (!source) {
-    return undefined;
+    const scoped = getMergedEnvOverrides(env);
+    const hasScopedEnvironment = Object.values(scoped).some((value) => value !== undefined);
+    // A process profile may depend only on custom invocation variables. Keep
+    // native fromEnv precedence when the host has a complete static tuple and
+    // no selected profile; otherwise let the adapter detect a process leaf.
+    const ambientKeys = getEnvString('AWS_ACCESS_KEY_ID') && getEnvString('AWS_SECRET_ACCESS_KEY');
+    return hasScopedEnvironment && (!ambientKeys || getEnvString('AWS_PROFILE'))
+      ? getScopedAwsProfileCredentials(getAwsCredentialProviderOptions(env), env)
+      : undefined;
   }
   const { accessKeyId, secretAccessKey, sessionToken, profile } = source;
   // Incomplete configured tuples have always fallen through to config.profile.
@@ -200,6 +208,80 @@ export async function resolveAwsCredentials(
 /** Stable public identity partition for SDK credentials introduced by scoped environments. */
 export function getAwsCredentialCacheNamespace(
   config: AwsCredentialConfig = {},
+  env?: EnvOverrides,
+): string | undefined {
+  const identity = getScopedCredentialCacheNamespace(config, env);
+  const endpoint = getAwsEndpointCacheNamespace(env);
+  const process = getAwsProcessCacheNamespace(config, env);
+  return [identity, endpoint, process].filter(Boolean).join(':') || undefined;
+}
+
+/** Scoped SDK routing must partition responses even when explicit credentials win. */
+export function getAwsEndpointCacheNamespace(env?: EnvOverrides): string | undefined {
+  const scoped = getMergedEnvOverrides(env);
+  const fileSelectors = ['AWS_PROFILE', 'AWS_CONFIG_FILE', 'AWS_SHARED_CREDENTIALS_FILE'];
+  const settings = Object.entries(scoped)
+    .filter(
+      ([key, value]) =>
+        value !== undefined &&
+        (key === 'AWS_USE_FIPS_ENDPOINT' ||
+          key === 'AWS_USE_DUALSTACK_ENDPOINT' ||
+          key === 'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS' ||
+          key === 'AWS_ENDPOINT_URL' ||
+          key.startsWith('AWS_ENDPOINT_URL_')),
+    )
+    .sort(([left], [right]) => left.localeCompare(right));
+  if (!settings.length && !fileSelectors.some((key) => scoped[key] !== undefined)) {
+    return undefined;
+  }
+  const options = getAwsCredentialProviderOptions(env);
+  // Files can contain endpoint credentials. Partition by public selectors and
+  // revisions only; direct endpoint values receive an opaque process-local ID.
+  const files = getCredentialCacheNamespace(
+    [scoped.AWS_PROFILE ?? getEnvString('AWS_PROFILE') ?? 'default'],
+    [
+      options.configFilepath ??
+        resolveSharedFilePath(getEnvString('AWS_CONFIG_FILE') ?? '', 'config'),
+      options.filepath ??
+        resolveSharedFilePath(getEnvString('AWS_SHARED_CREDENTIALS_FILE') ?? '', 'credentials'),
+    ],
+  );
+  const direct = settings.length
+    ? `:${getOpaqueCredentialCacheNamespace(JSON.stringify(settings))}`
+    : '';
+  return `aws-endpoint:${files}${direct}`;
+}
+
+function getAwsProcessCacheNamespace(config: AwsCredentialConfig, env?: EnvOverrides) {
+  const source = getScopedAwsCredentialConfig(config, env);
+  // Explicit configuration uses static IAM or the documented SSO provider.
+  // Neither reads custom environment variables through credential_process.
+  if (source === config || (source?.accessKeyId && source.secretAccessKey)) {
+    return undefined;
+  }
+  if (
+    !source &&
+    !getEnvString('AWS_PROFILE') &&
+    getEnvString('AWS_ACCESS_KEY_ID') &&
+    getEnvString('AWS_SECRET_ACCESS_KEY')
+  ) {
+    return undefined;
+  }
+  const scoped = Object.entries(getMergedEnvOverrides(env))
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right));
+  const publicSelectors = ['AWS_PROFILE', 'AWS_CONFIG_FILE', 'AWS_SHARED_CREDENTIALS_FILE'];
+  if (!scoped.some(([key]) => !publicSelectors.includes(key))) {
+    return undefined;
+  }
+  // A process helper may read any variable. Conservatively isolate possible
+  // process discovery without synchronously parsing profiles or persisting
+  // custom values (or their hashes) in response-cache keys.
+  return `aws-process:${getOpaqueCredentialCacheNamespace(JSON.stringify(scoped))}`;
+}
+
+function getScopedCredentialCacheNamespace(
+  config: AwsCredentialConfig,
   env?: EnvOverrides,
 ): string | undefined {
   const source = getScopedAwsCredentialConfig(config, env);

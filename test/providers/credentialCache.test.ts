@@ -6,7 +6,10 @@ import { pathToFileURL } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import cliState from '../../src/cliState';
-import { getAwsCredentialCacheNamespace } from '../../src/providers/awsCredentials';
+import {
+  getAwsCredentialCacheNamespace,
+  getAwsEndpointCacheNamespace,
+} from '../../src/providers/awsCredentials';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { createBedrockCacheKeyHash } from '../../src/providers/bedrock/base';
 import {
@@ -24,14 +27,19 @@ afterEach(() => {
 });
 
 describe('scoped SDK response cache compatibility', () => {
-  it('tracks role-source availability without fingerprinting secret or optional session values', () => {
+  it('tracks public role-source availability separately from opaque process inputs', () => {
     restore = mockProcessEnv({ AWS_SECRET_ACCESS_KEY: undefined, AWS_SESSION_TOKEN: undefined });
     const env = { AWS_PROFILE: 'fixture', AWS_ACCESS_KEY_ID: 'source-access' };
-    const namespace = (secret: string | undefined, session?: string) =>
+    const fullNamespace = (secret: string | undefined, session?: string) =>
       getAwsCredentialCacheNamespace(
         {},
         { ...env, AWS_SECRET_ACCESS_KEY: secret, AWS_SESSION_TOKEN: session },
       );
+    const namespace = (secret: string | undefined, session?: string) =>
+      fullNamespace(secret, session)?.split(':aws-process:')[0];
+    expect(fullNamespace('first-secret')).not.toBe(fullNamespace('second-secret'));
+    expect(fullNamespace('first-secret')).toBe(fullNamespace('first-secret'));
+    expect(fullNamespace('first-secret')).not.toContain('first-secret');
     const available = namespace('first-secret');
     const unavailable = namespace(undefined);
     const invalid = namespace(' \t ');
@@ -40,7 +48,7 @@ describe('scoped SDK response cache compatibility', () => {
     expect(namespace('first-secret', '')).toBe(available);
     expect(namespace('first-secret', ' \t ')).toBe(available);
     expect(namespace('')).toBe(unavailable);
-    expect(getAwsCredentialCacheNamespace({}, env)).toBe(unavailable);
+    expect(getAwsCredentialCacheNamespace({}, env)?.split(':aws-process:')[0]).toBe(unavailable);
     cliState.withEnvFileOverrides({ AWS_SECRET_ACCESS_KEY: 'file-secret' }, () => {
       expect(namespace(undefined)).toBe(available);
       expect(namespace('')).toBe(unavailable);
@@ -158,7 +166,7 @@ describe('scoped SDK response cache compatibility', () => {
     expect(run()).toBe(getCredentialCacheNamespace(['fixture-access-key', 'profile']));
   });
 
-  it('partitions configured SSO profiles only when a scoped file changes their identity', () => {
+  it('partitions scoped SSO files and routing files even with configured static IAM', () => {
     const config = { profile: 'fixture' };
     expect(getAwsCredentialCacheNamespace(config)).toBeUndefined();
     const first = getAwsCredentialCacheNamespace(config, {
@@ -176,7 +184,7 @@ describe('scoped SDK response cache compatibility', () => {
         { accessKeyId: 'fixed', secretAccessKey: 'fixed' },
         { AWS_CONFIG_FILE: '/fixture/first-config' },
       ),
-    ).toBeUndefined();
+    ).toBe(getAwsEndpointCacheNamespace({ AWS_CONFIG_FILE: '/fixture/first-config' }));
   });
 
   it('keeps opaque identities isolated without persistent secret fingerprints', () => {

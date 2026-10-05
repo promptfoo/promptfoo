@@ -20,6 +20,7 @@ const invocationArn = 'arn:aws:bedrock:us-east-1:123456789012:async-invoke/fixtu
 let dir: string;
 let restore: () => void;
 let authorizations: string[];
+let destinations: string[];
 
 beforeEach(() => {
   // These cases verify credential selection; SDK initialization time must not
@@ -42,7 +43,9 @@ beforeEach(() => {
     { clear: true },
   );
   authorizations = [];
+  destinations = [];
   const handle = async (request: HttpRequest) => {
+    destinations.push(request.hostname);
     const authorization =
       Object.entries(request.headers)
         .filter(([name]) => name.toLowerCase() === 'authorization')
@@ -230,6 +233,26 @@ describe('released async media credential precedence', () => {
               : 'default-access',
       ]);
       expect(process.env.AWS_ACCESS_KEY_ID).toBe('host-access');
+    },
+  );
+  it.each(kinds.flatMap((kind) => methods.map((method) => ({ kind, method }))))(
+    'selects the scoped service endpoint for $kind $method',
+    async ({ kind, method }) => {
+      const configFile = path.join(dir, 'endpoint-config');
+      fs.writeFileSync(
+        configFile,
+        '[profile scoped]\nservices=media\n[services media]\nbedrock_runtime =\n  endpoint_url=https://bedrock.invalid\ns3 =\n  endpoint_url=https://s3.invalid\n',
+      );
+      const provider = createProvider(kind, {});
+      const result = await cliState.withEnvFileOverrides(
+        { AWS_PROFILE: 'scoped', AWS_CONFIG_FILE: configFile },
+        () => invoke(provider, method),
+      );
+      expect(result.error).toBeUndefined();
+      expect(authorizations).toEqual(['scoped-profile-access']);
+      expect(destinations).toEqual([
+        method === 'downloadAndStoreVideo' ? 'fixture-bucket.s3.invalid' : 'bedrock.invalid',
+      ]);
     },
   );
 });

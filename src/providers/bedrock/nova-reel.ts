@@ -199,7 +199,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
         '@aws-sdk/client-bedrock-runtime'
       );
 
-      const credentialOptions = await this.getIamCredentialOptions();
+      const credentialOptions = await this.getIamCredentialOptions('Bedrock Runtime');
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -243,7 +243,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
         '@aws-sdk/client-bedrock-runtime'
       );
 
-      const credentialOptions = await this.getIamCredentialOptions();
+      const credentialOptions = await this.getIamCredentialOptions('Bedrock Runtime');
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -307,7 +307,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
 
       // Download from S3
       const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const credentialOptions = await this.getIamCredentialOptions();
+      const credentialOptions = await this.getIamCredentialOptions('S3');
 
       const s3 = new S3Client({
         region: this.getRegion(),

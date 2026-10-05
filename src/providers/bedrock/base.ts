@@ -13,9 +13,11 @@ import telemetry from '../../telemetry';
 import {
   getAwsCredentialCacheNamespace,
   getAwsCredentialProviderOptions,
+  getAwsEndpointCacheNamespace,
   getAwsSdkProfile,
   resolveAwsCredentials,
 } from '../awsCredentials';
+import { getScopedAwsEndpointOptions } from '../awsEndpointConfig';
 import { getOpaqueCredentialCacheNamespace } from '../credentialCache';
 import { createEnvironmentScopedState } from '../scopedState';
 import { createBedrockRequestHandler } from './util';
@@ -140,15 +142,20 @@ export abstract class AwsBedrockGenericProvider {
 
   protected selectResponseCacheNamespace(iamConfig = this.config): string | undefined {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
-      return undefined;
+      return getAwsEndpointCacheNamespace(this.env);
     }
     const bearer = this.getApiKey();
     if (bearer) {
       // Keep the existing main fingerprint for config/file/ambient bearer tokens.
       // A provider-only bearer is new here and lacks a safe public identity.
-      return bearer === (this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK'))
-        ? undefined
-        : getOpaqueCredentialCacheNamespace(bearer);
+      const bearerNamespace =
+        bearer === (this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK'))
+          ? undefined
+          : getOpaqueCredentialCacheNamespace(bearer);
+      return (
+        [bearerNamespace, getAwsEndpointCacheNamespace(this.env)].filter(Boolean).join(':') ||
+        undefined
+      );
     }
     const namespace = getAwsCredentialCacheNamespace(iamConfig, this.env);
     // A provider-level empty value masks a lower bearer identity. Keep that
@@ -239,12 +246,14 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   /** Keep released IAM discovery for agent-runtime and async media/S3 clients. */
-  protected async getIamCredentialOptions() {
+  protected async getIamCredentialOptions(serviceId = 'Bedrock Agent Runtime') {
     const config = this.getIamCredentialConfig();
     const credentials = await resolveAwsCredentials(config, this.env);
     const profile = getAwsSdkProfile(config, this.env);
+    const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
     return {
       ...getAwsCredentialProviderOptions(this.env),
+      ...(await getScopedAwsEndpointOptions(serviceId, sdkOptions, this.env)),
       ...(credentials ? { credentials } : {}),
       ...(profile === undefined ? {} : { profile }),
     };
@@ -254,8 +263,14 @@ export abstract class AwsBedrockGenericProvider {
     const credentials = await this.getCredentials();
     const profile = this.getProfile();
     const apiKey = this.getApiKey();
+    const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
     return {
       ...getAwsCredentialProviderOptions(this.env),
+      ...(await getScopedAwsEndpointOptions(
+        'Bedrock Runtime',
+        { ...sdkOptions, endpoint: this.config.endpoint },
+        this.env,
+      )),
       ...(credentials ? { credentials } : {}),
       ...(profile === undefined ? {} : { profile }),
       // Explicitly represent an invocation's cleared bearer token so SDK

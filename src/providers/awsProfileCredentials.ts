@@ -1,4 +1,6 @@
+import { exec } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { promisify } from 'node:util';
 
 import { getEnvString, getMergedEnvOverrides } from '../envars';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider, Logger } from '@smithy/types';
@@ -38,6 +40,8 @@ type CredentialChain = (
   ...providers: Array<() => Promise<AwsCredentialIdentity>>
 ) => () => Promise<AwsCredentialIdentity>;
 
+const execAsync = promisify(exec);
+
 /** Resolve through an installed optional client, including with isolated pnpm layouts. */
 function loadProfileSdk() {
   const rootRequire = createRequire(import.meta.url);
@@ -59,6 +63,13 @@ function loadProfileSdk() {
       const iniEntry = nodeRequire.resolve('@aws-sdk/credential-provider-ini');
       const iniRequire = createRequire(iniEntry);
       const { fromIni } = iniRequire(iniEntry) as { fromIni?: CredentialFactory };
+      const { setCredentialFeature } = iniRequire('@aws-sdk/core/client') as {
+        setCredentialFeature: (
+          credentials: AwsCredentialIdentity,
+          feature: string,
+          value: string,
+        ) => void;
+      };
       const { parseKnownFiles, chain, CredentialsProviderError } = iniRequire(
         '@smithy/core/config',
       ) as {
@@ -95,6 +106,7 @@ function loadProfileSdk() {
       };
       return {
         fromIni,
+        setCredentialFeature,
         parseKnownFiles,
         chain,
         CredentialsProviderError,
@@ -181,7 +193,8 @@ function isRole(data: Profile) {
 
 /**
  * The SDK's nested Environment provider reads process.env, and its nested SSO
- * provider drops custom filenames. Intercept only those leaves; use the SDK's
+ * provider drops custom filenames; credential_process inherits the host env.
+ * Intercept only those leaves; use the SDK's
  * exported package entrypoints for INI parsing, other providers, and STS calls.
  */
 export async function getScopedAwsProfileCredentials(
@@ -193,7 +206,11 @@ export async function getScopedAwsProfileCredentials(
     (key) => scoped[key] !== undefined,
   );
   const scopedFiles = options.filepath !== undefined || options.configFilepath !== undefined;
-  if (!scopedKeys && !scopedFiles) {
+  const scopedEnvironment = Object.fromEntries(
+    Object.entries(scoped).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+  const hasScopedEnvironment = Object.keys(scopedEnvironment).length > 0;
+  if (!hasScopedEnvironment && !scopedFiles) {
     return undefined;
   }
   const sdk = loadProfileSdk();
@@ -207,6 +224,59 @@ export async function getScopedAwsProfileCredentials(
     secretAccessKey: effective('AWS_SECRET_ACCESS_KEY'),
     sessionToken: effective('AWS_SESSION_TOKEN'),
   };
+
+  async function resolveProcess(profiles: Profiles, name: string, fromProfile = false) {
+    const command = profiles[name]?.credential_process;
+    if (command === undefined) {
+      throw new sdk.CredentialsProviderError(
+        `Profile ${name} did not contain credential_process.`,
+        {
+          logger: options.logger,
+        },
+      );
+    }
+    try {
+      // The SDK does not accept a child environment. Keep its shell and output
+      // contract, changing only the environment for this individual invocation.
+      const { stdout } = await execAsync(command, {
+        env: { ...process.env, ...scopedEnvironment },
+      });
+      let data;
+      try {
+        data = JSON.parse(stdout.trim());
+      } catch {
+        throw new Error(`Profile ${name} credential_process returned invalid JSON.`);
+      }
+      if (data.Version !== 1) {
+        throw new Error(`Profile ${name} credential_process did not return Version 1.`);
+      }
+      if (data.AccessKeyId === undefined || data.SecretAccessKey === undefined) {
+        throw new Error(`Profile ${name} credential_process returned invalid credentials.`);
+      }
+      if (data.Expiration && new Date(data.Expiration) < new Date()) {
+        throw new Error(`Profile ${name} credential_process returned expired credentials.`);
+      }
+      const accountId = data.AccountId || profiles[name]?.aws_account_id;
+      const credentials: AwsCredentialIdentity = {
+        accessKeyId: data.AccessKeyId,
+        secretAccessKey: data.SecretAccessKey,
+        ...(data.SessionToken && { sessionToken: data.SessionToken }),
+        ...(data.Expiration && { expiration: new Date(data.Expiration) }),
+        ...(data.CredentialScope && { credentialScope: data.CredentialScope }),
+        ...(accountId && { accountId }),
+      };
+      sdk.setCredentialFeature(credentials, 'CREDENTIALS_PROCESS', 'w');
+      if (fromProfile) {
+        sdk.setCredentialFeature(credentials, 'CREDENTIALS_PROFILE_PROCESS', 'v');
+      }
+      return credentials;
+    } catch (error) {
+      throw new sdk.CredentialsProviderError(
+        error instanceof Error ? error.message : String(error),
+        { logger: options.logger },
+      );
+    }
+  }
   function resolveEnvironmentCredentials(): AwsCredentialIdentity {
     const { accessKeyId, secretAccessKey, sessionToken } = environmentCredentials;
     if (!accessKeyId || !secretAccessKey) {
@@ -244,12 +314,11 @@ export async function getScopedAwsProfileCredentials(
       }
       return scopedKeys && data.credential_source === 'Environment';
     }
-    if (
-      isStatic(data) ||
-      (data.web_identity_token_file && data.role_arn) ||
-      data.credential_process
-    ) {
+    if (isStatic(data) || (data.web_identity_token_file && data.role_arn)) {
       return false;
+    }
+    if (data.credential_process !== undefined) {
+      return hasScopedEnvironment;
     }
     return (
       scopedFiles &&
@@ -259,7 +328,11 @@ export async function getScopedAwsProfileCredentials(
     );
   }
 
-  if (!needsScopedProvider(await sdk.parseKnownFiles(options), profile)) {
+  const profiles = await sdk.parseKnownFiles(options);
+  if (
+    !needsScopedProvider(profiles, profile) &&
+    !(hasScopedEnvironment && profiles[profile]?.credential_process !== undefined)
+  ) {
     return undefined;
   }
 
@@ -269,10 +342,14 @@ export async function getScopedAwsProfileCredentials(
     const callerClientConfig = properties?.callerClientConfig as
       | Record<string, unknown>
       | undefined;
+    const resolveLeaf = (name: string) =>
+      profiles[name].credential_process === undefined
+        ? sdk.fromSSO({ ...options, profile: name })(properties)
+        : resolveProcess(profiles, name, true);
     const resolve = async (name: string, recursive = false): Promise<AwsCredentialIdentity> => {
       const data = profiles[name];
       if (!isRole(data) && !(recursive && !data.role_arn && data.credential_source)) {
-        return sdk.fromSSO({ ...options, profile: name })(properties);
+        return resolveLeaf(name);
       }
       // Native fromIni treats missing MFA configuration as terminal even when
       // the source credentials are unavailable.
@@ -328,7 +405,10 @@ export async function getScopedAwsProfileCredentials(
         needsScopedProvider(profiles, profile)
           ? resolve(profile)
           : sdk.fromIni(settings)(properties),
-      () => sdk.fromProcess(settings)(properties),
+      () =>
+        hasScopedEnvironment
+          ? resolveProcess(profiles, profile)
+          : sdk.fromProcess(settings)(properties),
       () => sdk.fromTokenFile(settings)(properties),
       () => sdk.fromRemote(settings),
       async () => {

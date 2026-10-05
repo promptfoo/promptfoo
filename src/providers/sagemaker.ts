@@ -12,6 +12,7 @@ import {
   getAwsSdkProfile,
   resolveAwsCredentials,
 } from './awsCredentials';
+import { getScopedAwsEndpointOptions } from './awsEndpointConfig';
 import { createEnvironmentScopedState } from './scopedState';
 
 import type { EnvOverrides } from '../types/env';
@@ -205,9 +206,16 @@ abstract class SageMakerGenericProvider {
         );
         const credentials = await this.getCredentials();
         const profile = getAwsSdkProfile(this.config, this.env);
+        const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
+        const endpointOptions = await getScopedAwsEndpointOptions(
+          'SageMaker Runtime',
+          sdkOptions,
+          this.env,
+        );
 
         const runtime = new SageMakerRuntimeClient({
           ...getAwsCredentialProviderOptions(this.env),
+          ...endpointOptions,
           region: runtimeRegion,
           maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
           retryMode: 'adaptive',
