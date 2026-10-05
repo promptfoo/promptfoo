@@ -623,7 +623,7 @@ describe('huggingfaceDatasets', () => {
     });
 
     it('should keep small-row pages at the 100-row maximum the datasets server allows', async () => {
-      const totalRows = 500;
+      const rows = Array.from({ length: 546 }, (_, i) => ({ row: { text: `Item ${i + 1}` } }));
 
       vi.mocked(fetchWithCache).mockImplementation(async (url) => {
         const searchParams = new URL(String(url)).searchParams;
@@ -642,9 +642,9 @@ describe('huggingfaceDatasets', () => {
 
         return {
           data: {
-            num_rows_total: totalRows,
+            num_rows_total: rows.length,
             features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-            rows: Array.from({ length }, (_, i) => ({ row: { text: `Item ${offset + i + 1}` } })),
+            rows: rows.slice(offset, offset + length),
           },
           cached: false,
           status: 200,
@@ -657,10 +657,8 @@ describe('huggingfaceDatasets', () => {
         .mocked(fetchWithCache)
         .mock.calls.map(([url]) => new URL(String(url)).searchParams.get('length'));
 
-      expect(requestedLengths).toEqual(['100', '100', '100', '100', '100']);
-      expect(tests.map((test) => test.vars?.text)).toEqual(
-        Array.from({ length: totalRows }, (_, i) => `Item ${i + 1}`),
-      );
+      expect(requestedLengths).toEqual(['100', '100', '100', '100', '100', '46']);
+      expect(tests.map((test) => test.vars)).toEqual(rows.map(({ row }) => row));
     });
 
     it('should handle authentication tokens correctly', async () => {
