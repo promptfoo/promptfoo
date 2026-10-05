@@ -404,7 +404,7 @@ function isCompoundSecretObjectField(name: string, value: unknown): boolean {
 // collection roles take precedence over this MCP-only field classification.
 function isMcpTokenMetadataName(normalized: string): boolean {
   return (
-    /^(?:input|output|completion|prompt|reasoning(?:output)?|thinking|thought|response|logit|reserved|budget|num(?:input(?:image|text)?|output)?|total(?:input|output|cached|reasoning|thought|tooluse)?)tokens$/.test(
+    /^(?:input|output|completion|prompt|reasoning(?:output)?|thinking|thought|response|logit|reserved|budget|(?:additional)?special|num(?:input(?:image|text)?|output)?|total(?:input|output|cached|reasoning|thought|tooluse)?)tokens$/.test(
       normalized,
     ) ||
     /^(?:(?:audio|image|video|text)(?:input|output|completion|prompt)?|(?:cached|uncached)(?:audio|image|video|text|nontext)?(?:input|prompt|response)?|toolprompt)tokens$/.test(
@@ -2344,7 +2344,13 @@ function sanitizeUrlWithContext(
     // sanitizeObject runs this on any field literally named `url`, so blanket
     // redaction would destroy non-secret bare domains, relative paths, and prose
     // in persisted eval results and user-facing config error messages.
-    return unparseableUrlMightLeakSecret(url, false, compoundContext) ? REDACTED : url;
+    if (unparseableUrlMightLeakSecret(url, false, compoundContext)) {
+      return REDACTED;
+    }
+    // Decoded relative URL values still need their query/fragment payloads inspected.
+    return compoundContext?.guardUrlPayload
+      ? sanitizeTemplatedUrl(url, compoundContext, compoundContext)
+      : url;
   }
 }
 

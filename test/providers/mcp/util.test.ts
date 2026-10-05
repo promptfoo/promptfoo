@@ -41,6 +41,88 @@ vi.mock('../../../src/util/fetch/index', () => ({
 describe('sanitizeMcpToolData', () => {
   const omitted = '[MCP tool data omitted: it could not be sanitized]';
 
+  it('checks relative query JSON within form-valued URLs without losing templates', () => {
+    for (const prefix of ['callback?data=', '//host/path?data=', 'callback#data=']) {
+      for (const encode of [(value: string) => value, encodeURIComponent]) {
+        const data = JSON.stringify({ password: 'query-fixture', page: 2 });
+        const value = `redirect=${prefix}${encode(data)}&label={{ label }}`;
+        const safeValue = `redirect=${encodeURIComponent(`${prefix}${encodeURIComponent(JSON.stringify({ password: '[REDACTED]', page: 2 }))}`)}&label={{ label }}`;
+        const args = { url: value, callbackUrl: value, env: { SERVICE_URL: value } };
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(args)).toEqual({
+          url: safeValue,
+          callbackUrl: safeValue,
+          env: { SERVICE_URL: safeValue },
+        });
+        expect(args).toEqual(original);
+      }
+    }
+  });
+
+  it('preserves public form queries and protects JSON with internal templates', () => {
+    const publicValue = 'redirect=callback?data=%7B%22page%22%3A2%7D&label={{ label }}';
+    const args = { url: publicValue, apiHost: publicValue, callbackUrl: publicValue };
+    expect(sanitizeMcpToolData(args)).toEqual(args);
+    const data = JSON.stringify({ password: 'query-fixture', label: '{{ label }}' });
+    const safeData = JSON.stringify({ password: '[REDACTED]', label: '{{ label }}' });
+    expect(sanitizeMcpToolData({ url: `data=${encodeURIComponent(data)}` })).toEqual({
+      url: `data=${encodeURIComponent(safeData)}`,
+    });
+    expect(sanitizeUrl(publicValue)).toBe(publicValue);
+  });
+
+  it('visits nested form/query JSON once at each level', () => {
+    let value = 'public';
+    for (let depth = 0; depth < 9; depth++) {
+      value = `redirect=callback?x=public&data=${encodeURIComponent(JSON.stringify({ url: value }))}&label={{ label }}`;
+    }
+    const args = { url: value };
+    const original = structuredClone(args);
+    const parse = vi.spyOn(JSON, 'parse');
+    let result: unknown;
+    let calls = 0;
+    try {
+      result = sanitizeMcpToolData(args);
+      calls = parse.mock.calls.length;
+    } finally {
+      parse.mockRestore();
+    }
+    expect(result).toEqual(args);
+    expect(args).toEqual(original);
+    expect(calls).toBeLessThan(200);
+  });
+
+  it('preserves special-token metadata while checking descendants and inherited credentials', () => {
+    for (const name of [
+      'specialTokens',
+      'special_tokens',
+      'additionalSpecialTokens',
+      'additional_special_tokens',
+    ]) {
+      const data = { [name]: ['<s>', 12, { databasePassword: 'token-fixture', label: 'public' }] };
+      const safeData = { [name]: ['<s>', 12, { databasePassword: '[REDACTED]', label: 'public' }] };
+      for (const encode of [
+        (value: unknown) => value,
+        (value: unknown) => JSON.stringify(value),
+        (value: unknown) => `data=${encodeURIComponent(JSON.stringify(value))}`,
+      ]) {
+        const args = { payload: encode(data) };
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(args)).toEqual({ payload: encode(safeData) });
+        expect(args).toEqual(original);
+      }
+      expect(sanitizeMcpToolData({ apiKeysByTenant: { [name]: ['fixture', 12] } })).toEqual({
+        apiKeysByTenant: { [name]: ['[REDACTED]', '[REDACTED]'] },
+      });
+      const publicData = { [name]: ['<s>', '</s>', 12] };
+      expect(sanitizeObject(publicData, { sanitizeUrls: true })).toEqual(publicData);
+    }
+    expect(sanitizeMcpToolData({ accessTokens: ['fixture'], authTokens: ['fixture'] })).toEqual({
+      accessTokens: ['[REDACTED]'],
+      authTokens: ['[REDACTED]'],
+    });
+  });
+
   it('retains inherited host credential checks when authority parsing fails', () => {
     for (const authority of [
       'alice:host-fixture@db:badport',
