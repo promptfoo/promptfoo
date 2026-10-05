@@ -502,7 +502,10 @@ export function getMergedEnvOverrides(env?: EnvOverrides): EnvOverrides {
   for (const layer of [getEnvOverrides('file'), getEnvOverrides(), env]) {
     for (const [key, value] of Object.entries(layer ?? {})) {
       if (value !== undefined) {
-        merged[key] = value;
+        // YAML config keeps its original primitive values after validation.
+        // SDK environment selectors expect the strings process.env would hold.
+        merged[key] =
+          typeof value === 'boolean' || typeof value === 'number' ? String(value) : value;
       }
     }
   }

@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
 
 import { getEnvString, getMergedEnvOverrides } from '../envars';
+import { getScopedAwsEndpointOptions } from './awsEndpointConfig';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider, Logger } from '@smithy/types';
 
 import type { EnvOverrides } from '../contracts/env';
@@ -20,6 +21,7 @@ type RoleAssumer = (
   source: AwsCredentialIdentity,
   params: AssumeRoleParams,
 ) => Promise<AwsCredentialIdentity>;
+type WebIdentityRoleAssumer = (params: Record<string, unknown>) => Promise<AwsCredentialIdentity>;
 
 interface ProfileOptions {
   profile?: string;
@@ -28,6 +30,10 @@ interface ProfileOptions {
   ignoreCache?: boolean;
   logger?: Logger;
   roleAssumer?: RoleAssumer;
+  roleAssumerWithWebIdentity?: WebIdentityRoleAssumer;
+  webIdentityTokenFile?: string;
+  roleArn?: string;
+  roleSessionName?: string;
   mfaCodeProvider?: (serial: string) => Promise<string>;
   clientConfig?: Record<string, unknown>;
   parentClientConfig?: Record<string, unknown>;
@@ -214,6 +220,19 @@ function loadProfileSdk() {
           }
           return getDefaultRoleAssumer(options);
         },
+        webIdentityRoleAssumer(options: Record<string, unknown>) {
+          const { getDefaultRoleAssumerWithWebIdentity } = iniRequire(
+            '@aws-sdk/nested-clients/sts',
+          ) as {
+            getDefaultRoleAssumerWithWebIdentity?: (
+              options: Record<string, unknown>,
+            ) => WebIdentityRoleAssumer;
+          };
+          if (typeof getDefaultRoleAssumerWithWebIdentity !== 'function') {
+            throw new Error('Reinstall the AWS SDK: its STS web identity provider is unavailable.');
+          }
+          return getDefaultRoleAssumerWithWebIdentity(options);
+        },
       };
     } catch (cause) {
       const error = new Error(
@@ -261,6 +280,16 @@ export async function getScopedAwsProfileCredentials(
     Object.entries(scoped).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
   const hasScopedEnvironment = Object.keys(scopedEnvironment).length > 0;
+  const hasScopedStsSettings = [
+    'AWS_CONFIG_FILE',
+    'AWS_SHARED_CREDENTIALS_FILE',
+    'AWS_PROFILE',
+    'AWS_USE_FIPS_ENDPOINT',
+    'AWS_USE_DUALSTACK_ENDPOINT',
+    'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
+    'AWS_ENDPOINT_URL',
+    'AWS_ENDPOINT_URL_STS',
+  ].some((name) => scoped[name] !== undefined);
   if (!hasScopedEnvironment && !scopedFiles) {
     return undefined;
   }
@@ -380,19 +409,56 @@ export async function getScopedAwsProfileCredentials(
   }
 
   const profiles = await sdk.parseKnownFiles(options);
+  const needsScopedSts = (profiles: Profiles) =>
+    hasScopedStsSettings &&
+    (Boolean(profiles[profile]?.role_arn) ||
+      Boolean(
+        (options.webIdentityTokenFile ?? process.env.AWS_WEB_IDENTITY_TOKEN_FILE) &&
+          (options.roleArn ?? process.env.AWS_ROLE_ARN),
+      ));
   if (
     !needsScopedProvider(profiles, profile) &&
+    !needsScopedSts(profiles) &&
     !(hasScopedEnvironment && profiles[profile]?.credential_process !== undefined)
   ) {
     return undefined;
   }
 
   let defaultRoleAssumer: RoleAssumer | undefined;
+  let defaultWebIdentityAssumer: WebIdentityRoleAssumer | undefined;
   const resolveCredentials: AwsCredentialIdentityProvider = async (properties) => {
     const profiles = await sdk.parseKnownFiles(options);
     const callerClientConfig = properties?.callerClientConfig as
       | Record<string, unknown>
       | undefined;
+    const scopedStsClientConfig = async () => {
+      const clientConfig = options.clientConfig ?? {};
+      const endpointOptions = await getScopedAwsEndpointOptions(
+        'STS',
+        {
+          ...options,
+          ...clientConfig,
+          // Native nested STS inherits the caller profile, but never its endpoint.
+          profile: (clientConfig.profile ??
+            options.parentClientConfig?.profile ??
+            callerClientConfig?.profile ??
+            scoped.AWS_PROFILE) as string | undefined,
+        },
+        scoped,
+      );
+      return { ...clientConfig, ...endpointOptions };
+    };
+    const getRoleAssumer = async (region?: string): Promise<RoleAssumer> =>
+      options.roleAssumer ??
+      (defaultRoleAssumer ??= sdk.roleAssumer({
+        ...(needsScopedSts(profiles) ? await scopedStsClientConfig() : options.clientConfig),
+        credentialProviderLogger: options.logger,
+        parentClientConfig: {
+          ...callerClientConfig,
+          ...options.parentClientConfig,
+          region: region ?? options.parentClientConfig?.region ?? callerClientConfig?.region,
+        },
+      }));
     const resolveLeaf = (name: string) =>
       profiles[name].credential_process === undefined
         ? sdk.fromSSO({ ...options, profile: name })(properties)
@@ -416,19 +482,7 @@ export async function getScopedAwsProfileCredentials(
           : undefined;
       // Match the SDK: the outer role initializes the assumer, which is shared
       // by nested roles and refreshes of this credential-provider lifetime.
-      const assume = data.role_arn
-        ? (options.roleAssumer ??
-          (defaultRoleAssumer ??= sdk.roleAssumer({
-            ...options.clientConfig,
-            credentialProviderLogger: options.logger,
-            parentClientConfig: {
-              ...callerClientConfig,
-              ...options.parentClientConfig,
-              region:
-                data.region ?? options.parentClientConfig?.region ?? callerClientConfig?.region,
-            },
-          })))
-        : undefined;
+      const assume = data.role_arn ? await getRoleAssumer(data.region) : undefined;
       const source = data.source_profile
         ? await resolve(data.source_profile, true)
         : resolveEnvironmentCredentials();
@@ -447,7 +501,33 @@ export async function getScopedAwsProfileCredentials(
       }
       return assume(source, params);
     };
-    const settings = { ...options, profile };
+    const settings = (): ProfileOptions => {
+      if (!needsScopedSts(profiles)) {
+        return { ...options, profile };
+      }
+      return {
+        ...options,
+        profile,
+        roleAssumer:
+          options.roleAssumer ??
+          (async (source, params) => {
+            const assume = await getRoleAssumer(profiles[profile]?.region);
+            return assume(source, params);
+          }),
+        // Native fromIni drops clientConfig when it delegates a web-identity
+        // profile. Supply only that native assumer with the scoped STS settings.
+        roleAssumerWithWebIdentity:
+          options.roleAssumerWithWebIdentity ??
+          (async (params) => {
+            defaultWebIdentityAssumer ??= sdk.webIdentityRoleAssumer({
+              ...(await scopedStsClientConfig()),
+              credentialProviderLogger: options.logger,
+              parentClientConfig: { ...callerClientConfig, ...options.parentClientConfig },
+            });
+            return defaultWebIdentityAssumer(params);
+          }),
+      };
+    };
     // Bind caller properties explicitly: the SDK's generic chain helper does
     // not forward arguments. Keep only the native tail after the adapted INI
     // provider, including its unavailable-versus-terminal error handling.
@@ -455,13 +535,13 @@ export async function getScopedAwsProfileCredentials(
       () =>
         needsScopedProvider(profiles, profile)
           ? resolve(profile)
-          : sdk.fromIni(settings)(properties),
+          : sdk.fromIni(settings())(properties),
       () =>
         hasScopedEnvironment
           ? resolveProcess(profiles, profile)
-          : sdk.fromProcess(settings)(properties),
-      () => sdk.fromTokenFile(settings)(properties),
-      () => sdk.fromRemote(settings),
+          : sdk.fromProcess({ ...options, profile })(properties),
+      () => sdk.fromTokenFile(settings())(properties),
+      () => sdk.fromRemote({ ...options, profile }),
       async () => {
         throw new sdk.CredentialsProviderError('Could not load credentials from any providers', {
           logger: options.logger,

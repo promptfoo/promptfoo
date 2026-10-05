@@ -3,7 +3,10 @@ import { createRequire } from 'node:module';
 type Profile = Record<string, string | undefined>;
 interface FileOptions {
   profile?: string;
-  endpoint?: string;
+  endpoint?: unknown;
+  useFipsEndpoint?: boolean | (() => Promise<boolean>);
+  useDualstackEndpoint?: boolean | (() => Promise<boolean>);
+  ignoreConfiguredEndpointUrls?: boolean | (() => Promise<boolean>);
   filepath?: string;
   configFilepath?: string;
   ignoreCache?: boolean;
@@ -94,16 +97,29 @@ export async function getScopedAwsEndpointOptions(
   const endpointOptions = { ...options, profile: effective.AWS_PROFILE || 'default' };
   const ignore =
     options.endpoint ||
-    (await load(
-      {
-        environmentVariableSelector: (values) =>
-          sdk.booleanSelector(values, 'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', sdk.SelectorType.ENV),
-        configFileSelector: (profile) =>
-          sdk.booleanSelector(profile, 'ignore_configured_endpoint_urls', sdk.SelectorType.CONFIG),
-        default: false,
-      },
-      endpointOptions,
-    ));
+    ((options.ignoreConfiguredEndpointUrls === undefined
+      ? undefined
+      : typeof options.ignoreConfiguredEndpointUrls === 'function'
+        ? await options.ignoreConfiguredEndpointUrls()
+        : options.ignoreConfiguredEndpointUrls) ??
+      (await load(
+        {
+          environmentVariableSelector: (values) =>
+            sdk.booleanSelector(
+              values,
+              'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
+              sdk.SelectorType.ENV,
+            ),
+          configFileSelector: (profile) =>
+            sdk.booleanSelector(
+              profile,
+              'ignore_configured_endpoint_urls',
+              sdk.SelectorType.CONFIG,
+            ),
+          default: false,
+        },
+        endpointOptions,
+      )));
   const endpoint = ignore
     ? undefined
     : await load<string | undefined>(
@@ -135,7 +151,9 @@ export async function getScopedAwsEndpointOptions(
     // Prevent the SDK's later endpoint loader from restoring host-file values
     // when the selected file/profile has no configured endpoint.
     ignoreConfiguredEndpointUrls: true,
-    useFipsEndpoint: await load(sdk.NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS),
-    useDualstackEndpoint: await load(sdk.NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS),
+    useFipsEndpoint:
+      options.useFipsEndpoint ?? (await load(sdk.NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS)),
+    useDualstackEndpoint:
+      options.useDualstackEndpoint ?? (await load(sdk.NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS)),
   };
 }
