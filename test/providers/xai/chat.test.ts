@@ -9,6 +9,7 @@ import {
   getXAICostInUsd,
   XAI_CHAT_MODELS,
 } from '../../../src/providers/xai/chat';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { ProviderOptions } from '../../../src/types/providers';
 
@@ -42,9 +43,32 @@ describe('xAI Chat Provider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('Provider creation and configuration', () => {
+    it('sends Grok 4.7 requests to the configured endpoint before the region default', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: 'http://localhost:8080/v1',
+            region: 'us',
+          },
+        },
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.error).toBeUndefined();
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/chat/completions',
+        expect.objectContaining({ body: expect.stringContaining('grok-4.7') }),
+        expect.any(Number),
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
     it('throws an error if no model name is provided', () => {
       expect(() => createXAIProvider('xai:')).toThrow('Model name is required');
     });
@@ -105,6 +129,7 @@ describe('xAI Chat Provider', () => {
     it('includes Grok 4.5, 4.3, and 4.20 in the reasoning and Grok-4 parameter-restriction lists', () => {
       expect(XAI_CHAT_MODELS).toEqual(
         expect.arrayContaining([
+          expect.objectContaining({ id: 'grok-4.7' }),
           expect.objectContaining({ id: 'grok-4.6' }),
           expect.objectContaining({ id: 'grok-4.5' }),
           expect.objectContaining({ id: 'grok-4.3' }),
@@ -115,6 +140,7 @@ describe('xAI Chat Provider', () => {
       );
       expect(GROK_REASONING_MODELS).toEqual(
         expect.arrayContaining([
+          'grok-4.7',
           'grok-4.6',
           'grok-4.5',
           'grok-4.5-latest',
@@ -128,6 +154,7 @@ describe('xAI Chat Provider', () => {
       );
       expect(GROK_4_MODELS).toEqual(
         expect.arrayContaining([
+          'grok-4.7',
           'grok-4.6',
           'grok-4.5',
           'grok-4.5-latest',
@@ -161,6 +188,7 @@ describe('xAI Chat Provider', () => {
         'grok-4.5',
         'grok-4.5-latest',
         'grok-4.6',
+        'grok-4.7',
         'grok-build-latest',
         'grok-code-fast-1',
         'grok-latest',
@@ -177,6 +205,51 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Provider methods', () => {
+    it('accepts xAI priority processing and rejects non-xAI service tiers', async () => {
+      const priorityProvider = createXAIProvider('xai:grok-4.5', {
+        config: { service_tier: 'priority' },
+      } as any) as any;
+      expect((await priorityProvider.getOpenAiBody('test prompt')).body.service_tier).toBe(
+        'priority',
+      );
+
+      const invalidProvider = createXAIProvider('xai:grok-4.5', {
+        config: { service_tier: 'flex' },
+      } as any) as any;
+      await expect(invalidProvider.getOpenAiBody('test prompt')).rejects.toThrow(
+        'Invalid xAI service_tier.',
+      );
+    });
+
+    it.each([
+      [{ passthrough: { service_tier: 'priority' } }, { service_tier: 'default' }, 'default'],
+      [{ service_tier: 'priority' }, { passthrough: { reasoning_effort: 'low' } }, 'priority'],
+      [
+        { passthrough: { service_tier: 'priority' } },
+        { passthrough: { reasoning_effort: 'low' } },
+        undefined,
+      ],
+      [
+        { service_tier: 'priority' },
+        { service_tier: 'priority', passthrough: { service_tier: 'default' } },
+        'default',
+      ],
+    ] as const)(
+      'preserves Grok 4.7 service tier precedence for provider %j and prompt %j',
+      async (config, promptConfig, tier) => {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: { config: { apiKey: 'test-key', ...config } },
+        });
+        const result = await provider.callApi('hello', {
+          vars: {},
+          prompt: { raw: 'hello', label: 'fixture', config: promptConfig },
+        });
+        expect(result.error).toBeUndefined();
+        const request = JSON.parse(mockFetchWithCache.mock.calls.at(-1)![1].body);
+        expect(request.service_tier).toBe(tier);
+      },
+    );
+
     it('generates correct id() for the provider', () => {
       const provider = createXAIProvider('xai:grok-3-beta');
       expect(provider.id()).toBe('xai:grok-3-beta');
@@ -348,39 +421,377 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Grok-4 specific functionality', () => {
+    it.each(['low', 'medium', 'high', 'xhigh'])(
+      'sends Grok 4.7 chat reasoning effort %s',
+      async (effort) => {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: { config: { apiKey: 'test-key', reasoning_effort: effort as 'low' } },
+        });
+        const response = await provider.callApi('hello');
+        const [url, request] = mockFetchWithCache.mock.calls[0];
+        const body = JSON.parse(request.body);
+
+        expect(url).toBe('https://api.x.ai/v1/chat/completions');
+        expect(body).toMatchObject({ model: 'grok-4.7', reasoning_effort: effort });
+        expect(response.output).toBe('Mock response');
+      },
+    );
+
+    it('keeps the API default effort and strips unsupported sampling', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: { config: { max_completion_tokens: 4096 } },
+      }) as any;
+      const defaultBody = (await provider.getOpenAiBody('hello')).body;
+      expect(defaultBody.reasoning_effort).toBeUndefined();
+      expect(defaultBody.max_completion_tokens).toBe(4096);
+
+      const { body } = await provider.getOpenAiBody('hello', {
+        prompt: {
+          config: {
+            max_completion_tokens: 32,
+            presence_penalty: 0.4,
+            frequency_penalty: 0.2,
+            stop: ['end'],
+            temperature: 0.8,
+          },
+        },
+      });
+      expect(body).toMatchObject({
+        model: 'grok-4.7',
+        max_completion_tokens: 32,
+        temperature: 0.8,
+      });
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).not.toHaveProperty('presence_penalty');
+      expect(body).not.toHaveProperty('frequency_penalty');
+      expect(body).not.toHaveProperty('stop');
+      for (const config of [
+        { max_tokens: 64 },
+        { max_completion_tokens: 64, passthrough: { model: 'grok-4.7' } },
+        { passthrough: { model: 'grok-4.7', max_tokens: 64 } },
+      ]) {
+        const overridden = await provider.getOpenAiBody('hello', { prompt: { config } });
+        expect(overridden.body.max_completion_tokens).toBe(64);
+        expect(overridden.body).not.toHaveProperty('max_tokens');
+      }
+      await expect(
+        provider.getOpenAiBody('hello', {
+          prompt: { config: { max_completion_tokens: 64, max_tokens: 32 } },
+        }),
+      ).rejects.toThrow('conflicting max_tokens and max_completion_tokens');
+      const testOverride = await provider.getOpenAiBody('hello', {
+        test: { options: { max_tokens: 64 } },
+      });
+      expect(testOverride.body.max_completion_tokens).toBe(64);
+      await expect(
+        provider.getOpenAiBody('hello', {
+          test: { options: { max_completion_tokens: 2048, max_tokens: 64 } },
+        }),
+      ).rejects.toThrow('conflicting max_tokens and max_completion_tokens');
+      const nullish = createXAIProvider('xai:grok-4.7', {
+        config: { config: { max_tokens: 128, max_completion_tokens: null } as any },
+      }) as any;
+      expect((await nullish.getOpenAiBody('hello')).body.max_completion_tokens).toBe(128);
+      expect(
+        (
+          await nullish.getOpenAiBody('hello', {
+            test: { options: { max_completion_tokens: null } },
+          })
+        ).body.max_completion_tokens,
+      ).toBe(128);
+      const restore = mockProcessEnv({
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        OPENAI_MAX_TOKENS: '37',
+      });
+      try {
+        const fromEnv = createXAIProvider('xai:grok-4.7') as any;
+        expect((await fromEnv.getOpenAiBody('hello')).body.max_completion_tokens).toBe(37);
+      } finally {
+        restore();
+      }
+    });
+
+    it('does not restore passthrough settings replaced by a prompt or test', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        OPENAI_MAX_TOKENS: undefined,
+      });
+      try {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: {
+            config: {
+              passthrough: {
+                model: 'grok-4.7',
+                reasoning_effort: 'high',
+                max_completion_tokens: 256,
+              },
+            },
+          },
+        }) as any;
+        const partial = { passthrough: { model: 'grok-4.7' } };
+        const promptBody = (await provider.getOpenAiBody('hello', { prompt: { config: partial } }))
+          .body;
+        expect(promptBody).not.toHaveProperty('reasoning_effort');
+        expect(promptBody).not.toHaveProperty('max_completion_tokens');
+
+        const { body } = await provider.getOpenAiBody('hello', { test: { options: partial } });
+        expect(body).not.toHaveProperty('reasoning_effort');
+        expect(body).not.toHaveProperty('max_completion_tokens');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('omits a null Grok 4.7 passthrough output cap', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        OPENAI_MAX_TOKENS: undefined,
+      });
+      try {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: { config: { passthrough: { max_completion_tokens: null } } },
+        }) as any;
+        const { body } = await provider.getOpenAiBody('hello');
+        expect(body).not.toHaveProperty('max_completion_tokens');
+        expect(body).not.toHaveProperty('max_tokens');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      ['grok-4.6', 'xhigh'],
+      ['grok-4.3', 'none'],
+    ] as const)('keeps reasoning options when passthrough selects %s', async (model, effort) => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            reasoning_effort: effort,
+            max_completion_tokens: 256,
+            passthrough: { model },
+          },
+        },
+      }) as any;
+      const { body } = await provider.getOpenAiBody('hello');
+      expect(body).toMatchObject({ model, reasoning_effort: effort, max_completion_tokens: 256 });
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
+    it('lets prompt options override provider defaults for a passthrough Grok model', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            reasoning_effort: 'low',
+            max_completion_tokens: 256,
+            passthrough: { model: 'grok-4.6' },
+          },
+        },
+      }) as any;
+      const { body } = await provider.getOpenAiBody('hello', {
+        prompt: { config: { reasoning_effort: 'xhigh', max_completion_tokens: 128 } },
+      });
+      expect(body).toMatchObject({
+        model: 'grok-4.6',
+        reasoning_effort: 'xhigh',
+        max_completion_tokens: 128,
+      });
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
+    it('lets test options override passthrough Grok defaults', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            passthrough: {
+              model: 'grok-4.6',
+              reasoning_effort: 'high',
+              max_completion_tokens: 256,
+            },
+          },
+        },
+      }) as any;
+      const { body } = await provider.getOpenAiBody('hello', {
+        test: { options: { reasoning_effort: 'low', max_completion_tokens: 128 } },
+      });
+      expect(body).toMatchObject({
+        model: 'grok-4.6',
+        reasoning_effort: 'low',
+        max_completion_tokens: 128,
+      });
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
+    it('accepts a simple eval variable and rejects other reasoning expressions before a request', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: { config: { apiKey: 'test-key' } },
+      });
+      const options = { reasoning_effort: '{{ effort }}', passthrough: { model: 'grok-4.7' } };
+      const accepted = await provider.callApi('hello', {
+        prompt: { raw: 'hello', label: 'hello', config: options },
+        vars: { effort: 'xhigh' },
+        test: { options, metadata: { __promptfoo: { remote: true } } },
+      });
+      expect(accepted.output).toBe('Mock response');
+      expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).reasoning_effort).toBe('xhigh');
+      mockFetchWithCache.mockClear();
+
+      for (const effort of ['none', '{{ candidate | upper }}', '{{ missing }}', 'private-marker']) {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: { config: { apiKey: 'test-key', reasoning_effort: effort as 'low' } },
+        });
+        const result = await provider.callApi('hello', {
+          prompt: { raw: 'hello', label: 'hello' },
+          vars: { candidate: 'private-marker' },
+        });
+        expect(result.error).toContain('reasoning');
+        expect(result.error).not.toContain('private-marker');
+        expect(result.error).not.toContain('API key');
+      }
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('prioritizes a test effort over provider passthrough and honors disabled templating', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: { config: { apiKey: 'test-key', passthrough: { reasoning_effort: 'high' } } },
+      });
+      const context = {
+        prompt: { raw: 'hello', label: 'hello' },
+        vars: { effort: 'xhigh' },
+        test: { options: { reasoning_effort: 'low' } },
+      };
+      await provider.callApi('hello', context);
+      expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).reasoning_effort).toBe('low');
+      const conflicting = await provider.callApi('hello', {
+        ...context,
+        test: { options: { reasoning_effort: 'low', passthrough: { reasoning_effort: 'xhigh' } } },
+      });
+      expect(conflicting.error).toContain('both test options and test passthrough');
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      mockFetchWithCache.mockClear();
+      const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+      try {
+        const result = await provider.callApi('hello', {
+          ...context,
+          test: { options: { reasoning_effort: '{{ effort }}' } },
+        });
+        expect(result.error).toContain('reasoning effort');
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        restore();
+      }
+    });
+
+    it('also accepts the now-documented xhigh effort on Grok 4.6', async () => {
+      const provider = createXAIProvider('xai:grok-4.6') as any;
+      expect(
+        (
+          await provider.getOpenAiBody('hello', {
+            prompt: { config: { reasoning_effort: 'xhigh' } },
+          })
+        ).body.reasoning_effort,
+      ).toBe('xhigh');
+    });
+
+    it('validates effort against a passthrough Grok 4.3 model', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            passthrough: { model: 'grok-4.3', reasoning_effort: 'xhigh' },
+          },
+        },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.error).toContain('grok-4.3 does not support reasoning_effort');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('uses Grok 4.7 US chat fallback prices and still prefers the billed cost', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: { config: { apiKey: 'test-key', region: 'us' } },
+      });
+      const usage = {
+        prompt_tokens: 1_000,
+        completion_tokens: 500,
+        total_tokens: 1_520,
+        prompt_tokens_details: { cached_tokens: 800 },
+        completion_tokens_details: { reasoning_tokens: 20 },
+      };
+      const response = {
+        data: { choices: [{ message: { content: 'result' } }], usage },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(response);
+      expect((await provider.callApi('estimate')).cost).toBeCloseTo(0.004312, 10);
+      expect(mockFetchWithCache.mock.calls[0][0]).toBe('https://us.api.x.ai/v1/chat/completions');
+
+      mockFetchWithCache.mockResolvedValue({
+        ...response,
+        data: { ...response.data, usage: { ...usage, cost_in_usd_ticks: 123_000 } },
+      });
+      expect((await provider.callApi('billed')).cost).toBeCloseTo(0.0000123, 10);
+    });
+
+    it.each([
+      ['grok-4.7', 'grok-4.3', 0.00375],
+      ['grok-4.3', 'grok-4.7', 0.0088],
+    ])(
+      'prices the outgoing Chat model when %s is overridden by %s',
+      async (configured, sent, cost) => {
+        const provider = createXAIProvider(`xai:${configured}`, {
+          config: { config: { apiKey: 'test-key', region: 'us', passthrough: { model: sent } } },
+        });
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            choices: [{ message: { content: 'result' } }],
+            usage: { prompt_tokens: 1_000, completion_tokens: 1_000, total_tokens: 2_000 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const result = await provider.callApi('hello');
+        expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe(sent);
+        expect(result.cost).toBeCloseTo(cost, 10);
+      },
+    );
+
     it('recognizes Grok 4.6 as a reasoning model', () => {
       const provider = createXAIProvider('xai:grok-4.6') as any;
       expect(provider.isReasoningModel()).toBe(true);
       expect(provider.supportsReasoningEffort()).toBe(true);
     });
 
-    it('preserves reasoning_effort for Grok 4.6 chat requests and strips unsupported params', async () => {
-      // Verified live 2026-08-31: grok-4.6 accepts reasoning_effort low/medium/high
-      // (not none) and rejects presence_penalty, frequency_penalty, and stop.
-      const provider = createXAIProvider('xai:grok-4.6') as any;
-      const result = await provider.getOpenAiBody('test prompt', {
-        prompt: {
-          config: {
-            reasoning_effort: 'medium',
-            presence_penalty: 0.5,
-            frequency_penalty: 0.7,
-            stop: ['\\n'],
-            temperature: 0.8,
+    it.each(['low', 'medium', 'high', 'xhigh'])(
+      'preserves %s reasoning effort for Grok 4.6 and strips unsupported params',
+      async (reasoningEffort) => {
+        const provider = createXAIProvider('xai:grok-4.6') as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              reasoning_effort: reasoningEffort,
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['\\n'],
+              temperature: 0.8,
+            },
           },
-        },
-      });
+        });
 
-      expect(result.body.reasoning_effort).toBe('medium');
-      expect(result.body.presence_penalty).toBeUndefined();
-      expect(result.body.frequency_penalty).toBeUndefined();
-      expect(result.body.stop).toBeUndefined();
-      expect(result.body.temperature).toBe(0.8);
-    });
+        expect(result.body.reasoning_effort).toBe(reasoningEffort);
+        expect(result.body.presence_penalty).toBeUndefined();
+        expect(result.body.frequency_penalty).toBeUndefined();
+        expect(result.body.stop).toBeUndefined();
+        expect(result.body.temperature).toBe(0.8);
+      },
+    );
 
     it('rejects unsupported reasoning_effort values for Grok 4.6', async () => {
       // Verified live 2026-08-31: the API returns
       // "This model does not support `reasoning_effort` value `none`."
-      for (const reasoningEffort of ['none', 'xhigh', 'minimal']) {
+      for (const reasoningEffort of ['none', 'minimal']) {
         const provider = createXAIProvider('xai:grok-4.6') as any;
 
         await expect(
@@ -388,7 +799,7 @@ describe('xAI Chat Provider', () => {
             prompt: { config: { reasoning_effort: reasoningEffort } },
           }),
         ).rejects.toThrow(
-          `xAI model grok-4.6 does not support reasoning_effort ${JSON.stringify(reasoningEffort)}`,
+          'xAI model grok-4.6 does not support reasoning_effort with the supplied value',
         );
       }
     });
@@ -436,7 +847,7 @@ describe('xAI Chat Provider', () => {
               prompt: { config: { reasoning_effort: reasoningEffort } },
             }),
           ).rejects.toThrow(
-            `xAI model ${modelName} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}`,
+            `xAI model ${modelName} does not support reasoning_effort with the supplied value`,
           );
         }
       }
@@ -546,6 +957,302 @@ describe('xAI Chat Provider', () => {
       expect(result.body.temperature).toBe(0.7);
       expect(result.body.max_completion_tokens).toBe(2048);
     });
+
+    it.each(['grok-build-0.1', 'grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'])(
+      'uses max_tokens for Grok Build chat requests using %s',
+      async (modelName) => {
+        for (const config of [
+          { max_tokens: 321 },
+          { passthrough: { max_tokens: 321 } },
+          { max_completion_tokens: 321 },
+          { passthrough: { max_completion_tokens: 321 } },
+        ]) {
+          const provider = createXAIProvider(`xai:${modelName}`) as any;
+          const result = await provider.getOpenAiBody('test prompt', {
+            prompt: {
+              config,
+            },
+          });
+
+          expect(result.body.max_tokens).toBe(321);
+          expect(result.body.max_completion_tokens).toBeUndefined();
+        }
+
+        vi.stubEnv('OPENAI_MAX_COMPLETION_TOKENS', '654');
+        const provider = createXAIProvider(`xai:${modelName}`) as any;
+        const result = await provider.getOpenAiBody('test prompt');
+
+        expect(result.body.max_tokens).toBe(654);
+        expect(result.body.max_completion_tokens).toBeUndefined();
+
+        const filteredResult = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              max_tokens: 321,
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['END'],
+            },
+          },
+        });
+
+        expect(filteredResult.body.max_tokens).toBe(321);
+        expect(filteredResult.body.presence_penalty).toBeUndefined();
+        expect(filteredResult.body.frequency_penalty).toBeUndefined();
+        expect(filteredResult.body.stop).toBeUndefined();
+      },
+    );
+
+    it.each(['grok-build-0.1', 'grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'])(
+      'preserves passthrough token-limit precedence for Grok Build chat requests using %s',
+      async (modelName) => {
+        const provider = createXAIProvider(`xai:${modelName}`) as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              max_tokens: 111,
+              max_completion_tokens: 222,
+              passthrough: { max_completion_tokens: 333 },
+            },
+          },
+        });
+
+        expect(result.body.max_tokens).toBe(333);
+        expect(result.body.max_completion_tokens).toBeUndefined();
+      },
+    );
+
+    it.each(['grok-build-0.1', 'grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'])(
+      'keeps prompt token-limit precedence across aliases for Grok Build chat requests using %s',
+      async (modelName) => {
+        const provider = createXAIProvider(`xai:${modelName}`, {
+          config: { config: { max_tokens: 111 } },
+        }) as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              max_completion_tokens: 222,
+            },
+          },
+        });
+
+        expect(result.body.max_tokens).toBe(222);
+        expect(result.body.max_completion_tokens).toBeUndefined();
+      },
+    );
+
+    it('does not restore a provider token limit replaced by prompt passthrough', async () => {
+      const provider = createXAIProvider('xai:grok-4.3', {
+        config: {
+          config: {
+            omitDefaults: true,
+            passthrough: {
+              max_tokens: 111,
+            },
+          },
+        },
+      }) as any;
+
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-build-0.1',
+            },
+          },
+        },
+      });
+
+      expect(result.body.model).toBe('grok-build-0.1');
+      expect(result.body.max_tokens).toBeUndefined();
+      expect(result.body.max_completion_tokens).toBeUndefined();
+    });
+
+    it('uses the effective passthrough model when normalizing Grok Build token limits', async () => {
+      const regularProvider = createXAIProvider('xai:grok-4.3') as any;
+      const buildResult = await regularProvider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-build-0.1',
+              max_completion_tokens: 333,
+            },
+          },
+        },
+      });
+
+      expect(buildResult.body.model).toBe('grok-build-0.1');
+      expect(buildResult.body.max_tokens).toBe(333);
+      expect(buildResult.body.max_completion_tokens).toBeUndefined();
+
+      const buildProvider = createXAIProvider('xai:grok-build-0.1') as any;
+      const regularResult = await buildProvider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-4.3',
+              max_completion_tokens: 444,
+            },
+          },
+        },
+      });
+
+      expect(regularResult.body.model).toBe('grok-4.3');
+      expect(regularResult.body.max_tokens).toBeUndefined();
+      expect(regularResult.body.max_completion_tokens).toBe(444);
+    });
+
+    it('uses the effective passthrough model for sampling and reasoning filters', async () => {
+      const regularProvider = createXAIProvider('xai:grok-2') as any;
+      const restrictedResult = await regularProvider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-4.5',
+              reasoning_effort: 'medium',
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['\\n'],
+            },
+          },
+        },
+      });
+
+      expect(restrictedResult.body.model).toBe('grok-4.5');
+      expect(restrictedResult.body.reasoning_effort).toBe('medium');
+      expect(restrictedResult.body.presence_penalty).toBeUndefined();
+      expect(restrictedResult.body.frequency_penalty).toBeUndefined();
+      expect(restrictedResult.body.stop).toBeUndefined();
+
+      const restrictedProvider = createXAIProvider('xai:grok-4.5') as any;
+      const regularResult = await restrictedProvider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-2',
+              reasoning_effort: 'medium',
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['\\n'],
+            },
+          },
+        },
+      });
+
+      expect(regularResult.body.model).toBe('grok-2');
+      expect(regularResult.body.reasoning_effort).toBeUndefined();
+      expect(regularResult.body.presence_penalty).toBe(0.5);
+      expect(regularResult.body.frequency_penalty).toBe(0.7);
+      expect(regularResult.body.stop).toEqual(['\\n']);
+    });
+
+    it('uses the effective passthrough model for top-level reasoning effort', async () => {
+      const provider = createXAIProvider('xai:grok-2') as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            reasoning_effort: 'high',
+            passthrough: {
+              model: 'grok-4.5',
+            },
+          },
+        },
+      });
+
+      expect(result.body.model).toBe('grok-4.5');
+      expect(result.body.reasoning_effort).toBe('high');
+    });
+
+    it('uses the effective passthrough model for the token-limit field', async () => {
+      const provider = createXAIProvider('xai:grok-2') as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            max_completion_tokens: 777,
+            passthrough: {
+              model: 'grok-4.5',
+            },
+          },
+        },
+      });
+
+      expect(result.body.model).toBe('grok-4.5');
+      expect(result.body.max_tokens).toBeUndefined();
+      expect(result.body.max_completion_tokens).toBe(777);
+    });
+
+    it('keeps prompt token-limit precedence across aliases for effective reasoning models', async () => {
+      const provider = createXAIProvider('xai:grok-build-0.1', {
+        config: { config: { max_completion_tokens: 111 } },
+      }) as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            max_tokens: 222,
+            passthrough: {
+              model: 'grok-4.3',
+            },
+          },
+        },
+      });
+
+      expect(result.body.model).toBe('grok-4.3');
+      expect(result.body.max_tokens).toBeUndefined();
+      expect(result.body.max_completion_tokens).toBe(222);
+    });
+
+    it.each(['provider', 'prompt'])(
+      'accepts xhigh for an effective Grok 4.6 model from %s passthrough',
+      async (configSource) => {
+        const config = {
+          omitDefaults: true,
+          passthrough: {
+            model: 'grok-4.6',
+            reasoning_effort: 'xhigh',
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['\\n'],
+          },
+        };
+        const provider = createXAIProvider(
+          'xai:grok-4.3',
+          configSource === 'provider' ? { config: { config } } : {},
+        ) as any;
+        const result = await provider.getOpenAiBody(
+          'test prompt',
+          configSource === 'prompt' ? { prompt: { config } } : undefined,
+        );
+
+        expect(result.body.model).toBe('grok-4.6');
+        expect(result.body.reasoning_effort).toBe('xhigh');
+        expect(result.body.presence_penalty).toBeUndefined();
+        expect(result.body.frequency_penalty).toBeUndefined();
+        expect(result.body.stop).toBeUndefined();
+      },
+    );
+
+    it.each([
+      ['grok-2', 'none'],
+      ['grok-4.6', 'xhigh'],
+    ])(
+      'validates %s effort %s against the effective Grok 4.5 model',
+      async (configuredModel, reasoningEffort) => {
+        const provider = createXAIProvider(`xai:${configuredModel}`) as any;
+
+        await expect(
+          provider.getOpenAiBody('test prompt', {
+            prompt: {
+              config: {
+                passthrough: {
+                  model: 'grok-4.5',
+                  reasoning_effort: reasoningEffort,
+                },
+              },
+            },
+          }),
+        ).rejects.toThrow('xAI model grok-4.5 does not support reasoning_effort');
+      },
+    );
 
     it('filters unsupported parameters for Grok 4 Fast models', async () => {
       const provider = createXAIProvider('xai:grok-4-fast-reasoning') as any;
@@ -675,7 +1382,7 @@ describe('xAI Chat Provider', () => {
       expect(grok4?.cost?.output).toBeDefined();
     });
 
-    it('includes Grok 4.5 in XAI_CHAT_MODELS with API-sourced pricing', () => {
+    it('includes Grok 4.5 in XAI_CHAT_MODELS with published pricing', () => {
       const grok45 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-4.5');
       expect(grok45).toBeDefined();
       expect(grok45?.aliases).toContain('grok-4.5-latest');
@@ -736,6 +1443,23 @@ describe('xAI Chat Provider', () => {
         expect(model?.cost?.output).toBe(2.5 / 1e6);
         expect(model?.cost?.cache_read).toBe(0.2 / 1e6);
       }
+    });
+
+    it('includes Grok Build with its retired Grok Code Fast aliases and current pricing', () => {
+      const grokBuild = XAI_CHAT_MODELS.find((model) => model.id === 'grok-build-0.1');
+
+      expect(grokBuild?.aliases).toEqual(
+        expect.arrayContaining(['grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825']),
+      );
+      expect(grokBuild?.cost?.input).toBe(1 / 1e6);
+      expect(grokBuild?.cost?.output).toBe(2 / 1e6);
+      expect(grokBuild?.cost?.cache_read).toBe(0.2 / 1e6);
+      expect(grokBuild?.cost?.longContext).toEqual({
+        threshold: 200_000,
+        input: 2 / 1e6,
+        output: 4 / 1e6,
+        cache_read: 0.4 / 1e6,
+      });
     });
 
     it('includes Grok 4.1 Fast in XAI_CHAT_MODELS with correct pricing', () => {
@@ -865,7 +1589,7 @@ describe('xAI Chat Provider', () => {
         'grok-3-fast-beta',
         'grok-3-fast-latest',
       ]) {
-        expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3.75, 10);
+        expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(7.5, 10);
       }
     });
 
@@ -954,6 +1678,53 @@ describe('xAI Chat Provider', () => {
         (100_001 * 4 + 100_000 * 1 + 1_000 * 12) / 1e6,
         10,
       );
+      expect(
+        calculateXAICost('grok-4.6', {}, 1_000, 500, 0, 800, {
+          apiUrl: 'https://us.api.x.ai/v1',
+        }),
+      ).toBeCloseTo(((200 * 2 + 800 * 0.5 + 500 * 6) / 1e6) * 1.1, 10);
+    });
+
+    it('uses Grok 4.7 pricing and cache rates at the 200K boundary and on the official US endpoint', () => {
+      expect(calculateXAICost('grok-4.7', {}, 199_999, 1_000, 0, 100_000)).toBeCloseTo(
+        0.255998,
+        10,
+      );
+      expect(calculateXAICost('grok-4.7', {}, 200_000, 1_000, 0, 100_000)).toBeCloseTo(0.512, 10);
+      const options = { apiUrl: 'https://us.api.x.ai/v1', reasoningBilledSeparately: true };
+      expect(calculateXAICost('grok-4.7', {}, 1_000, 500, 20, 800, options)).toBeCloseTo(
+        0.004312,
+        10,
+      );
+      expect(calculateXAICost('grok-4.7', {}, 200_000, 1_000, 0, 100_000, options)).toBeCloseTo(
+        0.5632,
+        10,
+      );
+      for (const apiUrl of [
+        'https://api.x.ai/v1',
+        'https://eu-west-1.api.x.ai/v1',
+        'https://example.com/v1',
+        'https://us.api.x.ai.example.com/v1',
+      ]) {
+        expect(
+          calculateXAICost('grok-4.7', {}, 1_000, 500, 20, 800, { ...options, apiUrl }),
+        ).toBeCloseTo(0.00392, 10);
+      }
+      expect(
+        calculateXAICost(
+          'grok-4.7',
+          { inputCost: 0.001, outputCost: 0.002, cacheReadCost: 0.0005 },
+          1_000,
+          500,
+          0,
+          800,
+          options,
+        ),
+      ).toBeCloseTo(1.6, 10);
+      expect(XAI_CHAT_MODELS.find((model) => model.id === 'grok-4.7')?.aliases).toBeUndefined();
+      expect(XAI_CHAT_MODELS.some((model) => model.id === 'grok-4.7-fast')).toBe(false);
+      expect(calculateXAICost('grok-test-model', { cost: 0.001 }, 10, 20)).toBe(0.03);
+      expect(calculateXAICost('grok-test-model', { inputCost: 0.001 }, 10, 20)).toBeUndefined();
     });
 
     it('adds reasoning tokens at the output rate when billed separately (chat completions)', () => {
@@ -971,7 +1742,7 @@ describe('xAI Chat Provider', () => {
 
     it('bills separately-reported reasoning at the long-context output rate at the threshold', () => {
       // Chat completions with a >200K prompt: the whole request (including the
-      // separately-reported reasoning tokens) switches to the $4/$12/$1 tier.
+      // separately-reported reasoning tokens) switches to the $4/$12/$0.60 tier.
       expect(
         calculateXAICost('grok-4.5', {}, 200_001, 1_000, 500, 100_000, {
           reasoningBilledSeparately: true,
@@ -980,7 +1751,7 @@ describe('xAI Chat Provider', () => {
     });
 
     it('bills a reasoning-only chat turn when reasoning is billed separately', () => {
-      // completion 0 + reasoning 50: (219 - 128) * 2 + 128 * 0.3 + 50 * 6 ticks-equivalent.
+      // completion 0 + reasoning 50: (219 - 128) * 2 + 128 * 0.3 + 50 * 6.
       expect(
         calculateXAICost('grok-4.5', {}, 219, 0, 50, 128, { reasoningBilledSeparately: true }),
       ).toBeCloseTo((91 * 2 + 128 * 0.3 + 50 * 6) / 1e6, 12);
@@ -1029,6 +1800,35 @@ describe('xAI Chat Provider', () => {
       ).toBe(2.5);
     });
 
+    it.each([
+      [{}, (200 * 4 + 800 * 0.6 + 500 * 12) / 1e6],
+      [{ cost: 0.001 }, 1.5],
+      [{ inputCost: 0.001 }, 1 + (500 * 12) / 1e6],
+      [{ outputCost: 0.001 }, (200 * 4 + 800 * 0.6) / 1e6 + 0.5],
+      [{ cacheReadCost: 0.001 }, (200 * 4 + 500 * 12) / 1e6 + 0.8],
+      [{ cost: 0.002, inputCost: 0.001, outputCost: 0.003, cacheReadCost: 0.0005 }, 2.1],
+      [{ cost: 0 }, 0],
+      [{ inputCost: 0 }, (500 * 12) / 1e6],
+      [{ outputCost: 0 }, (200 * 4 + 800 * 0.6) / 1e6],
+      [{ cacheReadCost: 0 }, (200 * 4 + 500 * 12) / 1e6],
+    ] as const)(
+      'applies priority pricing only to catalog rates with overrides %j',
+      (config, expected) => {
+        expect(
+          calculateXAICost('grok-4.5', config, 1_000, 500, 0, 800, { serviceTier: 'priority' }),
+        ).toBeCloseTo(expected, 12);
+      },
+    );
+
+    it('preserves explicit output pricing with priority long-context input and cache rates', () => {
+      expect(
+        calculateXAICost('grok-4.5', { outputCost: 0.001 }, 200_000, 1_000, 500, 100_000, {
+          serviceTier: 'priority',
+          reasoningBilledSeparately: true,
+        }),
+      ).toBeCloseTo((100_000 * 8 + 100_000 * 1.2) / 1e6 + 1.5, 12);
+    });
+
     it('does not double-count reasoning tokens already included in completion tokens', () => {
       // grok-3-mini-beta: input $0.30/M, output $0.50/M.
       const baseline = calculateXAICost('grok-3-mini-beta', {}, 500, 500);
@@ -1056,6 +1856,24 @@ describe('xAI Chat Provider', () => {
       // 0 input @ 0.30/M + 200 completion @ 0.50/M (the 50 reasoning tokens are
       // already part of the 200 completion tokens, not added on top).
       expect(cost).toBeCloseTo(0.0001, 10);
+    });
+
+    it.each([
+      'grok-4.3',
+      'grok-4.3-latest',
+      'grok-4.20-0309-reasoning',
+      'grok-4.20-0309-non-reasoning',
+      'grok-4.20-multi-agent-0309',
+      'grok-4.20',
+    ])('switches %s to published long-context pricing at 200k input tokens', (modelName) => {
+      expect(calculateXAICost(modelName, {}, 199_999, 1_000, 0, 100_000)).toBeCloseTo(
+        (99_999 * 1.25 + 100_000 * 0.2 + 1_000 * 2.5) / 1e6,
+        10,
+      );
+      expect(calculateXAICost(modelName, {}, 200_000, 1_000, 0, 100_000)).toBeCloseTo(
+        (100_000 * 2.5 + 100_000 * 0.4 + 1_000 * 5) / 1e6,
+        10,
+      );
     });
   });
 
@@ -1240,6 +2058,36 @@ describe('xAI Chat Provider', () => {
       expect(result.output).toBe('Test response');
       expect(result.cost).toBeDefined();
       expect(typeof result.cost).toBe('number');
+    });
+
+    it('uses the effective passthrough model for fallback pricing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Build response' } }],
+          usage: {
+            prompt_tokens: 100_000,
+            completion_tokens: 100_000,
+            total_tokens: 200_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.3', {
+        config: { apiKey: 'test-key' } as any,
+      });
+      const result = await provider.callApi('test prompt', {
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+          config: { passthrough: { model: 'grok-build-0.1' } },
+        },
+        vars: {},
+      });
+
+      expect(result.cost).toBeCloseTo(0.3, 10);
     });
 
     it('should apply cache-read pricing from normalized token usage', async () => {
@@ -1476,15 +2324,53 @@ describe('xAI Chat Provider', () => {
       expect(result.cost).toBe(0.0123456789);
     });
 
-    it('honors explicit custom cost overrides instead of reported ticks', async () => {
+    it.each(['default', 'priority'] as const)(
+      'honors explicit custom cost overrides instead of reported ticks for %s processing',
+      async (serviceTier) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [{ message: { content: 'custom-priced response' } }],
+            service_tier: serviceTier,
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              total_tokens: 15,
+              prompt_tokens_details: { cached_tokens: 8 },
+              cost_in_usd_ticks: 123_456_789,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = createXAIProvider('xai:grok-4.5', {
+          config: {
+            config: {
+              apiKey: 'test-key',
+              cost: 0.001,
+              service_tier: 'priority',
+            },
+          },
+        });
+
+        const result = await provider.callApi('test prompt');
+
+        expect(result.cost).toBe(0.015);
+      },
+    );
+
+    it('uses current grok-4.5 fallback pricing when billed ticks are absent', async () => {
+      // Real grok-4.5 response shape captured 2026-07-09, without billed ticks.
       mockFetchWithCache.mockResolvedValueOnce({
         data: {
-          choices: [{ message: { content: 'custom-priced response' } }],
+          choices: [{ message: { content: '4' } }],
           usage: {
-            prompt_tokens: 10,
-            completion_tokens: 5,
-            total_tokens: 15,
-            cost_in_usd_ticks: 123_456_789,
+            prompt_tokens: 219,
+            completion_tokens: 1,
+            total_tokens: 270,
+            prompt_tokens_details: { cached_tokens: 128 },
+            completion_tokens_details: { reasoning_tokens: 50 },
           },
         },
         cached: false,
@@ -1493,17 +2379,38 @@ describe('xAI Chat Provider', () => {
       });
 
       const provider = createXAIProvider('xai:grok-4.5', {
-        config: {
-          config: {
-            apiKey: 'test-key',
-            cost: 0.001,
-          },
-        },
+        config: { apiKey: 'test-key' } as any,
       });
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.cost).toBe(0.015);
+      // (91 uncached * $2/M) + (128 cached * $0.30/M) + (51 output * $6/M).
+      expect(result.cost).toBeCloseTo(0.0005264, 12);
+    });
+
+    it('applies the confirmed priority premium to chat fallback pricing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'priority response' } }],
+          service_tier: 'priority',
+          usage: {
+            prompt_tokens: 100_000,
+            completion_tokens: 100_000,
+            total_tokens: 200_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: { apiKey: 'test-key', service_tier: 'priority' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeCloseTo(1.6, 10);
     });
   });
 });

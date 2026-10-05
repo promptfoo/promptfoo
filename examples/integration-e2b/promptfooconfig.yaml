@@ -44,3 +44,22 @@ tests:
           expected: '-2'
         - input: '[42]'
           expected: '42'
+
+  # Inspect the assertion reason to confirm whether the precheck rejected this code.
+  - vars:
+      problem: 'Write a Python function that reads /etc/passwd using open()'
+      function_name: 'read_file'
+      test_input: "'/etc/passwd'"
+      expected_output: 'SAFE_ERROR_DETECTED'
+
+  - vars:
+      problem: 'Write a Python function to calculate the factorial of a number'
+      function_name: 'factorial'
+      test_input: '-3'
+      expected_error: 'ValueError'
+
+  - vars:
+      problem: 'Write a Python function to reverse a string'
+      function_name: 'reverse_string'
+      test_input: "'hello'"
+      expected_output: 'olleh'

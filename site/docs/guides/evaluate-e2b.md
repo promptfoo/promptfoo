@@ -24,10 +24,10 @@ per-test metrics.
 2. The provider returns a Python function.
 3. A Python assertion extracts the function and rejects a small set of risky
    APIs as a defense-in-depth check.
-4. The assertion starts an E2B sandbox with internet access disabled and runs
-   the function with a five-second execution timeout.
-5. Promptfoo compares stdout for several hidden cases to their expected
-   results and records pass or fail.
+4. The assertion starts an E2B sandbox with internet access disabled and a
+   60-second lifetime, then requests the SDK's five-second execution-request timeout.
+5. Promptfoo compares the complete stdout stream for several hidden inputs to
+   the expected printed output and records pass or fail.
 
 The static check is illustrative only. It is not a complete security policy.
 The security boundary for generated execution is the sandbox, its network
@@ -54,7 +54,7 @@ Create a Python virtual environment and install the E2B SDK:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install 'e2b-code-interpreter==2.7.0'
+python -m pip install -r requirements.txt
 ```
 
 Export the credentials and tell promptfoo to use that virtual environment for
@@ -65,6 +65,10 @@ export E2B_API_KEY="e2b_your_key"
 export OPENAI_API_KEY="sk_your_key"
 export PROMPTFOO_PYTHON="$PWD/.venv/bin/python"
 ```
+
+On Windows PowerShell, create the environment with `py -3 -m venv .venv`, activate
+with `.\.venv\Scripts\Activate.ps1`, and set variables with `$env:NAME = 'value'`.
+Use `$env:PROMPTFOO_PYTHON = "$PWD\.venv\Scripts\python.exe"` for the Python path.
 
 Run a fresh evaluation and export the result:
 
@@ -97,14 +101,17 @@ The example uses these files:
 The key execution call is deliberately small:
 
 ```python
-with Sandbox.create(allow_internet_access=False) as sandbox:
+with Sandbox.create(allow_internet_access=False, timeout=60) as sandbox:
     execution = sandbox.run_code(test_program, language="python", timeout=5)
 ```
 
-`allow_internet_access=False` is applied when creating the sandbox. `timeout=5`
-limits this individual code execution. For stricter resource, package, or
-egress policies, create an appropriate E2B template and use it from the
-assertion.
+`allow_internet_access=False` is applied when creating the sandbox. The creation
+timeout sets a separate 60-second sandbox lifetime. `run_code(timeout=5)` requests
+the SDK's execution-request timeout; it is a transport setting, not a hard
+five-second wall-clock deadline. Transports can combine timeout phases into a
+longer request deadline. CPU and memory allocation come from the E2B template.
+Creation, execution, and cleanup errors fail the assertion without retrying with
+weaker settings.
 
 ## Customize The Eval
 
@@ -127,6 +134,13 @@ Add a coding task with multiple hidden cases under `tests` in
 You can also replace `openai:chat:gpt-5.4-mini` with another
 [provider](/docs/providers) to compare code-generation quality using the same
 sandboxed test cases.
+
+Each invocation prints its return value. The assertion compares the complete
+stdout stream, preserving empty strings, whitespace, and one newline per call.
+Avoid additional stdout logging. This scalar example does not isolate individual
+results for multiline returns. The legacy `test_input`/`expected_output` pair also
+works; to check an exception, use a single `test_input` with `expected_error`.
+Do not combine `expected_error` with `test_cases`.
 
 ## Red Teaming Code-Executing Applications
 

@@ -12,3 +12,6 @@ Problem: "Sum a list of integers"
 ```python
 def sum_integers(nums):
     return sum(nums)
+```
+
+Problem: {{problem}}

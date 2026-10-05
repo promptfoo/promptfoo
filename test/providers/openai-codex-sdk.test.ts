@@ -1,4 +1,6 @@
+import { execFileSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
@@ -95,6 +97,41 @@ function restoreEnvVar(name: 'OPENAI_API_KEY' | 'CODEX_API_KEY', value: string |
   }
 }
 
+const bundledCodexCli = path.resolve(process.cwd(), 'node_modules/@openai/codex/bin/codex.js');
+
+describe('bundled Codex model metadata', () => {
+  it.runIf(fs.existsSync(bundledCodexCli))(
+    'includes the supported Sol and Luna reasoning modes offline',
+    () => {
+      const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-models-'));
+      try {
+        const output = execFileSync(
+          process.execPath,
+          [bundledCodexCli, 'debug', 'models', '--bundled'],
+          {
+            cwd: codexHome,
+            encoding: 'utf8',
+            env: { ...process.env, CODEX_HOME: codexHome, CODEX_API_KEY: '', OPENAI_API_KEY: '' },
+            maxBuffer: 10 * 1024 * 1024,
+          },
+        );
+        const catalog = JSON.parse(output) as {
+          models: Array<{ slug: string; supported_reasoning_levels: Array<{ effort: string }> }>;
+        };
+        const modelEfforts = (slug: string) =>
+          catalog.models
+            .find((model) => model.slug === slug)
+            ?.supported_reasoning_levels.map(({ effort }) => effort);
+        expect(modelEfforts('gpt-6-sol')).toEqual(expect.arrayContaining(['high', 'max', 'ultra']));
+        expect(modelEfforts('gpt-6-luna')).toEqual(expect.arrayContaining(['high', 'max']));
+        expect(modelEfforts('gpt-6-luna')).not.toContain('ultra');
+      } finally {
+        fs.rmSync(codexHome, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
 describe('OpenAICodexSDKProvider', () => {
   let statSyncSpy: MockInstance;
   let existsSyncSpy: MockInstance;
@@ -145,6 +182,20 @@ describe('OpenAICodexSDKProvider', () => {
     await clearCache();
   });
 
+  it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
+    const provider = new OpenAICodexSDKProvider({ config: {} });
+    cliState.withEnvFileOverrides({ PATH: 'file-path', PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () => {
+      const env = (provider as any).prepareEnvironment({ inherit_process_env: inheritProcessEnv });
+      expect(env.PATH).toBe('file-path');
+      expect(env.PROMPTFOO_REVIEW_ENV_PROBE).toBe(inheritProcessEnv ? 'file' : undefined);
+      const explicit = (provider as any).prepareEnvironment({
+        inherit_process_env: inheritProcessEnv,
+        cli_env: { PROMPTFOO_REVIEW_ENV_PROBE: 'explicit' },
+      });
+      expect(explicit.PROMPTFOO_REVIEW_ENV_PROBE).toBe('explicit');
+    });
+  });
+
   describe('constructor', () => {
     it('should initialize with default config', () => {
       const provider = new OpenAICodexSDKProvider();
@@ -190,7 +241,8 @@ describe('OpenAICodexSDKProvider', () => {
       expect(provider.id()).toBe('custom-provider-id');
     });
 
-    it.each(['unknown-model', 'gpt-5.6'])('should warn about unknown model %s', (model) => {
+    it('should warn about an unknown model', () => {
+      const model = 'unknown-model';
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model } });
@@ -204,9 +256,13 @@ describe('OpenAICodexSDKProvider', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.4-mini' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.6-sol' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-sol' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-luna' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -1848,6 +1904,8 @@ describe('OpenAICodexSDKProvider', () => {
       it.each([
         ['gpt-6-astra', 'max'],
         ['gpt-6-astra', 'ultra'],
+        ['gpt-6-sol', 'max'],
+        ['gpt-6-luna', 'max'],
         ['gpt-5.6-sol', 'max'],
         ['gpt-5.6-sol', 'ultra'],
         ['gpt-5.6-terra', 'max'],
@@ -3192,7 +3250,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.cost).toBeCloseTo(0.066125, 10);
       });
 
-      it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+      it.each(['gpt-5.6', 'gpt-5.4-mini', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
         'should recognize %s as a known model',
         (model) => {
           const provider = new OpenAICodexSDKProvider({
@@ -3205,37 +3263,156 @@ describe('OpenAICodexSDKProvider', () => {
 
       it.each([
         ['gpt-6-astra', 10, 1, 50],
+        ['gpt-6-sol', 2, 0.2, 10],
+        ['gpt-6-luna', 0.1, 0.01, 0.5],
         ['gpt-5.6-sol', 4, 0.4, 20],
         ['gpt-5.6-terra', 2, 0.2, 12],
         ['gpt-5.6-luna', 0.2, 0.02, 1.2],
         ['openai.gpt-5.6-sol', 4.4, 0.44, 22],
         ['openai.gpt-5.6-terra', 2.2, 0.22, 13.2],
         ['openai.gpt-5.6-luna', 0.22, 0.022, 1.32],
+      ])('leaves %s cost unknown without cache-write tokens', async (model) => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model,
+            ...(model.startsWith('openai.') ? { model_provider: 'amazon-bedrock' } : {}),
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeUndefined();
+      });
+
+      it('should calculate gpt-5.6 cost when Codex reports cache-write tokens', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.6-sol' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeCloseTo(0.02645, 6);
+        expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
+      });
+
+      it.each([
+        ['openai.gpt-5.4', 0.0207625],
+        ['openai.gpt-5.5', 0.041525],
+      ] as const)('preserves existing Bedrock Codex billing for %s', async (model, cost) => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        for (const providerConfig of [
+          { model_provider: 'amazon-bedrock' },
+          { cli_config: { model_provider: 'amazon-bedrock' } },
+        ]) {
+          const provider = new OpenAICodexSDKProvider({
+            config: { model, ...providerConfig },
+          });
+          const result = await provider.callApi('Test prompt');
+          expect(result.error).toBeUndefined();
+          expect(result.cost).toBeCloseTo(cost, 10);
+          expect(provider.config.model).toBe(model);
+        }
+      });
+
+      it('should calculate Bedrock cost for an amazon-bedrock model id', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'openai.gpt-5.6-sol',
+            model_provider: 'amazon-bedrock',
+          },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeCloseTo(0.029095, 8);
+        expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
+      });
+
+      it('should calculate gpt-5.6 cost when a custom Codex binary reports positive cache-write tokens', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'gpt-5.6-sol',
+            codex_path_override: '/custom/path/to/codex',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeCloseTo(0.02645, 6);
+        expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
+      });
+
+      it.each([
+        ['omits cache-write usage', undefined],
+        ['reports zero cache-write usage', 0],
       ])(
-        'should calculate %s cost without cache-write tokens',
-        async (model, input, cachedInput, output) => {
+        'should not estimate gpt-5.6 cost when a custom Codex binary %s',
+        async (_description, cacheWriteInputTokens) => {
           mockRun.mockResolvedValue(
             createMockResponse('Response', {
               input_tokens: 2000,
               cached_input_tokens: 500,
+              cache_write_input_tokens: cacheWriteInputTokens,
               output_tokens: 1000,
             }),
           );
 
           const provider = new OpenAICodexSDKProvider({
             config: {
-              model,
-              ...(model.startsWith('openai.') ? { model_provider: 'amazon-bedrock' } : {}),
+              model: 'gpt-5.6-sol',
+              codex_path_override: '/custom/path/to/codex',
             },
             env: { OPENAI_API_KEY: 'test-api-key' },
           });
 
           const result = await provider.callApi('Test prompt');
 
-          expect(result.cost).toBeCloseTo(
-            (1500 * input + 500 * cachedInput + 1000 * output) / 1e6,
-            10,
-          );
+          expect(result.cost).toBeUndefined();
         },
       );
 

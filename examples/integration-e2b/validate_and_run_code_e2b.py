@@ -1,16 +1,15 @@
-# validate_and_run_code_e2b.py
-import json
-import logging
+"""Grade generated Python in an E2B sandbox with outbound internet disabled."""
+
 import re
 import time
 
 from e2b_code_interpreter import Sandbox
 from metrics import write_metrics
 
-# Robust fenced code regex
 FENCE_RE = re.compile(r"```(?:\s*python)?\s*\r?\n(.*?)```", re.DOTALL | re.IGNORECASE)
 
-# Unsafe patterns: pre-exec static scanner
+# This illustrative precheck is not a security boundary. Generated code executes
+# in an E2B sandbox, never in the local Python process.
 UNSAFE_PATTERNS = [
     r"\bimport\s+socket\b",
     r"\bimport\s+requests\b",
@@ -23,16 +22,12 @@ UNSAFE_PATTERNS = [
     r"open\(\s*['\"]\/proc",
     r"__import__\(",
 ]
-
-logger = logging.getLogger(__name__)
+SANDBOX_TIMEOUT_SECONDS = 60
+EXECUTION_TIMEOUT_SECONDS = 5
 
 
 def is_unsafe(code: str) -> bool:
-    """Return True when generated code contains blocked imports or APIs."""
-    for p in UNSAFE_PATTERNS:
-        if re.search(p, code):
-            return True
-    return False
+    return any(re.search(pattern, code) for pattern in UNSAFE_PATTERNS)
 
 
 def _extract_function(output: str, fn_name: str) -> str | None:
@@ -55,229 +50,87 @@ def _extract_function(output: str, fn_name: str) -> str | None:
     return None
 
 
-def _try_parse_logs_obj(logs_obj):
-    """Try multiple ways to extract stdout/stderr from logs object or string."""
-    if isinstance(logs_obj, (dict, list)):
-        if isinstance(logs_obj, dict) and "stdout" in logs_obj:
-            out = logs_obj.get("stdout")
-            err = logs_obj.get("stderr", "")
-            if isinstance(out, list):
-                out = "".join(map(str, out))
-            if isinstance(err, list):
-                err = "".join(map(str, err))
-            return str(out).strip(), str(err).strip()
-        if isinstance(logs_obj, list):
-            outs, errs = [], []
-            for it in logs_obj:
-                if isinstance(it, dict):
-                    if it.get("stdout"):
-                        outs.append(it.get("stdout"))
-                    if it.get("stderr"):
-                        errs.append(it.get("stderr"))
-            if outs or errs:
-                outs = "".join(map(str, outs))
-                errs = "".join(map(str, errs))
-                return str(outs).strip(), str(errs).strip()
-
-    if hasattr(logs_obj, "to_json"):
-        try:
-            j = logs_obj.to_json()
-            return _try_parse_logs_obj(j)
-        except Exception:
-            logger.debug("Failed to parse sandbox logs via to_json()", exc_info=True)
-
-    if hasattr(logs_obj, "stdout") or hasattr(logs_obj, "stderr"):
-        try:
-            out = getattr(logs_obj, "stdout", "")
-            err = getattr(logs_obj, "stderr", "")
-            if isinstance(out, list):
-                out = "".join(map(str, out))
-            if isinstance(err, list):
-                err = "".join(map(str, err))
-            return str(out).strip(), str(err).strip()
-        except Exception:
-            logger.debug("Failed to parse sandbox log stream fields", exc_info=True)
-
-    if isinstance(logs_obj, str):
-        try:
-            parsed = json.loads(logs_obj)
-            return _try_parse_logs_obj(parsed)
-        except Exception:
-            logger.debug("Failed to decode sandbox logs as JSON", exc_info=True)
-            m = re.search(r"stdout:\s*\[([^\]]*)\]", logs_obj)
-            if m:
-                inner = m.group(1).strip()
-                items = re.findall(r"'(.*?)'|\"(.*?)\"", inner)
-                strs = []
-                for a, b in items:
-                    if a:
-                        strs.append(a)
-                    elif b:
-                        strs.append(b)
-                out = "".join(strs)
-                return out.strip(), ""
-    return "", ""
-
-
-def _stdout_from_result(res) -> tuple[str, str]:
-    """Return stdout and stderr strings from an E2B execution result."""
-    if hasattr(res, "results") and res.results:
-        try:
-            first = res.results[0]
-            if isinstance(first, dict):
-                out = (
-                    first.get("stdout")
-                    or first.get("output")
-                    or first.get("text")
-                    or ""
-                )
-                err = first.get("stderr") or ""
-                if isinstance(out, list):
-                    out = "".join(map(str, out))
-                if isinstance(err, list):
-                    err = "".join(map(str, err))
-                if out or err:
-                    return str(out).strip(), str(err).strip()
-        except Exception:
-            logger.debug("Failed to parse sandbox result entries", exc_info=True)
-
-    logs_field = getattr(res, "logs", None)
-    if logs_field is not None:
-        out, err = _try_parse_logs_obj(logs_field)
-        if out or err:
-            return out, err
-
-    if getattr(res, "text", None):
-        return str(res.text).strip(), ""
-
-    if hasattr(res, "to_json"):
-        try:
-            j = res.to_json()
-            return _try_parse_logs_obj(j)
-        except Exception:
-            logger.debug(
-                "Failed to serialize sandbox result via to_json()", exc_info=True
-            )
-
-    return "", ""
-
-
-def _run_code_in_sandbox(sbx, code: str):
-    """Execute Python code with the supported E2B execution timeout."""
-    return sbx.run_code(code, language="python", timeout=5)
-
-
-def _get_test_cases(context) -> list[tuple[str, str]]:
-    """Read one or more hidden input/output checks from assertion variables."""
-    cases = context["vars"].get("test_cases")
-    if cases is None:
-        return [
-            (
-                str(context["vars"]["test_input"]),
-                str(context["vars"]["expected_output"]),
-            )
-        ]
-    if not isinstance(cases, list) or not cases:
-        raise ValueError("test_cases must be a non-empty list")
-
-    normalized = []
-    for case in cases:
-        if not isinstance(case, dict) or "input" not in case or "expected" not in case:
-            raise ValueError("each test_cases entry must include input and expected")
-        normalized.append((str(case["input"]), str(case["expected"])))
-    return normalized
-
-
 def get_assert(output, context):
-    """Execute a generated function in E2B and compare its hidden test outputs."""
-    fn_name = context["vars"]["function_name"]
-    task_id = context.get("id") or f"{fn_name}-{time.time_ns()}"
+    task_id = context.get("id", str(time.time()))
+    provider = context.get("provider", "unknown")
+    if isinstance(provider, dict):
+        provider = provider.get("label") or provider.get("id") or "unknown"
+    model = context.get("model", "unknown")
+    variables = context["vars"]
+    started = time.monotonic()
 
-    try:
-        test_cases = _get_test_cases(context)
-    except ValueError as e:
-        write_metrics(task_id, False, 0.0, extra={"reason": "invalid_test_cases"})
-        return {"pass": False, "score": 0, "reason": f"Invalid test cases: {e}"}
-
-    function_code = _extract_function(output, fn_name)
-    if not function_code:
-        snippet = output.strip()[:300].replace("\n", " ")
-        write_metrics(task_id, False, 0.0, extra={"reason": "no_code_found"})
-        return {
-            "pass": False,
-            "score": 0,
-            "reason": f"No Python code block found (first 300 chars: {snippet})",
-        }
-
-    # Defense in depth only; the E2B sandbox is the execution boundary.
-    if is_unsafe(function_code):
-        write_metrics(task_id, False, 0.0, extra={"reason": "unsafe_pattern"})
-        return {
-            "pass": False,
-            "score": 0,
-            "reason": "Unsafe pattern detected in generated code",
-        }
-
-    invocations = "\n".join(
-        f"print({fn_name}({test_input}))" for test_input, _ in test_cases
-    )
-    test_program = f"{function_code}\n\n{invocations}\n"
-    expected = "\n".join(expected_output for _, expected_output in test_cases)
-
-    start = time.time()
-    try:
-        with Sandbox.create(allow_internet_access=False) as sbx:
-            res = _run_code_in_sandbox(sbx, test_program)
-    except Exception as e:
-        duration = time.time() - start
-        write_metrics(task_id, False, duration, extra={"error": str(e)})
-        return {
-            "pass": False,
-            "score": 0,
-            "reason": f"Sandbox execution error: {e}",
-        }
-
-    duration = time.time() - start
-    stdout, stderr = _stdout_from_result(res)
-    err_obj = getattr(res, "error", None)
-
-    if err_obj or stderr:
-        dbg = ""
-        try:
-            dbg = (
-                getattr(res, "to_json")()
-                if hasattr(res, "to_json")
-                else str(getattr(res, "logs", ""))[:800]
-            )
-        except Exception:
-            dbg = str(getattr(res, "logs", ""))[:800]
+    def result(passed, reason):
         write_metrics(
-            task_id, False, duration, extra={"error": err_obj or stderr, "debug": dbg}
+            task_id,
+            provider,
+            model,
+            passed,
+            time.monotonic() - started,
+            extra={"reason": reason},
         )
-        return {
-            "pass": False,
-            "score": 0,
-            "reason": f"Execution error: {err_obj or stderr} | debug: {dbg}",
-        }
+        return {"pass": passed, "score": int(passed), "reason": reason}
 
-    success = stdout == expected
-    write_metrics(
-        task_id,
-        success,
-        duration,
-        extra={"stdout": stdout[:500], "test_cases": len(test_cases)},
+    function_name = variables["function_name"]
+    expected_error = variables.get("expected_error")
+    try:
+        if "test_cases" in variables:
+            if expected_error:
+                raise ValueError("expected_error cannot be combined with test_cases")
+            cases = variables["test_cases"]
+            if not isinstance(cases, list) or not cases:
+                raise ValueError("test_cases must be a non-empty list")
+            if any(
+                not isinstance(case, dict)
+                or "input" not in case
+                or "expected" not in case
+                for case in cases
+            ):
+                raise ValueError(
+                    "each test_cases entry must include input and expected"
+                )
+        else:
+            cases = [
+                {
+                    "input": variables["test_input"],
+                    "expected": "" if expected_error else variables["expected_output"],
+                }
+            ]
+    except (KeyError, ValueError) as error:
+        return result(False, f"Invalid test cases: {error}")
+
+    code = _extract_function(output, function_name)
+    if not code:
+        return result(False, f"No Python function named {function_name} found")
+    if is_unsafe(code):
+        return result(False, "Unsafe pattern detected in generated code")
+
+    invocations = "".join(
+        f"print({function_name}({case['input']}))\n" for case in cases
     )
-    if success:
-        return {
-            "pass": True,
-            "score": 1,
-            "reason": f"Correct outputs for {len(test_cases)} cases: {stdout}",
-        }
-    logs_preview = getattr(res, "logs", None)
-    if isinstance(logs_preview, str) and len(logs_preview) > 400:
-        logs_preview = logs_preview[:400] + "...(truncated)"
-    return {
-        "pass": False,
-        "score": 0,
-        "reason": f"Expected {expected}, got {stdout or '(empty)'} | logs: {logs_preview}",
-    }
+    program = f"{code}\n\n{invocations}"
+    try:
+        # E2B's SDK accepts internet policy when creating the sandbox, and an
+        # request timeout on run_code. CPU/memory limits are template settings,
+        # not run_code parameters. Never retry with weaker settings on failure.
+        with Sandbox.create(
+            allow_internet_access=False, timeout=SANDBOX_TIMEOUT_SECONDS
+        ) as sandbox:
+            execution = sandbox.run_code(
+                program, language="python", timeout=EXECUTION_TIMEOUT_SECONDS
+            )
+    except Exception as error:
+        return result(False, f"Sandbox execution error: {error}")
+
+    if execution.error:
+        error = execution.error
+        if expected_error and error.name == expected_error:
+            return result(True, f"Expected error: {error.name}")
+        return result(False, f"Execution error: {error.name}: {error.value}")
+    if expected_error:
+        return result(False, f"Expected {expected_error}, but execution succeeded")
+
+    stdout = "".join(execution.logs.stdout)
+    expected = "".join(f"{case['expected']}\n" for case in cases)
+    if stdout == expected:
+        return result(True, f"Correct output: {stdout!r}")
+    return result(False, f"Expected {expected!r}, got {stdout!r}")
