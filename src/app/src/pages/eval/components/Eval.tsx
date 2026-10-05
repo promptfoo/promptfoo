@@ -518,10 +518,15 @@ export default function Eval({ fetchId }: EvalOptions) {
     // would otherwise run their async table reloads concurrently — and whichever DB response
     // landed last, possibly an OLDER eval's, would win the table. Serialize the handler runs so
     // events apply in arrival order. The returned promise lets tests await the queued work.
+    //
+    // An event can still be queued when this connection is replaced. The handler in the ref
+    // is by then the one of the new endpoint's page, which would take the event for one of
+    // its own, so what the old connection queued is dropped instead.
+    let isCurrentConnection = true;
     let pending: Promise<void> = Promise.resolve();
     const enqueue = (data: EvalRefreshSignal): Promise<void> => {
       pending = pending
-        .then(() => handleResultsFileRef.current(data))
+        .then(() => (isCurrentConnection ? handleResultsFileRef.current(data) : undefined))
         .catch((error) => {
           logger.error('[Eval] Error handling socket update', { error });
         });
@@ -543,6 +548,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       });
 
     return () => {
+      isCurrentConnection = false;
       socket.disconnect();
       setIsStreaming(false);
     };

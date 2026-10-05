@@ -638,6 +638,54 @@ describe('Eval', () => {
     expect(getByTestId('results-view').getAttribute('data-recent-eval-ids')).toBe('');
   });
 
+  it('drops a socket update that was still queued when the API endpoint changed', async () => {
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
+    let answerRecents!: (response: Response) => void;
+    const recents = new Promise<Response>((resolve) => {
+      answerRecents = resolve;
+    });
+    const { container } = render(
+      <MemoryRouter>
+        <Eval fetchId="pinned-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    vi.mocked(callApi).mockReturnValueOnce(recents);
+    // The new endpoint has an eval of the same id, and others.
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-of-the-new-endpoint' }] }),
+    } as Response);
+    const updateOnOldConnection = mockSocketHandlers.get('update');
+    let queued!: Promise<void> | undefined;
+    await act(async () => {
+      // The first update holds the queue while it waits for the old endpoint's evals.
+      updateOnOldConnection?.({ evalId: 'pinned-eval' });
+      // Behind it, the old endpoint says that its eval of that id was deleted.
+      queued = updateOnOldConnection?.({ deletedEvalIds: ['pinned-eval'] });
+      mockApiConfig.apiBaseUrl = 'http://other-host';
+      render(
+        <MemoryRouter>
+          <Eval fetchId="pinned-eval" />
+        </MemoryRouter>,
+        { container },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    mockNavigate.mockClear();
+
+    await act(async () => {
+      answerRecents({ ok: true, json: async () => ({ data: [] }) } as Response);
+      await queued;
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // The deletion was the old endpoint's, so the page of the new one stays on its eval.
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   it('keeps the recent evals of the endpoint when only the route changed', async () => {
     vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
     let answerRecents!: (response: Response) => void;
