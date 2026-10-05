@@ -1136,6 +1136,57 @@ describe('sanitizeMcpToolData', () => {
     },
   );
 
+  it.each(['apiHost', 'env.SERVICE_HOST'])(
+    'guards quoted scalar %s credentials before host normalization',
+    (name) => {
+      const host = (value: string) =>
+        name.startsWith('env.') ? { env: { [name.slice(4)]: value } } : { [name]: value };
+      for (const field of ['url', 'callbackUrl', 'apiBaseUrl']) {
+        for (const literal of ['password=scalar-fixture', 'token=scalar-fixture']) {
+          const args = { [field]: JSON.stringify({ ...host(JSON.stringify(literal)), page: 2 }) };
+          const original = structuredClone(args);
+          expect(JSON.stringify(sanitizeMcpToolData(args))).not.toContain('scalar-fixture');
+          expect(args).toEqual(original);
+        }
+        for (const scalar of ['gateway.example', 'page=2', null, 42, false]) {
+          const args = { [field]: JSON.stringify({ ...host(JSON.stringify(scalar)), page: 2 }) };
+          expect(sanitizeMcpToolData(args)).toEqual(args);
+        }
+      }
+    },
+  );
+
+  it.each(['url', 'callbackUrl', 'apiBaseUrl', 'apiHost'])(
+    'uses parsed userinfo for guarded %s keys and scalar/host values',
+    (role) => {
+      for (const scheme of ['https:', 'http:', 'ftp:', 'ws:']) {
+        for (const slash of ['', '/', '\\', '\\\\', '/\\']) {
+          const value = `${scheme}${slash}alice:parser-fixture@example.test/public`;
+          expect(new URL(value).password).toBe('parser-fixture');
+          for (const payload of [
+            { target: JSON.stringify(value) },
+            { apiHost: value },
+            { env: { SERVICE_HOST: value } },
+            { [value]: 'public', '[REDACTED]': 'authored' },
+            { headers: { [value]: 'public', '[REDACTED]': 'authored' } },
+            { authHeaders: { [value]: 'public', '[REDACTED]': 'authored' } },
+          ]) {
+            const args = { [role]: JSON.stringify({ ...payload, page: 2 }) };
+            const original = structuredClone(args);
+            const result = sanitizeMcpToolData(args);
+            expect(JSON.stringify(result)).not.toContain('parser-fixture');
+            expect(args).toEqual(original);
+            const decoded = JSON.parse((result as Record<string, string>)[role]);
+            expect(decoded.page).toBe(2);
+          }
+          const publicValue = `${scheme}${slash}example.test/public`;
+          const args = { [role]: JSON.stringify({ target: JSON.stringify(publicValue), page: 2 }) };
+          expect(sanitizeMcpToolData(args)).toEqual(args);
+        }
+      }
+    },
+  );
+
   it.each(['apiHost', 'env.SERVICE_HOST'])('walks nested raw %s JSON payloads once', (name) => {
     const wrap = (value: string) =>
       name.startsWith('env.') ? { env: { [name.slice(4)]: value } } : { [name]: value };

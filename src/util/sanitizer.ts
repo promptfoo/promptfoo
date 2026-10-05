@@ -39,6 +39,21 @@ function hasUrlUserinfo(url: string): boolean {
   return atIndex > 0;
 }
 
+// Decoded URL payloads also accept the special-scheme spellings recognized by
+// the platform parser, such as a single slash or backslash authority. Keep the
+// generic sanitizer's lexical policy unchanged outside this inherited context.
+function hasUrlPayloadUserinfo(value: string): boolean {
+  if (hasUrlUserinfo(value)) {
+    return true;
+  }
+  try {
+    const parsed = new URL(value);
+    return Boolean(parsed.username || parsed.password);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Names that hold a credential word without being a credential: special tokens, cursors and
  * token limits, and settings. Takes a name from `normalizeFieldName`.
@@ -171,7 +186,7 @@ function unparseableUrlMightLeakSecret(
   compoundContext?: CompoundKeyContext,
 ): boolean {
   return (
-    hasUrlUserinfo(url) ||
+    (compoundContext?.guardUrlPayload ? hasUrlPayloadUserinfo(url) : hasUrlUserinfo(url)) ||
     looksLikeSecret(url.trim()) ||
     hasSecretFormSegment(url, preservePureTemplates, compoundContext)
   );
@@ -1301,6 +1316,7 @@ function sanitizeJsonString(
   return guardUrlPayload &&
     (unparseableUrlMightLeakSecret(scalar, guardUrlPayload !== 'logging', {
       maxDepth: maxDepth - depth,
+      guardUrlPayload,
     }) ||
       (guardUrlPayload === 'logging' && hasOpaqueLoggingPath(scalar, true)))
     ? REDACTED
@@ -1491,7 +1507,7 @@ function sanitizeUrlEncodedStringWithContext(
 // Property names retain opaque public identifiers. Only the existing URL
 // userinfo/parameter guards apply to keys in an already-decoded URL payload.
 function hasUrlPayloadKeyCredential(key: string, compoundContext?: CompoundKeyContext): boolean {
-  return hasUrlUserinfo(key) || hasSecretFormSegment(key, false, compoundContext);
+  return hasUrlPayloadUserinfo(key) || hasSecretFormSegment(key, false, compoundContext);
 }
 
 /**
@@ -1619,9 +1635,21 @@ function sanitizePlainObject(
           continue;
         }
       }
-      if (compoundContext?.guardUrlPayload && hasUrlUserinfo(value)) {
-        sanitized[key] = REDACTED;
-        continue;
+      if (compoundContext?.guardUrlPayload) {
+        // Object/array payloads already returned above. Check remaining scalar
+        // data before host normalization can reinterpret a quoted form as DNS.
+        const guarded = sanitizeJsonString(
+          value,
+          depth + 1,
+          maxDepth,
+          sanitizeUrls,
+          redactCompoundKeys,
+          guardUrlPayload,
+        );
+        if (guarded !== value) {
+          sanitized[key] = guarded;
+          continue;
+        }
       }
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);

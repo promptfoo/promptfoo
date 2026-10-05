@@ -917,6 +917,14 @@ describe('MCPClient', () => {
             headers: { 'https://host/db;password=context-fixture': 'x' },
             page: 2,
           }),
+          quotedHostUrl: JSON.stringify({
+            apiHost: JSON.stringify('password=scalar-fixture'),
+            page: 2,
+          }),
+          parserKeyUrl: JSON.stringify({
+            headers: { 'https:\\alice:parser-fixture@example.test/': 'x' },
+            page: 2,
+          }),
           referenceHeaders: { headers: { Authorization: 'Bearer {{ env.MCP_API_KEY }}' } },
           dbPwd: 'pwd-fixture',
           clientSecrets: ['secret-one', 'secret-two'],
@@ -1016,6 +1024,11 @@ describe('MCPClient', () => {
                           rawHostPayload: { apiHost: '[REDACTED]' },
                           composedGuardUrl: JSON.stringify({
                             apiHost: '[REDACTED]',
+                            headers: { '[REDACTED]': '[REDACTED]' },
+                            page: 2,
+                          }),
+                          quotedHostUrl: JSON.stringify({ apiHost: '[REDACTED]', page: 2 }),
+                          parserKeyUrl: JSON.stringify({
                             headers: { '[REDACTED]': '[REDACTED]' },
                             page: 2,
                           }),
