@@ -59,6 +59,7 @@ const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const KNOWN_BAD_RELEASES = new Map([
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
   ['@hono/node-server', '<1.19.15 || >=2.0.0 <2.0.10'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg
+  ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
   ['csv-parse', '<7.0.2'], // GHSA-8cw4-87c7-c6xx
