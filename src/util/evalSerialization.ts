@@ -43,7 +43,7 @@ export function serializeEvalValue<T>(value: T): T {
     ) {
       return projected;
     }
-    const container = Array.isArray(projected)
+    const container: object = Array.isArray(projected)
       ? Array.from({ length: projected.length }, (_, index) => snapshotProvider(projected[index]))
       : Object.fromEntries(
           Object.entries(projected).map(([key, child]) => [key, snapshotProvider(child)]),
