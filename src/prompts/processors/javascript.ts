@@ -26,12 +26,17 @@ export async function processJsFile(
   filePath: string,
   prompt: Partial<Prompt>,
   functionName: string | undefined,
+  labelPath: string = filePath,
 ): Promise<Prompt[]> {
   const promptFunction = await importModule(filePath, functionName);
   return [
     {
       raw: String(promptFunction),
-      label: prompt.label ? prompt.label : functionName ? `${filePath}:${functionName}` : filePath,
+      label: prompt.label
+        ? prompt.label
+        : functionName
+          ? `${labelPath}:${functionName}`
+          : labelPath,
       function: (context) =>
         promptFunction(
           transformContext({
