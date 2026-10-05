@@ -63,6 +63,29 @@ describe('resolveTestsWatchPaths', () => {
     expect(resolveTestsWatchPaths('file://*.yaml', root)).toEqual([testsPath]);
   });
 
+  it('expands a glob that leads out of the base directory into one containing brackets', () => {
+    // An absolute reference, as --tests is once it has been located from the working
+    // directory. Directories that exist as written are not part of the pattern.
+    const root = path.join(base, 'work [acme]');
+    fs.mkdirSync(path.join(root, 'set-1'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'set-2'));
+    fs.writeFileSync(path.join(root, 'set-1', 'cases.yaml'), '- description: case');
+    fs.writeFileSync(path.join(root, 'set-2', 'cases.yaml'), '- description: case');
+    // What the pattern matches when the brackets are taken for a set of characters.
+    fs.mkdirSync(path.join(base, 'work a', 'set-1'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'work a', 'set-1', 'cases.yaml'), '- description: other');
+
+    const watched = resolveTestsWatchPaths(
+      path.join(root, 'set-*', 'cases.yaml') as TestSuiteConfig['tests'],
+      path.join(base, 'nested'),
+    );
+
+    expect([...watched].sort()).toEqual([
+      path.join(root, 'set-1', 'cases.yaml'),
+      path.join(root, 'set-2', 'cases.yaml'),
+    ]);
+  });
+
   it("never watches a glob's parent directory", () => {
     // chokidar watches a directory recursively, and doEval reruns the whole evaluation
     // on any `change` beneath it. Watching the parent would therefore rerun on every

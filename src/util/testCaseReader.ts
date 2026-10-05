@@ -657,15 +657,9 @@ async function loadTestsFromGlobWithEnv(
 
   const testFiles: string[] = fs.existsSync(resolvedPath)
     ? [resolvedPath]
-    : globSync(
-        path.resolve(
-          escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
-          path.relative(path.resolve(basePath), resolvedPath),
-        ),
-        {
-          windowsPathsNoEscape: true,
-        },
-      );
+    : globSync(toTestsGlob(basePath, resolvedPath), {
+        windowsPathsNoEscape: true,
+      });
 
   // Check for possible function names in the path (Windows-aware)
   const pathWithoutFunction = stripFunctionSuffix(resolvedPath);
@@ -989,6 +983,38 @@ function hasGlobMagic(reference: string): boolean {
 }
 
 /**
+ * The glob pattern for a tests reference that was resolved from `basePath`.
+ *
+ * The directory a reference is resolved from is not part of its pattern, whatever characters
+ * its name has. A reference that leads out of that directory, such as an absolute one, has
+ * no such starting point, so its leading directories count as written for as long as they
+ * exist: `/work [acme]/cases-*.yaml` then looks for `cases-*.yaml` in `/work [acme]`.
+ */
+function toTestsGlob(basePath: string, resolvedPath: string): string {
+  const escape = (directory: string) => escapeGlob(directory, { windowsPathsNoEscape: true });
+  const base = path.resolve(basePath);
+  const relative = path.relative(base, resolvedPath);
+  if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
+    return path.resolve(escape(base), relative);
+  }
+
+  const { root } = path.parse(resolvedPath);
+  const segments = resolvedPath.slice(root.length).split(path.sep);
+  let directory = root;
+  let used = 0;
+  // The last segment names the files, so it is always part of the pattern.
+  while (used < segments.length - 1) {
+    const next = path.join(directory, segments[used]);
+    if (!fs.statSync(next, { throwIfNoEntry: false })?.isDirectory()) {
+      break;
+    }
+    directory = next;
+    used++;
+  }
+  return path.resolve(escape(directory), ...segments.slice(used));
+}
+
+/**
  * Resolve a single `tests` string reference to the file paths the loader will read.
  *
  * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
@@ -1005,13 +1031,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
 
   const resolved = path.resolve(basePath, withoutScheme);
   if (hasGlobMagic(withoutScheme)) {
-    const matches = globSync(
-      path.resolve(
-        escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
-        path.relative(path.resolve(basePath), resolved),
-      ),
-      { windowsPathsNoEscape: true },
-    );
+    const matches = globSync(toTestsGlob(basePath, resolved), { windowsPathsNoEscape: true });
     if (matches.length > 0) {
       return matches.map((match) => stripSheetSelector(match));
     }
