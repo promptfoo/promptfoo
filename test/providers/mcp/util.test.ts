@@ -983,6 +983,68 @@ describe('sanitizeMcpToolData', () => {
     },
   );
 
+  it.each(['url', 'callbackUrl', 'apiBaseUrl', 'apiHost', 'env.SERVICE_HOST'])(
+    'guards opaque URI credentials in decoded %s payloads before query changes',
+    (role) => {
+      const wrap = (value: string) =>
+        role.startsWith('env.') ? { env: { [role.slice(4)]: value } } : { [role]: value };
+      for (const uri of [
+        'jdbc:sqlserver://db;password=opaque-fixture',
+        'urn:database:db;password=opaque-fixture',
+        'mailto:alice@example.test;password=opaque-fixture',
+        'jdbc:sqlserver://alice:opaque-fixture@db',
+      ]) {
+        for (const suffix of ['', '?page=2', '?api_key=query-fixture', '#page=2']) {
+          const input = wrap(JSON.stringify({ target: uri + suffix, page: 2 }));
+          const original = structuredClone(input);
+          expect(sanitizeMcpToolData(input)).toEqual(
+            wrap(JSON.stringify({ target: '[REDACTED]', page: 2 })),
+          );
+          expect(input).toEqual(original);
+        }
+      }
+      for (const uri of [
+        'jdbc:sqlserver://db;database=public',
+        'urn:example:public',
+        'mailto:alice@example.test',
+      ]) {
+        const input = wrap(JSON.stringify({ target: uri, page: 2 }));
+        expect(sanitizeMcpToolData(input)).toEqual(input);
+      }
+    },
+  );
+
+  it.each(['apiHost', 'env.SERVICE_HOST'])(
+    'shares complete parsed logging path checks with raw %s forms',
+    (role) => {
+      const wrap = (value: string) =>
+        role.startsWith('env.') ? { env: { [role.slice(4)]: value } } : { [role]: value };
+      for (const path of ['sk-123456789012345678901234', 'token/abc1234567890']) {
+        for (const prefix of ['data=gateway.example/', 'data=https://gateway.example/']) {
+          expect(sanitizeMcpToolData(wrap(`${prefix}${path}/`))).toEqual(wrap('[REDACTED]'));
+        }
+      }
+      for (const path of ['public-path', 'token/public']) {
+        const input = wrap(`data=https://gateway.example/${path}/`);
+        expect(sanitizeMcpToolData(input)).toEqual(input);
+      }
+    },
+  );
+
+  it.each(['url', 'callbackUrl', 'apiBaseUrl', 'apiHost', 'env.SERVICE_HOST'])(
+    'preserves the existing pure-template policy within quoted %s JSON scalars',
+    (role) => {
+      const wrap = (value: string) =>
+        role.startsWith('env.') ? { env: { [role.slice(4)]: value } } : { [role]: value };
+      const target = JSON.stringify('jdbc:sqlserver://db;password={{ password }}');
+      const input = wrap(JSON.stringify({ target, page: 2 }));
+      const logging = role !== 'url' && role !== 'callbackUrl';
+      expect(sanitizeMcpToolData(input)).toEqual(
+        logging ? wrap(JSON.stringify({ target: '[REDACTED]', page: 2 })) : input,
+      );
+    },
+  );
+
   it.each(['apiHost', 'env.SERVICE_HOST'])('walks nested raw %s JSON payloads once', (name) => {
     const wrap = (value: string) =>
       name.startsWith('env.') ? { env: { [name.slice(4)]: value } } : { [name]: value };
