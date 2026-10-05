@@ -39,6 +39,135 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 describe('sanitizeMcpToolData', () => {
+  it('preserves quoted public form values before host normalization', () => {
+    for (const name of ['apiHost', 'SERVICE_HOST']) {
+      for (const value of ['true', 'false']) {
+        const uri = `https://host.test/?filter=includeCredentials%3D${value}`;
+        const hostValue = `data=${JSON.stringify(uri)}`;
+        const args = name === 'apiHost' ? { apiHost: hostValue } : { env: { [name]: hostValue } };
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(args)).toEqual(args);
+        expect(sanitizeObject(args, { sanitizeUrls: true })).toEqual(args);
+        expect(args).toEqual(original);
+      }
+    }
+  });
+
+  it('preserves harmless quoted containers in whole host fields', () => {
+    for (const uri of [
+      'https://host.test/?filter=includeCredentials%3Dtrue',
+      'https://host.test/?filter=includeCredentials%3Dfalse',
+      'mailto:alice@example.test?body=includeCredentials%3Dtrue',
+    ]) {
+      let value = JSON.stringify({ target: uri, page: 2 });
+      for (let layers = 1; layers <= 3; layers++) {
+        value = JSON.stringify(value);
+        const args = { apiHost: value };
+        const original = structuredClone(args);
+        expect(sanitizeMcpToolData(args)).toEqual(args);
+        expect(args).toEqual(original);
+      }
+    }
+  });
+
+  it('retains credential and depth guards for quoted host forms and containers', () => {
+    for (const uri of [
+      'https://host.test/?token=quoted-host-fixture',
+      'https://alice:quoted-host-fixture@host.test/',
+      'mailto:alice@example.test?token=quoted-host-fixture',
+    ]) {
+      const form = { apiHost: `data=${JSON.stringify(uri)}` };
+      const original = structuredClone(form);
+      expect(JSON.stringify(sanitizeMcpToolData(form))).not.toContain('quoted-host-fixture');
+      expect(form).toEqual(original);
+      const container = { apiHost: JSON.stringify(JSON.stringify({ target: uri, page: 2 })) };
+      expect(sanitizeMcpToolData(container)).toEqual({ apiHost: '[REDACTED]' });
+    }
+    let value = JSON.stringify({ target: 'https://host.test/?page=2' });
+    for (let layer = 0; layer < 4; layer++) {
+      value = JSON.stringify(value);
+    }
+    const args = { apiHost: value };
+    expect(sanitizeMcpToolData(args)).toEqual(args);
+    const privateArgs = { apiHost: value.replace('page=2', 'token=quoted-host-fixture') };
+    expect(
+      JSON.stringify(
+        sanitizeObject(privateArgs, { sanitizeUrls: true, redactCompoundKeys: true, maxDepth: 2 }),
+      ),
+    ).not.toContain('quoted-host-fixture');
+  });
+
+  it('preserves quoted query URI layers while masking nested credentials', () => {
+    const prefix = 'https://{{ user }}:{{ password }}@example.test/callback';
+    for (const layers of [1, 2, 3]) {
+      for (const kind of ['json', 'token']) {
+        const fields = { password: 'quoted-query-fixture', label: 'a&b;c#d', page: 2 };
+        let child =
+          prefix +
+          (kind === 'json'
+            ? `?data=${encodeURIComponent(JSON.stringify(fields))}`
+            : '?token=quoted-query-fixture&page=2');
+        for (let layer = 0; layer < layers; layer++) {
+          child = JSON.stringify(child);
+        }
+        const args = { url: `https://outer.test/?redirect=${encodeURIComponent(child)}` };
+        const original = structuredClone(args);
+        const sanitized = sanitizeMcpToolData(args) as typeof args;
+        let decoded = new URL(sanitized.url).searchParams.get('redirect')!;
+        for (let layer = 0; layer < layers; layer++) {
+          decoded = JSON.parse(decoded);
+        }
+        expect(typeof decoded).toBe('string');
+        expect(decoded.startsWith(prefix)).toBe(true);
+        const query = new URL(decoded).searchParams;
+        if (kind === 'json') {
+          expect(JSON.parse(query.get('data')!)).toEqual({ ...fields, password: '[REDACTED]' });
+        } else {
+          expect(query.get('token')).toBe('[REDACTED]');
+          expect(query.get('page')).toBe('2');
+        }
+        expect(args).toEqual(original);
+        expect(sanitizeObject(args, { sanitizeUrls: true })).toEqual(original);
+      }
+    }
+  });
+
+  it('preserves public quoted queries and distinguishes logging redaction from exhausted depth', () => {
+    const prefix = 'https://{{ user }}:{{ password }}@example.test/';
+    for (const layers of [1, 2, 3]) {
+      for (const suffix of [
+        'page=2',
+        'includeCredentials=true',
+        'includeCredentials=false',
+        'password={{ pass }}',
+      ]) {
+        let child = `${prefix}callback?${suffix}`;
+        for (let layer = 0; layer < layers; layer++) {
+          child = JSON.stringify(child);
+        }
+        const args = { apiHost: `https://outer.test/?redirect=${encodeURIComponent(child)}` };
+        expect(sanitizeMcpToolData(args)).toEqual(args);
+      }
+      let child = `${prefix}token-12345678abcdef?token=quoted-query-fixture`;
+      for (let layer = 0; layer < layers; layer++) {
+        child = JSON.stringify(child);
+      }
+      const args = { apiHost: `https://outer.test/?redirect=${encodeURIComponent(child)}` };
+      const sanitized = sanitizeMcpToolData(args) as typeof args;
+      let decoded = new URL(sanitized.apiHost).searchParams.get('redirect')!;
+      for (let layer = 0; layer < layers; layer++) {
+        decoded = JSON.parse(decoded);
+      }
+      expect(decoded).toBe('[REDACTED]');
+      const bounded = sanitizeObject(args, {
+        sanitizeUrls: true,
+        redactCompoundKeys: true,
+        maxDepth: 1,
+      }) as typeof args;
+      expect(new URL(bounded.apiHost).searchParams.get('redirect')).toBe('[REDACTED]');
+    }
+  });
+
   it('checks form credentials in parsed URL authorities within MCP payloads', () => {
     for (const prefix of ['https:', 'https:/', 'https://host']) {
       for (const key of ['password', '%70assword', 'clientSecret']) {

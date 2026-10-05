@@ -39,12 +39,21 @@ function hasUrlUserinfo(url: string): boolean {
   return atIndex > 0;
 }
 
-// Remove public mailto paths only from the host authority inspection copy.
+// Exclude quoted components and public mailto paths from host inspection only.
 // The bounded form owner still inspects the original component's keys/values.
 function hostUserinfoInspectionValue(value: string): string {
   return value.replace(URL_ENCODED_PAIR_RE, (match, separator, key, rawValue) => {
     if (!/^[A-Za-z0-9._~+%\[\]\-]+$/.test(key)) {
       return match;
+    }
+    if (rawValue.trimStart().startsWith('"')) {
+      try {
+        if (typeof JSON.parse(rawValue) === 'string') {
+          return `${separator}${key}=`;
+        }
+      } catch {
+        // Malformed quoting retains the existing host interpretation.
+      }
     }
     const colon = rawValue.indexOf(':');
     const equals = rawValue.lastIndexOf('=', colon);
@@ -1599,6 +1608,33 @@ function redactNestedJsonValue(
     typeof parsed === 'string' && compoundContext?.guardUrlPayload
       ? getUrlPayloadScalar(decoded, compoundContext.maxDepth)
       : null;
+  if (quotedScalar !== null && /^[{\[]/.test(quotedScalar.trimStart())) {
+    let scalar = decoded;
+    let remaining = compoundContext!.maxDepth;
+    while (scalar.trimStart().startsWith('"')) {
+      if (remaining-- <= 0) {
+        return REDACTED;
+      }
+      const parsedLayer: unknown = JSON.parse(scalar);
+      if (typeof parsedLayer !== 'string') {
+        break;
+      }
+      scalar = parsedLayer;
+    }
+    const sanitized = redactNestedJsonValue(
+      scalar,
+      { ...compoundContext!, maxDepth: remaining },
+      'original',
+    );
+    if (sanitized !== null) {
+      if (sanitized === scalar) {
+        return unchangedResult === 'null' ? null : decoded;
+      }
+      // A quoted container is still an opaque scalar at the whole-field owner.
+      // Preserve public spelling, but retain whole-value redaction for credentials.
+      return REDACTED;
+    }
+  }
   if (
     quotedScalar !== null &&
     !/^[{\[]/.test(quotedScalar.trimStart()) &&
@@ -1778,20 +1814,51 @@ function redactUrlPayloadValue(
       return sanitized;
     }
     if (isParsedQueryValue) {
-      const scalar = getUrlPayloadScalar(decoded, compoundContext.maxDepth);
-      if (scalar === null || compoundContext.maxDepth <= 0) {
+      let scalar = decoded;
+      let quotedLayers = 0;
+      let remaining = compoundContext.maxDepth;
+      // Interpret only scalar string layers, retaining their shape if a nested
+      // credential changes this query value. Containers keep their existing owner.
+      while (scalar.trimStart().startsWith('"')) {
+        if (remaining-- < 0) {
+          return REDACTED;
+        }
+        try {
+          const parsed: unknown = JSON.parse(scalar);
+          if (typeof parsed !== 'string') {
+            break;
+          }
+          scalar = parsed;
+          quotedLayers++;
+        } catch {
+          break;
+        }
+      }
+      if (compoundContext.maxDepth <= 0) {
         return REDACTED;
       }
       if (hasOnlyTemplateUserinfo(scalar)) {
         // Newly inspected query scalars retain unresolved authority references.
         // Continue checking literal query/hash credentials and logging paths.
-        const context = { ...compoundContext, maxDepth: compoundContext.maxDepth - 1 };
+        if (quotedLayers >= compoundContext.maxDepth) {
+          return REDACTED;
+        }
+        const context = {
+          ...compoundContext,
+          maxDepth: compoundContext.maxDepth - quotedLayers - 1,
+        };
         const sanitized = sanitizeTemplatedUrl(scalar, context, context, true);
-        const guarded =
+        let guarded =
           isLoggingUrlPayload(context.guardUrlPayload) && hasOpaqueLoggingPath(sanitized, true)
             ? REDACTED
             : sanitized;
-        return guarded === scalar ? null : guarded;
+        if (guarded === scalar) {
+          return null;
+        }
+        for (let layer = 0; layer < quotedLayers; layer++) {
+          guarded = JSON.stringify(guarded);
+        }
+        return guarded;
       }
     }
     const guarded =
