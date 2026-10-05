@@ -1433,6 +1433,46 @@ describe('agent workspaces', () => {
       expect(workspaceDiffIncomplete).toBe(true);
     });
 
+    it.for([0, 90_000, 150_000])(
+      'bounds omitted-path notes together with a %i-character patch',
+      async (length, context) => {
+        if (process.platform === 'win32') {
+          context.skip('This fixture requires POSIX named pipes');
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const workspace = await create(source, 'git');
+        if (length > 0) {
+          write(path.join(workspace.dir, 'README.md'), 'x'.repeat(length));
+        }
+        const directory = path.join(
+          workspace.dir,
+          ...Array.from({ length: 14 }, (_, index) => `${index}${'a'.repeat(199)}`),
+        );
+        fs.mkdirSync(directory, { recursive: true });
+        execFileSync(
+          'mkfifo',
+          Array.from({ length: 50 }, (_, index) => path.join(directory, `pipe-${index}`)),
+        );
+
+        const metadata = await workspace.metadata();
+        const marker = '\n[diff truncated after 100000 characters]';
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        expect(metadata.workspaceDiffIncomplete).toBe(true);
+        expect(metadata.workspaceDiff).toHaveLength(100_000 + marker.length);
+        expect(metadata.workspaceDiff?.endsWith(marker)).toBe(true);
+        if (length === 0) {
+          expect(metadata.workspaceDiff).toMatch(/^\[diff incomplete: 50 changed path/);
+        } else {
+          expect(metadata.workspaceDiff).toMatch(/^diff --git a\/README.md b\/README.md/);
+          if (length < 100_000) {
+            expect(metadata.workspaceDiff).toContain('[diff incomplete: 50 changed path');
+          }
+        }
+      },
+    );
+
     it("does not run filters defined in the workspace's own git config", async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
@@ -2097,6 +2137,66 @@ describe('agent workspaces', () => {
         expect(fs.readFileSync(path.join(workspace.dir, 'policy\uFFFD', 'keep.txt'), 'utf8')).toBe(
           'safe\n',
         );
+      },
+    );
+
+    it.for([
+      ...['ordinary', 'policy\uFFFD', ':policy\uFFFD', 'policy\uFFFD/parent\uFFFD'].flatMap(
+        (parent) =>
+          [false, true].flatMap((trackedInside) =>
+            ['ancestor', 'alias'].map((rule) => ({ parent, trackedInside, rule, kind: 'file' })),
+          ),
+      ),
+      ...['ancestor', 'alias'].map((rule) => ({
+        parent: 'policy\uFFFD',
+        trackedInside: true,
+        rule,
+        kind: 'fifo',
+      })),
+    ])(
+      'retains lossless ignore ancestors ($parent, tracked=$trackedInside, rule=$rule, $kind)',
+      async ({ parent, trackedInside, rule, kind }, context) => {
+        if (process.platform === 'win32' && (kind === 'fifo' || parent.startsWith(':'))) {
+          context.skip('This fixture requires POSIX filenames or named pipes');
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source, {
+          '.gitignore': `${parent}/cache/${rule === 'alias' ? 'raw\uFFFD.txt' : ''}\n`,
+          [`${parent}/keep.txt`]: 'baseline\n',
+        });
+        if (trackedInside) {
+          write(path.join(source, parent, 'cache', 'keep.txt'), 'tracked inside\n');
+          git(source, 'add', '--force', '--', `./${parent}/cache/keep.txt`);
+          git(source, 'commit', '-q', '-m', 'tracked ignored child');
+        }
+        const workspace = await create(source, 'git');
+        const directory = path.join(workspace.dir, parent, 'cache');
+        fs.mkdirSync(directory, { recursive: true });
+        const raw = Buffer.concat([
+          Buffer.from(`${directory}${path.sep}raw`),
+          Buffer.from([0xff]),
+          Buffer.from('.txt'),
+        ]);
+        if (kind === 'fifo') {
+          const temporary = path.join(directory, 'temporary.pipe');
+          execFileSync('mkfifo', [temporary]);
+          createRawPath(raw, context, () => fs.renameSync(temporary, raw));
+        } else {
+          writeRawFile(raw, 'raw fixture\n', context);
+        }
+
+        const metadata = await workspace.metadata();
+
+        expect(metadata.workspaceDiffError).toBeUndefined();
+        if (rule === 'ancestor') {
+          expect(metadata.workspaceDiff).toBe('');
+          expect(metadata.workspaceDiffIncomplete).toBeUndefined();
+        } else {
+          // A decoded-name rule must not excuse a different raw-byte leaf.
+          expect(metadata.workspaceDiffIncomplete).toBe(true);
+          expect(metadata.workspaceDiff).toContain('diff incomplete');
+        }
+        expect(fs.readFileSync(path.join(source, parent, 'keep.txt'), 'utf8')).toBe('baseline\n');
       },
     );
 

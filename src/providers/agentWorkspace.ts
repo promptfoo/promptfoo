@@ -248,7 +248,20 @@ function quotePath(file: string): string {
  */
 function toIgnoreQuery(file: string, raw?: string): string | undefined {
   let query = file;
-  const lost = Buffer.from(file).toString('latin1') === raw ? -1 : file.indexOf('\uFFFD');
+  let lost = Buffer.from(file).toString('latin1') === raw ? -1 : file.indexOf('\uFFFD');
+  if (lost !== -1 && raw !== undefined) {
+    // A literal replacement character can precede a genuinely lossy component. Keep
+    // each ancestor whose original bytes match, rather than stopping at its spelling.
+    const rawComponents = raw.split('/');
+    let offset = 0;
+    for (const [index, component] of file.split('/').entries()) {
+      if (Buffer.from(component).toString('latin1') !== rawComponents[index]) {
+        lost = offset;
+        break;
+      }
+      offset += component.length + 1;
+    }
+  }
   if (lost !== -1) {
     const end = file.lastIndexOf('/', lost);
     if (end === -1) {
@@ -1346,16 +1359,17 @@ async function getWorkspaceDiff(
     if (binaryContent) {
       notes.push('[diff incomplete: binary file contents are not included]');
     }
-    const diff = diffBytes.toString();
+    const patch = diffBytes.toString();
+    // Notes contain agent-controlled paths, so they share the patch's output budget.
+    const diff =
+      notes.length === 0
+        ? patch
+        : `${patch}${patch && !patch.endsWith('\n') ? '\n' : ''}${notes.join('\n')}`;
     const truncated = diff.length > MAX_DIFF_LENGTH;
-    const shown = truncated
-      ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`
-      : diff;
     return {
-      diff:
-        notes.length === 0
-          ? shown
-          : `${shown}${shown && !shown.endsWith('\n') ? '\n' : ''}${notes.join('\n')}`,
+      diff: truncated
+        ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`
+        : diff,
       incomplete: truncated || notes.length > 0,
     };
   } finally {
