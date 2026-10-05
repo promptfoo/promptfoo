@@ -8,7 +8,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -172,42 +172,111 @@ describe('ResultsTable Metrics Display', () => {
     }));
   });
 
-  it.each([
-    [
-      'skips its first fetch when the page loaded the eval in the current display mode',
-      'all',
-      false,
-    ],
-    ['fetches when the display mode changed while the page was loading the eval', 'failures', true],
-  ] as const)('%s', async (_name, filterMode, fetches) => {
-    const fetchEvalData = vi.fn();
-    vi.mocked(useTableStore).mockImplementation(() => ({
-      config: {},
-      evalId: '123',
-      inComparisonMode: false,
-      setTable: vi.fn(),
-      table: mockTable,
-      version: 4,
-      renderMarkdown: true,
-      fetchEvalData,
-      // The page asked for all rows before this table was mounted.
-      lastTableView: { evalId: '123', filterMode: 'all' },
-      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
-    }));
+  describe('the first fetch after the page loaded the eval', () => {
+    const metricFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metric',
+      operator: 'is_defined',
+      value: '',
+      field: 'accuracy',
+      logicOperator: 'and',
+      sortIndex: 0,
+    };
+    type FilterMode = React.ComponentProps<typeof ResultsTable>['filterMode'];
+    type LoadedView = {
+      evalId: string;
+      filterMode: FilterMode;
+      searchText: string;
+      filters: ResultsFilter[];
+    };
+    type FirstFetchCase = {
+      name: string;
+      loaded: LoadedView;
+      filterMode?: FilterMode;
+      searchText?: string;
+      filters?: Record<string, ResultsFilter>;
+      fetches: boolean;
+    };
+    // What the page asked for before this table was mounted.
+    const loadedAll: LoadedView = { evalId: '123', filterMode: 'all', searchText: '', filters: [] };
 
-    renderWithProviders(<ResultsTable {...defaultProps} filterMode={filterMode} />);
-    await act(async () => {
-      await Promise.resolve();
-    });
+    it.each<FirstFetchCase>([
+      {
+        name: 'is skipped when the page asked for what the table shows',
+        loaded: loadedAll,
+        fetches: false,
+      },
+      {
+        name: 'is skipped when the page asked with the same search text and filters',
+        loaded: { ...loadedAll, searchText: 'four', filters: [metricFilter] },
+        searchText: 'four',
+        filters: { [metricFilter.id]: metricFilter },
+        fetches: false,
+      },
+      {
+        name: 'is made when the display mode changed while the page was loading the eval',
+        loaded: loadedAll,
+        filterMode: 'failures',
+        fetches: true,
+      },
+      {
+        name: 'is made when the search text changed while the page was loading the eval',
+        loaded: { ...loadedAll, searchText: 'three' },
+        searchText: 'four',
+        fetches: true,
+      },
+      {
+        name: 'is made when the search text was cleared while the page was loading the eval',
+        loaded: { ...loadedAll, searchText: 'three' },
+        fetches: true,
+      },
+      {
+        name: 'is made when the filters changed while the page was loading the eval',
+        loaded: loadedAll,
+        filters: { [metricFilter.id]: metricFilter },
+        fetches: true,
+      },
+      {
+        name: 'is skipped when the page loaded another eval, which it then replaces',
+        loaded: { ...loadedAll, evalId: 'another-eval', searchText: 'three' },
+        searchText: 'four',
+        fetches: false,
+      },
+    ])('$name', async ({ loaded, filterMode = 'all', searchText, filters = {}, fetches }) => {
+      const fetchEvalData = vi.fn();
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: vi.fn(),
+        table: mockTable,
+        version: 4,
+        renderMarkdown: true,
+        fetchEvalData,
+        lastTableView: loaded,
+        filters: {
+          values: filters,
+          appliedCount: Object.keys(filters).length,
+          options: { metric: [] },
+        },
+      }));
 
-    if (fetches) {
-      expect(fetchEvalData).toHaveBeenCalledWith(
-        '123',
-        expect.objectContaining({ pageIndex: 0, filterMode: 'failures' }),
+      renderWithProviders(
+        <ResultsTable {...defaultProps} filterMode={filterMode} debouncedSearchText={searchText} />,
       );
-    } else {
-      expect(fetchEvalData).not.toHaveBeenCalled();
-    }
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      if (fetches) {
+        expect(fetchEvalData).toHaveBeenCalledWith(
+          '123',
+          expect.objectContaining({ pageIndex: 0, filterMode, searchText }),
+        );
+      } else {
+        expect(fetchEvalData).not.toHaveBeenCalled();
+      }
+    });
   });
 
   it('displays total cost with correct formatting', () => {

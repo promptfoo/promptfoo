@@ -1,9 +1,10 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import useApiConfig from '@app/stores/apiConfig';
 import { useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
 import { SUPERSEDED_TABLE_REQUEST } from './tableRequest';
 import type {
@@ -1319,6 +1320,116 @@ describe('useTableStore', () => {
         } finally {
           errors.mockRestore();
         }
+      });
+
+      it('ends the loading state of a request that a failed refresh for another eval replaced', async () => {
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const pending = deferRequests();
+        try {
+          let foreground!: Promise<unknown>;
+          let background!: Promise<unknown>;
+          await act(async () => {
+            foreground = useTableStore.getState().fetchEvalData('eval-a');
+            // A refresh for a newer eval makes the first request ineligible, and then fails.
+            background = useTableStore
+              .getState()
+              .fetchEvalData('eval-b', { skipLoadingState: true });
+            pending[1].fail(new Error('network down'));
+            await background;
+          });
+          await expect(background).resolves.toBeNull();
+          // The first request is still in flight.
+          expect(useTableStore.getState().isFetching).toBe(true);
+
+          await act(async () => {
+            pending[0].respond(tableWith('table of eval-a'));
+            await foreground;
+          });
+
+          // Its response is not applied, and nothing else is left to end its loading state.
+          await expect(foreground).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
+          expect(useTableStore.getState().table).toBeNull();
+          expect(useTableStore.getState().isFetching).toBe(false);
+          expect(useTableStore.getState().loadingRequestId).toBeNull();
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
+      describe('across a change of the API endpoint', () => {
+        const otherEndpoint = 'http://other-host';
+        let originalEndpoint: string | undefined;
+
+        beforeEach(() => {
+          originalEndpoint = useApiConfig.getState().apiBaseUrl;
+        });
+
+        afterEach(() => {
+          useApiConfig.setState({ apiBaseUrl: originalEndpoint });
+        });
+
+        it('does not apply the response of the replaced endpoint when it arrives last', async () => {
+          const pending = deferRequests();
+          let previous!: Promise<unknown>;
+          let current!: Promise<unknown>;
+          await act(async () => {
+            previous = useTableStore.getState().fetchEvalData(mockEvalId);
+            // The new endpoint has an eval of the same id.
+            useApiConfig.setState({ apiBaseUrl: otherEndpoint });
+            current = useTableStore.getState().fetchEvalData(mockEvalId);
+            pending[1].respond(tableWith('table of the new endpoint'));
+            await current;
+            pending[0].respond(tableWith('table of the old endpoint'));
+            await previous;
+          });
+
+          await expect(previous).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
+          expect(useTableStore.getState().table?.body[0].outputs[0].text).toBe(
+            'table of the new endpoint',
+          );
+          expect(useTableStore.getState().isFetching).toBe(false);
+        });
+
+        it('does not apply the response of the replaced endpoint when the new one fails', async () => {
+          const pending = deferRequests();
+          let previous!: Promise<unknown>;
+          let current!: Promise<unknown>;
+          await act(async () => {
+            previous = useTableStore.getState().fetchEvalData(mockEvalId);
+            useApiConfig.setState({ apiBaseUrl: otherEndpoint });
+            current = useTableStore.getState().fetchEvalData(mockEvalId);
+            // The old endpoint answers first, while the new one is still loading.
+            pending[0].respond(tableWith('table of the old endpoint'));
+            await previous;
+          });
+
+          await expect(previous).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
+          expect(useTableStore.getState().table).toBeNull();
+          expect(useTableStore.getState().isFetching).toBe(true);
+
+          await act(async () => {
+            pending[1].respond({}, false);
+            await current;
+          });
+
+          // The page's request failed, and the table of another endpoint does not stand in.
+          await expect(current).resolves.toBeNull();
+          expect(useTableStore.getState().table).toBeNull();
+          expect(useTableStore.getState().isFetching).toBe(false);
+        });
+
+        it('does not report the failure of the replaced endpoint as the page failing', async () => {
+          const pending = deferRequests();
+          let previous!: Promise<unknown>;
+          await act(async () => {
+            previous = useTableStore.getState().fetchEvalData(mockEvalId);
+            useApiConfig.setState({ apiBaseUrl: otherEndpoint });
+            pending[0].respond({}, false);
+            await previous;
+          });
+
+          await expect(previous).resolves.toBe(SUPERSEDED_TABLE_REQUEST);
+        });
       });
 
       it('does not apply the response for an eval that the page has left', async () => {

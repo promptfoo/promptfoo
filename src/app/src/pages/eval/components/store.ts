@@ -1,4 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
@@ -692,18 +693,26 @@ export const useTableStore = create<TableState>()(
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
       const requestId = ++latestTableRequestId;
       latestTableEvalId = id;
+      // The API endpoint this request goes to. Another endpoint can have an eval of the
+      // same id, so the id alone does not say whose table a response is.
+      const endpoint = useApiConfig.getState().apiBaseUrl;
       const isLatestRequest = () => requestId === latestTableRequestId;
       /**
        * Whether this response must not be applied: the response to a request issued after it
-       * has been, or the page has moved on to another eval, whose table this is not.
+       * has been, or the page has moved on to another eval or another API endpoint, whose
+       * table this is not.
        */
-      const isSuperseded = () => requestId < appliedTableRequestId || id !== latestTableEvalId;
+      const isSuperseded = () =>
+        requestId < appliedTableRequestId ||
+        id !== latestTableEvalId ||
+        endpoint !== useApiConfig.getState().apiBaseUrl;
       // The loading state belongs to the foreground request that turned it on. It ends when
       // a response is applied for that request or a later one, since the table then shows
-      // data at least as recent as that request asked for, or when that request itself fails.
-      const settleLoading = (isOwnFailure = false) => {
+      // data at least as recent as that request asked for, or when that request itself ends
+      // without being applied: it failed, or its response was superseded.
+      const settleLoading = (isOwnEnd = false) => {
         const { loadingRequestId } = get();
-        const isSettled = isOwnFailure
+        const isSettled = isOwnEnd
           ? loadingRequestId === requestId
           : loadingRequestId !== null && loadingRequestId <= requestId;
         return isSettled ? { isFetching: false, loadingRequestId: null } : {};
@@ -782,6 +791,10 @@ export const useTableStore = create<TableState>()(
           ]);
 
           if (isSuperseded()) {
+            // The request is over, so the loading state it turned on is too, although its
+            // response is not applied. No later response may be left to end it: a refresh
+            // for another eval makes this request ineligible, and can then fail itself.
+            set(settleLoading(true));
             return SUPERSEDED_TABLE_REQUEST;
           }
           appliedTableRequestId = requestId;
