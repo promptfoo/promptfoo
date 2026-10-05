@@ -1021,6 +1021,22 @@ export async function resolveConfigs(
   };
 }
 
+/**
+ * YAML and JSON configs may give `env` values as numbers or booleans. Environment values
+ * are strings, and the resolved suite is validated as such.
+ */
+function stringifyEnvValues(env: UnifiedConfig['env']): TestSuite['env'] {
+  if (!env) {
+    return env;
+  }
+  return Object.fromEntries(
+    Object.entries(env as Record<string, unknown>).map(([key, value]) => [
+      key,
+      typeof value === 'number' || typeof value === 'boolean' ? String(value) : value,
+    ]),
+  ) as TestSuite['env'];
+}
+
 async function resolveLoadedConfig(
   cmdObj: Partial<CommandLineOptions>,
   fileConfig: Partial<UnifiedConfig>,
@@ -1167,11 +1183,15 @@ async function resolveLoadedConfig(
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
+  // Providers and tests receive this env directly, so they need the string values that
+  // real environment variables have. The saved config keeps the values as authored.
+  const runtimeEnv = stringifyEnvValues(config.env);
+
   config.defaultTest = processedDefaultTest
-    ? await readTestConfig(processedDefaultTest, basePath, true, config.env)
+    ? await readTestConfig(processedDefaultTest, basePath, true, runtimeEnv)
     : undefined;
   const parsedDefaultTest = config.defaultTest
-    ? await readTest(clone(config.defaultTest), basePath, true, config.env)
+    ? await readTest(clone(config.defaultTest), basePath, true, runtimeEnv)
     : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
@@ -1218,7 +1238,7 @@ async function resolveLoadedConfig(
   }
 
   const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
-    env: config.env,
+    env: runtimeEnv,
     basePath,
   });
   const testConfigs = await readTestSources(
@@ -1230,12 +1250,12 @@ async function resolveLoadedConfig(
             // rows resolve from the config directory like every other test.
             tests:
               typeof cmdObj.tests === 'string'
-                ? resolveCliTestsReference(cmdObj.tests, config.env)
+                ? resolveCliTestsReference(cmdObj.tests, runtimeEnv)
                 : config.tests || [],
             basePath,
           },
         ],
-    config.env,
+    runtimeEnv,
     false,
     basePath,
   );
@@ -1243,7 +1263,7 @@ async function resolveLoadedConfig(
     clone(isApiProvider(test.provider) ? { ...test, provider: undefined } : test),
   );
   const parsedTests = await Promise.all(
-    testConfigs.map((test) => readTest(test, basePath, false, config.env)),
+    testConfigs.map((test) => readTest(test, basePath, false, runtimeEnv)),
   );
 
   let parsedScenarios = config.scenarios;
@@ -1271,7 +1291,7 @@ async function resolveLoadedConfig(
       if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
         scenario.tests = await readTestSources(
           [{ tests: scenario.tests, basePath }],
-          config.env,
+          runtimeEnv,
           false,
           basePath,
         );
@@ -1302,7 +1322,7 @@ async function resolveLoadedConfig(
         ),
       });
       scenario.tests = await Promise.all(
-        filteredTests.map((test) => readTest(test, basePath, false, config.env)),
+        filteredTests.map((test) => readTest(test, basePath, false, runtimeEnv)),
       );
     }
   }
@@ -1350,7 +1370,7 @@ async function resolveLoadedConfig(
     redteam: config.redteam,
     extensions: config.extensions,
     tracing: config.tracing,
-    env: config.env,
+    env: runtimeEnv,
   };
 
   // Validate assertions in tests and defaultTest using Zod schema
