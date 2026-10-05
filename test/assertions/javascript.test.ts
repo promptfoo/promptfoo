@@ -970,6 +970,58 @@ describe('JavaScript file references', () => {
     expect(result.componentResults).toBeUndefined();
   });
 
+  it.each([
+    [
+      'boolean, null, and numeric string named scores',
+      '({ pass: true, score: 1, reason: "Custom", namedScores: { yes: true, no: false, skipped: null, half: "0.5", unset: undefined } })',
+      { namedScores: { yes: 1, no: 0, skipped: 0, half: 0.5 } },
+    ],
+    [
+      'nested results without a reason or score',
+      '({ pass: true, score: 1, reason: "Custom", componentResults: [{ pass: true, score: 0.75 }, { pass: false, reason: "Nested" }] })',
+      {
+        componentResults: [
+          { pass: true, score: 0.75, reason: '' },
+          { pass: false, score: 0, reason: 'Nested' },
+        ],
+      },
+    ],
+    [
+      'boolean named scores in nested results',
+      '({ pass: true, score: 1, reason: "Custom", componentResults: [{ pass: true, score: 1, reason: "Nested", namedScores: { inner: true } }] })',
+      { componentResults: [{ pass: true, score: 1, reason: 'Nested', namedScores: { inner: 1 } }] },
+    ],
+  ])('accepts result shapes earlier releases recorded: %s', async (_shape, value, expected) => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Custom', ...expected });
+    expect(result.namedScores ?? {}).not.toHaveProperty('unset');
+  });
+
+  it('records a boolean named score from a function assertion without changing its result', async () => {
+    const grade = Object.freeze({
+      pass: true,
+      score: 1,
+      reason: 'Custom',
+      namedScores: Object.freeze({ exact_match: true }),
+    });
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value: () => grade },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1, namedScores: { exact_match: 1 } });
+    expect(grade.namedScores.exact_match).toBe(true);
+  });
+
   it('rejects a nonfinite async function result before applying inverse logic', async () => {
     const result = await runAssertion({
       prompt: 'Some prompt',
