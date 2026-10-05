@@ -944,6 +944,36 @@ describe('importCommand', () => {
       }
     });
 
+    it.each([
+      { head: { vars: ['topic'] }, body: [] },
+      { body: [] },
+      { head: { vars: ['topic'] }, body: [{ outputs: [null, 'legacy text'] }] },
+    ])('preserves supported legacy table shapes during --force import: %j', async (table) => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sample = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      expect(await Eval.findById(sample.evalId)).toBeDefined();
+
+      tempFilePath = path.join(__dirname, `temp-legacy-shape-${Date.now()}.json`);
+      fs.writeFileSync(
+        tempFilePath,
+        JSON.stringify({
+          id: sample.evalId,
+          config: { description: 'legacy replacement' },
+          results: { version: 2, results: [], table, stats: { successes: 0, failures: 0 } },
+        }),
+      );
+      const replacement = new Command();
+      importCommand(replacement);
+      await replacement.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+
+      expect(process.exitCode).toBeUndefined();
+      const imported = await Eval.findById(sample.evalId);
+      expect(imported).toBeDefined();
+      expect(await imported!.toEvaluateSummary()).toMatchObject({ table });
+    });
+
     it('should import legacy table-backed eval exports', async () => {
       const evalId = 'eval-legacy-table-backed';
       const filePath = path.join(__dirname, `temp-legacy-v2-${Date.now()}.json`);
@@ -972,8 +1002,30 @@ describe('importCommand', () => {
           results: {
             version: 2,
             timestamp: '2024-01-02T03:04:05.000Z',
-            results: [{ success: true, vars: { topic: 'legacy' } }],
-            table: { head: { prompts: [], vars: ['topic'] }, body: [] },
+            results: [
+              {
+                success: true,
+                vars: { topic: 'legacy' },
+                provider: { id: 'fixture-provider', config: { apiKey: 'fixture-legacy-provider' } },
+              },
+            ],
+            table: {
+              head: {
+                prompts: [
+                  {
+                    raw: 'Hello',
+                    label: 'Greeting',
+                    provider: 'fixture-provider',
+                    metrics: {
+                      namedScores: { auth: 1, token: 0.5 },
+                      namedScoresCount: { auth: 1, token: 2 },
+                    },
+                  },
+                ],
+                vars: ['topic'],
+              },
+              body: [],
+            },
             stats: { successes: 1, failures: 0 },
           },
         }),
@@ -986,6 +1038,9 @@ describe('importCommand', () => {
       const importedEval = await Eval.findById(evalId);
       expect(importedEval).toBeDefined();
       expect(importedEval!.author).toBe('legacy-author');
+      expect(JSON.stringify(await importedEval!.toEvaluateSummary())).not.toContain(
+        'fixture-legacy-provider',
+      );
       expect(JSON.stringify(importedEval!.config)).not.toContain('imported-legacy-secret');
       expect(JSON.stringify(importedEval!.config)).not.toContain('imported-header-secret');
       expect(importedEval!.config.tracing?.provider?.headers).toEqual({
@@ -1001,7 +1056,19 @@ describe('importCommand', () => {
       expect(await importedEval!.toEvaluateSummary()).toMatchObject({
         version: 2,
         results: [{ success: true, vars: { topic: 'legacy' } }],
-        table: { head: { vars: ['topic'] } },
+        table: {
+          head: {
+            prompts: [
+              {
+                metrics: {
+                  namedScores: { auth: 1, token: 0.5 },
+                  namedScoresCount: { auth: 1, token: 2 },
+                },
+              },
+            ],
+            vars: ['topic'],
+          },
+        },
       });
     });
   });

@@ -97,6 +97,7 @@ import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMe
 import { filterFiniteScores } from './util/numeric';
 import { isPromptAllowed } from './util/promptMatching';
 import {
+  AMBIGUOUS_PROVIDER_ID_MESSAGE,
   getProviderIdentifier,
   isAnthropicProvider,
   isGoogleProvider,
@@ -4653,7 +4654,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
       // Provider errors can contain credentials or config source snippets.
       const message =
-        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation.';
+        error instanceof Error && error.message === AMBIGUOUS_PROVIDER_ID_MESSAGE
+          ? AMBIGUOUS_PROVIDER_ID_MESSAGE
+          : 'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
       for (const result of resultsToCompare) {
@@ -4831,7 +4834,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     repeatCacheContext?: RepeatCacheContext,
   ): CallApiContextParams {
     const providerId = firstResult.provider.id;
-    const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
+    let originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
+    if (!originalProvider) {
+      const candidates = this.testSuite.providers.filter(
+        (provider) =>
+          sanitizeProviderIdForLog(provider.id()) === providerId &&
+          (!firstResult.provider.label || provider.label === firstResult.provider.label),
+      );
+      if (candidates.length > 1) {
+        throw new Error(AMBIGUOUS_PROVIDER_ID_MESSAGE);
+      }
+      originalProvider = candidates[0];
+    }
     return {
       getCache,
       ...(originalProvider && { originalProvider }),

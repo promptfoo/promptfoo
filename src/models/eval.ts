@@ -65,9 +65,9 @@ import EvalResult, {
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
-  persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
+  sanitizeResultFieldsForDb,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -513,7 +513,7 @@ export default class Eval {
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
-          prompts: opts?.completedPrompts || [],
+          prompts: opts?.completedPrompts?.map((prompt) => projectPrompt(prompt, false)) || [],
           isRedteam: config.redteam !== undefined,
         })
         .run();
@@ -549,7 +549,7 @@ export default class Eval {
           .values(
             opts.results?.map((r) => ({
               ...r,
-              metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              ...sanitizeResultFieldsForDb(r),
               evalId,
               id: crypto.randomUUID(),
             })),
@@ -677,7 +677,7 @@ export default class Eval {
     const updateObj: Record<string, unknown> = {
       config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
-      prompts: this.prompts,
+      prompts: this.prompts.map((prompt) => projectPrompt(prompt, false)),
       description: this.config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
@@ -1359,7 +1359,11 @@ export default class Eval {
     this.prompts = prompts;
     if (this.persisted) {
       const db = await getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      await db
+        .update(evalsTable)
+        .set({ prompts: prompts.map((prompt) => projectPrompt(prompt, false)) })
+        .where(eq(evalsTable.id, this.id))
+        .run();
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
       notifyEvaluationChanged(this.id);
@@ -1375,7 +1379,7 @@ export default class Eval {
         .values(
           results.map((r) => ({
             ...r,
-            metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            ...sanitizeResultFieldsForDb(r),
             evalId: this.id,
           })),
         )
@@ -1586,7 +1590,7 @@ export default class Eval {
           description: copyDescription,
           config: sanitizeTracingConfigForPersistence(newConfig),
           results: {},
-          prompts: newPrompts,
+          prompts: newPrompts.map((prompt) => projectPrompt(prompt, false)),
           vars: newVars,
           runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
           isRedteam: newConfig.redteam !== undefined,
@@ -1681,14 +1685,18 @@ export default class Eval {
 
         // Map to new eval with new IDs and timestamps
         const now = Date.now();
-        const copiedResults = batch.map((result) => ({
-          ...result,
-          id: crypto.randomUUID(),
-          evalId: newEvalId,
-          createdAt: now,
-          metadata: stripTraceLinkageFromMetadata(result.metadata),
-          updatedAt: now,
-        }));
+        const copiedResults = batch.map((result) => {
+          const sanitizedFields = sanitizeResultFieldsForDb(result);
+          return {
+            ...result,
+            ...sanitizedFields,
+            id: crypto.randomUUID(),
+            evalId: newEvalId,
+            createdAt: now,
+            metadata: stripTraceLinkageFromMetadata(sanitizedFields.metadata),
+            updatedAt: now,
+          };
+        });
 
         // Insert batch
         await tx.insert(evalResultsTable).values(copiedResults).run();
