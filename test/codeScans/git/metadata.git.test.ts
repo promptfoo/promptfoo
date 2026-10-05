@@ -80,6 +80,11 @@ describe('code scan metadata with real git', () => {
     await expect(validateOnBranch(simpleGit(repoPath))).rejects.toThrow('Not on a branch');
   });
 
+  it('allows full option names but rejects abbreviated long options', async () => {
+    await expect(simpleGit(repoPath).raw(['branch', '--list'])).resolves.toContain('feature/topic');
+    await expect(simpleGit(repoPath).raw(['branch', '--lis'])).rejects.toThrow('abbreviated');
+  });
+
   it.each(['VISUAL', 'visual', 'ViSuAl'])(
     'rejects an explicitly supplied %s editor variable before running git',
     async (key) => {
