@@ -301,7 +301,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@openai/codex-sdk": "^0.156.1",
-    "@opencode-ai/sdk": "^1.18.31",
+    "@opencode-ai/sdk": "^1.18.32",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.1.0",
     "hono": "^4.13.8",
