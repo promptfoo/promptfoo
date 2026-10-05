@@ -341,6 +341,10 @@ async function findPathsGitLeavesOut(
         () => true,
         () => false,
       );
+      signal?.throwIfAborted();
+      if (performance.now() >= deadline) {
+        return { leftOut, reserved, directories, populatedDirectories, timedOut: true };
+      }
       // Node must retain bytes for its own DT_UNKNOWN lstat fallback, before yielding an
       // entry. The installed Node typings omit opendir's supported Buffer-name option.
       const entries = (await fs.opendir(physicalDirectory, {
@@ -1303,27 +1307,46 @@ async function getWorkspaceDiff(
       ),
       'latin1',
     );
-    if (!isUtf8(diffBytes)) {
+    // Only whole patch lines carry these markers: content lines have a +, - or space
+    // prefix, and Git quotes newlines in filenames. Deletions, pure renames and mode
+    // changes fully describe their operation without any new binary bytes to inspect.
+    const checkUtf8 = !isUtf8(diffBytes);
+    let invalidUtf8 = false;
+    let binaryContent = false;
+    let deletedFile = false;
+    let inHunk = false;
+    for (const line of diffBytes.toString('latin1').split('\n')) {
+      if (line.startsWith('diff --git ')) {
+        deletedFile = false;
+        inHunk = false;
+      } else if (line.startsWith('deleted file mode ')) {
+        deletedFile = true;
+      } else if (/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/.test(line)) {
+        inHunk = true;
+      } else if (!deletedFile && /^Binary files .+ differ$/.test(line)) {
+        binaryContent = true;
+      }
+      // Only removed data from a wholly deleted file can be omitted. Headers, added
+      // bytes, and context/removals in a surviving file still need faithful decoding.
+      if (
+        checkUtf8 &&
+        !invalidUtf8 &&
+        !(deletedFile && inHunk && line.startsWith('-')) &&
+        !isUtf8(Buffer.from(line, 'latin1'))
+      ) {
+        invalidUtf8 = true;
+      }
+    }
+    if (invalidUtf8) {
       notes.push(
         '[diff incomplete: some changed content is not valid UTF-8 and is shown with ' +
           'replacement characters]',
       );
     }
-    const diff = diffBytes.toString();
-    // Only whole patch lines carry these markers: content lines have a +, - or space
-    // prefix, and Git quotes newlines in filenames. Deletions, pure renames and mode
-    // changes fully describe their operation without any new binary bytes to inspect.
-    let deletedFile = false;
-    for (const line of diff.split('\n')) {
-      if (line.startsWith('diff --git ')) {
-        deletedFile = false;
-      } else if (line.startsWith('deleted file mode ')) {
-        deletedFile = true;
-      } else if (!deletedFile && /^Binary files .+ differ$/.test(line)) {
-        notes.push('[diff incomplete: binary file contents are not included]');
-        break;
-      }
+    if (binaryContent) {
+      notes.push('[diff incomplete: binary file contents are not included]');
     }
+    const diff = diffBytes.toString();
     const truncated = diff.length > MAX_DIFF_LENGTH;
     const shown = truncated
       ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`

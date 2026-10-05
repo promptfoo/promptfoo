@@ -535,6 +535,55 @@ describe('agent workspaces', () => {
       expect(metadata.workspaceDiffError).toBeUndefined();
     });
 
+    it.each([
+      'deleted',
+      'deleted-with-edit',
+      'deleted-with-invalid-addition',
+      'context',
+      'removed-line',
+    ])('records UTF-8 completeness for legacy text that is %s', async (kind) => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const legacy = Buffer.from('hi\xffden\nline 2\nline 3\nline 4\n', 'latin1');
+      fs.writeFileSync(path.join(source, 'a-legacy.txt'), legacy);
+      git(source, 'add', 'a-legacy.txt');
+      git(source, 'commit', '-q', '-m', 'legacy text');
+      const workspace = await create(source, 'git');
+      if (kind.startsWith('deleted')) {
+        fs.unlinkSync(path.join(workspace.dir, 'a-legacy.txt'));
+      } else {
+        fs.writeFileSync(
+          path.join(workspace.dir, 'a-legacy.txt'),
+          kind === 'context'
+            ? Buffer.from('hi\xffden\nline 2\nline 3\nchanged 4\n', 'latin1')
+            : Buffer.from('safe\nline 2\nline 3\nline 4\n'),
+        );
+      }
+      if (kind === 'deleted-with-edit') {
+        write(path.join(workspace.dir, 'README.md'), 'original\nvisible change\n');
+      } else if (kind === 'deleted-with-invalid-addition') {
+        fs.writeFileSync(
+          path.join(workspace.dir, 'z-new.txt'),
+          Buffer.from('new\xffbytes\n', 'latin1'),
+        );
+      }
+
+      const metadata = await workspace.metadata();
+      const complete = kind === 'deleted' || kind === 'deleted-with-edit';
+
+      expect(metadata.workspaceDiffError).toBeUndefined();
+      expect(metadata.workspaceDiffIncomplete).toBe(complete ? undefined : true);
+      expect(metadata.workspaceDiff).toContain('hi\uFFFDden');
+      expect(metadata.workspaceDiff?.includes('not valid UTF-8')).toBe(!complete);
+      if (kind.startsWith('deleted')) {
+        expect(metadata.workspaceDiff).toContain('deleted file mode');
+      }
+      if (kind === 'deleted-with-edit') {
+        expect(metadata.workspaceDiff).toContain('+visible change');
+      }
+      expect(fs.readFileSync(path.join(source, 'a-legacy.txt'))).toEqual(legacy);
+    });
+
     it('does not treat binary-marker text or renamed path names as binary content', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
@@ -2850,6 +2899,51 @@ describe('agent workspaces', () => {
           for (const directory of directories) {
             fs.chmodSync(directory, 0o700);
           }
+        }
+      },
+    );
+
+    it.each(['abort', 'timeout'] as const)(
+      'does not open another directory after access causes %s',
+      async (kind) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const controller = new AbortController();
+        const workspace = await create(source, 'git', controller.signal);
+        write(path.join(workspace.dir, 'README.md'), 'original\nvisible change\n');
+        const start = performance.now();
+        const now = vi.spyOn(performance, 'now').mockReturnValue(start);
+        const original = fs.promises.access;
+        const opendir = vi.spyOn(fs.promises, 'opendir');
+        let openedBeforeStop: number | undefined;
+        const access = vi.spyOn(fs.promises, 'access').mockImplementation(async (...args) => {
+          await original(...args);
+          if (path.resolve(String(args[0])) === workspace.dir) {
+            openedBeforeStop = opendir.mock.calls.length;
+            if (kind === 'abort') {
+              controller.abort();
+            } else {
+              now.mockReturnValue(start + 30_001);
+            }
+          }
+        });
+        try {
+          if (kind === 'abort') {
+            await expect(workspace.metadata()).rejects.toMatchObject({ name: 'AbortError' });
+          } else {
+            const metadata = await workspace.metadata();
+            expect(metadata.workspaceDiffError).toBeUndefined();
+            expect(metadata.workspaceDiffIncomplete).toBe(true);
+            expect(metadata.workspaceDiff).toContain('+visible change');
+            expect(metadata.workspaceDiff).toContain('workspace traversal exceeded 30000 ms');
+          }
+          expect(openedBeforeStop).toBeDefined();
+          expect(opendir).toHaveBeenCalledTimes(openedBeforeStop!);
+          expect(fs.readdirSync(path.dirname(workspace.dir))).toEqual(['workspace']);
+        } finally {
+          opendir.mockRestore();
+          access.mockRestore();
+          now.mockRestore();
         }
       },
     );
