@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
 
 import { getEnvString, getMergedEnvOverrides } from '../envars';
+import { memoizeAwsCredentials } from './awsCredentialRefresh';
 import { getScopedAwsEndpointOptions } from './awsEndpointConfig';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider, Logger } from '@smithy/types';
 
@@ -47,52 +48,6 @@ type CredentialChain = (
 ) => () => Promise<AwsCredentialIdentity>;
 
 const execAsync = promisify(exec);
-
-/** Preserve the native default chain's valid-credential background refresh policy. */
-function memoizeProfileCredentials(
-  resolve: AwsCredentialIdentityProvider,
-  needsRefresh: (identity: AwsCredentialIdentity) => boolean,
-): AwsCredentialIdentityProvider {
-  let current: AwsCredentialIdentity | undefined;
-  let initial: Promise<AwsCredentialIdentity> | undefined;
-  let background: Promise<void> | undefined;
-  let forced: Promise<AwsCredentialIdentity> | undefined;
-  const refresh: AwsCredentialIdentityProvider = async (properties) => {
-    const next = await resolve(properties);
-    current = next;
-    return next;
-  };
-  const provider: AwsCredentialIdentityProvider = async (properties) => {
-    if (properties?.forceRefresh) {
-      return (forced ??= refresh(properties).finally(() => {
-        forced = undefined;
-      }));
-    }
-    if (current?.expiration && current.expiration.getTime() < Date.now()) {
-      current = undefined;
-    }
-    if (initial) {
-      return initial;
-    }
-    if (!current) {
-      return (initial = refresh(properties).finally(() => {
-        initial = undefined;
-      }));
-    }
-    if (needsRefresh(current) && !background) {
-      background = refresh(properties)
-        .then(() => undefined)
-        // The existing credentials remain usable until their actual expiration.
-        .catch(() => undefined)
-        .finally(() => {
-          background = undefined;
-        });
-    }
-    return current;
-  };
-  // Prevent the SDK from replacing this policy with its blocking explicit-provider cache.
-  return Object.assign(provider, { memoized: true });
-}
 
 /** Resolve through an installed optional client, including with isolated pnpm layouts. */
 function loadProfileSdk() {
@@ -549,5 +504,5 @@ export async function getScopedAwsProfileCredentials(
       },
     )();
   };
-  return memoizeProfileCredentials(resolveCredentials, sdk.credentialsTreatedAsExpired);
+  return memoizeAwsCredentials(resolveCredentials, sdk.credentialsTreatedAsExpired);
 }

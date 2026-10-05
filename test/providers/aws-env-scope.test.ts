@@ -21,6 +21,7 @@ import {
   SageMakerEmbeddingProvider,
 } from '../../src/providers/sagemaker';
 import { mockProcessEnv } from '../util/utils';
+import type { AwsCredentialIdentityProvider } from '@smithy/types';
 
 import type { EnvOverrides } from '../../src/contracts/env';
 
@@ -424,7 +425,14 @@ describe('scoped AWS SDK authentication', () => {
   it('clears an optional session token while retaining the complete host keypair', async () => {
     mockProcessEnv(keys('host'));
     mockProcessEnv({ AWS_SESSION_TOKEN: 'host-session' });
-    expect(await resolveAwsCredentials({}, { AWS_SESSION_TOKEN: '' })).toEqual({
+    expect(
+      await (
+        (await resolveAwsCredentials(
+          {},
+          { AWS_SESSION_TOKEN: '' },
+        )) as AwsCredentialIdentityProvider
+      )(),
+    ).toEqual({
       accessKeyId: 'host-access',
       secretAccessKey: 'host-secret',
       sessionToken: undefined,
@@ -755,7 +763,7 @@ describe('scoped AWS SDK authentication', () => {
       env: suite,
       options: { env: keys('provider') },
     })) as SageMakerCompletionProvider;
-    expect(await provider.getCredentials()).toEqual({
+    expect(await ((await provider.getCredentials()) as AwsCredentialIdentityProvider)()).toEqual({
       accessKeyId: 'provider-access',
       secretAccessKey: 'provider-secret',
       sessionToken: 'suite-session',
@@ -764,7 +772,7 @@ describe('scoped AWS SDK authentication', () => {
       env: suite,
       options: { env: { AWS_ACCESS_KEY_ID: 'partial-access' } },
     })) as SageMakerCompletionProvider;
-    expect(await partial.getCredentials()).toEqual({
+    expect(await ((await partial.getCredentials()) as AwsCredentialIdentityProvider)()).toEqual({
       accessKeyId: 'partial-access',
       secretAccessKey: 'suite-secret',
       sessionToken: 'suite-session',

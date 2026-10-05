@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 import { getEnvString, getMergedEnvOverrides } from '../envars';
+import { memoizeAwsEnvironmentCredentials } from './awsCredentialRefresh';
 import { getScopedAwsProfileCredentials } from './awsProfileCredentials';
 import { getCredentialCacheNamespace, getOpaqueCredentialCacheNamespace } from './credentialCache';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
@@ -181,6 +182,33 @@ export async function resolveAwsCredentials(
       throw new Error(
         'AWS access credentials are incomplete. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY together in the effective environment.',
       );
+    }
+    if (source !== config) {
+      // Capture invocation overrides, but refresh inherited host values like the
+      // native environment provider. A later invocation must not supply them.
+      const scoped = getMergedEnvOverrides(env);
+      return memoizeAwsEnvironmentCredentials(async () => {
+        const value = (name: string) => scoped[name] ?? process.env[name];
+        const currentAccessKeyId = value('AWS_ACCESS_KEY_ID');
+        const currentSecretAccessKey = value('AWS_SECRET_ACCESS_KEY');
+        if (!currentAccessKeyId?.trim() || !currentSecretAccessKey?.trim()) {
+          throw new Error(
+            'AWS access credentials are incomplete. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY together in the effective environment.',
+          );
+        }
+        const currentSessionToken = value('AWS_SESSION_TOKEN');
+        const expiration = value('AWS_CREDENTIAL_EXPIRATION');
+        const credentialScope = value('AWS_CREDENTIAL_SCOPE');
+        const accountId = value('AWS_ACCOUNT_ID');
+        return {
+          accessKeyId: currentAccessKeyId,
+          secretAccessKey: currentSecretAccessKey,
+          sessionToken: currentSessionToken?.trim() ? currentSessionToken : undefined,
+          ...(expiration ? { expiration: new Date(expiration) } : {}),
+          ...(credentialScope ? { credentialScope } : {}),
+          ...(accountId ? { accountId } : {}),
+        };
+      });
     }
     return {
       accessKeyId,

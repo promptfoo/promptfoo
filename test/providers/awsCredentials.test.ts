@@ -5,6 +5,7 @@ import {
   resolveAwsCredentials,
 } from '../../src/providers/awsCredentials';
 import { mockProcessEnv } from '../util/utils';
+import type { AwsCredentialIdentityProvider } from '@smithy/types';
 
 afterEach(() => {
   vi.doUnmock('@aws-sdk/credential-provider-sso');
@@ -129,7 +130,7 @@ describe('backwards-compatible AWS env-file handoff', () => {
     });
     try {
       await cliState.withEnvFileOverrides({ AWS_SESSION_TOKEN: 'file-token' }, async () => {
-        expect(await resolveAwsCredentials()).toEqual({
+        expect(await ((await resolveAwsCredentials()) as AwsCredentialIdentityProvider)()).toEqual({
           accessKeyId: 'host-access',
           secretAccessKey: 'host-secret',
           sessionToken: 'file-token',
@@ -149,7 +150,7 @@ describe('backwards-compatible AWS env-file handoff', () => {
         AWS_SESSION_TOKEN: token,
       },
       async () => {
-        expect(await resolveAwsCredentials()).toEqual({
+        expect(await ((await resolveAwsCredentials()) as AwsCredentialIdentityProvider)()).toEqual({
           accessKeyId: 'file-access',
           secretAccessKey: 'file-secret',
         });
