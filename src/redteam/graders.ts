@@ -131,6 +131,8 @@ import { WordplayGrader } from './plugins/wordplay';
 import type { RedteamGraderBase } from './plugins/base';
 import type { RedteamAssertionTypes } from './types';
 
+export { validateRedteamTargetResponse } from './grading/validation';
+
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
   'promptfoo:redteam:aegis': new AegisGrader(),

@@ -62,7 +62,8 @@ vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../../src/redteam/graders', () => ({
+vi.mock('../../../../src/redteam/graders', async (importOriginal) => ({
+  ...(await importOriginal()),
   getGraderById: mockGetGraderById,
 }));
 
