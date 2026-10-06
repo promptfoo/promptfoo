@@ -2345,7 +2345,52 @@ type ProviderColumns = {
 function buildCompletedPrompts(
   testSuite: TestSuite,
   store: EvaluationStore,
+  restorePromptColumns = false,
 ): { prompts: CompletedPrompt[]; columnsByProvider: ProviderColumns[] } {
+  const providerKeys = testSuite.providers.map(getProviderIdentifier);
+  if (
+    restorePromptColumns &&
+    new Set(providerKeys).size === providerKeys.length &&
+    !testSuite.prompts.some((prompt) => prompt.function)
+  ) {
+    // Saved columns are the replay schedule, including generated prompts and snapshots
+    // whose file labels or contents have since changed. Do not expand or filter them again.
+    const columnsByProvider: ProviderColumns[] = testSuite.providers.map((provider) => ({
+      provider,
+      columns: [],
+    }));
+    let previousProviderIndex = -1;
+    const prompts = store.prompts.map((saved, promptIdx) => {
+      const providerIndex = providerKeys.indexOf(saved.provider);
+      invariant(
+        providerIndex >= 0 && providerIndex >= previousProviderIndex,
+        'Cannot resume evaluation because saved providers are missing or reordered. Start a new evaluation instead.',
+      );
+      previousProviderIndex = providerIndex;
+      const prompt = {
+        ...saved,
+        metrics: saved.metrics ? structuredClone(saved.metrics) : createDefaultPromptMetrics(),
+      };
+      backfillNamedScoreWeights(prompt.metrics);
+      // Headers store a generated hash, while test-level selectors use authored IDs.
+      const authored = testSuite.prompts.filter(
+        (candidate) =>
+          generateIdFromPrompt(candidate) === saved.id &&
+          candidate.raw === saved.raw &&
+          candidate.label === saved.label &&
+          isDeepStrictEqual(candidate.config, saved.config),
+      );
+      columnsByProvider[providerIndex].columns.push({
+        promptIdx,
+        prompt: { ...prompt, id: authored.length === 1 ? authored[0].id : undefined },
+      });
+      return prompt;
+    });
+    return { prompts, columnsByProvider };
+  }
+
+  // Duplicate provider keys do not identify saved instance boundaries; live functions
+  // cannot be recovered from serialized source. Require the current layout to match.
   const prompts: CompletedPrompt[] = [];
   const columnsByProvider: ProviderColumns[] = [];
   const existingPromptsMap = buildExistingPromptsMap(store);
@@ -5242,11 +5287,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
       testSuite = beforeAllOut.suite;
 
-      if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
+      const restorePromptColumns = Boolean(
+        options.restorePromptColumns &&
+          cliState.resume &&
+          this.store.persisted &&
+          this.store.prompts.length > 0,
+      );
+      if (!restorePromptColumns && !(await maybeAddGeneratedPrompts(testSuite, options))) {
         return this.store.evaluation;
       }
 
-      const { prompts, columnsByProvider } = buildCompletedPrompts(testSuite, this.store);
+      const { prompts, columnsByProvider } = buildCompletedPrompts(
+        testSuite,
+        this.store,
+        restorePromptColumns,
+      );
 
       await this.store.appendPrompts(prompts);
 

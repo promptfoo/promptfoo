@@ -12,13 +12,19 @@ import {
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
+import { generatePrompts } from '../../src/suggestions';
 import { ResultFailureReason, type TestSuite } from '../../src/types/index';
+import { promptYesNo } from '../../src/util/readline';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 import type { EvaluationStore, EvaluatorRuntime } from '../../src/evaluator/runtime';
 import type EvalResult from '../../src/models/evalResult';
 import type { ApiProvider, EvaluateResult, Prompt } from '../../src/types/index';
+
+vi.mock('../../src/suggestions', () => ({ generatePrompts: vi.fn() }));
+vi.mock('../../src/util/readline', () => ({ promptYesNo: vi.fn() }));
 
 function createResultWriter() {
   return {
@@ -292,6 +298,82 @@ describeEvaluator('evaluator runtime ports', () => {
       expect(evaluation.results).toHaveLength(1);
       expect(evaluation.results[0]).toMatchObject({ success: true, promptIdx: 0 });
       expect(evaluation.prompts[0]).toMatchObject({ raw: saved.raw, label: saved.label });
+    },
+  );
+
+  it('generates initial suggestions when CLI recovery has no saved columns', async () => {
+    const evaluation = createInMemoryEvaluation({ persisted: true });
+    const store = new InMemoryEvaluationStore(evaluation);
+    cliState.resume = true;
+    vi.mocked(generatePrompts).mockResolvedValueOnce({
+      prompts: ['generated'],
+      tokensUsed: createEmptyTokenUsage(),
+    });
+    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
+    try {
+      await evaluate(
+        { providers: [mockApiProvider], prompts: [toPrompt('original')], tests: [{}] },
+        evaluation,
+        { restorePromptColumns: true, generateSuggestions: true },
+        createInMemoryRuntime(store),
+      );
+      expect(generatePrompts).toHaveBeenCalledWith('original', 1);
+      expect(evaluation.prompts.map((prompt) => prompt.raw)).toEqual(['original', 'generated']);
+      expect(evaluation.results).toHaveLength(2);
+      expect(evaluation.results.every((result) => result.success)).toBe(true);
+    } finally {
+      vi.mocked(generatePrompts).mockReset();
+      vi.mocked(promptYesNo).mockReset();
+    }
+  });
+
+  it.each(['missing', 'reordered', 'duplicate', 'function'] as const)(
+    'rejects incompatible CLI saved columns before writes: %s',
+    async (change) => {
+      const labels = change === 'duplicate' ? ['same', 'same'] : ['first', 'second'];
+      const providers: ApiProvider[] = labels.map((label) => ({
+        id: () => 'echo',
+        label,
+        callApi: vi.fn().mockResolvedValue({ output: 'hello' }),
+      }));
+      const saved = (change === 'duplicate' ? ['same'] : labels).map((provider) => ({
+        raw: 'hello',
+        label: 'prompt',
+        provider,
+      }));
+      if (change === 'missing') {
+        providers.pop();
+      } else if (change === 'reordered') {
+        providers.reverse();
+      }
+      const prompt: Prompt = {
+        raw: change === 'function' ? 'changed live source' : 'hello',
+        label: 'prompt',
+        ...(change === 'function' && { function: async () => 'live output' }),
+      };
+      const evaluation = createInMemoryEvaluation({ persisted: true, prompts: saved });
+      const before = structuredClone(saved);
+      const store = new InMemoryEvaluationStore(evaluation);
+      const appendPrompts = vi.spyOn(store, 'appendPrompts');
+      const appendResult = vi.spyOn(store, 'appendResult');
+      const save = vi.spyOn(store, 'save');
+      cliState.resume = true;
+      await expect(
+        evaluate(
+          { providers, prompts: [prompt], tests: [{}] },
+          evaluation,
+          { restorePromptColumns: true },
+          createInMemoryRuntime(store),
+        ),
+      ).rejects.toThrow('Cannot resume evaluation');
+      expect(appendPrompts).not.toHaveBeenCalled();
+      expect(appendResult).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(evaluation.prompts).toEqual(before);
+      expect(evaluation.results).toEqual([]);
+      for (const provider of providers) {
+        expect(provider.callApi).not.toHaveBeenCalled();
+      }
     },
   );
 

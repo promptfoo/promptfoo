@@ -1,6 +1,5 @@
 import fs from 'fs/promises';
 import * as path from 'path';
-import { isDeepStrictEqual } from 'util';
 
 import chalk from 'chalk';
 import chokidar from 'chokidar';
@@ -22,7 +21,6 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { generateIdFromPrompt } from '../models/prompt';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -71,7 +69,6 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
-  Prompt,
   Scenario,
   TestSuite,
   UnifiedConfig,
@@ -141,53 +138,6 @@ async function resolveReplayConfigs(
   // provider set matches the original even when an instantiated id or label diverges
   // from its raw config reference.
   configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
-  if (evalRecord.prompts.length > 0) {
-    // Saved headers contain one entry per provider–prompt pair. Restore snapshots
-    // onto authored slots to keep their order, IDs, and repeated entries.
-    const authoredPrompts = configs.testSuite.prompts;
-    const sameSnapshot = (left: Prompt, right: Prompt) =>
-      left.label === right.label &&
-      left.raw === right.raw &&
-      isDeepStrictEqual(left.config, right.config);
-    configs.testSuite.prompts = authoredPrompts.flatMap((prompt) => {
-      const customId = !prompt.label && prompt.id ? generateIdFromPrompt(prompt) : undefined;
-      const byLabel = evalRecord.prompts.filter(
-        (saved) =>
-          saved.label === prompt.label && (!customId || !saved.id || saved.id === customId),
-      );
-      let matches = byLabel.filter((saved) => sameSnapshot(saved, prompt));
-      if (matches.length === 0) {
-        // A snapshot that still matches an authored slot must not populate a different,
-        // previously filtered slot merely because their labels are equal.
-        const unmatched = byLabel.filter(
-          (saved) =>
-            !authoredPrompts.some(
-              (authored) =>
-                (!customId || authored.id === prompt.id) && sameSnapshot(authored, saved),
-            ),
-        );
-        const byContent = unmatched.filter((saved) => saved.raw === prompt.raw);
-        matches = byContent.length ? byContent : unmatched;
-      }
-      const saved = matches[0];
-      if (!saved) {
-        return []; // Retain the original --filter-prompts subset.
-      }
-      if (
-        matches.some(
-          (match) => match.raw !== saved.raw || !isDeepStrictEqual(match.config, saved.config),
-        ) ||
-        // A live prompt function can close over current file contents or config.
-        (prompt.function &&
-          (saved.raw !== prompt.raw || !isDeepStrictEqual(saved.config, prompt.config)))
-      ) {
-        throw new ConfigResolutionError(
-          'Cannot safely restore saved prompt snapshots. Start a new evaluation instead.',
-        );
-      }
-      return [{ ...prompt, raw: saved.raw, config: saved.config }];
-    });
-  }
   return configs;
 }
 
@@ -795,10 +745,13 @@ async function doEvalWithEnv(
 
     const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 
-    // Strip any providerFilter a config file injected via evaluateOptions — only the
-    // normalized CLI/persisted value above may be persisted and replayed.
-    const { providerFilter: _ignoredProviderFilter, ...safeEvaluateOptions } =
-      evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
+    // Strip orchestration keys from config-supplied options. Only the normalized
+    // provider filter is persisted; saved-column restoration is set at the call site.
+    const {
+      providerFilter: _ignoredProviderFilter,
+      restorePromptColumns: _ignoredRestorePromptColumns,
+      ...safeEvaluateOptions
+    } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
       showProgressBar:
@@ -971,6 +924,7 @@ async function doEvalWithEnv(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        restorePromptColumns: Boolean(resumeEval),
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),

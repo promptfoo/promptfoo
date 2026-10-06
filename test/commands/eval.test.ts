@@ -44,6 +44,7 @@ import {
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
+import { generatePrompts } from '../../src/suggestions';
 import { generateTable } from '../../src/table';
 import {
   ConfigPermissionError,
@@ -93,6 +94,7 @@ vi.mock('../../src/redteam/shared', async (importOriginal) => {
 });
 vi.mock('../../src/share');
 vi.mock('../../src/table');
+vi.mock('../../src/suggestions');
 vi.mock('../../src/util/cloud', async () => ({
   ...(await vi.importActual('../../src/util/cloud')),
   getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
@@ -1880,10 +1882,10 @@ describe('evalCommand', () => {
       basePath: path.resolve('/'),
     });
     vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
-      expect(testSuite.prompts).toEqual([
-        { ...authored, raw: 'saved prompt', config: { temperature: 0 } },
-      ]);
-      expect(options).toEqual(expect.objectContaining({ repeat: 2, cache: false }));
+      expect(testSuite.prompts).toEqual([authored]);
+      expect(options).toEqual(
+        expect.objectContaining({ repeat: 2, cache: false, restorePromptColumns: true }),
+      );
       return evalRecord as Eval;
     });
 
@@ -1927,8 +1929,9 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
-    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord) => {
-      expect(testSuite.prompts).toEqual([{ raw: 'retry prompt', label: 'Retry', config: {} }]);
+    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
+      expect(testSuite.prompts).toEqual([authored]);
+      expect(options.restorePromptColumns).toBe(true);
       return evalRecord as Eval;
     });
 
@@ -1948,95 +1951,149 @@ describe('evalCommand', () => {
     }
   });
 
-  it.each([
-    { mode: 'resume', duplicates: false },
-    { mode: 'retry-errors', duplicates: false },
-    { mode: 'resume', duplicates: true },
-    { mode: 'retry-errors', duplicates: true },
-  ] as const)(
-    'reconstructs two-provider columns through the real evaluator for $mode (duplicates: $duplicates)',
-    async ({ mode, duplicates }) => {
-      const prompts = [
+  it.each(
+    (
+      [
         {
-          id: 'authored-prompt',
-          raw: 'hello',
-          label: 'shared',
-          config: { public: { setting: 1 } },
+          name: 'an unchanged prompt',
+          authored: [{ id: 'authored', raw: 'hello', label: 'shared' }],
         },
-      ];
-      if (duplicates) {
-        prompts.push({ ...prompts[0], id: 'repeated-prompt', config: { public: { setting: 2 } } });
-      }
-      const providers = ['first', 'second'].map((label) => ({
-        id: () => 'echo',
-        label,
-        callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
-      }));
-      const record = new Eval({
-        prompts,
-        providers: providers.map((provider) => ({ id: 'echo', label: provider.label })),
-        tests: [{}],
+        {
+          name: 'repeated same-label slots with distinct settings',
+          authored: [
+            { raw: 'same', label: 'shared', config: { public: { setting: 1 } } },
+            { raw: 'same', label: 'shared', config: { public: { setting: 2 } } },
+          ],
+        },
+        {
+          name: 'accepted generated suggestions without regenerating them',
+          authored: [{ raw: 'authored', label: 'authored' }],
+          saved: [
+            { raw: 'authored', label: 'authored' },
+            { raw: 'accepted variation', label: 'accepted variation' },
+          ],
+          generateSuggestions: true,
+        },
+        {
+          name: 'edited text-file contents and content-derived labels',
+          authored: [{ raw: 'edited', label: 'prompts.txt: edited', config: { prefix: 'new' } }],
+          saved: [{ raw: 'saved', label: 'prompts.txt: saved', config: { prefix: 'old' } }],
+        },
+        {
+          name: 'file labels relative to a different working directory',
+          authored: [{ raw: 'same text', label: '../suite/prompts.txt: same text' }],
+          saved: [{ raw: 'same text', label: 'prompts.txt: same text' }],
+        },
+        {
+          name: 'one ID-filtered occurrence among otherwise identical prompts',
+          authored: [
+            { id: 'included', raw: 'same', label: 'shared' },
+            { id: 'excluded', raw: 'same', label: 'shared' },
+          ],
+          saved: [{ id: 'included', raw: 'same', label: 'shared' }],
+        },
+        {
+          name: 'an exactly recoverable empty-label ID used by a test selector',
+          authored: [{ id: 'included', raw: 'same', label: '' }],
+          testPromptFilter: ['included'],
+        },
+        {
+          name: 'unchanged live prompt functions through the exact-layout fallback',
+          authored: [{ raw: 'live source', label: 'live', function: async () => 'live output' }],
+          expectedOutputs: ['live output'],
+        },
+        {
+          name: 'unchanged duplicate provider identities through the exact-layout fallback',
+          authored: [{ raw: 'hello', label: 'shared' }],
+          duplicateProviders: true,
+        },
+      ] as Array<{
+        name: string;
+        authored: Prompt[];
+        saved?: Prompt[];
+        generateSuggestions?: boolean;
+        testPromptFilter?: string[];
+        expectedOutputs?: string[];
+        duplicateProviders?: boolean;
+      }>
+    ).flatMap((scenario) =>
+      (['resume', 'retry-errors'] as const).map((mode) => ({ ...scenario, mode })),
+    ),
+  )('replays saved columns through the real evaluator: $mode, $name', async (scenario) => {
+    const { authored, mode } = scenario;
+    const saved = (scenario.saved ?? authored).map(({ function: _function, ...prompt }) => prompt);
+    const labels = scenario.duplicateProviders ? ['same', 'same'] : ['first', 'second'];
+    const providers = labels.map((label) => ({
+      id: () => 'echo',
+      label,
+      callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
+    }));
+    const tests = [{ prompts: scenario.testPromptFilter }];
+    const record = new Eval({
+      prompts: authored,
+      providers: providers.map((provider) => ({ id: 'echo', label: provider.label })),
+      tests,
+      evaluateOptions: { generateSuggestions: scenario.generateSuggestions },
+    });
+    record.prompts = providers.flatMap((provider) =>
+      saved.map((prompt) => ({
+        ...prompt,
+        id: generateIdFromPrompt(prompt),
+        provider: provider.label,
+      })),
+    );
+    const savedColumns = structuredClone(record.prompts);
+    record.runtimeOptions = { cache: false };
+    const findById = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(record);
+    const latest = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(record);
+    vi.mocked(withCacheNamespace).mockImplementation((_namespace, callback) => callback());
+    if (mode === 'retry-errors') {
+      vi.mocked(getErrorResultIds).mockResolvedValueOnce(['mocked-retry-row']);
+    }
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: record.config as UnifiedConfig,
+      testSuite: { providers, prompts: authored, tests },
+      basePath: path.resolve('/'),
+    });
+    const actual =
+      await vi.importActual<typeof import('../../src/evaluator')>('../../src/evaluator');
+    const { TokenUsageTracker: ActualTracker } = await vi.importActual<
+      typeof import('../../src/util/tokenUsage')
+    >('../../src/util/tokenUsage');
+    const tracker = vi
+      .spyOn(TokenUsageTracker, 'getInstance')
+      .mockReturnValue(ActualTracker.getInstance());
+    vi.mocked(evaluate).mockImplementationOnce(async (suite, evalRecord, options) => {
+      // Run the actual command-prepared suite through the evaluator with an in-memory
+      // store. The outer command retains its existing mocked persistence/cleanup.
+      const memory: InMemoryEvaluation = {
+        id: record.id,
+        config: record.config,
+        persisted: true,
+        prompts: structuredClone(record.prompts),
+        results: [],
+        vars: [],
+        resultPersistenceFailed: false,
+        finalResults: [],
+        failedResults: [],
+      };
+      await actual.evaluate(suite, memory, options, {
+        createEvaluationStore: () => new InMemoryEvaluationStore(memory),
+        createResultWriters: () => [],
       });
-      record.prompts = providers.flatMap((provider) =>
-        prompts.map((prompt) => ({
-          ...prompt,
-          id: generateIdFromPrompt(prompt),
-          provider: provider.label,
-        })),
+      expect(options.restorePromptColumns).toBe(true);
+      expect(memory.prompts).toMatchObject(savedColumns);
+      expect(memory.results.map((result) => result.promptIdx).sort()).toEqual(
+        Array.from({ length: savedColumns.length }, (_, index) => index),
       );
-      record.runtimeOptions = { cache: false };
-      const findById = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(record);
-      const latest = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(record);
-      vi.mocked(withCacheNamespace).mockImplementation((_namespace, callback) => callback());
-      if (mode === 'retry-errors') {
-        vi.mocked(getErrorResultIds).mockResolvedValueOnce(['mocked-retry-row']);
-      }
-      vi.mocked(resolveConfigs).mockResolvedValueOnce({
-        config: record.config as UnifiedConfig,
-        testSuite: { providers, prompts, tests: [{}] },
-        basePath: path.resolve('/'),
-      });
-      const actual =
-        await vi.importActual<typeof import('../../src/evaluator')>('../../src/evaluator');
-      const { TokenUsageTracker: ActualTracker } = await vi.importActual<
-        typeof import('../../src/util/tokenUsage')
-      >('../../src/util/tokenUsage');
-      const tracker = vi
-        .spyOn(TokenUsageTracker, 'getInstance')
-        .mockReturnValue(ActualTracker.getInstance());
-      vi.mocked(evaluate).mockImplementationOnce(async (suite, evalRecord, options) => {
-        // Exercise the real column builder with persistence replaced by the existing
-        // in-memory adapter; the outer command keeps its normal persistence mocks.
-        const memory: InMemoryEvaluation = {
-          id: record.id,
-          config: record.config,
-          persisted: true,
-          prompts: structuredClone(record.prompts),
-          results: [],
-          vars: [],
-          resultPersistenceFailed: false,
-          finalResults: [],
-          failedResults: [],
-        };
-        const store = new InMemoryEvaluationStore(memory);
-        await actual.evaluate(suite, memory, options, {
-          createEvaluationStore: () => store,
-          createResultWriters: () => [],
-        });
-        expect(suite.prompts).toEqual(prompts);
-        expect(memory.prompts.map((prompt) => prompt.provider)).toEqual(
-          providers.flatMap((provider) => prompts.map(() => provider.label)),
-        );
-        expect(memory.results.map((result) => result.promptIdx).sort()).toEqual(
-          Array.from({ length: providers.length * prompts.length }, (_, index) => index),
-        );
-        expect(memory.results.every((result) => result.success)).toBe(true);
-        record.prompts = memory.prompts;
-        return evalRecord as Eval;
-      });
-
-      try {
-        const result = await doEval(
+      expect(memory.results.every((result) => result.success)).toBe(true);
+      expect(generatePrompts).not.toHaveBeenCalled();
+      record.prompts = memory.prompts;
+      return evalRecord as Eval;
+    });
+    try {
+      await expect(
+        doEval(
           {
             ...(mode === 'resume' ? { resume: record.id } : { retryErrors: true }),
             share: false,
@@ -2046,128 +2103,20 @@ describe('evalCommand', () => {
           {},
           undefined,
           { cache: false, eventSource: 'mcp' },
-        );
-        expect(result).toBe(record);
-        expect(evaluate).toHaveBeenCalledOnce();
-        for (const provider of providers) {
-          expect(provider.callApi).toHaveBeenCalledTimes(prompts.length);
-        }
-      } finally {
-        findById.mockRestore();
-        latest.mockRestore();
-        tracker.mockRestore();
-        vi.mocked(withCacheNamespace).mockReset();
-        vi.mocked(evaluate).mockReset();
-      }
-    },
-  );
-
-  it.each<{
-    name: string;
-    authored: Prompt[];
-    saved: Prompt[];
-    expected: Prompt[];
-  }>([
-    {
-      name: 'a stable file label restores saved text and settings',
-      authored: [{ id: 'source', label: 'file', raw: 'edited', config: { temperature: 1 } }],
-      saved: [{ label: 'file', raw: 'saved', config: { temperature: 0 } }],
-      expected: [{ id: 'source', label: 'file', raw: 'saved', config: { temperature: 0 } }],
-    },
-    {
-      name: 'an ID-filtered slot does not populate another slot with the same label',
-      authored: [
-        { id: 'included', label: 'shared', raw: 'first' },
-        { id: 'excluded', label: 'shared', raw: 'second' },
-      ],
-      saved: [{ label: 'shared', raw: 'first' }],
-      expected: [{ id: 'included', label: 'shared', raw: 'first' }],
-    },
-    {
-      name: 'empty-label custom IDs preserve the original filtered slot',
-      authored: [
-        { id: 'included', label: '', raw: 'same' },
-        { id: 'excluded', label: '', raw: 'same' },
-      ],
-      saved: [
-        { id: generateIdFromPrompt({ id: 'included', raw: 'same' }), label: '', raw: 'same' },
-      ],
-      expected: [{ id: 'included', label: '', raw: 'same' }],
-    },
-    {
-      name: 'duplicate labels with distinct content keep their authored order',
-      authored: [
-        { label: 'shared', raw: 'first', config: { temperature: 0 } },
-        { label: 'shared', raw: 'second', config: { temperature: 1 } },
-      ],
-      saved: [
-        { label: 'shared', raw: 'first', config: { temperature: 0 } },
-        { label: 'shared', raw: 'second', config: { temperature: 1 } },
-      ],
-      expected: [
-        { label: 'shared', raw: 'first', config: { temperature: 0 } },
-        { label: 'shared', raw: 'second', config: { temperature: 1 } },
-      ],
-    },
-  ])('restores authored replay slots: $name', async ({ authored, saved, expected }) => {
-    const record = new Eval({ prompts: authored } as UnifiedConfig);
-    record.prompts = ['first', 'second'].flatMap((provider) =>
-      saved.map((prompt) => ({ ...prompt, provider })),
-    );
-    const findById = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(record);
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: record.config as UnifiedConfig,
-      testSuite: { prompts: authored, providers: [] },
-      basePath: path.resolve('/'),
-    });
-    vi.mocked(evaluate).mockImplementationOnce(async (suite, evalRecord) => {
-      expect(suite.prompts).toEqual(
-        expected.map((prompt) => ({ ...prompt, config: prompt.config })),
-      );
-      return evalRecord as Eval;
-    });
-    try {
-      const options = { resume: record.id, table: false };
-      await doEval(options, {}, undefined, {});
+        ),
+      ).resolves.toBe(record);
       expect(evaluate).toHaveBeenCalledOnce();
+      for (const provider of providers) {
+        expect(provider.callApi.mock.calls.map(([prompt]) => prompt)).toEqual(
+          scenario.expectedOutputs ?? saved.map((prompt) => prompt.raw),
+        );
+      }
     } finally {
       findById.mockRestore();
+      latest.mockRestore();
+      tracker.mockRestore();
+      vi.mocked(withCacheNamespace).mockReset();
       vi.mocked(evaluate).mockReset();
-    }
-  });
-
-  it.each([
-    { name: 'ambiguous changed snapshots', dynamic: false },
-    { name: 'changed live prompt functions', dynamic: true },
-  ])('rejects unsafe replay snapshots before evaluation: $name', async ({ dynamic }) => {
-    const authored: Prompt = {
-      label: 'shared',
-      raw: 'current',
-      ...(dynamic && { function: async () => 'current output' }),
-    };
-    const record = new Eval({ prompts: [authored] } as UnifiedConfig);
-    record.prompts = [
-      { label: 'shared', raw: 'saved first', provider: 'first' },
-      { label: 'shared', raw: dynamic ? 'saved first' : 'saved second', provider: 'second' },
-    ];
-    const before = structuredClone(record.prompts);
-    const findById = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(record);
-    vi.mocked(evaluate).mockReset();
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: record.config as UnifiedConfig,
-      testSuite: { prompts: [authored], providers: [] },
-      basePath: path.resolve('/'),
-    });
-    try {
-      const options = { resume: record.id, table: false };
-      await expect(doEval(options, {}, undefined, {})).rejects.toThrow(
-        'Cannot safely restore saved prompt snapshots',
-      );
-      expect(evaluate).not.toHaveBeenCalled();
-      expect(deleteErrorResults).not.toHaveBeenCalled();
-      expect(record.prompts).toEqual(before);
-    } finally {
-      findById.mockRestore();
     }
   });
 

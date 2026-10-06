@@ -1127,7 +1127,7 @@ async function resolveLoadedConfig(
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
   // This enables:
-  // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
+  // 1. Loading per-instance `prompts` filters from external files (#1307)
   // 2. Filtering by resolved provider ids/labels (not just file paths)
   // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
   const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
