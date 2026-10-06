@@ -377,6 +377,65 @@ describeEvaluator('evaluator runtime ports', () => {
     },
   );
 
+  it.each([
+    {
+      name: 'callable source with a changed working-directory label',
+      savedLabel: 'saved',
+      authored: [
+        { raw: 'hello', label: 'saved' },
+        { raw: 'hello', label: '../prompt.js', function: async () => 'live output' },
+      ],
+    },
+    {
+      name: 'a callable label with changed source',
+      savedLabel: 'saved',
+      authored: [
+        { raw: 'hello', label: 'saved' },
+        { raw: 'changed source', label: 'saved', function: async () => 'live output' },
+      ],
+    },
+    {
+      name: 'an unknown snapshot in a suite containing callables',
+      savedLabel: 'saved',
+      authored: [
+        { raw: 'different text', label: 'text' },
+        { raw: 'changed source', label: '../prompt.js', function: async () => 'live output' },
+      ],
+    },
+    {
+      name: 'an empty callable label with changed source',
+      savedLabel: '',
+      authored: [
+        { raw: 'hello', label: '' },
+        { raw: 'changed source', label: '', function: async () => 'live output' },
+      ],
+    },
+  ])('does not interpret $name as saved text', async ({ authored, savedLabel }) => {
+    const saved = { raw: 'hello', label: savedLabel, provider: mockApiProvider.id() };
+    const evaluation = createInMemoryEvaluation({ persisted: true, prompts: [saved] });
+    const store = new InMemoryEvaluationStore(evaluation);
+    const appendPrompts = vi.spyOn(store, 'appendPrompts');
+    const appendResult = vi.spyOn(store, 'appendResult');
+    const save = vi.spyOn(store, 'save');
+    cliState.resume = true;
+
+    await expect(
+      evaluate(
+        { providers: [mockApiProvider], prompts: authored, tests: [{}] },
+        evaluation,
+        { restorePromptColumns: true },
+        createInMemoryRuntime(store),
+      ),
+    ).rejects.toThrow('saved provider/prompt columns differ. Start a new evaluation');
+
+    expect(appendPrompts).not.toHaveBeenCalled();
+    expect(appendResult).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    expect(evaluation.prompts).toEqual([saved]);
+    expect(evaluation.results).toEqual([]);
+  });
+
   it('persists comparison updates through an explicit in-memory runtime', async () => {
     const evaluation = createInMemoryEvaluation({ persisted: true });
     const store = new InMemoryEvaluationStore(evaluation);

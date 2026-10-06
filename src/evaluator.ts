@@ -2347,11 +2347,33 @@ function buildCompletedPrompts(
   store: EvaluationStore,
   restorePromptColumns = false,
 ): { prompts: CompletedPrompt[]; columnsByProvider: ProviderColumns[] } {
-  const providerKeys = testSuite.providers.map(getProviderIdentifier);
+  const providerIndices = new Map(
+    testSuite.providers.map((provider, index) => [getProviderIdentifier(provider), index]),
+  );
+  let canRestoreText = true;
+  if (restorePromptColumns && testSuite.prompts.some((prompt) => prompt.function)) {
+    // An excluded callable must not prevent replaying proven text snapshots. Unknown
+    // snapshots or anything overlapping a callable still require the exact live layout.
+    const textRaw = new Set<string>();
+    const callableRaw = new Set<string>();
+    const callableLabels = new Set<string>();
+    for (const prompt of testSuite.prompts) {
+      if (prompt.function) {
+        callableRaw.add(prompt.raw);
+        callableLabels.add(prompt.label);
+      } else {
+        textRaw.add(prompt.raw);
+      }
+    }
+    canRestoreText = store.prompts.every(
+      (saved) =>
+        !callableRaw.has(saved.raw) && !callableLabels.has(saved.label) && textRaw.has(saved.raw),
+    );
+  }
   if (
     restorePromptColumns &&
-    new Set(providerKeys).size === providerKeys.length &&
-    !testSuite.prompts.some((prompt) => prompt.function)
+    providerIndices.size === testSuite.providers.length &&
+    canRestoreText
   ) {
     // Saved columns are the replay schedule, including generated prompts and snapshots
     // whose file labels or contents have since changed. Do not expand or filter them again.
@@ -2361,7 +2383,7 @@ function buildCompletedPrompts(
     }));
     let previousProviderIndex = -1;
     const prompts = store.prompts.map((saved, promptIdx) => {
-      const providerIndex = providerKeys.indexOf(saved.provider);
+      const providerIndex = providerIndices.get(saved.provider) ?? -1;
       invariant(
         providerIndex >= 0 && providerIndex >= previousProviderIndex,
         'Cannot resume evaluation because saved providers are missing or reordered. Start a new evaluation instead.',
@@ -2372,17 +2394,11 @@ function buildCompletedPrompts(
         metrics: saved.metrics ? structuredClone(saved.metrics) : createDefaultPromptMetrics(),
       };
       backfillNamedScoreWeights(prompt.metrics);
-      // Headers store a generated hash, while test-level selectors use authored IDs.
-      const authored = testSuite.prompts.filter(
-        (candidate) =>
-          generateIdFromPrompt(candidate) === saved.id &&
-          candidate.raw === saved.raw &&
-          candidate.label === saved.label &&
-          isDeepStrictEqual(candidate.config, saved.config),
-      );
+      // Headers retain their generated IDs. Legacy CLI replay did not restore authored
+      // test-selector IDs, so do not expose a header hash as a runtime prompt ID.
       columnsByProvider[providerIndex].columns.push({
         promptIdx,
-        prompt: { ...prompt, id: authored.length === 1 ? authored[0].id : undefined },
+        prompt: { ...prompt, id: undefined },
       });
       return prompt;
     });

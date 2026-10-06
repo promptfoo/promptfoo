@@ -1993,9 +1993,28 @@ describe('evalCommand', () => {
           saved: [{ id: 'included', raw: 'same', label: 'shared' }],
         },
         {
-          name: 'an exactly recoverable empty-label ID used by a test selector',
-          authored: [{ id: 'included', raw: 'same', label: '' }],
-          testPromptFilter: ['included'],
+          name: 'only the saved text when a configured callable was excluded',
+          authored: [
+            { id: 'included', raw: 'hello', label: 'text', config: { public: true } },
+            { raw: 'live source', label: 'live', function: async () => 'unused output' },
+          ],
+          saved: [{ raw: 'hello', label: 'text', config: { public: true } }],
+        },
+        {
+          name: 'saved text settings when a configured callable was excluded',
+          authored: [
+            { raw: 'hello', label: 'text', config: { prefix: 'new' } },
+            { raw: 'live source', label: 'live', function: async () => 'unused output' },
+          ],
+          saved: [{ raw: 'hello', label: 'text', config: { prefix: 'saved' } }],
+        },
+        {
+          name: 'text with a cwd-dependent label when a configured callable was excluded',
+          authored: [
+            { raw: 'hello', label: '../suite/prompt.txt: hello' },
+            { raw: 'live source', label: '../suite/prompt.js', function: async () => 'unused' },
+          ],
+          saved: [{ raw: 'hello', label: 'prompt.txt: hello' }],
         },
         {
           name: 'unchanged live prompt functions through the exact-layout fallback',
@@ -2012,7 +2031,6 @@ describe('evalCommand', () => {
         authored: Prompt[];
         saved?: Prompt[];
         generateSuggestions?: boolean;
-        testPromptFilter?: string[];
         expectedOutputs?: string[];
         duplicateProviders?: boolean;
       }>
@@ -2028,7 +2046,7 @@ describe('evalCommand', () => {
       label,
       callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
     }));
-    const tests = [{ prompts: scenario.testPromptFilter }];
+    const tests = [{}];
     const record = new Eval({
       prompts: authored,
       providers: providers.map((provider) => ({ id: 'echo', label: provider.label })),

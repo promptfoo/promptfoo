@@ -523,6 +523,7 @@ describe('retryCommand', () => {
         delay: 0,
         eventSource: 'cli',
         maxConcurrency: 4,
+        restorePromptColumns: true,
         showProgressBar: true,
       });
       return retriedEval;
@@ -566,6 +567,7 @@ describe('retryCommand', () => {
         delay: 25,
         eventSource: 'cli',
         maxConcurrency: 1,
+        restorePromptColumns: false,
         showProgressBar: false,
       });
       return retriedEval;
