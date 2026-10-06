@@ -701,6 +701,134 @@ describe('Python file references', { timeout: 15000 }, () => {
     expect(pythonResult).not.toHaveProperty('tokensUsed');
   });
 
+  it.each([
+    ['namedScores', 'namedScores'],
+    ['named_scores', 'namedScores'],
+    ['namedScoreWeights', 'namedScoreWeights'],
+    ['named_score_weights', 'namedScoreWeights'],
+  ])(
+    'accepts nullable %s maps and component lists, including nested results',
+    async (field, mappedField) => {
+      const scriptResult = {
+        pass_: true,
+        score: 1,
+        reason: 'ok',
+        [field]: null,
+        component_results: [
+          { pass_: true, score: 0.75, reason: 'nested', [field]: null, component_results: null },
+        ],
+      };
+      vi.mocked(runPythonCode).mockResolvedValueOnce(scriptResult);
+
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'python', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
+      expect(result).toHaveProperty(mappedField, null);
+      expect(result.componentResults?.[0]).toMatchObject({
+        pass: true,
+        score: 0.75,
+        [mappedField]: null,
+        componentResults: null,
+      });
+      expect(scriptResult[field]).toBeNull();
+      expect(scriptResult.component_results[0][field]).toBeNull();
+    },
+  );
+
+  it.each([2, Number.POSITIVE_INFINITY])(
+    'validates snake_case weights in nested script results: %s',
+    async (weight) => {
+      const scriptResult = {
+        pass_: true,
+        score: 1,
+        reason: 'ok',
+        named_scores: { quality: 0.5 },
+        named_score_weights: { quality: 3 },
+        component_results: [
+          {
+            pass_: true,
+            score: 0.75,
+            reason: 'nested',
+            named_scores: { quality: 0.75 },
+            named_score_weights: { quality: weight },
+          },
+        ],
+      };
+      vi.mocked(runPythonCode).mockResolvedValueOnce(scriptResult);
+
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'python', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      if (Number.isFinite(weight)) {
+        expect(result.namedScoreWeights).toEqual({ quality: 3 });
+        expect(result.componentResults?.[0].namedScoreWeights).toEqual({ quality: weight });
+      } else {
+        expect(result).toMatchObject({ pass: false, score: 0 });
+        expect(result.componentResults).toBeUndefined();
+      }
+      expect(scriptResult).not.toHaveProperty('namedScoreWeights');
+      expect(scriptResult.component_results[0]).not.toHaveProperty('namedScoreWeights');
+    },
+  );
+
+  it('accepts the result shapes earlier releases recorded from Python graders', async () => {
+    vi.mocked(runPythonCode).mockResolvedValueOnce({
+      pass_: true,
+      score: 1,
+      reason: 'ok',
+      named_scores: { exact_match: true, has_citation: false, skipped: null, relevance: '0.5' },
+      component_results: [{ pass_: true, score: 0.75 }, { pass_: false }],
+    });
+
+    const result = await runAssertion({
+      assertion: { type: 'python', value: 'unused' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      namedScores: { exact_match: 1, has_citation: 0, skipped: 0, relevance: 0.5 },
+      componentResults: [
+        { pass: true, score: 0.75, reason: '' },
+        { pass: false, score: 0, reason: '' },
+      ],
+    });
+  });
+
+  it('omits rejected object payloads from validation errors', async () => {
+    vi.mocked(runPythonCode).mockResolvedValueOnce({
+      pass_: true,
+      score: 1,
+      reason: 'Custom grade',
+      named_scores: { quality: 'high' },
+      metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
+    });
+
+    const result = await runAssertion({
+      assertion: { type: 'python', value: 'unused' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('diagnostic-placeholder');
+    expect(result.reason).not.toContain('requestHeaders');
+    expect(result.metadata).toBeUndefined();
+  });
+
   describe('Python threshold edge cases', () => {
     const baseParams = {
       prompt: 'test',
