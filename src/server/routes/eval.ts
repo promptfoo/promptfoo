@@ -630,7 +630,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     const selectedRef = normalizeProviderRef(providerConfig);
     const replayProviders = (
       selectedRef.kind === 'file'
-        ? loadProviderConfigsFromFile(selectedRef.loadProviderPath)
+        ? loadProviderConfigsFromFile(selectedRef.loadProviderPath, eval_.config.basePath)
         : [providerConfig]
     ).map((provider) => {
       const ref = normalizeProviderRef(provider);
@@ -655,6 +655,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
           },
         ],
         providers: replayProviders,
+        basePath: eval_.config.basePath,
         tests: [
           {
             vars: (variables || {}) as Vars,

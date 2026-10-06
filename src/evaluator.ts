@@ -2352,12 +2352,14 @@ function buildCompletedPrompts(
 
   for (const provider of testSuite.providers) {
     const providerKey = getProviderIdentifier(provider);
+    const allowedPrompts =
+      testSuite.providerPromptMap?.[providerKey] ??
+      testSuite.providerPromptMap?.[provider.id()] ??
+      provider.prompts;
     const columns: ProviderColumns['columns'] = [];
 
     for (const prompt of testSuite.prompts) {
-      if (
-        !isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey] ?? provider.prompts)
-      ) {
+      if (!isAllowedPrompt(prompt, allowedPrompts)) {
         continue;
       }
 

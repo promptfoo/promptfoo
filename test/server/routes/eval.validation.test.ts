@@ -13,6 +13,7 @@ vi.mock('../../../src/node', () => ({ evaluateWithSource: vi.fn() }));
 
 import Eval, { EvalQueries } from '../../../src/models/eval';
 import { evaluateWithSource } from '../../../src/node';
+import { loadApiProviders } from '../../../src/providers/index';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
@@ -356,36 +357,70 @@ describe('Eval Routes - Zod Validation', () => {
       },
     );
 
-    it('replays a saved multi-provider file without changing its options', async () => {
-      const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-replay-'));
-      const providerPath = path.join(directory, 'providers.json');
-      const providers = [
-        { id: 'echo', label: 'First', prompts: ['first'] },
-        { id: 'echo', label: 'Second', prompts: [], config: { prefix: 'Hi' } },
-      ];
-      writeFileSync(providerPath, JSON.stringify(providers));
-      mockFindById.mockResolvedValue({ config: { providers: `file://${providerPath}` } });
-      vi.mocked(evaluateWithSource).mockResolvedValue({
-        toEvaluateSummary: async () => ({ results: [{ response: { output: 'Hello World' } }] }),
-      } as unknown as Eval);
-      try {
-        const response = await api.post('/api/eval/replay').send({
-          evaluationId: 'test-id',
-          prompt: 'Hello World',
-        });
-
-        expect(response.status).toBe(200);
-        expect(evaluateWithSource).toHaveBeenCalledWith(
-          expect.objectContaining({
-            providers: providers.map((provider) => ({ ...provider, prompts: ['Replay'] })),
-          }),
-          expect.anything(),
+    it.each(['absolute', 'relative'] as const)(
+      'replays a saved %s multi-provider file from its evaluation directory',
+      async (referenceKind) => {
+        const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-replay-'));
+        const providerPath = path.join(directory, 'providers.json');
+        const providers = [
+          {
+            id: './echo.cjs',
+            label: 'First',
+            prompts: ['first'],
+            config: { settings: 'file://./settings.json' },
+          },
+          { id: 'echo', label: 'Second', prompts: [], config: { prefix: 'Hi' } },
+        ];
+        writeFileSync(providerPath, JSON.stringify(providers));
+        writeFileSync(path.join(directory, 'settings.json'), JSON.stringify({ greeting: 'Hello' }));
+        writeFileSync(
+          path.join(directory, 'echo.cjs'),
+          "module.exports = class { id() { return 'replay-echo'; } async callApi(prompt) { return { output: prompt }; } };",
         );
-        expect(providers.map((provider) => provider.prompts)).toEqual([['first'], []]);
-      } finally {
-        rmSync(directory, { recursive: true, force: true });
-      }
-    });
+        mockFindById.mockResolvedValue({
+          config: {
+            providers:
+              referenceKind === 'relative' ? 'file://./providers.json' : `file://${providerPath}`,
+            basePath: directory,
+          },
+        });
+        vi.mocked(evaluateWithSource).mockImplementation(async (suite) => {
+          // Exercise the native contained-file loader using the route's evaluation context.
+          const [provider] = await loadApiProviders(suite.providers, { basePath: suite.basePath });
+          const response = await provider.callApi('Hello World');
+          return {
+            toEvaluateSummary: async () => ({ results: [{ response }] }),
+          } as unknown as Eval;
+        });
+        try {
+          const response = await api.post('/api/eval/replay').send({
+            evaluationId: 'test-id',
+            prompt: 'Hello World',
+          });
+
+          expect(response.status).toBe(200);
+          expect(response.body.output).toBe('Hello World');
+          expect(evaluateWithSource).toHaveBeenCalledWith(
+            expect.objectContaining({
+              providers: [
+                {
+                  ...providers[0],
+                  prompts: ['Replay'],
+                  config: { settings: { greeting: 'Hello' } },
+                },
+                { ...providers[1], prompts: ['Replay'] },
+              ],
+              basePath: directory,
+            }),
+            expect.anything(),
+          );
+          expect(providers.map((provider) => provider.prompts)).toEqual([['first'], []]);
+          expect(providers[0].config).toEqual({ settings: 'file://./settings.json' });
+        } finally {
+          rmSync(directory, { recursive: true, force: true });
+        }
+      },
+    );
 
     it('should return 400 when evaluationId is missing', async () => {
       const response = await api.post('/api/eval/replay').send({

@@ -22,6 +22,37 @@ function duplicateProvider(id: string, output: string, label?: string): ApiProvi
 }
 
 describeEvaluator('evaluator prompt and provider routing', () => {
+  it.each<{
+    name: string;
+    map: NonNullable<TestSuite['providerPromptMap']>;
+    expected: string[];
+  }>([
+    { name: 'ID fallback', map: { 'stable-id': ['second'] }, expected: ['second'] },
+    {
+      name: 'label precedence',
+      map: { named: ['first'], 'stable-id': ['second'] },
+      expected: ['first'],
+    },
+    { name: 'empty label override', map: { named: [], 'stable-id': ['second'] }, expected: [] },
+    { name: 'empty ID override', map: { 'stable-id': [] }, expected: [] },
+  ])('honors explicit overrides for labeled providers: $name', async ({ map, expected }) => {
+    const provider = createMockProvider({ id: 'stable-id', label: 'named', prompts: ['first'] });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('first'), toPrompt('second')],
+      providerPromptMap: map,
+      tests: [{ vars: {} }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results.map((result) => result.prompt.label)).toEqual(expected);
+    expect(provider.callApi).toHaveBeenCalledTimes(expected.length);
+    expect(provider.prompts).toEqual(['first']);
+  });
+
   it('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

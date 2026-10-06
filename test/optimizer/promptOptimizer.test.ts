@@ -392,15 +392,21 @@ describe('prompt optimizer', () => {
     );
   });
 
-  it.each([
+  it.each<{
+    allowed: string[];
+    label?: string;
+    map?: TestSuite['providerPromptMap'];
+  }>([
     { allowed: [] as string[], map: undefined },
     { allowed: ['Other'], map: undefined },
     { allowed: ['A'], map: { 'target-provider': [] as string[] } },
+    { allowed: ['A'], label: 'named', map: { 'target-provider': [] } },
+    { allowed: ['A'], label: 'named', map: { named: [], 'target-provider': ['A'] } },
   ])(
     'rejects a prompt outside the selected effective filter: $allowed',
-    async ({ allowed, map }) => {
+    async ({ allowed, label, map }) => {
       const testSuite: TestSuite = {
-        providers: [createMockProvider({ id: 'target-provider', prompts: allowed })],
+        providers: [createMockProvider({ id: 'target-provider', label, prompts: allowed })],
         prompts: [{ raw: 'Prompt A', label: 'A' }],
         providerPromptMap: map,
         tests: [{ vars: {} }],
@@ -533,13 +539,30 @@ describe('prompt optimizer', () => {
     }
   });
 
-  it.each([
+  it.each<{
+    source: string;
+    providerPrompts?: string[];
+    label?: string;
+    map?: TestSuite['providerPromptMap'];
+  }>([
     { source: 'explicit map', providerPrompts: undefined, map: { 'target-provider': ['seed-id'] } },
     { source: 'provider', providerPrompts: ['seed-id'], map: undefined },
     { source: 'explicit override', providerPrompts: [], map: { 'target-provider': ['seed-id'] } },
+    {
+      source: 'ID override for a labeled provider',
+      providerPrompts: [],
+      label: 'named',
+      map: { 'target-provider': ['seed-id'] },
+    },
+    {
+      source: 'label override ahead of ID',
+      providerPrompts: [],
+      label: 'named',
+      map: { named: ['seed-id'], 'target-provider': [] },
+    },
   ])(
     'keeps optimized candidates eligible when $source routing uses prompt ids',
-    async ({ providerPrompts, map }) => {
+    async ({ providerPrompts, label, map }) => {
       const provider = createMockProvider({
         id: 'optimizer-provider',
         response: {
@@ -577,7 +600,7 @@ describe('prompt optimizer', () => {
         .mockResolvedValueOnce(candidateEval);
 
       const testSuite: TestSuite = {
-        providers: [createMockProvider({ id: 'target-provider', prompts: providerPrompts })],
+        providers: [createMockProvider({ id: 'target-provider', label, prompts: providerPrompts })],
         prompts: [{ id: 'seed-id', raw: 'Seed', label: 'Seed' }],
         providerPromptMap: map,
         tests: [{}],
@@ -586,9 +609,14 @@ describe('prompt optimizer', () => {
       await optimizePromptTestSuite({}, testSuite);
 
       const candidateSuite = vi.mocked(evaluate).mock.calls[1][0];
-      expect(candidateSuite.providerPromptMap).toEqual({
-        'target-provider': ['seed-id', 'Seed', 'Seed [optimized 1]'],
-      });
+      expect(candidateSuite.providerPromptMap?.[label || 'target-provider']).toEqual([
+        'seed-id',
+        'Seed',
+        'Seed [optimized 1]',
+      ]);
+      if (label && map?.['target-provider']?.length === 0) {
+        expect(candidateSuite.providerPromptMap?.['target-provider']).toEqual([]);
+      }
       expect(candidateSuite.prompts[0].id).toBe('seed-id');
       expect(candidateSuite.prompts[1].id).toEqual(expect.any(String));
       expect(candidateSuite.prompts[1].id).not.toBe('seed-id');
