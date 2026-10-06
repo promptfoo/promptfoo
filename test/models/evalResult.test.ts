@@ -61,9 +61,9 @@ describe('EvalResult', () => {
 
   describe('sanitizeProvider', () => {
     it.each([
-      { kind: 'API', provider: { id: () => 'echo', callApi: vi.fn(), prompts: ['first'] } },
+      { kind: 'API', provider: { id: (): string => 'echo', callApi: vi.fn(), prompts: ['first'] } },
       { kind: 'options', provider: { id: 'echo', prompts: [] } },
-      { kind: 'generic', provider: { id: () => 'echo', prompts: ['second'] } },
+      { kind: 'generic', provider: { id: (): string => 'echo', prompts: ['second'] } },
     ])('copies prompt restrictions for $kind providers', ({ provider }) => {
       const result = sanitizeProvider(provider as ApiProvider | ProviderOptions);
       expect(result.prompts).toEqual(provider.prompts);
