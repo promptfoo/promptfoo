@@ -12,6 +12,7 @@ import {
   getProviderFromCloud,
   makeRequest,
   validateLinkedTargetId,
+  withCloudProviderResolver,
 } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
@@ -291,6 +292,50 @@ describe('cloud utils', () => {
       await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
         'Failed to fetch provider from cloud: test-provider.',
       );
+    });
+  });
+
+  describe('withCloudProviderResolver', () => {
+    it('preserves the callback result and supplies normalized saved options without HTTP', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+      const resolver = vi.fn().mockResolvedValue({ id: 'echo', config: { prefix: 'saved' } });
+
+      expect(withCloudProviderResolver(resolver, () => 7)).toBe(7);
+      const result = await withCloudProviderResolver(resolver, () => getProviderFromCloud('saved'));
+
+      expect(result).toEqual({ id: 'echo', config: { prefix: 'saved' } });
+      expect(resolver).toHaveBeenCalledWith('saved', undefined);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('restores the enclosing resolver after a nested operation succeeds or fails', async () => {
+      const outer = () => ({ id: 'echo', label: 'outer' });
+      const inner = () => ({ id: 'echo', label: 'inner' });
+      await withCloudProviderResolver(outer, async () => {
+        const nested = await withCloudProviderResolver(inner, () => getProviderFromCloud('saved'));
+        expect(nested.label).toBe('inner');
+        await expect(
+          withCloudProviderResolver(inner, async () => {
+            await getProviderFromCloud('saved');
+            throw new Error('operation failed');
+          }),
+        ).rejects.toThrow('operation failed');
+        expect((await getProviderFromCloud('saved')).label).toBe('outer');
+      });
+
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+      await expect(getProviderFromCloud('saved')).rejects.toThrow('Cloud config is not enabled');
+    });
+
+    it('propagates resolver failures without falling back to HTTP', async () => {
+      const error = new Error('prepared provider unavailable');
+      await expect(
+        withCloudProviderResolver(
+          () => Promise.reject(error),
+          () => getProviderFromCloud('saved'),
+        ),
+      ).rejects.toBe(error);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
   });
 
