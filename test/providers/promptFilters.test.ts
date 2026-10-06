@@ -478,6 +478,34 @@ it('preserves mixed provider type-map entries and application settings', async (
   expect(fetchWithProxy).not.toHaveBeenCalled();
 });
 
+it('keeps instance filters independent when reevaluating the same runtime suite', async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-prompt-filter-'));
+  temporaryDirectories.push(directory);
+  const file = path.join(directory, 'repeat.mjs');
+  writeFileSync(file, 'export function beforeAll({ suite }) { return { suite }; }');
+  const providers = await loadApiProviders([
+    { id: 'echo', label: 'shared', prompts: ['first'] },
+    { id: 'echo', label: 'shared', prompts: ['second'] },
+  ]);
+  const testSuite = {
+    providers,
+    prompts: prompts.map((raw) => ({ raw, label: raw })),
+    tests: [{ vars: {} }],
+    extensions: [`file://${file}:beforeAll`],
+  };
+
+  for (let run = 0; run < 2; run++) {
+    const result = new Eval({});
+    await evaluateRuntime(testSuite, result, { cache: false, maxConcurrency: 1 });
+    const summary = await result.toEvaluateSummary();
+    expect(summary.stats).toMatchObject({ successes: 2, failures: 0 });
+    expect(summary.results.map((row) => row.prompt.label)).toEqual(['first', 'second']);
+    expect(testSuite).not.toHaveProperty('providerPromptMap');
+  }
+  expect(providers.map((provider) => provider.prompts)).toEqual([['first'], ['second']]);
+  expect(fetchWithProxy).not.toHaveBeenCalled();
+});
+
 it('keeps explicit runtime prompt maps authoritative and mutable', async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-prompt-filter-'));
   temporaryDirectories.push(directory);

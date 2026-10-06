@@ -2249,7 +2249,7 @@ async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> 
       }
     }
     seededMap = structuredClone(map);
-    testSuite.providerPromptMap = map;
+    testSuite = { ...testSuite, providerPromptMap: map };
   }
 
   const { suite } = await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
