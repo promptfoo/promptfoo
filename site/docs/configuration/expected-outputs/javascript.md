@@ -20,6 +20,10 @@ assert:
 
 In the example above, the `javascript` assertion checks if the output includes the string "Hello, World!". If it does, the assertion passes and a score of 1 is recorded. If it doesn't, the assertion fails and a score of 0 is returned.
 
+Single-line assertions may begin with `const`, `let`, or `var` declarations; the final expression is returned automatically. Semicolons and quotes inside `/* ... */` or trailing `// ...` comments do not affect that expression. For example, `const n = output.length; /* characters; not words */ n > 5` returns whether the output has more than five characters.
+
+For longer assertions, use [multiline functions](#multiline-functions) with an explicit `return`.
+
 If you want to return a custom score, your function should return a number. For example:
 
 ```yaml

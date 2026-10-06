@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -16,6 +18,37 @@ import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
+
+type CloudProviderOptions = ProviderOptions & { id: string };
+type CloudProviderResolver = (
+  id: string,
+  localOptions?: ProviderOptions,
+) => CloudProviderOptions | Promise<CloudProviderOptions>;
+
+const cloudProviderResolver = new AsyncLocalStorage<CloudProviderResolver>();
+
+/**
+ * Supplies saved providers for a host-managed operation without putting their settings
+ * through suite rendering. Native loading still merges and renders per-entry options.
+ *
+ * The resolver replaces HTTP lookup for this async scope, including nested calls. It must
+ * throw for unavailable providers. Omitted options indicate a lookup only; an options
+ * object indicates a native load. Treat options and returned settings as read-only, and
+ * do not depend on lookup order: the same provider can be loaded with different options.
+ * Consumed by promptfoo-cloud through source imports, not the public package entry point.
+ */
+export function withCloudProviderResolver<T>(
+  resolver: CloudProviderResolver,
+  callback: () => T,
+): T {
+  return cloudProviderResolver.run(resolver, callback);
+}
+
+function parseCloudProvider(id: string, config: unknown): ProviderOptions & { id: string } {
+  const provider = ProviderOptionsSchema.parse(config);
+  invariant(provider.id, `Provider ${id} has no id`);
+  return { ...provider, id: provider.id };
+}
 
 /**
  * Makes an authenticated HTTP request to the PromptFoo Cloud API.
@@ -46,10 +79,20 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
 /**
  * Fetches a provider configuration from PromptFoo Cloud by its ID.
  * @param id - The unique identifier of the cloud provider
+ * @param localOptions - Per-entry options for a native load; omitted for lookup only
  * @returns Promise resolving to provider options with guaranteed id field
  * @throws Error if cloud is not enabled, provider not found, or request fails
  */
-export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
+export async function getProviderFromCloud(
+  id: string,
+  localOptions?: ProviderOptions,
+): Promise<ProviderOptions & { id: string }> {
+  const resolver = cloudProviderResolver.getStore();
+  if (resolver) {
+    const prepared = await resolver(id, localOptions);
+    // The HTTP schema strips custom env keys; typed host options must retain them.
+    return { ...parseCloudProvider(id, prepared), ...(prepared.env && { env: prepared.env }) };
+  }
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch Provider ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -68,10 +111,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     const body = await response.json();
     logger.debug(`Provider fetched from cloud: ${id}`);
 
-    const provider = ProviderOptionsSchema.parse(body.config);
-    // The provider options schema has ID field as optional but we know it's required for cloud providers
-    invariant(provider.id, `Provider ${id} has no id in ${body.config}`);
-    return { ...provider, id: provider.id };
+    return parseCloudProvider(id, body.config);
   } catch (e) {
     logger.error(`Failed to fetch provider from cloud: ${id}.`);
     logger.error(String(e));

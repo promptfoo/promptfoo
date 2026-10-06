@@ -1090,6 +1090,11 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+      if (modelType === 'chatkit') {
+        throw new Error(
+          'The openai:chatkit provider has been removed. Export your Agent Builder workflow and evaluate it with the OpenAI Agents SDK, a custom provider, or an HTTP endpoint. Migration guide: https://www.promptfoo.dev/docs/providers/openai-chatkit/',
+        );
+      }
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
       const assistantModel =
         modelType === 'assistant' && typeof providerOptions.config?.modelName === 'string'
@@ -1183,7 +1188,7 @@ export const providerMap: ProviderFactory[] = [
         modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
       if (
         !isLiveProvider &&
-        !['agents', 'chatkit'].includes(modelType) &&
+        modelType !== 'agents' &&
         (modelType !== 'assistant' || assistantModel)
       ) {
         const apiUrl = resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env);
@@ -1294,10 +1299,6 @@ export const providerMap: ProviderFactory[] = [
         );
         return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
       }
-      if (modelType === 'chatkit') {
-        const { OpenAiChatKitProvider } = await import('./openai/chatkit');
-        return new OpenAiChatKitProvider(modelName || '', providerOptions);
-      }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
       }
@@ -1309,7 +1310,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },

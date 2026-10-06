@@ -822,8 +822,6 @@ describe('loadApiProvider', () => {
     ['openai:assistant:gpt-5.3-codex-spark', 'openai:gpt-5.3-codex-spark'],
     ['openai:agents:gpt-5-codex-mini', 'openai:agents:gpt-5-codex-mini'],
     ['openai:agents:gpt-5.3-codex-spark', 'openai:agents:gpt-5.3-codex-spark'],
-    ['openai:chatkit:gpt-5-codex-mini', 'openai:chatkit:gpt-5-codex-mini'],
-    ['openai:chatkit:gpt-5.3-codex-spark', 'openai:chatkit:gpt-5.3-codex-spark'],
   ])('should allow Codex-like names on identifier-based route %s', async (route, expectedId) => {
     if (route.startsWith('openai:agents:')) {
       vi.mocked(fs.readFileSync).mockReturnValue(
@@ -834,6 +832,49 @@ describe('loadApiProvider', () => {
 
     expect(provider.id()).toBe(expectedId);
   });
+
+  it.each<{ name: string; path: string; options?: ProviderOptions }>([
+    {
+      name: 'configured workflow ID',
+      path: 'openai:chatkit',
+      options: { config: { workflowId: 'wf_test' } },
+    },
+    {
+      name: 'custom display ID',
+      path: 'openai:chatkit:wf_test',
+      options: { id: 'support-agent' },
+    },
+    { name: 'Codex-like workflow ID', path: 'openai:chatkit:gpt-5-codex-mini' },
+    { name: 'SDK-only model-like workflow ID', path: 'openai:chatkit:gpt-5.3-codex-spark' },
+    {
+      name: 'retired configured model',
+      path: 'openai:chatkit:wf_test',
+      options: { config: { model: 'chatgpt-4o-latest' } },
+    },
+    {
+      name: 'malformed configured model',
+      path: 'openai:chatkit:wf_test',
+      options: { config: { model: { invalid: true } } },
+    },
+    {
+      name: 'custom API endpoint',
+      path: 'openai:chatkit:wf_test',
+      options: { config: { apiBaseUrl: 'https://gateway.example/v1' } },
+    },
+  ])(
+    'rejects removed ChatKit $name with migration guidance before model routing',
+    async ({ path, options }) => {
+      const loadingProvider = loadApiProvider(path, { options });
+
+      await expect(loadingProvider).rejects.toThrow('The openai:chatkit provider has been removed');
+      await expect(loadingProvider).rejects.toThrow('OpenAI Agents SDK');
+      await expect(loadingProvider).rejects.toThrow(
+        'https://www.promptfoo.dev/docs/providers/openai-chatkit/',
+      );
+      expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
+      expect(OpenAiResponsesProvider).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['gpt-5-search-api', 'gpt-5-search-api-2025-10-14'])(
     'should auto-route bare Chat Completions search model %s to Chat Completions',

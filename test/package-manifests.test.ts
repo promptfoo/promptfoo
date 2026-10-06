@@ -9,6 +9,12 @@ type PackageManifest = {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  overrides?: PackageOverrides;
+};
+
+type PackageOverrides = {
+  [selector: string]: string | PackageOverrides;
 };
 
 type PackageLockManifest<T> = {
@@ -18,6 +24,68 @@ type PackageLockManifest<T> = {
 function readPackageJson<T>(relativePath: string): T {
   const packageJsonPath = path.join(process.cwd(), relativePath);
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
+}
+
+function findKnownBadRanges(
+  manifest: PackageManifest,
+  knownBadReleases: ReadonlyMap<string, string>,
+): string[] {
+  const { dependencies, devDependencies, optionalDependencies, peerDependencies } = manifest;
+  const ranges = [dependencies, devDependencies, optionalDependencies].flatMap((declared) =>
+    Object.entries(declared ?? {}),
+  );
+
+  const resolveOverrideRange = (value: string): string => {
+    if (!value.startsWith('$')) {
+      return value;
+    }
+    const reference = value.slice(1);
+    // Match npm's direct dependency reference lookup order.
+    const range =
+      devDependencies?.[reference] ??
+      optionalDependencies?.[reference] ??
+      dependencies?.[reference] ??
+      peerDependencies?.[reference];
+    if (range === undefined) {
+      throw new Error(`Unable to resolve override reference ${value}`);
+    }
+    return range;
+  };
+
+  const collectOverrides = (overrides: PackageOverrides, parentName?: string): void => {
+    for (const [selector, value] of Object.entries(overrides)) {
+      // Separate version selectors from package names while preserving scope names.
+      const versionStart = selector.indexOf('@', 1);
+      const name =
+        selector === '.'
+          ? parentName
+          : versionStart === -1
+            ? selector
+            : selector.slice(0, versionStart);
+      if (typeof value !== 'string') {
+        // npm uses a qualified key's range as its implicit self override when '.' is absent.
+        // Bare names and '*' selectors leave the dependency's original range unchanged.
+        const keyRange = versionStart === -1 ? '*' : selector.slice(versionStart + 1) || '*';
+        if (name && value['.'] === undefined && keyRange !== '*') {
+          ranges.push([name, keyRange]);
+        }
+        collectOverrides(value, name);
+        continue;
+      }
+      if (!name) {
+        continue;
+      }
+      ranges.push([name, resolveOverrideRange(value)]);
+    }
+  };
+  collectOverrides(manifest.overrides ?? {});
+
+  return ranges
+    .filter(([name, range]) => {
+      const badRange = knownBadReleases.get(name);
+      return badRange && validRange(range) && intersects(range, badRange);
+    })
+    .map(([name, range]) => `${name}@${range}`);
 }
 
 // Scan the whole Dockerfile, not just RUN lines, so heredoc bodies and exec-form RUNs count.
@@ -59,6 +127,8 @@ const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const KNOWN_BAD_RELEASES = new Map([
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
   ['@hono/node-server', '<1.19.15 || >=2.0.0 <2.0.10'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg
+  ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
+  ['@simple-git/argv-parser', '<2.0.1'], // GHSA-v5rq-49vh-5v5c; upstream fixes VISUAL in 2.0.1
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
   ['csv-parse', '<7.0.2'], // GHSA-8cw4-87c7-c6xx
@@ -71,6 +141,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
   ['serialize-javascript', '7.1.1'], // GHSA-gfhx-hw2g-v5hg
+  ['simple-git', '<=3.36.0'], // GHSA-858h-whjf-mvg5
   ['undici', '<7.29.1 || >=8.0.0 <8.10.2'], // GHSA-3xpg-4rpp-hhhm and the 7.29.1/8.10.2 fixes
   ['ws', '<5.2.5 || >=6.0.0 <6.2.4 || >=7.0.0 <7.5.11 || >=8.0.0 <8.21.0'], // GHSA-96hv-2xvq-fx4p
 ]);
@@ -292,18 +363,119 @@ describe('package manifests', () => {
       'src/app/package.json',
       'code-scan-action/package.json',
     ].flatMap((manifestPath) => {
-      const manifest = readPackageJson<PackageManifest & { overrides?: object }>(manifestPath);
-      const { dependencies, devDependencies, optionalDependencies, overrides } = manifest;
-      return [dependencies, devDependencies, optionalDependencies, overrides]
-        .flatMap((declared) => Object.entries(declared ?? {}))
-        .filter(([name, range]) => {
-          const badRange = KNOWN_BAD_RELEASES.get(name);
-          return badRange && validRange(range) && intersects(range, badRange);
-        })
-        .map(([name, range]) => `${manifestPath}: ${name}@${range}`);
+      const manifest = readPackageJson<PackageManifest>(manifestPath);
+      return findKnownBadRanges(manifest, KNOWN_BAD_RELEASES).map(
+        (violation) => `${manifestPath}: ${violation}`,
+      );
     });
 
     expect(violations).toEqual([]);
+  });
+
+  it.each<{ description: string; overrides: PackageOverrides; expected: string[] }>([
+    {
+      description: 'direct string overrides',
+      overrides: { 'fixture-leaf': '^1.0.0' },
+      expected: ['fixture-leaf@^1.0.0'],
+    },
+    {
+      description: 'deeply nested overrides',
+      overrides: { 'fixture-parent': { 'fixture-middle': { 'fixture-leaf': '^1.0.0' } } },
+      expected: ['fixture-leaf@^1.0.0'],
+    },
+    {
+      description: 'nested self overrides',
+      overrides: { 'fixture-parent': { 'fixture-leaf': { '.': '^1.0.0' } } },
+      expected: ['fixture-leaf@^1.0.0'],
+    },
+    {
+      description: 'version-qualified overrides',
+      overrides: { 'fixture-leaf@^3.0.0': '^1.0.0' },
+      expected: ['fixture-leaf@^1.0.0'],
+    },
+    {
+      description: 'scoped package overrides',
+      overrides: { 'fixture-parent': { '@fixture/leaf': '^1.0.0' } },
+      expected: ['@fixture/leaf@^1.0.0'],
+    },
+    {
+      description: 'scoped and version-qualified self overrides',
+      overrides: { '@fixture/parent@^3.0.0': { '@fixture/leaf@^3.0.0': { '.': '^1.0.0' } } },
+      expected: ['@fixture/leaf@^1.0.0'],
+    },
+    {
+      description: 'implicit self overrides from parent version selectors',
+      overrides: { 'fixture-leaf@^1.0.0': { 'fixture-other': '^1.0.0' } },
+      expected: ['fixture-leaf@^1.0.0'],
+    },
+    {
+      description: 'nested scoped implicit self overrides',
+      overrides: {
+        'fixture-parent': { '@fixture/leaf@^1.0.0': { 'fixture-other': '^2.0.0' } },
+      },
+      expected: ['@fixture/leaf@^1.0.0'],
+    },
+    {
+      description: 'safe parent version selectors',
+      overrides: { 'fixture-leaf@^2.0.0': { 'fixture-other': '^1.0.0' } },
+      expected: [],
+    },
+    {
+      description: 'unqualified parent selectors without self overrides',
+      overrides: { 'fixture-leaf': { 'fixture-other': '^1.0.0' } },
+      expected: [],
+    },
+    {
+      description: 'wildcard parent selectors without self overrides',
+      overrides: { 'fixture-leaf@*': { 'fixture-other': '^1.0.0' } },
+      expected: [],
+    },
+    {
+      description: 'safe replacements for old versions',
+      overrides: { 'fixture-leaf@^1.0.0': { '.': '^2.0.0' } },
+      expected: [],
+    },
+    {
+      description: 'non-semver replacements',
+      overrides: { 'fixture-parent': { 'fixture-leaf': 'file:../fixture-leaf' } },
+      expected: [],
+    },
+  ])('checks replacement ranges in $description', ({ overrides, expected }) => {
+    expect(
+      findKnownBadRanges(
+        { overrides },
+        new Map([
+          ['fixture-leaf', '<2.0.0'],
+          ['@fixture/leaf', '<2.0.0'],
+        ]),
+      ),
+    ).toEqual(expected);
+  });
+
+  it.each(['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const)(
+    'resolves nested override references from %s against the overridden package',
+    (dependencyType) => {
+      expect(
+        findKnownBadRanges(
+          {
+            [dependencyType]: { '@fixture/reference': '^1.0.0' },
+            overrides: {
+              'fixture-parent': { 'fixture-leaf': { '.': '$@fixture/reference' } },
+            },
+          },
+          new Map([['fixture-leaf', '<2.0.0']]),
+        ),
+      ).toEqual(['fixture-leaf@^1.0.0']);
+    },
+  );
+
+  it('reports unresolved override references instead of skipping their ranges', () => {
+    expect(() =>
+      findKnownBadRanges(
+        { overrides: { 'fixture-parent': { 'fixture-leaf': '$missing' } } },
+        new Map([['fixture-leaf', '<2.0.0']]),
+      ),
+    ).toThrow('Unable to resolve override reference $missing');
   });
 
   it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
