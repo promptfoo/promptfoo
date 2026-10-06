@@ -11,6 +11,7 @@ import {
 } from '../../src/evaluator/inMemoryStore';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { generateIdFromPrompt } from '../../src/models/prompt';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { generatePrompts } from '../../src/suggestions';
 import { ResultFailureReason, type TestSuite } from '../../src/types/index';
@@ -435,6 +436,123 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(evaluation.prompts).toEqual([saved]);
     expect(evaluation.results).toEqual([]);
   });
+
+  it.each([
+    { name: 'positional duplicate identities', savedCount: 2, selector: 'second', expected: [1] },
+    {
+      name: 'a uniquely indexed filtered identity',
+      savedCount: 1,
+      distinct: true,
+      selector: 'first',
+      expected: [0],
+    },
+    {
+      name: 'ambiguous identities selected by their label',
+      savedCount: 1,
+      selector: 'shared',
+      expected: [0],
+    },
+    { name: 'an unrelated empty selector', savedCount: 1, selector: '', expected: [] },
+    {
+      name: 'an excluded provider with an ID selector',
+      savedCount: 1,
+      selector: 'first',
+      excludedProvider: true,
+      expected: [],
+    },
+  ])('restores authored-ID routing for $name', async (scenario) => {
+    const authored = [
+      { id: 'first', raw: 'hello', label: 'shared' },
+      {
+        id: 'second',
+        raw: scenario.distinct ? 'other' : 'hello',
+        label: scenario.distinct ? 'other' : 'shared',
+      },
+    ];
+    const headers = authored.slice(0, scenario.savedCount).map((prompt) => ({
+      ...prompt,
+      id: generateIdFromPrompt(prompt),
+      provider: mockApiProvider.id(),
+    }));
+    const evaluation = createInMemoryEvaluation({ persisted: true, prompts: headers });
+    const store = new InMemoryEvaluationStore(evaluation);
+    cliState.resume = true;
+
+    await evaluate(
+      {
+        providers: [mockApiProvider],
+        prompts: authored,
+        tests: [
+          {
+            prompts: [scenario.selector],
+            providers: scenario.excludedProvider ? ['other'] : undefined,
+          },
+        ],
+      },
+      evaluation,
+      { restorePromptColumns: true },
+      createInMemoryRuntime(store),
+    );
+
+    expect(evaluation.prompts).toMatchObject(headers);
+    expect(evaluation.results.map((result) => result.promptIdx)).toEqual(scenario.expected);
+    expect(evaluation.results.every((result) => result.success)).toBe(true);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(scenario.expected.length);
+  });
+
+  it.each(['test', 'default', 'scenario', 'missing-id', 'generated'] as const)(
+    'rejects unresolved authored-ID routing before writes: %s',
+    async (source) => {
+      const authored: Prompt[] = [
+        { id: 'first', raw: 'hello', label: 'shared' },
+        { id: source === 'missing-id' ? undefined : 'second', raw: 'hello', label: 'shared' },
+      ];
+      if (source === 'generated') {
+        authored.pop();
+      }
+      const saved = [
+        { raw: 'hello', label: 'shared' },
+        ...(source === 'generated' ? [{ raw: 'generated', label: 'generated' }] : []),
+      ].map((prompt) => ({
+        ...prompt,
+        id: generateIdFromPrompt(prompt),
+        provider: mockApiProvider.id(),
+      }));
+      const testSuite: TestSuite = { providers: [mockApiProvider], prompts: authored, tests: [{}] };
+      if (source === 'default') {
+        testSuite.defaultTest = { prompts: ['first'] };
+      } else if (source === 'scenario') {
+        testSuite.tests = [];
+        testSuite.scenarios = [{ config: [{ prompts: ['first'] }], tests: [{}] }];
+      } else {
+        testSuite.tests = [{ prompts: ['first'] }];
+      }
+      const evaluation = createInMemoryEvaluation({ persisted: true, prompts: saved });
+      const store = new InMemoryEvaluationStore(evaluation);
+      const appendPrompts = vi.spyOn(store, 'appendPrompts');
+      const appendResult = vi.spyOn(store, 'appendResult');
+      const save = vi.spyOn(store, 'save');
+      cliState.resume = true;
+
+      await expect(
+        evaluate(
+          testSuite,
+          evaluation,
+          { restorePromptColumns: true },
+          createInMemoryRuntime(store),
+        ),
+      ).rejects.toThrow(
+        'saved prompt IDs cannot be matched to test filters. Start a new evaluation',
+      );
+
+      expect(appendPrompts).not.toHaveBeenCalled();
+      expect(appendResult).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+      expect(evaluation.prompts).toEqual(saved);
+      expect(evaluation.results).toEqual([]);
+    },
+  );
 
   it('persists comparison updates through an explicit in-memory runtime', async () => {
     const evaluation = createInMemoryEvaluation({ persisted: true });
