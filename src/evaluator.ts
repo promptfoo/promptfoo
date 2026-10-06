@@ -5337,6 +5337,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const rowsWithMaxScoreAssertion = new Set<number>();
 
       ensureDefaultTestForExtensions(testSuite);
+      testSuite.providerPromptMap ??= Object.create(null);
       const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
         suite: testSuite,
       });

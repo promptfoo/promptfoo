@@ -40,18 +40,19 @@ afterEach(() => {
 async function runEvaluation(
   entrypoint: 'CLI' | 'library',
   providers: NonNullable<UnifiedConfig['providers']>,
+  extensions?: string[],
 ) {
   let result: Eval;
   if (entrypoint === 'CLI') {
     const { testSuite, config } = await resolveConfigs(
       {},
-      { providers, prompts, tests: [{ vars: {} }] },
+      { providers, prompts, tests: [{ vars: {} }], extensions },
     );
     result = new Eval(config);
     await evaluateRuntime(testSuite, result, { cache: false, maxConcurrency: 1 });
   } else {
     result = await evaluate(
-      { providers, prompts, tests: [{ vars: {} }], writeLatestResults: false },
+      { providers, prompts, tests: [{ vars: {} }], extensions, writeLatestResults: false },
       { cache: false, maxConcurrency: 1 },
     );
   }
@@ -65,6 +66,25 @@ async function runEvaluation(
 }
 
 describe.each(['CLI', 'library'] as const)('%s resolved provider prompt filters', (entrypoint) => {
+  it('allows beforeAll extensions to assign indexed prompt overrides', async () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-prompt-filter-'));
+    temporaryDirectories.push(directory);
+    const file = path.join(directory, 'override.mjs');
+    writeFileSync(
+      file,
+      `export function beforeAll(context) {
+        context.suite.providerPromptMap.echo = ['second'];
+        return context;
+      }`,
+    );
+    const rows = await runEvaluation(
+      entrypoint,
+      [{ id: 'echo', prompts: ['first'] }],
+      [`file://${file}:beforeAll`],
+    );
+    expect(rows).toEqual([{ provider: 'echo', prompt: 'second' }]);
+  });
+
   it('uses a saved prompt filter and resolved label', async () => {
     const rows = await withCloudProviderResolver(
       () => ({ id: 'echo', label: 'saved target', prompts: ['first'] }),
@@ -432,16 +452,16 @@ it('preserves mixed provider type-map entries and application settings', async (
 it('keeps explicit runtime prompt maps authoritative', async () => {
   const providers = await loadApiProviders([{ id: 'echo', label: 'target', prompts: ['first'] }]);
   const result = new Eval({});
-  await evaluateRuntime(
-    {
-      providers,
-      prompts: prompts.map((raw) => ({ raw, label: raw })),
-      tests: [{ vars: {} }],
-      providerPromptMap: { target: ['second'] },
-    },
-    result,
-    { cache: false, maxConcurrency: 1 },
-  );
+  const providerPromptMap = { target: ['second'] };
+  const testSuite = {
+    providers,
+    prompts: prompts.map((raw) => ({ raw, label: raw })),
+    tests: [{ vars: {} }],
+    providerPromptMap,
+  };
+  await evaluateRuntime(testSuite, result, { cache: false, maxConcurrency: 1 });
+  expect(testSuite.providerPromptMap).toBe(providerPromptMap);
+  expect(providerPromptMap).toEqual({ target: ['second'] });
   expect((await result.toEvaluateSummary()).results.map((row) => row.prompt.label)).toEqual([
     'second',
   ]);
