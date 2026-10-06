@@ -594,6 +594,8 @@ All merges are **shallow**: returned properties replace existing values at the t
 | `context.suite.derivedMetrics`    | `DerivedMetric[]`          | [Derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
 | `context.suite.redteam`           | `RedteamConfig`            | The [red team](/docs/red-team) configuration to be evaluated.                     |
 
+When no explicit `providerPromptMap` is supplied, `beforeAll` receives provider ID and label entries initialized from each provider's `prompts` (or all current prompt labels). Mutating an entry creates a shared override; deleting it removes that restriction. Unchanged entries keep per-provider routing, so providers sharing an ID or label can retain different filters and unrestricted providers include prompts added by the hook.
+
 #### beforeEach
 
 | Property       | Type                     | Description                    |
