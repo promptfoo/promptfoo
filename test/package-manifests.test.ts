@@ -21,6 +21,11 @@ type PackageLockManifest<T> = {
   packages: Record<string, T>;
 };
 
+type LockedPackage = {
+  name?: string;
+  version?: string;
+};
+
 function readPackageJson<T>(relativePath: string): T {
   const packageJsonPath = path.join(process.cwd(), relativePath);
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
@@ -97,6 +102,18 @@ function findKnownBadRanges(
       return badRange && validRange(range) && intersects(range, badRange);
     })
     .map(([name, range]) => `${name}@${range}`);
+}
+
+function collectLockfileReleaseChecks(
+  lockfile: PackageLockManifest<LockedPackage>,
+  knownBadReleases: ReadonlyMap<string, string>,
+): { id: string; version: string; badRange: string }[] {
+  return Object.entries(lockfile.packages).flatMap(([installPath, { name, version }]) => {
+    // npm records an alias target's actual package name separately from its install path.
+    const packageName = name ?? installPath.split('node_modules/').at(-1)!;
+    const badRange = knownBadReleases.get(packageName);
+    return badRange && version ? [{ id: `${installPath}@${version}`, version, badRange }] : [];
+  });
 }
 
 // Scan the whole Dockerfile, not just RUN lines, so heredoc bodies and exec-form RUNs count.
@@ -350,20 +367,41 @@ describe('package manifests', () => {
   it('keeps known-bad releases out of every lockfile install, including nested copies', () => {
     const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap(
       (lockfile) =>
-        Object.entries(
-          readPackageJson<PackageLockManifest<{ version?: string }>>(lockfile).packages,
-        ).flatMap(([installPath, { version }]) => {
-          const badRange = KNOWN_BAD_RELEASES.get(installPath.split('node_modules/').at(-1)!);
-          return badRange && version
-            ? [{ id: `${lockfile}: ${installPath}@${version}`, version, badRange }]
-            : [];
-        }),
+        collectLockfileReleaseChecks(
+          readPackageJson<PackageLockManifest<LockedPackage>>(lockfile),
+          KNOWN_BAD_RELEASES,
+        ).map((check) => ({ ...check, id: `${lockfile}: ${check.id}` })),
     );
 
     expect(installs.length).toBeGreaterThan(0);
     expect(
       installs.filter(({ version, badRange }) => satisfies(version, badRange)).map(({ id }) => id),
     ).toEqual([]);
+  });
+
+  it.each([
+    ['node_modules/alias', { name: 'fixture-leaf', version: '1.0.0' }, true],
+    [
+      'node_modules/parent/node_modules/@fixture/alias',
+      { name: '@fixture/leaf', version: '1.0.0' },
+      true,
+    ],
+    ['node_modules/parent/node_modules/fixture-leaf', { version: '1.0.0' }, true],
+    ['node_modules/@fixture/leaf', { version: '1.0.0' }, true],
+    ['node_modules/alias', { name: 'fixture-leaf', version: '2.0.0' }, false],
+    ['node_modules/fixture-leaf', { name: 'fixture-replacement', version: '1.0.0' }, false],
+  ] as const)('checks locked package identity at %s: %j', (installPath, packageInfo, violates) => {
+    const checks = collectLockfileReleaseChecks(
+      { packages: { [installPath]: packageInfo } },
+      new Map([
+        ['fixture-leaf', '<2.0.0'],
+        ['@fixture/leaf', '<2.0.0'],
+      ]),
+    );
+
+    expect(
+      checks.filter(({ version, badRange }) => satisfies(version, badRange)).map(({ id }) => id),
+    ).toEqual(violates ? [`${installPath}@${packageInfo.version}`] : []);
   });
 
   it('keeps declared ranges from resolving known-bad releases', () => {
