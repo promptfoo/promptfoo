@@ -16,6 +16,7 @@ import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
+  GRADING_PROVIDER_TYPE_KEYS,
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
@@ -70,6 +71,16 @@ function toSerializableProviderRef(provider: unknown): unknown {
   if (Array.isArray(provider)) {
     return provider.map(toSerializableProviderRef);
   }
+  if (isProviderTypeMap(provider)) {
+    let serialized: Record<string, unknown> | undefined;
+    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+      if (isApiProvider(provider[type])) {
+        serialized ??= { ...provider };
+        serialized[type] = toSerializableProviderRef(provider[type]);
+      }
+    }
+    return serialized ?? provider;
+  }
   return provider;
 }
 
@@ -78,7 +89,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function withSerializableProvider<T extends Record<string, unknown>>(record: T): T {
-  if (!isApiProvider(record.provider)) {
+  if (!isApiProvider(record.provider) && !isProviderTypeMap(record.provider)) {
     return record;
   }
   return {
@@ -168,13 +179,18 @@ function toSerializableScenario(scenario: unknown, droppedRef: { value: boolean 
     return scenario;
   }
 
-  if (!Array.isArray(scenario.tests)) {
+  if (!Array.isArray(scenario.tests) && !Array.isArray(scenario.config)) {
     return scenario;
   }
 
   return {
     ...scenario,
-    tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+    ...(Array.isArray(scenario.config) && {
+      config: scenario.config.map((t) => toSerializableTestCase(t, droppedRef)),
+    }),
+    ...(Array.isArray(scenario.tests) && {
+      tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+    }),
   };
 }
 

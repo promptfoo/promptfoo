@@ -304,12 +304,28 @@ it.each([
   },
 );
 
-it.each([{ allowed: ['nested selector'] }, { allowed: [] as string[] }, { allowed: undefined }])(
-  'retains nested runtime selectors in local replay configs: $allowed',
-  async ({ allowed }) => {
-    const [provider] = await loadApiProviders([{ id: 'echo', prompts: allowed }]);
+it.each([
+  { allowed: ['nested selector'], typeMap: false },
+  { allowed: [] as string[], typeMap: false },
+  { allowed: undefined, typeMap: false },
+  { allowed: ['nested selector'], typeMap: true },
+  { allowed: [] as string[], typeMap: true },
+  { allowed: undefined, typeMap: true },
+])(
+  'retains nested runtime selectors in local replay configs: $allowed/type map $typeMap',
+  async ({ allowed, typeMap }) => {
+    const [liveProvider] = await loadApiProviders([{ id: 'echo', prompts: allowed }]);
+    liveProvider.toJSON = () => ({ id: 'echo' });
+    const provider = typeMap
+      ? {
+          text: liveProvider,
+          embedding: liveProvider,
+          classification: liveProvider,
+          moderation: liveProvider,
+        }
+      : liveProvider;
     const test = {
-      provider,
+      provider: liveProvider,
       options: { provider },
       assert: [
         { type: 'equals' as const, value: 'first', provider },
@@ -325,7 +341,10 @@ it.each([{ allowed: ['nested selector'] }, { allowed: [] as string[] }, { allowe
         prompts: ['first'],
         defaultTest: test,
         tests: [test],
-        scenarios: [{ config: [{}], tests: [test] }],
+        scenarios: [
+          { config: [test], tests: [test] },
+          { config: [test], tests: [{}] },
+        ],
         writeLatestResults: false,
       },
       { cache: false, maxConcurrency: 1 },
@@ -334,7 +353,7 @@ it.each([{ allowed: ['nested selector'] }, { allowed: [] as string[] }, { allowe
     expect(summary.stats.successes).toBeGreaterThan(0);
     expect(summary.stats.failures).toBe(0);
     const expected = allowed?.slice();
-    provider.prompts?.push('runtime-only');
+    liveProvider.prompts?.push('runtime-only');
     const saved = JSON.parse(JSON.stringify(result.config));
     const projected = sanitizeConfigForOutput(saved, { shouldStripPromptText: true });
 
@@ -344,12 +363,20 @@ it.each([{ allowed: ['nested selector'] }, { allowed: [] as string[] }, { allowe
     ] as const) {
       const refs = [
         config.defaultTest.provider,
-        config.defaultTest.options.provider,
         config.tests[0].provider,
-        config.tests[0].options.provider,
-        config.tests[0].assert[0].provider,
-        config.tests[0].assert[1].assert[0].provider,
-        config.scenarios[0].tests[0].options.provider,
+        config.scenarios[0].config[0].provider,
+        config.scenarios[1].config[0].provider,
+        ...[
+          config.defaultTest.options.provider,
+          config.tests[0].options.provider,
+          config.tests[0].assert[0].provider,
+          config.tests[0].assert[1].assert[0].provider,
+          config.scenarios[0].tests[0].options.provider,
+          config.scenarios[0].config[0].options.provider,
+          config.scenarios[0].config[0].assert[0].provider,
+          config.scenarios[0].config[0].assert[1].assert[0].provider,
+          config.scenarios[1].config[0].options.provider,
+        ].flatMap((reference) => (typeMap ? Object.values(reference) : [reference])),
       ];
       for (const reference of refs) {
         expect(reference).toMatchObject({ id: 'echo' });
@@ -360,10 +387,47 @@ it.each([{ allowed: ['nested selector'] }, { allowed: [] as string[] }, { allowe
       }
     }
     expect(saved.defaultTest.provider.prompts).toEqual(expected);
-    expect(test.provider).toBe(provider);
+    expect(test.provider).toBe(liveProvider);
+    expect(test.options.provider).toBe(provider);
     expect(fetchWithProxy).not.toHaveBeenCalled();
   },
 );
+
+it('preserves mixed provider type-map entries and application settings', async () => {
+  const [liveProvider] = await loadApiProviders([{ id: 'echo', prompts: ['nested selector'] }]);
+  const inline = { id: 'echo', config: { applicationSetting: 'keep' }, prompts: [] };
+  const application = { prompts: ['application setting'] };
+  const provider = { text: liveProvider, embedding: 'echo', classification: inline, application };
+  const result = await evaluate(
+    {
+      providers: ['echo'],
+      prompts: ['first'],
+      tests: [{ options: { provider }, assert: [{ type: 'equals', value: 'first' }] }],
+      writeLatestResults: false,
+    },
+    { cache: false, maxConcurrency: 1 },
+  );
+  const summary = await result.toEvaluateSummary();
+  expect(summary.stats.successes).toBe(1);
+  expect(summary.stats.failures).toBe(0);
+  const config = result.config as { tests: { options: { provider: typeof provider } }[] };
+  const serialized = config.tests[0].options.provider;
+  expect(serialized).not.toBe(provider);
+  expect(serialized.embedding).toBe('echo');
+  expect(serialized.classification).toBe(inline);
+  expect(serialized.application).toBe(application);
+  expect(provider.text).toBe(liveProvider);
+  const saved = JSON.parse(JSON.stringify(serialized));
+  expect(saved).toEqual({
+    text: expect.objectContaining({ id: 'echo', prompts: ['nested selector'] }),
+    embedding: 'echo',
+    classification: inline,
+    application,
+  });
+  const [reloaded] = await loadApiProviders([saved.text]);
+  expect(reloaded.prompts).toEqual(['nested selector']);
+  expect(fetchWithProxy).not.toHaveBeenCalled();
+});
 
 it('keeps explicit runtime prompt maps authoritative', async () => {
   const providers = await loadApiProviders([{ id: 'echo', label: 'target', prompts: ['first'] }]);
