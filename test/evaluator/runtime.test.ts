@@ -63,26 +63,47 @@ function createInMemoryEvaluation(overrides: Partial<InMemoryEvaluation> = {}): 
 }
 
 describeEvaluator('evaluator runtime ports', () => {
-  it('evaluates with an in-memory store and preserves evaluation identity', async () => {
-    const evaluation = createInMemoryEvaluation();
-    const store = new InMemoryEvaluationStore(evaluation);
-    const runtime = createInMemoryRuntime(store);
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
+  it.each([undefined, 10000])(
+    'evaluates with an in-memory store and preserves identity with deadline %s',
+    async (maxEvalTimeMs) => {
+      if (maxEvalTimeMs) {
+        vi.useFakeTimers();
+      }
+      const timeoutSpy = maxEvalTimeMs ? vi.spyOn(globalThis, 'setTimeout') : undefined;
+      const clearTimeoutSpy = maxEvalTimeMs ? vi.spyOn(globalThis, 'clearTimeout') : undefined;
+      const evaluation = createInMemoryEvaluation();
+      const store = new InMemoryEvaluationStore(evaluation);
+      const runtime = createInMemoryRuntime(store);
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}],
+      };
 
-    await expect(evaluate(testSuite, evaluation, {}, runtime)).resolves.toBe(evaluation);
+      await expect(evaluate(testSuite, evaluation, { maxEvalTimeMs }, runtime)).resolves.toBe(
+        evaluation,
+      );
 
-    expect(evaluation.results).toHaveLength(1);
-    expect(evaluation.results[0]).toMatchObject({
-      success: true,
-      testIdx: 0,
-      promptIdx: 0,
-    });
-    expect(evaluation.prompts).toHaveLength(1);
-  });
+      expect(evaluation.results).toHaveLength(1);
+      expect(evaluation.results[0]).toMatchObject({
+        success: true,
+        testIdx: 0,
+        promptIdx: 0,
+      });
+      expect(evaluation.prompts).toHaveLength(1);
+      if (timeoutSpy && clearTimeoutSpy) {
+        const deadlineCalls = timeoutSpy.mock.calls
+          .map(([, delay], index) => ({ delay, index }))
+          .filter(({ delay }) => delay === maxEvalTimeMs);
+        expect(deadlineCalls).toHaveLength(1);
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(
+          timeoutSpy.mock.results[deadlineCalls[0].index].value,
+        );
+        timeoutSpy.mockRestore();
+        clearTimeoutSpy.mockRestore();
+      }
+    },
+  );
 
   it('uses the store resume lookup without importing a concrete result model', async () => {
     const evaluation = createInMemoryEvaluation({
@@ -120,6 +141,7 @@ describeEvaluator('evaluator runtime ports', () => {
     providerPrompts?: string[];
     savedProvider?: string;
     retryMode: boolean;
+    maxEvalTimeMs?: number;
   }>([
     {
       name: 'newly filtered columns',
@@ -127,6 +149,14 @@ describeEvaluator('evaluator runtime ports', () => {
       prompts: [toPrompt('first'), toPrompt('second')],
       providerPrompts: ['second'],
       retryMode: true,
+    },
+    {
+      name: 'newly filtered columns with a deadline',
+      savedPrompts: [toPrompt('first'), toPrompt('second')],
+      prompts: [toPrompt('first'), toPrompt('second')],
+      providerPrompts: ['second'],
+      retryMode: true,
+      maxEvalTimeMs: 10000,
     },
     {
       name: 'reordered columns',
@@ -155,7 +185,12 @@ describeEvaluator('evaluator runtime ports', () => {
     },
   ])(
     'rejects changed saved column routing before writes: $name',
-    async ({ savedPrompts, prompts, providerPrompts, savedProvider, retryMode }) => {
+    async ({ savedPrompts, prompts, providerPrompts, savedProvider, retryMode, maxEvalTimeMs }) => {
+      if (maxEvalTimeMs) {
+        vi.useFakeTimers();
+      }
+      const timeoutSpy = maxEvalTimeMs ? vi.spyOn(globalThis, 'setTimeout') : undefined;
+      const clearTimeoutSpy = maxEvalTimeMs ? vi.spyOn(globalThis, 'clearTimeout') : undefined;
       const provider: ApiProvider = { ...mockApiProvider, prompts: providerPrompts };
       const evaluation = createInMemoryEvaluation({
         persisted: true,
@@ -177,7 +212,12 @@ describeEvaluator('evaluator runtime ports', () => {
       cliState.retryMode = retryMode;
 
       await expect(
-        evaluate({ providers: [provider], prompts, tests: [{}] }, evaluation, {}, runtime),
+        evaluate(
+          { providers: [provider], prompts, tests: [{}] },
+          evaluation,
+          { maxEvalTimeMs },
+          runtime,
+        ),
       ).rejects.toThrow('saved provider/prompt columns differ. Start a new evaluation');
 
       expect(appendPrompts).not.toHaveBeenCalled();
@@ -189,6 +229,17 @@ describeEvaluator('evaluator runtime ports', () => {
       expect(provider.callApi).not.toHaveBeenCalled();
       expect(evaluation.prompts).toEqual(savedColumns);
       expect(evaluation.results).toEqual([]);
+      if (timeoutSpy && clearTimeoutSpy) {
+        const deadlineCalls = timeoutSpy.mock.calls
+          .map(([, delay], index) => ({ delay, index }))
+          .filter(({ delay }) => delay === maxEvalTimeMs);
+        expect(deadlineCalls).toHaveLength(1);
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(
+          timeoutSpy.mock.results[deadlineCalls[0].index].value,
+        );
+        timeoutSpy.mockRestore();
+        clearTimeoutSpy.mockRestore();
+      }
     },
   );
 
