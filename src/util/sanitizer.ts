@@ -700,7 +700,21 @@ export function stripProviderPromptSelectors<T>(providers: T): T {
     if (!provider || typeof provider !== 'object') {
       return provider;
     }
-    const { prompts: _prompts, ...rest } = provider as Record<string, unknown>;
+    const record = provider as Record<string, unknown>;
+    // Serialize live providers before copying so prototype serializers remain effective.
+    const projected =
+      typeof record.id === 'function' || typeof record.toJSON === 'function'
+        ? sanitizeObject(provider, {
+            context: 'provider output',
+            sanitizeUrls: true,
+            maxDepth: Number.POSITIVE_INFINITY,
+            throwOnError: true,
+          })
+        : record;
+    if (!projected || typeof projected !== 'object' || Array.isArray(projected)) {
+      return projected;
+    }
+    const { prompts: _prompts, ...rest } = projected;
     return rest;
   };
   // Runtime serialization can remove id() and absent selectors from an options object.

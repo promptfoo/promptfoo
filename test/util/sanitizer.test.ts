@@ -15,6 +15,7 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
+  stripProviderPromptSelectors,
 } from '../../src/util/sanitizer';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -67,6 +68,31 @@ describe('looksLikeSecret', () => {
 
     expect(looksLikeSecret(value)).toBe(true);
     expect(looksLikeSecret(`${value}.`)).toBe(false);
+  });
+});
+
+describe('stripProviderPromptSelectors', () => {
+  it.each([{ value: 'echo' }, { value: null }, { value: ['echo'] }])(
+    'preserves a provider serializer non-record result: $value',
+    ({ value }) => {
+      const provider = { id: () => 'echo', toJSON: () => value };
+      expect(stripProviderPromptSelectors(provider)).toEqual(value);
+    },
+  );
+
+  it('uses canonical failure output for a provider serializer error', () => {
+    const error = new Error('Ordinary serialization failure');
+    const provider = {
+      id: () => 'echo',
+      runtimeOnly: 'ordinary working state',
+      toJSON: () => {
+        throw error;
+      },
+    };
+    expect(stripProviderPromptSelectors(provider)).toBe(
+      '[unable to serialize, circular reference is too complex to analyze]',
+    );
+    expect(provider.runtimeOnly).toBe('ordinary working state');
   });
 });
 

@@ -3,6 +3,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, {
   getStripFlags,
+  projectPrompt,
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
 } from '../../src/models/evalResult';
@@ -1281,6 +1282,50 @@ describe('EvalResult', () => {
         metadata: { source: 'idempotent' },
       });
     });
+  });
+
+  describe('projectPrompt', () => {
+    it.each([
+      { mapped: false, strip: true },
+      { mapped: true, strip: true },
+      { mapped: false, strip: false },
+    ])(
+      'preserves live provider serialization (mapped: $mapped, strip: $strip)',
+      ({ mapped, strip }) => {
+        class LocalProvider {
+          prompts = ['ordinary selector'];
+          runtimeOnly = 'ordinary working state';
+          config = { nested: { one: { two: { three: { value: 'public setting' } } } } };
+
+          id(): string {
+            return 'echo';
+          }
+
+          toJSON() {
+            return { id: this.id(), prompts: this.prompts, config: this.config };
+          }
+        }
+        const provider = new LocalProvider();
+        const prompt = createPrompt('Hello', {
+          config: { provider: mapped ? { text: provider } : provider },
+        });
+        const projected = projectPrompt(prompt, strip);
+        const output = JSON.parse(JSON.stringify(projected));
+        const serializedProvider = mapped ? output.config.provider.text : output.config.provider;
+
+        expect(serializedProvider).toEqual({
+          id: 'echo',
+          config: provider.config,
+          ...(!strip && { prompts: provider.prompts }),
+        });
+        expect(provider.runtimeOnly).toBe('ordinary working state');
+        expect(provider.prompts).toEqual(['ordinary selector']);
+        expect(mapped ? prompt.config.provider.text : prompt.config.provider).toBe(provider);
+        if (!strip) {
+          expect(projected).toBe(prompt);
+        }
+      },
+    );
   });
 
   describe('toEvaluateResult', () => {
