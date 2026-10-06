@@ -1071,20 +1071,18 @@ async function assertOptionalBrowserDependencies(
         assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
       }
     }
-    for (const [id, config] of [
-      ['browser', { steps: [] }],
-      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: false }],
-      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: true }],
-    ]) {
-      const provider = await loadApiProvider(id, { options: { config } });
-      const response = await provider.callApi('optional browser fixture', { vars: {} });
-      assert.match(response.error, incompatible
-        ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
-        : /requires the optional Playwright package/);
-      assert.match(response.error, /npm install promptfoo/);
-      assert.match(response.error, /npx playwright install chromium/);
-      await provider.cleanup?.();
-    }
+    await assert.rejects(
+      loadApiProvider('openai:chatkit:wf_fixture'),
+      /openai:chatkit provider has been removed/,
+    );
+    const provider = await loadApiProvider('browser', { options: { config: { steps: [] } } });
+    const response = await provider.callApi('optional browser fixture', { vars: {} });
+    assert.match(response.error, incompatible
+      ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
+      : /requires the optional Playwright package/);
+    assert.match(response.error, /npm install promptfoo/);
+    assert.match(response.error, /npx playwright install chromium/);
+    await provider.cleanup?.();
   `;
   for (const format of ['mjs', 'cjs']) {
     const imports =
