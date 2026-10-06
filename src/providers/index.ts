@@ -222,6 +222,7 @@ async function createApiProvider(
       basePath,
       options: {
         ...fileContent,
+        prompts: options.prompts ?? fileContent.prompts,
         env: mergedFileEnv,
       },
     });
@@ -236,7 +237,7 @@ async function createApiProvider(
       ret.delay = options.delay;
       ret.inputs = options.inputs;
       ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
-      ret.prompts = options.prompts && renderEnvOnlyInObject(options.prompts, mergedEnv);
+      ret.prompts = options.prompts;
       return ret;
     }
   }

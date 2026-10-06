@@ -7,6 +7,7 @@ import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
+import { getProviderIdentifier } from '../util/provider';
 import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
 import { processExecutableFile } from './processors/executable';
@@ -65,14 +66,15 @@ export function readProviderPromptMap(
     return { 'Custom function': allPrompts };
   }
 
-  if (isApiProvider(config.providers)) {
-    addProviderPrompts(config.providers.id(), config.providers.label, config.providers.prompts);
-    return ret;
-  }
-
-  for (const provider of config.providers) {
+  const providers = isApiProvider(config.providers) ? [config.providers] : config.providers;
+  for (const provider of providers) {
     if (isApiProvider(provider)) {
-      addProviderPrompts(provider.id(), provider.label, provider.prompts);
+      const key = getProviderIdentifier(provider);
+      if (provider.prompts === undefined) {
+        delete ret[key];
+      } else {
+        ret[key] = provider.prompts;
+      }
       continue;
     }
 

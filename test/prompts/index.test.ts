@@ -672,10 +672,7 @@ describe('readProviderPromptMap', () => {
     };
     config = { providers: provider };
 
-    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      provider1: ['prompt1', 'prompt2'],
-      providerLabel: ['prompt1', 'prompt2'],
-    });
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({});
   });
 
   it('should handle ApiProvider objects in provider arrays', () => {
@@ -683,13 +680,23 @@ describe('readProviderPromptMap', () => {
       id: () => 'provider1',
       callApi: vi.fn<ApiProvider['callApi']>(),
       label: 'providerLabel',
+      prompts: ['prompt1'],
     };
     config = { providers: [provider] };
 
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
-      provider1: ['prompt1', 'prompt2'],
-      providerLabel: ['prompt1', 'prompt2'],
+      providerLabel: ['prompt1'],
     });
+  });
+
+  it('keeps a later unrestricted instance unrestricted at the same runtime key', () => {
+    const provider: ApiProvider = {
+      id: () => 'provider1',
+      callApi: vi.fn<ApiProvider['callApi']>(),
+      label: 'shared',
+    };
+    config = { providers: [{ ...provider, prompts: [] }, provider] };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({});
   });
 
   it('should handle provider objects with id, label, and prompts', () => {

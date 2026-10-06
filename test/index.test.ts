@@ -266,7 +266,7 @@ describe('evaluate function', () => {
     };
 
     await index.evaluate(testSuite);
-    expect(readProviderPromptMap).toHaveBeenCalledWith(testSuite, [
+    expect(readProviderPromptMap).toHaveBeenCalledWith({ providers: [] }, [
       {
         raw: mockPromptFunction.toString(),
         label: 'testPrompt',
