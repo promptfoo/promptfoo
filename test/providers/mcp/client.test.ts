@@ -900,7 +900,98 @@ describe('MCPClient', () => {
       const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
 
       try {
-        const args = { query: 'inventory', session: 'opaque-session', nested: { apiKey: 'short' } };
+        const fields = {
+          databasePassword: 'database-fixture',
+          userCredential: 'credential-fixture',
+          databaseDsn: 'dsn-fixture',
+          awsAccessKey: 'access-fixture',
+          guardedJsonUrl: JSON.stringify({ 'callback?token=key-fixture': 'GET', page: 2 }),
+          formatUrl: JSON.stringify(['AKIAABCDEFGHIJKLMNOP:format-fixture']),
+          opaqueUriUrl: JSON.stringify({
+            target: 'jdbc:sqlserver://db;password=opaque-fixture?api_key=query-fixture',
+            page: 2,
+          }),
+          rawHostPayload: { apiHost: 'data=https://example.test/sk-123456789012345678901234/' },
+          composedGuardUrl: JSON.stringify({
+            apiHost: 'jdbc:sqlserver://alice:context-fixture@db',
+            headers: { 'https://host/db;password=context-fixture': 'x' },
+            page: 2,
+          }),
+          quotedScalarUrl: JSON.stringify({
+            url: JSON.stringify('https:alice:quoted-fixture@example.test/'),
+            page: 2,
+          }),
+          quotedHostUrl: JSON.stringify({
+            apiHost: JSON.stringify('password=scalar-fixture'),
+            page: 2,
+          }),
+          parserKeyUrl: JSON.stringify({
+            headers: { 'https:\\alice:parser-fixture@example.test/': 'x' },
+            page: 2,
+          }),
+          referenceHeaders: { headers: { Authorization: 'Bearer {{ env.MCP_API_KEY }}' } },
+          dbPwd: 'pwd-fixture',
+          clientSecrets: ['secret-one', 'secret-two'],
+          apiKeysByTenant: { tenant: 'tenant-secret', count: 2 },
+          cookies: { sid: 'cookie-fixture' },
+          cookieJar: { sid: 123456, nested: ['other-fixture'], enabled: false },
+          cookieSettings: { sameSite: 'lax' },
+          headers: {
+            Accept: 'https://example.test/?api_key=header-fixture',
+            'User-Agent': '{"password":"header-fixture","label":"{{ value }}"}',
+            'https://example.test/?api_key=header-key': 'value',
+          },
+          env: {
+            SERVICE_URL: '{"password":"url-fixture","label":"{{ value }}"}',
+            SERVICE_HOST: '{"databasePassword":"host-fixture","label":"{{ value }}"}',
+          },
+          tokenUsage: { input: 4, output: 9 },
+          tokenUsages: [{ input: 4, model: 'gpt-4' }],
+          tokenCounts: { input: 120, output: 30 },
+          tokenSettings: { enabled: true, label: 'public' },
+          sessionCookies: { sid: 'cookie-fixture' },
+          subscriptionKeys: ['subscription-fixture'],
+          aliasForm: 'sessionCookies[0]=cookie-fixture',
+          aliasUrl: 'https://example.test/?subscriptionKey=subscription-fixture',
+          tokenBudgets: { daily: 4096 },
+          signatureAlgorithms: ['SHA256'],
+          passwordPolicies: [{ minLength: 12 }],
+          hasCredentials: false,
+          isSecret: true,
+          requiresCredentials: false,
+          needsPassword: true,
+          supportsApiKey: false,
+          tokenBudget: 4096,
+          signatureAlgorithm: 'SHA256',
+          dbPassword: 'db-fixture',
+          databasePasswordEnabled: true,
+          pageToken: 'next-page',
+          maxTokens: 42,
+          monkey: 'ordinary',
+          key: 'record-name',
+          'record.key': 'field-name',
+          tokenCount: 12,
+          credentialsRequired: false,
+          authHeaders: {
+            'User-Agent': '{"databasePassword":"header-fixture","page":2}',
+            Accept: 'https://example.test/?api_key=header-fixture',
+            'https://example.test/?api_key=header-key': 'value',
+          },
+          form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: 'encoded-fixture', tokenCount: 12 }))}`,
+          callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: 'encoded-fixture', credentialsRequired: false }))}`,
+          url: 'redirect=https://alice:fixture-password@example.test/path',
+          secondaryUrl: JSON.stringify({ target: 'callback?token=relative-fixture' }),
+          byUrl: {
+            'https://example.test/?api_key=short': { method: 'GET' },
+          },
+        };
+        const args = {
+          query: 'inventory',
+          session: 'opaque-session',
+          nested: { apiKey: 'short' },
+          one: { two: { three: { four: { five: fields } } } },
+        };
+        const original = structuredClone(args);
         expect(await mcpClient.callTool('tool1', args)).toEqual({
           content: 'result',
           raw: { content: 'result' },
@@ -917,13 +1008,78 @@ describe('MCPClient', () => {
             attributes: expect.objectContaining({
               'gen_ai.operation.name': 'execute_tool',
               'gen_ai.tool.name': 'tool1',
-              'tool.arguments':
-                '{"query":"inventory","session":"[REDACTED]","nested":{"apiKey":"[REDACTED]"}}',
+              'tool.arguments': JSON.stringify({
+                ...args,
+                session: '[REDACTED]',
+                nested: { apiKey: '[REDACTED]' },
+                one: {
+                  two: {
+                    three: {
+                      four: {
+                        five: {
+                          ...fields,
+                          databasePassword: '[REDACTED]',
+                          userCredential: '[REDACTED]',
+                          databaseDsn: '[REDACTED]',
+                          awsAccessKey: '[REDACTED]',
+                          guardedJsonUrl: JSON.stringify({ '[REDACTED]': 'GET', page: 2 }),
+                          formatUrl: JSON.stringify(['[REDACTED]']),
+                          opaqueUriUrl: JSON.stringify({ target: '[REDACTED]', page: 2 }),
+                          rawHostPayload: { apiHost: '[REDACTED]' },
+                          composedGuardUrl: JSON.stringify({
+                            apiHost: '[REDACTED]',
+                            headers: { '[REDACTED]': '[REDACTED]' },
+                            page: 2,
+                          }),
+                          quotedScalarUrl: JSON.stringify({ url: '[REDACTED]', page: 2 }),
+                          quotedHostUrl: JSON.stringify({ apiHost: '[REDACTED]', page: 2 }),
+                          parserKeyUrl: JSON.stringify({
+                            headers: { '[REDACTED]': '[REDACTED]' },
+                            page: 2,
+                          }),
+                          dbPwd: '[REDACTED]',
+                          clientSecrets: ['[REDACTED]', '[REDACTED]'],
+                          apiKeysByTenant: { tenant: '[REDACTED]', count: '[REDACTED]' },
+                          cookies: { sid: '[REDACTED]' },
+                          sessionCookies: { sid: '[REDACTED]' },
+                          subscriptionKeys: ['[REDACTED]'],
+                          aliasForm: 'sessionCookies[0]=%5BREDACTED%5D',
+                          aliasUrl: 'https://example.test/?subscriptionKey=%5BREDACTED%5D',
+                          cookieJar: { sid: '[REDACTED]', nested: ['[REDACTED]'], enabled: false },
+                          headers: {
+                            Accept: 'https://example.test/?api_key=%5BREDACTED%5D',
+                            'User-Agent': '{"password":"[REDACTED]","label":"{{ value }}"}',
+                            'https://example.test/?api_key=%5BREDACTED%5D': '[REDACTED]',
+                          },
+                          env: {
+                            SERVICE_URL: '{"password":"[REDACTED]","label":"{{ value }}"}',
+                            SERVICE_HOST: '{"databasePassword":"[REDACTED]","label":"{{ value }}"}',
+                          },
+                          dbPassword: '[REDACTED]',
+                          authHeaders: {
+                            'User-Agent': '{"databasePassword":"[REDACTED]","page":2}',
+                            Accept: 'https://example.test/?api_key=%5BREDACTED%5D',
+                            'https://example.test/?api_key=%5BREDACTED%5D': '[REDACTED]',
+                          },
+                          form: `data=${encodeURIComponent(JSON.stringify({ databasePassword: '[REDACTED]', tokenCount: 12 }))}`,
+                          callbackUrl: `https://example.test/?data=${encodeURIComponent(JSON.stringify({ dbPassword: '[REDACTED]', credentialsRequired: false }))}`,
+                          url: '[REDACTED]',
+                          secondaryUrl: JSON.stringify({ target: '[REDACTED]' }),
+                          byUrl: {
+                            'https://example.test/?api_key=%5BREDACTED%5D': { method: 'GET' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              }),
             }),
           }),
           expect.any(Function),
         );
         expect(span.setAttribute).toHaveBeenCalledWith('tool.output', 'result');
+        expect(args).toEqual(original);
       } finally {
         activeSpanSpy.mockRestore();
         tracerSpy.mockRestore();

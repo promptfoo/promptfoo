@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getCredentialFieldKind,
   isSecretEnvVarName,
   looksLikeSecret,
   preserveTracingCredentialReferences,
@@ -441,7 +442,122 @@ describe('isSecretEnvVarName', () => {
   });
 });
 
+describe('getCredentialFieldKind', () => {
+  it.each([
+    'databasePassword',
+    'db_password',
+    'DB-PASSWORD',
+    'userApiKey',
+    'x-upstream-token',
+    'oauthClientSecret',
+    'dbPwd',
+    'userCredential',
+    'includeCredentials',
+  ])('takes %s for a credential', (name) => {
+    expect(getCredentialFieldKind(name)).toBe('credential');
+  });
+
+  it.each([
+    // Plurals.
+    'clientSecrets',
+    'databasePasswords',
+    'userApiKeys',
+    'accessTokens',
+    'ACCESS_TOKENS',
+    'apiKeysByTenant',
+    'tokens',
+    'inputTokens',
+    // A credential word with a qualifier after it.
+    'apiKeyForTenant',
+    'tenantClientSecret2Value',
+    'tokenValue',
+    'tokenCount',
+    'passwordHash',
+    'secret_name',
+  ])('takes %s for a name related to a credential', (name) => {
+    expect(getCredentialFieldKind(name)).toBe('related');
+  });
+
+  it.each([
+    // Cursors and special tokens.
+    'pageToken',
+    'page_tokens',
+    'nextPageToken',
+    'continuationToken',
+    'resumeToken',
+    'cursorToken',
+    'nextToken',
+    'stopToken',
+    'maxTokens',
+    'max_tokens',
+    // Settings.
+    'tokenType',
+    'secretVersion',
+    'passwordEnabled',
+    // Ordinary names.
+    'key',
+    'keys',
+    'sortKey',
+    'publicKey',
+    'author',
+    'tokenizer',
+    'passwordless',
+    'session_name',
+    'auth_mode',
+    'access',
+    'status',
+  ])('does not take %s for a credential', (name) => {
+    expect(getCredentialFieldKind(name)).toBeUndefined();
+  });
+});
+
 describe('sanitizeObject', () => {
+  it('limits MCP alias, collection-number and map-key handling to the opt-in policy', () => {
+    const credentialKey = `sk-${'a'.repeat(24)}`;
+    const input = {
+      basicAuth: 'alice:fixture',
+      subscriptionKey: 'fixture',
+      sessionCookie: 'fixture',
+      authHeaders: { 'X-Service-Key': 'fixture', Accept: 'application/json' },
+      databasePasswords: [123456],
+      apiKeysByTenant: { acme: 424242 },
+      revokedApiKeys: { [credentialKey]: true },
+    };
+    expect(sanitizeObject(input)).toEqual(input);
+    expect(sanitizeObject(input, { redactCompoundKeys: true })).toEqual({
+      basicAuth: '[REDACTED]',
+      subscriptionKey: '[REDACTED]',
+      sessionCookie: '[REDACTED]',
+      authHeaders: { 'X-Service-Key': '[REDACTED]', Accept: 'application/json' },
+      databasePasswords: ['[REDACTED]'],
+      apiKeysByTenant: { acme: '[REDACTED]' },
+      revokedApiKeys: { '[REDACTED]': true },
+    });
+  });
+
+  it('only applies compound credential names when explicitly requested', () => {
+    const fields = {
+      databasePassword: 'database-fixture',
+      dbPassword: 'db-fixture',
+      databasePasswordEnabled: true,
+      pageToken: 'next-page',
+      maxTokens: 42,
+      includeCredentials: false,
+      monkey: 'ordinary',
+      key: 'record-name',
+      'record.key': 'field-name',
+      tokenCount: 12,
+      credentialsRequired: false,
+    };
+    const input = { items: [fields], encoded: JSON.stringify(fields) };
+    const redacted = { ...fields, databasePassword: '[REDACTED]', dbPassword: '[REDACTED]' };
+    expect(sanitizeObject(input)).toEqual(input);
+    expect(sanitizeObject(input, { redactCompoundKeys: true })).toEqual({
+      items: [redacted],
+      encoded: JSON.stringify(redacted),
+    });
+  });
+
   describe('environment variable maps', () => {
     it.each([
       'url',

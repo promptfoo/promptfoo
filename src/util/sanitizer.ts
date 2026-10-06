@@ -39,47 +39,174 @@ function hasUrlUserinfo(url: string): boolean {
   return atIndex > 0;
 }
 
+// Exclude quoted components and public mailto paths from host inspection only.
+// The bounded form owner still inspects the original component's keys/values.
+function hostUserinfoInspectionValue(value: string): string {
+  return value.replace(URL_ENCODED_PAIR_RE, (match, separator, key, rawValue) => {
+    if (!/^[A-Za-z0-9._~+%\[\]\-]+$/.test(key)) {
+      return match;
+    }
+    if (rawValue.trimStart().startsWith('"')) {
+      try {
+        if (typeof JSON.parse(rawValue) === 'string') {
+          return `${separator}${key}=`;
+        }
+      } catch {
+        // Malformed quoting retains the existing host interpretation.
+      }
+    }
+    const colon = rawValue.indexOf(':');
+    const equals = rawValue.lastIndexOf('=', colon);
+    const prefix = rawValue.slice(0, equals + 1);
+    if (
+      rawValue.slice(equals + 1, colon).toLowerCase() !== 'mailto' ||
+      (equals !== -1 &&
+        (!/^[A-Za-z0-9._~+%\[\]=\-]+$/.test(prefix) ||
+          prefix.startsWith('=') ||
+          prefix.includes('==')))
+    ) {
+      return match;
+    }
+    return `${separator}${key}=`;
+  });
+}
+
+// Decoded URL payloads also accept the special-scheme spellings recognized by
+// the platform parser, such as a single slash or backslash authority. Keep the
+// generic sanitizer's lexical policy unchanged outside this inherited context.
+function hasUrlPayloadUserinfo(value: string, guard?: UrlPayloadGuard): boolean {
+  if (hasUrlUserinfo(value)) {
+    return true;
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.username || parsed.password) {
+      return true;
+    }
+    if (parsed.protocol === 'mailto:') {
+      // The mailbox belongs to this URI's path, not to a host authority.
+      // Its query/path credential segments are still inspected separately.
+      return false;
+    }
+  } catch {
+    // Host payloads retain the same schemeless authority interpretation as the
+    // original host field; ordinary URL payloads do not acquire that policy.
+  }
+  if (guard === 'host') {
+    value = hostUserinfoInspectionValue(value);
+    try {
+      const parsed = new URL(`https://${value}`);
+      // A bare email address is public data, not evidence of a password.
+      return Boolean(parsed.password);
+    } catch {
+      // Retain the host field's authority interpretation even when its port or
+      // hostname is invalid. Require a password separator so public email data
+      // does not become a credential merely because parsing failed.
+      const authorityEnd = value.search(/[\\/?#]/);
+      const authority = authorityEnd === -1 ? value : value.slice(0, authorityEnd);
+      const atIndex = authority.lastIndexOf('@');
+      const colonIndex = authority.indexOf(':');
+      return colonIndex !== -1 && atIndex > colonIndex + 1;
+    }
+  }
+  return false;
+}
+
+// Scalar strings can retain JSON quoting at any URL/key fast path. Decode only
+// those string layers for the inherited guard, without interpreting containers
+// or changing the original public bytes. The existing depth budget also bounds
+// this iterative interpretation; exhaustion must not restore unchecked data.
+function getUrlPayloadScalar(value: string, maxDepth: number): string | null {
+  let scalar = value;
+  let remaining = maxDepth;
+  while (scalar.trimStart().startsWith('"')) {
+    if (remaining-- < 0) {
+      return null;
+    }
+    try {
+      const parsed: unknown = JSON.parse(scalar);
+      if (typeof parsed !== 'string') {
+        break;
+      }
+      scalar = parsed;
+    } catch {
+      break;
+    }
+  }
+  return scalar;
+}
+
+/**
+ * Names that hold a credential word without being a credential: special tokens, cursors and
+ * token limits, and settings. Takes a name from `normalizeFieldName`.
+ */
+function isBenignParameterName(normalized: string): boolean {
+  return (
+    /^(?:eos|bos|pad|unk|mask|sep|cls|stop|start|end|next|prev|page|nextpage|continuation|resume|cursor|max|min)tokens?$/.test(
+      normalized,
+    ) || /(?:version|type|enabled)$/.test(normalized)
+  );
+}
+
 function isSecretParameterName(name: string): boolean {
   const normalized = normalizeFieldName(name);
   if (normalized === 'key') {
     return true;
   }
-  if (
-    /^(?:eos|bos|pad|unk|mask|sep|cls|stop|start|end|next|prev|page|nextpage|continuation|resume|cursor|max|min)tokens?$/.test(
-      normalized,
-    ) ||
-    /(?:version|type|enabled)$/.test(normalized)
-  ) {
+  if (isBenignParameterName(normalized)) {
     return false;
   }
   if (isSecretField(name) || name.split(/[-_\s=]+/).some(isSecretField)) {
     return true;
   }
+  return hasCredentialCompound(name);
+}
 
-  // Check credential compounds, including lowercase suffixes, camelCase and numeric versions.
+/** Checks credential compounds, including lowercase suffixes, camelCase and numeric versions. */
+function hasCredentialCompound(name: string): boolean {
   const words = name
     .replace(/(value|hash|encrypted)$/i, '_$1')
     .replace(/v?\d+/gi, '_')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .split(/[-_\s=]+/);
-  let prefix = '';
+  let suffix = '';
+  let length = 0;
   return words.some((word) => {
-    prefix += word.toLowerCase();
+    const normalizedWord = word.toLowerCase();
+    length += normalizedWord.length;
+    // Only the longest credential name can affect a suffix match. Keeping the
+    // full growing prefix makes repeated endsWith checks quadratic on long keys.
+    suffix = (suffix + normalizedWord).slice(-MAX_SECRET_PARAMETER_LENGTH);
     return SECRET_PARAMETER_NAMES.some(
-      (secret) => prefix === secret || (secret.length > 3 && prefix.endsWith(secret)),
+      (secret) =>
+        (length === secret.length && suffix === secret) ||
+        (secret.length > 3 && suffix.endsWith(secret)),
     );
   });
 }
 
-function isSecretParameter(name: string, value: string | undefined): boolean {
+function isBooleanCredentialControl(name: string, value: string | undefined): boolean {
   // Boolean controls such as includeCredentials are settings, not credential values.
-  if (
+  return (
     /^(?:true|false)$/i.test(value ?? '') &&
     /(?:^|[.\[])(?:include|require|use|with|enable|disable)(?:[a-z]|[_-])[^.\[\]]*\]?$/i.test(name)
-  ) {
+  );
+}
+
+function isSecretParameter(
+  name: string,
+  value: string | undefined,
+  includeGenericKey = true,
+): boolean {
+  if (isBooleanCredentialControl(name, value)) {
     return false;
   }
-  return name.split(/[.\[\]]+/).some(isSecretParameterName);
+  return name
+    .split(/[.\[\]]+/)
+    .some(
+      (part) =>
+        (includeGenericKey || normalizeFieldName(part) !== 'key') && isSecretParameterName(part),
+    );
 }
 
 /**
@@ -89,17 +216,31 @@ function isSecretParameter(name: string, value: string | undefined): boolean {
  * a benign name in a malformed URL, and `;`-separated query pairs (URLSearchParams
  * only splits on `&`). Linear: a single split plus per-segment checks.
  */
-function hasSecretFormSegment(text: string): boolean {
+function hasSecretFormSegment(
+  text: string,
+  preservePureTemplates = false,
+  compoundContext?: CompoundKeyContext,
+): boolean {
   for (const segment of text.split(/[?&;#]/)) {
     const equalsIndex = segment.indexOf('=');
     if (equalsIndex <= 0) {
       continue;
     }
     const rawValue = segment.slice(equalsIndex + 1);
-    if (!rawValue) {
+    if (!rawValue || (preservePureTemplates && isPureTemplateValue(rawValue))) {
       continue;
     }
     const decodedValue = decodeFormComponent(rawValue);
+    if (compoundContext?.guardUrlPayload) {
+      const scalar = getUrlPayloadScalar(decodedValue ?? rawValue, compoundContext.maxDepth);
+      if (
+        scalar === null ||
+        (!hasOnlyTemplateUserinfo(scalar) &&
+          hasUrlPayloadUserinfo(scalar, compoundContext.guardUrlPayload))
+      ) {
+        return true;
+      }
+    }
     if (
       looksLikeSecret(rawValue) ||
       (decodedValue !== undefined && looksLikeSecret(decodedValue))
@@ -108,7 +249,7 @@ function hasSecretFormSegment(text: string): boolean {
     }
     const rawKey = segment.slice(0, equalsIndex);
     const key = decodeFormComponent(rawKey) ?? rawKey;
-    if (isSecretParameter(key, decodedValue)) {
+    if (isSecretParameterWithContext(key, decodedValue, compoundContext)) {
       return true;
     }
   }
@@ -131,8 +272,22 @@ function hasSecretFormSegment(text: string): boolean {
  * carry one of the structural markers above (the secret-named-key case is covered
  * by `hasSecretFormSegment`, which normalizes keys like `api_key` before matching).
  */
-function unparseableUrlMightLeakSecret(url: string): boolean {
-  return hasUrlUserinfo(url) || looksLikeSecret(url.trim()) || hasSecretFormSegment(url);
+function unparseableUrlMightLeakSecret(
+  url: string,
+  preservePureTemplates = false,
+  compoundContext?: CompoundKeyContext,
+): boolean {
+  const scalar = compoundContext?.guardUrlPayload
+    ? getUrlPayloadScalar(url, compoundContext.maxDepth)
+    : url;
+  return (
+    scalar === null ||
+    (compoundContext?.guardUrlPayload
+      ? hasUrlPayloadUserinfo(scalar, compoundContext.guardUrlPayload)
+      : hasUrlUserinfo(scalar)) ||
+    looksLikeSecret(scalar.trim()) ||
+    hasSecretFormSegment(scalar, preservePureTemplates, compoundContext)
+  );
 }
 
 /**
@@ -228,6 +383,175 @@ export const SECRET_FIELD_NAMES = new Set([
 const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES].filter(
   (name) => !['auth', 'session', 'cookie', 'setcookie'].includes(name),
 );
+const MAX_SECRET_PARAMETER_LENGTH = Math.max(...SECRET_PARAMETER_NAMES.map((name) => name.length));
+
+// MCP object fields use terminal credential names: tokenUsage/passwordPolicy describe
+// ordinary data even though the broader URL-parameter policy recognizes their prefixes.
+function isCompoundSecretObjectField(name: string, value: unknown): boolean {
+  if (value === null || typeof value === 'boolean') {
+    return false;
+  }
+  const normalized = normalizeFieldName(name);
+  const textValue =
+    typeof value === 'string' || typeof value === 'boolean' ? String(value) : undefined;
+  if (isBooleanCredentialControl(name, textValue)) {
+    return false;
+  }
+  // Preserve the existing value-bearing aliases and numeric versions, including
+  // databasePasswordValue, tokenHash and dbPwdV2Encrypted. These passes are bounded.
+  let materialName = normalized;
+  for (let pass = 0; pass < 2; pass++) {
+    let end = materialName.length;
+    while (
+      end > 0 &&
+      materialName.charCodeAt(end - 1) >= 48 &&
+      materialName.charCodeAt(end - 1) <= 57
+    ) {
+      end--;
+    }
+    if (end < materialName.length && materialName[end - 1] === 'v') {
+      end--;
+    }
+    materialName = materialName.slice(0, end);
+    if (pass === 0) {
+      materialName = materialName.replace(/(?:value|hash|encrypted)$/, '');
+    }
+  }
+  // Reuse the established terminal vocabulary (including credential, DSN and
+  // accessKey) without inheriting its broader descriptive `related` category.
+  if (getCredentialFieldKind(materialName) === 'credential') {
+    return true;
+  }
+  const terminal = SECRET_PARAMETER_NAMES.find((secret) => materialName.endsWith(secret));
+  if (!terminal) {
+    return false;
+  }
+  // The URL policy intentionally omits short suffixes, but dbPwd/userSig are
+  // credential-bearing object names. Bare `key` is not in SECRET_PARAMETER_NAMES.
+  return terminal.length <= 3 || isSecretParameter(name, textValue, false);
+}
+
+// Provider usage and tokenization fields hold counts or token pieces. Match only
+// these finite metadata roles, not arbitrary prefixes such as access/auth/session.
+// Descendants still receive ordinary credential checks, and inherited private
+// collection roles take precedence over this MCP-only field classification.
+function isMcpTokenMetadataName(normalized: string): boolean {
+  return (
+    /^(?:input|output|completion|prompt|reasoning(?:output)?|thinking|thought|response|logit|reserved|budget|(?:additional)?special|num(?:input(?:image|text)?|output)?|total(?:input|output|cached|reasoning|thought|tooluse)?)tokens$/.test(
+      normalized,
+    ) ||
+    /^(?:(?:audio|image|video|text)(?:input|output|completion|prompt)?|(?:cached|uncached)(?:audio|image|video|text|nontext)?(?:input|prompt|response)?|toolprompt)tokens$/.test(
+      normalized,
+    ) ||
+    /^(?:cache(?:read|write|creation)(?:input)?|promptcache(?:hit|miss)|billablecached|(?:accepted|rejected)prediction|(?:max|min)(?:completion|new|output|thinking|responseoutput)?)tokens$/.test(
+      normalized,
+    )
+  );
+}
+
+// Credential collections retain their structure but hide string and numeric
+// descendants; direct scalar counts stay intact. Metadata roles remain ordinary
+// and recurse through credential/URL checks. This policy is only enabled for MCP.
+function getCompoundSecretObjectFieldKind(
+  name: string,
+  value: unknown,
+): 'credential' | 'related' | undefined {
+  if (value === null || typeof value === 'boolean') {
+    return undefined;
+  }
+  const normalized = normalizeFieldName(name);
+  if (
+    normalized === 'basicauth' ||
+    normalized === 'sessioncookie' ||
+    normalized === 'subscriptionkey' ||
+    (normalized === 'authheaders' && typeof value !== 'object')
+  ) {
+    return 'credential';
+  }
+  if (
+    isMcpTokenMetadataName(normalized) ||
+    /(?:tokenusages?|tokenbudgets?|tokenids|signaturealgorithms?|passwordpolic(?:y|ies))$/.test(
+      normalized,
+    ) ||
+    /(?:url|uri|host|endpoint|proxy)$/.test(normalized) ||
+    isBooleanCredentialControl(name, typeof value === 'string' ? value : undefined)
+  ) {
+    return undefined;
+  }
+  if (
+    /^(?:cookies|cookiejars?|basicauths|sessioncookies|subscriptionkeys)$/.test(normalized) ||
+    (normalized === 'authheaders' && Array.isArray(value))
+  ) {
+    return 'related';
+  }
+  // Retain terminal precedence: userCredentials is itself a credential field,
+  // while clientSecrets is a collection of individual credentials.
+  if (getCredentialFieldKind(name) === 'credential' && isCompoundSecretObjectField(name, value)) {
+    return 'credential';
+  }
+  const singular = singularizeFieldName(name);
+  // Only actual credential collections inherit the private-value role. A
+  // credential word in tokenCounts/tokenSettings describes ordinary metadata.
+  if (normalizeFieldName(singular) !== normalized && isCompoundSecretObjectField(singular, value)) {
+    return 'related';
+  }
+  if (isCompoundSecretObjectField(name, value)) {
+    return 'credential';
+  }
+  // Retain established qualified collections without treating every suffix as
+  // a credential qualifier. Inspect one bounded word-delimited By/For prefix.
+  const words = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+  const qualifier = /[-_\s=](?:by|for)[-_\s=]/i.exec(words);
+  if (qualifier && qualifier.index + qualifier[0].length < words.length) {
+    const prefix = words.slice(0, qualifier.index);
+    if (isCompoundSecretObjectField(singularizeFieldName(prefix), value)) {
+      return 'related';
+    }
+  }
+  return undefined;
+}
+
+// Carry the MCP-only policy and remaining object depth through existing encoded
+// JSON paths. Public URL/form sanitizers keep their established defaults.
+type UrlPayloadGuard = boolean | 'logging' | 'host';
+type CompoundKeyContext = {
+  maxDepth: number;
+  guardUrlPayload?: UrlPayloadGuard;
+  pendingFormDecode?: number;
+};
+
+function isLoggingUrlPayload(guard?: UrlPayloadGuard): boolean {
+  return guard === 'logging' || guard === 'host';
+}
+
+function isSecretParameterWithContext(
+  name: string,
+  value: string | undefined,
+  compoundContext?: CompoundKeyContext,
+): boolean {
+  if (
+    compoundContext?.pendingFormDecode &&
+    value !== undefined &&
+    isPureTemplateValue(
+      decodePendingComponent(value, compoundContext.pendingFormDecode - 1) ?? value,
+    )
+  ) {
+    return false;
+  }
+  // Predicates must see the same pending value interpretation as the owner.
+  // Invalid escapes cannot form a true/false control, so retain their bytes.
+  const inspectedValue =
+    compoundContext?.pendingFormDecode && value !== undefined
+      ? (decodePendingComponent(value, compoundContext.pendingFormDecode) ?? value)
+      : value;
+  return (
+    isSecretParameter(name, inspectedValue) ||
+    (compoundContext !== undefined &&
+      name
+        .split(/[.\[\]]+/)
+        .some((part) => getCompoundSecretObjectFieldKind(part, inspectedValue) !== undefined))
+  );
+}
 
 /**
  * Normalize field names for comparison (lowercase, drop hyphens, underscores,
@@ -279,6 +603,52 @@ const ENV_SECRET_SUFFIX_WORDS = [
   // compound shows up in env vars.
   'accesskey',
 ].map((word) => word.toUpperCase());
+
+/** `clientSecrets` as `client_Secret`: every word without its plural ending. */
+function singularizeFieldName(fieldName: string): string {
+  return fieldName
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .split(/[-_\s=]+/)
+    .map((word) => (word.length > 3 && /[^s]s$/i.test(word) ? word.slice(0, -1) : word))
+    .join('_');
+}
+
+/**
+ * How a field name relates to credentials, for data whose keys are not under our control,
+ * such as the arguments of a tool call. `isSecretField` only knows exact names.
+ *
+ * - `'credential'`: the name ends in a credential word, as `databasePassword`,
+ *   `db_password` and `userApiKey` do.
+ * - `'related'`: the name is the plural of such a name (`accessTokens`) or qualifies a
+ *   credential word (`apiKeyForTenant`), by the rules for URL parameter names. Such a name
+ *   can also hold a count or a setting (`inputTokens`, `tokenCount`).
+ * - `undefined`: neither. That includes cursors and special tokens (`pageToken`,
+ *   `maxTokens`) and a bare `key`, which is an ordinary argument name.
+ *
+ * This is not applied to configs, where a key such as `secret_name` is a setting.
+ */
+export function getCredentialFieldKind(fieldName: string): 'credential' | 'related' | undefined {
+  const endsInCredentialWord = (normalized: string) =>
+    ENV_SECRET_SUFFIX_WORDS.some((secret) => normalized.toUpperCase().endsWith(secret));
+
+  const normalized = normalizeFieldName(fieldName);
+  if (isBenignParameterName(normalized)) {
+    return undefined;
+  }
+  if (endsInCredentialWord(normalized)) {
+    return 'credential';
+  }
+  const singular = singularizeFieldName(fieldName);
+  const normalizedSingular = normalizeFieldName(singular);
+  if (isBenignParameterName(normalizedSingular)) {
+    return undefined;
+  }
+  return hasCredentialCompound(fieldName) ||
+    hasCredentialCompound(singular) ||
+    endsInCredentialWord(normalizedSingular)
+    ? 'related'
+    : undefined;
+}
 
 /**
  * Secret only as the final `_`-delimited word. `MLFLOW_BASIC_AUTH` and `NPM_CONFIG__AUTH`
@@ -351,15 +721,9 @@ export function sanitizeRuntimeOptions(
   return sanitized;
 }
 
-/**
- * Check if a value looks like a secret based on common patterns.
- * Detects API keys, tokens, and other credential patterns.
- */
-export function looksLikeSecret(value: string): boolean {
-  if (typeof value !== 'string') {
-    return false;
-  }
-
+// Known credential formats are also safe to recognize in structural map keys.
+// Opaque-length heuristics remain value-only so ordinary tenant IDs retain names.
+function matchesCredentialFormat(value: string): boolean {
   // OpenAI API keys (sk-...)
   if (/^sk-[a-zA-Z0-9-_]{20,}/.test(value)) {
     return true;
@@ -397,6 +761,21 @@ export function looksLikeSecret(value: string): boolean {
 
   // Google API keys (AIza...)
   if (/^AIza[a-zA-Z0-9_-]{35}/.test(value)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if a value looks like a secret based on common patterns.
+ * Detects API keys, tokens, and other credential patterns.
+ */
+export function looksLikeSecret(value: string): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  if (matchesCredentialFormat(value)) {
     return true;
   }
 
@@ -1012,21 +1391,59 @@ function sanitizeJsonString(
   depth: number,
   maxDepth: number,
   sanitizeUrls = false,
+  redactCompoundKeys = false,
+  guardUrlPayload: UrlPayloadGuard = false,
+  pendingFormDecode = 0,
 ): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
     return redactedAzureBlobUri;
   }
 
+  let parsedJson = false;
+  let scalar = str;
   try {
     const parsed = JSON.parse(str);
+    parsedJson = true;
+    if (typeof parsed === 'string') {
+      scalar = parsed;
+    }
     if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth, sanitizeUrls);
+      const sanitized = recursiveSanitize(
+        parsed,
+        depth,
+        maxDepth,
+        sanitizeUrls,
+        false,
+        redactCompoundKeys,
+        false,
+        guardUrlPayload,
+      );
       return JSON.stringify(sanitized);
     }
-  } catch {
+  } catch (error) {
+    if (redactCompoundKeys && parsedJson) {
+      // A traversal/serialization failure is not a parse failure. Let MCP's
+      // fail-closed boundary handle it instead of restoring the original JSON.
+      throw error;
+    }
+    if (guardUrlPayload) {
+      const context = { maxDepth: maxDepth - depth, guardUrlPayload, pendingFormDecode };
+      if (
+        looksLikeSecret(str) ||
+        (isLoggingUrlPayload(guardUrlPayload) && unparseableUrlMightLeakSecret(str, false, context))
+      ) {
+        return REDACTED;
+      }
+      return isLoggingUrlPayload(guardUrlPayload)
+        ? sanitizeUrlForLoggingWithContext(str, context)
+        : sanitizeUrlWithContext(str, context);
+    }
     if (looksLikeUrlEncodedFormData(str)) {
-      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
+      const sanitizedUrlEncoded = sanitizeUrlEncodedStringWithContext(
+        str,
+        redactCompoundKeys ? { maxDepth: maxDepth - depth } : undefined,
+      );
       if (sanitizedUrlEncoded !== str) {
         return sanitizedUrlEncoded;
       }
@@ -1036,6 +1453,60 @@ function sanitizeJsonString(
     if (looksLikeSecret(str)) {
       return REDACTED;
     }
+  }
+  // Keep public bytes unchanged while applying logging-path checks to the same
+  // bounded scalar interpretation as the structural credential guard below.
+  const loggingScalar = isLoggingUrlPayload(guardUrlPayload)
+    ? getUrlPayloadScalar(scalar, maxDepth - depth)
+    : null;
+  if (
+    guardUrlPayload &&
+    (unparseableUrlMightLeakSecret(scalar, !isLoggingUrlPayload(guardUrlPayload), {
+      maxDepth: maxDepth - depth,
+      guardUrlPayload,
+      pendingFormDecode,
+    }) ||
+      (loggingScalar !== null && hasOpaqueLoggingPath(loggingScalar, true)))
+  ) {
+    return REDACTED;
+  }
+  if (
+    guardUrlPayload &&
+    parsedJson &&
+    scalar !== str &&
+    /[?#]/.test(scalar.replace(NUNJUCKS_PLACEHOLDER, ''))
+  ) {
+    if (maxDepth <= depth) {
+      return REDACTED;
+    }
+    let remaining = maxDepth - depth - 1;
+    let quotedScalar = scalar;
+    let stringLayers = 1;
+    // Inspect only additional JSON string layers, never a container twice.
+    while (quotedScalar.trimStart().startsWith('"')) {
+      if (remaining-- <= 0) {
+        return REDACTED;
+      }
+      try {
+        const parsed: unknown = JSON.parse(quotedScalar);
+        if (typeof parsed !== 'string') {
+          break;
+        }
+        quotedScalar = parsed;
+        stringLayers++;
+      } catch {
+        break;
+      }
+    }
+    const context = { maxDepth: remaining, guardUrlPayload, pendingFormDecode };
+    let sanitized = sanitizeTemplatedUrl(quotedScalar, context, context);
+    if (sanitized === quotedScalar) {
+      return str;
+    }
+    for (let layer = 0; layer < stringLayers; layer++) {
+      sanitized = JSON.stringify(sanitized);
+    }
+    return sanitized;
   }
   return str;
 }
@@ -1070,6 +1541,27 @@ function looksLikeUrlEncodedFormData(value: string): boolean {
 // value run to the next pair separator (`&` or `;`).
 const URL_ENCODED_PAIR_RE = /(^|[&;])([^=&;]+)=([^&;]*)/g;
 
+// URLSearchParams tolerates malformed escapes. Escape only its pair delimiter
+// so one already-selected component retains that exact decoder behavior.
+function decodeQueryComponent(component: string): string {
+  return new URLSearchParams(`value=${component.replace(/&/g, '%26')}`).get('value')!;
+}
+
+function decodePendingComponent(
+  value: string | undefined,
+  count: number,
+  decode: (component: string) => string | undefined = decodeFormComponent,
+): string | undefined {
+  for (let index = 0; index < count && value !== undefined; index++) {
+    const next = decode(value);
+    if (next === value) {
+      break;
+    }
+    value = next;
+  }
+  return value;
+}
+
 function decodeFormComponent(component: string): string | undefined {
   try {
     return decodeURIComponent(component.replace(/\+/g, ' '));
@@ -1083,14 +1575,27 @@ function decodeFormComponent(component: string): string | undefined {
  * it and return the serialized result — but only if sanitization actually
  * changed something. Returns `null` when there is no JSON to sanitize or when
  * the value is JSON but contains no secrets (so callers can preserve the
- * original byte-for-byte).
+ * original byte-for-byte). URL-named MCP data can request canonical output even
+ * when unchanged, matching the generic JSON-string traversal it replaces.
  */
-function redactNestedJsonValue(decoded: string | undefined): string | null {
+function redactNestedJsonValue(
+  decoded: string | undefined,
+  compoundContext?: CompoundKeyContext,
+  unchangedResult: 'null' | 'canonical' | 'original' = 'null',
+  // Whole URL fields own quoted scalars; form/query candidates retain their
+  // dedicated scalar owner so decoding and quote layers are handled once.
+  allowQuotedScalar = false,
+): string | null {
   if (decoded === undefined) {
     return null;
   }
   const trimmed = decoded.trim();
-  if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+  if (
+    !trimmed ||
+    (trimmed[0] !== '{' &&
+      trimmed[0] !== '[' &&
+      !(allowQuotedScalar && compoundContext?.guardUrlPayload && trimmed[0] === '"'))
+  ) {
     return null;
   }
   let parsed: unknown;
@@ -1099,16 +1604,279 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
   } catch {
     return null;
   }
+  const quotedScalar =
+    typeof parsed === 'string' && compoundContext?.guardUrlPayload
+      ? getUrlPayloadScalar(decoded, compoundContext.maxDepth)
+      : null;
+  if (quotedScalar !== null && /^[{\[]/.test(quotedScalar.trimStart())) {
+    let scalar = decoded;
+    let remaining = compoundContext!.maxDepth;
+    while (scalar.trimStart().startsWith('"')) {
+      if (remaining-- <= 0) {
+        return REDACTED;
+      }
+      const parsedLayer: unknown = JSON.parse(scalar);
+      if (typeof parsedLayer !== 'string') {
+        break;
+      }
+      scalar = parsedLayer;
+    }
+    const sanitized = redactNestedJsonValue(
+      scalar,
+      { ...compoundContext!, maxDepth: remaining },
+      'original',
+    );
+    if (sanitized !== null) {
+      if (sanitized === scalar) {
+        return unchangedResult === 'null' ? null : decoded;
+      }
+      // A quoted container is still an opaque scalar at the whole-field owner.
+      // Preserve public spelling, but retain whole-value redaction for credentials.
+      return REDACTED;
+    }
+  }
+  if (
+    quotedScalar !== null &&
+    !/^[{\[]/.test(quotedScalar.trimStart()) &&
+    /[?#]/.test(quotedScalar.replace(NUNJUCKS_PLACEHOLDER, '')) &&
+    compoundContext?.guardUrlPayload
+  ) {
+    const sanitized = sanitizeJsonString(
+      decoded,
+      0,
+      compoundContext.maxDepth,
+      true,
+      true,
+      compoundContext.guardUrlPayload,
+      compoundContext.pendingFormDecode,
+    );
+    return sanitized !== decoded || unchangedResult !== 'null' ? sanitized : null;
+  }
   if (!parsed || typeof parsed !== 'object') {
     return null;
   }
-  const sanitized = sanitizeObject(parsed, {
-    sanitizeUrls: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  });
-  const originalSerialized = JSON.stringify(parsed);
-  const sanitizedSerialized = JSON.stringify(sanitized);
-  return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
+  let sanitizedSerialized: string | undefined;
+  try {
+    const sanitized = sanitizeObjectWithContext(
+      parsed,
+      {
+        sanitizeUrls: true,
+        maxDepth: compoundContext?.maxDepth ?? Number.POSITIVE_INFINITY,
+        redactCompoundKeys: compoundContext !== undefined,
+        throwOnError: compoundContext !== undefined,
+      },
+      compoundContext?.guardUrlPayload,
+    );
+    sanitizedSerialized = JSON.stringify(sanitized);
+    // Canonical mode only serializes the bounded result, never the unbounded
+    // original. A comparison failure must not discard already sanitized data.
+    if (unchangedResult === 'canonical' || sanitizedSerialized !== JSON.stringify(parsed)) {
+      return sanitizedSerialized;
+    }
+    return unchangedResult === 'original' ? decoded : null;
+  } catch (error) {
+    if (compoundContext) {
+      return sanitizedSerialized ?? JSON.stringify(REDACTED);
+    }
+    throw error;
+  }
+}
+
+// One owner for decoded form/query values: handle JSON containers once, then
+// inspect scalar values through the existing dispatcher with less depth. A
+// handled, unchanged container returns its decoded bytes to avoid a second pass.
+function redactUrlPayloadValue(
+  decoded: string | undefined,
+  compoundContext?: CompoundKeyContext,
+  isParsedQueryValue = false,
+  rawValue?: string,
+): string | null {
+  const originalDecoded = decoded;
+  const pendingDecodes = compoundContext?.pendingFormDecode ?? 0;
+  const interpretations = [decoded];
+  for (let index = 0; index < pendingDecodes && decoded !== undefined; index++) {
+    decoded = isParsedQueryValue ? decodeQueryComponent(decoded) : decodeFormComponent(decoded);
+    interpretations.push(decoded);
+  }
+  if (pendingDecodes) {
+    compoundContext = { ...compoundContext!, pendingFormDecode: 0 };
+  }
+  if (compoundContext?.guardUrlPayload && rawValue !== undefined) {
+    interpretations.unshift(rawValue);
+  }
+  // Choose the most decoded valid container before traversing it once. An
+  // invalid later spelling must not discard a valid earlier JSON container.
+  for (let index = interpretations.length - 1; index >= 0; index--) {
+    const candidate = interpretations[index];
+    const nestedJson = redactNestedJsonValue(
+      candidate,
+      compoundContext,
+      compoundContext?.guardUrlPayload ? 'original' : 'null',
+    );
+    if (nestedJson !== null) {
+      return nestedJson === candidate ? (originalDecoded ?? rawValue ?? nestedJson) : nestedJson;
+    }
+  }
+  if (compoundContext?.guardUrlPayload) {
+    for (let index = 0; index < interpretations.length - 1; index++) {
+      const rawScalar = interpretations[index];
+      const decodedScalar = interpretations[index + 1];
+      if (rawScalar === undefined || decodedScalar === undefined || rawScalar === decodedScalar) {
+        continue;
+      }
+      const rawBoundary = rawScalar.search(/[?#]/);
+      const decodedBoundary = decodedScalar.search(/[?#]/);
+      if (
+        rawBoundary >= 0 &&
+        decodedBoundary >= 0 &&
+        decodeFormComponent(rawScalar.slice(0, rawBoundary)) ===
+          decodedScalar.slice(0, decodedBoundary)
+      ) {
+        const rawChild = decodedScalar.slice(0, decodedBoundary) + rawScalar.slice(rawBoundary);
+        const effectiveScalar = decoded ?? originalDecoded ?? decodedScalar;
+        if (
+          isLoggingUrlPayload(compoundContext.guardUrlPayload) &&
+          !URL_REFERENCE.test(effectiveScalar) &&
+          !(isParsedQueryValue && hasOnlyTemplateUserinfo(effectiveScalar)) &&
+          unparseableUrlMightLeakSecret(effectiveScalar, false, compoundContext)
+        ) {
+          return REDACTED;
+        }
+        if (compoundContext.maxDepth <= 0) {
+          return REDACTED;
+        }
+        const context = {
+          ...compoundContext,
+          maxDepth: compoundContext.maxDepth - 1,
+          pendingFormDecode: interpretations.length - index - 1,
+        };
+        const preserveUserinfo = isParsedQueryValue && hasOnlyTemplateUserinfo(rawChild);
+        const sanitized = preserveUserinfo
+          ? sanitizeTemplatedUrl(rawChild, context, context, true)
+          : sanitizeUrlValueWithContext(rawChild, context);
+        const guarded =
+          preserveUserinfo &&
+          isLoggingUrlPayload(context.guardUrlPayload) &&
+          hasOpaqueLoggingPath(sanitized, true)
+            ? REDACTED
+            : sanitized;
+        return guarded === rawChild ? null : guarded;
+      }
+    }
+    if (decoded === undefined) {
+      // Keep the nearest raw spelling's structural guard after a failed decode.
+      // Its unapplied layers belong to leaf checks, never to delimiter splitting.
+      let index = interpretations.length - 1;
+      while (index >= 0 && interpretations[index] === undefined) {
+        index--;
+      }
+      const rawScalar = interpretations[index];
+      const context = {
+        ...compoundContext,
+        pendingFormDecode: pendingDecodes + (rawValue === undefined ? 0 : 1) - index,
+      };
+      if (rawScalar === undefined || !unparseableUrlMightLeakSecret(rawScalar, true, context)) {
+        return null;
+      }
+      if (compoundContext.maxDepth <= 0) {
+        return REDACTED;
+      }
+      let scalar = rawScalar;
+      let quotedLayers = 0;
+      while (scalar.trimStart().startsWith('"')) {
+        if (quotedLayers >= compoundContext.maxDepth) {
+          return REDACTED;
+        }
+        try {
+          const parsed: unknown = JSON.parse(scalar);
+          if (typeof parsed !== 'string') {
+            break;
+          }
+          scalar = parsed;
+          quotedLayers++;
+        } catch {
+          break;
+        }
+      }
+      if (quotedLayers >= compoundContext.maxDepth) {
+        return REDACTED;
+      }
+      let sanitized = sanitizeUrlValueWithContext(scalar, {
+        ...context,
+        maxDepth: compoundContext.maxDepth - quotedLayers - 1,
+      });
+      if (sanitized === scalar) {
+        return null;
+      }
+      for (let layer = 0; layer < quotedLayers; layer++) {
+        sanitized = JSON.stringify(sanitized);
+      }
+      return sanitized;
+    }
+    if (isParsedQueryValue) {
+      let scalar = decoded;
+      let quotedLayers = 0;
+      let remaining = compoundContext.maxDepth;
+      // Interpret only scalar string layers, retaining their shape if a nested
+      // credential changes this query value. Containers keep their existing owner.
+      while (scalar.trimStart().startsWith('"')) {
+        if (remaining-- < 0) {
+          return REDACTED;
+        }
+        try {
+          const parsed: unknown = JSON.parse(scalar);
+          if (typeof parsed !== 'string') {
+            break;
+          }
+          scalar = parsed;
+          quotedLayers++;
+        } catch {
+          break;
+        }
+      }
+      if (compoundContext.maxDepth <= 0) {
+        return REDACTED;
+      }
+      if (hasOnlyTemplateUserinfo(scalar)) {
+        // Newly inspected query scalars retain unresolved authority references.
+        // Continue checking literal query/hash credentials and logging paths.
+        if (quotedLayers >= compoundContext.maxDepth) {
+          return REDACTED;
+        }
+        const context = {
+          ...compoundContext,
+          maxDepth: compoundContext.maxDepth - quotedLayers - 1,
+        };
+        const sanitized = sanitizeTemplatedUrl(scalar, context, context, true);
+        let guarded =
+          isLoggingUrlPayload(context.guardUrlPayload) && hasOpaqueLoggingPath(sanitized, true)
+            ? REDACTED
+            : sanitized;
+        if (guarded === scalar) {
+          return null;
+        }
+        for (let layer = 0; layer < quotedLayers; layer++) {
+          guarded = JSON.stringify(guarded);
+        }
+        return guarded;
+      }
+    }
+    const guarded =
+      compoundContext.maxDepth <= 0
+        ? REDACTED
+        : recursiveSanitize(
+            decoded,
+            1,
+            compoundContext.maxDepth,
+            true,
+            false,
+            true,
+            false,
+            compoundContext.guardUrlPayload,
+          );
+    return guarded === decoded ? null : guarded;
+  }
+  return null;
 }
 
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
@@ -1123,7 +1891,31 @@ function isPureTemplateValue(value: string): boolean {
   return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
 }
 
+function hasOnlyTemplateUserinfo(value: string): boolean {
+  if (!value.includes('{{') || !value.includes('}}')) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    return (
+      Boolean(parsed.username || parsed.password) &&
+      [parsed.username, parsed.password].every(
+        (part) => !part || isPureTemplateValue(decodeURIComponent(part)),
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function sanitizeUrlEncodedString(value: string): string {
+  return sanitizeUrlEncodedStringWithContext(value);
+}
+
+function sanitizeUrlEncodedStringWithContext(
+  value: string,
+  compoundContext?: CompoundKeyContext,
+): string {
   if (!value.includes('=')) {
     return value;
   }
@@ -1149,9 +1941,15 @@ export function sanitizeUrlEncodedString(value: string): string {
     // An undecodable key (stray `%` not forming %HH) only disables the key-NAME
     // match — the value-pattern checks below must still run, otherwise a malformed
     // key smuggles its secret value past redaction (e.g. `api%ZZkey=AKIA...`).
-    const decodedKey = decodeFormComponent(rawKey);
+    const key = decodeFormComponent(rawKey);
+    const decodedKey =
+      compoundContext?.pendingFormDecode && key !== undefined
+        ? decodePendingComponent(key, compoundContext.pendingFormDecode)
+        : key;
     const decodedValue = decodeFormComponent(rawValue);
-    const keyIsSecret = decodedKey !== undefined && isSecretParameter(decodedKey, decodedValue);
+    const keyIsSecret =
+      decodedKey !== undefined &&
+      isSecretParameterWithContext(decodedKey, decodedValue, compoundContext);
 
     // A secret-named key redacts its ENTIRE value before any template skip or
     // nested-JSON recursion, so a partial-template value (`password=abc{{x}}def`)
@@ -1166,10 +1964,13 @@ export function sanitizeUrlEncodedString(value: string): string {
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
     // redacted at the leaf rather than leaked as opaque bytes.
-    const nestedJson = redactNestedJsonValue(decodedValue);
-    if (nestedJson !== null) {
+    const guardedValue = redactUrlPayloadValue(decodedValue, compoundContext, false, rawValue);
+    if (guardedValue !== null) {
+      if (guardedValue === decodedValue || guardedValue === rawValue) {
+        return match;
+      }
       changed = true;
-      return `${separator}${rawKey}=${encodeURIComponent(nestedJson)}`;
+      return `${separator}${rawKey}=${encodeURIComponent(guardedValue)}`;
     }
 
     // Check both raw and decoded forms of the value so `+` decoding can't be
@@ -1189,6 +1990,37 @@ export function sanitizeUrlEncodedString(value: string): string {
   return changed ? result : value;
 }
 
+// Property names retain opaque public identifiers. Only the existing URL
+// userinfo/parameter guards apply to keys in an already-decoded URL payload.
+function hasUrlPayloadKeyCredential(key: string, compoundContext?: CompoundKeyContext): boolean {
+  const scalar = getUrlPayloadScalar(key, compoundContext?.maxDepth ?? MAX_DEPTH);
+  let guard = compoundContext?.guardUrlPayload;
+  let containerName = false;
+  if (scalar !== null && /^[\[{]/.test(scalar.trimStart())) {
+    try {
+      const parsed = JSON.parse(scalar);
+      if (parsed !== null && typeof parsed === 'object') {
+        // A valid container used as a property name is not a schemeless host.
+        // Keep the existing explicit URL/form checks without traversing it.
+        containerName = true;
+        if (guard === 'host') {
+          guard = 'logging';
+        }
+      }
+    } catch {
+      // Bracketed usernames and malformed names retain host authority checks.
+    }
+  }
+  return (
+    scalar === null ||
+    hasUrlPayloadUserinfo(scalar, guard) ||
+    hasSecretFormSegment(scalar, false, compoundContext) ||
+    // Explicit encoded form/query payloads keep the same bounded value owner as
+    // scalar URLs; arbitrary containers used as names remain opaque identifiers.
+    (!containerName && sanitizeUrlEncodedStringWithContext(scalar, compoundContext) !== scalar)
+  );
+}
+
 /**
  * Sanitize plain object fields
  */
@@ -1198,12 +2030,26 @@ function sanitizePlainObject(
   maxDepth: number,
   sanitizeUrls: boolean,
   isEnvMap: boolean,
+  redactCompoundKeys: boolean,
+  redactCredentialValues: boolean,
+  guardUrlPayload: UrlPayloadGuard,
 ): any {
   const sanitized: any = {};
   let keySuffix = 0;
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
+  const compoundContext = redactCompoundKeys
+    ? { maxDepth: maxDepth - depth - 1, guardUrlPayload }
+    : undefined;
   for (const [rawKey, value] of Object.entries(obj)) {
-    const redactedKey = sanitizeUrls && URL_REFERENCE.test(rawKey) ? sanitizeUrl(rawKey) : rawKey;
+    const isUrlKey = URL_REFERENCE.test(rawKey);
+    const redactedKey =
+      redactCredentialValues && matchesCredentialFormat(rawKey)
+        ? REDACTED
+        : sanitizeUrls && isUrlKey
+          ? sanitizeUrlWithContext(rawKey, compoundContext)
+          : guardUrlPayload && hasUrlPayloadKeyCredential(rawKey, compoundContext)
+            ? REDACTED
+            : rawKey;
     let key = redactedKey;
     while (
       Object.prototype.hasOwnProperty.call(sanitized, key) ||
@@ -1211,19 +2057,74 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
-    if (isSecretKey(key)) {
+    const compoundKind =
+      redactCompoundKeys && !isUrlKey ? getCompoundSecretObjectFieldKind(key, value) : undefined;
+    if (isSecretKey(key) || compoundKind === 'credential') {
       sanitized[key] = REDACTED;
-    } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
-      sanitized[key] = Object.fromEntries(
-        Object.entries(value).map(([name, item]) => [
-          name,
-          isSafeTracingCredentialTemplate(item) ||
-          (typeof item === 'string' &&
-            !isTracingCredentialHeader(name, item) &&
-            (isNonCredentialHeader(name) || SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase())))
-            ? item
+    } else if (
+      (key.toLowerCase() === 'headers' ||
+        (redactCompoundKeys &&
+          normalizeFieldName(key) === 'authheaders' &&
+          !Array.isArray(value))) &&
+      value &&
+      typeof value === 'object'
+    ) {
+      const headers: [string, unknown][] = [];
+      const reservedNames = new Set(Object.keys(value));
+      const usedNames = new Set<string>();
+      for (const [name, item] of Object.entries(value)) {
+        const redactedName =
+          redactCredentialValues && matchesCredentialFormat(name)
+            ? REDACTED
+            : redactCompoundKeys && sanitizeUrls && URL_REFERENCE.test(name)
+              ? sanitizeUrlWithContext(name, { maxDepth: maxDepth - depth - 2, guardUrlPayload })
+              : guardUrlPayload && hasUrlPayloadKeyCredential(name, compoundContext)
+                ? REDACTED
+                : name;
+        let headerName = redactedName;
+        while (
+          usedNames.has(headerName) ||
+          (headerName !== name && reservedNames.has(headerName))
+        ) {
+          headerName = `${redactedName}#${++keySuffix}`;
+        }
+        usedNames.add(headerName);
+        headers.push([
+          headerName,
+          !redactCredentialValues &&
+          (isSafeTracingCredentialTemplate(item) ||
+            (typeof item === 'string' &&
+              !isTracingCredentialHeader(name, item) &&
+              (isNonCredentialHeader(name) ||
+                SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()))))
+            ? redactCompoundKeys && !isSafeTracingCredentialTemplate(item)
+              ? recursiveSanitize(
+                  item,
+                  depth + 2,
+                  maxDepth,
+                  sanitizeUrls,
+                  false,
+                  true,
+                  false,
+                  guardUrlPayload,
+                )
+              : item
             : REDACTED,
-        ]),
+        ]);
+      }
+      sanitized[key] = Object.fromEntries(headers);
+    } else if (compoundKind === 'related' || redactCredentialValues) {
+      sanitized[key] = recursiveSanitize(
+        value,
+        depth + 1,
+        maxDepth,
+        sanitizeUrls,
+        key === 'env',
+        redactCompoundKeys,
+        // A direct numeric related field can be a count. Once inside a
+        // credential collection, numeric entries can themselves be credentials.
+        redactCredentialValues || typeof value !== 'number',
+        guardUrlPayload,
       );
     } else if (
       typeof value === 'string' &&
@@ -1231,7 +2132,75 @@ function sanitizePlainObject(
     ) {
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);
-      const endpoint = sanitizeUrlForLogging(hasScheme ? value : `https://${value}`);
+      const normalizedHost = hasScheme ? value : `https://${value}`;
+      // Whole JSON has a single bounded owner before host normalization. A
+      // form-shaped value can also be a host with userinfo or a query/fragment;
+      // retain that established URL interpretation instead of returning early.
+      if (compoundContext) {
+        const sanitizedJson = redactNestedJsonValue(
+          value,
+          { ...compoundContext, guardUrlPayload: 'host' },
+          'original',
+          true,
+        );
+        if (sanitizedJson !== null) {
+          sanitized[key] = sanitizeUrlForLoggingWithContext(sanitizedJson, compoundContext, true);
+          continue;
+        }
+        if (looksLikeUrlEncodedFormData(value)) {
+          if (unparseableUrlMightLeakSecret(value, true, compoundContext)) {
+            sanitized[key] = REDACTED;
+            continue;
+          }
+          let hasHostComponents = hasUrlUserinfo(normalizedHost);
+          try {
+            const parsed = new URL(
+              hasScheme ? value : `https://${hostUserinfoInspectionValue(value)}`,
+            );
+            hasHostComponents = Boolean(
+              parsed.username || parsed.password || parsed.search || parsed.hash,
+            );
+          } catch {
+            // The existing fallback guards still inspect malformed forms below.
+          }
+          if (!hasHostComponents) {
+            sanitized[key] = sanitizeUrlForLoggingWithContext(
+              value,
+              compoundContext,
+              false,
+              true,
+              'host',
+            );
+            continue;
+          }
+        }
+      }
+      if (compoundContext?.guardUrlPayload) {
+        // Inspect scalar quoting/userinfo without recursively sanitizing URL
+        // children here. The host/logging stage below owns their one traversal.
+        const scalar = getUrlPayloadScalar(value, compoundContext.maxDepth);
+        if (
+          scalar === null ||
+          hasUrlPayloadUserinfo(scalar, compoundContext?.guardUrlPayload) ||
+          looksLikeSecret(scalar) ||
+          unparseableUrlMightLeakSecret(
+            scalar,
+            !isLoggingUrlPayload(guardUrlPayload),
+            compoundContext,
+          ) ||
+          (isLoggingUrlPayload(guardUrlPayload) && hasOpaqueLoggingPath(scalar, true))
+        ) {
+          sanitized[key] = REDACTED;
+          continue;
+        }
+      }
+      const endpoint = sanitizeUrlForLoggingWithContext(
+        normalizedHost,
+        compoundContext,
+        false,
+        false,
+        'host',
+      );
       const host = hasScheme ? endpoint : endpoint.replace(/^https:\/\//, '');
       const hasPath = value.replace(scheme, '').split(/[?#]/, 1)[0].includes('/');
       sanitized[key] = hasPath ? host : host.replace(/\/(?=[?#]|$)/, '');
@@ -1245,11 +2214,31 @@ function sanitizePlainObject(
       sanitized[key] =
         key === 'url' ||
         (isEnvMap && key.toUpperCase().endsWith('_URL') && !/^OPENAI_(?:API_)?BASE_URL$/i.test(key))
-          ? sanitizeUrl(value)
-          : sanitizeUrlForLogging(value);
+          ? sanitizeUrlValueWithContext(value, compoundContext)
+          : sanitizeUrlForLoggingWithContext(value, compoundContext);
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact opaque credential values before trying URL-specific handling.
       sanitized[key] = REDACTED;
+    } else if (
+      compoundContext &&
+      typeof value === 'string' &&
+      (key.toLowerCase() === 'url' ||
+        (sanitizeUrls && /(?:url|uri|host|endpoint|proxy)$/i.test(key)))
+    ) {
+      // Own JSON/form traversal once for MCP URL fields. A generic recursive pass
+      // followed by URL sanitization would revisit every nested payload. Direct
+      // JSON strings keep the generic string path's canonical serialization.
+      const sanitizedJson = redactNestedJsonValue(
+        value,
+        { ...compoundContext, guardUrlPayload: compoundContext.guardUrlPayload || true },
+        'canonical',
+        true,
+      );
+      sanitized[key] = sanitizeUrlValueWithContext(
+        sanitizedJson ?? value,
+        compoundContext,
+        sanitizedJson !== null,
+      );
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
@@ -1259,12 +2248,15 @@ function sanitizePlainObject(
         maxDepth,
         sanitizeUrls,
         key === 'env',
+        redactCompoundKeys,
+        false,
+        guardUrlPayload,
       );
       sanitized[key] =
         typeof sanitizedValue === 'string' &&
         (key.toLowerCase() === 'url' ||
           (sanitizeUrls && /(?:url|uri|host|endpoint|proxy)$/i.test(key)))
-          ? sanitizeUrl(sanitizedValue)
+          ? sanitizeUrlValueWithContext(sanitizedValue, compoundContext)
           : sanitizedValue;
     }
   }
@@ -1280,7 +2272,13 @@ function recursiveSanitize(
   maxDepth = MAX_DEPTH,
   sanitizeUrls = false,
   isEnvMap = false,
+  redactCompoundKeys = false,
+  redactCredentialValues = false,
+  guardUrlPayload: UrlPayloadGuard = false,
 ): any {
+  if (redactCredentialValues && (typeof obj === 'string' || typeof obj === 'number')) {
+    return REDACTED;
+  }
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
@@ -1288,8 +2286,11 @@ function recursiveSanitize(
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
     return sanitizeUrls && URL_REFERENCE.test(obj)
-      ? sanitizeUrl(obj)
-      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls);
+      ? sanitizeUrlValueWithContext(
+          obj,
+          redactCompoundKeys ? { maxDepth: maxDepth - depth, guardUrlPayload } : undefined,
+        )
+      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactCompoundKeys, guardUrlPayload);
   }
 
   // Handle primitives and null/undefined
@@ -1304,7 +2305,18 @@ function recursiveSanitize(
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth, sanitizeUrls));
+    return obj.map((item) =>
+      recursiveSanitize(
+        item,
+        depth + 1,
+        maxDepth,
+        sanitizeUrls,
+        false,
+        redactCompoundKeys,
+        redactCredentialValues,
+        guardUrlPayload,
+      ),
+    );
   }
 
   // Handle class instances
@@ -1314,7 +2326,16 @@ function recursiveSanitize(
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap);
+  return sanitizePlainObject(
+    obj,
+    depth,
+    maxDepth,
+    sanitizeUrls,
+    isEnvMap,
+    redactCompoundKeys,
+    redactCredentialValues,
+    guardUrlPayload,
+  );
 }
 
 /**
@@ -1331,13 +2352,25 @@ export function sanitizeObject(
     maxDepth?: number;
     // Config output and provider configs can carry credentials in any URL string or map key.
     sanitizeUrls?: boolean;
+    // MCP tool data can use application-specific names such as databasePassword. Opt into
+    // the URL parameter credential-name rules without changing ordinary object defaults.
+    redactCompoundKeys?: boolean;
   } = {},
+): any {
+  return sanitizeObjectWithContext(obj, options);
+}
+
+function sanitizeObjectWithContext(
+  obj: any,
+  options: NonNullable<Parameters<typeof sanitizeObject>[1]>,
+  guardUrlPayload: UrlPayloadGuard = false,
 ): any {
   const {
     context = 'object',
     throwOnError = false,
     maxDepth = MAX_DEPTH,
     sanitizeUrls = false,
+    redactCompoundKeys = false,
   } = options;
 
   try {
@@ -1348,7 +2381,16 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return recursiveSanitize(obj, 0, maxDepth, sanitizeUrls);
+      return recursiveSanitize(
+        obj,
+        0,
+        maxDepth,
+        sanitizeUrls,
+        false,
+        redactCompoundKeys,
+        false,
+        guardUrlPayload,
+      );
     }
 
     // Handle other primitives
@@ -1380,7 +2422,16 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth, sanitizeUrls);
+    return recursiveSanitize(
+      safeObj,
+      0,
+      maxDepth,
+      sanitizeUrls,
+      false,
+      redactCompoundKeys,
+      false,
+      guardUrlPayload,
+    );
   } catch (error) {
     if (throwOnError) {
       throw error;
@@ -1422,12 +2473,22 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
   return secretKeys;
 }
 
-function sanitizeTemplatedUrl(url: string): string {
+function sanitizeTemplatedUrl(
+  url: string,
+  compoundContext?: CompoundKeyContext,
+  payloadContext?: CompoundKeyContext,
+  preserveTemplateUserinfo = false,
+): string {
   // A template may coexist with an already-rendered env credential. Avoid URL
   // parsing here because it encodes the remaining Nunjucks syntax, but still
   // scrub literal query and fragment credentials before the value is logged or
   // persisted.
-  if (hasUrlUserinfo(url)) {
+  if (
+    !preserveTemplateUserinfo &&
+    (compoundContext?.guardUrlPayload
+      ? hasUrlPayloadUserinfo(url, compoundContext.guardUrlPayload)
+      : hasUrlUserinfo(url))
+  ) {
     return REDACTED;
   }
 
@@ -1437,26 +2498,90 @@ function sanitizeTemplatedUrl(url: string): string {
   const queryIndex = beforeHash.indexOf('?');
   const beforeQuery = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
   const query = queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1);
-  const sanitizedQuery = query ? sanitizeUrlEncodedString(query) : query;
-  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash) : hash;
+  if (
+    compoundContext?.guardUrlPayload &&
+    hasSecretFormSegment(
+      beforeQuery,
+      !isLoggingUrlPayload(compoundContext.guardUrlPayload),
+      compoundContext,
+    )
+  ) {
+    return REDACTED;
+  }
+  const sanitizedQuery = query ? sanitizeUrlEncodedStringWithContext(query, payloadContext) : query;
+  const sanitizedHash = hash ? sanitizeUrlEncodedStringWithContext(hash, payloadContext) : hash;
 
   return `${beforeQuery}${queryIndex === -1 ? '' : `?${sanitizedQuery}`}${hashIndex === -1 ? '' : `#${sanitizedHash}`}`;
 }
 
 export function sanitizeUrl(url: string): string {
+  return sanitizeUrlWithContext(url);
+}
+
+// Decoded scalar values retain the enclosing logging policy. Property names
+// use the structural URL guard directly so opaque public identifiers survive.
+function sanitizeUrlValueWithContext(
+  url: string,
+  compoundContext?: CompoundKeyContext,
+  jsonAlreadySanitized = false,
+): string {
+  return isLoggingUrlPayload(compoundContext?.guardUrlPayload)
+    ? sanitizeUrlForLoggingWithContext(url, compoundContext, jsonAlreadySanitized)
+    : sanitizeUrlWithContext(url, compoundContext, jsonAlreadySanitized);
+}
+
+function sanitizeUrlWithContext(
+  url: string,
+  compoundContext?: CompoundKeyContext,
+  jsonAlreadySanitized = false,
+  decodedPayloadGuard?: UrlPayloadGuard,
+): string {
   try {
     // Ensure url is a string and handle edge cases
     if (typeof url !== 'string' || !url.trim()) {
       return url;
     }
 
+    if (compoundContext && jsonAlreadySanitized) {
+      return url;
+    }
+
+    // The enclosing logging role governs decoded children without changing the
+    // established policy for the outer URL's own userinfo or pure placeholders.
+    const payloadContext = compoundContext
+      ? {
+          ...compoundContext,
+          guardUrlPayload: decodedPayloadGuard ?? (compoundContext.guardUrlPayload || true),
+        }
+      : undefined;
+
+    // Exact URL fields reach this helper without the suffix-field JSON pass.
+    // Own whole JSON before template handling, then retain the remaining URL
+    // guards without recursively decoding that same payload a second time.
+    if (compoundContext && !jsonAlreadySanitized) {
+      const nestedJson = redactNestedJsonValue(url, payloadContext, 'original', true);
+      if (nestedJson !== null) {
+        return nestedJson;
+      }
+    }
+
+    // URL-named MCP fields can still contain a form payload. Reuse the same
+    // bounded decoded-JSON policy rather than losing it in the URL fast path.
+    if (compoundContext && looksLikeUrlEncodedFormData(url)) {
+      // Form values can contain an embedded URL. Keep the existing URL fallback
+      // guard for its userinfo/query/fragment before taking the form-only path.
+      return unparseableUrlMightLeakSecret(url, true, compoundContext)
+        ? REDACTED
+        : sanitizeUrlEncodedStringWithContext(url, payloadContext);
+    }
+
     // Preserve unresolved template syntax while redacting any literal credentials
     // that were already rendered into another part of the same URL.
     if (url.includes('{{') && url.includes('}}')) {
-      return sanitizeTemplatedUrl(url);
+      return sanitizeTemplatedUrl(url, compoundContext, payloadContext);
     }
 
-    const nestedJson = redactNestedJsonValue(url);
+    const nestedJson = jsonAlreadySanitized ? null : redactNestedJsonValue(url, compoundContext);
     if (nestedJson !== null) {
       return nestedJson;
     }
@@ -1465,6 +2590,30 @@ export function sanitizeUrl(url: string): string {
     // new URL() requires a fully qualified URL, so prepend a dummy base for parsing.
     const isPathOnly = url.startsWith('/') && !url.startsWith('//');
     const parsedUrl = isPathOnly ? new URL(url, DUMMY_BASE) : new URL(url);
+
+    // Opaque URI paths (for example JDBC connection strings) can carry the
+    // same form/userinfo credentials as an unparseable URL. Check before query
+    // changes, since a changed query must not hide an unchanged private path.
+    if (
+      compoundContext?.guardUrlPayload &&
+      (hasUrlPayloadUserinfo(url, compoundContext.guardUrlPayload) ||
+        hasUrlPayloadUserinfo(parsedUrl.pathname) ||
+        // URL.host decodes escapes. Inspect raw separators and retain its value-decode
+        // context so encoded public labels, templates, and boolean controls survive.
+        (parsedUrl.host &&
+          hasSecretFormSegment(
+            url
+              .trim()
+              .replace(/[\t\r\n]/g, '')
+              .replace(/^[a-z][a-z\d+.-]*:[\\/]*/i, '')
+              .split(/[\\/?#]/, 1)[0],
+            true,
+            { ...compoundContext, pendingFormDecode: (compoundContext.pendingFormDecode ?? 0) + 1 },
+          )) ||
+        hasSecretFormSegment(parsedUrl.pathname, false, compoundContext))
+    ) {
+      return REDACTED;
+    }
 
     // Create a copy for sanitization to avoid modifying the original URL
     // Use href instead of toString() for better cross-platform compatibility
@@ -1478,28 +2627,51 @@ export function sanitizeUrl(url: string): string {
     // Sanitize query parameters that might contain sensitive data
     const rawSecretParamKeys = getSecretLookingRawQueryKeys(parsedUrl.search);
 
+    const rawQueryValues = payloadContext?.guardUrlPayload
+      ? url
+          .replace(/[\t\r\n]/g, '')
+          .split('#', 1)[0]
+          .split('?')
+          .slice(1)
+          .join('?')
+          .split('&')
+          .filter(Boolean)
+          .map((part) => {
+            const equals = part.indexOf('=');
+            return equals < 0 ? '' : part.slice(equals + 1);
+          })
+      : [];
     try {
-      for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
+      for (const [index, [key, value]] of Array.from(
+        sanitizedUrl.searchParams.entries(),
+      ).entries()) {
+        const rawValue = rawQueryValues[index];
+        const inspectedKey = payloadContext?.pendingFormDecode
+          ? (decodePendingComponent(key, payloadContext.pendingFormDecode, decodeQueryComponent) ??
+            key)
+          : key;
         if (
-          isSecretParameter(key, value) ||
+          isSecretParameterWithContext(inspectedKey, value, compoundContext) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
           // (`data=ok;api_key=sk-...`, legacy but still accepted by some stacks)
           // hides inside one value. Redact the whole value when it conceals one.
-          (value.includes(';') && hasSecretFormSegment(value))
+          (value.includes(';') && hasSecretFormSegment(value, false, compoundContext))
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         } else {
-          const nestedJson = redactNestedJsonValue(value);
-          if (nestedJson !== null) {
+          const nestedJson = redactUrlPayloadValue(value, payloadContext, true, rawValue);
+          if (nestedJson !== null && nestedJson !== value && nestedJson !== rawValue) {
             sanitizedUrl.searchParams.set(key, nestedJson);
           }
         }
       }
     } catch (paramError) {
       // Can't use logger here as it would create a circular dependency.
-      console.warn(`Failed to sanitize URL parameters: ${paramError}`);
+      if (!compoundContext) {
+        console.warn(`Failed to sanitize URL parameters: ${paramError}`);
+      }
       return REDACTED;
     }
 
@@ -1507,7 +2679,12 @@ export function sanitizeUrl(url: string): string {
     // shape `#access_token=...`). The hash is a `key=value(&...)` string after the
     // leading `#`, so reuse the same form-pair scrubbing as the query.
     if (sanitizedUrl.hash.length > 1) {
-      const sanitizedHash = sanitizeUrlEncodedString(sanitizedUrl.hash.slice(1));
+      const sanitizedHash = sanitizeUrlEncodedStringWithContext(
+        payloadContext?.guardUrlPayload && url.includes('#')
+          ? url.slice(url.indexOf('#') + 1).replace(/[\t\r\n]/g, '')
+          : sanitizedUrl.hash.slice(1),
+        payloadContext,
+      );
       sanitizedUrl.hash = sanitizedHash ? `#${sanitizedHash}` : '';
     }
 
@@ -1527,7 +2704,13 @@ export function sanitizeUrl(url: string): string {
     // sanitizeObject runs this on any field literally named `url`, so blanket
     // redaction would destroy non-secret bare domains, relative paths, and prose
     // in persisted eval results and user-facing config error messages.
-    return unparseableUrlMightLeakSecret(url) ? REDACTED : url;
+    if (unparseableUrlMightLeakSecret(url, false, compoundContext)) {
+      return REDACTED;
+    }
+    // Decoded relative URL values still need their query/fragment payloads inspected.
+    return compoundContext?.guardUrlPayload
+      ? sanitizeTemplatedUrl(url, compoundContext, compoundContext)
+      : url;
   }
 }
 
@@ -1537,31 +2720,46 @@ export function sanitizeUrl(url: string): string {
  * use this stricter redaction.
  */
 export function sanitizeUrlForLogging(url: string): string {
-  const sanitized = sanitizeUrl(url);
+  return sanitizeUrlForLoggingWithContext(url);
+}
+
+function sanitizeUrlForLoggingWithContext(
+  url: string,
+  compoundContext?: CompoundKeyContext,
+  jsonAlreadySanitized = false,
+  preserveFormTemplates = false,
+  decodedPayloadGuard: UrlPayloadGuard = 'logging',
+): string {
+  const payloadGuard = compoundContext?.guardUrlPayload === 'host' ? 'host' : decodedPayloadGuard;
+  if (compoundContext) {
+    const nestedJson = jsonAlreadySanitized
+      ? url
+      : redactNestedJsonValue(
+          url,
+          { ...compoundContext, guardUrlPayload: payloadGuard },
+          'original',
+          true,
+        );
+    if (nestedJson !== null) {
+      return hasOpaqueLoggingPath(url, true) ? REDACTED : nestedJson;
+    }
+  }
+  const sanitized = sanitizeUrlWithContext(
+    url,
+    compoundContext,
+    jsonAlreadySanitized,
+    payloadGuard,
+  );
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
     const sanitizedPathname = parsed.pathname
       .split('/')
-      .map((segment, index, segments) => {
-        const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
-        try {
-          const decoded = decodeURIComponent(segment);
-          // Credential routes can also contain ordinary words such as /auth/proxy.
-          const opaqueValue =
-            isSecretField(previous) &&
-            /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
-            /[a-z]/i.test(decoded) &&
-            /[0-9]/.test(decoded);
-          return opaqueValue ||
-            OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
-            looksLikeSecret(decoded)
-            ? '%5BREDACTED%5D'
-            : segment;
-        } catch {
-          return isSecretField(previous) ? '%5BREDACTED%5D' : segment;
-        }
-      })
+      .map((segment, index, segments) =>
+        isLoggingCredentialPathSegment(segment, segments[index - 1] ?? '')
+          ? '%5BREDACTED%5D'
+          : segment,
+      )
       .join('/');
     if (sanitizedPathname === parsed.pathname) {
       return sanitized;
@@ -1569,11 +2767,35 @@ export function sanitizeUrlForLogging(url: string): string {
     parsed.pathname = sanitizedPathname;
     return isPathOnly ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
   } catch {
-    const hasOpaquePath = url
-      .split(/[/?#]/)
-      .some((segment) =>
-        OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decodeFormComponent(segment) ?? segment),
-      );
-    return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
+    return unparseableUrlMightLeakSecret(url, preserveFormTemplates, compoundContext) ||
+      hasOpaqueLoggingPath(url, Boolean(compoundContext))
+      ? REDACTED
+      : sanitized;
   }
+}
+
+function isLoggingCredentialPathSegment(segment: string, previousSegment: string): boolean {
+  const previous = decodeFormComponent(previousSegment) ?? '';
+  try {
+    const decoded = decodeURIComponent(segment);
+    // Credential routes can also contain ordinary words such as /auth/proxy.
+    const opaqueValue =
+      isSecretField(previous) &&
+      /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
+      /[a-z]/i.test(decoded) &&
+      /[0-9]/.test(decoded);
+    return opaqueValue || OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) || looksLikeSecret(decoded);
+  } catch {
+    return isSecretField(previous);
+  }
+}
+
+function hasOpaqueLoggingPath(url: string, completePathChecks = false): boolean {
+  return url
+    .split(/[/?#]/)
+    .some((segment, index, segments) =>
+      completePathChecks
+        ? isLoggingCredentialPathSegment(segment, segments[index - 1] ?? '')
+        : OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decodeFormComponent(segment) ?? segment),
+    );
 }
