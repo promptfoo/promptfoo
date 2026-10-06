@@ -495,42 +495,45 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     ]);
   });
 
-  it('does not share resumed metrics between duplicate providers', async () => {
-    const firstProvider = duplicateProvider('duplicate-provider', 'First provider output');
-    const secondProvider = duplicateProvider('duplicate-provider', 'Second provider output');
-    const prompt = toPrompt('Test prompt');
+  it.each([false, true])(
+    'preserves distinct metrics for duplicate columns (restore: %s)',
+    async (restorePromptColumns) => {
+      const firstProvider = duplicateProvider('duplicate-provider', 'First provider output');
+      const secondProvider = duplicateProvider('duplicate-provider', 'Second provider output');
+      const prompt = toPrompt('Test prompt');
 
-    const testSuite: TestSuite = {
-      providers: [firstProvider, secondProvider],
-      prompts: [prompt],
-      tests: [{ vars: { input: 'value' } }],
-    };
+      const testSuite: TestSuite = {
+        providers: [firstProvider, secondProvider],
+        prompts: [prompt],
+        tests: [{ vars: { input: 'value' } }],
+      };
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    // Saved columns retain both providers, even though their identities are equal.
-    evalRecord.prompts = [firstProvider, secondProvider].map(() => ({
-      ...prompt,
-      id: generateIdFromPrompt(prompt),
-      provider: 'duplicate-provider',
-      metrics: createPromptMetrics({
-        testPassCount: 5,
-        tokenUsage: createTokenUsage({ numRequests: 3 }),
-      }),
-    }));
-    evalRecord.persisted = true;
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      // Saved columns retain both providers, even though their identities are equal.
+      evalRecord.prompts = [firstProvider, secondProvider].map((_, index) => ({
+        ...prompt,
+        id: generateIdFromPrompt(prompt),
+        provider: 'duplicate-provider',
+        metrics: createPromptMetrics({
+          testPassCount: 5 + index * 6,
+          tokenUsage: createTokenUsage({ numRequests: 3 + index * 4 }),
+        }),
+      }));
+      evalRecord.persisted = true;
 
-    cliState.resume = true;
-    await evaluate(testSuite, evalRecord, {});
+      cliState.resume = true;
+      await evaluate(testSuite, evalRecord, { restorePromptColumns });
 
-    const table = await evalRecord.getTable();
+      const table = await evalRecord.getTable();
 
-    // Each column resumes from the stored totals and adds only its own result, rather
-    // than both accumulating into one shared metrics object.
-    expect(table.head.prompts.map((prompt) => prompt.metrics?.testPassCount)).toEqual([6, 6]);
-    expect(table.head.prompts.map((prompt) => prompt.metrics?.tokenUsage?.numRequests)).toEqual([
-      4, 4,
-    ]);
-  });
+      // Each column resumes from the stored totals and adds only its own result, rather
+      // than both accumulating into one shared metrics object.
+      expect(table.head.prompts.map((prompt) => prompt.metrics?.testPassCount)).toEqual([6, 12]);
+      expect(table.head.prompts.map((prompt) => prompt.metrics?.tokenUsage?.numRequests)).toEqual([
+        4, 8,
+      ]);
+    },
+  );
 
   it('evaluate with test-level providers filter', async () => {
     const mockProvider1: ApiProvider = {

@@ -559,6 +559,12 @@ describe('prompt optimizer', () => {
       map: { 'target-provider': ['seed-id'] },
     },
     {
+      source: 'independent ID and label overrides',
+      providerPrompts: [],
+      label: 'named',
+      map: { named: ['seed-id'], 'target-provider': ['seed-id'] },
+    },
+    {
       source: 'label override ahead of ID',
       providerPrompts: [],
       label: 'named',
@@ -621,6 +627,11 @@ describe('prompt optimizer', () => {
       if (label && map?.['target-provider']?.length === 0) {
         expect(candidateSuite.providerPromptMap?.['target-provider']).toEqual([]);
       }
+      if (label && map?.[label] && map['target-provider'] !== map[label]) {
+        expect(candidateSuite.providerPromptMap?.[label]).not.toBe(
+          candidateSuite.providerPromptMap?.['target-provider'],
+        );
+      }
       expect(candidateSuite.prompts[0].id).toBe('seed-id');
       expect(candidateSuite.prompts[1].id).toEqual(expect.any(String));
       expect(candidateSuite.prompts[1].id).not.toBe('seed-id');
@@ -629,7 +640,7 @@ describe('prompt optimizer', () => {
   );
 
   it.each(['echo', 'target'])(
-    'supports beforeAll array mutation through the synthesized %s alias',
+    'applies beforeAll splice routing through the synthesized %s alias in every optimizer round',
     async (alias) => {
       const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-optimizer-hook-'));
       try {
@@ -637,7 +648,7 @@ describe('prompt optimizer', () => {
         writeFileSync(
           extension,
           `export function beforeAll({ suite }) {
-            suite.providerPromptMap.${alias}.push('hook marker');
+            suite.providerPromptMap.${alias}.splice(0, suite.providerPromptMap.${alias}.length, 'A');
             suite.tests[0].metadata = { hookSelectors: [...suite.providerPromptMap.${alias}] };
             return { suite };
           }`,
@@ -675,11 +686,18 @@ describe('prompt optimizer', () => {
         expect(result.baselineEval.results).toHaveLength(1);
         expect(result.baselineEval.results[0]).toMatchObject({
           success: true,
-          testCase: { metadata: { hookSelectors: ['A', 'hook marker'] } },
+          testCase: { metadata: { hookSelectors: ['A'] } },
         });
-        const candidateEval: Eval = await vi.mocked(evaluate).mock.results[1].value;
-        expect(candidateEval.results).toHaveLength(2);
-        expect(candidateEval.results.every((row) => row.success)).toBe(true);
+        const candidateSuites = vi
+          .mocked(evaluate)
+          .mock.calls.slice(1)
+          .map(([suite]) => suite);
+        expect(candidateSuites.map((suite) => suite.prompts.length)).toEqual([2, 2, 2]);
+        for (const call of vi.mocked(evaluate).mock.results.slice(1)) {
+          const candidateEval: Eval = await call.value;
+          expect(candidateEval.results).toHaveLength(1);
+          expect(candidateEval.results[0]).toMatchObject({ success: true, prompt: { label: 'A' } });
+        }
         expect(provider.prompts).toEqual(['A']);
         expect(testSuite.providerPromptMap).toBeUndefined();
         expect(testSuite.tests?.[0].metadata).toBeUndefined();

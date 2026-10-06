@@ -302,41 +302,53 @@ describeEvaluator('evaluator runtime ports', () => {
     },
   );
 
-  it.each([
-    { name: 'changed', savedTemplate: 'Original {{ name }}', template: 'Updated {{ name }}' },
-    { name: 'added', savedTemplate: undefined, template: 'Updated {{ name }}' },
-    { name: 'removed', savedTemplate: 'Original {{ name }}', template: undefined },
-    { name: 'empty', savedTemplate: '', template: 'Updated {{ name }}' },
-  ])(
-    'restores the saved template when the current template is $name',
-    async ({ savedTemplate, template }) => {
+  it.each(
+    [
+      { name: 'changed', savedTemplate: 'Original {{ name }}', template: 'Updated {{ name }}' },
+      { name: 'added', savedTemplate: undefined, template: 'Updated {{ name }}' },
+      { name: 'removed', savedTemplate: 'Original {{ name }}', template: undefined },
+      { name: 'empty', savedTemplate: '', template: 'Updated {{ name }}' },
+    ].flatMap((scenario) => [1, 2].map((providerCount) => ({ ...scenario, providerCount }))),
+  )(
+    'restores the saved template when the current template is $name for $providerCount providers',
+    async ({ savedTemplate, template, providerCount }) => {
       const saved = { raw: 'Hello {{ name }}', label: 'greeting', template: savedTemplate };
+      const providers = Array.from({ length: providerCount }, () => ({ ...mockApiProvider }));
       const evaluation = createInMemoryEvaluation({
         persisted: true,
-        prompts: [{ ...saved, id: generateIdFromPrompt(saved), provider: mockApiProvider.id() }],
+        prompts: providers.map((provider) => ({
+          ...saved,
+          id: generateIdFromPrompt(saved),
+          provider: provider.id(),
+        })),
       });
       const store = new InMemoryEvaluationStore(evaluation);
       cliState.resume = true;
 
       await evaluate(
         {
-          providers: [mockApiProvider],
-          prompts: [{ ...saved, template }],
-          tests: [{ vars: { name: 'world' } }],
+          providers,
+          prompts: [{ ...saved, id: 'authored-greeting', template }],
+          tests: [{ vars: { name: 'world' }, prompts: ['authored-greeting'] }],
         },
         evaluation,
         { restorePromptColumns: true },
         createInMemoryRuntime(store),
       );
 
-      expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
-      expect(vi.mocked(mockApiProvider.callApi).mock.calls[0][0]).toBe('Hello world');
-      expect(vi.mocked(mockApiProvider.callApi).mock.calls[0][1]?.prompt.template).toBe(
-        savedTemplate ?? saved.raw,
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(providerCount);
+      for (const [prompt, context] of vi.mocked(mockApiProvider.callApi).mock.calls) {
+        expect(prompt).toBe('Hello world');
+        expect(context?.prompt.template).toBe(savedTemplate ?? saved.raw);
+      }
+      expect(evaluation.prompts.map((prompt) => prompt.template)).toEqual(
+        providers.map(() => savedTemplate),
       );
-      expect(evaluation.prompts[0].template).toBe(savedTemplate);
-      expect(evaluation.results).toHaveLength(1);
-      expect(evaluation.results[0]).toMatchObject({ success: true, promptIdx: 0 });
+      expect(evaluation.results).toHaveLength(providerCount);
+      expect(evaluation.results.every((result) => result.success)).toBe(true);
+      expect(evaluation.results.map((result) => result.promptIdx).sort()).toEqual(
+        providers.map((_, index) => index),
+      );
     },
   );
 

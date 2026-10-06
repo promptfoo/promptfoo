@@ -520,12 +520,15 @@ function buildCandidateProviderPromptMap(
     return testSuite.providerPromptMap;
   }
 
+  const extendedFilters = new Map<string[], string[]>();
   return Object.fromEntries(
     Object.entries(testSuite.providerPromptMap).map(([providerId, labels]) => {
-      return [
-        providerId,
-        extendPromptFilter(labels, routingPrompt, seedPrompt, candidateLabels) ?? labels,
-      ];
+      const extended =
+        extendedFilters.get(labels) ??
+        extendPromptFilter(labels, routingPrompt, seedPrompt, candidateLabels) ??
+        labels;
+      extendedFilters.set(labels, extended);
+      return [providerId, extended];
     }),
   );
 }

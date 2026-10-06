@@ -2345,17 +2345,6 @@ function createDefaultPromptMetrics(): PromptMetrics {
   };
 }
 
-function buildExistingPromptsMap(store: EvaluationStore) {
-  const existingPromptsMap = new Map<string, CompletedPrompt>();
-  if (cliState.resume && store.persisted && store.prompts.length > 0) {
-    logger.debug('Resuming evaluation: preserving metrics from previous run');
-    for (const existingPrompt of store.prompts) {
-      existingPromptsMap.set(`${existingPrompt.provider}:${existingPrompt.id}`, existingPrompt);
-    }
-  }
-  return existingPromptsMap;
-}
-
 /**
  * The results-table columns owned by one provider, in table order. `promptIdx` is the
  * column's position in the table, which is how results are addressed everywhere else.
@@ -2406,7 +2395,6 @@ function buildCompletedPrompts(
   }
   const prompts: CompletedPrompt[] = [];
   const columnsByProvider: ProviderColumns[] = [];
-  const existingPromptsMap = buildExistingPromptsMap(store);
 
   for (const provider of testSuite.providers) {
     const providerKey = getProviderIdentifier(provider);
@@ -2422,20 +2410,13 @@ function buildCompletedPrompts(
       }
 
       const promptId = generateIdFromPrompt(prompt);
-      const existingPrompt = existingPromptsMap.get(`${providerKey}:${promptId}`);
-      const metrics = existingPrompt?.metrics
-        ? structuredClone(existingPrompt.metrics)
-        : createDefaultPromptMetrics();
-      backfillNamedScoreWeights(metrics);
-
       columns.push({ promptIdx: prompts.length, prompt });
       prompts.push({
         ...prompt,
         id: promptId,
         provider: providerKey,
         label: prompt.label,
-        // Duplicate identities must not share the mutable metrics object.
-        metrics,
+        metrics: createDefaultPromptMetrics(),
       });
     }
 
@@ -2450,7 +2431,7 @@ function buildCompletedPrompts(
         prompt.provider === saved.provider &&
         prompt.label === saved.label &&
         prompt.raw === saved.raw &&
-        prompt.template === saved.template &&
+        (prompt.template === saved.template || (restorePromptColumns && canRestoreText)) &&
         isDeepStrictEqual(prompt.config, saved.config)
       );
     });
@@ -2467,6 +2448,11 @@ function buildCompletedPrompts(
   if (restorePromptColumns && matchesSavedLayout) {
     // Preserve positional authored IDs and each saved column's own metrics, even when
     // provider or prompt identifiers are duplicated.
+    for (const { columns } of columnsByProvider) {
+      for (const column of columns) {
+        column.prompt = { ...column.prompt, template: store.prompts[column.promptIdx].template };
+      }
+    }
     return { prompts: restoredPrompts, columnsByProvider };
   }
 
@@ -2537,6 +2523,15 @@ function buildCompletedPrompts(
       matchesSavedLayout,
       'Cannot resume evaluation because the saved provider/prompt columns differ. Start a new evaluation instead.',
     );
+    // Explicit retry configs retain their current definitions, but metrics belong to
+    // saved column positions, not potentially duplicated provider/prompt identities.
+    prompts.forEach((prompt, index) => {
+      const metrics = store.prompts[index].metrics;
+      if (metrics) {
+        prompt.metrics = structuredClone(metrics);
+        backfillNamedScoreWeights(prompt.metrics);
+      }
+    });
   }
 
   return { prompts, columnsByProvider };
