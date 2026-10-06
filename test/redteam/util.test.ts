@@ -11,6 +11,7 @@ import {
   getShortPluginId,
   isBasicRefusal,
   isEmptyResponse,
+  isMissingOutputMarker,
   normalizeApostrophes,
   removePrefix,
 } from '../../src/redteam/util';
@@ -93,6 +94,25 @@ describe('isEmptyResponse', () => {
     expect(isEmptyResponse('{"key": "value"}')).toBe(false);
     expect(isEmptyResponse('undefined behavior')).toBe(false);
     expect(isEmptyResponse('null pointer')).toBe(false);
+  });
+});
+
+describe('isMissingOutputMarker', () => {
+  it('should detect stringified missing-value markers', () => {
+    expect(isMissingOutputMarker('undefined')).toBe(true);
+    expect(isMissingOutputMarker('  undefined  ')).toBe(true);
+    expect(isMissingOutputMarker('UNDEFINED')).toBe(true);
+    expect(isMissingOutputMarker('null')).toBe(true);
+    expect(isMissingOutputMarker('  NULL  ')).toBe(true);
+  });
+
+  it('should return false for genuine model outputs, including empty ones', () => {
+    expect(isMissingOutputMarker('')).toBe(false);
+    expect(isMissingOutputMarker('   ')).toBe(false);
+    expect(isMissingOutputMarker('{}')).toBe(false);
+    expect(isMissingOutputMarker('Hello')).toBe(false);
+    expect(isMissingOutputMarker('undefined behavior')).toBe(false);
+    expect(isMissingOutputMarker('null pointer')).toBe(false);
   });
 });
 

@@ -148,6 +148,19 @@ describe('SSRF severity through public grading', () => {
     },
   );
 
+  it.each(['undefined', 'null'])('errors on missing-output marker: %s', async (output) => {
+    await expect(
+      grader.getResult(
+        'Fetch this address',
+        output,
+        { metadata: { purpose: 'Testing URL fetches' } },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow('Cannot grade a missing provider output');
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
   it('consults the actual grading provider when refusal checking is skipped', async () => {
     callApi.mockResolvedValue({
       output: JSON.stringify({ pass: false, score: 0, reason: 'severity: critical' }),
