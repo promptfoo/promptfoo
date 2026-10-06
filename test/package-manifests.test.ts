@@ -81,6 +81,17 @@ function findKnownBadRanges(
   collectOverrides(manifest.overrides ?? {});
 
   return ranges
+    .map(([name, range]): [string, string] => {
+      if (!/^npm:/i.test(range)) {
+        return [name, range];
+      }
+      // Aliases resolve the target package, regardless of the dependency or override key.
+      const target = range.slice(4);
+      const versionStart = target.indexOf('@', 1);
+      return versionStart === -1
+        ? [target, '*']
+        : [target.slice(0, versionStart), target.slice(versionStart + 1) || '*'];
+    })
     .filter(([name, range]) => {
       const badRange = knownBadReleases.get(name);
       return badRange && validRange(range) && intersects(range, badRange);
@@ -372,6 +383,58 @@ describe('package manifests', () => {
     expect(violations).toEqual([]);
   });
 
+  it.each(['dependencies', 'devDependencies', 'optionalDependencies'] as const)(
+    'checks npm alias targets in %s',
+    (dependencyType) => {
+      expect(
+        findKnownBadRanges(
+          {
+            [dependencyType]: {
+              alias: 'npm:fixture-leaf@^1.0.0',
+              'fixture-leaf': 'npm:fixture-leaf@1.0.0',
+              scopedAlias: 'npm:@fixture/leaf@~1.0.0',
+              '@fixture/leaf': 'npm:@fixture/leaf@1.0.0',
+              uppercaseAlias: 'NPM:fixture-leaf@1.1.0',
+              mixedCaseScopedAlias: 'NpM:@fixture/leaf@^1.1.0',
+              safeAlias: 'npm:fixture-leaf@^2.0.0',
+              safeScopedAlias: 'npm:@fixture/leaf@^2.0.0',
+              'fixture-original': 'npm:fixture-replacement@1.0.0',
+            },
+          },
+          new Map([
+            ['fixture-leaf', '<2.0.0'],
+            ['@fixture/leaf', '<2.0.0'],
+            ['fixture-original', '<2.0.0'],
+          ]),
+        ),
+      ).toEqual([
+        'fixture-leaf@^1.0.0',
+        'fixture-leaf@1.0.0',
+        '@fixture/leaf@~1.0.0',
+        '@fixture/leaf@1.0.0',
+        'fixture-leaf@1.1.0',
+        '@fixture/leaf@^1.1.0',
+      ]);
+    },
+  );
+
+  it.each([
+    ['npm:fixture-leaf', 'fixture-leaf@*'],
+    ['npm:fixture-leaf@', 'fixture-leaf@*'],
+    ['npm:@fixture/leaf', '@fixture/leaf@*'],
+    ['npm:@fixture/leaf@', '@fixture/leaf@*'],
+  ])('checks the unrestricted range of an npm alias without a version: %s', (range, expected) => {
+    expect(
+      findKnownBadRanges(
+        { dependencies: { alias: range } },
+        new Map([
+          ['fixture-leaf', '<2.0.0'],
+          ['@fixture/leaf', '<2.0.0'],
+        ]),
+      ),
+    ).toEqual([expected]);
+  });
+
   it.each<{ description: string; overrides: PackageOverrides; expected: string[] }>([
     {
       description: 'direct string overrides',
@@ -440,6 +503,21 @@ describe('package manifests', () => {
       overrides: { 'fixture-parent': { 'fixture-leaf': 'file:../fixture-leaf' } },
       expected: [],
     },
+    {
+      description: 'npm alias replacement targets',
+      overrides: { 'fixture-other': 'npm:fixture-leaf@^1.0.0' },
+      expected: ['fixture-leaf@^1.0.0'],
+    },
+    {
+      description: 'scoped npm alias replacement targets',
+      overrides: { 'fixture-parent': { 'fixture-other': { '.': 'npm:@fixture/leaf@^1.0.0' } } },
+      expected: ['@fixture/leaf@^1.0.0'],
+    },
+    {
+      description: 'safe npm alias replacements for known-bad package names',
+      overrides: { 'fixture-leaf': 'npm:fixture-replacement@1.0.0' },
+      expected: [],
+    },
   ])('checks replacement ranges in $description', ({ overrides, expected }) => {
     expect(
       findKnownBadRanges(
@@ -468,6 +546,18 @@ describe('package manifests', () => {
       ).toEqual(['fixture-leaf@^1.0.0']);
     },
   );
+
+  it('checks the target of an npm alias resolved through an override reference', () => {
+    expect(
+      findKnownBadRanges(
+        {
+          peerDependencies: { reference: 'npm:@fixture/leaf@^1.0.0' },
+          overrides: { 'fixture-other': '$reference' },
+        },
+        new Map([['@fixture/leaf', '<2.0.0']]),
+      ),
+    ).toEqual(['@fixture/leaf@^1.0.0']);
+  });
 
   it('reports unresolved override references instead of skipping their ranges', () => {
     expect(() =>
