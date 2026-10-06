@@ -12,7 +12,7 @@ import {
   type TestSuite,
 } from '../types/index';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
-import { isPromptAllowed } from '../util/promptMatching';
+import { getProviderPromptSelectors, isPromptAllowed } from '../util/promptMatching';
 import { sanitizeObject } from '../util/sanitizer';
 
 import type EvalResult from '../models/evalResult';
@@ -459,10 +459,7 @@ function createSelectedOptimizationTestSuite(
   }
 
   const providerKey = selectedProvider.label || selectedProvider.id();
-  const allowedPrompts =
-    testSuite.providerPromptMap?.[providerKey] ??
-    testSuite.providerPromptMap?.[selectedProvider.id()] ??
-    selectedProvider.prompts;
+  const allowedPrompts = getProviderPromptSelectors(selectedProvider, testSuite.providerPromptMap);
   if (!isPromptAllowed(selectedPrompt, allowedPrompts)) {
     throw new Error(
       `Prompt index ${promptIndex} is not configured for provider index ${providerIndex}.`,

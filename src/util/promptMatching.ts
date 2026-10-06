@@ -1,4 +1,17 @@
-import type { Prompt } from '../types/index';
+import type { Prompt, TestSuite } from '../types/index';
+
+/** Returns authored label/ID overrides before instance selectors, without copying arrays. */
+export function getProviderPromptSelectors(
+  provider: TestSuite['providers'][number],
+  map: TestSuite['providerPromptMap'],
+): string[] | undefined {
+  const ownSelectors = (key: string) => (map && Object.hasOwn(map, key) ? map[key] : undefined);
+  return (
+    (provider.label ? ownSelectors(provider.label) : undefined) ??
+    ownSelectors(provider.id()) ??
+    provider.prompts
+  );
+}
 
 /**
  * Checks if a prompt reference matches a given prompt by label or ID.

@@ -27,6 +27,11 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     map: NonNullable<TestSuite['providerPromptMap']>;
     expected: string[];
   }>([
+    {
+      name: 'unrelated map falls back to instance',
+      map: { other: ['second'] },
+      expected: ['first'],
+    },
     { name: 'ID fallback', map: { 'stable-id': ['second'] }, expected: ['second'] },
     {
       name: 'label precedence',

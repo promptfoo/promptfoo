@@ -96,7 +96,7 @@ import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
-import { isPromptAllowed } from './util/promptMatching';
+import { getProviderPromptSelectors, isPromptAllowed } from './util/promptMatching';
 import {
   getProviderIdentifier,
   isAnthropicProvider,
@@ -2374,10 +2374,7 @@ function buildLivePromptColumns(testSuite: TestSuite): {
 
   for (const provider of testSuite.providers) {
     const providerKey = getProviderIdentifier(provider);
-    const allowedPrompts =
-      testSuite.providerPromptMap?.[providerKey] ??
-      testSuite.providerPromptMap?.[provider.id()] ??
-      provider.prompts;
+    const allowedPrompts = getProviderPromptSelectors(provider, testSuite.providerPromptMap);
     const columns: ProviderColumns['columns'] = [];
 
     for (const prompt of testSuite.prompts) {

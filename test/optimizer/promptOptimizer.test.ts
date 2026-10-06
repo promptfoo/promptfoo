@@ -551,6 +551,12 @@ describe('prompt optimizer', () => {
   }>([
     { source: 'explicit map', providerPrompts: undefined, map: { 'target-provider': ['seed-id'] } },
     { source: 'provider', providerPrompts: ['seed-id'], map: undefined },
+    {
+      source: 'unrelated map with instance fallback',
+      providerPrompts: ['seed-id'],
+      label: 'named',
+      map: { other: [] },
+    },
     { source: 'explicit override', providerPrompts: [], map: { 'target-provider': ['seed-id'] } },
     {
       source: 'ID override for a labeled provider',
