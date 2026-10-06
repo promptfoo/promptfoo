@@ -102,6 +102,9 @@
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
+    // Cloud-consumed: server/src/worker/redteamRun imports withCloudProviderResolver
+    // from @promptfoo/util/cloud to supply prepared saved providers during a run.
+    "src/util/cloud.ts": ["exports"],
     // Internal intentional alias/duplicate-export patterns.
     "src/contracts/api/user.ts": ["duplicates"],
     // Cloud-consumed: server/src/task/hydra.ts and server/src/task/h4rm3l
