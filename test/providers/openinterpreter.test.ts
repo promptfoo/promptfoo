@@ -226,7 +226,7 @@ describe('OpenInterpreterProvider', () => {
     async (method) => {
       mockProcessEnv({ OPENAI_API_KEY: undefined, CODEX_API_KEY: undefined });
       const provider = new OpenInterpreterProvider({
-        config: { working_dir: os.tmpdir(), reuse_server: true },
+        config: { working_dir: os.tmpdir(), skip_git_repo_check: true, reuse_server: true },
       });
       const delegate = (provider as any).delegate;
       expect(providerRegistry.has(provider)).toBe(true);
