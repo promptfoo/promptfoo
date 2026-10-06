@@ -5,7 +5,8 @@ export function getProviderPromptSelectors(
   provider: TestSuite['providers'][number],
   map: TestSuite['providerPromptMap'],
 ): string[] | undefined {
-  const ownSelectors = (key: string) => (map && Object.hasOwn(map, key) ? map[key] : undefined);
+  const ownSelectors = (key: string) =>
+    map && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
   return (
     (provider.label ? ownSelectors(provider.label) : undefined) ??
     ownSelectors(provider.id()) ??
