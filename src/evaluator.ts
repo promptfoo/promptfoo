@@ -2227,9 +2227,9 @@ function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult
   }
 }
 
-function ensureDefaultTestForExtensions(testSuite: TestSuite) {
+async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> {
   if (!testSuite.extensions?.length) {
-    return;
+    return testSuite;
   }
   if (!testSuite.defaultTest) {
     testSuite.defaultTest = {};
@@ -2237,6 +2237,39 @@ function ensureDefaultTestForExtensions(testSuite: TestSuite) {
   if (typeof testSuite.defaultTest !== 'string' && !testSuite.defaultTest.assert) {
     testSuite.defaultTest.assert = [];
   }
+
+  let seededMap: TestSuite['providerPromptMap'];
+  if (!testSuite.providerPromptMap) {
+    const map: NonNullable<TestSuite['providerPromptMap']> = Object.create(null);
+    for (const provider of testSuite.providers) {
+      const selectors = [...(provider.prompts ?? testSuite.prompts.map((prompt) => prompt.label))];
+      map[provider.id()] = selectors;
+      if (provider.label) {
+        map[provider.label] = selectors;
+      }
+    }
+    seededMap = structuredClone(map);
+    testSuite.providerPromptMap = map;
+  }
+
+  const { suite } = await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+  if (seededMap) {
+    // Hooks may mutate legacy map arrays. Only changed entries override instance filters;
+    // untouched seeds must not merge duplicate providers or exclude newly added prompts.
+    const overrides: NonNullable<TestSuite['providerPromptMap']> = Object.assign(
+      Object.create(null),
+      suite.providerPromptMap,
+    );
+    for (const [key, selectors] of Object.entries(seededMap)) {
+      if (!Object.hasOwn(overrides, key)) {
+        overrides[key] = ['*'];
+      } else if (isDeepStrictEqual(overrides[key], selectors)) {
+        delete overrides[key];
+      }
+    }
+    suite.providerPromptMap = overrides;
+  }
+  return suite;
 }
 
 async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalEvaluateOptions) {
@@ -2417,6 +2450,7 @@ function buildCompletedPrompts(
         prompt.provider === saved.provider &&
         prompt.label === saved.label &&
         prompt.raw === saved.raw &&
+        prompt.template === saved.template &&
         isDeepStrictEqual(prompt.config, saved.config)
       );
     });
@@ -5336,12 +5370,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const rowsWithSelectBestAssertion = new Set<number>();
       const rowsWithMaxScoreAssertion = new Set<number>();
 
-      ensureDefaultTestForExtensions(testSuite);
-      testSuite.providerPromptMap ??= Object.create(null);
-      const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
-        suite: testSuite,
-      });
-      testSuite = beforeAllOut.suite;
+      testSuite = await runBeforeAllExtensions(testSuite);
 
       const restorePromptColumns = Boolean(
         options.restorePromptColumns &&

@@ -66,23 +66,52 @@ async function runEvaluation(
 }
 
 describe.each(['CLI', 'library'] as const)('%s resolved provider prompt filters', (entrypoint) => {
-  it('allows beforeAll extensions to assign indexed prompt overrides', async () => {
+  it.each([
+    { operation: "suite.providerPromptMap.echo = ['second']", expected: ['second'] },
+    { operation: "suite.providerPromptMap.echo.push('second')", expected: prompts },
+    { operation: "suite.providerPromptMap.target.push('second')", expected: prompts },
+    { operation: "suite.providerPromptMap.echo.splice(0, 1, 'second')", expected: ['second'] },
+    { operation: 'delete suite.providerPromptMap.echo', expected: prompts },
+  ])('allows beforeAll indexed overrides: $operation', async ({ operation, expected }) => {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-prompt-filter-'));
     temporaryDirectories.push(directory);
     const file = path.join(directory, 'override.mjs');
     writeFileSync(
       file,
-      `export function beforeAll(context) {
-        context.suite.providerPromptMap.echo = ['second'];
-        return context;
+      `export function beforeAll({ suite }) {
+        ${operation};
+        return { suite };
       }`,
     );
     const rows = await runEvaluation(
       entrypoint,
-      [{ id: 'echo', prompts: ['first'] }],
+      [{ id: 'echo', label: 'target', prompts: ['first'] }],
       [`file://${file}:beforeAll`],
     );
-    expect(rows).toEqual([{ provider: 'echo', prompt: 'second' }]);
+    expect(rows).toEqual(expected.map((prompt) => ({ provider: 'target', prompt })));
+  });
+
+  it('keeps duplicate provider filters independent through an unchanged hook map', async () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-prompt-filter-'));
+    temporaryDirectories.push(directory);
+    const file = path.join(directory, 'unchanged.mjs');
+    writeFileSync(
+      file,
+      `export function beforeAll({ suite }) {
+        suite.providerPromptMap = JSON.parse(JSON.stringify(suite.providerPromptMap));
+        return { suite };
+      }`,
+    );
+    const rows = await runEvaluation(
+      entrypoint,
+      [
+        { id: 'echo', label: 'shared', prompts: ['first'] },
+        { id: 'echo', label: 'shared', prompts: ['second'] },
+        { id: 'echo', label: 'shared' },
+      ],
+      [`file://${file}:beforeAll`],
+    );
+    expect(rows.map((row) => row.prompt)).toEqual(['first', 'second', ...prompts]);
   });
 
   it('uses a saved prompt filter and resolved label', async () => {
@@ -449,15 +478,26 @@ it('preserves mixed provider type-map entries and application settings', async (
   expect(fetchWithProxy).not.toHaveBeenCalled();
 });
 
-it('keeps explicit runtime prompt maps authoritative', async () => {
+it('keeps explicit runtime prompt maps authoritative and mutable', async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-prompt-filter-'));
+  temporaryDirectories.push(directory);
+  const file = path.join(directory, 'explicit.mjs');
+  writeFileSync(
+    file,
+    `export function beforeAll({ suite }) {
+      suite.providerPromptMap.target.splice(0, 1, 'second');
+      return { suite };
+    }`,
+  );
   const providers = await loadApiProviders([{ id: 'echo', label: 'target', prompts: ['first'] }]);
   const result = new Eval({});
-  const providerPromptMap = { target: ['second'] };
+  const providerPromptMap = { target: ['first'] };
   const testSuite = {
     providers,
     prompts: prompts.map((raw) => ({ raw, label: raw })),
     tests: [{ vars: {} }],
     providerPromptMap,
+    extensions: [`file://${file}:beforeAll`],
   };
   await evaluateRuntime(testSuite, result, { cache: false, maxConcurrency: 1 });
   expect(testSuite.providerPromptMap).toBe(providerPromptMap);

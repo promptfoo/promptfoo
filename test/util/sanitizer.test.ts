@@ -72,6 +72,41 @@ describe('looksLikeSecret', () => {
 });
 
 describe('stripProviderPromptSelectors', () => {
+  it.each([
+    {},
+    {
+      label: 'ordinary map label',
+      config: { prompts: ['ordinary map configuration'] },
+      prompts: ['ordinary map setting'],
+    },
+  ])('projects only known grading slots in mixed type maps: %s', (metadata) => {
+    const provider = {
+      id: 'echo',
+      prompts: ['ordinary selector'],
+      config: { prompts: ['ordinary provider payload'] },
+    };
+    const application = { prompts: ['ordinary application payload'] };
+    const map = {
+      text: provider,
+      embedding: 'echo',
+      classification: provider,
+      moderation: provider,
+      application,
+      ...metadata,
+    };
+    const projected = stripProviderPromptSelectors(map);
+    const expectedProvider = { id: 'echo', config: provider.config };
+    expect(projected).toEqual({
+      ...map,
+      text: expectedProvider,
+      classification: expectedProvider,
+      moderation: expectedProvider,
+    });
+    expect(projected.application).toBe(application);
+    expect(map.text).toBe(provider);
+    expect(provider.prompts).toEqual(['ordinary selector']);
+  });
+
   it.each([{ value: 'echo' }, { value: null }, { value: ['echo'] }])(
     'preserves a provider serializer non-record result: $value',
     ({ value }) => {
@@ -143,7 +178,15 @@ describe('sanitizeConfigForOutput', () => {
     };
     const test = {
       provider,
-      options: { provider: { text: provider, embedding: provider } },
+      options: {
+        provider: {
+          text: provider,
+          embedding: provider,
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          application: { prompts: ['ordinary application payload'] },
+        },
+      },
       assert: [
         {
           type: 'assert-set' as const,
@@ -164,7 +207,14 @@ describe('sanitizeConfigForOutput', () => {
     const projectedTest = {
       metadata: test.metadata,
       provider: { config: provider.config },
-      options: { provider: { text: { config: provider.config } } },
+      options: {
+        provider: {
+          text: { config: provider.config },
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          application: { prompts: ['ordinary application payload'] },
+        },
+      },
     };
     expect(output).toMatchObject({
       tests: [projectedTest],
@@ -173,6 +223,67 @@ describe('sanitizeConfigForOutput', () => {
     });
     expect(config).toEqual(before);
   });
+
+  it.each([true, false])(
+    'projects live grading maps before output serialization (strip: %s)',
+    (strip) => {
+      const provider = {
+        id: () => 'echo',
+        callApi: vi.fn(),
+        prompts: ['ordinary live selector'],
+        config: { prompts: ['ordinary provider payload'] },
+      };
+      const application = { prompts: ['ordinary application payload'] };
+      const map = {
+        text: provider,
+        embedding: provider,
+        classification: provider,
+        moderation: provider,
+        label: 'ordinary map label',
+        config: { prompts: ['ordinary map configuration'] },
+        prompts: ['ordinary map setting'],
+        application,
+      };
+      const test = {
+        options: { provider: map },
+        assert: [
+          { type: 'assert-set' as const, assert: [{ type: 'equals' as const, provider: map }] },
+        ],
+      };
+      const config = {
+        tests: [test],
+        defaultTest: test,
+        scenarios: [{ config: [test], tests: [test] }],
+      };
+      const before = JSON.stringify(config);
+      const projectedProvider = {
+        config: provider.config,
+        ...(!strip && { prompts: provider.prompts }),
+      };
+      const projectedMap = {
+        ...map,
+        text: projectedProvider,
+        embedding: projectedProvider,
+        classification: projectedProvider,
+        moderation: projectedProvider,
+      };
+      const projectedTest = {
+        options: { provider: projectedMap },
+        assert: [{ type: 'assert-set', assert: [{ type: 'equals', provider: projectedMap }] }],
+      };
+
+      expect(sanitizeConfigForOutput(config, { shouldStripPromptText: strip })).toEqual({
+        tests: [projectedTest],
+        defaultTest: projectedTest,
+        scenarios: [{ config: [projectedTest], tests: [projectedTest] }],
+      });
+      expect(JSON.stringify(config)).toBe(before);
+      expect(map.text).toBe(provider);
+      expect(map.application).toBe(application);
+      expect(provider.id()).toBe('echo');
+      expect(provider.callApi).not.toHaveBeenCalled();
+    },
+  );
 
   it('preserves application prompts on serialized provider options without selectors', () => {
     const provider = { label: 'grader', config: { prompts: ['ordinary application payload'] } };

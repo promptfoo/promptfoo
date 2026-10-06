@@ -3,6 +3,7 @@
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
 import safeStringify from 'fast-safe-stringify';
+import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
@@ -717,6 +718,15 @@ export function stripProviderPromptSelectors<T>(providers: T): T {
     const { prompts: _prompts, ...rest } = projected;
     return rest;
   };
+  if (isProviderTypeMap(providers)) {
+    const projected: Record<string, unknown> = { ...providers };
+    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+      if (Object.hasOwn(providers, type)) {
+        projected[type] = omitSelectors(providers[type]);
+      }
+    }
+    return projected as T;
+  }
   // Runtime serialization can remove id() and absent selectors from an options object.
   const isOptions = [
     'id',
@@ -768,6 +778,25 @@ export function sanitizeConfigForOutput(
 ): Partial<UnifiedConfig> {
   const safe = sanitizeTracingConfigForPersistence(config);
   const { basePath, ...outputConfig } = safe;
+  if (options.shouldStripPromptText) {
+    // Classify live grading maps before serialization removes their provider methods.
+    outputConfig.providers = stripProviderPromptSelectors(outputConfig.providers);
+    outputConfig.defaultTest = stripTestProviderPromptSelectors(outputConfig.defaultTest);
+    if (Array.isArray(outputConfig.tests)) {
+      outputConfig.tests = outputConfig.tests.map(stripTestProviderPromptSelectors);
+    }
+    outputConfig.scenarios = outputConfig.scenarios?.map((scenario) =>
+      typeof scenario === 'object'
+        ? {
+            ...scenario,
+            config: scenario.config?.map(stripTestProviderPromptSelectors),
+            tests: Array.isArray(scenario.tests)
+              ? scenario.tests.map(stripTestProviderPromptSelectors)
+              : scenario.tests,
+          }
+        : scenario,
+    );
+  }
   const sanitized = sanitizeObject(outputConfig, {
     context: 'output config',
     sanitizeUrls: true,
@@ -780,9 +809,6 @@ export function sanitizeConfigForOutput(
   if (options.shouldStripPromptText) {
     delete sanitized.prompts;
     Reflect.deleteProperty(sanitized, 'providerPromptMap');
-    if (sanitized.providers !== undefined) {
-      sanitized.providers = stripProviderPromptSelectors(sanitized.providers);
-    }
   }
   const {
     shouldStripTestVars: stripVars,
@@ -802,9 +828,6 @@ export function sanitizeConfigForOutput(
   for (const [index, test] of collectTests(sanitized).entries()) {
     if (!test || typeof test !== 'object') {
       continue;
-    }
-    if (options.shouldStripPromptText) {
-      Object.assign(test, stripTestProviderPromptSelectors(test));
     }
     const sourceTest = sourceTests[index];
     const sourceMetadata =

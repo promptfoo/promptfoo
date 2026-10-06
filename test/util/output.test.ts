@@ -371,8 +371,15 @@ describe('writeOutput', () => {
         Object.fromEntries(Object.keys(flags).map((key) => [key, String(!strip)])),
       );
       const grader = { id: 'echo', prompts: ['private-nested-selector'] };
+      const application = { prompts: ['ordinary-map-application'] };
+      const graderMap = {
+        text: grader,
+        label: 'ordinary map label',
+        config: { prompts: ['ordinary map configuration'] },
+        application,
+      };
       const testCase = {
-        options: { provider: { text: grader } },
+        options: { provider: graderMap },
         vars: { input: 'private-input' },
         metadata: { note: 'private-note' },
         providerOutput: 'private-output',
@@ -437,6 +444,9 @@ describe('writeOutput', () => {
         expect(JSON.stringify(output).includes('private-')).toBe(!strip);
         expect(Object.hasOwn(output.config, 'providerPromptMap')).toBe(!strip);
         expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
+        expect(output.config).toMatchObject({
+          tests: [{ options: { provider: { application, config: graderMap.config } } }],
+        });
         if (!strip) {
           expect(output.config).toMatchObject({ providerPromptMap });
           expect(output.results.results[0]).toMatchObject({
@@ -460,6 +470,7 @@ describe('writeOutput', () => {
             .join('');
           expect(contents, extension).not.toBe('');
           expect(contents.includes('private-'), extension).toBe(!strip);
+          expect(contents, extension).toContain('ordinary-map-application');
         }
 
         expect(grader.prompts).toEqual(['private-nested-selector']);

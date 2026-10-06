@@ -302,6 +302,44 @@ describeEvaluator('evaluator runtime ports', () => {
     },
   );
 
+  it.each([
+    { name: 'changed', savedTemplate: 'Original {{ name }}', template: 'Updated {{ name }}' },
+    { name: 'added', savedTemplate: undefined, template: 'Updated {{ name }}' },
+    { name: 'removed', savedTemplate: 'Original {{ name }}', template: undefined },
+    { name: 'empty', savedTemplate: '', template: 'Updated {{ name }}' },
+  ])(
+    'restores the saved template when the current template is $name',
+    async ({ savedTemplate, template }) => {
+      const saved = { raw: 'Hello {{ name }}', label: 'greeting', template: savedTemplate };
+      const evaluation = createInMemoryEvaluation({
+        persisted: true,
+        prompts: [{ ...saved, id: generateIdFromPrompt(saved), provider: mockApiProvider.id() }],
+      });
+      const store = new InMemoryEvaluationStore(evaluation);
+      cliState.resume = true;
+
+      await evaluate(
+        {
+          providers: [mockApiProvider],
+          prompts: [{ ...saved, template }],
+          tests: [{ vars: { name: 'world' } }],
+        },
+        evaluation,
+        { restorePromptColumns: true },
+        createInMemoryRuntime(store),
+      );
+
+      expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
+      expect(vi.mocked(mockApiProvider.callApi).mock.calls[0][0]).toBe('Hello world');
+      expect(vi.mocked(mockApiProvider.callApi).mock.calls[0][1]?.prompt.template).toBe(
+        savedTemplate ?? saved.raw,
+      );
+      expect(evaluation.prompts[0].template).toBe(savedTemplate);
+      expect(evaluation.results).toHaveLength(1);
+      expect(evaluation.results[0]).toMatchObject({ success: true, promptIdx: 0 });
+    },
+  );
+
   it('generates initial suggestions when CLI recovery has no saved columns', async () => {
     const evaluation = createInMemoryEvaluation({ persisted: true });
     const store = new InMemoryEvaluationStore(evaluation);
