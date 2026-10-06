@@ -287,7 +287,7 @@ To override the Python binary, set the `PROMPTFOO_PYTHON` environment variable. 
 
 ## Negation
 
-Use `not-python` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+Use `not-python` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted. If the script returns a `{pass, score, reason}` object, a custom `reason` is kept when inversion turns a pass into a fail (empty reasons and the default `Assertion passed` text fall back to `Python code returned true/false`):
 
 ```yaml
 assert:

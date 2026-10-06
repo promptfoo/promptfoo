@@ -61,7 +61,7 @@ export function normalizeScriptAssertionResult(
         ? result.reason
         : pass
           ? 'Assertion passed'
-          : result.reason
+          : result.reason && result.reason !== 'Assertion passed'
             ? result.reason
             : `${labels.code} returned ${result.pass ? 'true' : 'false'}`,
     assertion: result.assertion ?? assertion,

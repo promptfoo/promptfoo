@@ -41,6 +41,22 @@ describe('normalizeScriptAssertionResult', () => {
     expect(result.pass).toBe(false);
     expect(result.reason).toBe('Python code returned true');
   });
+
+  it('replaces the default pass reason when inverse turns a pass into a fail', () => {
+    const result = normalizeScriptAssertionResult(
+      pythonAssertion,
+      {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+      },
+      true,
+      labels,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Python code returned true');
+  });
 });
 
 describe('normalizeScriptResult', () => {
@@ -51,6 +67,22 @@ describe('normalizeScriptResult', () => {
         pass: true,
         score: 1,
         reason: '',
+      },
+      true,
+      labels,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Python code returned true');
+  });
+
+  it('replaces the default pass reason when an inverted object GradingResult is inverted to fail', () => {
+    const result = normalizeScriptResult(
+      pythonAssertion,
+      {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
       },
       true,
       labels,
