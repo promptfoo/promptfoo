@@ -2285,9 +2285,9 @@ describe('resolveProviderConfigs', () => {
   });
 
   it.each([true, false])('uses the effective nested file base path (explicit: %s)', (explicit) => {
-    const inherited = path.join(path.sep, 'inherited');
-    const configured = path.join(path.sep, 'configured');
-    const providerFile = path.join(path.sep, 'outer', 'provider.json');
+    const inherited = path.resolve(path.sep, 'inherited');
+    const configured = path.resolve(path.sep, 'configured');
+    const providerFile = path.resolve(path.sep, 'outer', 'provider.json');
     const provider = { id: 'echo', config: { settings: 'file://./settings.json' } };
     mockFsReadFileSync.mockImplementation((filename) =>
       JSON.stringify(filename === providerFile ? provider : { greeting: 'Hello' }),

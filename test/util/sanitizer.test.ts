@@ -119,12 +119,18 @@ describe('sanitizeConfigForOutput', () => {
     { providers: [{ id: () => 'echo', callApi: vi.fn(), prompts: ['ordinary selector'] }] },
   ])('omits provider selectors only from prompt-redacted config: $providers', (config) => {
     // A top-level runtime provider is serialized as a single options object too.
-    const input = { ...config, metadata: { prompts: ['ordinary metadata'] } } as Parameters<
-      typeof sanitizeConfigForOutput
-    >[0];
+    const providerPromptMap = { echo: ['ordinary selector'] };
+    const input = {
+      ...(config as Parameters<typeof sanitizeConfigForOutput>[0]),
+      providerPromptMap,
+      metadata: { prompts: ['ordinary metadata'] },
+    };
     const stripped = sanitizeConfigForOutput(input, { shouldStripPromptText: true });
     expect(JSON.stringify(stripped)).not.toContain('ordinary selector');
     expect(stripped.metadata).toEqual(input.metadata);
+    expect(stripped).not.toHaveProperty('providerPromptMap');
+    expect(sanitizeConfigForOutput(input)).toMatchObject({ providerPromptMap });
+    expect(input.providerPromptMap).toEqual(providerPromptMap);
     expect(JSON.stringify(sanitizeConfigForOutput(input))).toContain('ordinary selector');
     expect(JSON.stringify(input)).toContain('ordinary selector');
   });

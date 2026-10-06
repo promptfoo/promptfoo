@@ -1153,7 +1153,9 @@ describe('createShareableUrl', () => {
         callApi: vi.fn(),
         prompts: ['private-provider-selector'],
       };
-      mockEval.config = {
+      const providerPromptMap = { echo: ['private-explicit-selector'] };
+      const config = {
+        providerPromptMap,
         providers: [{ id: provider.id(), prompts: [...provider.prompts] }],
         env: {
           PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
@@ -1163,6 +1165,7 @@ describe('createShareableUrl', () => {
         },
         tests: [testCase],
       };
+      mockEval.config = config;
       mockEval.getTraces = vi.fn().mockResolvedValue([
         {
           metadata: { note: 'private-trace-note' },
@@ -1208,6 +1211,10 @@ describe('createShareableUrl', () => {
         ]);
         expect(grader.prompts).toEqual(['private-nested-selector']);
         expect(provider.prompts).toEqual(['private-provider-selector']);
+        expect(mockEval.config).toMatchObject({ providerPromptMap });
+        expect(
+          JSON.parse(mockFetch.mock.calls[0][1].body).config.providerPromptMap,
+        ).toBeUndefined();
         expect(mockEval.config.providers).toEqual([
           { id: 'echo', prompts: ['private-provider-selector'] },
         ]);

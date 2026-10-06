@@ -397,12 +397,15 @@ describe('writeOutput', () => {
         },
       ]);
       const provider = { id: 'echo', prompts: ['private-provider-selector'] };
-      const eval_ = new Eval({
+      const providerPromptMap = { echo: ['private-explicit-selector'] };
+      const config = {
+        providerPromptMap,
         env: flags,
         tests: [testCase],
         prompts: ['private-config-prompt'],
         providers: [provider],
-      });
+      };
+      const eval_ = new Eval(config);
       await eval_.addResult(
         createEvaluateResult({
           prompt: {
@@ -432,8 +435,10 @@ describe('writeOutput', () => {
         expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
         const output = await createOutputData(eval_, null);
         expect(JSON.stringify(output).includes('private-')).toBe(!strip);
+        expect(Object.hasOwn(output.config, 'providerPromptMap')).toBe(!strip);
         expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
         if (!strip) {
+          expect(output.config).toMatchObject({ providerPromptMap });
           expect(output.results.results[0]).toMatchObject({
             prompt: { raw: 'private-prompt' },
             testCase,
@@ -460,6 +465,7 @@ describe('writeOutput', () => {
         expect(grader.prompts).toEqual(['private-nested-selector']);
         expect(provider.prompts).toEqual(['private-provider-selector']);
         expect(eval_.config.providers).toEqual([provider]);
+        expect(eval_.config).toMatchObject({ providerPromptMap });
         expect(eval_.config.tests).toEqual([testCase]);
         expect(eval_.config.prompts).toEqual(['private-config-prompt']);
         expect(eval_.prompts[0].template).toBe('private-template');

@@ -779,6 +779,7 @@ export function sanitizeConfigForOutput(
   }
   if (options.shouldStripPromptText) {
     delete sanitized.prompts;
+    Reflect.deleteProperty(sanitized, 'providerPromptMap');
     if (sanitized.providers !== undefined) {
       sanitized.providers = stripProviderPromptSelectors(sanitized.providers);
     }
