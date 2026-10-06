@@ -266,7 +266,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
-      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
+      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID, {});
       expect(loadApiProvider).toHaveBeenCalledWith(
         'openai:gpt-4',
         expect.objectContaining({
@@ -446,7 +446,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
-      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
+      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID, {});
       expect(loadApiProvider).toHaveBeenCalledWith(
         'openai:gpt-4',
         expect.objectContaining({

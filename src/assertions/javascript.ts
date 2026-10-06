@@ -1,3 +1,4 @@
+import { tokenizer } from 'acorn';
 import { type GradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
@@ -6,54 +7,30 @@ import { asGradingResult, normalizeScriptAssertionResult } from './scriptResultN
 import type { AssertionParams } from '../types/index';
 
 /**
- * Checks if a character at the given index is escaped by backslashes.
- * Handles multiple consecutive backslashes correctly (e.g., \\\\ is two escaped backslashes).
- */
-function isCharEscaped(code: string, index: number): boolean {
-  let backslashCount = 0;
-  let i = index - 1;
-  while (i >= 0 && code[i] === '\\') {
-    backslashCount++;
-    i--;
-  }
-  return backslashCount % 2 === 1;
-}
-
-/**
- * Finds the last semicolon that acts as a statement separator (not inside a string literal).
- * Tracks quote state to skip semicolons inside single quotes, double quotes, and template literals.
- *
- * @returns The index of the last statement-level semicolon, or -1 if none found.
- *
- * @remarks
- * Known limitations (use multiline format for these cases):
- * - Does not handle semicolons inside regex literals (e.g., /;/)
- * - Does not handle semicolons inside template literal expressions (e.g., `${a;b}`)
+ * Finds the last top-level semicolon followed by code. Tokenization keeps comment,
+ * string, regex, and template contents from becoming statement separators.
  */
 function findLastStatementSemicolon(code: string): number {
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inTemplate = false;
+  let depth = 0;
+  let pendingSemiIndex = -1;
   let lastSemiIndex = -1;
 
-  for (let i = 0; i < code.length; i++) {
-    const char = code[i];
-    const isEscaped = isCharEscaped(code, i);
-
-    // Toggle quote state for unescaped quote characters
-    if (!isEscaped) {
-      if (char === "'" && !inDoubleQuote && !inTemplate) {
-        inSingleQuote = !inSingleQuote;
-      } else if (char === '"' && !inSingleQuote && !inTemplate) {
-        inDoubleQuote = !inDoubleQuote;
-      } else if (char === '`' && !inSingleQuote && !inDoubleQuote) {
-        inTemplate = !inTemplate;
-      }
+  for (const token of tokenizer(code, { ecmaVersion: 'latest' })) {
+    const label = token.type.label;
+    if (label === 'eof') {
+      break;
     }
-
-    // Track semicolons only when outside all string contexts
-    if (char === ';' && !inSingleQuote && !inDoubleQuote && !inTemplate) {
-      lastSemiIndex = i;
+    if (label === ';' && depth === 0) {
+      // Wait for another token so terminal semicolons and trailing comments do
+      // not displace the separator before the final expression.
+      pendingSemiIndex = token.start;
+      continue;
+    }
+    lastSemiIndex = pendingSemiIndex;
+    if (label === '(' || label === '[' || label === '{' || label === '${') {
+      depth++;
+    } else if (label === ')' || label === ']' || label === '}') {
+      depth--;
     }
   }
 
