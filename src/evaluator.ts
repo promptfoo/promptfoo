@@ -2388,6 +2388,23 @@ function buildCompletedPrompts(
     columnsByProvider.push({ provider, columns });
   }
 
+  if (cliState.resume && store.persisted && store.prompts.length > 0) {
+    // Resume completion uses column indices. Compare their content, not generated IDs:
+    // older saved prompts may no longer retain the authored ID used to generate them.
+    invariant(
+      prompts.length === store.prompts.length &&
+        prompts.every((prompt, index) => {
+          const saved = store.prompts[index];
+          return (
+            prompt.provider === saved.provider &&
+            prompt.label === saved.label &&
+            prompt.raw === saved.raw
+          );
+        }),
+      'Cannot resume evaluation because the saved provider/prompt columns differ. Start a new evaluation instead.',
+    );
+  }
+
   return { prompts, columnsByProvider };
 }
 

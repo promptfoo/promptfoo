@@ -507,18 +507,16 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    // Both duplicate providers resolve to this single stored prompt on resume.
-    evalRecord.prompts = [
-      {
-        ...prompt,
-        id: generateIdFromPrompt(prompt),
-        provider: 'duplicate-provider',
-        metrics: createPromptMetrics({
-          testPassCount: 5,
-          tokenUsage: createTokenUsage({ numRequests: 3 }),
-        }),
-      },
-    ];
+    // Saved columns retain both providers, even though their identities are equal.
+    evalRecord.prompts = [firstProvider, secondProvider].map(() => ({
+      ...prompt,
+      id: generateIdFromPrompt(prompt),
+      provider: 'duplicate-provider',
+      metrics: createPromptMetrics({
+        testPassCount: 5,
+        tokenUsage: createTokenUsage({ numRequests: 3 }),
+      }),
+    }));
     evalRecord.persisted = true;
 
     cliState.resume = true;

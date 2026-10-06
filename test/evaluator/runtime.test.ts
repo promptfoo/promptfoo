@@ -18,7 +18,7 @@ import { describeEvaluator } from './lifecycle';
 
 import type { EvaluationStore, EvaluatorRuntime } from '../../src/evaluator/runtime';
 import type EvalResult from '../../src/models/evalResult';
-import type { ApiProvider, EvaluateResult } from '../../src/types/index';
+import type { ApiProvider, EvaluateResult, Prompt } from '../../src/types/index';
 
 function createResultWriter() {
   return {
@@ -112,6 +112,119 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(readCompletedIndexPairs).toHaveBeenCalledWith({ excludeErrors: false });
     expect(evaluation.results).toHaveLength(1);
   });
+
+  it.each<{
+    name: string;
+    savedPrompts: Prompt[];
+    prompts: Prompt[];
+    providerPrompts?: string[];
+    savedProvider?: string;
+    retryMode: boolean;
+  }>([
+    {
+      name: 'newly filtered columns',
+      savedPrompts: [toPrompt('first'), toPrompt('second')],
+      prompts: [toPrompt('first'), toPrompt('second')],
+      providerPrompts: ['second'],
+      retryMode: true,
+    },
+    {
+      name: 'reordered columns',
+      savedPrompts: [toPrompt('first'), toPrompt('second')],
+      prompts: [toPrompt('second'), toPrompt('first')],
+      retryMode: false,
+    },
+    {
+      name: 'reordered raw prompts with a shared label',
+      savedPrompts: [
+        { raw: 'first', label: 'shared' },
+        { raw: 'second', label: 'shared' },
+      ],
+      prompts: [
+        { raw: 'second', label: 'shared' },
+        { raw: 'first', label: 'shared' },
+      ],
+      retryMode: true,
+    },
+    {
+      name: 'changed provider identity',
+      savedPrompts: [toPrompt('first')],
+      prompts: [toPrompt('first')],
+      savedProvider: 'previous-provider',
+      retryMode: false,
+    },
+  ])(
+    'rejects changed saved column routing before writes: $name',
+    async ({ savedPrompts, prompts, providerPrompts, savedProvider, retryMode }) => {
+      const provider: ApiProvider = { ...mockApiProvider, prompts: providerPrompts };
+      const evaluation = createInMemoryEvaluation({
+        persisted: true,
+        prompts: savedPrompts.map((prompt) => ({
+          ...prompt,
+          provider: savedProvider ?? provider.id(),
+        })),
+      });
+      const savedColumns = structuredClone(evaluation.prompts);
+      const store = new InMemoryEvaluationStore(evaluation);
+      const appendPrompts = vi.spyOn(store, 'appendPrompts');
+      const appendResult = vi.spyOn(store, 'appendResult');
+      const save = vi.spyOn(store, 'save');
+      const readCompletedIndexPairs = vi.spyOn(store, 'readCompletedIndexPairs');
+      const writer = createResultWriter();
+      const runtime = createInMemoryRuntime(store);
+      vi.mocked(runtime.createResultWriters).mockReturnValue([writer]);
+      cliState.resume = true;
+      cliState.retryMode = retryMode;
+
+      await expect(
+        evaluate({ providers: [provider], prompts, tests: [{}] }, evaluation, {}, runtime),
+      ).rejects.toThrow('saved provider/prompt columns differ. Start a new evaluation');
+
+      expect(appendPrompts).not.toHaveBeenCalled();
+      expect(appendResult).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(readCompletedIndexPairs).not.toHaveBeenCalled();
+      expect(writer.write).not.toHaveBeenCalled();
+      expect(writer.close).toHaveBeenCalledOnce();
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(evaluation.prompts).toEqual(savedColumns);
+      expect(evaluation.results).toEqual([]);
+    },
+  );
+
+  it.each([
+    {
+      name: 'matching filtered columns',
+      saved: { ...toPrompt('second'), id: 'previous-id' },
+      prompts: [toPrompt('first'), toPrompt('second')],
+      providerPrompts: ['second'],
+    },
+    {
+      name: 'an unchanged empty-label prompt with a legacy custom ID',
+      saved: { raw: 'hello', label: '', id: 'previous-custom-id' },
+      prompts: [{ raw: 'hello', label: '' }],
+      providerPrompts: undefined,
+    },
+  ])(
+    'resumes $name without changing column routing',
+    async ({ saved, prompts, providerPrompts }) => {
+      const provider: ApiProvider = { ...mockApiProvider, prompts: providerPrompts };
+      const evaluation = createInMemoryEvaluation({
+        persisted: true,
+        prompts: [{ ...saved, provider: provider.id() }],
+      });
+      const store = new InMemoryEvaluationStore(evaluation);
+      const runtime = createInMemoryRuntime(store);
+      cliState.resume = true;
+
+      await evaluate({ providers: [provider], prompts, tests: [{}] }, evaluation, {}, runtime);
+
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      expect(evaluation.results).toHaveLength(1);
+      expect(evaluation.results[0]).toMatchObject({ success: true, promptIdx: 0 });
+      expect(evaluation.prompts[0]).toMatchObject({ raw: saved.raw, label: saved.label });
+    },
+  );
 
   it('persists comparison updates through an explicit in-memory runtime', async () => {
     const evaluation = createInMemoryEvaluation({ persisted: true });
