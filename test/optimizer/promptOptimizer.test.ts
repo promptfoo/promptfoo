@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
@@ -621,6 +625,67 @@ describe('prompt optimizer', () => {
       expect(candidateSuite.prompts[1].id).toEqual(expect.any(String));
       expect(candidateSuite.prompts[1].id).not.toBe('seed-id');
       expect(testSuite.providers[0].prompts).toEqual(providerPrompts);
+    },
+  );
+
+  it.each(['echo', 'target'])(
+    'supports beforeAll array mutation through the synthesized %s alias',
+    async (alias) => {
+      const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-optimizer-hook-'));
+      try {
+        const extension = path.join(directory, 'hook.mjs');
+        writeFileSync(
+          extension,
+          `export function beforeAll({ suite }) {
+            suite.providerPromptMap.${alias}.push('hook marker');
+            suite.tests[0].metadata = { hookSelectors: [...suite.providerPromptMap.${alias}] };
+            return { suite };
+          }`,
+        );
+        const runtime =
+          await vi.importActual<typeof import('../../src/evaluator')>('../../src/evaluator');
+        vi.mocked(evaluate).mockImplementation(runtime.evaluate);
+        const suggestions = createMockProvider({
+          id: 'local-suggestions',
+          response: optimizerResponse('Candidate'),
+        });
+        vi.mocked(getDefaultProviders).mockResolvedValue({
+          embeddingProvider: suggestions,
+          gradingJsonProvider: suggestions,
+          gradingProvider: suggestions,
+          moderationProvider: suggestions,
+          suggestionsProvider: suggestions,
+          synthesizeProvider: suggestions,
+        });
+        const provider = createMockProvider({
+          id: 'echo',
+          label: 'target',
+          prompts: ['A'],
+          response: { output: 'hello' },
+        });
+        const testSuite: TestSuite = {
+          providers: [provider],
+          prompts: [{ raw: 'hello', label: 'A' }],
+          tests: [{ assert: [{ type: 'equals', value: 'hello' }] }],
+          extensions: [`file://${extension}:beforeAll`],
+        };
+
+        const result = await optimizePromptTestSuite({}, testSuite);
+
+        expect(result.baselineEval.results).toHaveLength(1);
+        expect(result.baselineEval.results[0]).toMatchObject({
+          success: true,
+          testCase: { metadata: { hookSelectors: ['A', 'hook marker'] } },
+        });
+        const candidateEval: Eval = await vi.mocked(evaluate).mock.results[1].value;
+        expect(candidateEval.results).toHaveLength(2);
+        expect(candidateEval.results.every((row) => row.success)).toBe(true);
+        expect(provider.prompts).toEqual(['A']);
+        expect(testSuite.providerPromptMap).toBeUndefined();
+        expect(testSuite.tests?.[0].metadata).toBeUndefined();
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
     },
   );
 

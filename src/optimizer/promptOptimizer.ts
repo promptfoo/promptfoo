@@ -470,15 +470,19 @@ function createSelectedOptimizationTestSuite(
   }
 
   logger.info(`Optimizing prompt index ${promptIndex} against provider index ${providerIndex}.`);
+  const selectors = testSuite.providerPromptMap ? allowedPrompts : allowedPrompts?.slice();
 
   return {
     ...testSuite,
     prompts: [selectedPrompt],
     providers: [selectedProvider],
     providerPromptMap:
-      allowedPrompts === undefined
+      selectors === undefined
         ? testSuite.providerPromptMap
-        : { ...testSuite.providerPromptMap, [providerKey]: allowedPrompts },
+        : {
+            ...(testSuite.providerPromptMap ?? { [selectedProvider.id()]: selectors }),
+            [providerKey]: selectors,
+          },
   };
 }
 
