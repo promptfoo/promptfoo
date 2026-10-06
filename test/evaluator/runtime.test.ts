@@ -385,6 +385,7 @@ describeEvaluator('evaluator runtime ports', () => {
           expect(prompt).toMatchObject(saved);
           expect(prompt.config.callback).toBe(callback);
           expect(prompt.config.callback()).toBe('ordinary callback result');
+          suite.providerPromptMap![mockApiProvider.id()] = [prompt.id ?? prompt.label];
           suite.tests = [
             {
               prompts: [prompt.id ?? prompt.label],
@@ -460,47 +461,68 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(evaluation.results.every((result) => result.success)).toBe(true);
   });
 
-  it('gives recovery hooks distinct saved templates for duplicate provider columns', async () => {
-    const prompt = { id: 'authored', raw: 'hello', label: 'shared', template: 'current template' };
-    const providers = [{ ...mockApiProvider }, { ...mockApiProvider }];
-    const templates = ['first saved template', 'second saved template'];
-    const evaluation = createInMemoryEvaluation({
-      persisted: true,
-      prompts: providers.map((provider, index) => ({
-        ...prompt,
-        id: generateIdFromPrompt(prompt),
-        provider: provider.id(),
-        template: templates[index],
-      })),
-    });
-    const store = new InMemoryEvaluationStore(evaluation);
-    vi.mocked(mockApiProvider.callApi).mockImplementation(async (text) => ({ output: text }));
-    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
-      if (hook === 'beforeAll') {
-        const { suite } = context as { suite: TestSuite };
-        expect(suite.prompts.map((entry) => entry.template)).toEqual(templates);
-        expect(suite.prompts.map((entry) => entry.id)).toEqual(['authored', 'authored']);
-        suite.tests = [{ prompts: ['authored'], assert: [{ type: 'equals', value: 'hello' }] }];
-      }
-      return context;
-    });
-    cliState.resume = true;
+  it.each(['unchanged', 'instance', 'ID map', 'label map'] as const)(
+    'gives recovery hooks distinct saved templates with %s provider selectors',
+    async (selectorSource) => {
+      const prompt = {
+        id: 'authored',
+        raw: 'hello',
+        label: 'shared',
+        template: 'current template',
+      };
+      const providers: ApiProvider[] = [
+        { ...mockApiProvider, label: 'saved target' },
+        { ...mockApiProvider, label: 'saved target' },
+      ];
+      const templates = ['first saved template', 'second saved template'];
+      const evaluation = createInMemoryEvaluation({
+        persisted: true,
+        prompts: providers.map((provider, index) => ({
+          ...prompt,
+          id: generateIdFromPrompt(prompt),
+          provider: provider.label!,
+          template: templates[index],
+        })),
+      });
+      const store = new InMemoryEvaluationStore(evaluation);
+      vi.mocked(mockApiProvider.callApi).mockImplementation(async (text) => ({ output: text }));
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+        if (hook === 'beforeAll') {
+          const { suite } = context as { suite: TestSuite };
+          expect(suite.prompts.map((entry) => entry.template)).toEqual(templates);
+          expect(suite.prompts.map((entry) => entry.id)).toEqual(['authored', 'authored']);
+          if (selectorSource === 'instance') {
+            for (const provider of suite.providers) {
+              provider.prompts = ['authored'];
+            }
+          } else if (selectorSource !== 'unchanged') {
+            const key = selectorSource === 'ID map' ? mockApiProvider.id() : 'saved target';
+            suite.providerPromptMap![key] = ['authored'];
+          }
+          suite.tests = [{ prompts: ['authored'], assert: [{ type: 'equals', value: 'hello' }] }];
+        }
+        return context;
+      });
+      cliState.resume = true;
 
-    await evaluate(
-      { providers, prompts: [prompt], extensions: ['local hook'] },
-      evaluation,
-      { restorePromptColumns: true },
-      createInMemoryRuntime(store),
-    );
+      await evaluate(
+        { providers, prompts: [prompt], extensions: ['local hook'] },
+        evaluation,
+        { restorePromptColumns: true },
+        createInMemoryRuntime(store),
+      );
 
-    expect(evaluation.results.map((result) => result.promptIdx)).toEqual([0, 1]);
-    expect(evaluation.results.every((result) => result.success)).toBe(true);
-    expect(
-      vi.mocked(mockApiProvider.callApi).mock.calls.map(([, context]) => context?.prompt.template),
-    ).toEqual(templates);
-    expect(evaluation.prompts.map((entry) => entry.template)).toEqual(templates);
-    expect(prompt.template).toBe('current template');
-  });
+      expect(evaluation.results.map((result) => result.promptIdx)).toEqual([0, 1]);
+      expect(evaluation.results.every((result) => result.success)).toBe(true);
+      expect(
+        vi
+          .mocked(mockApiProvider.callApi)
+          .mock.calls.map(([, context]) => context?.prompt.template),
+      ).toEqual(templates);
+      expect(evaluation.prompts.map((entry) => entry.template)).toEqual(templates);
+      expect(prompt.template).toBe('current template');
+    },
+  );
 
   it('validates saved providers and effective selectors after recovery hooks', async () => {
     const prompt = { id: 'authored', raw: 'hello', label: 'shared' };

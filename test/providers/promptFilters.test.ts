@@ -91,6 +91,33 @@ describe.each(['CLI', 'library'] as const)('%s resolved provider prompt filters'
     expect(rows).toEqual(expected.map((prompt) => ({ provider: 'target', prompt })));
   });
 
+  it.each(['echo', 'shared'])(
+    'honors an equal-content replacement of the generated %s selector array',
+    async (key) => {
+      const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-prompt-filter-'));
+      temporaryDirectories.push(directory);
+      const file = path.join(directory, 'replacement.mjs');
+      writeFileSync(
+        file,
+        `export function beforeAll({ suite }) {
+          suite.providerPromptMap[${JSON.stringify(key)}] = ['second'];
+          return { suite };
+        }`,
+      );
+      const providers = [
+        { id: 'echo', label: 'shared', prompts: ['first'] },
+        { id: 'echo', label: 'shared', prompts: ['second'] },
+      ];
+      const rows = await runEvaluation(entrypoint, providers, [`file://${file}:beforeAll`]);
+
+      expect(rows).toEqual([
+        { provider: 'shared', prompt: 'second' },
+        { provider: 'shared', prompt: 'second' },
+      ]);
+      expect(providers.map((provider) => provider.prompts)).toEqual([['first'], ['second']]);
+    },
+  );
+
   it('keeps duplicate provider filters independent through an unchanged hook map', async () => {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-prompt-filter-'));
     temporaryDirectories.push(directory);
@@ -363,7 +390,8 @@ it.each([
 ])(
   'retains nested runtime selectors in local replay configs: $allowed/type map $typeMap',
   async ({ allowed, typeMap }) => {
-    const [liveProvider] = await loadApiProviders([{ id: 'echo', prompts: allowed }]);
+    const settings = { transform: 'output', delay: 0, inputs: { query: 'A short question' } };
+    const [liveProvider] = await loadApiProviders([{ id: 'echo', prompts: allowed, ...settings }]);
     liveProvider.toJSON = () => ({ id: 'echo' });
     const provider = typeMap
       ? {
@@ -403,6 +431,7 @@ it.each([
     expect(summary.stats.failures).toBe(0);
     const expected = allowed?.slice();
     liveProvider.prompts?.push('runtime-only');
+    liveProvider.inputs = { query: 'Runtime-only description' };
     const saved = JSON.parse(JSON.stringify(result.config));
     const projected = sanitizeConfigForOutput(saved, { shouldStripPromptText: true });
 
@@ -428,11 +457,14 @@ it.each([
         ].flatMap((reference) => (typeMap ? Object.values(reference) : [reference])),
       ];
       for (const reference of refs) {
-        expect(reference).toMatchObject({ id: 'echo' });
+        expect(reference).toMatchObject({ id: 'echo', ...settings });
         expect(reference.prompts).toEqual(selectors);
         expect(reference).not.toHaveProperty('callApi');
         const [reloaded] = await loadApiProviders([reference]);
         expect(reloaded.prompts).toEqual(selectors);
+        expect(reloaded.transform).toBe(settings.transform);
+        expect(reloaded.delay).toBe(0);
+        expect(reloaded.inputs).toEqual(settings.inputs);
       }
     }
     expect(saved.defaultTest.provider.prompts).toEqual(expected);

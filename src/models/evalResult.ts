@@ -325,6 +325,14 @@ export function toSerializableProviderRef(provider: unknown): unknown {
   if (isApiProvider(provider)) {
     return {
       ...sanitizeProvider(provider),
+      ...sanitizeObject(
+        {
+          transform: typeof provider.transform === 'string' ? provider.transform : undefined,
+          delay: provider.delay,
+          inputs: provider.inputs,
+        },
+        { context: 'provider options', sanitizeUrls: true, maxDepth: Number.POSITIVE_INFINITY },
+      ),
       ...(provider.prompts && { prompts: [...provider.prompts] }),
     };
   }
@@ -344,39 +352,34 @@ export function toSerializableProviderRef(provider: unknown): unknown {
   return provider;
 }
 
-/** Preserve grading-map identities before generic result serialization removes id methods. */
-function serializeResultProviderMaps<T extends object>(result: T): T {
+/** Snapshot live grading references before generic result serialization invokes provider toJSON. */
+function serializeResultProviderRefs<T extends object>(result: T): T {
   const record = result as Record<string, unknown>;
-  const serializeMap = (provider: unknown) => {
-    if (!isProviderTypeMap(provider)) {
+  const serializeProvider = (provider: unknown) => {
+    if (!isApiProvider(provider) && !isProviderTypeMap(provider)) {
       return provider;
     }
-    const serialized = toSerializableProviderRef(provider) as Record<string, unknown>;
-    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
-      if (isApiProvider(provider[type])) {
-        const options = serialized[type] as ProviderOptions;
-        serialized[type] = {
-          ...options,
-          id: sanitizeObject(options.id, { context: 'grading provider id', sanitizeUrls: true }),
-        };
-      }
-    }
-    return serialized;
+    return sanitizeObject(toSerializableProviderRef(provider), {
+      context: 'grading provider',
+      sanitizeUrls: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+      throwOnError: true,
+    });
   };
   const projected: Record<string, unknown> = { ...record };
   if (record.testCase) {
-    projected.testCase = mapTestProviderRefs(record.testCase, serializeMap);
+    projected.testCase = mapTestProviderRefs(record.testCase, serializeProvider);
   }
   const prompt = asRecord(record.prompt);
   const config = asRecord(prompt?.config);
   if (config?.provider !== undefined) {
     projected.prompt = {
       ...prompt,
-      config: { ...config, provider: serializeMap(config.provider) },
+      config: { ...config, provider: serializeProvider(config.provider) },
     };
   }
   if (record.gradingResult) {
-    projected.gradingResult = mapGradingResultProviderRefs(record.gradingResult, serializeMap);
+    projected.gradingResult = mapGradingResultProviderRefs(record.gradingResult, serializeProvider);
   }
   return projected as T;
 }
@@ -844,7 +847,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     shouldStripMetadata,
   } = stripFlags;
 
-  const artifactResult = serializeResultProviderMaps(result) as T & Record<string, unknown>;
+  const artifactResult = serializeResultProviderRefs(result) as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
     gradingResult: sanitizeForDb(artifactResult.gradingResult),
@@ -928,19 +931,11 @@ export default class EvalResult {
       testCase,
       traceId,
       evaluationId,
-    } = serializeResultProviderMaps(result);
+    } = serializeResultProviderRefs(result);
 
     // Persist trace linkage inside a private metadata namespace so it survives
     // EvalResult round-trips without a Drizzle schema migration.
     const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
-
-    // Normalize provider for storage and extract blobs from responses.
-    const preSanitizeTestCase = {
-      ...testCase,
-      ...(testCase.provider && {
-        provider: sanitizeProvider(testCase.provider),
-      }),
-    };
 
     const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
@@ -958,7 +953,7 @@ export default class EvalResult {
     const args = {
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizeForDbWithSecrets(preSanitizeTestCase),
+      testCase: sanitizeForDbWithSecrets(testCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt: sanitizeForDbWithSecrets(prompt),
@@ -1006,7 +1001,7 @@ export default class EvalResult {
           })
         : result.response;
       processedResults.push({
-        ...serializeResultProviderMaps(result),
+        ...serializeResultProviderRefs(result),
         response: processedResponse ?? undefined,
       });
     }
@@ -1248,7 +1243,7 @@ export default class EvalResult {
       evaluationId: _evaluationId,
       pluginId: _pluginId,
       ...rest
-    } = serializeResultProviderMaps(this);
+    } = serializeResultProviderRefs(this);
     const persistedValues = {
       ...rest,
       error: this.error ?? null,

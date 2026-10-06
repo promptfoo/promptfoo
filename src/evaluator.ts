@@ -2240,6 +2240,7 @@ async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> 
   }
 
   let seededMap: TestSuite['providerPromptMap'];
+  let seededEntries: [string, string[], string[]][] = [];
   if (!testSuite.providerPromptMap) {
     const map: NonNullable<TestSuite['providerPromptMap']> = Object.create(null);
     for (const provider of testSuite.providers) {
@@ -2249,7 +2250,8 @@ async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> 
         map[provider.label] = selectors;
       }
     }
-    seededMap = structuredClone(map);
+    seededMap = map;
+    seededEntries = Object.entries(map).map(([key, selectors]) => [key, selectors, [...selectors]]);
     testSuite = { ...testSuite, providerPromptMap: map };
   }
 
@@ -2261,10 +2263,15 @@ async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> 
       Object.create(null),
       suite.providerPromptMap,
     );
-    for (const [key, selectors] of Object.entries(seededMap)) {
+    for (const [key, reference, selectors] of seededEntries) {
       if (!Object.hasOwn(overrides, key)) {
         overrides[key] = ['*'];
-      } else if (isDeepStrictEqual(overrides[key], selectors)) {
+      } else if (
+        // Same-map entry replacements are explicit, even with equal values. An
+        // unchanged serialized roundtrip cannot retain map or array identity.
+        (suite.providerPromptMap !== seededMap || overrides[key] === reference) &&
+        isDeepStrictEqual(overrides[key], selectors)
+      ) {
         delete overrides[key];
       }
     }
@@ -2637,6 +2644,16 @@ function buildCompletedPrompts(
         recovery?.mode === 'snapshot'
           ? testSuite.prompts[promptIdx]
           : { ...prompt, id: ids?.size === 1 ? ids.values().next().value : undefined };
+      invariant(
+        isAllowedPrompt(
+          runtimePrompt,
+          getProviderPromptSelectors(
+            testSuite.providers[providerIndex],
+            testSuite.providerPromptMap,
+          ),
+        ),
+        'Cannot resume evaluation because provider prompt selectors exclude saved columns. Start a new evaluation instead.',
+      );
       invariant(
         (ambiguousFilters.get(key) ?? unknownFilters).every(
           (filter) =>
