@@ -12,7 +12,7 @@ import {
   type TestSuite,
 } from '../types/index';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
-import { getProviderPromptSelectors, isPromptAllowed } from '../util/promptMatching';
+import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
 import { sanitizeObject } from '../util/sanitizer';
 
 import type EvalResult from '../models/evalResult';
@@ -459,15 +459,15 @@ function createSelectedOptimizationTestSuite(
   }
 
   const providerKey = selectedProvider.label || selectedProvider.id();
-  const allowedPrompts = getProviderPromptSelectors(selectedProvider, testSuite.providerPromptMap);
-  if (!isPromptAllowed(selectedPrompt, allowedPrompts)) {
+  const override = getProviderPromptOverride(selectedProvider, testSuite.providerPromptMap);
+  const selectors = override ?? selectedProvider.prompts?.slice();
+  if (!isPromptAllowed(selectedPrompt, selectors)) {
     throw new Error(
       `Prompt index ${promptIndex} is not configured for provider index ${providerIndex}.`,
     );
   }
 
   logger.info(`Optimizing prompt index ${promptIndex} against provider index ${providerIndex}.`);
-  const selectors = testSuite.providerPromptMap ? allowedPrompts : allowedPrompts?.slice();
 
   return {
     ...testSuite,
@@ -477,7 +477,8 @@ function createSelectedOptimizationTestSuite(
       selectors === undefined
         ? testSuite.providerPromptMap
         : {
-            ...(testSuite.providerPromptMap ?? { [selectedProvider.id()]: selectors }),
+            ...testSuite.providerPromptMap,
+            ...(override === undefined && { [selectedProvider.id()]: selectors }),
             [providerKey]: selectors,
           },
   };

@@ -645,9 +645,14 @@ describe('prompt optimizer', () => {
     },
   );
 
-  it.each(['echo', 'target'])(
-    'applies beforeAll splice routing through the synthesized %s alias in every optimizer round',
-    async (alias) => {
+  it.each([
+    { alias: 'echo', unrelatedMap: false },
+    { alias: 'target', unrelatedMap: false },
+    { alias: 'echo', unrelatedMap: true },
+    { alias: 'target', unrelatedMap: true },
+  ])(
+    'applies beforeAll splice routing through $alias with unrelated map $unrelatedMap in every optimizer round',
+    async ({ alias, unrelatedMap }) => {
       const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-optimizer-hook-'));
       try {
         const extension = path.join(directory, 'hook.mjs');
@@ -677,11 +682,12 @@ describe('prompt optimizer', () => {
         const provider = createMockProvider({
           id: 'echo',
           label: 'target',
-          prompts: ['A'],
+          prompts: ['A', 'Other'],
           response: { output: 'hello' },
         });
         const testSuite: TestSuite = {
           providers: [provider],
+          providerPromptMap: unrelatedMap ? { other: ['Other'] } : undefined,
           prompts: [{ raw: 'hello', label: 'A' }],
           tests: [{ assert: [{ type: 'equals', value: 'hello' }] }],
           extensions: [`file://${extension}:beforeAll`],
@@ -704,8 +710,10 @@ describe('prompt optimizer', () => {
           expect(candidateEval.results).toHaveLength(1);
           expect(candidateEval.results[0]).toMatchObject({ success: true, prompt: { label: 'A' } });
         }
-        expect(provider.prompts).toEqual(['A']);
-        expect(testSuite.providerPromptMap).toBeUndefined();
+        expect(provider.prompts).toEqual(['A', 'Other']);
+        expect(testSuite.providerPromptMap).toEqual(
+          unrelatedMap ? { other: ['Other'] } : undefined,
+        );
         expect(testSuite.tests?.[0].metadata).toBeUndefined();
       } finally {
         rmSync(directory, { recursive: true, force: true });

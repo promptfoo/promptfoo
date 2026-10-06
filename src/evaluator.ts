@@ -96,7 +96,7 @@ import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
-import { getProviderPromptSelectors, isPromptAllowed } from './util/promptMatching';
+import { getProviderPromptOverride, isPromptAllowed } from './util/promptMatching';
 import {
   getProviderIdentifier,
   isAnthropicProvider,
@@ -2381,7 +2381,8 @@ function buildLivePromptColumns(testSuite: TestSuite): {
 
   for (const provider of testSuite.providers) {
     const providerKey = getProviderIdentifier(provider);
-    const allowedPrompts = getProviderPromptSelectors(provider, testSuite.providerPromptMap);
+    const allowedPrompts =
+      getProviderPromptOverride(provider, testSuite.providerPromptMap) ?? provider.prompts;
     const columns: ProviderColumns['columns'] = [];
 
     for (const prompt of testSuite.prompts) {
@@ -2647,10 +2648,10 @@ function buildCompletedPrompts(
       invariant(
         isAllowedPrompt(
           runtimePrompt,
-          getProviderPromptSelectors(
+          getProviderPromptOverride(
             testSuite.providers[providerIndex],
             testSuite.providerPromptMap,
-          ),
+          ) ?? testSuite.providers[providerIndex].prompts,
         ),
         'Cannot resume evaluation because provider prompt selectors exclude saved columns. Start a new evaluation instead.',
       );

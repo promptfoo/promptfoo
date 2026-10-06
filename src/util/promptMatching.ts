@@ -1,17 +1,13 @@
 import type { Prompt, TestSuite } from '../types/index';
 
-/** Returns authored label/ID overrides before instance selectors, without copying arrays. */
-export function getProviderPromptSelectors(
+/** Returns an own label/ID override without copying its array; undefined means no override. */
+export function getProviderPromptOverride(
   provider: TestSuite['providers'][number],
   map: TestSuite['providerPromptMap'],
 ): string[] | undefined {
   const ownSelectors = (key: string) =>
     map && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
-  return (
-    (provider.label ? ownSelectors(provider.label) : undefined) ??
-    ownSelectors(provider.id()) ??
-    provider.prompts
-  );
+  return (provider.label ? ownSelectors(provider.label) : undefined) ?? ownSelectors(provider.id());
 }
 
 /**
