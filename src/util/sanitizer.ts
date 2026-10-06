@@ -721,7 +721,7 @@ export function stripProviderPromptSelectors<T>(providers: T): T {
   if (isProviderTypeMap(providers)) {
     const projected: Record<string, unknown> = { ...providers };
     for (const type of GRADING_PROVIDER_TYPE_KEYS) {
-      if (Object.hasOwn(providers, type)) {
+      if (Object.prototype.hasOwnProperty.call(providers, type)) {
         projected[type] = omitSelectors(providers[type]);
       }
     }
