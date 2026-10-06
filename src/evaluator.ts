@@ -2355,7 +2355,9 @@ function buildCompletedPrompts(
     const columns: ProviderColumns['columns'] = [];
 
     for (const prompt of testSuite.prompts) {
-      if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+      if (
+        !isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey] ?? provider.prompts)
+      ) {
         continue;
       }
 

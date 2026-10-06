@@ -60,16 +60,6 @@ describe('EvalResult', () => {
   });
 
   describe('sanitizeProvider', () => {
-    it.each([
-      { kind: 'API', provider: { id: (): string => 'echo', callApi: vi.fn(), prompts: ['first'] } },
-      { kind: 'options', provider: { id: 'echo', prompts: [] } },
-      { kind: 'generic', provider: { id: (): string => 'echo', prompts: ['second'] } },
-    ])('copies prompt restrictions for $kind providers', ({ provider }) => {
-      const result = sanitizeProvider(provider as ApiProvider | ProviderOptions);
-      expect(result.prompts).toEqual(provider.prompts);
-      expect(result.prompts).not.toBe(provider.prompts);
-    });
-
     it('should handle ApiProvider objects', () => {
       const apiProvider = createMockProvider({
         id: 'test-provider',
@@ -78,7 +68,9 @@ describe('EvalResult', () => {
         config: { apiKey: 'test-key' },
       });
 
+      apiProvider.prompts = ['ordinary runtime selector'];
       const result = sanitizeProvider(apiProvider);
+      expect(apiProvider.prompts).toEqual(['ordinary runtime selector']);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
@@ -92,12 +84,14 @@ describe('EvalResult', () => {
       const providerOptions: ProviderOptions = {
         id: 'test-provider',
         label: 'Test Provider',
+        prompts: ['ordinary runtime selector'],
         config: {
           apiKey: 'test-key',
         },
       };
 
       const result = sanitizeProvider(providerOptions);
+      expect(providerOptions.prompts).toEqual(['ordinary runtime selector']);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
@@ -111,12 +105,14 @@ describe('EvalResult', () => {
       const provider = {
         id: () => 'test-provider',
         label: 'Test Provider',
+        prompts: ['ordinary runtime selector'],
         config: {
           apiKey: 'test-key',
         },
       } as ApiProvider;
 
       const result = sanitizeProvider(provider);
+      expect(provider.prompts).toEqual(['ordinary runtime selector']);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',

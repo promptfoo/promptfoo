@@ -459,7 +459,7 @@ function createSelectedOptimizationTestSuite(
   }
 
   const providerKey = selectedProvider.label || selectedProvider.id();
-  const allowedPrompts = testSuite.providerPromptMap?.[providerKey];
+  const allowedPrompts = testSuite.providerPromptMap?.[providerKey] ?? selectedProvider.prompts;
   if (!isPromptAllowed(selectedPrompt, allowedPrompts)) {
     throw new Error(
       `Prompt index ${promptIndex} is not configured for provider index ${providerIndex}.`,
@@ -472,6 +472,10 @@ function createSelectedOptimizationTestSuite(
     ...testSuite,
     prompts: [selectedPrompt],
     providers: [selectedProvider],
+    providerPromptMap:
+      allowedPrompts === undefined
+        ? testSuite.providerPromptMap
+        : { ...testSuite.providerPromptMap, [providerKey]: allowedPrompts },
   };
 }
 

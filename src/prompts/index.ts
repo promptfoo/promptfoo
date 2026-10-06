@@ -3,11 +3,9 @@ import path from 'path';
 
 import { globSync } from 'glob';
 import logger from '../logger';
-import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
-import { getProviderIdentifier } from '../util/provider';
 import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
 import { processExecutableFile } from './processors/executable';
@@ -22,83 +20,10 @@ import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
 
-import type {
-  EvaluateTestSuite,
-  Prompt,
-  PromptFunction,
-  ProviderOptions,
-  ProviderOptionsMap,
-  TestSuite,
-} from '../types/index';
+import type { EvaluateTestSuite, Prompt, PromptFunction, TestSuite } from '../types/index';
 
 export * from './grading';
 export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
-
-/**
- * Reads and maps provider prompts based on the configuration and parsed prompts.
- * @param config - The configuration object.
- * @param parsedPrompts - Array of parsed prompts.
- * @returns A map of provider IDs to their respective prompts.
- */
-export function readProviderPromptMap(
-  config: Pick<Partial<EvaluateTestSuite>, 'providers'>,
-  parsedPrompts: Prompt[],
-): TestSuite['providerPromptMap'] {
-  const ret: Record<string, string[]> = {};
-
-  if (!config.providers) {
-    return ret;
-  }
-
-  const allPrompts = parsedPrompts.map((prompt) => prompt.label);
-  const addProviderPrompts = (id: string, label?: string, prompts = allPrompts) => {
-    ret[id] = prompts;
-    if (label) {
-      ret[label] = prompts;
-    }
-  };
-
-  if (typeof config.providers === 'string') {
-    return { [config.providers]: allPrompts };
-  }
-
-  if (typeof config.providers === 'function') {
-    return { 'Custom function': allPrompts };
-  }
-
-  const providers = isApiProvider(config.providers) ? [config.providers] : config.providers;
-  for (const provider of providers) {
-    if (isApiProvider(provider)) {
-      const key = getProviderIdentifier(provider);
-      if (provider.prompts === undefined) {
-        delete ret[key];
-      } else {
-        ret[key] = provider.prompts;
-      }
-      continue;
-    }
-
-    if (typeof provider === 'object') {
-      // It's either a ProviderOptionsMap or a ProviderOptions
-      if (provider.id) {
-        const rawProvider = provider as ProviderOptions;
-        invariant(
-          rawProvider.id,
-          'You must specify an `id` on the Provider when you override options.prompts',
-        );
-        addProviderPrompts(rawProvider.id, rawProvider.label, rawProvider.prompts || allPrompts);
-      } else {
-        const rawProvider = provider as ProviderOptionsMap;
-        const originalId = Object.keys(rawProvider)[0];
-        const providerObject = rawProvider[originalId];
-        const id = providerObject.id || originalId;
-        ret[id] = rawProvider[originalId].prompts || allPrompts;
-      }
-    }
-  }
-
-  return ret;
-}
 
 /** Reads the prompts in one file, choosing the processor by its extension. */
 async function processPromptFile(

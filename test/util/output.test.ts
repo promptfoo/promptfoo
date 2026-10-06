@@ -394,10 +394,17 @@ describe('writeOutput', () => {
           ],
         },
       ]);
-      const eval_ = new Eval({ env: flags, tests: [testCase], prompts: ['private-config-prompt'] });
+      const provider = { id: 'echo', prompts: ['private-provider-selector'] };
+      const eval_ = new Eval({
+        env: flags,
+        tests: [testCase],
+        prompts: ['private-config-prompt'],
+        providers: [provider],
+      });
       await eval_.addResult(
         createEvaluateResult({
           prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
+          provider,
           testCase,
           response: { output: 'private-output', raw: 'private-raw-output' },
           metadata: { note: 'private-note' },
@@ -443,6 +450,8 @@ describe('writeOutput', () => {
           expect(contents.includes('private-'), extension).toBe(!strip);
         }
 
+        expect(provider.prompts).toEqual(['private-provider-selector']);
+        expect(eval_.config.providers).toEqual([provider]);
         expect(eval_.config.tests).toEqual([testCase]);
         expect(eval_.config.prompts).toEqual(['private-config-prompt']);
         expect(eval_.prompts[0].template).toBe('private-template');

@@ -688,6 +688,22 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
+/** Remove selectors from an already-cloned output configuration, including provider maps. */
+function stripProviderPromptSelectors(providers: UnifiedConfig['providers'] | undefined): void {
+  for (const provider of Array.isArray(providers) ? providers : [providers]) {
+    if (!provider || typeof provider !== 'object') {
+      continue;
+    }
+    const entries =
+      'id' in provider || 'prompts' in provider ? [provider] : Object.values(provider);
+    for (const entry of entries) {
+      if (entry && typeof entry === 'object' && 'prompts' in entry) {
+        delete entry.prompts;
+      }
+    }
+  }
+}
+
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
 export function sanitizeConfigForOutput(
   config: Partial<UnifiedConfig>,
@@ -711,6 +727,7 @@ export function sanitizeConfigForOutput(
   }
   if (options.shouldStripPromptText) {
     delete sanitized.prompts;
+    stripProviderPromptSelectors(sanitized.providers);
   }
   const {
     shouldStripTestVars: stripVars,

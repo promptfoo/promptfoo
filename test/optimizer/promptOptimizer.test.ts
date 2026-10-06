@@ -110,75 +110,93 @@ describe('prompt optimizer', () => {
     expect(evidence.gradingReason.length).toBeLessThanOrEqual(1214);
   });
 
-  it('evaluates candidates from the selected prompt and provider', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: {
-        output: JSON.stringify({
-          candidates: [{ hypothesis: 'Make the policy explicit.', prompt: 'Optimized B' }],
-        }),
-      },
-    });
-    vi.mocked(provider.callApi)
-      .mockResolvedValueOnce(optimizerResponse('Optimized B'))
-      .mockResolvedValueOnce(optimizerResponse('Alternative B 2'))
-      .mockResolvedValueOnce(optimizerResponse('Alternative B 3'));
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } as any);
+  it.each([false, true])(
+    'evaluates candidates from the selected prompt and provider (duplicate IDs: %s)',
+    async (duplicateIds) => {
+      const provider = createMockProvider({
+        id: 'optimizer-provider',
+        response: {
+          output: JSON.stringify({
+            candidates: [{ hypothesis: 'Make the policy explicit.', prompt: 'Optimized B' }],
+          }),
+        },
+      });
+      vi.mocked(provider.callApi)
+        .mockResolvedValueOnce(optimizerResponse('Optimized B'))
+        .mockResolvedValueOnce(optimizerResponse('Alternative B 2'))
+        .mockResolvedValueOnce(optimizerResponse('Alternative B 3'));
+      vi.mocked(getDefaultProviders).mockResolvedValue({
+        embeddingProvider: provider,
+        gradingJsonProvider: provider,
+        gradingProvider: provider,
+        moderationProvider: provider,
+        suggestionsProvider: provider,
+        synthesizeProvider: provider,
+      } as any);
 
-    const baselinePrompts = [completedPrompt('Prompt B', 'B', 0.8)];
-    const baselineResults = [
-      evalResult(0, false, 'Missed the required JSON format.'),
-      evalResult(0, true, 'Matched the required JSON format.'),
-    ];
-    const baselineEval = evalWith(baselinePrompts, baselineResults);
-    const candidateEval = evalWith(
-      [
-        completedPrompt('Prompt B', 'B', 0.8),
-        completedPrompt('Optimized B', 'B [optimized 1]', 0.9),
-      ],
-      [],
-    );
+      const baselinePrompts = [completedPrompt('Prompt B', 'B', 0.8)];
+      const baselineResults = [
+        evalResult(0, false, 'Missed the required JSON format.'),
+        evalResult(0, true, 'Matched the required JSON format.'),
+      ];
+      const baselineEval = evalWith(baselinePrompts, baselineResults);
+      const candidateEval = evalWith(
+        [
+          completedPrompt('Prompt B', 'B', 0.8),
+          completedPrompt('Optimized B', 'B [optimized 1]', 0.9),
+        ],
+        [],
+      );
 
-    vi.mocked(evaluate)
-      .mockResolvedValueOnce(baselineEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval);
+      vi.mocked(evaluate)
+        .mockResolvedValueOnce(baselineEval)
+        .mockResolvedValueOnce(candidateEval)
+        .mockResolvedValueOnce(candidateEval)
+        .mockResolvedValueOnce(candidateEval);
 
-    const testSuite: TestSuite = {
-      providers: [
-        createMockProvider({ id: 'target-provider-a' }),
-        createMockProvider({ id: 'target-provider-b' }),
-      ],
-      prompts: [
-        { raw: 'Prompt A', label: 'A' },
+      const testSuite: TestSuite = {
+        providers: [
+          createMockProvider({
+            id: duplicateIds ? 'shared-provider' : 'target-provider-a',
+            prompts: duplicateIds ? ['A'] : undefined,
+          }),
+          createMockProvider({
+            id: duplicateIds ? 'shared-provider' : 'target-provider-b',
+            prompts: duplicateIds ? ['B'] : undefined,
+          }),
+        ],
+        prompts: [
+          { raw: 'Prompt A', label: 'A' },
+          { raw: 'Prompt B', label: 'B' },
+        ],
+        tests: [{}],
+      };
+
+      const result = await optimizePromptTestSuite({}, testSuite, {
+        promptIndex: 1,
+        providerIndex: 1,
+      });
+
+      expect(result.improved).toBe(true);
+      expect(result.baselinePrompt.label).toBe('B');
+      expect(result.bestPrompt.label).toBe('B [optimized 1]');
+      expect(vi.mocked(evaluate).mock.calls[0][0].prompts).toEqual([
         { raw: 'Prompt B', label: 'B' },
-      ],
-      tests: [{}],
-    };
-
-    const result = await optimizePromptTestSuite({}, testSuite, {
-      promptIndex: 1,
-      providerIndex: 1,
-    });
-
-    expect(result.improved).toBe(true);
-    expect(result.baselinePrompt.label).toBe('B');
-    expect(result.bestPrompt.label).toBe('B [optimized 1]');
-    expect(vi.mocked(evaluate).mock.calls[0][0].prompts).toEqual([{ raw: 'Prompt B', label: 'B' }]);
-    expect(vi.mocked(evaluate).mock.calls[0][0].providers[0].id()).toBe('target-provider-b');
-    expect(provider.callApi).toHaveBeenCalledTimes(3);
-    expect(String(vi.mocked(provider.callApi).mock.calls[0][0])).toContain(
-      'Missed the required JSON format.',
-    );
-  });
+      ]);
+      expect(vi.mocked(evaluate).mock.calls[0][0].providers[0].id()).toBe(
+        duplicateIds ? 'shared-provider' : 'target-provider-b',
+      );
+      if (duplicateIds) {
+        expect(vi.mocked(evaluate).mock.calls[1][0].providerPromptMap).toEqual({
+          'shared-provider': ['B', 'B [optimized 1]'],
+        });
+      }
+      expect(provider.callApi).toHaveBeenCalledTimes(3);
+      expect(String(vi.mocked(provider.callApi).mock.calls[0][0])).toContain(
+        'Missed the required JSON format.',
+      );
+    },
+  );
 
   it('keeps an earlier-round improvement when a later round fails to generate candidates', async () => {
     const provider = createMockProvider({
@@ -374,6 +392,27 @@ describe('prompt optimizer', () => {
     );
   });
 
+  it.each([
+    { allowed: [] as string[], map: undefined },
+    { allowed: ['Other'], map: undefined },
+    { allowed: ['A'], map: { 'target-provider': [] as string[] } },
+  ])(
+    'rejects a prompt outside the selected effective filter: $allowed',
+    async ({ allowed, map }) => {
+      const testSuite: TestSuite = {
+        providers: [createMockProvider({ id: 'target-provider', prompts: allowed })],
+        prompts: [{ raw: 'Prompt A', label: 'A' }],
+        providerPromptMap: map,
+        tests: [{ vars: {} }],
+      };
+      await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+        'Prompt index 0 is not configured for provider index 0.',
+      );
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(getDefaultProviders).not.toHaveBeenCalled();
+    },
+  );
+
   it('preserves config evaluation runtime options for internal optimizer evals', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
@@ -494,62 +533,68 @@ describe('prompt optimizer', () => {
     }
   });
 
-  it('keeps optimized candidates eligible when provider prompt routing uses prompt ids', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: {
-        output: JSON.stringify({
-          candidates: [{ hypothesis: 'Clarify the instruction.', prompt: 'Optimized Seed' }],
-        }),
-      },
-    });
-    vi.mocked(provider.callApi)
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
-      .mockResolvedValueOnce(optimizerResponse('Alternative Seed 2'))
-      .mockResolvedValueOnce(optimizerResponse('Alternative Seed 3'));
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } as any);
+  it.each([
+    { source: 'explicit map', providerPrompts: undefined, map: { 'target-provider': ['seed-id'] } },
+    { source: 'provider', providerPrompts: ['seed-id'], map: undefined },
+    { source: 'explicit override', providerPrompts: [], map: { 'target-provider': ['seed-id'] } },
+  ])(
+    'keeps optimized candidates eligible when $source routing uses prompt ids',
+    async ({ providerPrompts, map }) => {
+      const provider = createMockProvider({
+        id: 'optimizer-provider',
+        response: {
+          output: JSON.stringify({
+            candidates: [{ hypothesis: 'Clarify the instruction.', prompt: 'Optimized Seed' }],
+          }),
+        },
+      });
+      vi.mocked(provider.callApi)
+        .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+        .mockResolvedValueOnce(optimizerResponse('Alternative Seed 2'))
+        .mockResolvedValueOnce(optimizerResponse('Alternative Seed 3'));
+      vi.mocked(getDefaultProviders).mockResolvedValue({
+        embeddingProvider: provider,
+        gradingJsonProvider: provider,
+        gradingProvider: provider,
+        moderationProvider: provider,
+        suggestionsProvider: provider,
+        synthesizeProvider: provider,
+      } as any);
 
-    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
-    const candidateEval = evalWith(
-      [
-        completedPrompt('Seed', 'Seed', 0.5),
-        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.7),
-      ],
-      [],
-    );
+      const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+      const candidateEval = evalWith(
+        [
+          completedPrompt('Seed', 'Seed', 0.5),
+          completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.7),
+        ],
+        [],
+      );
 
-    vi.mocked(evaluate)
-      .mockResolvedValueOnce(baselineEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval);
+      vi.mocked(evaluate)
+        .mockResolvedValueOnce(baselineEval)
+        .mockResolvedValueOnce(candidateEval)
+        .mockResolvedValueOnce(candidateEval)
+        .mockResolvedValueOnce(candidateEval);
 
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ id: 'seed-id', raw: 'Seed', label: 'Seed' }],
-      providerPromptMap: {
-        'target-provider': ['seed-id'],
-      },
-      tests: [{}],
-    };
+      const testSuite: TestSuite = {
+        providers: [createMockProvider({ id: 'target-provider', prompts: providerPrompts })],
+        prompts: [{ id: 'seed-id', raw: 'Seed', label: 'Seed' }],
+        providerPromptMap: map,
+        tests: [{}],
+      };
 
-    await optimizePromptTestSuite({}, testSuite);
+      await optimizePromptTestSuite({}, testSuite);
 
-    const candidateSuite = vi.mocked(evaluate).mock.calls[1][0];
-    expect(candidateSuite.providerPromptMap).toEqual({
-      'target-provider': ['seed-id', 'Seed', 'Seed [optimized 1]'],
-    });
-    expect(candidateSuite.prompts[0].id).toBe('seed-id');
-    expect(candidateSuite.prompts[1].id).toEqual(expect.any(String));
-    expect(candidateSuite.prompts[1].id).not.toBe('seed-id');
-  });
+      const candidateSuite = vi.mocked(evaluate).mock.calls[1][0];
+      expect(candidateSuite.providerPromptMap).toEqual({
+        'target-provider': ['seed-id', 'Seed', 'Seed [optimized 1]'],
+      });
+      expect(candidateSuite.prompts[0].id).toBe('seed-id');
+      expect(candidateSuite.prompts[1].id).toEqual(expect.any(String));
+      expect(candidateSuite.prompts[1].id).not.toBe('seed-id');
+      expect(testSuite.providers[0].prompts).toEqual(providerPrompts);
+    },
+  );
 
   it('keeps exact-label provider prompt routing intact after adopting a candidate', async () => {
     const provider = createMockProvider({

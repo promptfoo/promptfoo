@@ -7,7 +7,6 @@ import cliState from '../../src/cliState';
 import { evaluate as evaluateRuntime } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { evaluate } from '../../src/node/evaluate';
-import { readProviderPromptMap } from '../../src/prompts/index';
 import { loadApiProviders } from '../../src/providers/index';
 import { withCloudProviderResolver } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
@@ -89,6 +88,56 @@ describe.each(['CLI', 'library'] as const)('%s resolved provider prompt filters'
     );
     expect(rows.map((row) => row.prompt)).toEqual(expected);
   });
+
+  it.each([undefined, 'shared'])(
+    'keeps differing filters independent at runtime identity %s',
+    async (label) => {
+      const rows = await withCloudProviderResolver(
+        () => ({ id: 'echo', label }),
+        () =>
+          runEvaluation(entrypoint, [
+            { [cloudPath]: { prompts: ['first'] } },
+            { [cloudPath]: { prompts: ['second'] } },
+          ]),
+      );
+      expect(rows).toEqual([
+        { provider: label || 'echo', prompt: 'first' },
+        { provider: label || 'echo', prompt: 'second' },
+      ]);
+    },
+  );
+
+  it.each([false, true])(
+    'keeps filtered and unrestricted duplicates independent (reverse: %s)',
+    async (reverse) => {
+      const providers = [{ id: 'echo', prompts: ['first'] }, { id: 'echo' }];
+      if (reverse) {
+        providers.reverse();
+      }
+      const rows = await runEvaluation(entrypoint, providers);
+      expect(rows.map((row) => row.prompt)).toEqual(
+        reverse ? ['first', 'second', 'first'] : ['first', 'first', 'second'],
+      );
+    },
+  );
+
+  it('round-trips differing runtime filters for duplicate identities', async () => {
+    const providers = await loadApiProviders([
+      { id: 'echo', prompts: ['first'] },
+      { id: 'echo', prompts: ['second'] },
+    ]);
+    const result = await evaluate(
+      { providers, prompts, tests: [{ vars: {} }], writeLatestResults: false },
+      { cache: false, maxConcurrency: 1 },
+    );
+    const saved = JSON.parse(JSON.stringify(result.config)) as UnifiedConfig;
+    expect(
+      await runEvaluation(entrypoint, saved.providers as NonNullable<UnifiedConfig['providers']>),
+    ).toEqual([
+      { provider: 'echo', prompt: 'first' },
+      { provider: 'echo', prompt: 'second' },
+    ]);
+  });
 });
 
 it('keeps authored selectors literal while rendering the saved provider label', async () => {
@@ -135,7 +184,7 @@ it('keeps duplicate native IDs independent when their labels differ', async () =
   ]);
 });
 
-it('retains shared-map behavior for duplicate runtime labels with a common restriction', async () => {
+it('retains a common restriction for duplicate runtime labels', async () => {
   const rows = await withCloudProviderResolver(
     () => ({ id: 'echo', label: 'shared', prompts: ['first'] }),
     () => runEvaluation('library', [cloudPath, cloudPath]),
@@ -243,6 +292,7 @@ it.each([
       { providers, prompts, tests: [{ vars: {} }], writeLatestResults: false },
       { cache: false, maxConcurrency: 1 },
     );
+    providers[0].prompts?.push('second');
     const saved = JSON.parse(JSON.stringify(result.config)) as UnifiedConfig;
     expect(saved.providers).toBeDefined();
     expect(
@@ -269,13 +319,7 @@ it('keeps explicit runtime prompt maps authoritative', async () => {
   ]);
 });
 
-it('retains prompt metadata through the runtime schema and single-provider map', async () => {
+it('retains prompt metadata through the runtime schema', async () => {
   const [provider] = await loadApiProviders([{ id: 'echo', label: 'target', prompts: [] }]);
-  const parsed = ApiProviderSchema.parse(provider);
-  expect(
-    readProviderPromptMap(
-      { providers: parsed },
-      prompts.map((raw) => ({ raw, label: raw })),
-    ),
-  ).toEqual({ target: [] });
+  expect(ApiProviderSchema.parse(provider).prompts).toEqual([]);
 });

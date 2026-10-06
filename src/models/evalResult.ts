@@ -227,7 +227,6 @@ export function sanitizeProvider(
       return {
         id: provider.id(),
         label: provider.label,
-        ...(provider.prompts && { prompts: [...provider.prompts] }),
         ...(provider.config && {
           config: sanitizeProviderConfig(provider.config),
         }),
@@ -237,7 +236,6 @@ export function sanitizeProvider(
       return {
         id: provider.id,
         label: provider.label,
-        ...(provider.prompts && { prompts: [...provider.prompts] }),
         ...(provider.config && {
           config: sanitizeProviderConfig(provider.config),
         }),
@@ -247,13 +245,11 @@ export function sanitizeProvider(
       const providerObj = provider as {
         id: string | (() => string);
         label?: string;
-        prompts?: string[];
         config?: ProviderConfig;
       };
       return {
         id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
         label: providerObj.label,
-        ...(providerObj.prompts && { prompts: [...providerObj.prompts] }),
         ...(providerObj.config && {
           config: sanitizeProviderConfig(providerObj.config),
         }),

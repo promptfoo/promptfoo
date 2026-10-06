@@ -14,7 +14,7 @@ import cliState from '../../cliState';
 import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { readPrompts, readProviderPromptMap } from '../../prompts/index';
+import { readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
@@ -1251,12 +1251,6 @@ async function resolveLoadedConfig(
     }
   }
 
-  // Loaded providers retain effective filters from cloud/file configs and their runtime identities.
-  const parsedProviderPromptMap = readProviderPromptMap(
-    { providers: parsedProviders },
-    parsedPrompts,
-  );
-
   if (parsedPrompts.length === 0) {
     const message =
       'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.';
@@ -1280,7 +1274,6 @@ async function resolveLoadedConfig(
     tags: config.tags,
     prompts: parsedPrompts,
     providers: parsedProviders,
-    providerPromptMap: parsedProviderPromptMap,
     tests: parsedTests,
     scenarios: parsedScenarios as Scenario[],
     defaultTest,

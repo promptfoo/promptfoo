@@ -1146,7 +1146,13 @@ describe('createShareableUrl', () => {
         metadata: { note: 'private-note' },
         providerOutput: 'private-output',
       };
+      const provider = {
+        id: () => 'echo',
+        callApi: vi.fn(),
+        prompts: ['private-provider-selector'],
+      };
       mockEval.config = {
+        providers: [{ id: provider.id(), prompts: [...provider.prompts] }],
         env: {
           PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
           PROMPTFOO_STRIP_TEST_VARS: 'true',
@@ -1171,7 +1177,7 @@ describe('createShareableUrl', () => {
       ]);
       mockEval.prompts = [{ raw: 'private-prompt', label: 'public', provider: 'echo' }];
       mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
-        yield [{ id: 'row', testCase }];
+        yield [{ id: 'row', testCase, provider }];
       });
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
@@ -1184,6 +1190,10 @@ describe('createShareableUrl', () => {
         }
         expect(JSON.parse(mockFetch.mock.calls[0][1].body).traces).toEqual([
           { spans: [{ attributes: { operation: 'provider-call' } }] },
+        ]);
+        expect(provider.prompts).toEqual(['private-provider-selector']);
+        expect(mockEval.config.providers).toEqual([
+          { id: 'echo', prompts: ['private-provider-selector'] },
         ]);
         expect(testCase.vars.input).toBe('private-input');
         expect(getEnvBool('PROMPTFOO_STRIP_TEST_VARS')).toBe(false);

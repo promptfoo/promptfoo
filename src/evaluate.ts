@@ -8,7 +8,7 @@ import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
-import { processPrompts, readProviderPromptMap } from './prompts/index';
+import { processPrompts } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
@@ -62,7 +62,10 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
 
 function toSerializableProviderRef(provider: unknown): unknown {
   if (isApiProvider(provider)) {
-    return sanitizeProvider(provider);
+    return {
+      ...sanitizeProvider(provider),
+      ...(provider.prompts && { prompts: [...provider.prompts] }),
+    };
   }
   if (Array.isArray(provider)) {
     return provider.map(toSerializableProviderRef);
@@ -346,10 +349,6 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
-  const parsedProviderPromptMap = readProviderPromptMap(
-    { providers: loadedProviders },
-    constructedTestSuite.prompts,
-  );
   const unifiedConfig = createSerializableUnifiedConfig(
     testSuiteConfig,
     constructedTestSuite.prompts,
@@ -360,17 +359,10 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
     : new Eval(unifiedConfig, { author });
 
   const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
-    doEvaluate(
-      {
-        ...constructedTestSuite,
-        providerPromptMap: parsedProviderPromptMap,
-      },
-      evalRecord,
-      {
-        isRedteam: Boolean(testSuiteConfig.redteam),
-        ...options,
-      },
-    ),
+    doEvaluate(constructedTestSuite, evalRecord, {
+      isRedteam: Boolean(testSuiteConfig.redteam),
+      ...options,
+    }),
   );
 
   await maybeShareEval(testSuiteConfig, ret);
