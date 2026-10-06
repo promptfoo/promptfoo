@@ -9,6 +9,7 @@ import {
   type InMemoryEvaluation,
   InMemoryEvaluationStore,
 } from '../../src/evaluator/inMemoryStore';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { generateIdFromPrompt } from '../../src/models/prompt';
@@ -351,6 +352,228 @@ describeEvaluator('evaluator runtime ports', () => {
       );
     },
   );
+
+  it.each(['saved text', 'saved template'] as const)(
+    'gives recovery hooks the %s used by provider execution',
+    async (change) => {
+      const callback = () => 'ordinary callback result';
+      const saved = {
+        raw: 'saved text',
+        label: 'saved label',
+        template: 'saved template',
+        config: { public: { setting: 'saved' }, callback },
+      };
+      const authored = {
+        ...saved,
+        id: 'authored',
+        ...(change === 'saved text'
+          ? { raw: 'edited text', label: 'edited label', config: { public: { setting: 'edited' } } }
+          : {}),
+        template: 'edited template',
+      };
+      const evaluation = createInMemoryEvaluation({
+        persisted: true,
+        prompts: [{ ...saved, id: generateIdFromPrompt(saved), provider: mockApiProvider.id() }],
+      });
+      const store = new InMemoryEvaluationStore(evaluation);
+      vi.mocked(mockApiProvider.callApi).mockImplementation(async (text) => ({ output: text }));
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+        if (hook === 'beforeAll') {
+          const { suite } = context as { suite: TestSuite };
+          expect(suite.prompts).toHaveLength(1);
+          const prompt = suite.prompts[0];
+          expect(prompt).toMatchObject(saved);
+          expect(prompt.config.callback).toBe(callback);
+          expect(prompt.config.callback()).toBe('ordinary callback result');
+          suite.tests = [
+            {
+              prompts: [prompt.id ?? prompt.label],
+              assert: [{ type: 'equals', value: prompt.raw }],
+            },
+          ];
+        }
+        return context;
+      });
+      cliState.resume = true;
+
+      await evaluate(
+        { providers: [mockApiProvider], prompts: [authored], extensions: ['local hook'] },
+        evaluation,
+        { restorePromptColumns: true },
+        createInMemoryRuntime(store),
+      );
+
+      expect(evaluation.results).toHaveLength(1);
+      expect(evaluation.results[0]).toMatchObject({ success: true, promptIdx: 0 });
+      expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
+      const [input, context] = vi.mocked(mockApiProvider.callApi).mock.calls[0];
+      expect(input).toBe(saved.raw);
+      expect(context?.prompt.template).toBe(saved.template);
+      expect(context?.prompt.config.callback).toBe(callback);
+      expect(authored.template).toBe('edited template');
+      expect(evaluation.prompts[0]).toMatchObject(saved);
+    },
+  );
+
+  it('keeps one live callable slot visible to recovery hooks across duplicate providers', async () => {
+    const callable = vi.fn(async () => 'live output');
+    const prompt = {
+      id: 'authored',
+      raw: 'callable source',
+      label: 'callable',
+      function: callable,
+    };
+    const providers = [{ ...mockApiProvider }, { ...mockApiProvider }];
+    const evaluation = createInMemoryEvaluation({
+      persisted: true,
+      prompts: providers.map((provider) => ({
+        raw: prompt.raw,
+        label: prompt.label,
+        id: generateIdFromPrompt(prompt),
+        provider: provider.id(),
+      })),
+    });
+    const store = new InMemoryEvaluationStore(evaluation);
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async (text) => ({ output: text }));
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeAll') {
+        const { suite } = context as { suite: TestSuite };
+        expect(suite.prompts).toHaveLength(1);
+        expect(suite.prompts[0]).toMatchObject({ id: 'authored', function: callable });
+        suite.tests = [
+          { prompts: [suite.prompts[0].id!], assert: [{ type: 'equals', value: 'live output' }] },
+        ];
+      }
+      return context;
+    });
+    cliState.resume = true;
+
+    await evaluate(
+      { providers, prompts: [prompt], extensions: ['local hook'] },
+      evaluation,
+      { restorePromptColumns: true },
+      createInMemoryRuntime(store),
+    );
+
+    expect(callable).toHaveBeenCalledTimes(2);
+    expect(evaluation.results.map((result) => result.promptIdx)).toEqual([0, 1]);
+    expect(evaluation.results.every((result) => result.success)).toBe(true);
+  });
+
+  it('gives recovery hooks distinct saved templates for duplicate provider columns', async () => {
+    const prompt = { id: 'authored', raw: 'hello', label: 'shared', template: 'current template' };
+    const providers = [{ ...mockApiProvider }, { ...mockApiProvider }];
+    const templates = ['first saved template', 'second saved template'];
+    const evaluation = createInMemoryEvaluation({
+      persisted: true,
+      prompts: providers.map((provider, index) => ({
+        ...prompt,
+        id: generateIdFromPrompt(prompt),
+        provider: provider.id(),
+        template: templates[index],
+      })),
+    });
+    const store = new InMemoryEvaluationStore(evaluation);
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async (text) => ({ output: text }));
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeAll') {
+        const { suite } = context as { suite: TestSuite };
+        expect(suite.prompts.map((entry) => entry.template)).toEqual(templates);
+        expect(suite.prompts.map((entry) => entry.id)).toEqual(['authored', 'authored']);
+        suite.tests = [{ prompts: ['authored'], assert: [{ type: 'equals', value: 'hello' }] }];
+      }
+      return context;
+    });
+    cliState.resume = true;
+
+    await evaluate(
+      { providers, prompts: [prompt], extensions: ['local hook'] },
+      evaluation,
+      { restorePromptColumns: true },
+      createInMemoryRuntime(store),
+    );
+
+    expect(evaluation.results.map((result) => result.promptIdx)).toEqual([0, 1]);
+    expect(evaluation.results.every((result) => result.success)).toBe(true);
+    expect(
+      vi.mocked(mockApiProvider.callApi).mock.calls.map(([, context]) => context?.prompt.template),
+    ).toEqual(templates);
+    expect(evaluation.prompts.map((entry) => entry.template)).toEqual(templates);
+    expect(prompt.template).toBe('current template');
+  });
+
+  it('validates saved providers and effective selectors after recovery hooks', async () => {
+    const prompt = { id: 'authored', raw: 'hello', label: 'shared' };
+    const other: ApiProvider = {
+      id: () => 'other',
+      callApi: vi.fn(async (text) => ({ output: text })),
+    };
+    const evaluation = createInMemoryEvaluation({
+      persisted: true,
+      prompts: [{ ...prompt, id: generateIdFromPrompt(prompt), provider: mockApiProvider.id() }],
+    });
+    const store = new InMemoryEvaluationStore(evaluation);
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async (text) => ({ output: text }));
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeAll') {
+        const { suite } = context as { suite: TestSuite };
+        suite.providers.push(mockApiProvider);
+        suite.defaultTest = { prompts: [suite.prompts[0].id!] };
+        suite.tests = [{ assert: [{ type: 'equals', value: suite.prompts[0].raw }] }];
+      }
+      return context;
+    });
+    cliState.resume = true;
+
+    await evaluate(
+      {
+        providers: [other],
+        prompts: [prompt],
+        defaultTest: { prompts: ['old default selector'] },
+        tests: [{ prompts: ['old test selector'] }],
+        extensions: ['local hook'],
+      },
+      evaluation,
+      { restorePromptColumns: true },
+      createInMemoryRuntime(store),
+    );
+
+    expect(other.callApi).not.toHaveBeenCalled();
+    expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
+    expect(evaluation.results).toHaveLength(1);
+    expect(evaluation.results[0]).toMatchObject({ success: true, promptIdx: 0 });
+  });
+
+  it('checks hook-edited saved definitions before appending recovery results', async () => {
+    const saved = { ...toPrompt('saved'), config: { public: { setting: 'saved' } } };
+    const evaluation = createInMemoryEvaluation({
+      persisted: true,
+      prompts: [{ ...saved, provider: mockApiProvider.id() }],
+    });
+    const store = new InMemoryEvaluationStore(evaluation);
+    const appendPrompts = vi.spyOn(store, 'appendPrompts');
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeAll') {
+        const { suite } = context as { suite: TestSuite };
+        suite.prompts[0].config.public.setting = 'changed';
+      }
+      return context;
+    });
+    cliState.resume = true;
+
+    await expect(
+      evaluate(
+        { providers: [mockApiProvider], prompts: [toPrompt('edited')], extensions: ['local hook'] },
+        evaluation,
+        { restorePromptColumns: true },
+        createInMemoryRuntime(store),
+      ),
+    ).rejects.toThrow('beforeAll changed saved prompt definitions');
+
+    expect(appendPrompts).not.toHaveBeenCalled();
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    expect(evaluation.prompts[0].config.public.setting).toBe('saved');
+  });
 
   it('generates initial suggestions when CLI recovery has no saved columns', async () => {
     const evaluation = createInMemoryEvaluation({ persisted: true });
