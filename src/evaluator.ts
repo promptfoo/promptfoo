@@ -2377,8 +2377,7 @@ function buildCompletedPrompts(
         label: prompt.label,
         // `existingPromptsMap` is still keyed by identity, so duplicate providers resolve
         // to the same stored prompt. Clone its metrics so the columns do not accumulate
-        // into one shared object. (Resume has deeper duplicate-provider problems; see
-        // `doEval`, which rebuilds `testSuite.prompts` from the previous run's columns.)
+        // into one shared object.
         metrics: existingPrompt?.metrics
           ? structuredClone(existingPrompt.metrics)
           : createDefaultPromptMetrics(),
@@ -2398,7 +2397,8 @@ function buildCompletedPrompts(
           return (
             prompt.provider === saved.provider &&
             prompt.label === saved.label &&
-            prompt.raw === saved.raw
+            prompt.raw === saved.raw &&
+            isDeepStrictEqual(prompt.config, saved.config)
           );
         }),
       'Cannot resume evaluation because the saved provider/prompt columns differ. Start a new evaluation instead.',

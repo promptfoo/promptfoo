@@ -177,6 +177,18 @@ describeEvaluator('evaluator runtime ports', () => {
       retryMode: true,
     },
     {
+      name: 'reordered settings on equal-label and equal-text prompts',
+      savedPrompts: [
+        { raw: 'same', label: 'shared', config: { public: { setting: 1 } } },
+        { raw: 'same', label: 'shared', config: { public: { setting: 2 } } },
+      ],
+      prompts: [
+        { raw: 'same', label: 'shared', config: { public: { setting: 2 } } },
+        { raw: 'same', label: 'shared', config: { public: { setting: 1 } } },
+      ],
+      retryMode: true,
+    },
+    {
       name: 'changed provider identity',
       savedPrompts: [toPrompt('first')],
       prompts: [toPrompt('first')],
@@ -249,6 +261,12 @@ describeEvaluator('evaluator runtime ports', () => {
       saved: { ...toPrompt('second'), id: 'previous-id' },
       prompts: [toPrompt('first'), toPrompt('second')],
       providerPrompts: ['second'],
+    },
+    {
+      name: 'identical nested prompt settings',
+      saved: { raw: 'hello', label: 'shared', config: { public: { setting: 1 } } },
+      prompts: [{ raw: 'hello', label: 'shared', config: { public: { setting: 1 } } }],
+      providerPrompts: undefined,
     },
     {
       name: 'an unchanged empty-label prompt with a legacy custom ID',
