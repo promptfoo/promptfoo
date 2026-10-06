@@ -747,23 +747,38 @@ export function stripProviderPromptSelectors<T>(providers: T): T {
   ) as T;
 }
 
+/** Map only provider slots in a test or assertion, preserving shared assertion sets. */
+export function mapTestProviderRefs<T>(test: T, mapProvider: (provider: unknown) => unknown): T {
+  const visited = new WeakMap<object, Record<string, unknown>>();
+  const project = (value: unknown): unknown => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return value;
+    }
+    const previous = visited.get(value);
+    if (previous) {
+      return previous;
+    }
+    const record = value as Record<string, unknown>;
+    const projected = { ...record };
+    visited.set(value, projected);
+    const options = record.options as Record<string, unknown> | undefined;
+    if ('provider' in record) {
+      projected.provider = mapProvider(record.provider);
+    }
+    if (options?.provider !== undefined) {
+      projected.options = { ...options, provider: mapProvider(options.provider) };
+    }
+    if (Array.isArray(record.assert)) {
+      projected.assert = record.assert.map(project);
+    }
+    return projected;
+  };
+  return project(test) as T;
+}
+
 /** Project only provider slots in a test or assertion (including sets). */
 export function stripTestProviderPromptSelectors<T>(test: T): T {
-  if (!test || typeof test !== 'object' || Array.isArray(test)) {
-    return test;
-  }
-  const record = test as Record<string, unknown>;
-  const options = record.options as Record<string, unknown> | undefined;
-  return {
-    ...record,
-    ...('provider' in record && { provider: stripProviderPromptSelectors(record.provider) }),
-    ...(options?.provider !== undefined && {
-      options: { ...options, provider: stripProviderPromptSelectors(options.provider) },
-    }),
-    ...(Array.isArray(record.assert) && {
-      assert: record.assert.map(stripTestProviderPromptSelectors),
-    }),
-  } as T;
+  return mapTestProviderRefs(test, stripProviderPromptSelectors);
 }
 
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */

@@ -7,7 +7,7 @@ import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { sanitizeProvider } from './models/evalResult';
+import { toSerializableProviderRef } from './models/evalResult';
 import { processPrompts } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
@@ -16,7 +16,6 @@ import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
-  GRADING_PROVIDER_TYPE_KEYS,
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
@@ -59,29 +58,6 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
     cloned.assert = test.assert.map((assertion) => ({ ...assertion }));
   }
   return cloned;
-}
-
-function toSerializableProviderRef(provider: unknown): unknown {
-  if (isApiProvider(provider)) {
-    return {
-      ...sanitizeProvider(provider),
-      ...(provider.prompts && { prompts: [...provider.prompts] }),
-    };
-  }
-  if (Array.isArray(provider)) {
-    return provider.map(toSerializableProviderRef);
-  }
-  if (isProviderTypeMap(provider)) {
-    let serialized: Record<string, unknown> | undefined;
-    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
-      if (isApiProvider(provider[type])) {
-        serialized ??= { ...provider };
-        serialized[type] = toSerializableProviderRef(provider[type]);
-      }
-    }
-    return serialized ?? provider;
-  }
-  return provider;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

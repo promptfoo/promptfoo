@@ -24,9 +24,11 @@ import {
   type TraceData,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
+import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { safeJsonStringify } from '../util/json';
 import {
   isSecretField,
+  mapTestProviderRefs,
   REDACTED,
   sanitizeObject,
   stripProviderPromptSelectors,
@@ -242,23 +244,39 @@ function projectTestCase(
     : projectedTestCase;
 }
 
+/** Map only grading assertion providers and component results. */
+function mapGradingResultProviderRefs<T>(
+  gradingResult: T,
+  mapProvider: (provider: unknown) => unknown,
+): T {
+  const visited = new WeakMap<object, Record<string, unknown>>();
+  const project = (value: unknown): unknown => {
+    const result = asRecord(value);
+    if (!result) {
+      return value;
+    }
+    const previous = visited.get(result);
+    if (previous) {
+      return previous;
+    }
+    const projected = { ...result };
+    visited.set(result, projected);
+    if (result.assertion) {
+      projected.assertion = mapTestProviderRefs(result.assertion, mapProvider);
+    }
+    if (Array.isArray(result.componentResults)) {
+      projected.componentResults = result.componentResults.map(project);
+    }
+    return projected;
+  };
+  return project(gradingResult) as T;
+}
+
 /** Project assertion providers only, preserving grading details and unrelated metadata. */
 function projectGradingResult<T>(gradingResult: T, stripPromptText: boolean): T {
-  const result = asRecord(gradingResult);
-  if (!stripPromptText || !result) {
-    return gradingResult;
-  }
-  return {
-    ...result,
-    ...(Boolean(result.assertion) && {
-      assertion: stripTestProviderPromptSelectors(result.assertion),
-    }),
-    ...(Array.isArray(result.componentResults) && {
-      componentResults: result.componentResults.map((component) =>
-        projectGradingResult(component, true),
-      ),
-    }),
-  } as T;
+  return stripPromptText
+    ? mapGradingResultProviderRefs(gradingResult, stripProviderPromptSelectors)
+    : gradingResult;
 }
 
 // Removes circular references from the provider object and ensures consistent format
@@ -300,6 +318,67 @@ export function sanitizeProvider(
     }
   } catch {}
   return JSON.parse(safeJsonStringify(provider) as string);
+}
+
+/** Snapshot live provider references for replay without retaining runtime client state. */
+export function toSerializableProviderRef(provider: unknown): unknown {
+  if (isApiProvider(provider)) {
+    return {
+      ...sanitizeProvider(provider),
+      ...(provider.prompts && { prompts: [...provider.prompts] }),
+    };
+  }
+  if (Array.isArray(provider)) {
+    return provider.map(toSerializableProviderRef);
+  }
+  if (isProviderTypeMap(provider)) {
+    let serialized: Record<string, unknown> | undefined;
+    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+      if (isApiProvider(provider[type])) {
+        serialized ??= { ...provider };
+        serialized[type] = toSerializableProviderRef(provider[type]);
+      }
+    }
+    return serialized ?? provider;
+  }
+  return provider;
+}
+
+/** Preserve grading-map identities before generic result serialization removes id methods. */
+function serializeResultProviderMaps<T extends object>(result: T): T {
+  const record = result as Record<string, unknown>;
+  const serializeMap = (provider: unknown) => {
+    if (!isProviderTypeMap(provider)) {
+      return provider;
+    }
+    const serialized = toSerializableProviderRef(provider) as Record<string, unknown>;
+    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+      if (isApiProvider(provider[type])) {
+        const options = serialized[type] as ProviderOptions;
+        serialized[type] = {
+          ...options,
+          id: sanitizeObject(options.id, { context: 'grading provider id', sanitizeUrls: true }),
+        };
+      }
+    }
+    return serialized;
+  };
+  const projected: Record<string, unknown> = { ...record };
+  if (record.testCase) {
+    projected.testCase = mapTestProviderRefs(record.testCase, serializeMap);
+  }
+  const prompt = asRecord(record.prompt);
+  const config = asRecord(prompt?.config);
+  if (config?.provider !== undefined) {
+    projected.prompt = {
+      ...prompt,
+      config: { ...config, provider: serializeMap(config.provider) },
+    };
+  }
+  if (record.gradingResult) {
+    projected.gradingResult = mapGradingResultProviderRefs(record.gradingResult, serializeMap);
+  }
+  return projected as T;
 }
 
 /**
@@ -765,7 +844,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     shouldStripMetadata,
   } = stripFlags;
 
-  const artifactResult = result as T & Record<string, unknown>;
+  const artifactResult = serializeResultProviderMaps(result) as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
     gradingResult: sanitizeForDb(artifactResult.gradingResult),
@@ -849,7 +928,7 @@ export default class EvalResult {
       testCase,
       traceId,
       evaluationId,
-    } = result;
+    } = serializeResultProviderMaps(result);
 
     // Persist trace linkage inside a private metadata namespace so it survives
     // EvalResult round-trips without a Drizzle schema migration.
@@ -926,7 +1005,10 @@ export default class EvalResult {
             promptIdx: result.promptIdx,
           })
         : result.response;
-      processedResults.push({ ...result, response: processedResponse ?? undefined });
+      processedResults.push({
+        ...serializeResultProviderMaps(result),
+        response: processedResponse ?? undefined,
+      });
     }
 
     await db.transaction(async (tx) => {
@@ -1161,11 +1243,16 @@ export default class EvalResult {
     // testCase metadata in the constructor, and trace linkage travels inside the metadata
     // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
     // explicitly keeps the write payload aligned with the schema.
-    const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
+    const {
+      traceId: _traceId,
+      evaluationId: _evaluationId,
+      pluginId: _pluginId,
+      ...rest
+    } = serializeResultProviderMaps(this);
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
-      gradingResult: sanitizeGradingResultForDb(this.gradingResult),
+      gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
     };
     //check if this exists in the db
