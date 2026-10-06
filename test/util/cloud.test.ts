@@ -265,6 +265,22 @@ describe('cloud utils', () => {
       );
     });
 
+    it('keeps the existing HTTP environment normalization', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          config: {
+            id: 'echo',
+            env: { OPENAI_API_BASE_URL: 'built-in', CUSTOM_TARGET_URL: 'custom' },
+          },
+        }),
+        ok: true,
+      } as Response);
+
+      const provider = await getProviderFromCloud('saved');
+
+      expect(provider.env).toEqual({ OPENAI_API_BASE_URL: 'built-in' });
+    });
+
     it('should throw error when provider fetch fails', async () => {
       mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
 
@@ -296,6 +312,26 @@ describe('cloud utils', () => {
   });
 
   describe('withCloudProviderResolver', () => {
+    it('retains custom environment keys from typed prepared options', async () => {
+      const env = Object.freeze({ CUSTOM_TARGET_URL: 'saved', OPENAI_API_BASE_URL: 'built-in' });
+      const provider = await withCloudProviderResolver(
+        () => ({ id: 'echo', env }),
+        () => getProviderFromCloud('saved'),
+      );
+
+      expect(provider.env).toEqual(env);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('still validates built-in environment values from the resolver', async () => {
+      const resolver = vi.fn().mockResolvedValue({ id: 'echo', env: { OPENAI_API_KEY: 42 } });
+
+      await expect(
+        withCloudProviderResolver(resolver, () => getProviderFromCloud('saved')),
+      ).rejects.toThrow();
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('preserves the callback result and supplies normalized saved options without HTTP', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(false);
       const resolver = vi.fn().mockResolvedValue({ id: 'echo', config: { prefix: 'saved' } });

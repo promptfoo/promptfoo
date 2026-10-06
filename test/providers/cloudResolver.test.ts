@@ -24,20 +24,23 @@ afterEach(() => {
 
 describe('prepared cloud provider loading', () => {
   it.each([
-    { saved: undefined, local: undefined, expected: 'suite' },
-    { saved: 'saved', local: undefined, expected: 'saved' },
-    { saved: 'saved', local: 'local', expected: 'local' },
+    { key: 'OPENAI_API_BASE_URL', saved: undefined, local: undefined, expected: 'suite' },
+    { key: 'OPENAI_API_BASE_URL', saved: 'saved', local: undefined, expected: 'saved' },
+    { key: 'OPENAI_API_BASE_URL', saved: 'saved', local: 'local', expected: 'local' },
+    { key: 'CUSTOM_TARGET_URL', saved: undefined, local: undefined, expected: 'suite' },
+    { key: 'CUSTOM_TARGET_URL', saved: 'saved', local: undefined, expected: 'saved' },
+    { key: 'CUSTOM_TARGET_URL', saved: 'saved', local: 'local', expected: 'local' },
   ])(
-    'keeps suite < saved < local env precedence: $expected',
-    async ({ saved, local, expected }) => {
+    'keeps suite < saved < local env precedence for $key: $expected',
+    async ({ key, saved, local, expected }) => {
       const savedProvider = {
         id: 'echo',
-        config: { endpoint: '{{ env.OPENAI_API_BASE_URL }}' },
-        env: saved ? { OPENAI_API_BASE_URL: saved } : undefined,
+        config: { endpoint: `{{ env.${key} }}` },
+        env: saved ? { [key]: saved } : undefined,
       };
       const suite = renderConfigEnvTemplates({
-        env: { OPENAI_API_BASE_URL: 'suite' },
-        providers: [{ [cloudPath]: { env: local ? { OPENAI_API_BASE_URL: local } : undefined } }],
+        env: { [key]: 'suite' },
+        providers: [{ [cloudPath]: { env: local ? { [key]: local } : undefined } }],
       });
 
       const [provider] = await withCloudProviderResolver(
@@ -46,7 +49,7 @@ describe('prepared cloud provider loading', () => {
       );
 
       expect(provider.config?.endpoint).toBe(expected);
-      expect(savedProvider.config.endpoint).toBe('{{ env.OPENAI_API_BASE_URL }}');
+      expect(savedProvider.config.endpoint).toBe(`{{ env.${key} }}`);
       expect(fetchWithProxy).not.toHaveBeenCalled();
     },
   );
@@ -54,18 +57,18 @@ describe('prepared cloud provider loading', () => {
   it('does not add a suite rendering pass or dereference file-valued saved settings', async () => {
     const savedProvider = {
       id: 'echo',
-      label: '{{ env.OPENAI_API_BASE_URL }}',
+      label: '{{ env.CUSTOM_TARGET_URL }}',
       env: {
-        OPENAI_API_BASE_URL: '{{ env.OPENAI_ORGANIZATION }}',
+        CUSTOM_TARGET_URL: '{{ env.OPENAI_ORGANIZATION }}',
         OPENAI_ORGANIZATION: 'would-be-an-extra-pass',
       },
       config: {
-        endpoint: '{{ env.OPENAI_API_BASE_URL }}',
+        endpoint: '{{ env.CUSTOM_TARGET_URL }}',
         document: 'file://keep-as-provider-data.txt',
       },
     };
     const suite = renderConfigEnvTemplates({
-      env: { OPENAI_API_BASE_URL: 'suite' },
+      env: { CUSTOM_TARGET_URL: 'suite' },
       providers: [cloudPath],
     });
 
