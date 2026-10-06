@@ -66,13 +66,13 @@ export function readProviderPromptMap(
   }
 
   if (isApiProvider(config.providers)) {
-    addProviderPrompts(config.providers.id());
+    addProviderPrompts(config.providers.id(), config.providers.label, config.providers.prompts);
     return ret;
   }
 
   for (const provider of config.providers) {
     if (isApiProvider(provider)) {
-      addProviderPrompts(provider.id(), provider.label);
+      addProviderPrompts(provider.id(), provider.label, provider.prompts);
       continue;
     }
 

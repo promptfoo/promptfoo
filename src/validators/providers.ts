@@ -38,6 +38,7 @@ export const ApiProviderSchema = z.object({
     )
     .optional(),
   label: z.custom<ProviderLabel>().optional(),
+  prompts: z.array(z.string()).optional(),
   transform: StringOrFunctionSchema.optional(),
   delay: z.number().optional(),
   config: z.any().optional(),

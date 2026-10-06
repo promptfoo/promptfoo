@@ -32,10 +32,11 @@ import type {
 } from '../types/providers';
 
 type ProviderFunctionWithMetadata = ProviderFunction &
-  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
+  Pick<ApiProvider, 'label' | 'prompts' | 'transform' | 'delay' | 'inputs' | 'config'>;
 
 const FORWARDED_PROVIDER_METADATA_KEYS = [
   'label',
+  'prompts',
   'transform',
   'delay',
   'inputs',
@@ -235,6 +236,7 @@ async function createApiProvider(
       ret.delay = options.delay;
       ret.inputs = options.inputs;
       ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
+      ret.prompts = options.prompts && renderEnvOnlyInObject(options.prompts, mergedEnv);
       return ret;
     }
   }

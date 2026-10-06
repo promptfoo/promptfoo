@@ -347,7 +347,7 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
   const parsedProviderPromptMap = readProviderPromptMap(
-    testSuiteConfig,
+    { providers: loadedProviders },
     constructedTestSuite.prompts,
   );
   const unifiedConfig = createSerializableUnifiedConfig(

@@ -674,6 +674,7 @@ describe('readProviderPromptMap', () => {
 
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
       provider1: ['prompt1', 'prompt2'],
+      providerLabel: ['prompt1', 'prompt2'],
     });
   });
 

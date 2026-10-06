@@ -1251,11 +1251,9 @@ async function resolveLoadedConfig(
     }
   }
 
-  // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
-  // This ensures that `prompts` filters from external provider files are respected (#1307)
-  // and that the map is consistent with the filtered providers
+  // Loaded providers retain effective filters from cloud/file configs and their runtime identities.
   const parsedProviderPromptMap = readProviderPromptMap(
-    { providers: filteredProviderConfigs },
+    { providers: parsedProviders },
     parsedPrompts,
   );
 

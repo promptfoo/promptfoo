@@ -870,6 +870,12 @@
         "callEmbeddingApi": {},
         "callClassificationApi": {},
         "label": {},
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "transform": {
           "type": "string"
         },
