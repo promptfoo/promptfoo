@@ -89,7 +89,9 @@ export async function getProviderFromCloud(
 ): Promise<ProviderOptions & { id: string }> {
   const resolver = cloudProviderResolver.getStore();
   if (resolver) {
-    return parseCloudProvider(id, await resolver(id, localOptions));
+    const prepared = await resolver(id, localOptions);
+    // The HTTP schema strips custom env keys; typed host options must retain them.
+    return { ...parseCloudProvider(id, prepared), ...(prepared.env && { env: prepared.env }) };
   }
   if (!cloudConfig.isEnabled()) {
     throw new Error(
