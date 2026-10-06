@@ -303,9 +303,8 @@ export async function resolveProvider(
  * so they can be properly handled by loadApiProviders.
  *
  * This is used to:
- * 1. Build the provider-prompt map (respecting `prompts` filters from external files)
- * 2. Enable --filter-providers to match resolved provider ids/labels from files
- * 3. Pass to loadApiProviders without re-reading files
+ * 1. Enable --filter-providers to match resolved provider ids/labels from files
+ * 2. Pass resolved options to loadApiProviders without re-reading files
  */
 export function resolveProviderConfigs(
   providerPaths: TestSuiteConfig['providers'],

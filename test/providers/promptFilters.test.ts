@@ -7,7 +7,9 @@ import cliState from '../../src/cliState';
 import { evaluate as evaluateRuntime } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { evaluate } from '../../src/node/evaluate';
+import { testProviderConnectivity } from '../../src/node/testProvider';
 import { loadApiProviders } from '../../src/providers/index';
+import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import { withCloudProviderResolver } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -323,3 +325,27 @@ it('retains prompt metadata through the runtime schema', async () => {
   const [provider] = await loadApiProviders([{ id: 'echo', label: 'target', prompts: [] }]);
   expect(ApiProviderSchema.parse(provider).prompts).toEqual([]);
 });
+
+it.each([
+  { label: undefined, allowed: ['first'] },
+  { label: 'labeled', allowed: ['first'] },
+  { label: 'labeled', allowed: [] as string[] },
+])(
+  'runs connectivity diagnostics independently of evaluation filters: $label/$allowed',
+  async ({ label, allowed }) => {
+    vi.spyOn(remoteGeneration, 'neverGenerateRemote').mockReturnValue(true);
+    const [provider] = await loadApiProviders([{ id: 'echo', label, prompts: allowed }]);
+    const originalSelectors = provider.prompts;
+    const callApi = vi.spyOn(provider, 'callApi');
+    const prompt = `Connectivity ${label ?? 'unlabeled'} ${allowed.length}`;
+
+    const result = await testProviderConnectivity({ provider, prompt });
+
+    expect(result.success).toBe(true);
+    expect(result.providerResponse).toMatchObject({ output: prompt });
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(provider.prompts).toBe(originalSelectors);
+    expect(provider.prompts).toEqual(allowed);
+    expect(fetchWithProxy).not.toHaveBeenCalled();
+  },
+);

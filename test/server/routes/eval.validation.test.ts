@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { Server } from 'node:http';
 
 import request from 'supertest';
@@ -6,8 +9,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
+vi.mock('../../../src/node', () => ({ evaluateWithSource: vi.fn() }));
 
 import Eval, { EvalQueries } from '../../../src/models/eval';
+import { evaluateWithSource } from '../../../src/node';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
@@ -304,6 +309,84 @@ describe('Eval Routes - Zod Validation', () => {
   });
 
   describe('POST /api/eval/replay', () => {
+    it.each([
+      {
+        providers: 'echo',
+        expected: [{ id: 'echo', prompts: ['Replay'] }],
+      },
+      {
+        providers: [
+          { id: 'echo', label: 'Saved target', prompts: ['first'], config: { prefix: 'Hi' } },
+        ],
+        expected: [
+          { id: 'echo', label: 'Saved target', prompts: ['Replay'], config: { prefix: 'Hi' } },
+        ],
+      },
+      {
+        providers: ['promptfoo://provider/saved-target'],
+        expected: [{ id: 'promptfoo://provider/saved-target', prompts: ['Replay'] }],
+      },
+      {
+        providers: [{ 'promptfoo://provider/saved-target': { id: 'local-alias', prompts: [] } }],
+        expected: [
+          { 'promptfoo://provider/saved-target': { id: 'local-alias', prompts: ['Replay'] } },
+        ],
+      },
+    ])(
+      'replays the requested prompt with saved provider selection $providers',
+      async ({ providers, expected }) => {
+        const before = structuredClone(providers);
+        mockFindById.mockResolvedValue({ config: { providers } });
+        vi.mocked(evaluateWithSource).mockResolvedValue({
+          toEvaluateSummary: async () => ({ results: [{ response: { output: 'Hello World' } }] }),
+        } as unknown as Eval);
+
+        const response = await api.post('/api/eval/replay').send({
+          evaluationId: 'test-id',
+          prompt: 'Hello World',
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.body.output).toBe('Hello World');
+        expect(evaluateWithSource).toHaveBeenCalledWith(
+          expect.objectContaining({ providers: expected }),
+          expect.objectContaining({ cache: false }),
+        );
+        expect(providers).toEqual(before);
+      },
+    );
+
+    it('replays a saved multi-provider file without changing its options', async () => {
+      const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-replay-'));
+      const providerPath = path.join(directory, 'providers.json');
+      const providers = [
+        { id: 'echo', label: 'First', prompts: ['first'] },
+        { id: 'echo', label: 'Second', prompts: [], config: { prefix: 'Hi' } },
+      ];
+      writeFileSync(providerPath, JSON.stringify(providers));
+      mockFindById.mockResolvedValue({ config: { providers: `file://${providerPath}` } });
+      vi.mocked(evaluateWithSource).mockResolvedValue({
+        toEvaluateSummary: async () => ({ results: [{ response: { output: 'Hello World' } }] }),
+      } as unknown as Eval);
+      try {
+        const response = await api.post('/api/eval/replay').send({
+          evaluationId: 'test-id',
+          prompt: 'Hello World',
+        });
+
+        expect(response.status).toBe(200);
+        expect(evaluateWithSource).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providers: providers.map((provider) => ({ ...provider, prompts: ['Replay'] })),
+          }),
+          expect.anything(),
+        );
+        expect(providers.map((provider) => provider.prompts)).toEqual([['first'], []]);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
     it('should return 400 when evaluationId is missing', async () => {
       const response = await api.post('/api/eval/replay').send({
         prompt: 'test prompt',

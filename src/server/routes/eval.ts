@@ -17,6 +17,7 @@ import {
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
+import { loadProviderConfigsFromFile, normalizeProviderRef } from '../../util/providerRef';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -624,6 +625,26 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       providerConfig = providers;
     }
 
+    // Replay is a one-prompt diagnostic. Keep the saved selection and local options,
+    // but replace evaluation routing filters after expanding provider config files.
+    const selectedRef = normalizeProviderRef(providerConfig);
+    const replayProviders = (
+      selectedRef.kind === 'file'
+        ? loadProviderConfigsFromFile(selectedRef.loadProviderPath)
+        : [providerConfig]
+    ).map((provider) => {
+      const ref = normalizeProviderRef(provider);
+      if (ref.kind === 'options' || ref.kind === 'map') {
+        const options = { ...ref.loadOptions, prompts: ['Replay'] };
+        return ref.kind === 'map' ? { [ref.loadProviderPath]: options } : options;
+      }
+      if (ref.kind === 'named') {
+        return { id: ref.loadProviderPath, prompts: ['Replay'] };
+      }
+      // Persisted refs are declarative; leave other forms for normal loader validation.
+      return provider;
+    });
+
     // Run the prompt through the provider
     const result = await evaluateWithSource(
       {
@@ -633,7 +654,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
             label: 'Replay', // Add required label field
           },
         ],
-        providers: [providerConfig],
+        providers: replayProviders,
         tests: [
           {
             vars: (variables || {}) as Vars,
