@@ -1141,7 +1141,9 @@ describe('createShareableUrl', () => {
       vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', 'false');
       vi.stubEnv('PROMPTFOO_STRIP_METADATA', 'false');
       vi.stubEnv('PROMPTFOO_STRIP_RESPONSE_OUTPUT', 'false');
+      const grader = { id: 'echo', prompts: ['private-nested-selector'] };
       const testCase = {
+        options: { provider: { text: grader } },
         vars: { input: 'private-input' },
         metadata: { note: 'private-note' },
         providerOutput: 'private-output',
@@ -1177,7 +1179,20 @@ describe('createShareableUrl', () => {
       ]);
       mockEval.prompts = [{ raw: 'private-prompt', label: 'public', provider: 'echo' }];
       mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
-        yield [{ id: 'row', testCase, provider }];
+        yield [
+          {
+            id: 'row',
+            testCase,
+            provider,
+            prompt: { raw: 'Hello', label: 'Greeting', config: { provider: grader } },
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              assertion: { type: 'equals', value: 'ok', provider: grader },
+            },
+          },
+        ];
       });
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
@@ -1191,6 +1206,7 @@ describe('createShareableUrl', () => {
         expect(JSON.parse(mockFetch.mock.calls[0][1].body).traces).toEqual([
           { spans: [{ attributes: { operation: 'provider-call' } }] },
         ]);
+        expect(grader.prompts).toEqual(['private-nested-selector']);
         expect(provider.prompts).toEqual(['private-provider-selector']);
         expect(mockEval.config.providers).toEqual([
           { id: 'echo', prompts: ['private-provider-selector'] },

@@ -370,7 +370,9 @@ describe('writeOutput', () => {
       const restoreEnv = mockProcessEnv(
         Object.fromEntries(Object.keys(flags).map((key) => [key, String(!strip)])),
       );
+      const grader = { id: 'echo', prompts: ['private-nested-selector'] };
       const testCase = {
+        options: { provider: { text: grader } },
         vars: { input: 'private-input' },
         metadata: { note: 'private-note' },
         providerOutput: 'private-output',
@@ -403,7 +405,12 @@ describe('writeOutput', () => {
       });
       await eval_.addResult(
         createEvaluateResult({
-          prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
+          prompt: {
+            raw: 'private-prompt',
+            template: 'private-template',
+            label: 'label',
+            config: { provider: grader },
+          },
           provider,
           testCase,
           response: { output: 'private-output', raw: 'private-raw-output' },
@@ -450,6 +457,7 @@ describe('writeOutput', () => {
           expect(contents.includes('private-'), extension).toBe(!strip);
         }
 
+        expect(grader.prompts).toEqual(['private-nested-selector']);
         expect(provider.prompts).toEqual(['private-provider-selector']);
         expect(eval_.config.providers).toEqual([provider]);
         expect(eval_.config.tests).toEqual([testCase]);

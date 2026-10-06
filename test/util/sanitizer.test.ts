@@ -103,6 +103,56 @@ describe('sanitizeConfigForOutput', () => {
     expect(JSON.stringify(input)).toContain('ordinary selector');
   });
 
+  it.each([true, false])('projects nested provider selectors in config (strip: %s)', (strip) => {
+    const provider = {
+      id: 'echo',
+      prompts: ['ordinary nested selector'],
+      config: { prompts: ['ordinary provider configuration'] },
+    };
+    const test = {
+      provider,
+      options: { provider: { text: provider, embedding: provider } },
+      assert: [
+        {
+          type: 'assert-set' as const,
+          assert: [{ type: 'equals' as const, value: 'ok', provider }],
+        },
+      ],
+      metadata: { prompts: ['ordinary metadata'] },
+    };
+    const config = {
+      tests: [test],
+      defaultTest: test,
+      scenarios: [{ config: [test], tests: [test] }],
+    };
+    const before = structuredClone(config);
+    const output = sanitizeConfigForOutput(config, { shouldStripPromptText: strip });
+
+    expect(JSON.stringify(output).includes('ordinary nested selector')).toBe(!strip);
+    const projectedTest = {
+      metadata: test.metadata,
+      provider: { config: provider.config },
+      options: { provider: { text: { config: provider.config } } },
+    };
+    expect(output).toMatchObject({
+      tests: [projectedTest],
+      defaultTest: projectedTest,
+      scenarios: [{ config: [projectedTest], tests: [projectedTest] }],
+    });
+    expect(config).toEqual(before);
+  });
+
+  it('preserves application prompts on serialized provider options without selectors', () => {
+    const provider = { label: 'grader', config: { prompts: ['ordinary application payload'] } };
+    // A persisted runtime provider can have no id after its method is serialized away.
+    const config = { defaultTest: { options: { provider } } } as Parameters<
+      typeof sanitizeConfigForOutput
+    >[0];
+    const output = sanitizeConfigForOutput(config, { shouldStripPromptText: true });
+    expect(output.defaultTest).toEqual({ options: { provider } });
+    expect(config.defaultTest).toEqual({ options: { provider } });
+  });
+
   it('preserves the local replay directory even when it resembles an opaque token', () => {
     const basePath = `/home/${'nested/'.repeat(15)}project`;
     expect(sanitizeConfigForOutput({ basePath }).basePath).toBe(basePath);

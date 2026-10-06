@@ -688,20 +688,58 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
-/** Remove selectors from an already-cloned output configuration, including provider maps. */
-function stripProviderPromptSelectors(providers: UnifiedConfig['providers'] | undefined): void {
-  for (const provider of Array.isArray(providers) ? providers : [providers]) {
-    if (!provider || typeof provider !== 'object') {
-      continue;
-    }
-    const entries =
-      'id' in provider || 'prompts' in provider ? [provider] : Object.values(provider);
-    for (const entry of entries) {
-      if (entry && typeof entry === 'object' && 'prompts' in entry) {
-        delete entry.prompts;
-      }
-    }
+/** Project direct providers and provider/type maps without changing their local configuration. */
+export function stripProviderPromptSelectors<T>(providers: T): T {
+  if (Array.isArray(providers)) {
+    return providers.map(stripProviderPromptSelectors) as T;
   }
+  if (!providers || typeof providers !== 'object') {
+    return providers;
+  }
+  const omitSelectors = (provider: unknown) => {
+    if (!provider || typeof provider !== 'object') {
+      return provider;
+    }
+    const { prompts: _prompts, ...rest } = provider as Record<string, unknown>;
+    return rest;
+  };
+  // Runtime serialization can remove id() and absent selectors from an options object.
+  const isOptions = [
+    'id',
+    'label',
+    'config',
+    'env',
+    'transform',
+    'delay',
+    'inputs',
+    'prompts',
+  ].some((key) => key in providers);
+  return (
+    isOptions
+      ? omitSelectors(providers)
+      : Object.fromEntries(
+          Object.entries(providers).map(([key, provider]) => [key, omitSelectors(provider)]),
+        )
+  ) as T;
+}
+
+/** Project only provider slots in a test or assertion (including sets). */
+export function stripTestProviderPromptSelectors<T>(test: T): T {
+  if (!test || typeof test !== 'object' || Array.isArray(test)) {
+    return test;
+  }
+  const record = test as Record<string, unknown>;
+  const options = record.options as Record<string, unknown> | undefined;
+  return {
+    ...record,
+    ...('provider' in record && { provider: stripProviderPromptSelectors(record.provider) }),
+    ...(options?.provider !== undefined && {
+      options: { ...options, provider: stripProviderPromptSelectors(options.provider) },
+    }),
+    ...(Array.isArray(record.assert) && {
+      assert: record.assert.map(stripTestProviderPromptSelectors),
+    }),
+  } as T;
 }
 
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
@@ -727,7 +765,9 @@ export function sanitizeConfigForOutput(
   }
   if (options.shouldStripPromptText) {
     delete sanitized.prompts;
-    stripProviderPromptSelectors(sanitized.providers);
+    if (sanitized.providers !== undefined) {
+      sanitized.providers = stripProviderPromptSelectors(sanitized.providers);
+    }
   }
   const {
     shouldStripTestVars: stripVars,
@@ -747,6 +787,9 @@ export function sanitizeConfigForOutput(
   for (const [index, test] of collectTests(sanitized).entries()) {
     if (!test || typeof test !== 'object') {
       continue;
+    }
+    if (options.shouldStripPromptText) {
+      Object.assign(test, stripTestProviderPromptSelectors(test));
     }
     const sourceTest = sourceTests[index];
     const sourceMetadata =

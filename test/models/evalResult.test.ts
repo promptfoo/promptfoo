@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, {
+  getStripFlags,
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
 } from '../../src/models/evalResult';
@@ -1283,6 +1284,81 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
+    it.each([
+      { boundary: 'model', strip: true },
+      { boundary: 'model', strip: false },
+      { boundary: 'jsonl', strip: true },
+      { boundary: 'jsonl', strip: false },
+    ])(
+      'projects nested provider selectors at $boundary output (strip: $strip)',
+      async ({ boundary, strip }) => {
+        const provider = {
+          id: 'echo',
+          prompts: ['ordinary nested selector'],
+          config: { prompts: ['ordinary provider configuration'] },
+        };
+        const assertion: Assertion = { type: 'equals', value: 'ok', provider };
+        const testCase: AtomicTestCase = {
+          provider,
+          options: {
+            provider: {
+              text: provider,
+              embedding: provider,
+              classification: provider,
+              moderation: provider,
+            },
+          },
+          assert: [{ type: 'assert-set', assert: [assertion] }],
+          metadata: { prompts: ['ordinary metadata'] },
+        };
+        const input = createEvaluateResult({
+          provider,
+          testCase,
+          prompt: {
+            raw: 'Hello',
+            label: 'Greeting',
+            config: {
+              provider,
+              options: { provider: { prompts: ['ordinary application options'] } },
+              assert: [{ provider: { prompts: ['ordinary application assertions'] } }],
+            },
+          },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'ok',
+            assertion,
+            componentResults: [{ pass: true, score: 1, reason: 'ok', assertion }],
+            metadata: { prompts: ['ordinary grading metadata'] },
+          },
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_PROMPT_TEXT: String(strip) });
+        const projected =
+          boundary === 'model'
+            ? (
+                await EvalResult.createFromEvaluateResult('ordinary-projection', input, {
+                  persist: false,
+                })
+              ).toEvaluateResult(flags)
+            : sanitizeResultForJsonlArtifact(input, flags);
+
+        expect(JSON.stringify(projected).includes('ordinary nested selector')).toBe(!strip);
+        expect(projected.testCase.metadata).toEqual(testCase.metadata);
+        expect(projected.testCase.options?.provider).toMatchObject({
+          text: { config: provider.config },
+        });
+        expect(projected.prompt.config.provider.config).toEqual(provider.config);
+        expect(projected.prompt.config.options).toEqual(input.prompt.config.options);
+        expect(projected.prompt.config.assert).toEqual(input.prompt.config.assert);
+        expect(projected.gradingResult?.metadata).toEqual({
+          prompts: ['ordinary grading metadata'],
+        });
+        expect(provider.prompts).toEqual(['ordinary nested selector']);
+        expect(testCase.options?.provider).toMatchObject({ text: { prompts: provider.prompts } });
+        expect(input.gradingResult?.componentResults?.[0].assertion?.provider).toBe(provider);
+      },
+    );
+
     it('should convert EvalResult to EvaluateResult format', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
 

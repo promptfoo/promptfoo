@@ -25,7 +25,13 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
+import {
+  isSecretField,
+  REDACTED,
+  sanitizeObject,
+  stripProviderPromptSelectors,
+  stripTestProviderPromptSelectors,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingTokenUsage,
@@ -126,6 +132,12 @@ export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: bool
         ...prompt,
         raw: '[prompt stripped]',
         template: undefined,
+        ...(prompt.config?.provider && {
+          config: {
+            ...prompt.config,
+            provider: stripProviderPromptSelectors(prompt.config.provider),
+          },
+        }),
       }
     : prompt;
 }
@@ -195,9 +207,19 @@ export function projectTracesForOutput(
 
 function projectTestCase(
   testCase: AtomicTestCase,
-  options: { stripMetadata: boolean; stripVars: boolean; stripOutput: boolean },
+  options: {
+    stripMetadata: boolean;
+    stripVars: boolean;
+    stripOutput: boolean;
+    stripPromptText: boolean;
+  },
 ): AtomicTestCase {
-  if (!options.stripMetadata && !options.stripVars && !options.stripOutput) {
+  if (
+    !options.stripMetadata &&
+    !options.stripVars &&
+    !options.stripOutput &&
+    !options.stripPromptText
+  ) {
     return testCase;
   }
 
@@ -215,7 +237,28 @@ function projectTestCase(
     projectedTestCase.metadata = { __promptfoo: { remote: true } };
   }
 
-  return projectedTestCase;
+  return options.stripPromptText
+    ? stripTestProviderPromptSelectors(projectedTestCase)
+    : projectedTestCase;
+}
+
+/** Project assertion providers only, preserving grading details and unrelated metadata. */
+function projectGradingResult<T>(gradingResult: T, stripPromptText: boolean): T {
+  const result = asRecord(gradingResult);
+  if (!stripPromptText || !result) {
+    return gradingResult;
+  }
+  return {
+    ...result,
+    ...(Boolean(result.assertion) && {
+      assertion: stripTestProviderPromptSelectors(result.assertion),
+    }),
+    ...(Array.isArray(result.componentResults) && {
+      componentResults: result.componentResults.map((component) =>
+        projectGradingResult(component, true),
+      ),
+    }),
+  } as T;
 }
 
 // Removes circular references from the provider object and ensures consistent format
@@ -743,6 +786,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
               stripMetadata: shouldStripMetadata,
               stripVars: shouldStripTestVars,
               stripOutput: shouldStripResponseOutput,
+              stripPromptText: shouldStripPromptText,
             },
           ),
         }
@@ -768,7 +812,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
         }
       : {}),
     response,
-    gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+    gradingResult: shouldStripGradingResult
+      ? null
+      : projectGradingResult(redacted.gradingResult, shouldStripPromptText),
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata
       ? {}
@@ -1157,6 +1203,7 @@ export default class EvalResult {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
       stripOutput: shouldStripResponseOutput,
+      stripPromptText: shouldStripPromptText,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one
@@ -1178,7 +1225,9 @@ export default class EvalResult {
       }),
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: shouldStripGradingResult
+        ? null
+        : projectGradingResult(this.gradingResult, shouldStripPromptText),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
