@@ -83,7 +83,7 @@ function withSerializableProvider<T extends Record<string, unknown>>(record: T):
   }
   return {
     ...record,
-    provider: sanitizeProvider(record.provider),
+    provider: toSerializableProviderRef(record.provider),
   };
 }
 

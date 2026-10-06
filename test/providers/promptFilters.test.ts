@@ -13,6 +13,7 @@ import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import { withCloudProviderResolver } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { fetchWithProxy } from '../../src/util/fetch/index';
+import { sanitizeConfigForOutput } from '../../src/util/sanitizer';
 import { ApiProviderSchema } from '../../src/validators/providers';
 
 import type { UnifiedConfig } from '../../src/types/index';
@@ -300,6 +301,67 @@ it.each([
     expect(
       await runEvaluation('library', saved.providers as NonNullable<UnifiedConfig['providers']>),
     ).toEqual(expected.map((prompt) => ({ provider: 'target', prompt })));
+  },
+);
+
+it.each([{ allowed: ['nested selector'] }, { allowed: [] as string[] }, { allowed: undefined }])(
+  'retains nested runtime selectors in local replay configs: $allowed',
+  async ({ allowed }) => {
+    const [provider] = await loadApiProviders([{ id: 'echo', prompts: allowed }]);
+    const test = {
+      provider,
+      options: { provider },
+      assert: [
+        { type: 'equals' as const, value: 'first', provider },
+        {
+          type: 'assert-set' as const,
+          assert: [{ type: 'equals' as const, value: 'first', provider }],
+        },
+      ],
+    };
+    const result = await evaluate(
+      {
+        providers: ['echo'],
+        prompts: ['first'],
+        defaultTest: test,
+        tests: [test],
+        scenarios: [{ config: [{}], tests: [test] }],
+        writeLatestResults: false,
+      },
+      { cache: false, maxConcurrency: 1 },
+    );
+    const summary = await result.toEvaluateSummary();
+    expect(summary.stats.successes).toBeGreaterThan(0);
+    expect(summary.stats.failures).toBe(0);
+    const expected = allowed?.slice();
+    provider.prompts?.push('runtime-only');
+    const saved = JSON.parse(JSON.stringify(result.config));
+    const projected = sanitizeConfigForOutput(saved, { shouldStripPromptText: true });
+
+    for (const [config, selectors] of [
+      [saved, expected],
+      [projected, undefined],
+    ] as const) {
+      const refs = [
+        config.defaultTest.provider,
+        config.defaultTest.options.provider,
+        config.tests[0].provider,
+        config.tests[0].options.provider,
+        config.tests[0].assert[0].provider,
+        config.tests[0].assert[1].assert[0].provider,
+        config.scenarios[0].tests[0].options.provider,
+      ];
+      for (const reference of refs) {
+        expect(reference).toMatchObject({ id: 'echo' });
+        expect(reference.prompts).toEqual(selectors);
+        expect(reference).not.toHaveProperty('callApi');
+        const [reloaded] = await loadApiProviders([reference]);
+        expect(reloaded.prompts).toEqual(selectors);
+      }
+    }
+    expect(saved.defaultTest.provider.prompts).toEqual(expected);
+    expect(test.provider).toBe(provider);
+    expect(fetchWithProxy).not.toHaveBeenCalled();
   },
 );
 
