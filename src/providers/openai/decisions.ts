@@ -34,18 +34,6 @@ const gradingLevelsSchema = z
   .array(z.union([z.string().transform((label) => ({ label })), levelSchema]))
   .min(2)
   .max(10);
-// These graders can mistake Decisions answer JSON for a successful grading verdict.
-const UNSUPPORTED_GRADER_LABELS = [
-  'agent-rubric',
-  'trajectory:goal-success',
-  'select-best',
-  'factuality',
-  'context-recall',
-  'context-faithfulness-longform',
-  'context-faithfulness-nli',
-  'context-relevance',
-  'answer-relevance',
-];
 const questionSchema = z.discriminatedUnion('type', [
   z.object({ ...questionFields, type: z.literal('predicate') }).strict(),
   z
@@ -260,13 +248,13 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     const config: DecisionsOptions = { ...this.config, ...context?.prompt?.config };
     const label = context?.prompt?.label;
-    if (label && UNSUPPORTED_GRADER_LABELS.includes(label)) {
+    if (context?.isGrading) {
+      if (label === 'llm-rubric') {
+        return this.grade(prompt, config, context, options);
+      }
       return {
         error: `OpenAI Decisions cannot grade \`${label}\` assertions. Use \`llm-rubric\` or \`classifier\`.`,
       };
-    }
-    if (context && label === 'llm-rubric') {
-      return this.grade(prompt, config, context, options);
     }
     let input: unknown = prompt;
     if (prompt.trimStart().startsWith('[')) {
@@ -416,7 +404,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         model: this.modelName,
         input,
         questions:
-          context?.prompt?.label === 'llm-rubric'
+          context?.isGrading && context.prompt.label === 'llm-rubric'
             ? config.questions
             : renderVarsInObject(config.questions, context?.vars),
         safety_identifier: renderVarsInObject(config.safety_identifier, context?.vars),

@@ -4,7 +4,9 @@ import { fetchWithCache } from '../../../src/cache';
 import { matchesClassification } from '../../../src/matchers/classification';
 import { matchesSelectBest } from '../../../src/matchers/comparison';
 import {
+  matchesClosedQa,
   matchesFactuality,
+  matchesGEval,
   matchesLlmRubric,
   matchesTrajectoryGoalSuccess,
 } from '../../../src/matchers/llmGrading';
@@ -30,6 +32,7 @@ const imageUrl = 'data:image/png;base64,iVBORw0KGgo=';
 
 function rubricContext(rubric: unknown, output: unknown): CallApiContextParams {
   return {
+    isGrading: true,
     prompt: { raw: 'rendered grading prompt', label: 'llm-rubric' },
     vars: { rubric, output } as CallApiContextParams['vars'],
   };
@@ -879,6 +882,28 @@ describe('OpenAiDecisionsProvider', () => {
     expect(JSON.parse(result.output as string)).toEqual({ answers });
   });
 
+  describe.each([undefined, false])('ordinary calls with isGrading=%s', (isGrading) => {
+    it.each(['factuality', 'llm-rubric', 'select-best'])(
+      'treats the prompt label %s and grading-like variables as ordinary target input',
+      async (label) => {
+        const question = { ...predicateQuestion, instructions: 'Mentions {{topic}}' };
+        const result = await provider({ questions: [question] }).callApi('Original target input', {
+          ...(isGrading === undefined ? {} : { isGrading }),
+          prompt: { raw: 'Original target input', label },
+          vars: { topic: 'discounts', rubric: 'Is polite', output: 'Different grading output' },
+        });
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe(JSON.stringify({ answers: response().answers }));
+        expect(requestBody()).toEqual({
+          model: 'gpt-6-luna',
+          input: 'Original target input',
+          questions: [{ ...question, instructions: 'Mentions discounts' }],
+        });
+      },
+    );
+  });
+
   describe('llm-rubric grading', () => {
     it('asks a predicate about the output and preserves usage through the matcher', async () => {
       mockAnswers([{ name: 'grade', type: 'predicate', probability: 0.12 }]);
@@ -1142,6 +1167,7 @@ describe('OpenAiDecisionsProvider', () => {
 
     it('fails closed for llm-rubric without grading variables', async () => {
       const result = await provider().callApi('text', {
+        isGrading: true,
         prompt: { raw: 'text', label: 'llm-rubric' },
         vars: {},
       });
@@ -1159,8 +1185,13 @@ describe('OpenAiDecisionsProvider', () => {
       'context-faithfulness-nli',
       'context-relevance',
       'answer-relevance',
+      'model-graded-closedqa',
+      'g-eval-steps',
+      'g-eval',
+      'future-custom-grader',
     ])('rejects unsupported grader %s even with questions configured', async (label) => {
       const result = await provider().callApi('text', {
+        isGrading: true,
         prompt: { raw: 'text', label },
         vars: {},
       });
@@ -1216,6 +1247,29 @@ describe('OpenAiDecisionsProvider', () => {
         expect(fetchWithCache).not.toHaveBeenCalled();
       },
     );
+
+    it.each([
+      {
+        label: 'model-graded-closedqa',
+        match: (instance: OpenAiDecisionsProvider) =>
+          matchesClosedQa('2+2?', '4', '5', {
+            provider: instance,
+            rubricPrompt: 'Assess the output',
+          }),
+      },
+      {
+        label: 'g-eval-steps',
+        match: (instance: OpenAiDecisionsProvider) =>
+          matchesGEval('Is correct', '2+2?', '5', 0.5, {
+            provider: instance,
+          }),
+      },
+    ])('rejects $label before sending a billable request', async ({ label, match }) => {
+      const result = await match(provider());
+      expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+      expect(result.reason).toContain(`cannot grade \`${label}\` assertions`);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
 
     it('does not treat Decisions JSON as generated questions for answer-relevance', async () => {
       const name = 'unrelated-decision';
