@@ -117,9 +117,11 @@ vi.mock('./CommonConfigurationOptions', () => ({
 function StatefulCodexSecurityEditor({
   initialConfig = {},
   initialId = 'openai:codex-security:gpt-5.6-luna',
+  allowRename = false,
 }: {
   initialConfig?: ProviderOptions['config'];
   initialId?: string;
+  allowRename?: boolean;
 }) {
   const [provider, setProvider] = React.useState<ProviderOptions>({
     id: initialId,
@@ -135,6 +137,13 @@ function StatefulCodexSecurityEditor({
 
   return (
     <>
+      {allowRename && (
+        <input
+          aria-label="Target name"
+          value={provider.label ?? ''}
+          onChange={(event) => setProvider({ ...provider, label: event.target.value })}
+        />
+      )}
       <ProviderConfigEditor
         provider={provider}
         setProvider={setProvider}
@@ -1097,6 +1106,28 @@ describe('ProviderConfigEditor', () => {
       paths: ['src/auth', 'src/api'],
       model_reasoning_effort: 'max',
     });
+  });
+
+  it.each([
+    { field: 'Repository path', value: '/repos/renamed' },
+    { field: 'Model', value: 'gpt-5.6-sol' },
+    { field: 'Target name', value: 'Renamed target' },
+  ])('preserves scoped path drafts while editing $field', async ({ field, value }) => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor allowRename />);
+    const pathsInput = screen.getByLabelText('Scoped paths');
+
+    await user.type(pathsInput, 'src/auth, ');
+    const otherInput = screen.getByRole('textbox', { name: new RegExp(field) });
+    await user.clear(otherInput);
+    await user.type(otherInput, value);
+    await user.type(pathsInput, 'src/api');
+
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      paths: ['src/auth', 'src/api'],
+    });
+    expect(pathsInput).toHaveValue('src/auth, src/api');
+    expect(otherInput).toHaveValue(value);
   });
 
   it('removes cleared optional paths, scan cost, and finding files', async () => {

@@ -55,21 +55,29 @@ describe('cloud utils', () => {
   });
 
   describe('makeRequest', () => {
-    it('should redact URL credentials and sensitive query parameters in failure logs', async () => {
+    it('should omit credential-bearing error and cause details from failure logs', async () => {
       mockCloudConfig.getApiHost.mockReturnValue('https://test-user:test-password@example.com');
-      const error = new Error('fetch failed');
+      const cause = new Error('Authorization: Bearer test-cause-credential');
+      const error = new Error(
+        'request to https://test-user:test-password@example.com failed: api_key=test-error-credential',
+        { cause },
+      );
       mockFetchWithProxy.mockRejectedValue(error);
       const logError = vi.spyOn(winstonLogger, 'error').mockImplementation(() => winstonLogger);
 
       try {
-        await expect(makeRequest('test/path?api_key=test-secret-query', 'GET')).rejects.toBe(error);
+        await expect(makeRequest('test/path?api_key=test-query-credential', 'GET')).rejects.toBe(
+          error,
+        );
+        expect(error.cause).toBe(cause);
         const output = JSON.stringify(logError.mock.calls);
         expect(output).toContain('[Cloud] Failed to make request');
         expect(output).toContain('example.com/api/v1/test/path');
-        expect(output).toContain('fetch failed');
         expect(output).not.toContain('test-user');
         expect(output).not.toContain('test-password');
-        expect(output).not.toContain('test-secret-query');
+        expect(output).not.toContain('test-query-credential');
+        expect(output).not.toContain('test-error-credential');
+        expect(output).not.toContain('test-cause-credential');
       } finally {
         logError.mockRestore();
       }
@@ -101,11 +109,9 @@ describe('cloud utils', () => {
         );
         expect(logError).toHaveBeenCalledWith('[Cloud] Failed to make request', {
           url: 'https://api.example.com/api/v1/test/path',
-          error: 'Error: fetch failed',
         });
-        expect(logError).toHaveBeenCalledWith('[Cloud] Request failure cause', {
-          cause: 'Error: connection refused',
-        });
+        expect(error.cause).toBe(cause);
+        expect(logError).toHaveBeenCalledTimes(1);
       } finally {
         logError.mockRestore();
       }

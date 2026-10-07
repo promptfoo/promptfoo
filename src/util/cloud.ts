@@ -68,10 +68,8 @@ export async function makeRequest(path: string, method: string, body?: any): Pro
       headers: { ...(cloudConfig.getAuthHeaders() ?? {}), 'Content-Type': 'application/json' },
     });
   } catch (e) {
-    logger.error('[Cloud] Failed to make request', { url, error: String(e) });
-    if ((e as any)?.cause) {
-      logger.error('[Cloud] Request failure cause', { cause: String((e as any).cause) });
-    }
+    // Transport diagnostics can embed credentials; preserve them only in the thrown error.
+    logger.error('[Cloud] Failed to make request', { url });
     throw e;
   }
 }
