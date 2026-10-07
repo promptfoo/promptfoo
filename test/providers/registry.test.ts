@@ -69,6 +69,21 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each([
+    'openai:chatkit',
+    'openai:chatkit:',
+    'openai:chatkit:wf_test',
+    'openai:chatkit:wf_test:3',
+  ])('rejects removed ChatKit route %s instead of falling back to chat', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+
+    expect(factory).toBeDefined();
+    await expect(factory!.create(providerPath, {}, { options: {} })).rejects.toThrow(
+      'The openai:chatkit provider has been removed',
+    );
+  });
+
   it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
     'routes %s to the hosted Agents API with scoped credentials',
     async (providerPath) => {
