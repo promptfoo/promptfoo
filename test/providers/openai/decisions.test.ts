@@ -2078,6 +2078,180 @@ describe('OpenAiDecisionsProvider', () => {
     },
   );
 
+  it.each(
+    [
+      { credential: 'in', labels: ['billing', 'technical'], apiKey: false },
+      { credential: 'test', labels: ['billing', 'testing'], apiKey: false },
+      { credential: 'none', labels: ['none', 'billing'], apiKey: true },
+    ].flatMap((fixture) => [true, false].map((enabled) => ({ ...fixture, enabled }))),
+  )(
+    'preserves selected and unselected classifier labels for credential $credential (cache $enabled)',
+    async ({ credential, labels, apiKey, enabled }) => {
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const cache = actualCache.getCache();
+      const write = vi.spyOn(cache, 'set');
+      const answers = [
+        {
+          name: 'classification',
+          type: 'choice',
+          choice: labels[0],
+          confidence: 0.8,
+          probabilities: [
+            { value: labels[0], probability: 0.8 },
+            { value: labels[1], probability: 0.2 },
+          ],
+        },
+      ];
+      const data = { ...response(answers), diagnostics: { [credential]: labels } };
+      vi.mocked(fetchWithRetries).mockImplementation(
+        async () => new Response(JSON.stringify(data), { status: 200 }),
+      );
+      const instance = provider({
+        ...(apiKey
+          ? { apiKey: credential }
+          : {
+              headers: {
+                Authorization: `Basic ${Buffer.from(`account:${credential}`).toString('base64')}`,
+              },
+            }),
+        instructions: 'Choose a category',
+        labels,
+      });
+      const output = `Category fixture ${credential} ${enabled}`;
+      try {
+        await actualCache.withCacheEnabled(enabled, async () => {
+          const fresh = await instance.callClassificationApi(output);
+          const grading = await matchesClassification(labels[0], output, 0.5, {
+            provider: instance,
+          });
+          expect(fresh.error).toBeUndefined();
+          expect(fresh.classification).toEqual({ [labels[0]]: 0.8, [labels[1]]: 0.2 });
+          expect(grading).toMatchObject({ pass: true, score: 0.8 });
+          expect(grading.metadata?.graderError).toBeUndefined();
+          expect(fetchWithRetries).toHaveBeenCalledTimes(enabled ? 1 : 2);
+          expect(write).toHaveBeenCalledTimes(enabled ? 1 : 0);
+          if (enabled) {
+            const stored = JSON.parse(write.mock.calls[0]![1] as string).data;
+            expect(stored.answers).toEqual(answers);
+            expect(stored.diagnostics).toHaveProperty('[REDACTED]');
+            expect(JSON.stringify(stored.diagnostics)).not.toContain(credential);
+          }
+        });
+      } finally {
+        for (const [key] of write.mock.calls) {
+          await cache.del(key);
+        }
+      }
+    },
+  );
+
+  it.each(['enabled', 'disabled', 'bypass'] as const)(
+    'preserves configured response identities without exempting diagnostic echoes (%s)',
+    async (mode) => {
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const cache = actualCache.getCache();
+      const write = vi.spyOn(cache, 'set');
+      const answers = [
+        { name: 'test', type: 'predicate', probability: 0.9 },
+        {
+          name: 'test-choice',
+          type: 'choice',
+          choice: 'test',
+          confidence: 0.8,
+          probabilities: [
+            { value: 'test', probability: 0.8 },
+            { value: 'other_test', probability: 0.2 },
+          ],
+        },
+        {
+          name: 'test-score',
+          type: 'score',
+          score: 0.75,
+          confidence: 0.9,
+          probabilities: [
+            { value: 0, label: 'test_low', probability: 0.25 },
+            { value: 1, label: 'test_high', probability: 0.75 },
+          ],
+        },
+      ];
+      const data = {
+        ...response(answers),
+        model: 'gpt-test-model',
+        diagnostics: {
+          test: {
+            model: 'gpt-test-model',
+            name: 'test',
+            choice: 'other_test',
+            label: 'test_low',
+            instructions: 'test instruction',
+            description: 'test description',
+            input: 'test input',
+          },
+        },
+      };
+      vi.mocked(fetchWithRetries).mockImplementation(
+        async () => new Response(JSON.stringify(data), { status: 200 }),
+      );
+      const instance = new OpenAiDecisionsProvider('gpt-test-model', {
+        config: {
+          apiKey: 'test',
+          questions: [
+            { name: 'test', type: 'predicate', instructions: 'test instruction' },
+            {
+              name: 'test-choice',
+              type: 'choice',
+              instructions: 'Choose',
+              choices: [
+                { value: 'test', description: 'test description' },
+                { value: 'other_test' },
+              ],
+            },
+            {
+              name: 'test-score',
+              type: 'score',
+              instructions: 'Score',
+              levels: [{ label: 'test_low' }, { label: 'test_high' }],
+            },
+          ],
+        },
+      });
+      const context: CallApiContextParams = {
+        vars: {},
+        prompt: { raw: 'test input', label: 'Public identities' },
+        bustCache: mode === 'bypass',
+      };
+      try {
+        await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+          const fresh = await instance.callApi('test input', context);
+          const repeated = await instance.callApi('test input', context);
+          expect(fresh.error).toBeUndefined();
+          expect(fresh.output).toBe(JSON.stringify({ answers }));
+          expect(fresh.raw).toMatchObject({ answers, usage, model: 'gpt-test-model' });
+          expect(fresh.metadata?.model).toBe('gpt-test-model');
+          expect(fresh.tokenUsage).toMatchObject({ total: 165, prompt: 164, completion: 1 });
+          expect(repeated.raw).toEqual(fresh.raw);
+          expect(repeated.cached).toBe(mode === 'enabled');
+          expect(fetchWithRetries).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 2);
+          expect(write).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 0);
+          const diagnostics = (fresh.raw as typeof data).diagnostics;
+          expect(diagnostics).toHaveProperty('[REDACTED]');
+          expect(JSON.stringify(diagnostics)).not.toContain('test');
+          if (mode === 'enabled') {
+            expect(JSON.parse(write.mock.calls[0]![1] as string).data).toEqual(fresh.raw);
+          }
+        });
+      } finally {
+        for (const [key] of write.mock.calls) {
+          await cache.del(key);
+        }
+      }
+    },
+  );
+
   describe.each(['header', 'url'] as const)('%s Basic account identifiers', (source) => {
     it.each(['token', 'score'])(
       'preserves protocol fields and grading labels for username %s',

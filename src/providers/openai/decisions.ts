@@ -655,8 +655,19 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       value.replace(credentialPattern, '[REDACTED]');
     const errorText = (value: unknown): string =>
       redactCredentials(String(sanitizeObject(String(value), { sanitizeUrls: true })));
-    // Fixed protocol keys and literal tags are public structure, even when a credential matches.
-    // Data strings and unknown diagnostic keys still require credential redaction.
+    const publicIdentifiers = new Set([
+      body.model,
+      ...body.questions.flatMap((question) => [
+        question.name,
+        ...(question.type === 'choice'
+          ? question.choices.map(({ value }) => value)
+          : question.type === 'score'
+            ? question.levels.map(({ label }) => label)
+            : []),
+      ]),
+    ]);
+    // Fixed structure and request-declared identities must survive credential collisions.
+    // Only schema-declared fields may retain identities; diagnostic echoes still redact them.
     const responseData = (value: unknown, schema?: z.core.$ZodType): unknown => {
       if (schema instanceof z.ZodOptional) {
         schema = schema.unwrap();
@@ -668,7 +679,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         return value;
       }
       if (typeof value === 'string') {
-        return redactCredentials(value);
+        return schema && publicIdentifiers.has(value) ? value : redactCredentials(value);
       }
       if (Array.isArray(value)) {
         const element = schema instanceof z.ZodArray ? schema.element : undefined;
