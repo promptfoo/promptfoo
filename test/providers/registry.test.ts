@@ -14,6 +14,7 @@ import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getProviderFactories, mergeProviderEnv, providerMap } from '../../src/providers/registry';
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
+import { YApiProvider } from '../../src/providers/yapi';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -2342,6 +2343,101 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(autoProvider.id()).toBe('orcarouter:orcarouter/auto');
+    });
+
+    describe('y-api: prefix routing', () => {
+      // Empty id so the provider computes its own rather than using the fixture override.
+      const yApiOptions: ProviderOptions = { ...mockProviderOptions, id: undefined };
+
+      it.each([
+        'y-api:deepseek/deepseek-v4-pro',
+        'y-api:deepseek/deepseek-v4-flash',
+        'y-api:qwen/qwen3.8-flash',
+        'y-api:z-ai/glm-5.3',
+        'y-api:moonshotai/kimi-k3',
+        'y-api:minimax/minimax-m2.7',
+        'y-api:anthropic/claude-sonnet-5',
+        'y-api:openai/gpt-5.6-luna',
+        'y-api:chat:deepseek/deepseek-v4-pro',
+      ])('routes %s uniquely to the Y-API provider', async (providerPath) => {
+        const matchingFactories = providerMap.filter((factory) => factory.test(providerPath));
+        expect(matchingFactories).toHaveLength(1);
+
+        const provider = await matchingFactories[0].create(providerPath, yApiOptions, mockContext);
+
+        expect(provider).toBeInstanceOf(YApiProvider);
+        expect(provider.id()).toBe(
+          providerPath === 'y-api:chat:deepseek/deepseek-v4-pro'
+            ? 'y-api:deepseek/deepseek-v4-pro'
+            : providerPath,
+        );
+      });
+
+      it('claims only y-api: paths and nothing else', () => {
+        const yApiFactory = providerMap.find((factory) =>
+          factory.test('y-api:deepseek/deepseek-v4-pro'),
+        );
+        expect(yApiFactory).toBeDefined();
+
+        // Lookalike paths must not be captured by the y-api prefix test.
+        for (const other of [
+          'yapi:deepseek/deepseek-v4-pro',
+          'y-api',
+          'y-apix:deepseek/deepseek-v4-pro',
+          'ya-pi:deepseek/deepseek-v4-pro',
+          'openai:gpt-5.6-luna',
+        ]) {
+          expect(yApiFactory!.test(other)).toBe(false);
+        }
+
+        // And no other factory may capture a `y-api:` path ahead of it.
+        expect(
+          providerMap.filter((factory) => factory.test('y-api:deepseek/deepseek-v4-pro')),
+        ).toHaveLength(1);
+      });
+
+      it('defaults the Y-API endpoint and key envar when resolved through the registry', async () => {
+        const factory = providerMap.find((factory) => factory.test('y-api:z-ai/glm-5.3'));
+        const provider = (await factory!.create(
+          'y-api:z-ai/glm-5.3',
+          { id: undefined, config: {} },
+          mockContext,
+        )) as YApiProvider;
+
+        expect(provider.getApiUrl()).toBe('https://api.y-api.bestvirtualgoods.com/v1');
+        expect(provider.config.apiKeyEnvar).toBe('Y_API_API_KEY');
+      });
+
+      it('threads registry context env into the y-api provider', async () => {
+        const factory = providerMap.find((factory) => factory.test('y-api:qwen/qwen3.8-flash'));
+        const provider = await factory!.create('y-api:qwen/qwen3.8-flash', { config: {} }, {
+          ...mockContext,
+          env: { Y_API_API_KEY: 'context-key' },
+        } as LoadApiProviderContext);
+
+        expect((provider as YApiProvider).getApiKey()).toBe('context-key');
+      });
+
+      it('throws through the registry when the model is omitted', async () => {
+        const factory = providerMap.find((factory) => factory.test('y-api:'));
+        await expect(factory!.create('y-api:', yApiOptions, mockContext)).rejects.toThrow(
+          'Y-API provider requires a model in the format y-api:<vendor/model>',
+        );
+      });
+
+      it.each(['embedding', 'embeddings', 'image', 'moderation', 'responses', 'audio'])(
+        'fails fast through the registry for the unsupported y-api:%s sub-type',
+        async (subType) => {
+          const factory = providerMap.find((f) =>
+            f.test(`y-api:${subType}:deepseek/deepseek-v4-pro`),
+          );
+          expect(factory).toBeDefined();
+
+          await expect(
+            factory!.create(`y-api:${subType}:deepseek/deepseek-v4-pro`, yApiOptions, mockContext),
+          ).rejects.toThrow(/Y-API serves OpenAI-style chat completions only/);
+        },
+      );
     });
   });
 
