@@ -164,19 +164,24 @@ const tokenCount = z.number().int().nonnegative();
 const responseSchema = z.object({
   model: z.string().min(1),
   answers: z.array(answerSchema),
-  usage: z.object({
-    input_tokens: tokenCount,
-    output_tokens: tokenCount,
-    total_tokens: tokenCount,
-    input_tokens_details: z
-      .object({ cached_tokens: tokenCount.optional(), cache_write_tokens: tokenCount.optional() })
-      .passthrough()
-      .optional(),
-    output_tokens_details: z
-      .object({ reasoning_tokens: tokenCount.optional() })
-      .passthrough()
-      .optional(),
-  }),
+  usage: z
+    .object({
+      input_tokens: tokenCount,
+      output_tokens: tokenCount,
+      total_tokens: tokenCount,
+      input_tokens_details: z
+        .object({ cached_tokens: tokenCount.optional(), cache_write_tokens: tokenCount.optional() })
+        .passthrough()
+        .optional(),
+      output_tokens_details: z
+        .object({ reasoning_tokens: tokenCount.optional() })
+        .passthrough()
+        .optional(),
+    })
+    .refine(
+      ({ input_tokens, output_tokens, total_tokens }) =>
+        total_tokens === input_tokens + output_tokens,
+    ),
 });
 
 interface DecisionsOptions extends OpenAiSharedOptions {
@@ -651,13 +656,14 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         .join('|'),
       'g',
     );
-    const redactCredentials = (value: string): string =>
-      value.replace(credentialPattern, '[REDACTED]');
+    const redactCredentials = (value: string, publicModel?: string): string =>
+      value.replace(credentialPattern, (match) =>
+        publicModel?.includes(match) ? match : '[REDACTED]',
+      );
     const errorText = (value: unknown): string =>
       redactCredentials(String(sanitizeObject(String(value), { sanitizeUrls: true })));
-    const publicIdentifiers = new Set([
-      body.model,
-      ...body.questions.flatMap((question) => [
+    const publicIdentifiers = new Set(
+      body.questions.flatMap((question) => [
         question.name,
         ...(question.type === 'choice'
           ? question.choices.map(({ value }) => value)
@@ -665,7 +671,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
             ? question.levels.map(({ label }) => label)
             : []),
       ]),
-    ]);
+    );
     // Fixed structure and request-declared identities must survive credential collisions.
     // Only schema-declared fields may retain identities; diagnostic echoes still redact them.
     const responseData = (value: unknown, schema?: z.core.$ZodType): unknown => {
@@ -679,6 +685,10 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         return value;
       }
       if (typeof value === 'string') {
+        if (schema === responseSchema.shape.model) {
+          // Resolved snapshots may retain public model substrings, but not other credentials.
+          return redactCredentials(value, body.model);
+        }
         return schema && publicIdentifiers.has(value) ? value : redactCredentials(value);
       }
       if (Array.isArray(value)) {

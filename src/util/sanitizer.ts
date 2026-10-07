@@ -225,7 +225,7 @@ export const SECRET_FIELD_NAMES = new Set([
 ]);
 
 // Ambiguous names need a complete segment match: oauth/useSession/sameSiteCookie are settings.
-const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES].filter(
+const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES, 'subscriptionkey'].filter(
   (name) => !['auth', 'session', 'cookie', 'setcookie'].includes(name),
 );
 

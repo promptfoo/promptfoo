@@ -2173,6 +2173,64 @@ describe('legacy sanitizer aliases', () => {
 });
 
 describe('sanitizeUrl', () => {
+  describe('subscription-key parameters', () => {
+    it.each([
+      'subscription-key',
+      'subscription_key',
+      'SUBSCRIPTION-KEY',
+      'subscriptionKey',
+      'Ocp-Apim-Subscription-Key',
+      'OcpApimSubscriptionKey',
+      'subscription%2Dkey',
+      '%73ubscription-key',
+      'Ocp%2DApim%2DSubscription%2DKey',
+    ])('redacts %s in form bodies and diagnostic URLs', (key) => {
+      for (const credential of ['short', '0123456789abcdef0123456789abcdef']) {
+        const pair = `${key}=${credential}`;
+        expect(sanitizeUrlEncodedString(`tenant=public&${pair}`)).toBe(
+          `tenant=public&${key}=%5BREDACTED%5D`,
+        );
+        const url = `https://gateway.example/v1?tenant=public&${pair}`;
+        for (const sanitized of [sanitizeUrl(url), sanitizeUrlForLogging(url)]) {
+          const params = new URL(sanitized).searchParams;
+          expect(params.get(decodeURIComponent(key))).toBe('[REDACTED]');
+          expect(params.get('tenant')).toBe('public');
+        }
+        expect(sanitizeUrlForLogging(`http://[::1?${pair}`)).toBe('[REDACTED]');
+      }
+    });
+
+    it('redacts percent-encoded subscription credential values', () => {
+      const pair = 'subscription-key=%30%31%32%33%34%35%36%37%38%39abcdef0123456789abcdef';
+      expect(sanitizeUrlEncodedString(pair)).toBe('subscription-key=%5BREDACTED%5D');
+      expect(sanitizeUrlForLogging(`https://gateway.example/v1?${pair}`)).toBe(
+        'https://gateway.example/v1?subscription-key=%5BREDACTED%5D',
+      );
+    });
+
+    it('preserves subscription metadata and public key roles', () => {
+      const query =
+        'subscription_id=tenant-a&subscription_type=basic&subscriptionEnabled=true&subscriptionKeyType=header&subscriptionKeyEnabled=true&includeSubscriptionKey=false&publicKey=0123456789abcdef0123456789abcdef&idempotencyKey=request-123';
+      const url = `https://gateway.example/v1?${query}`;
+      expect(sanitizeUrlEncodedString(query)).toBe(query);
+      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrlForLogging(url)).toBe(url);
+    });
+
+    it('preserves pure subscription-key templates while redacting adjacent literal credentials', () => {
+      const template = 'subscription-key={{ env.GATEWAY_SUBSCRIPTION_KEY }}';
+      expect(sanitizeUrlEncodedString(template)).toBe(template);
+      const url = `https://gateway.example/{{ path }}?${template}`;
+      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrlEncodedString(`${template}&subscriptionKey=short`)).toBe(
+        `${template}&subscriptionKey=%5BREDACTED%5D`,
+      );
+      expect(sanitizeUrlEncodedString('subscription-key=literal{{ suffix }}')).toBe(
+        'subscription-key=%5BREDACTED%5D',
+      );
+    });
+  });
+
   it.each([
     'api_key_2',
     'apikey1',

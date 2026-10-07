@@ -935,6 +935,86 @@ describe('OpenAiDecisionsProvider', () => {
     expect(result.cost).toBe(0);
   });
 
+  it.each(
+    [1, 120, 121].flatMap((total) =>
+      (['fresh', 'cached', 'coalesced'] as const).map((mode) => ({ total, mode })),
+    ),
+  )('validates usage total $total before $mode accounting', async ({ total, mode }) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { ...response(), usage: { input_tokens: 100, output_tokens: 20, total_tokens: total } },
+      cached: mode === 'cached',
+      coalesced: mode === 'coalesced',
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache,
+    });
+    const result = await provider({ inputCost: 0.01, outputCost: 0.02 }).callApi('Usage fixture');
+    if (total === 120) {
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject(
+        mode === 'fresh'
+          ? { total: 120, prompt: 100, completion: 20 }
+          : { total: 120, cached: 120 },
+      );
+      expect(result.cost).toBeCloseTo(mode === 'fresh' ? 1.4 : 0);
+      expect(deleteFromCache).not.toHaveBeenCalled();
+    } else {
+      expect(result.error).toContain('Invalid OpenAI Decisions API response');
+      expect(result.output).toBeUndefined();
+      expect(result.raw).toBeUndefined();
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each(['enabled', 'disabled', 'bypass'] as const)(
+    'evicts inconsistent usage instead of reusing it when cache is %s',
+    async (mode) => {
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const cache = actualCache.getCache();
+      const write = vi.spyOn(cache, 'set');
+      vi.mocked(fetchWithRetries).mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({
+              ...response(),
+              usage: { input_tokens: 100, output_tokens: 20, total_tokens: 1 },
+            }),
+            { status: 200 },
+          ),
+      );
+      const instance = provider();
+      const prompt = `Inconsistent usage ${mode}`;
+      const context: CallApiContextParams = {
+        vars: {},
+        prompt: { raw: prompt, label: prompt },
+        bustCache: mode === 'bypass',
+      };
+      try {
+        await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const result = await instance.callApi(prompt, context);
+            expect(result.error).toContain('Invalid OpenAI Decisions API response');
+            expect(result.output).toBeUndefined();
+            expect(result.tokenUsage).toBeUndefined();
+          }
+          expect(fetchWithRetries).toHaveBeenCalledTimes(2);
+          expect(write).toHaveBeenCalledTimes(mode === 'enabled' ? 2 : 0);
+          for (const [key] of write.mock.calls) {
+            expect(await cache.get(key)).toBeUndefined();
+          }
+        });
+      } finally {
+        for (const [key] of write.mock.calls) {
+          await cache.del(key);
+        }
+      }
+    },
+  );
+
   it('does not persist signed URLs embedded in input in the cache', async () => {
     const input = 'https://example.com/image.png?X-Amz-Signature=sensitive-image-signature';
     await provider().callApi(input);
@@ -1380,6 +1460,10 @@ describe('OpenAiDecisionsProvider', () => {
     },
     { suffix: 'gateway.example/v1?api_key=shorturlsecret', credentials: ['shorturlsecret'] },
     {
+      suffix: 'gateway.example/v1?subscription-key=0123456789abcdef0123456789abcdef',
+      credentials: ['0123456789abcdef0123456789abcdef'],
+    },
+    {
       suffix: 'gateway.example/v1?api_key=sh%6Frt%2Bsecret',
       credentials: ['sh%6Frt%2Bsecret', 'short+secret'],
     },
@@ -1583,6 +1667,45 @@ describe('OpenAiDecisionsProvider', () => {
     }
   });
 
+  it.each(['enabled', 'disabled', 'bypass'] as const)(
+    'redacts subscription-key query URLs from malformed JSON failures (%s)',
+    async (mode) => {
+      const credential = '0123456789abcdef0123456789abcdef';
+      const apiBaseUrl = `https://gateway.example/v1?subscription-key=${credential}`;
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const write = vi.spyOn(actualCache.getCache(), 'set');
+      const debug = vi.spyOn(logger, 'debug');
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        new Response(`{"error":"${apiBaseUrl}",`, {
+          status: 401,
+          statusText: `Denied ${credential}`,
+        }),
+      );
+      const instance = provider({ apiKey: undefined, apiKeyRequired: false, apiBaseUrl });
+      await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+        const result = await instance.callApi(`Query parse fixture ${mode}`, {
+          vars: {},
+          prompt: { raw: 'text', label: 'text' },
+          bustCache: mode === 'bypass',
+        });
+        expect(result.error).toContain('Invalid JSON. HTTP 401.');
+        expect(result.error).toContain('subscription-key=');
+        expect(result.output).toBeUndefined();
+        expect(result.raw).toBeUndefined();
+        expect(write).not.toHaveBeenCalled();
+        expect(vi.mocked(fetchWithRetries).mock.calls[0]![0]).toBe(
+          apiBaseUrl.replace('/v1', '/v1/decisions'),
+        );
+        for (const value of [result, debug.mock.calls]) {
+          expect(JSON.stringify(value)).not.toContain(credential);
+          expect(JSON.stringify(value)).not.toContain(apiBaseUrl);
+        }
+      });
+    },
+  );
+
   it('does not reinterpret malformed Basic credentials or ordinary paths as secrets', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { error: { message: 'The auth proxy rejects user and password.' } },
@@ -1688,6 +1811,13 @@ describe('OpenAiDecisionsProvider', () => {
       credentials: ['0123456789abcdef0123456789abcdef', 'short-subscription-value'],
     },
     {
+      name: 'subscription-key query',
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1?subscription-key=0123456789abcdef0123456789abcdef',
+      },
+      credentials: ['0123456789abcdef0123456789abcdef'],
+    },
+    {
       name: 'URL userinfo and query',
       config: { apiBaseUrl: 'https://u:p@gateway.example/v1?api_key=shorturlsecret' },
       credentials: ['dTpw', 'shorturlsecret'],
@@ -1714,16 +1844,25 @@ describe('OpenAiDecisionsProvider', () => {
       const write = vi.spyOn(cache, 'set');
       const debug = vi.spyOn(logger, 'debug');
       vi.mocked(fetchWithRetries).mockResolvedValue(
-        new Response(JSON.stringify({ ...response(), echo: credentials }), {
-          status: 200,
-          statusText: `OK ${credentials.join(' ')}`,
-          headers: {
-            'content-type': 'application/json',
-            'x-request-id': `request ${credentials.join(' ')}`,
-            'retry-after': '2',
-            'x-gateway-auth': 'unknown-response-secret',
+        new Response(
+          JSON.stringify({
+            ...response(),
+            echo: credentials,
+            diagnostics: Object.fromEntries(
+              credentials.map((credential) => [credential, credential]),
+            ),
+          }),
+          {
+            status: 200,
+            statusText: `OK ${credentials.join(' ')}`,
+            headers: {
+              'content-type': 'application/json',
+              'x-request-id': `request ${credentials.join(' ')}`,
+              'retry-after': '2',
+              'x-gateway-auth': 'unknown-response-secret',
+            },
           },
-        }),
+        ),
       );
       const instance = provider({
         apiKey: undefined,
@@ -1739,9 +1878,22 @@ describe('OpenAiDecisionsProvider', () => {
         expect(fetchWithRetries).toHaveBeenCalledTimes(1);
         expect(write).toHaveBeenCalledTimes(1);
         const stored = JSON.parse(write.mock.calls[0]![1] as string);
-        expect(stored.statusText).toBe('OK [REDACTED] [REDACTED]');
+        const redactedEcho = credentials.map(() => '[REDACTED]').join(' ');
+        expect(stored.statusText).toBe(`OK ${redactedEcho}`);
+        expect(stored.data).toEqual({
+          ...response(),
+          echo: credentials.map(() => '[REDACTED]'),
+          diagnostics: { '[REDACTED]': '[REDACTED]' },
+        });
+        expect(fresh.raw).toEqual(stored.data);
+        expect(cached.raw).toEqual(stored.data);
+        if (typeof config.apiBaseUrl === 'string') {
+          expect(vi.mocked(fetchWithRetries).mock.calls[0]![0]).toBe(
+            config.apiBaseUrl.replace('/v1', '/v1/decisions'),
+          );
+        }
         expect(stored.headers).toEqual({
-          'x-request-id': 'request [REDACTED] [REDACTED]',
+          'x-request-id': `request ${redactedEcho}`,
           'retry-after': '2',
         });
         for (const value of [fresh, cached, write.mock.calls, debug.mock.calls]) {
@@ -2243,6 +2395,87 @@ describe('OpenAiDecisionsProvider', () => {
           if (mode === 'enabled') {
             expect(JSON.parse(write.mock.calls[0]![1] as string).data).toEqual(fresh.raw);
           }
+        });
+      } finally {
+        for (const [key] of write.mock.calls) {
+          await cache.del(key);
+        }
+      }
+    },
+  );
+
+  it.each(
+    [false, true].flatMap((echoPrivateCredential) =>
+      (['enabled', 'disabled', 'bypass'] as const).map((mode) => ({ echoPrivateCredential, mode })),
+    ),
+  )(
+    'preserves public model substrings while redacting private echoes ($mode, private: $echoPrivateCredential)',
+    async ({ mode, echoPrivateCredential }) => {
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const cache = actualCache.getCache();
+      const write = vi.spyOn(cache, 'set');
+      const privateCredential = 'private-gateway-credential';
+      const suffix = echoPrivateCredential ? `/${privateCredential}` : '';
+      const model = `gpt-6-luna-2026-10-01${suffix}`;
+      const expectedModel = `gpt-6-luna-2026-10-01${echoPrivateCredential ? '/[REDACTED]' : ''}`;
+      const diagnosticModel = expectedModel.replace('luna', '[REDACTED]');
+      const data = {
+        ...response(),
+        model,
+        diagnostics: { model, nested: { model }, luna: 'luna' },
+      };
+      vi.mocked(fetchWithRetries).mockImplementation(
+        async () => new Response(JSON.stringify(data), { status: 200 }),
+      );
+      const instance = provider({ apiKey: 'luna', headers: { 'X-Api-Key': privateCredential } });
+      const prompt = `Resolved model fixture ${mode} ${echoPrivateCredential}`;
+      const context: CallApiContextParams = {
+        vars: {},
+        prompt: { raw: prompt, label: prompt },
+        bustCache: mode === 'bypass',
+      };
+      try {
+        await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+          const fresh = await instance.callApi(prompt, context);
+          const repeated = await instance.callApi(prompt, context);
+          expect(fresh.error).toBeUndefined();
+          expect(fresh.raw).toEqual({
+            ...response(),
+            model: expectedModel,
+            diagnostics: {
+              model: diagnosticModel,
+              nested: { model: diagnosticModel },
+              '[REDACTED]': '[REDACTED]',
+            },
+          });
+          expect(fresh.metadata?.model).toBe(expectedModel);
+          expect(repeated.metadata?.model).toBe(expectedModel);
+          expect(repeated.raw).toEqual(fresh.raw);
+          expect(repeated.cached).toBe(mode === 'enabled');
+          expect(fetchWithRetries).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 2);
+          expect(write).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 0);
+          if (mode === 'enabled') {
+            expect(JSON.parse(write.mock.calls[0]![1] as string).data).toEqual(fresh.raw);
+          }
+          for (const value of [fresh, repeated, write.mock.calls]) {
+            expect(JSON.stringify(value)).not.toContain(privateCredential);
+          }
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                error: { message: model },
+              }),
+              { status: 401, statusText: model, headers: { 'x-request-id': model } },
+            ),
+          );
+          const failure = await instance.callApi(`${prompt} failure`, context);
+          expect(failure.error).toContain(diagnosticModel);
+          expect(failure.metadata?.http?.statusText).toBe(diagnosticModel);
+          expect(failure.metadata?.http?.headers?.['x-request-id']).toBe(diagnosticModel);
+          expect(JSON.stringify(failure)).not.toContain('luna');
+          expect(JSON.stringify(failure)).not.toContain(privateCredential);
         });
       } finally {
         for (const [key] of write.mock.calls) {
