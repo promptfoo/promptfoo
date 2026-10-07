@@ -9,9 +9,14 @@ import {
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
+import {
+  getCloudAuthHeaderName,
+  getCloudBearerToken,
+  isPromptfooCloudApiHost,
+} from '../../util/fetch/monkeyPatchFetch';
 import { renderVarsInObject } from '../../util/render';
 import {
-  isNonCredentialHeader,
+  isCredentialHeader,
   sanitizeObject,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
@@ -566,12 +571,32 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         ...this.getOpenAiRequestHeaders(config.headers, config),
       }).filter(([name]) => name.toLowerCase() !== 'x-promptfoo-silent'),
     );
+    const apiUrl = this.getApiUrl(config);
+    // Snapshot implicit Cloud auth before async transport work, cache identity, and redaction.
+    const cloudAuthHeaderName = isPromptfooCloudApiHost(apiUrl)
+      ? getCloudAuthHeaderName()
+      : undefined;
+    const cloudAuth = getCloudBearerToken(apiUrl);
+    if (cloudAuth && cloudAuthHeaderName && !hasHeaderOverride(headers, cloudAuthHeaderName)) {
+      const url = new URL(apiUrl);
+      // fetchWithProxy derives URL Basic auth before Cloud injection; keep that precedence.
+      if (
+        cloudAuthHeaderName.toLowerCase() !== 'authorization' ||
+        !(url.username || url.password)
+      ) {
+        headers[cloudAuthHeaderName] = cloudAuth;
+      }
+    }
     // Some API errors echo the supplied credential. Keep it out of eval results as well as logs.
     const secrets = [
       apiKey,
-      ...getUrlCredentials(this.getApiUrl(config)),
+      ...getUrlCredentials(apiUrl),
       ...Object.entries(headers)
-        .filter(([name]) => !isNonCredentialHeader(name))
+        .filter(
+          ([name, value]) =>
+            name.toLowerCase() === cloudAuthHeaderName?.toLowerCase() ||
+            isCredentialHeader(name, value),
+        )
         .flatMap(([name, value]) => getHeaderCredentials(name, value)),
     ]
       .filter((secret): secret is string => Boolean(secret))
@@ -629,7 +654,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
 
     let deleteFromCache: (() => Promise<void>) | undefined;
     try {
-      const url = appendOpenAiApiPath(this.getApiUrl(config), 'decisions');
+      const url = appendOpenAiApiPath(apiUrl, 'decisions');
       const transport = JSON.stringify([url, Array.from(new Headers(headers).entries()).sort()]);
       let scope = cacheScopes.get(transport);
       if (!scope) {
@@ -650,6 +675,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
           headers,
           body: JSON.stringify(body),
           signal: options?.abortSignal,
+          skipCloudAuthInjection: cloudAuthHeaderName !== undefined,
         },
         getRequestTimeoutMs(),
         'json',

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../../src/assertions/index';
 import { applyRagInverse } from '../../../src/assertions/ragDefaults';
 import { fetchWithCache } from '../../../src/cache';
+import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
 import { matchesClassification } from '../../../src/matchers/classification';
 import { matchesSelectBest } from '../../../src/matchers/comparison';
@@ -23,6 +24,7 @@ import { createProviderRateLimitOptions } from '../../../src/scheduler/providerW
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
+import { monkeyPatchFetch } from '../../../src/util/fetch/monkeyPatchFetch';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { CallApiContextParams } from '../../../src/types/providers';
@@ -685,6 +687,231 @@ describe('OpenAiDecisionsProvider', () => {
     });
   });
 
+  it.each([
+    ['X-Region', 'us'],
+    ['X-Tenant', 'token'],
+    ['X-Display-Name', 'score'],
+    ['Accept-Language', 'en'],
+  ])('preserves noncredential %s metadata in responses and the cache', async (name, value) => {
+    const actualCache =
+      await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+    vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+    const cache = actualCache.getCache();
+    const write = vi.spyOn(cache, 'set');
+    const answers = [
+      {
+        name: 'classification',
+        type: 'choice',
+        choice: value,
+        confidence: 0.8,
+        probabilities: [
+          { value, probability: 0.8 },
+          { value: 'other', probability: 0.2 },
+        ],
+      },
+    ];
+    const data = { ...response(answers), metadata: { [value]: value } };
+    vi.mocked(fetchWithRetries).mockImplementation(async () => new Response(JSON.stringify(data)));
+    const config = {
+      headers: { [name]: value },
+      questions: [
+        {
+          name: 'classification',
+          type: 'choice',
+          instructions: 'Choose.',
+          choices: [{ value }, { value: 'other' }],
+        },
+      ],
+    };
+    try {
+      await actualCache.withCacheEnabled(true, async () => {
+        const fresh = await provider(config).callApi(`metadata ${name}`);
+        const cached = await provider(config).callApi(`metadata ${name}`);
+        expect(fresh.error).toBeUndefined();
+        expect(fresh.raw).toEqual(data);
+        expect(JSON.parse(fresh.output as string)).toEqual({ answers });
+        expect(fresh.tokenUsage?.total).toBe(165);
+        expect(cached.raw).toEqual(data);
+        expect(cached.cached).toBe(true);
+        expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(write.mock.calls[0]![1] as string).data).toEqual(data);
+        expect(new Headers(vi.mocked(fetchWithRetries).mock.calls[0]![1]?.headers).get(name)).toBe(
+          value,
+        );
+      });
+    } finally {
+      for (const [key] of write.mock.calls) {
+        await cache.del(key);
+      }
+    }
+  });
+
+  describe('effective Cloud authentication', () => {
+    it.each(['Authorization', 'X-Session'])(
+      'isolates rotated %s credentials and sanitizes fresh and cached responses',
+      async (headerName) => {
+        vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('https://cloud.example');
+        const token = vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue('cloud-first-credential');
+        vi.spyOn(cloudConfig, 'getAuthHeaderName').mockReturnValue(headerName);
+        const actualCache =
+          await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+        vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+        const cache = actualCache.getCache();
+        const write = vi.spyOn(cache, 'set');
+        const debug = vi.spyOn(logger, 'debug');
+        vi.mocked(fetchWithRetries).mockImplementation(async (_url, options) => {
+          const authorization = new Headers(options?.headers).get(headerName);
+          expect(authorization).toBe(`Bearer ${token.mock.results.at(-1)?.value}`);
+          expect(options?.skipCloudAuthInjection).toBe(true);
+          if (headerName !== 'Authorization') {
+            expect(options?.restrictCloudAuthRedirects).toBe(true);
+          }
+          return new Response(
+            JSON.stringify({ ...response(), echo: { [authorization!]: authorization } }),
+            {
+              headers: { 'x-request-id': `request ${authorization}` },
+              statusText: `OK ${authorization}`,
+            },
+          );
+        });
+        const config = {
+          apiKey: undefined,
+          apiKeyRequired: false,
+          apiBaseUrl: 'https://cloud.example/v1',
+        };
+        try {
+          await actualCache.withCacheEnabled(true, async () => {
+            const first = await provider(config).callApi(`Cloud ${headerName}`);
+            const firstCached = await provider(config).callApi(`Cloud ${headerName}`);
+            token.mockReturnValue('cloud-second-credential');
+            const second = await provider(config).callApi(`Cloud ${headerName}`);
+            const secondCached = await provider(config).callApi(`Cloud ${headerName}`);
+            for (const result of [first, firstCached, second, secondCached]) {
+              expect(result.error).toBeUndefined();
+              expect(result.raw).toMatchObject({ echo: { '[REDACTED]': '[REDACTED]' } });
+            }
+            expect(first.cached).toBe(false);
+            expect(firstCached.cached).toBe(true);
+            expect(second.cached).toBe(false);
+            expect(secondCached.cached).toBe(true);
+            expect(fetchWithRetries).toHaveBeenCalledTimes(2);
+            expect(write).toHaveBeenCalledTimes(2);
+            for (const value of [
+              first,
+              firstCached,
+              second,
+              secondCached,
+              write.mock.calls,
+              debug.mock.calls,
+            ]) {
+              expect(JSON.stringify(value)).not.toMatch(/cloud-(?:first|second)-credential/);
+            }
+          });
+        } finally {
+          for (const [key] of write.mock.calls) {
+            await cache.del(key);
+          }
+        }
+      },
+    );
+
+    it.each([
+      {
+        headerName: 'Authorization',
+        headers: { aUtHoRiZaTiOn: 'Custom explicit-credential' },
+        userinfo: '',
+        expected: 'Custom explicit-credential',
+      },
+      {
+        headerName: 'X-Session',
+        headers: { 'x-SeSsIoN': 'opaque-credential' },
+        userinfo: '',
+        expected: 'opaque-credential',
+      },
+      { headerName: 'Authorization', headers: {}, userinfo: 'u:p@', expected: null },
+      {
+        headerName: 'X-Session',
+        headers: {},
+        userinfo: 'u:p@',
+        expected: 'Bearer cloud-credential',
+      },
+    ])(
+      'preserves caller and URL-userinfo precedence: $headerName / $userinfo / $expected',
+      async ({ headerName, headers, userinfo, expected }) => {
+        vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('https://cloud.example');
+        vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue('cloud-credential');
+        vi.spyOn(cloudConfig, 'getAuthHeaderName').mockReturnValue(headerName);
+        const message = `Rejected ${expected ?? 'Basic dTpw'}`;
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { error: { message } },
+          status: 401,
+          statusText: message,
+          cached: false,
+        });
+        const result = await provider({
+          apiKey: undefined,
+          apiKeyRequired: false,
+          apiBaseUrl: `https://${userinfo}cloud.example/v1`,
+          headers,
+        }).callApi('precedence fixture');
+        const options = vi.mocked(fetchWithCache).mock.calls[0]![1]!;
+        expect(new Headers(options.headers).get(headerName)).toBe(expected);
+        expect(options.skipCloudAuthInjection).toBe(true);
+        expect(result.error).toContain('[REDACTED]');
+        expect(result.error).not.toContain(expected ?? 'dTpw');
+        if (userinfo) {
+          expect(new Headers(options.headers).has('authorization')).toBe(false);
+        }
+      },
+    );
+
+    it.each(['cloud-initial-credential', undefined])(
+      'keeps the captured Cloud auth snapshot across an in-flight login change (%s)',
+      async (initialToken) => {
+        vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('https://cloud.example');
+        const token = vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue(initialToken);
+        const headerName = vi.spyOn(cloudConfig, 'getAuthHeaderName').mockReturnValue('X-Session');
+        const rawFetch = vi.fn().mockResolvedValue(new Response('{}'));
+        vi.stubGlobal('fetch', rawFetch);
+        vi.mocked(fetchWithCache).mockImplementation(async (url, options) => {
+          // Simulate a login change during asynchronous transport setup, before fetch injection.
+          await Promise.resolve();
+          token.mockReturnValue('cloud-next-credential');
+          headerName.mockReturnValue('X-Other-Session');
+          await monkeyPatchFetch(url, options);
+          return { data: response(), status: 200, statusText: 'OK', cached: false };
+        });
+        try {
+          const result = await provider({
+            apiKey: undefined,
+            apiKeyRequired: false,
+            apiBaseUrl: 'https://cloud.example/v1',
+          }).callApi('snapshot fixture');
+          expect(result.error).toBeUndefined();
+          const sent = new Headers(rawFetch.mock.calls[0]![1].headers);
+          expect(sent.get('x-session')).toBe(initialToken ? `Bearer ${initialToken}` : null);
+          expect(sent.has('x-other-session')).toBe(false);
+        } finally {
+          vi.unstubAllGlobals();
+        }
+      },
+    );
+
+    it('keeps ordinary gateway headers outside Cloud auth and redirect policy', async () => {
+      vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('https://cloud.example');
+      vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue('cloud-credential');
+      vi.spyOn(cloudConfig, 'getAuthHeaderName').mockReturnValue('X-Session');
+      await provider({
+        apiBaseUrl: 'https://gateway.example/v1',
+        headers: { 'X-Session': 'Bearer gateway-credential' },
+      }).callApi('gateway fixture');
+      const options = vi.mocked(fetchWithCache).mock.calls[0]![1]!;
+      expect(options.skipCloudAuthInjection).not.toBe(true);
+      expect(options.restrictCloudAuthRedirects).toBeUndefined();
+      expect(new Headers(options.headers).get('x-session')).toBe('Bearer gateway-credential');
+    });
+  });
+
   it('marks cached usage without billing another request', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: response(),
@@ -1119,6 +1346,31 @@ describe('OpenAiDecisionsProvider', () => {
   );
 
   it.each([
+    {
+      name: 'credential-named custom header',
+      config: { headers: { 'X-Gateway-Auth': 'gateway-secret-value' } },
+      credentials: ['gateway-secret-value'],
+    },
+    {
+      name: 'API-key custom header',
+      config: { headers: { 'X-Api-Key': 'gateway-key-value' } },
+      credentials: ['gateway-key-value'],
+    },
+    {
+      name: 'custom bearer header',
+      config: { headers: { 'X-Unlabeled': 'Bearer short-credential' } },
+      credentials: ['short-credential'],
+    },
+    {
+      name: 'custom Basic header',
+      config: { headers: { 'X-Unlabeled': 'Basic dTpw' } },
+      credentials: ['dTpw', 'u:p'],
+    },
+    {
+      name: 'secret-like value in an opaque header',
+      config: { headers: { 'X-Unlabeled': 'sk-abcdefghijklmnopqrstuvw' } },
+      credentials: ['sk-abcdefghijklmnopqrstuvw'],
+    },
     {
       name: 'multiple cookie values',
       config: { headers: { cOoKiE: 'session=opaque-session-123; csrf=second-session-456' } },
