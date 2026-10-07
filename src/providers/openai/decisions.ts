@@ -245,9 +245,17 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       };
     }
     if (context && label === 'llm-rubric') {
-      return this.grade(config, context, options);
+      return this.grade(prompt, config, context, options);
     }
-    return this.ask(prompt, config, context, options);
+    let input: unknown = prompt;
+    if (prompt.trimStart().startsWith('[')) {
+      try {
+        input = normalizeResponsesInput(JSON.parse(prompt));
+      } catch {
+        // Brackets also begin ordinary text, such as log prefixes and Markdown checklists.
+      }
+    }
+    return this.ask(input, config, context, options);
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
@@ -275,7 +283,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       questions: [{ name: 'classification', type: 'choice', instructions, choices }],
     });
     if (result.error) {
-      return { error: result.error };
+      return result;
     }
     const answer = responseSchema.parse(result.raw).answers[0];
     if (answer.type !== 'choice') {
@@ -289,10 +297,36 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
   }
 
   private async grade(
+    prompt: string,
     config: DecisionsOptions,
     context: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // The matcher puts attachments in the rendered prompt, while vars.output may be only a
+    // placeholder. Reject actual media parts rather than grading that placeholder as evidence.
+    try {
+      const messages = z
+        .array(z.object({ content: z.unknown().optional() }))
+        .safeParse(JSON.parse(prompt));
+      const textPart = z.object({
+        type: z.enum(['text', 'input_text', 'output_text']),
+        text: z.string(),
+      });
+      if (
+        messages.success &&
+        messages.data.some(
+          ({ content }) =>
+            Array.isArray(content) && content.some((part) => !textPart.safeParse(part).success),
+        )
+      ) {
+        return {
+          error:
+            'OpenAI Decisions `llm-rubric` supports text output only; media attachments are not supported.',
+        };
+      }
+    } catch {
+      // Plain-text grading prompts have no structured attachments.
+    }
     const threshold = probability.safeParse(config.threshold ?? 0.5);
     if (!threshold.success) {
       return { error: 'OpenAI Decisions `threshold` must be a number from 0 to 1.' };
@@ -343,7 +377,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
   }
 
   private async ask(
-    prompt: string,
+    input: unknown,
     config: DecisionsOptions,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
@@ -355,14 +389,6 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
 
     let body: z.infer<typeof requestSchema>;
     try {
-      let input: unknown = prompt;
-      if (context?.prompt?.label !== 'llm-rubric' && prompt.trimStart().startsWith('[')) {
-        try {
-          input = normalizeResponsesInput(JSON.parse(prompt));
-        } catch {
-          // Brackets also begin ordinary text, such as log prefixes and Markdown checklists.
-        }
-      }
       body = requestSchema.parse({
         model: context?.prompt?.config?.model ?? this.modelName,
         input,
@@ -391,7 +417,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         testIndex: context?.testIdx,
         promptLabel: context?.prompt?.label,
         traceparent: context?.traceparent,
-        requestBody: prompt,
+        requestBody: typeof input === 'string' ? input : JSON.stringify(input),
       },
       () => this.callDecisions(body, config, apiKey, context, options),
       extractProviderResponseAttributes,
