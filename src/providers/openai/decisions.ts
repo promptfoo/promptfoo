@@ -689,7 +689,8 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         const shape = schema instanceof z.ZodObject ? schema.shape : undefined;
         return Object.fromEntries(
           Object.entries(value).map(([key, item]) => {
-            const field = shape && Object.hasOwn(shape, key) ? shape[key] : undefined;
+            const field =
+              shape && Object.prototype.hasOwnProperty.call(shape, key) ? shape[key] : undefined;
             return [field ? key : redactCredentials(key), responseData(item, field)];
           }),
         );
