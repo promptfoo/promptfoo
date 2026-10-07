@@ -694,23 +694,104 @@ describe('OpenAiDecisionsProvider', () => {
     expect(requestBody().safety_identifier).toHaveLength(128);
   });
 
-  it.each(
-    [
-      [{ ...choiceQuestion, choices: [{ value: 'only' }] }],
-      [{ ...scoreQuestion, levels: [{ label: 'only' }] }],
-      Array.from({ length: 65 }, () => ({ type: 'predicate', instructions: 'Check.' })),
-      [
+  it.each([
+    { questions: [{ ...choiceQuestion, choices: [{ value: 'only' }] }], field: 'choices' },
+    {
+      questions: [
         {
           ...choiceQuestion,
           choices: Array.from({ length: 256 }, (_, i) => ({ value: String(i) })),
         },
       ],
-      [{ ...scoreQuestion, levels: Array.from({ length: 11 }, (_, i) => ({ label: String(i) })) }],
-    ].map((questions) => ({ questions })),
-  )('does not enforce undocumented question cardinality limits %#', async ({ questions }) => {
-    await provider({ questions }).callApi('text');
-    expect(fetchWithCache).toHaveBeenCalledOnce();
-    expect(requestBody().questions).toEqual(questions);
+      field: 'choices',
+    },
+    { questions: [{ ...scoreQuestion, levels: [{ label: 'only' }] }], field: 'levels' },
+    {
+      questions: [
+        { ...scoreQuestion, levels: Array.from({ length: 11 }, (_, i) => ({ label: String(i) })) },
+      ],
+      field: 'levels',
+    },
+    { questions: [predicateQuestion, predicateQuestion], field: 'Question names must be unique' },
+    {
+      questions: [
+        { ...predicateQuestion, name: '' },
+        { ...scoreQuestion, name: '' },
+      ],
+      field: 'Question names must be unique',
+    },
+  ])(
+    'rejects API-invalid question cardinality or duplicate names %# before network',
+    async ({ questions, field }) => {
+      const result = await provider({ questions }).callApi('text');
+      expect(result.error).toContain(field);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([2, 255])('accepts the valid choice boundary of %s options', async (count) => {
+    const choices = Array.from({ length: count }, (_, i) => ({ value: String(i) }));
+    const answer = {
+      name: null,
+      type: 'choice',
+      choice: '0',
+      confidence: 1,
+      probabilities: choices.map(({ value }, i) => ({ value, probability: i === 0 ? 1 : 0 })),
+    };
+    mockAnswers([answer]);
+    const result = await provider({ questions: [{ ...choiceQuestion, choices }] }).callApi('text');
+    expect(result.error).toBeUndefined();
+    expect(requestBody().questions[0].choices).toEqual(choices);
+    expect(JSON.parse(result.output as string)).toEqual({ answers: [answer] });
+  });
+
+  it.each([2, 10])('accepts the valid score boundary of %s levels', async (count) => {
+    const levels = Array.from({ length: count }, (_, i) => ({ label: String(i) }));
+    const answer = {
+      name: 'urgency',
+      type: 'score',
+      score: 0,
+      confidence: 1,
+      probabilities: levels.map(({ label }, value) => ({
+        label,
+        value,
+        probability: value === 0 ? 1 : 0,
+      })),
+    };
+    mockAnswers([answer]);
+    const result = await provider({ questions: [{ ...scoreQuestion, levels }] }).callApi('text');
+    expect(result.error).toBeUndefined();
+    expect(requestBody().questions[0].levels).toEqual(levels);
+    expect(JSON.parse(result.output as string)).toEqual({ answers: [answer] });
+  });
+
+  it.each([false, true])(
+    'accepts 65 questions with repeated unnamed or unique supplied names (named: %s)',
+    async (named) => {
+      const questions = Array.from({ length: 65 }, (_, i) => ({
+        type: 'predicate',
+        instructions: 'Check.',
+        ...(named ? { name: `question-${i}` } : {}),
+      }));
+      const answers = questions.map((question) => ({
+        name: question.name ?? null,
+        type: 'predicate',
+        probability: 0.5,
+      }));
+      mockAnswers(answers);
+      const result = await provider({ questions }).callApi('text');
+      expect(result.error).toBeUndefined();
+      expect(requestBody().questions).toEqual(questions);
+      expect(JSON.parse(result.output as string)).toEqual({ answers });
+    },
+  );
+
+  it('checks question name uniqueness after rendering variables', async () => {
+    const result = await provider({
+      questions: [predicateQuestion, { ...predicateQuestion, name: '{{name}}' }],
+    }).callApi('text', { vars: { name: predicateQuestion.name } });
+    expect(result.error).toContain('Question names must be unique');
+    expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
   it.each(['https://example.com/image.png', 'file-123', 'data:text/plain;base64,aGVsbG8='])(
@@ -847,14 +928,43 @@ describe('OpenAiDecisionsProvider', () => {
       expect(fetchWithCache).not.toHaveBeenCalled();
     });
 
-    it.each([[], ['Only'], [1, 2], [{ label: 'Low' }, {}]].map((levels) => ({ levels })))(
-      'rejects malformed grading levels %j',
-      async ({ levels }) => {
-        const result = await provider({ levels }).callApi('', rubricContext('Is polite', 'Thanks'));
-        expect(result.error).toContain('levels');
-        expect(fetchWithCache).not.toHaveBeenCalled();
-      },
-    );
+    it.each(
+      [
+        [],
+        ['Only'],
+        [1, 2],
+        [{ label: 'Low' }, {}],
+        Array.from({ length: 11 }, (_, i) => String(i)),
+      ].map((levels) => ({ levels })),
+    )('rejects malformed grading levels %j', async ({ levels }) => {
+      const result = await provider({ levels }).callApi('', rubricContext('Is polite', 'Thanks'));
+      expect(result.error).toContain('levels');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('grades with the maximum of ten score levels', async () => {
+      const levels = Array.from({ length: 10 }, (_, i) => String(i));
+      mockAnswers([
+        {
+          name: 'grade',
+          type: 'score',
+          score: 9,
+          confidence: 1,
+          probabilities: levels.map((label, value) => ({
+            label,
+            value,
+            probability: value === 9 ? 1 : 0,
+          })),
+        },
+      ]);
+      const result = await provider({ levels }).callApi(
+        '',
+        rubricContext('Meets requirements', 'Answer'),
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.output).toMatchObject({ pass: true, score: 1 });
+      expect(requestBody().questions[0].levels).toEqual(levels.map((label) => ({ label })));
+    });
 
     it.each([false, 0, null, { key: 'value' }, ['a', 'b']])(
       'grades structured output as text %j',
@@ -1020,6 +1130,8 @@ describe('OpenAiDecisionsProvider', () => {
       { instructions },
       { labels: ['a'] },
       { instructions, labels: [] },
+      { instructions, labels: ['only'] },
+      { instructions, labels: Array.from({ length: 256 }, (_, i) => String(i)) },
       { instructions, labels: {} },
       { instructions, labels: ['a', 'a'] },
       { instructions, labels: [true, false] },

@@ -32,7 +32,8 @@ const questionFields = { name: z.string().optional(), instructions: z.string() }
 const levelSchema = z.object({ label: z.string(), description: z.string().optional() }).strict();
 const gradingLevelsSchema = z
   .array(z.union([z.string().transform((label) => ({ label })), levelSchema]))
-  .min(2);
+  .min(2)
+  .max(10);
 // These JSON graders treat an object without a pass field as passing.
 const UNSUPPORTED_GRADER_LABELS = ['agent-rubric', 'trajectory:goal-success'];
 const questionSchema = z.discriminatedUnion('type', [
@@ -43,7 +44,8 @@ const questionSchema = z.discriminatedUnion('type', [
       type: z.literal('choice'),
       choices: z
         .array(z.object({ value: choiceValue, description: z.string().optional() }).strict())
-        .min(1)
+        .min(2)
+        .max(255)
         .refine(
           (choices) => new Set(choices.map((choice) => choice.value)).size === choices.length,
           {
@@ -56,11 +58,20 @@ const questionSchema = z.discriminatedUnion('type', [
     .object({
       ...questionFields,
       type: z.literal('score'),
-      levels: z.array(levelSchema).min(1),
+      levels: z.array(levelSchema).min(2).max(10),
     })
     .strict(),
 ]);
-const questionsSchema = z.array(questionSchema).min(1);
+const questionsSchema = z
+  .array(questionSchema)
+  .min(1)
+  .refine(
+    (questions) => {
+      const names = questions.map(({ name }) => name).filter((name) => name !== undefined);
+      return new Set(names).size === names.length;
+    },
+    { message: 'Question names must be unique within the request' },
+  );
 
 const inputSchema = z.union([
   z.string(),
@@ -342,7 +353,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     if (levels && !levels.success) {
       return {
         error:
-          'OpenAI Decisions `levels` must list at least two strings or {label, description?} objects, ordered low to high.',
+          'OpenAI Decisions `levels` must list 2 to 10 strings or {label, description?} objects, ordered low to high.',
       };
     }
     const instructions = typeof rubric === 'string' ? rubric : JSON.stringify(rubric);
