@@ -59,7 +59,7 @@ npx promptfoo@latest eval --no-cache -o results.json
 | `model`                                            | Required when using bare `openai:decisions`. A model in `openai:decisions:<model>` takes precedence. There is no default model. |
 | `questions`                                        | One or more predicate, choice, or score questions. Required when testing the provider directly.                                 |
 | `threshold`                                        | Pass cutoff for `llm-rubric`, from 0 to 1. Defaults to `0.5`.                                                                   |
-| `levels`                                           | Ordered score levels for `llm-rubric`, as strings or `{ label, description? }` objects. Omit to use a predicate.                |
+| `levels`                                           | Two to ten ordered score levels for `llm-rubric`, as strings or `{ label, description? }` objects. Omit to use a predicate.     |
 | `instructions`, `labels`                           | Required for `classifier`: a question and a list of labels or a map of label to description.                                    |
 | `safety_identifier`                                | Optional stable pseudonymous end-user identifier, at most 128 characters, or `null`.                                            |
 | `apiKey`, `apiKeyEnvar`                            | Standard OpenAI credential overrides. Defaults to `OPENAI_API_KEY`.                                                             |
@@ -75,11 +75,11 @@ Promptfoo does not infer a default Decisions price. Cost estimates require the e
 
 Every question requires `type` and `instructions`. An optional `name` identifies its answer; supplied names must be unique within the request. Answers preserve question order and echo the name, or use `null` when omitted. Questions are evaluated independently.
 
-| Type        | Additional configuration                                                                                 | Answer                                                             |
-| ----------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `predicate` | None; `instructions` states the proposition to evaluate.                                                 | `probability` that the proposition holds, between 0 and 1.         |
-| `choice`    | `choices`: Two or more objects with a unique string or Boolean `value` and optional `description`.       | Selected `choice`, a full `probabilities` array, and `confidence`. |
-| `score`     | `levels`: Two or more objects ordered lowest to highest, each with a `label` and optional `description`. | Expected `score`, a full `probabilities` array, and `confidence`.  |
+| Type        | Additional configuration                                                                          | Answer                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `predicate` | None; `instructions` states the proposition to evaluate.                                          | `probability` that the proposition holds, between 0 and 1.         |
+| `choice`    | `choices`: 2–255 objects with a unique string or Boolean `value` and optional `description`.      | Selected `choice`, a full `probabilities` array, and `confidence`. |
+| `score`     | `levels`: 2–10 objects ordered lowest to highest, each with a `label` and optional `description`. | Expected `score`, a full `probabilities` array, and `confidence`.  |
 
 Choice values keep their original types: Boolean `true` and `false` are returned as Booleans. When a choice has no description, its value supplies the scoring text.
 
@@ -160,7 +160,7 @@ assert:
           - Acknowledges the problem and offers a concrete fix
 ```
 
-List levels from low to high. The expected score is divided by `levels.length - 1` to produce a grading score from 0 to 1. For example, `1.5` across three levels becomes `0.75`.
+List 2–10 levels from low to high. The expected score is divided by `levels.length - 1` to produce a grading score from 0 to 1. For example, `1.5` across three levels becomes `0.75`.
 
 For classification, set a question in `instructions` and options in `labels`:
 
