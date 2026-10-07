@@ -1,9 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 
+import { satisfies, validRange } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
+import logger from '../../src/logger';
 import {
   CODEX_SECURITY_OPERATIONS,
   OpenAICodexSecurityProvider,
@@ -13,6 +15,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../src/util/tokenUsageUtils';
+import { createDeferred } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -35,9 +38,10 @@ const mockModule = {
     refs: mockRefs,
     workingTree: mockWorkingTree,
   },
-  VERSION: '0.1.18',
+  VERSION: '0.2.0',
   BUNDLED_PLUGIN_VERSION: '0.1.22',
 };
+const incompatibleSdkVersions = ['0.1.18', '0.1.30', '0.1.31'] as const;
 
 function createScanResult(overrides: Record<string, unknown> = {}) {
   const findings = {
@@ -206,9 +210,14 @@ describe('OpenAICodexSecurityProvider', () => {
       vi.mocked(resolvePackageEntryPoint).mockReturnValue(null);
       const provider = new OpenAICodexSecurityProvider();
 
-      expect(await provider.callApi('Scan')).toEqual({
+      const response = await provider.callApi('Scan');
+
+      expect(response).toEqual({
         error: expect.stringContaining('npm install promptfoo @openai/codex-security'),
       });
+      expect(response.error).toContain(
+        'If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.',
+      );
     });
 
     it('explains SDK import and runtime failures', async () => {
@@ -219,7 +228,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       expect(response.error).toContain('Failed to load @openai/codex-security');
       expect(response.error).toContain('even-numbered Node.js');
-      expect(response.error).toContain('^22.22.0');
+      expect(response.error).toContain('npm install promptfoo @openai/codex-security');
     });
 
     it('ignores an outdated trusted SDK and loads a compatible Promptfoo installation', async () => {
@@ -231,14 +240,14 @@ describe('OpenAICodexSecurityProvider', () => {
       );
       vi.mocked(importModule).mockImplementation(async (entryPoint) =>
         String(entryPoint).startsWith('/legacy/')
-          ? { ...mockModule, VERSION: '0.1.8' }
+          ? { ...mockModule, VERSION: incompatibleSdkVersions[0] }
           : mockModule,
       );
       const provider = new OpenAICodexSecurityProvider();
 
       const response = await provider.callApi('Scan');
 
-      expect(response.metadata?.sdkVersion).toBe('0.1.18');
+      expect(response.metadata?.sdkVersion).toBe(mockModule.VERSION);
       expect(importModule).toHaveBeenCalledWith('/legacy/@openai/codex-security/dist/index.js');
       expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
     });
@@ -260,7 +269,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan');
 
-      expect(response.metadata?.sdkVersion).toBe('0.1.18');
+      expect(response.metadata?.sdkVersion).toBe(mockModule.VERSION);
       expect(importModule).toHaveBeenCalledWith('/broken/@openai/codex-security/dist/index.js');
       expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
     });
@@ -278,7 +287,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan the adversarial checkout');
 
-      expect(response.metadata?.sdkVersion).toBe('0.1.18');
+      expect(response.metadata?.sdkVersion).toBe(mockModule.VERSION);
       expect(resolvePackageEntryPoint).not.toHaveBeenCalledWith(
         '@openai/codex-security',
         '/adversarial/repository',
@@ -303,16 +312,31 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(mockRun).not.toHaveBeenCalled();
     });
 
-    it('rejects outdated security SDKs that omit validation and deep-worker usage', async () => {
-      vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION: '0.1.8' });
-      const provider = new OpenAICodexSecurityProvider();
+    it.each([...incompatibleSdkVersions, '0.3.0', '1.0.0'])(
+      'rejects incompatible security SDK %s',
+      async (version) => {
+        vi.mocked(importModule).mockResolvedValue({
+          ...mockModule,
+          VERSION: version,
+        });
+        const provider = new OpenAICodexSecurityProvider();
 
-      const response = await provider.callApi('Scan');
+        const response = await provider.callApi('Scan');
 
-      expect(response.error).toContain('package is incompatible (0.1.8)');
-      expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
-      expect(mockRun).not.toHaveBeenCalled();
-    });
+        expect(response.error).toContain(`package is incompatible (${version})`);
+        const suggestedRange = response.error?.match(
+          /npm install promptfoo @openai\/codex-security@(\S+)/,
+        )?.[1];
+        expect(suggestedRange).toBeDefined();
+        expect(validRange(suggestedRange)).not.toBeNull();
+        expect(satisfies(version, suggestedRange!)).toBe(false);
+        expect(satisfies(mockModule.VERSION, suggestedRange!)).toBe(true);
+        for (const incompatibleVersion of incompatibleSdkVersions) {
+          expect(satisfies(incompatibleVersion, suggestedRange!)).toBe(false);
+        }
+        expect(mockRun).not.toHaveBeenCalled();
+      },
+    );
 
     it('reports multiple incompatible trusted SDK versions together', async () => {
       const firstTrustedRoot = path.resolve(getDirectory(), '..');
@@ -323,15 +347,17 @@ describe('OpenAICodexSecurityProvider', () => {
       );
       vi.mocked(importModule).mockImplementation(async (entryPoint) =>
         String(entryPoint).startsWith('/legacy/')
-          ? { ...mockModule, VERSION: '0.1.8' }
-          : { ...mockModule, VERSION: '0.1.10' },
+          ? { ...mockModule, VERSION: incompatibleSdkVersions[0] }
+          : { ...mockModule, VERSION: incompatibleSdkVersions[1] },
       );
       const provider = new OpenAICodexSecurityProvider();
 
       const response = await provider.callApi('Scan');
 
-      expect(response.error).toContain('package is incompatible (0.1.8, 0.1.10)');
-      expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
+      expect(response.error).toContain(
+        `package is incompatible (${incompatibleSdkVersions.slice(0, 2).join(', ')})`,
+      );
+      expect(response.error).toContain('npm install promptfoo @openai/codex-security@');
       expect(mockRun).not.toHaveBeenCalled();
     });
 
@@ -398,8 +424,8 @@ describe('OpenAICodexSecurityProvider', () => {
           model: 'gpt-5.6-sol',
           reasoningEffort: 'high',
           findingsCount: 1,
-          pluginVersion: '0.1.22',
-          sdkVersion: '0.1.18',
+          pluginVersion: result.pluginVersion,
+          sdkVersion: mockModule.VERSION,
           skillCalls: [{ name: 'security-scan' }],
         },
       });
@@ -527,6 +553,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
     it('resolves repository, output, plugin, and knowledge-base paths from the config directory', async () => {
       const configDirectory = path.resolve('/workspace/evals');
+      const expectedPluginVersion = '9.8.7';
       cliState.basePath = configDirectory;
       const provider = new OpenAICodexSecurityProvider({
         config: {
@@ -539,7 +566,7 @@ describe('OpenAICodexSecurityProvider', () => {
           scan_prompt: 'Security policy: protect payment data.',
           validation_prompt: 'Reject speculative issues.',
           post_scan_prompt: 'Summarize remaining risk.',
-          expected_plugin_version: '0.1.22',
+          expected_plugin_version: expectedPluginVersion,
           failure_severity: 'high',
           auth: 'api-key',
         },
@@ -561,7 +588,7 @@ describe('OpenAICodexSecurityProvider', () => {
           scanPrompt: 'Security policy: protect payment data.\n\nCheck checkout handlers',
           validationPrompt: 'Reject speculative issues.',
           postScanPrompt: 'Summarize remaining risk.',
-          expectedPluginVersion: '0.1.22',
+          expectedPluginVersion,
           failureSeverity: 'high',
         }),
       );
@@ -733,6 +760,57 @@ describe('OpenAICodexSecurityProvider', () => {
       });
       expect(response.error).toContain('aborted before it started');
       expect(mockRun).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      'Request rejected with Bearer synthetic-credential',
+      'Could not save scan session: api_key=synthetic-credential',
+      'Transport returned sk-proj-synthetic-credential',
+      'Request to https://synthetic:credential@example.test failed',
+      'Diagnostic: -----BEGIN PRIVATE KEY----- synthetic',
+    ])('omits credential-bearing SDK diagnostics: %s', async (diagnostic) => {
+      mockRun.mockImplementationOnce(async (_repository, options) => {
+        options.onWarning(diagnostic);
+        options.onWarning('Could not save scan session: disk is full');
+        return createScanResult();
+      });
+      const provider = new OpenAICodexSecurityProvider();
+      const successful = await provider.callApi('Scan');
+      expect(successful.metadata?.warnings).toEqual([
+        '[redacted]',
+        'Could not save scan session: disk is full',
+      ]);
+      mockRun.mockRejectedValueOnce(new Error(diagnostic));
+      expect(await provider.callApi('Scan')).toEqual({
+        error: 'Codex Security operation failed: [redacted]',
+      });
+    });
+
+    it('does not log SDK error stacks or causes during import and cleanup failures', async () => {
+      const error = new Error('SDK failed', { cause: new Error('token=synthetic-cause') });
+      error.stack = 'Error: SDK failed\n    token=synthetic-stack';
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+      vi.mocked(importModule).mockRejectedValueOnce(error);
+      const provider = new OpenAICodexSecurityProvider();
+      await provider.callApi('Scan');
+      expect(debug).toHaveBeenCalledWith('[CodexSecurity] Failed to load SDK', {
+        error: 'SDK failed',
+      });
+      vi.mocked(importModule).mockResolvedValue(mockModule);
+      mockClose.mockRejectedValueOnce(error);
+      await provider.callApi('Scan');
+      expect(warn).toHaveBeenCalledWith('[CodexSecurity] Error while closing SDK client', {
+        error: 'SDK failed',
+      });
+      expect(JSON.stringify([...debug.mock.calls, ...warn.mock.calls])).not.toContain('synthetic');
+    });
+
+    it('preserves finding content independently of diagnostic masking', async () => {
+      const findings = { findings: [{ description: 'Found token=synthetic-source in a fixture' }] };
+      mockRun.mockResolvedValueOnce(createScanResult({ findings }));
+      const response = await new OpenAICodexSecurityProvider().callApi('Scan');
+      expect(response.output).toContain('token=synthetic-source');
     });
 
     it('closes SDK clients when scans fail', async () => {
@@ -1016,6 +1094,135 @@ describe('OpenAICodexSecurityProvider', () => {
   });
 
   describe('lifecycle', () => {
+    it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
+      'registers reused resources after %s',
+      async (method) => {
+        const provider = new OpenAICodexSecurityProvider();
+        expect(providerRegistry.has(provider)).toBe(true);
+        await provider.cleanup();
+        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+
+        mockRun.mockImplementation(async () => {
+          expect(providerRegistry.has(provider)).toBe(true);
+          return createScanResult();
+        });
+        for (const prompt of ['First reuse', 'Second reuse']) {
+          expect((await provider.callApi(prompt)).error).toBeUndefined();
+          if (method === 'shutdownAll') {
+            await providerRegistry.shutdownAll();
+          } else {
+            await provider[method]();
+          }
+          expect(providerRegistry.has(provider)).toBe(false);
+        }
+        expect(mockRun).toHaveBeenCalledTimes(2);
+        expect(mockClose).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it('interrupts SDK loads pending when cleanup starts and permits fresh reuse', async () => {
+      const activeRun = createDeferred<ReturnType<typeof createScanResult>>();
+      const activeClose = createDeferred<void>();
+      const pendingLoad = createDeferred<typeof mockModule>();
+      mockRun.mockReturnValueOnce(activeRun.promise);
+      mockClose.mockReturnValueOnce(activeClose.promise);
+
+      const provider = new OpenAICodexSecurityProvider();
+      const activeCall = provider.callApi('Active scan');
+      await vi.waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+
+      vi.mocked(importModule).mockReturnValueOnce(pendingLoad.promise);
+      const pendingCall = provider.callApi('Pending SDK load');
+      expect(importModule).toHaveBeenCalledTimes(2);
+      const cleanup = provider.cleanup();
+      expect(mockClose).toHaveBeenCalledTimes(1);
+
+      try {
+        pendingLoad.resolve(mockModule);
+        expect(await pendingCall).toEqual({
+          error: 'Codex Security operation was interrupted by cleanup.',
+        });
+        expect(MockCodexSecurity).toHaveBeenCalledTimes(1);
+        expect(mockRun).toHaveBeenCalledTimes(1);
+
+        activeClose.resolve();
+        await cleanup;
+        expect(providerRegistry.has(provider)).toBe(false);
+        activeRun.resolve(createScanResult());
+        expect((await activeCall).error).toBeUndefined();
+
+        mockRun.mockImplementationOnce(async () => {
+          expect(providerRegistry.has(provider)).toBe(true);
+          return createScanResult();
+        });
+        expect((await provider.callApi('Fresh scan')).error).toBeUndefined();
+        expect(MockCodexSecurity).toHaveBeenCalledTimes(2);
+        expect(mockRun).toHaveBeenCalledTimes(2);
+      } finally {
+        pendingLoad.resolve(mockModule);
+        activeClose.resolve();
+        activeRun.resolve(createScanResult());
+        await Promise.all([activeCall, pendingCall, cleanup]);
+        await provider.cleanup();
+      }
+      expect(providerRegistry.has(provider)).toBe(false);
+    });
+
+    it.each(
+      (['cleanup', 'shutdown', 'shutdownAll'] as const).flatMap((method) =>
+        [false, true].map((closeFails) => ({ method, closeFails })),
+      ),
+    )(
+      'keeps fresh clients registered while older $method completes (closeFails=$closeFails)',
+      async ({ method, closeFails }) => {
+        const activeRun = createDeferred<ReturnType<typeof createScanResult>>();
+        const activeClose = createDeferred<void>();
+        const freshRun = createDeferred<ReturnType<typeof createScanResult>>();
+        const activeClient = {
+          run: vi.fn().mockReturnValue(activeRun.promise),
+          close: vi.fn().mockReturnValue(activeClose.promise),
+        };
+        const freshClient = {
+          run: vi.fn().mockReturnValue(freshRun.promise),
+          close: vi.fn().mockResolvedValue(undefined),
+        };
+        MockCodexSecurity.mockImplementationOnce(function () {
+          return activeClient;
+        }).mockImplementationOnce(function () {
+          return freshClient;
+        });
+
+        const provider = new OpenAICodexSecurityProvider();
+        const activeCall = provider.callApi('Active scan');
+        await vi.waitFor(() => expect(activeClient.run).toHaveBeenCalledTimes(1));
+        const cleanup =
+          method === 'shutdownAll' ? providerRegistry.shutdownAll() : provider[method]();
+        expect(activeClient.close).toHaveBeenCalledTimes(1);
+        const freshCall = provider.callApi('Fresh scan during cleanup');
+
+        try {
+          await vi.waitFor(() => expect(freshClient.run).toHaveBeenCalledTimes(1));
+          if (closeFails) {
+            activeClose.reject(new Error('Old client close failed'));
+          } else {
+            activeClose.resolve();
+          }
+          await cleanup;
+
+          await providerRegistry.shutdownAll();
+          expect(freshClient.close).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(provider)).toBe(false);
+        } finally {
+          activeClose.resolve();
+          activeRun.resolve(createScanResult());
+          freshRun.resolve(createScanResult());
+          await Promise.all([activeCall, freshCall, cleanup]);
+          await provider.shutdown();
+        }
+      },
+    );
+
     it('does not close completed SDK clients again during provider shutdown', async () => {
       const provider = new OpenAICodexSecurityProvider();
       await provider.callApi('Scan');

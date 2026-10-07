@@ -27,6 +27,7 @@ import {
 } from '../../util/fetch/errors';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -131,25 +132,25 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-6-astra / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
- * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
+ * - gpt-6-astra / gpt-6-sol / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-6-luna / gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max';
+ *   gpt-6-luna does not support 'ultra'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
- * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
  * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
  *
  * Values:
- * - 'minimal': Minimal reasoning overhead
+ * - 'minimal': Legacy minimal reasoning setting accepted by some older models
  * - 'low': Light reasoning, faster responses
- * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
+ * - 'medium': Balanced reasoning; runtime defaults vary by model
  * - 'high': Thorough reasoning for complex tasks
  * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2)
- * - 'max': Deepest single-agent reasoning for GPT-5.6
- * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
+ * - 'max': Deepest single-agent reasoning
+ * - 'ultra': Proactive multi-agent reasoning on supported Codex models
  */
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
@@ -266,6 +267,8 @@ export interface OpenAICodexSDKConfig {
    * Defaults to process.cwd()
    */
   working_dir?: string;
+  /** Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * Additional directories the agent can access beyond the working directory.
@@ -284,7 +287,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.6-terra' or 'gpt-5.6-luna').
+   * Model to use (e.g., 'gpt-6-sol' or 'gpt-6-luna').
    * Availability depends on authentication mode and account access; omitted models
    * use the installed Codex SDK's default.
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
@@ -423,6 +426,7 @@ const OpenAICodexSDKConfigShape = {
   base_url: z.string().min(1).optional(),
   maxRetries: z.number().int().nonnegative().optional(),
   working_dir: z.string().min(1).optional(),
+  copy_working_dir: z.union([z.boolean(), z.enum(['git', 'copy'])]).optional(),
   additional_directories: z.array(z.string().min(1)).optional(),
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
@@ -678,8 +682,12 @@ async function loadCodexSDK(): Promise<any> {
 }
 
 export class OpenAICodexSDKProvider implements ApiProvider {
+  private cleanupGeneration = 0;
+
   static OPENAI_MODELS = [
     'gpt-6-astra',
+    'gpt-6-sol',
+    'gpt-6-luna',
     // GPT-5.6 models (requires Codex 0.144.0 or later)
     'gpt-5.6-sol',
     'gpt-5.6-terra',
@@ -690,6 +698,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-pro',
+    'gpt-5.4-mini',
     // GPT-5.3 Codex models
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
@@ -775,27 +784,24 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    // Clean up threads
+    this.cleanupGeneration++;
+    providerRegistry.unregister(this);
+    const instances = [...this.codexInstances.values()];
+    this.codexInstances.clear();
     this.threads.clear();
     this.threadRunQueues.clear();
 
-    // Clean up Codex instances to release resources (child processes, file handles)
-    for (const instance of this.codexInstances.values()) {
+    for (const instance of instances) {
       try {
         await this.destroyInstance(instance);
       } catch (error) {
         logger.warn('[CodexSDK] Error during cleanup', { error });
       }
     }
-    this.codexInstances.clear();
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   private prepareEnvironment(
@@ -2074,6 +2080,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     // Merge configs (prompt config takes precedence)
     const mergedConfig: OpenAICodexSDKConfig = {
       ...this.config,
@@ -2084,6 +2091,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // but runtime variable rendering must not recurse into provider methods.
     delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
 
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
@@ -2092,7 +2100,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // withGenAISpan handles both exceptions and { error: ... } responses
     return withGenAISpan(
       this.buildCodexSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config),
+      () =>
+        this.callApiInternal(
+          prompt,
+          context,
+          callOptions,
+          config,
+          inIsolatedWorkspace,
+          cleanupGeneration,
+        ),
       (response) => this.extractCodexSpanResult(response, requestedModel),
     );
   }
@@ -2206,6 +2222,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: OpenAICodexSDKConfig,
+    inIsolatedWorkspace: boolean,
+    cleanupGeneration: number,
   ): Promise<ProviderResponse> {
     let config: OpenAICodexSDKConfig;
     try {
@@ -2240,6 +2258,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       currentTraceparent,
       apiKey,
     );
+    if (inIsolatedWorkspace) {
+      clearRepositoryEnv(env);
+    }
     const skillRootPrefixes = this.getSkillRootPrefixes(env, resolvedConfig.working_dir);
     const promptInput = this.parsePromptInput(prompt);
 
@@ -2267,7 +2288,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig.skip_git_repo_check,
       );
 
-      const codexInstance = await this.getCodexInstanceForTurn(env, resolvedConfig, apiKey);
+      const codexInstance = await this.getCodexInstanceForTurn(
+        env,
+        resolvedConfig,
+        apiKey,
+        cleanupGeneration,
+      );
       const activeInstance = codexInstance.activeInstance;
       localInstance = codexInstance.localInstance;
       useLocalInstance = codexInstance.useLocalInstance;
@@ -2284,6 +2310,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig,
         callOptions,
         skillRootPrefixes,
+        cleanupGeneration,
       );
 
       return this.buildCodexProviderResponse(turn, sessionId, skillRootPrefixes, resolvedConfig);
@@ -2324,6 +2351,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     env: Record<string, string>,
     resolvedConfig: OpenAICodexSDKConfig,
     apiKey: string | undefined,
+    cleanupGeneration: number,
   ): Promise<{
     activeInstance: any;
     instanceKey: string;
@@ -2333,6 +2361,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (!this.codexModule) {
       this.codexModule = await loadCodexSDK();
     }
+
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('Codex SDK call was interrupted by cleanup');
+    }
+    providerRegistry.register(this);
 
     const stableEnv = { ...env };
     delete stableEnv.TRACEPARENT;
@@ -2391,17 +2424,24 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     resolvedConfig: OpenAICodexSDKConfig,
     callOptions: CallApiOptionsParams | undefined,
     skillRootPrefixes: readonly string[],
+    cleanupGeneration: number,
   ): Promise<{ turn: any; sessionId: string }> {
     const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey);
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
     return this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Codex SDK call was interrupted by cleanup');
+      }
       const thread = await this.getOrCreateThread(
         resolvedConfig,
         cacheKey,
         instanceKey,
         activeInstance,
       );
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Codex SDK call was interrupted by cleanup');
+      }
       const turn = resolvedConfig.enable_streaming
         ? await this.runStreaming(thread, promptInput, runOptions, callOptions, skillRootPrefixes)
         : await thread.run(promptInput, runOptions);
@@ -2426,7 +2466,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return {
       output,
       tokenUsage,
-      cost: this.calculateCodexResponseCost(tokenUsage, resolvedConfig.model),
+      cost: this.calculateCodexResponseCost(
+        tokenUsage,
+        this.getCodexBillingModelName(resolvedConfig),
+        Boolean(resolvedConfig.codex_path_override),
+      ),
       metadata: this.buildCodexResponseMetadata(turn.items, skillRootPrefixes),
       raw: JSON.stringify(turn),
       sessionId,
@@ -2450,21 +2494,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       return undefined;
     }
 
+    const reasoningTokens = turnUsage.reasoning_output_tokens;
+    const cacheWriteTokens = turnUsage.cache_write_input_tokens;
+    const hasCompletionDetails =
+      typeof reasoningTokens === 'number' || typeof cacheWriteTokens === 'number';
+
     return {
       // cached_input_tokens is already included in input_tokens by the Codex SDK.
       prompt: turnUsage.input_tokens,
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
-      ...(typeof turnUsage.reasoning_output_tokens === 'number' ||
-      typeof turnUsage.cache_write_input_tokens === 'number'
+      ...(hasCompletionDetails
         ? {
             completionDetails: {
-              ...(typeof turnUsage.reasoning_output_tokens === 'number'
-                ? { reasoning: turnUsage.reasoning_output_tokens }
-                : {}),
-              ...(typeof turnUsage.cache_write_input_tokens === 'number'
-                ? { cacheCreationInputTokens: turnUsage.cache_write_input_tokens }
+              ...(typeof reasoningTokens === 'number' ? { reasoning: reasoningTokens } : {}),
+              ...(typeof cacheWriteTokens === 'number'
+                ? { cacheCreationInputTokens: cacheWriteTokens }
                 : {}),
             },
           }
@@ -2475,8 +2521,40 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private calculateCodexResponseCost(
     tokenUsage: ProviderResponse['tokenUsage'],
     model: string | undefined,
+    usesCustomCodexBinary: boolean,
   ): number | undefined {
+    // SDK 0.146 fills an omitted cache-write field with zero. That is reliable for its bundled
+    // Codex binary, but a custom/older binary may omit the field (or have it normalized to zero)
+    // despite performing cache writes. A positive value reported by the binary is still usable.
+    const normalizedModel = model?.replace(/^bedrock:/, '');
+    if (usesCustomCodexBinary && normalizedModel?.startsWith('gpt-5.6')) {
+      const cacheWriteTokens = tokenUsage?.completionDetails?.cacheCreationInputTokens;
+      if (
+        typeof cacheWriteTokens !== 'number' ||
+        !Number.isFinite(cacheWriteTokens) ||
+        cacheWriteTokens <= 0
+      ) {
+        return undefined;
+      }
+    }
     return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
+  }
+
+  private getCodexBillingModelName(config: OpenAICodexSDKConfig): string | undefined {
+    const cliConfigProvider = config.cli_config?.model_provider;
+    const modelProvider =
+      config.model_provider ??
+      (typeof cliConfigProvider === 'string' ? cliConfigProvider : undefined);
+
+    if (
+      modelProvider?.trim().toLowerCase() === 'amazon-bedrock' &&
+      config.model !== undefined &&
+      /^openai\.gpt-5\.6(?:-|$)/.test(config.model)
+    ) {
+      return `bedrock:${config.model.slice('openai.'.length)}`;
+    }
+
+    return config.model;
   }
 
   private async cleanupCodexTurn(
