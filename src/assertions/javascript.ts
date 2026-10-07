@@ -1,10 +1,43 @@
-import { tokenizer } from 'acorn';
+import { Parser, type TokenType, tokTypes } from 'acorn';
 import { type GradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
 import { asGradingResult, normalizeScriptAssertionResult } from './scriptResultNormalization';
 
 import type { AssertionParams } from '../types/index';
+
+/**
+ * Acorn's standalone tokenizer lacks the parser's property-name normalization.
+ * Treat names after . or ?. as identifiers so following operators and calls do not
+ * interpret them as keywords. Assertion source and token offsets remain unchanged.
+ */
+const assertionTokenizer = Parser.extend((BaseParser) => {
+  const tokenizerPrototype = BaseParser.prototype as Parser & {
+    updateContext(previousType: TokenType): void;
+    next(ignoreEscapeSequenceInKeyword: boolean): void;
+  };
+
+  return class extends BaseParser {
+    declare type: TokenType;
+
+    next(): void {
+      // Escaped keywords are valid property names. Standalone tokenization lacks
+      // that grammar context; leave syntax validation to the unchanged Function body.
+      tokenizerPrototype.next.call(this, true);
+    }
+
+    updateContext(previousType: TokenType): void {
+      if (
+        (previousType === tokTypes.dot || previousType === tokTypes.questionDot) &&
+        (this.type.keyword || this.type === tokTypes.name)
+      ) {
+        this.type = tokTypes.name;
+        previousType = tokTypes.dot;
+      }
+      tokenizerPrototype.updateContext.call(this, previousType);
+    }
+  };
+});
 
 /**
  * Finds the last top-level semicolon followed by code. Tokenization keeps comment,
@@ -15,7 +48,7 @@ function findLastStatementSemicolon(code: string): number {
   let pendingSemiIndex = -1;
   let lastSemiIndex = -1;
 
-  for (const token of tokenizer(code, { ecmaVersion: 'latest' })) {
+  for (const token of assertionTokenizer.tokenizer(code, { ecmaVersion: 'latest' })) {
     const label = token.type.label;
     if (label === 'eof') {
       break;

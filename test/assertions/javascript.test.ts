@@ -241,6 +241,64 @@ describe('buildFunctionBody', () => {
     ['regex after division', 'const x = 2 / /[/*]/.source.length; x === 0.5'],
     ['division after regex', 'const x = /a/ / 2; Number.isNaN(x)'],
     ['division after property keyword', 'const x = { return: 4 }; const y = x.return / 2; y === 2'],
+    ['division after optional keyword property', 'const x = { default: 4 }; x?.default / 2 === 2'],
+    [
+      'optional keyword division in a declaration',
+      'const x = { return: 4 }; const n = x?.return / 2; n === 2',
+    ],
+    [
+      'optional keyword division with a comment',
+      'const x = { typeof: 4 }; x?. /* ; */ typeof / 2 === 2',
+    ],
+    [
+      'optional keyword division in a template',
+      'const x = { default: 4 }; `${x?.default / 2};` === "2;"',
+    ],
+    [
+      'optional keyword division before a regex',
+      'const x = { default: 4 }; x?.default / /[;/*]/.source.length === 0.8',
+    ],
+    [
+      'escaped optional keyword property',
+      String.raw`const x = { default: 4 }; x?.\u0064efault / 2 === 2`,
+    ],
+    ['escaped dot keyword property', String.raw`const x = { return: 4 }; x.\u0072eturn / 2 === 2`],
+    ['escaped object keyword key', String.raw`const x = { \u0064efault: 4 }; x.default / 2 === 2`],
+    [
+      'escaped optional keyword with comment and template',
+      String.raw`const x = { typeof: 4 }; ` + '`${x?. /* ; */ \\u0074ypeof / 2};` === "2;"',
+    ],
+    ['optional contextual of property', 'const x = { of: 4 }; x?.of / 2 === 2'],
+    [
+      'optional yield property in generator',
+      'const fn = function* () { const x = { yield: 4 }; return x?.yield / 2; }; fn().next().value === 2',
+    ],
+    [
+      'optional keyword property followed by multiplication and arrow body',
+      'const x = { function: 4 }; const n = x?.function * 2; const f = () => {}; n === 8',
+    ],
+    [
+      'dot keyword property followed by multiplication and arrow body',
+      'const x = { function: 4 }; const n = x.function * 2; const f = () => {}; n === 8',
+    ],
+    [
+      'optional keyword property call followed by division',
+      'const x = { if: () => 4 }; const n = x?.if() / 2; const f = () => {}; n === 2',
+    ],
+    [
+      'dot keyword property call followed by division',
+      'const x = { while: () => 4 }; const n = x.while() / 2; const f = () => {}; n === 2',
+    ],
+    [
+      'generator declaration followed by division and arrow body',
+      'const g = function* () { yield 4; }; const n = g().next().value / 2; const f = () => {}; n === 2',
+    ],
+    ['function body new.target', 'const x = new.target; x === undefined'],
+    ['optional class property', 'const x = { class: 4 }; x?.class / 2 === 2'],
+    ['optional function property', 'const x = { function: 4 }; x?.function / 2 === 2'],
+    ['optional computed property', 'const x = { default: 4 }; x?.["default"] / 2 === 2'],
+    ['optional call', 'const x = () => 4; x?.() / 2 === 2'],
+    ['null optional property', 'const x = null; Number.isNaN(x?.default / 2)'],
     ['division after contextual keyword', 'const of = 8; const n = of / 2; n === 4'],
     ['division after await identifier', 'const await = 8; const n = await / 2; n === 4'],
     ['division after yield identifier', 'const yield = 8; const n = yield / 2; n === 4'],
@@ -278,6 +336,16 @@ describe('buildFunctionBody', () => {
       score: 1,
       reason: 'ok',
     });
+  });
+
+  it.each([
+    String.raw`const \u0064efault = 4; true`,
+    String.raw`const x = 4; \u0072eturn true`,
+    String.raw`const x = 4; \u0074rue`,
+    String.raw`const x = 4; \u0074hrow new Error("invalid")`,
+    String.raw`const x = { default: 4 }; x.\u00ZZ`,
+  ])('rejects malformed escaped syntax without discarding code: %s', (code) => {
+    expect(() => new Function(buildFunctionBody(code))).toThrow(SyntaxError);
   });
 
   it('should not modify expressions starting with const-like words', () => {
@@ -344,6 +412,88 @@ const javascriptFunctionFailAssertion: Assertion = {
     reason: 'Assertion failed',
   }),
 };
+
+describe('JavaScript declaration grading', () => {
+  it.each([
+    { output: '{"function":4}', pass: true, score: 1 },
+    { output: '{"function":2}', pass: false, score: 0 },
+  ])('grades keyword property multiplication for $output', async (testCase) => {
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'javascript',
+        value:
+          'const x = JSON.parse(output); const n = x?.function * 2; const f = () => {}; n === 8',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: testCase.output },
+    });
+    expect(result).toMatchObject({ pass: testCase.pass, score: testCase.score });
+    expect(result.reason).not.toContain('threw error');
+  });
+
+  it.each([
+    { output: '{"default":4}', pass: true, score: 1 },
+    { output: '{"default":2}', pass: false, score: 0 },
+  ])('grades escaped keyword properties for $output', async (testCase) => {
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'javascript',
+        value: String.raw`const x = JSON.parse(output); x?.\u0064efault / 2 === 2`,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: testCase.output },
+    });
+    expect(result).toMatchObject({ pass: testCase.pass, score: testCase.score });
+    expect(result.reason).not.toContain('threw error');
+  });
+
+  it.each([
+    ['numeric score', 'const x = { default: 1 }; x?.default / 2', { pass: true, score: 0.5 }],
+    [
+      'grading result object',
+      'const x = { default: 4 }; { pass: x?.default / 2 === 2, score: 0.75, reason: "ratio", namedScores: { ratio: 0.75 } }',
+      { pass: true, score: 0.75, reason: 'ratio', namedScores: { ratio: 0.75 } },
+    ],
+  ] as const)('preserves %s after optional-chain division', async (_name, value, expected) => {
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type: 'javascript', value },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '' },
+    });
+    expect(result).toMatchObject(expected);
+  });
+
+  it.each([
+    { type: 'javascript', output: '{"default":4}', pass: true, score: 1 },
+    { type: 'javascript', output: '{"default":2}', pass: false, score: 0 },
+    { type: 'not-javascript', output: '{"default":4}', pass: false, score: 0 },
+  ] as const)('grades optional-chain division for $type and $output', async (testCase) => {
+    const assertion: Assertion = {
+      type: testCase.type,
+      value: 'const x = JSON.parse(output); x?.default / 2 === 2',
+    };
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: testCase.output },
+    });
+
+    expect(result).toMatchObject({
+      pass: testCase.pass,
+      score: testCase.score,
+      assertion,
+    });
+    expect(result.reason).not.toContain('threw error');
+  });
+});
 
 describe('JavaScript file references', () => {
   beforeEach(() => {
