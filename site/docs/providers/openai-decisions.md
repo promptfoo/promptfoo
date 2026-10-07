@@ -9,7 +9,7 @@ The `openai:decisions` provider calls OpenAI's standalone `/v1/decisions` endpoi
 
 :::note
 
-The Decisions API is in [public beta](https://developers.openai.com/api/docs/guides/decisions), with `gpt-6-luna` as the currently supported model.
+These examples use `gpt-6-luna`. See [OpenAI's Decisions guide](https://developers.openai.com/api/docs/guides/decisions) for current model availability.
 
 :::
 
@@ -69,11 +69,11 @@ npx promptfoo@latest eval --no-cache -o results.json
 
 The rendered prompt becomes the request's `input`. Text prompts are sent as strings. A JSON array must contain user messages whose content is a string or text/image parts. The provider accepts Responses-style `input_text` and `input_image` parts and normalizes Chat Completions-style `text` and `image_url` parts. Images must be inline base64 data URLs; hosted image URLs and file IDs are not supported. A request can include up to 128 images. Other roles, tool items, and audio inputs are rejected. Multiple messages form one input, so use separate test cases to evaluate independent inputs.
 
-Promptfoo does not infer a default Decisions price. Cost estimates require the explicit per-token prices above. Custom input rates apply to all reported input tokens, including API-cached tokens; they are flat-rate estimates, not automatic Decisions billing. Cached results are scoped to the current provider instance and its credential identity: repeated requests within one eval can use the cache, but separate runs do not reuse those results.
+Promptfoo does not infer a default Decisions price. Cost estimates require the explicit per-token prices above. Custom input rates apply to all reported input tokens, including API-cached tokens; they are flat-rate estimates, not automatic Decisions billing. See [OpenAI's pricing and availability](https://developers.openai.com/api/docs/guides/decisions#pricing-and-availability) for current billing details. Matching results may be reused within an eval run; separate runs do not reuse provider results.
 
 ## Question types
 
-Every question requires `type` and `instructions`. An optional `name` identifies its answer; supplied names must be unique within the request. Answers preserve question order and echo the name, or use `null` when omitted. Questions are evaluated independently.
+The provider validates the question constraints below. Every question requires `type` and `instructions`. An optional `name` identifies its answer; supplied names must be unique within the request. Answers preserve question order and echo the name, or use `null` when omitted. Questions are evaluated independently.
 
 | Type        | Additional configuration                                                                          | Answer                                                             |
 | ----------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -83,7 +83,7 @@ Every question requires `type` and `instructions`. An optional `name` identifies
 
 Choice values keep their original types: Boolean `true` and `false` are returned as Booleans. When a choice has no description, its value supplies the scoring text.
 
-Score levels use zero-based indices. For three levels, the score ranges from `0` to `2` and can fall between levels because it is the probability-weighted mean of their indices. Each distribution entry includes the level's index and label. Levels must be objects, such as `{ label: Routine }`, even when no description is needed.
+Score levels use zero-based indices. For three levels, the score ranges from `0` to `2` and can fall between levels because it is the probability-weighted mean of their indices. Each distribution entry includes the level's index and label. For direct score questions, levels must be objects, such as `{ label: Routine }`, even when no description is needed.
 
 For example, add an ordered score question:
 
@@ -119,7 +119,7 @@ Predicate answers contain a probability without a confidence field. Choice and s
 
 ## Grade and classify outputs
 
-Like the [TypeSafe Jev provider](./typesafe.md), Decisions can grade another provider's text or serialized output with `llm-rubric` and `classifier`. Image attachments in rubric prompts are rejected; use direct Decisions questions to evaluate images. Grading a transcript or description does not assess the underlying audio or video.
+Decisions can grade another provider's text or serialized output with `llm-rubric` and `classifier`. Image attachments in rubric prompts are rejected; use direct Decisions questions to evaluate images. Grading a transcript or description does not assess the underlying audio or video.
 
 Set it as the grading provider to turn each rubric into a predicate about the output:
 
@@ -181,7 +181,7 @@ assert:
 
 `labels` can also be a list such as `[resolution, deflection, question]`. The assertion checks the probability of its `value`, which must match a label exactly. Set the assertion's `threshold` explicitly: it defaults to `1`, and the provider's `config.threshold` applies only to `llm-rubric`.
 
-Each assertion sends a separate request. A refusal or malformed answer fails grading, including negated assertions. Decisions returns scores rather than a generated rationale, so the grading reason describes how Promptfoo derived the verdict. `llm-rubric` reads the rubric and output directly; custom `rubricPrompt` text is not sent to the API. Other model-graded assertions that require text generation are not supported.
+Assertions are graded independently. A refusal or malformed answer fails grading, including negated assertions. Decisions returns scores rather than a generated rationale, so the grading reason describes how Promptfoo derived the verdict. `llm-rubric` reads the rubric and output directly; custom `rubricPrompt` text is not sent to the API. Other model-graded assertions that require text generation are not supported.
 
 The [example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-decisions) includes `promptfooconfig.grading.yaml` with fixed support replies for grading and classification. Tune thresholds on representative outputs before relying on them.
 
