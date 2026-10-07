@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Input } from '@app/components/ui/input';
@@ -77,6 +77,21 @@ export default function CodexSecurityConfiguration({
   const [scopedPaths, setScopedPaths] = useState(() =>
     Array.isArray(config.paths) ? config.paths.join(', ') : '',
   );
+  const pathsTargetKey = JSON.stringify([selectedTarget.id, selectedTarget.label, repository]);
+  const lastEditedPaths = useRef<{ targetKey: string; paths: unknown } | undefined>(undefined);
+
+  useEffect(() => {
+    // Preserve raw separators when the parent echoes our edit, but rehydrate
+    // external path replacements and changes to the selected target.
+    if (
+      lastEditedPaths.current?.targetKey === pathsTargetKey &&
+      lastEditedPaths.current.paths === config.paths
+    ) {
+      return;
+    }
+    lastEditedPaths.current = undefined;
+    setScopedPaths(Array.isArray(config.paths) ? config.paths.join(', ') : '');
+  }, [config.paths, pathsTargetKey]);
 
   const updateOperation = (nextOperation: string) => {
     const nextConfig: ProviderOptions['config'] = { ...config, operation: nextOperation };
@@ -137,6 +152,7 @@ export default function CodexSecurityConfiguration({
     } else {
       delete nextConfig.paths;
     }
+    lastEditedPaths.current = { targetKey: pathsTargetKey, paths: nextConfig.paths };
     updateCustomTarget('config', nextConfig);
   };
 

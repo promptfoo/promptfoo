@@ -58,19 +58,19 @@ function parseCloudProvider(id: string, config: unknown): ProviderOptions & { id
  * @returns Promise resolving to the fetch Response object
  * @throws Error if the request fails due to network or other issues
  */
-export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
+export async function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
-    return fetchWithProxy(url, {
+    return await fetchWithProxy(url, {
       method,
       body: JSON.stringify(body),
       headers: { ...(cloudConfig.getAuthHeaders() ?? {}), 'Content-Type': 'application/json' },
     });
   } catch (e) {
-    logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
-    if ((e as any).cause) {
-      logger.error(`Cause: ${(e as any).cause}`);
+    logger.error('[Cloud] Failed to make request', { url, error: String(e) });
+    if ((e as any)?.cause) {
+      logger.error('[Cloud] Request failure cause', { cause: String((e as any).cause) });
     }
     throw e;
   }

@@ -999,6 +999,106 @@ describe('ProviderConfigEditor', () => {
     );
   });
 
+  it.each(['src/second', 'src/first'])(
+    'refreshes scoped paths when switching targets with the same model and paths %s',
+    async (nextPath) => {
+      const user = userEvent.setup();
+      const setProvider = vi.fn();
+      const firstTarget: ProviderOptions = {
+        id: 'openai:codex-security:gpt-5.6-luna',
+        config: { repository: '/repos/first', paths: ['src/first'] },
+      };
+      const secondTarget: ProviderOptions = {
+        id: firstTarget.id,
+        config: { repository: '/repos/second', paths: [nextPath], auth: 'chatgpt' },
+      };
+      const { rerender } = renderWithProviders(
+        <ProviderConfigEditor
+          provider={firstTarget}
+          setProvider={setProvider}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(screen.getByLabelText('Scoped paths')).toHaveValue('src/first');
+      await user.type(screen.getByLabelText('Scoped paths'), ', ');
+      expect(screen.getByLabelText('Scoped paths')).toHaveValue('src/first, ');
+      rerender(
+        <ProviderConfigEditor
+          provider={secondTarget}
+          setProvider={setProvider}
+          providerType="codex-security"
+        />,
+      );
+
+      expect(screen.getByLabelText('Scoped paths')).toHaveValue(nextPath);
+      await user.type(screen.getByLabelText('Scoped paths'), ', tests');
+
+      expect(setProvider).toHaveBeenLastCalledWith({
+        ...secondTarget,
+        config: { ...secondTarget.config, paths: [nextPath, 'tests'] },
+      });
+      expect(firstTarget.config.paths).toEqual(['src/first']);
+      expect(secondTarget.config.paths).toEqual([nextPath]);
+    },
+  );
+
+  it('refreshes scoped paths when the current target configuration is replaced or cleared', () => {
+    const setProvider = vi.fn();
+    const provider: ProviderOptions = {
+      id: 'openai:codex-security:gpt-5.6-luna',
+      config: { repository: '/repos/service', paths: ['src/auth'] },
+    };
+    const { rerender } = renderWithProviders(
+      <ProviderConfigEditor
+        provider={provider}
+        setProvider={setProvider}
+        providerType="codex-security"
+      />,
+    );
+
+    rerender(
+      <ProviderConfigEditor
+        provider={{ ...provider, config: { ...provider.config, paths: ['src/api', 'test'] } }}
+        setProvider={setProvider}
+        providerType="codex-security"
+      />,
+    );
+    expect(screen.getByLabelText('Scoped paths')).toHaveValue('src/api, test');
+
+    rerender(
+      <ProviderConfigEditor
+        provider={{ ...provider, config: { repository: '/repos/service' } }}
+        setProvider={setProvider}
+        providerType="codex-security"
+      />,
+    );
+    expect(screen.getByLabelText('Scoped paths')).toHaveValue('');
+    expect(setProvider).not.toHaveBeenCalled();
+  });
+
+  it('preserves scoped path separators and whitespace through parent configuration updates', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+    const pathsInput = screen.getByLabelText('Scoped paths');
+
+    await user.type(pathsInput, '  src/auth, ');
+    expect(pathsInput).toHaveValue('  src/auth, ');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      paths: ['src/auth'],
+    });
+
+    await user.selectOptions(screen.getByLabelText('Reasoning effort'), 'max');
+    expect(pathsInput).toHaveValue('  src/auth, ');
+    await user.type(pathsInput, 'src/api  ');
+
+    expect(pathsInput).toHaveValue('  src/auth, src/api  ');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+      paths: ['src/auth', 'src/api'],
+      model_reasoning_effort: 'max',
+    });
+  });
+
   it('removes cleared optional paths, scan cost, and finding files', async () => {
     const user = userEvent.setup();
     renderWithProviders(<StatefulCodexSecurityEditor />);
