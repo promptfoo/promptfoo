@@ -239,7 +239,11 @@ function getHeaderCredentials(name: string, value: string): string[] {
           .trim()
           .replace(/^__(?:Host|Secure)-/i, '');
         // Cookie metadata is not a credential; keep full-header secrecy without erasing locale values.
-        if (isCredentialHeader(cookieName, decodedValue) || /^(?:csrf|xsrf)$/i.test(cookieName)) {
+        if (
+          isCredentialHeader(cookieName, decodedValue) ||
+          /^(?:csrf|xsrf)$/i.test(cookieName) ||
+          /(?:session(?:[-_]?id)?|sessid|(?:^|[._-])sid)$/i.test(cookieName)
+        ) {
           credentials.push(raw, unquoted, decoded, decodedValue);
         }
       }

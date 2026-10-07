@@ -1483,6 +1483,22 @@ describe('OpenAiDecisionsProvider', () => {
       config: { headers: { 'X-Unlabeled': 'sk-abcdefghijklmnopqrstuvw' } },
       credentials: ['sk-abcdefghijklmnopqrstuvw'],
     },
+    ...[
+      'JSESSIONID',
+      'PHPSESSID',
+      'connect.sid',
+      'ASP.NET_SessionId',
+      '__Secure-JSESSIONID',
+      'app_session',
+    ].map((name) => ({
+      name: `framework session cookie ${name}`,
+      config: {
+        headers: {
+          Cookie: `locale=en; region=us; session_mode=score; ${name}=0123456789abcdef0123456789abcdef`,
+        },
+      },
+      credentials: ['0123456789abcdef0123456789abcdef'],
+    })),
     {
       name: 'multiple cookie values',
       config: { headers: { cOoKiE: 'session=opaque-session-123; csrf=second-session-456' } },
@@ -1723,17 +1739,29 @@ describe('OpenAiDecisionsProvider', () => {
     },
   );
 
-  it.each(['enabled', 'disabled', 'bypass'] as const)(
-    'preserves cookie metadata while redacting recognized credentials (%s)',
-    async (mode) => {
+  it.each(
+    [
+      '__Host-session',
+      'JSESSIONID',
+      'PHPSESSID',
+      'connect.sid',
+      'ASP.NET_SessionId',
+      '__Secure-JSESSIONID',
+      'app_session',
+    ].flatMap((cookieName) =>
+      (['enabled', 'disabled', 'bypass'] as const).map((mode) => ({ cookieName, mode })),
+    ),
+  )(
+    'preserves cookie metadata while redacting recognized credentials ($mode, $cookieName)',
+    async ({ mode, cookieName }) => {
       const actualCache =
         await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
       vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
       const cache = actualCache.getCache();
       const write = vi.spyOn(cache, 'set');
-      const session = 'cookie/session+private';
+      const session = '0123456789abcdef0123456789abcdef';
       const csrf = 'csrf-cookie-private';
-      const cookie = `locale=en; region=us; __Host-session="${encodeURIComponent(session)}"; csrf=%22${csrf}%22`;
+      const cookie = `locale=en; region=us; session_mode=score; ${cookieName}="${encodeURIComponent(session)}"; csrf=%22${csrf}%22`;
       const answers = [
         {
           name: 'locale',
@@ -1748,13 +1776,14 @@ describe('OpenAiDecisionsProvider', () => {
       ];
       const data = {
         ...response(answers),
-        diagnostics: { locale: 'en', region: 'us', session, csrf, cookie },
+        diagnostics: { locale: 'en', region: 'us', session_mode: 'score', session, csrf, cookie },
       };
       const expected = {
         ...data,
         diagnostics: {
           locale: 'en',
           region: 'us',
+          session_mode: 'score',
           session: '[REDACTED]',
           csrf: '[REDACTED]',
           cookie: '[REDACTED]',
