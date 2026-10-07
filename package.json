@@ -113,6 +113,7 @@
     "prepare": "husky || exit 0"
   },
   "overrides": {
+    "smol-toml@1.8.0": "1.9.0",
     "nunjucks": {
       "chokidar": "$chokidar"
     },
@@ -311,7 +312,7 @@
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
     "read-excel-file": "^9.3.9",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",

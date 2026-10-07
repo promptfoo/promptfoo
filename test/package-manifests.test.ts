@@ -169,7 +169,9 @@ const KNOWN_BAD_RELEASES = new Map([
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
   ['serialize-javascript', '7.1.1'], // GHSA-gfhx-hw2g-v5hg
+  ['sharp', '<0.35.5'], // GHSA-wq5f-xc86-pv6w (bundled librsvg)
   ['simple-git', '<=3.36.0'], // GHSA-858h-whjf-mvg5
+  ['smol-toml', '<=1.8.0'], // GHSA-r4xh-jqrq-34v2
   ['undici', '<7.29.1 || >=8.0.0 <8.10.2'], // GHSA-3xpg-4rpp-hhhm and the 7.29.1/8.10.2 fixes
   ['ws', '<5.2.5 || >=6.0.0 <6.2.4 || >=7.0.0 <7.5.11 || >=8.0.0 <8.21.0'], // GHSA-96hv-2xvq-fx4p
 ]);
