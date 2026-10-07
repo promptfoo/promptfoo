@@ -286,10 +286,12 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       return result;
     }
     const answer = responseSchema.parse(result.raw).answers[0];
+    const { output: _output, ...response } = result;
     if (answer.type !== 'choice') {
-      return { error: 'OpenAI Decisions refused to classify the input.' };
+      return { ...response, error: 'OpenAI Decisions refused to classify the input.' };
     }
     return {
+      ...response,
       classification: Object.fromEntries(
         answer.probabilities.map(({ value, probability }) => [value, probability]),
       ),
@@ -503,6 +505,8 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         headers: responseHeaders(response.headers),
       };
       const cached = response.cached || response.coalesced === true;
+      // Reused responses must not replay stale rate-limit headers into the scheduler.
+      const httpMetadata = cached ? {} : { http };
       const apiError = z.object({ error: z.object({ message: z.string() }) }).safeParse(data);
       if (status < 200 || status >= 300 || apiError.success) {
         await deleteFromCache?.();
@@ -512,7 +516,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
               ? apiError.data.error.message
               : response.statusText || 'Request failed',
           )}`,
-          metadata: { http },
+          metadata: httpMetadata,
         };
       }
 
@@ -521,6 +525,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         await deleteFromCache?.();
         return {
           error: 'Invalid OpenAI Decisions API response: answers or usage do not match the request',
+          metadata: httpMetadata,
         };
       }
       const { answers, model, usage } = result.data;
@@ -537,6 +542,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         output: JSON.stringify({ answers }),
         raw: data,
         metadata: {
+          ...httpMetadata,
           model,
           requestId: http.headers['x-request-id'],
         },

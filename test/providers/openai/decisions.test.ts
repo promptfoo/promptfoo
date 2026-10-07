@@ -989,7 +989,7 @@ describe('OpenAiDecisionsProvider', () => {
         const result = await provider({ instructions, labels }).callClassificationApi(
           'My card was charged twice',
         );
-        expect(result).toEqual({ classification: { billing: 0.88, technical: 0.12 } });
+        expect(result).toMatchObject({ classification: { billing: 0.88, technical: 0.12 } });
         expect(requestBody().questions).toEqual([
           {
             name: 'classification',
@@ -1151,4 +1151,100 @@ describe('OpenAiDecisionsProvider', () => {
       );
     },
   );
+  describe('successful HTTP rate-limit metadata', () => {
+    const headers = {
+      'X-RateLimit-Remaining-Requests': '0',
+      'X-RateLimit-Reset-Requests': '2s',
+      'Retry-After': '2',
+      'X-Request-ID': 'request fixture-key',
+      authorization: 'Bearer fixture-key',
+      'x-gateway-auth': 'unknown-response-secret',
+    };
+    const safeHeaders = {
+      'x-ratelimit-remaining-requests': '0',
+      'x-ratelimit-reset-requests': '2s',
+      'retry-after': '2',
+      'x-request-id': 'request [REDACTED]',
+    };
+    const classificationConfig = {
+      instructions: 'Select a team',
+      labels: ['billing', 'technical'],
+    };
+
+    const cases = [
+      { mode: 'regular', answers: response().answers },
+      { mode: 'rubric', answers: [{ name: 'grade', type: 'predicate', probability: 0.8 }] },
+      { mode: 'classifier refusal', answers: [{ name: 'classification', type: 'refusal' }] },
+      {
+        mode: 'classifier',
+        answers: [
+          {
+            name: 'classification',
+            type: 'choice',
+            choice: 'billing',
+            confidence: 0.8,
+            probabilities: [
+              { value: 'billing', probability: 0.9 },
+              { value: 'technical', probability: 0.1 },
+            ],
+          },
+        ],
+      },
+    ];
+    it.each(
+      ['fresh', 'cached', 'coalesced'].flatMap((source) =>
+        cases.map((testCase) => ({ source, ...testCase })),
+      ),
+    )(
+      'exposes only fresh scheduler headers for $mode ($source)',
+      async ({ source, mode, answers }) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: response(answers),
+          status: 200,
+          statusText: 'OK',
+          headers,
+          cached: source === 'cached',
+          coalesced: source === 'coalesced',
+        });
+        const instance = provider(classificationConfig);
+        const result = mode.startsWith('classifier')
+          ? await instance.callClassificationApi('Refund please')
+          : await instance.callApi(
+              'Refund please',
+              mode === 'rubric' ? rubricContext('Requests a refund', 'Refund please') : undefined,
+            );
+        const scheduling = createProviderRateLimitOptions();
+        expect(scheduling.getHeaders?.(result)).toEqual(
+          source === 'fresh' ? safeHeaders : undefined,
+        );
+        expect(scheduling.getRetryAfter?.(result)).toBe(source === 'fresh' ? 2000 : undefined);
+        expect(scheduling.isRateLimited?.(result)).toBe(false);
+        expect(result).toMatchObject({
+          cached: source !== 'fresh',
+          tokenUsage:
+            source === 'fresh' ? { total: 165, numRequests: 1 } : { total: 165, cached: 165 },
+        });
+        expect(JSON.stringify(result)).not.toMatch(/fixture-key|unknown-response-secret/);
+        if (mode === 'classifier refusal') {
+          expect(result.error).toContain('refused to classify');
+          expect(result).not.toHaveProperty('output');
+        } else {
+          expect(result.error).toBeUndefined();
+        }
+      },
+    );
+
+    it('retains fresh scheduler headers when a successful classifier HTTP response is malformed', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers,
+        cached: false,
+      });
+      const result = await provider(classificationConfig).callClassificationApi('Refund please');
+      expect(result.error).toContain('Invalid OpenAI Decisions API response');
+      expect(createProviderRateLimitOptions().getHeaders?.(result)).toEqual(safeHeaders);
+    });
+  });
 });
