@@ -113,7 +113,6 @@
     "prepare": "husky || exit 0"
   },
   "overrides": {
-    "smol-toml@1.8.0": "1.9.0",
     "nunjucks": {
       "chokidar": "$chokidar"
     },
@@ -242,7 +241,7 @@
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
     "@openai/agents": "^0.14.1",
-    "@openai/codex-security": "^0.1.31",
+    "@openai/codex-security": "^0.2.0",
     "@slack/web-api": "^8.1.1",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
@@ -419,7 +418,7 @@
     "@ibm-cloud/watsonx-ai": "*",
     "@langfuse/client": "*",
     "@openai/agents": "*",
-    "@openai/codex-security": "*",
+    "@openai/codex-security": "^0.2.0",
     "@slack/web-api": "*",
     "ibm-cloud-sdk-core": "*",
     "playwright": "*",

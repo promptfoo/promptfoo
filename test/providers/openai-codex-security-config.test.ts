@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { type JsonObject, writeCodexConfig } from '@openai/codex-security';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Exercise the TOML parser used by the installed SDK, including nested dependency resolution.
 const { parse } = createRequire(import.meta.resolve('@openai/codex-security'))('smol-toml') as {
@@ -15,6 +15,7 @@ describe('Codex Security TOML configuration', () => {
   const directories: string[] = [];
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await Promise.all(
       directories.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
     );
@@ -24,12 +25,31 @@ describe('Codex Security TOML configuration', () => {
     'preserves a dot-free document containing many %s through the SDK config writer',
     async (shape) => {
       // Both shapes exercise the unbounded remainder scans from GHSA-r4xh-jqrq-34v2.
-      // Keep the workload finite and assert data rather than platform-dependent timings.
+      // Bound the known full-remainder search mechanism without wall-clock thresholds.
       const count = 2048;
       const source = Array.from({ length: count }, (_, index) =>
         shape === 'flat keys' ? `key${index} = ${index}\n` : `[[entry]]\nvalue = ${index}\n`,
       ).join('');
-      const config = parse(source);
+      const originalIndexOf = String.prototype.indexOf;
+      let searchedCharacters = 0;
+      const search = vi.spyOn(String.prototype, 'indexOf').mockImplementation(function (
+        this: string,
+        searchString: string,
+        position = 0,
+      ) {
+        const result = originalIndexOf.call(this, searchString, position);
+        if (String(this) === source && searchString === '.') {
+          searchedCharacters += Math.max(0, (result < 0 ? source.length : result + 1) - position);
+        }
+        return result;
+      });
+      let config: JsonObject;
+      try {
+        config = parse(source);
+      } finally {
+        search.mockRestore();
+      }
+      expect(searchedCharacters).toBeLessThanOrEqual(4 * source.length);
       if (shape === 'flat keys') {
         expect(Object.keys(config)).toHaveLength(count);
         expect(config.key0).toBe(0);
