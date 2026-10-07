@@ -89,6 +89,17 @@ describe('isCredentialHeader', () => {
     'X-Gateway-Authentication',
     'X-Gateway-Token',
     'X-Gateway-Cookie',
+    'GatewayToken',
+    'GatewayTokenV2',
+    'GatewayAuthentication',
+    'GatewaySecret',
+    'GatewayPassword',
+    'GatewayCredentials',
+    'GatewayCookie',
+    'GatewayApiKeyV2',
+    'X-Goog-Iap-Jwt-Assertion',
+    'GatewayJwtV2',
+    '_oauth2_proxy',
   ])('recognizes credential headers under %s regardless of value shape', (name) => {
     for (const variant of headerCaseVariants(name)) {
       expect(isCredentialHeader(variant, 'short'), variant).toBe(true);
@@ -136,9 +147,9 @@ describe('isCredentialHeader', () => {
       );
     }
   });
-  // HTTP cannot distinguish Monkey from MonKey; unknown key suffixes are conservatively secret.
-  it.each(['X-Monkey', 'X-MonKey', 'x-monkey', 'X-MONKEY'])(
-    'treats ambiguous key suffix %s consistently',
+  // HTTP cannot distinguish Monkey/MonKey or Author/AuthOr; credential inference is conservative.
+  it.each(['X-Monkey', 'X-MonKey', 'x-monkey', 'X-MONKEY', 'X-Author', 'X-AuthOr', 'x-author'])(
+    'treats ambiguous credential name %s consistently',
     (name) => {
       expect(isCredentialHeader(name, 'short')).toBe(true);
     },

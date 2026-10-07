@@ -41,6 +41,7 @@ vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
 }));
 
 const imageUrl = 'data:image/png;base64,iVBORw0KGgo=';
+const jwtFixture = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJmaXh0dXJlIn0.signature';
 
 function rubricContext(rubric: unknown, output: unknown): CallApiContextParams {
   return {
@@ -1533,11 +1534,30 @@ describe('OpenAiDecisionsProvider', () => {
       'aRbItRaRyVeNdOrKeY',
       'X-Gateway-aUtHeNtIcAtIoN',
       'X-Gateway-tOkEn',
+      'gatewaytoken',
+      'GATEWAYTOKEN',
+      'gatewaytokenv2',
+      'xgatewayauthentication',
+      'gatewaycredentials',
     ].map((name) => ({
       name: `case-insensitive header ${name}`,
       config: { headers: { [name]: '0123456789abcdef0123456789abcdef' } },
       credentials: ['0123456789abcdef0123456789abcdef'],
     })),
+    {
+      name: 'JWT assertion header',
+      config: { headers: { 'X-Goog-Iap-Jwt-Assertion': jwtFixture } },
+      credentials: [jwtFixture],
+    },
+    {
+      name: 'OAuth proxy cookie',
+      config: {
+        headers: {
+          Cookie: `locale=en; region=us; session_mode=score; _oauth2_proxy=${jwtFixture}`,
+        },
+      },
+      credentials: [jwtFixture],
+    },
     {
       name: 'custom subscription key',
       config: { headers: { 'X-Subscription-Key': 'short-subscription-value' } },
@@ -1739,7 +1759,7 @@ describe('OpenAiDecisionsProvider', () => {
       headers: { Authorization: 'Bearer explicit-key' },
     }).callApi('text');
     expect(result.error).toContain(
-      'The acme tenant requires cursor support for user u password [REDACTED].',
+      'The acme tenant requires cursor support for user [REDACTED] password [REDACTED].',
     );
     const [url, options] = vi.mocked(fetchWithCache).mock.calls[0]!;
     expect(url).toBe(apiBaseUrl.replace('/v1', '/v1/decisions'));
@@ -1813,11 +1833,30 @@ describe('OpenAiDecisionsProvider', () => {
       'aRbItRaRyVeNdOrKeY',
       'X-Gateway-aUtHeNtIcAtIoN',
       'X-Gateway-tOkEn',
+      'gatewaytoken',
+      'GATEWAYTOKEN',
+      'gatewaytokenv2',
+      'xgatewayauthentication',
+      'gatewaycredentials',
     ].map((name) => ({
       name: `case-insensitive header ${name}`,
       config: { headers: { [name]: '0123456789abcdef0123456789abcdef' } },
       credentials: ['0123456789abcdef0123456789abcdef'],
     })),
+    {
+      name: 'JWT assertion header',
+      config: { headers: { 'X-Goog-Iap-Jwt-Assertion': jwtFixture } },
+      credentials: [jwtFixture],
+    },
+    {
+      name: 'OAuth proxy cookie',
+      config: {
+        headers: {
+          Cookie: `locale=en; region=us; session_mode=score; _oauth2_proxy=${jwtFixture}`,
+        },
+      },
+      credentials: [jwtFixture],
+    },
     {
       name: 'subscription keys',
       config: {
@@ -1935,6 +1974,7 @@ describe('OpenAiDecisionsProvider', () => {
       'ASP.NET_SessionId',
       '__Secure-JSESSIONID',
       'app_session',
+      '_oauth2_proxy',
     ].flatMap((cookieName) =>
       (['enabled', 'disabled', 'bypass'] as const).map((mode) => ({ cookieName, mode })),
     ),
@@ -2513,9 +2553,11 @@ describe('OpenAiDecisionsProvider', () => {
             expect(fetchWithRetries).toHaveBeenCalledTimes(1);
             expect(write).toHaveBeenCalledOnce();
             const stored = JSON.parse(write.mock.calls[0]![1] as string);
+            expect(stored.data).toMatchObject({ answers, usage });
+            expect(cached.raw).toMatchObject({ answers, usage });
             expect(stored.data.diagnostics).toEqual({
-              [username]: 'Public identifier',
-              '[REDACTED]': `Account ${username}; credentials [REDACTED]; [REDACTED]; [REDACTED]; [REDACTED]`,
+              '[REDACTED]':
+                'Account [REDACTED]; credentials [REDACTED]; [REDACTED]; [REDACTED]; [REDACTED]',
             });
             for (const value of [fresh, cached, write.mock.calls]) {
               for (const credential of credentials) {
@@ -2531,7 +2573,8 @@ describe('OpenAiDecisionsProvider', () => {
           );
           await actualCache.withCacheEnabled(false, async () => {
             const failure = await instance.callApi('failure');
-            expect(failure.error).toContain(`Account ${username}`);
+            expect(failure.error).toContain('Account [REDACTED]');
+            expect(failure.error).not.toContain(username);
             for (const credential of credentials) {
               expect(JSON.stringify(failure)).not.toContain(credential);
             }
@@ -2540,11 +2583,15 @@ describe('OpenAiDecisionsProvider', () => {
       },
     );
 
-    it.each(['enabled', 'disabled', 'bypass'] as const)(
-      'redacts credential-shaped usernames with a password when cache is %s',
-      async (mode) => {
+    it.each(
+      ['sk-proj-fixture12345678901234567890/+', 'ghp_fixture12345678901234567890/+'].flatMap(
+        (username) =>
+          (['enabled', 'disabled', 'bypass'] as const).map((mode) => ({ username, mode })),
+      ),
+    )(
+      'redacts authentication username $username with a password (cache $mode)',
+      async ({ username, mode }) => {
         await withRealCache(async ({ actualCache, write }) => {
-          const username = 'sk-proj-fixture12345678901234567890/+';
           const encodedUsername = encodeURIComponent(username);
           const password = 'dummy-password';
           const pair = `${username}:${password}`;
@@ -2572,7 +2619,7 @@ describe('OpenAiDecisionsProvider', () => {
               }),
           );
           const instance = provider({ ...auth, apiKey: undefined, apiKeyRequired: false });
-          const prompt = `Credential-shaped username fixture ${source} ${mode}`;
+          const prompt = `Authentication username fixture ${source} ${mode}`;
           const context: CallApiContextParams = {
             vars: {},
             prompt: { raw: prompt, label: prompt },
@@ -2597,6 +2644,14 @@ describe('OpenAiDecisionsProvider', () => {
             expect(repeated.cached).toBe(mode === 'enabled');
             expect(fetchWithRetries).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 2);
             expect(write).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 0);
+            const [url, options] = vi.mocked(fetchWithRetries).mock.calls[0]!;
+            if (source === 'header') {
+              expect(new Headers(options?.headers).get('authorization')).toBe(`Basic ${basic}`);
+            } else {
+              expect(url).toBe(
+                `https://${encodedUsername}:${password}@gateway.example/v1/decisions`,
+              );
+            }
             if (mode === 'enabled') {
               expect(JSON.parse(write.mock.calls[0]![1] as string).data).toEqual(fresh.raw);
             }

@@ -454,23 +454,21 @@ function isSafeTracingCredentialTemplate(value: unknown): value is string {
 }
 
 export function isCredentialHeader(name: string, value: string): boolean {
-  const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+  const normalizedName = name.replace(/[-_\s]/g, '').toLowerCase();
   // These key roles identify requests, routing, or public material rather than authenticate.
   // Exempt only name inference; credential-shaped values still take precedence below.
   const publicKeyRole =
     /^x?(?:(?:idempotency|cache|routing|partition|public)key|secwebsocketkey)$/.test(
-      name.replace(/[-_\s]/g, '').toLowerCase(),
+      normalizedName,
     );
   return (
-    isSecretField(name) ||
-    (!publicKeyRole && /key$/i.test(name)) ||
-    /session(?:[-_\s]?(?:access|id))?$/i.test(name) ||
-    [name, normalizedName].some((candidate) =>
-      /(?:^|[-_\s])(?:(?:api|access|subscription)[-_\s]?key|auth(?:orization|entication)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
-        candidate,
-      ),
+    isSecretField(normalizedName) ||
+    (!publicKeyRole && normalizedName.endsWith('key')) ||
+    /session(?:access|id)?$/.test(normalizedName) ||
+    /(?:api|access|subscription)key|auth|token|password|passwd|secret|credential|cookie|jwt/.test(
+      normalizedName,
     ) ||
-    normalizedName.replace(/[-_]/g, '') === 'xhoneycombteam' ||
+    normalizedName === 'xhoneycombteam' ||
     /^(?:bearer|basic|token|api[-_]?key)\s+\S+/i.test(value.trim()) ||
     looksLikeSecret(value.trim())
   );

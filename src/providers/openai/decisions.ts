@@ -17,7 +17,6 @@ import {
 import { renderVarsInObject } from '../../util/render';
 import {
   isCredentialHeader,
-  looksLikeSecret,
   sanitizeObject,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
@@ -227,13 +226,7 @@ function getHeaderCredentials(name: string, value: string): string[] {
       separator !== -1 &&
       bytes.toString('base64').replace(/=+$/, '') === basic[1].replace(/=+$/, '')
     ) {
-      // Preserve public account names, but some gateways use API keys as Basic usernames.
-      const username = decoded.slice(0, separator);
-      const password = decoded.slice(separator + 1);
-      credentials.push(decoded, password || username);
-      if (looksLikeSecret(username)) {
-        credentials.push(username);
-      }
+      credentials.push(decoded, decoded.slice(0, separator), decoded.slice(separator + 1));
     }
   }
   if (name.toLowerCase() === 'cookie') {
@@ -276,17 +269,7 @@ function getUrlCredentials(value: string): string[] {
     const decoded = raw.map(decodeUrlComponent);
     const pair = decoded.join(':');
     const basic = Buffer.from(pair).toString('base64');
-    credentials.push(
-      raw[1] || raw[0],
-      decoded[1] || decoded[0],
-      raw.join(':'),
-      pair,
-      basic,
-      `Basic ${basic}`,
-    );
-    if (looksLikeSecret(decoded[0])) {
-      credentials.push(raw[0], decoded[0]);
-    }
+    credentials.push(...raw, ...decoded, raw.join(':'), pair, basic, `Basic ${basic}`);
   }
   const sanitizedSegments = sanitizeUrlForLogging(url.pathname).split('/');
   for (const [index, segment] of url.pathname.split('/').entries()) {
