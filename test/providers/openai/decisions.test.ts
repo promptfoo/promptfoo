@@ -789,7 +789,10 @@ describe('OpenAiDecisionsProvider', () => {
   it('checks question name uniqueness after rendering variables', async () => {
     const result = await provider({
       questions: [predicateQuestion, { ...predicateQuestion, name: '{{name}}' }],
-    }).callApi('text', { vars: { name: predicateQuestion.name } });
+    }).callApi('text', {
+      prompt: { raw: 'text', label: 'test' },
+      vars: { name: predicateQuestion.name },
+    });
     expect(result.error).toContain('Question names must be unique');
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
