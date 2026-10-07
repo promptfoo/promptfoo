@@ -69,7 +69,7 @@ npx promptfoo@latest eval --no-cache -o results.json
 
 The rendered prompt becomes the request's `input`. Text prompts are sent as strings. A JSON array must contain user messages whose content is a string or text/image parts. The provider accepts Responses-style `input_text` and `input_image` parts and normalizes Chat Completions-style `text` and `image_url` parts. Images must be inline base64 data URLs; hosted image URLs and file IDs are not supported. A request can include up to 128 images. Other roles, tool items, and audio inputs are rejected. Multiple messages form one input, so use separate test cases to evaluate independent inputs.
 
-Promptfoo does not infer a default Decisions price. Cost estimates require the explicit per-token prices above. Custom input rates apply to all reported input tokens, including API-cached tokens; they are flat-rate estimates, not automatic Decisions billing. See [OpenAI's pricing and availability](https://developers.openai.com/api/docs/guides/decisions#pricing-and-availability) for current billing details. Matching results may be reused within an eval run; separate runs do not reuse provider results.
+Promptfoo does not infer a default Decisions price. Cost estimates require the explicit per-token prices above. Custom input rates apply to all reported input tokens, including API-cached tokens; they are flat-rate estimates, not automatic Decisions billing. See [OpenAI's pricing and availability](https://developers.openai.com/api/docs/guides/decisions#pricing-and-availability) for current billing details. Matching results may be reused within an eval run; separate CLI invocations do not reuse provider results.
 
 ## Question types
 
