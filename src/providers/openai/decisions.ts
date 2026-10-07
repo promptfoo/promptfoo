@@ -34,8 +34,18 @@ const gradingLevelsSchema = z
   .array(z.union([z.string().transform((label) => ({ label })), levelSchema]))
   .min(2)
   .max(10);
-// These JSON graders treat an object without a pass field as passing.
-const UNSUPPORTED_GRADER_LABELS = ['agent-rubric', 'trajectory:goal-success'];
+// These graders can mistake Decisions answer JSON for a successful grading verdict.
+const UNSUPPORTED_GRADER_LABELS = [
+  'agent-rubric',
+  'trajectory:goal-success',
+  'select-best',
+  'factuality',
+  'context-recall',
+  'context-faithfulness-longform',
+  'context-faithfulness-nli',
+  'context-relevance',
+  'answer-relevance',
+];
 const questionSchema = z.discriminatedUnion('type', [
   z.object({ ...questionFields, type: z.literal('predicate') }).strict(),
   z
@@ -379,7 +389,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     }
     const raw = answer.type === 'predicate' ? answer.probability : answer.score;
     const top = question.type === 'score' ? question.levels.length - 1 : 1;
-    const score = Number((raw / top).toFixed(6));
+    const score = raw / top;
     const pass = score >= threshold.data;
     const comparison = `${pass ? '>=' : '<'} threshold ${threshold.data}`;
     const reason =
@@ -403,7 +413,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     let body: z.infer<typeof requestSchema>;
     try {
       body = requestSchema.parse({
-        model: context?.prompt?.config?.model ?? this.modelName,
+        model: this.modelName,
         input,
         questions:
           context?.prompt?.label === 'llm-rubric'

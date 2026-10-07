@@ -1,7 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { applyRagInverse } from '../../../src/assertions/ragDefaults';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesClassification } from '../../../src/matchers/classification';
-import { matchesLlmRubric, matchesTrajectoryGoalSuccess } from '../../../src/matchers/llmGrading';
+import { matchesSelectBest } from '../../../src/matchers/comparison';
+import {
+  matchesFactuality,
+  matchesLlmRubric,
+  matchesTrajectoryGoalSuccess,
+} from '../../../src/matchers/llmGrading';
+import {
+  matchesAnswerRelevance,
+  matchesContextFaithfulness,
+  matchesContextRecall,
+  matchesContextRelevance,
+} from '../../../src/matchers/rag';
 import { OpenAiDecisionsProvider } from '../../../src/providers/openai/decisions';
 import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
@@ -149,6 +161,24 @@ describe('OpenAiDecisionsProvider', () => {
     expect(configured.modelName).toBe('configured-model');
     expect(() => new OpenAiDecisionsProvider('')).toThrow(/model/i);
   });
+
+  it.each([
+    { pathModel: 'gpt-6-luna', configModel: 'other-config-model' },
+    { pathModel: '', configModel: 'gpt-6-luna' },
+  ])(
+    'keeps the constructor-resolved model when prompt config overrides model: %j',
+    async ({ pathModel, configModel }) => {
+      const instance = new OpenAiDecisionsProvider(pathModel, {
+        config: { apiKey: 'fixture-key', model: configModel, questions: [predicateQuestion] },
+      });
+      const result = await instance.callApi('text', {
+        vars: {},
+        prompt: { raw: 'text', label: 'text', config: { model: 'prompt-override-model' } },
+      });
+      expect(result.error).toBeUndefined();
+      expect(requestBody().model).toBe('gpt-6-luna');
+    },
+  );
 
   it('preserves false choice values, zero scores, and unnamed questions', async () => {
     const answers = [
@@ -886,6 +916,65 @@ describe('OpenAiDecisionsProvider', () => {
       },
     );
 
+    const precisionCases = [
+      { score: 0.4999996, threshold: 0.5, pass: false },
+      { score: 0.5000004, threshold: 0.5000003, pass: true },
+    ].flatMap(({ score, threshold, pass }) => [
+      {
+        type: 'predicate',
+        score,
+        threshold,
+        pass,
+        config: {},
+        answer: { name: 'grade', type: 'predicate', probability: score },
+      },
+      {
+        type: 'score',
+        score,
+        threshold,
+        pass,
+        config: { levels: ['Low', 'Middle', 'High'] },
+        answer: {
+          name: 'grade',
+          type: 'score',
+          score: score * 2,
+          confidence: 0.5,
+          probabilities: [
+            { value: 0, label: 'Low', probability: 1 - score },
+            { value: 1, label: 'Middle', probability: 0 },
+            { value: 2, label: 'High', probability: score },
+          ],
+        },
+      },
+    ]);
+
+    it.each(precisionCases)(
+      'compares the full-precision $type score $score against threshold $threshold',
+      async ({ score, threshold, pass, config, answer }) => {
+        mockAnswers([answer]);
+        const result = await provider({ ...config, threshold }).callApi(
+          '',
+          rubricContext('Meets the requirement', 'Answer'),
+        );
+        expect(result.output).toMatchObject({ pass, score });
+      },
+    );
+
+    it.each(precisionCases.filter(({ pass }) => !pass))(
+      'preserves the $type score for assertion-level threshold checks',
+      async ({ score, config, answer }) => {
+        mockAnswers([answer]);
+        const result = await matchesLlmRubric(
+          'Meets the requirement',
+          'Answer',
+          { provider: provider({ ...config, threshold: 0.4 }) },
+          undefined,
+          { type: 'llm-rubric', value: 'Meets the requirement', threshold: 0.5 },
+        );
+        expect(result).toMatchObject({ pass: false, score });
+      },
+    );
+
     it('normalizes expected score over named levels', async () => {
       const levels = [
         'Poor',
@@ -1060,17 +1149,104 @@ describe('OpenAiDecisionsProvider', () => {
       expect(fetchWithCache).not.toHaveBeenCalled();
     });
 
-    it.each(['agent-rubric', 'trajectory:goal-success'])(
-      'rejects unsupported grader %s even with questions configured',
-      async (label) => {
-        const result = await provider().callApi('text', {
-          prompt: { raw: 'text', label },
-          vars: {},
-        });
-        expect(result.error).toContain(`cannot grade \`${label}\``);
+    it.each([
+      'agent-rubric',
+      'trajectory:goal-success',
+      'select-best',
+      'factuality',
+      'context-recall',
+      'context-faithfulness-longform',
+      'context-faithfulness-nli',
+      'context-relevance',
+      'answer-relevance',
+    ])('rejects unsupported grader %s even with questions configured', async (label) => {
+      const result = await provider().callApi('text', {
+        prompt: { raw: 'text', label },
+        vars: {},
+      });
+      expect(result.error).toContain(`cannot grade \`${label}\``);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        label: 'factuality',
+        name: 'A)',
+        match: (instance: OpenAiDecisionsProvider) =>
+          matchesFactuality('2+2?', '4', '5', {
+            provider: instance,
+            rubricPrompt: 'Assess the output',
+          }),
+      },
+      {
+        label: 'context-recall',
+        name: '[Attributed]',
+        match: (instance: OpenAiDecisionsProvider) =>
+          matchesContextRecall('Bananas are yellow', 'Paris is in France', 0.9, {
+            provider: instance,
+            rubricPrompt: 'Assess the output',
+          }),
+      },
+      {
+        label: 'context-faithfulness-longform',
+        name: 'verdict: yes',
+        match: (instance: OpenAiDecisionsProvider) =>
+          matchesContextFaithfulness('2+2?', '5', '2+2=4', 0.9, {
+            provider: instance,
+            rubricPrompt: ['Generate statements', 'Assess statements'],
+          }),
+      },
+      {
+        label: 'context-relevance',
+        name: 'Insufficient Information',
+        match: (instance: OpenAiDecisionsProvider) =>
+          matchesContextRelevance('2+2?', 'Bananas are yellow.', 0.9, {
+            provider: instance,
+            rubricPrompt: 'Assess the output',
+          }),
+      },
+    ])(
+      'does not let an echoed question name become a $label verdict',
+      async ({ label, name, match }) => {
+        mockAnswers([{ name, type: 'predicate', probability: 0.01 }]);
+        const result = await match(provider({ questions: [{ ...predicateQuestion, name }] }));
+        expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+        expect(result.reason).toContain(`cannot grade \`${label}\` assertions`);
+        expect(applyRagInverse(result, true)).toMatchObject({ pass: false, score: 0 });
         expect(fetchWithCache).not.toHaveBeenCalled();
       },
     );
+
+    it('does not treat Decisions JSON as generated questions for answer-relevance', async () => {
+      const name = 'unrelated-decision';
+      mockAnswers([{ name, type: 'predicate', probability: 0.01 }]);
+      const embedding = {
+        id: () => 'embedding-fixture',
+        callApi: vi.fn(),
+        callEmbeddingApi: vi.fn().mockResolvedValue({ embedding: [1, 0] }),
+      };
+      const result = await matchesAnswerRelevance('2+2?', 'Bananas are yellow.', 0.9, {
+        rubricPrompt: 'Generate a question',
+        provider: { text: provider({ questions: [{ ...predicateQuestion, name }] }), embedding },
+      });
+      expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+      expect(result.reason).toContain('cannot grade `answer-relevance` assertions');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+      expect(embedding.callEmbeddingApi).not.toHaveBeenCalled();
+    });
+
+    it('cannot select an output by parsing a probability as a select-best verdict', async () => {
+      const result = await matchesSelectBest('Choose the correct answer', ['Wrong', 'Correct'], {
+        provider: provider(),
+        rubricPrompt: 'Choose the best answer',
+      });
+      expect(result).toHaveLength(2);
+      for (const verdict of result) {
+        expect(verdict).toMatchObject({ pass: false, score: 0 });
+        expect(verdict.reason).toContain('cannot grade `select-best` assertions');
+      }
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
 
     it('cannot pass a trajectory grader by returning an answers object', async () => {
       const result = await matchesTrajectoryGoalSuccess('Book a flight', '[]', 'Done', {
