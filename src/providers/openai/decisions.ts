@@ -233,7 +233,15 @@ function getHeaderCredentials(name: string, value: string): string[] {
         const raw = part.slice(separator + 1).trim();
         const unquoted = raw.replace(/^"(.*)"$/, '$1');
         const decoded = decodeUrlComponent(unquoted);
-        credentials.push(raw, unquoted, decoded, decoded.replace(/^"(.*)"$/, '$1'));
+        const decodedValue = decoded.replace(/^"(.*)"$/, '$1');
+        const cookieName = part
+          .slice(0, separator)
+          .trim()
+          .replace(/^__(?:Host|Secure)-/i, '');
+        // Cookie metadata is not a credential; keep full-header secrecy without erasing locale values.
+        if (isCredentialHeader(cookieName, decodedValue) || /^(?:csrf|xsrf)$/i.test(cookieName)) {
+          credentials.push(raw, unquoted, decoded, decodedValue);
+        }
       }
     }
   }

@@ -1489,6 +1489,25 @@ describe('OpenAiDecisionsProvider', () => {
       credentials: ['opaque-session-123', 'second-session-456'],
     },
     {
+      name: 'prefixed session and CSRF cookies',
+      config: {
+        headers: {
+          Cookie: '__Host-session=private-session-cookie; __Secure-csrf=private-csrf-cookie',
+        },
+      },
+      credentials: ['private-session-cookie', 'private-csrf-cookie'],
+    },
+    {
+      name: 'bare XSRF cookie',
+      config: { headers: { Cookie: 'xsrf=private-xsrf-cookie' } },
+      credentials: ['private-xsrf-cookie'],
+    },
+    {
+      name: 'credential-shaped value in an unmarked cookie',
+      config: { headers: { Cookie: 'preference=sk-abcdefghijklmnopqrstuvw' } },
+      credentials: ['sk-abcdefghijklmnopqrstuvw'],
+    },
+    {
       name: 'quoted and escaped cookie values',
       config: {
         headers: { Cookie: 'session="opaque%2Fsession%2B123=="; csrf=%22second-session-456%22' },
@@ -1701,6 +1720,93 @@ describe('OpenAiDecisionsProvider', () => {
         }
         await cache.del(write.mock.calls[0]![0]);
       });
+    },
+  );
+
+  it.each(['enabled', 'disabled', 'bypass'] as const)(
+    'preserves cookie metadata while redacting recognized credentials (%s)',
+    async (mode) => {
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const cache = actualCache.getCache();
+      const write = vi.spyOn(cache, 'set');
+      const session = 'cookie/session+private';
+      const csrf = 'csrf-cookie-private';
+      const cookie = `locale=en; region=us; __Host-session="${encodeURIComponent(session)}"; csrf=%22${csrf}%22`;
+      const answers = [
+        {
+          name: 'locale',
+          type: 'choice',
+          choice: 'en',
+          confidence: 0.8,
+          probabilities: [
+            { value: 'en', probability: 0.8 },
+            { value: 'us', probability: 0.2 },
+          ],
+        },
+      ];
+      const data = {
+        ...response(answers),
+        diagnostics: { locale: 'en', region: 'us', session, csrf, cookie },
+      };
+      const expected = {
+        ...data,
+        diagnostics: {
+          locale: 'en',
+          region: 'us',
+          session: '[REDACTED]',
+          csrf: '[REDACTED]',
+          cookie: '[REDACTED]',
+        },
+      };
+      vi.mocked(fetchWithRetries).mockImplementation(
+        async () => new Response(JSON.stringify(data)),
+      );
+      const instance = provider({
+        headers: { Cookie: cookie },
+        questions: [
+          {
+            name: 'locale',
+            type: 'choice',
+            instructions: 'Choose.',
+            choices: [{ value: 'en' }, { value: 'us' }],
+          },
+        ],
+      });
+      const context =
+        mode === 'bypass'
+          ? {
+              vars: {},
+              prompt: { raw: 'cookie fixture', label: 'cookie fixture' },
+              bustCache: true,
+            }
+          : undefined;
+      try {
+        await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+          const fresh = await instance.callApi(`cookie fixture ${mode}`, context);
+          const repeated = await instance.callApi(`cookie fixture ${mode}`, context);
+          for (const result of [fresh, repeated]) {
+            expect(result.error).toBeUndefined();
+            expect(JSON.parse(result.output as string)).toEqual({ answers });
+            expect(result.raw).toEqual(expected);
+            expect(result.tokenUsage?.total).toBe(165);
+          }
+          expect(repeated.cached).toBe(mode === 'enabled');
+          expect(fetchWithRetries).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 2);
+          expect(write).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 0);
+          for (const [, stored] of write.mock.calls) {
+            expect(JSON.parse(stored as string).data).toEqual(expected);
+          }
+          expect(
+            new Headers(vi.mocked(fetchWithRetries).mock.calls[0]![1]?.headers).get('cookie'),
+          ).toBe(cookie);
+        });
+      } finally {
+        for (const [key] of write.mock.calls) {
+          await cache.del(key);
+        }
+      }
     },
   );
 
