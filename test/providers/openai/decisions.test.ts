@@ -736,6 +736,18 @@ describe('OpenAiDecisionsProvider', () => {
       suffix: 'user:bad%zz%40secret@gateway.example/v1',
       credentials: ['user:bad%zz%40secret', Buffer.from('user:bad%zz%40secret').toString('base64')],
     },
+    {
+      suffix: 'gateway.example/credential-12345678abcdef/v1',
+      credentials: ['credential-12345678abcdef'],
+    },
+    {
+      suffix: 'gateway.example/%63redential-12345678abcdef/v1',
+      credentials: ['%63redential-12345678abcdef', 'credential-12345678abcdef'],
+    },
+    {
+      suffix: 'gateway.example/api_key/opaque12345678/v1',
+      credentials: ['opaque12345678'],
+    },
     { suffix: 'gateway.example/v1?api_key=shorturlsecret', credentials: ['shorturlsecret'] },
     {
       suffix: 'gateway.example/v1?api_key=sh%6Frt%2Bsecret',
@@ -779,6 +791,90 @@ describe('OpenAiDecisionsProvider', () => {
       ).toBe(false);
     },
   );
+
+  it.each([
+    {
+      name: 'multiple cookie values',
+      config: { headers: { cOoKiE: 'session=opaque-session-123; csrf=second-session-456' } },
+      credentials: ['opaque-session-123', 'second-session-456'],
+    },
+    {
+      name: 'quoted and escaped cookie values',
+      config: {
+        headers: { Cookie: 'session="opaque%2Fsession%2B123=="; csrf=%22second-session-456%22' },
+      },
+      credentials: ['opaque%2Fsession%2B123==', 'opaque/session+123==', 'second-session-456'],
+    },
+    {
+      name: 'literal plus in cookie values',
+      config: { headers: { Cookie: 'session=opaque+session123' } },
+      credentials: ['opaque+session123'],
+    },
+    {
+      name: 'decoded Basic credentials',
+      config: {
+        headers: {
+          Authorization: `Basic ${Buffer.from('gateway-user:p@ss:word').toString('base64')}`,
+        },
+      },
+      credentials: ['gateway-user:p@ss:word', 'gateway-user', 'p@ss:word'],
+    },
+    {
+      name: 'encoded custom authorization',
+      config: { headers: { Authorization: 'Custom+Auth opaque/session+123' } },
+      credentials: ['Custom+Auth opaque/session+123', 'opaque/session+123'],
+    },
+    {
+      name: 'encoded API key containing a redaction marker',
+      config: { apiKey: 'prefix[REDACTED]suffix' },
+      credentials: ['prefix[REDACTED]suffix'],
+    },
+  ])('redacts gateway credential forms: $name', async ({ config, credentials }) => {
+    const forms = [...new Set(credentials.flatMap((value) => [value, encodeURIComponent(value)]))];
+    const message = `Access denied: ${forms.join('; ')}.`;
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { error: { message } },
+      cached: false,
+      status: 401,
+      statusText: message,
+      headers: { 'x-request-id': message },
+    });
+    const result = await provider(config).callApi('text');
+    for (const credential of forms) {
+      expect(JSON.stringify(result)).not.toContain(credential);
+    }
+    expect(result.error).toContain('Access denied');
+    expect(result.error).toContain('[REDACTED]');
+    const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0]![1]?.headers);
+    if ('headers' in config) {
+      for (const [name, value] of Object.entries(config.headers ?? {})) {
+        expect(headers.get(name)).toBe(value);
+      }
+    }
+  });
+
+  it('does not reinterpret malformed Basic credentials or ordinary paths as secrets', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { error: { message: 'The auth proxy rejects user and password.' } },
+      cached: false,
+      status: 401,
+      statusText: 'Unauthorized',
+    });
+    const result = await provider({
+      apiBaseUrl: 'https://gateway.example/auth/proxy/v1',
+      headers: { Authorization: `Basic ${Buffer.from('user:password').toString('base64')}!` },
+    }).callApi('text');
+    expect(result.error).toContain('The auth proxy rejects user and password.');
+    expect(vi.mocked(fetchWithCache).mock.calls[0]![0]).toBe(
+      'https://gateway.example/auth/proxy/v1/decisions',
+    );
+  });
+
+  it('returns a handled error for credentials containing a lone surrogate', async () => {
+    const result = await provider({ apiKey: 'invalid-\uD800' }).callApi('text');
+    expect(result.error).toBeDefined();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
 
   it('keeps ordinary URL query values and explicit authorization unchanged', async () => {
     const apiBaseUrl = 'https://u:p@gateway.example/v1?tenant=acme&page_token=cursor';
@@ -828,50 +924,73 @@ describe('OpenAiDecisionsProvider', () => {
     expect(options.sanitizeResponseMetadata(first)).toEqual(first);
   });
 
-  it('sanitizes response metadata before real cache storage and cache-hit diagnostics', async () => {
-    const actualCache =
-      await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-    vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-    const cache = actualCache.getCache();
-    const write = vi.spyOn(cache, 'set');
-    const debug = vi.spyOn(logger, 'debug');
-    vi.mocked(fetchWithRetries).mockResolvedValue(
-      new Response(JSON.stringify(response()), {
-        status: 200,
-        statusText: 'OK dTpw shorturlsecret',
-        headers: {
-          'content-type': 'application/json',
-          'x-request-id': 'request dTpw shorturlsecret',
-          'retry-after': '2',
-          'x-gateway-auth': 'unknown-response-secret',
-        },
-      }),
-    );
-    const instance = provider({
-      apiKey: undefined,
-      apiKeyRequired: false,
-      apiBaseUrl: 'https://u:p@gateway.example/v1?api_key=shorturlsecret',
-    });
-    await actualCache.withCacheEnabled(true, async () => {
-      const fresh = await instance.callApi('cache fixture');
-      const cached = await instance.callApi('cache fixture');
-      expect(fresh.error).toBeUndefined();
-      expect(cached.cached).toBe(true);
-      expect(cached.output).toBe(fresh.output);
-      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
-      expect(write).toHaveBeenCalledTimes(1);
-      const stored = JSON.parse(write.mock.calls[0]![1] as string);
-      expect(stored.statusText).toBe('OK [REDACTED] [REDACTED]');
-      expect(stored.headers).toEqual({
-        'x-request-id': 'request [REDACTED] [REDACTED]',
-        'retry-after': '2',
+  it.each([
+    {
+      name: 'URL userinfo and query',
+      config: { apiBaseUrl: 'https://u:p@gateway.example/v1?api_key=shorturlsecret' },
+      credentials: ['dTpw', 'shorturlsecret'],
+    },
+    {
+      name: 'cookies',
+      config: { headers: { Cookie: 'session=opaque-session-123; csrf=second-session-456' } },
+      credentials: ['opaque-session-123', 'second-session-456'],
+    },
+    {
+      name: 'path tokens',
+      config: {
+        apiBaseUrl: 'https://gateway.example/credential-12345678abcdef/api_key/opaque12345678/v1',
+      },
+      credentials: ['credential-12345678abcdef', 'opaque12345678'],
+    },
+  ])(
+    'sanitizes $name before real cache storage and cache-hit diagnostics',
+    async ({ config, credentials }) => {
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const cache = actualCache.getCache();
+      const write = vi.spyOn(cache, 'set');
+      const debug = vi.spyOn(logger, 'debug');
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(JSON.stringify(response()), {
+          status: 200,
+          statusText: `OK ${credentials.join(' ')}`,
+          headers: {
+            'content-type': 'application/json',
+            'x-request-id': `request ${credentials.join(' ')}`,
+            'retry-after': '2',
+            'x-gateway-auth': 'unknown-response-secret',
+          },
+        }),
+      );
+      const instance = provider({
+        apiKey: undefined,
+        apiKeyRequired: false,
+        ...config,
       });
-      for (const value of [fresh, cached, write.mock.calls, debug.mock.calls]) {
-        expect(JSON.stringify(value)).not.toMatch(/dTpw|shorturlsecret|unknown-response-secret/);
-      }
-      await cache.del(write.mock.calls[0]![0]);
-    });
-  });
+      await actualCache.withCacheEnabled(true, async () => {
+        const fresh = await instance.callApi('cache fixture');
+        const cached = await instance.callApi('cache fixture');
+        expect(fresh.error).toBeUndefined();
+        expect(cached.cached).toBe(true);
+        expect(cached.output).toBe(fresh.output);
+        expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+        expect(write).toHaveBeenCalledTimes(1);
+        const stored = JSON.parse(write.mock.calls[0]![1] as string);
+        expect(stored.statusText).toBe('OK [REDACTED] [REDACTED]');
+        expect(stored.headers).toEqual({
+          'x-request-id': 'request [REDACTED] [REDACTED]',
+          'retry-after': '2',
+        });
+        for (const value of [fresh, cached, write.mock.calls, debug.mock.calls]) {
+          for (const credential of [...credentials, 'unknown-response-secret']) {
+            expect(JSON.stringify(value)).not.toContain(credential);
+          }
+        }
+        await cache.del(write.mock.calls[0]![0]);
+      });
+    },
+  );
 
   describe.each(['Basic', 'Token', 'Custom+Auth'])('%s authorization diagnostics', (scheme) => {
     it.each(['api-error', 'rate-limit', 'transport-error', 'success'])(

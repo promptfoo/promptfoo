@@ -13,6 +13,7 @@ import {
   isNonCredentialHeader,
   sanitizeObject,
   sanitizeUrlEncodedString,
+  sanitizeUrlForLogging,
 } from '../../util/sanitizer';
 import { escapeRegExp } from '../../util/text';
 import { normalizeResponsesInput } from '../responses/input';
@@ -182,6 +183,44 @@ function hasSensitiveValue(value: unknown): boolean {
     : false;
 }
 
+function decodeUrlComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/** Collect gateway authentication forms without changing the supplied headers. */
+function getHeaderCredentials(name: string, value: string): string[] {
+  const trimmed = value.trim();
+  const credentials = [value, trimmed.replace(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\s+/, '')];
+  const basic = /^Basic\s+([a-z\d+/]+={0,2})$/i.exec(trimmed);
+  if (basic) {
+    const bytes = Buffer.from(basic[1], 'base64');
+    const decoded = bytes.toString('utf8');
+    const separator = decoded.indexOf(':');
+    if (
+      separator !== -1 &&
+      bytes.toString('base64').replace(/=+$/, '') === basic[1].replace(/=+$/, '')
+    ) {
+      credentials.push(decoded, decoded.slice(0, separator), decoded.slice(separator + 1));
+    }
+  }
+  if (name.toLowerCase() === 'cookie') {
+    for (const part of value.split(';')) {
+      const separator = part.indexOf('=');
+      if (separator !== -1) {
+        const raw = part.slice(separator + 1).trim();
+        const unquoted = raw.replace(/^"(.*)"$/, '$1');
+        const decoded = decodeUrlComponent(unquoted);
+        credentials.push(raw, unquoted, decoded, decoded.replace(/^"(.*)"$/, '$1'));
+      }
+    }
+  }
+  return credentials;
+}
+
 /** Collect URL authentication forms without changing the gateway request URL. */
 function getUrlCredentials(value: string): string[] {
   let url: URL;
@@ -193,16 +232,16 @@ function getUrlCredentials(value: string): string[] {
   const credentials: string[] = [];
   if (url.username || url.password) {
     const raw = [url.username, url.password];
-    const decoded = raw.map((part) => {
-      try {
-        return decodeURIComponent(part);
-      } catch {
-        return part;
-      }
-    });
+    const decoded = raw.map(decodeUrlComponent);
     const pair = decoded.join(':');
     const basic = Buffer.from(pair).toString('base64');
     credentials.push(...raw, ...decoded, raw.join(':'), pair, basic, `Basic ${basic}`);
+  }
+  const sanitizedSegments = sanitizeUrlForLogging(url.pathname).split('/');
+  for (const [index, segment] of url.pathname.split('/').entries()) {
+    if (sanitizedSegments[index] === '%5BREDACTED%5D') {
+      credentials.push(segment, decodeUrlComponent(segment));
+    }
   }
   for (const segment of url.search.slice(1).split(/[&;]/)) {
     const separator = segment.indexOf('=');
@@ -502,13 +541,17 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       ...getUrlCredentials(this.getApiUrl(config)),
       ...Object.entries(headers)
         .filter(([name]) => !isNonCredentialHeader(name))
-        .flatMap(([, value]) => [
-          value,
-          value.trim().replace(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\s+/, ''),
-        ]),
+        .flatMap(([name, value]) => getHeaderCredentials(name, value)),
     ]
       .filter((secret): secret is string => Boolean(secret))
-      .sort((left, right) => right.length - left.length);
+      .flatMap((secret) => {
+        try {
+          return [secret, encodeURIComponent(secret)];
+        } catch {
+          // Invalid Unicode must still reach the existing request error handling.
+          return [secret];
+        }
+      });
     // Gateways can echo credentials in response bodies before provider-level redaction runs.
     headers['x-promptfoo-silent'] = 'true';
     // Longer credentials match before markers; single-character userinfo cannot erase words.
