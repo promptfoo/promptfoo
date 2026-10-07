@@ -26,6 +26,7 @@ import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { monkeyPatchFetch } from '../../../src/util/fetch/monkeyPatchFetch';
 import { mockProcessEnv } from '../../util/utils';
+import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../../src/types/providers';
 
@@ -47,6 +48,28 @@ function rubricContext(rubric: unknown, output: unknown): CallApiContextParams {
     prompt: { raw: 'rendered grading prompt', label: 'llm-rubric' },
     vars: { rubric, output } as CallApiContextParams['vars'],
   };
+}
+
+type ActualCache = typeof import('../../../src/cache');
+
+async function withRealCache(
+  run: (fixtures: {
+    actualCache: ActualCache;
+    cache: ReturnType<ActualCache['getCache']>;
+    write: MockInstance<ReturnType<ActualCache['getCache']>['set']>;
+  }) => Promise<void>,
+) {
+  const actualCache = await vi.importActual<ActualCache>('../../../src/cache');
+  vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+  const cache = actualCache.getCache();
+  const write = vi.spyOn(cache, 'set');
+  try {
+    await run({ actualCache, cache, write });
+  } finally {
+    for (const [key] of write.mock.calls) {
+      await cache.del(key);
+    }
+  }
 }
 
 function mockAnswers(answers: unknown[]) {
@@ -218,12 +241,7 @@ describe('OpenAiDecisionsProvider', () => {
         ],
       },
     ];
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: response(answers),
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockAnswers(answers);
 
     const result = await provider({
       questions: [predicateQuestion, choiceQuestion, scoreQuestion],
@@ -500,91 +518,81 @@ describe('OpenAiDecisionsProvider', () => {
     it.each(['rubric-string', 'rubric-inline', 'classifier-inline'] as const)(
       'reuses responses through normal %s grader resolution',
       async (kind) => {
-        const actualCache =
-          await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-        vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-        const cache = actualCache.getCache();
-        const write = vi.spyOn(cache, 'set');
-        const restoreKey = mockProcessEnv({ OPENAI_API_KEY: 'grader-cache-fixture-key' });
-        const id = 'openai:decisions:gpt-6-luna';
-        const grading =
-          kind === 'rubric-string'
-            ? { provider: id }
-            : {
-                provider: {
-                  id,
-                  config: {
-                    apiKey: 'grader-cache-fixture-key',
-                    ...(kind === 'classifier-inline'
-                      ? { instructions: 'Choose.', labels: ['yes', 'no'] }
-                      : {}),
+        await withRealCache(async ({ actualCache, write }) => {
+          const restoreKey = mockProcessEnv({ OPENAI_API_KEY: 'grader-cache-fixture-key' });
+          const id = 'openai:decisions:gpt-6-luna';
+          const grading =
+            kind === 'rubric-string'
+              ? { provider: id }
+              : {
+                  provider: {
+                    id,
+                    config: {
+                      apiKey: 'grader-cache-fixture-key',
+                      ...(kind === 'classifier-inline'
+                        ? { instructions: 'Choose.', labels: ['yes', 'no'] }
+                        : {}),
+                    },
                   },
-                },
-              };
-        const answers =
-          kind === 'classifier-inline'
-            ? [
-                {
-                  name: 'classification',
-                  type: 'choice',
-                  choice: 'yes',
-                  confidence: 0.7,
-                  probabilities: [
-                    { value: 'yes', probability: 0.8 },
-                    { value: 'no', probability: 0.2 },
-                  ],
-                },
-              ]
-            : [{ name: 'grade', type: 'predicate', probability: 0.8 }];
-        vi.mocked(fetchWithRetries).mockImplementation(
-          async () =>
-            new Response(JSON.stringify(response(answers)), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            }),
-        );
-        const grade = () =>
-          kind === 'classifier-inline'
-            ? matchesClassification('yes', `${kind} fixture`, 0.5, grading)
-            : matchesLlmRubric('Is correct', `${kind} fixture`, grading);
-        try {
-          await actualCache.withCacheEnabled(true, async () => {
-            const [first, coalesced] = await Promise.all([grade(), grade()]);
-            const cached = await grade();
-            for (const result of [first, coalesced, cached]) {
-              expect(result).toMatchObject({ pass: true, score: 0.8 });
-            }
-            expect(fetchWithRetries).toHaveBeenCalledTimes(1);
-            expect(write).toHaveBeenCalledTimes(1);
-            expect(cached.tokensUsed).toMatchObject({ total: 165, cached: 165 });
-          });
-        } finally {
-          restoreKey();
-          for (const [key] of write.mock.calls) {
-            await cache.del(key);
+                };
+          const answers =
+            kind === 'classifier-inline'
+              ? [
+                  {
+                    name: 'classification',
+                    type: 'choice',
+                    choice: 'yes',
+                    confidence: 0.7,
+                    probabilities: [
+                      { value: 'yes', probability: 0.8 },
+                      { value: 'no', probability: 0.2 },
+                    ],
+                  },
+                ]
+              : [{ name: 'grade', type: 'predicate', probability: 0.8 }];
+          vi.mocked(fetchWithRetries).mockImplementation(
+            async () =>
+              new Response(JSON.stringify(response(answers)), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              }),
+          );
+          const grade = () =>
+            kind === 'classifier-inline'
+              ? matchesClassification('yes', `${kind} fixture`, 0.5, grading)
+              : matchesLlmRubric('Is correct', `${kind} fixture`, grading);
+          try {
+            await actualCache.withCacheEnabled(true, async () => {
+              const [first, coalesced] = await Promise.all([grade(), grade()]);
+              const cached = await grade();
+              for (const result of [first, coalesced, cached]) {
+                expect(result).toMatchObject({ pass: true, score: 0.8 });
+              }
+              expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+              expect(write).toHaveBeenCalledTimes(1);
+              expect(cached.tokensUsed).toMatchObject({ total: 165, cached: 165 });
+            });
+          } finally {
+            restoreKey();
           }
-        }
+        });
       },
     );
 
     it('shares equivalent headers while isolating credentials, tenants, and request bodies', async () => {
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const cache = actualCache.getCache();
-      const write = vi.spyOn(cache, 'set');
-      vi.mocked(fetchWithRetries).mockImplementation(
-        async () =>
-          new Response(JSON.stringify(response()), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          }),
-      );
-      const config = {
-        apiKey: 'namespace-auth-key',
-        headers: { 'X-Tenant': 'tenant-a', 'X-Mode': 'default' },
-      };
-      try {
+      await withRealCache(async ({ actualCache, write }) => {
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () =>
+            new Response(JSON.stringify(response()), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+        );
+        const config = {
+          apiKey: 'namespace-auth-key',
+          headers: { 'X-Tenant': 'tenant-a', 'X-Mode': 'default' },
+        };
+
         await actualCache.withCacheEnabled(true, async () => {
           const first = await provider(config).callApi('namespace fixture');
           const equivalent = await provider({
@@ -612,11 +620,7 @@ describe('OpenAiDecisionsProvider', () => {
             );
           }
         });
-      } finally {
-        for (const [key] of write.mock.calls) {
-          await cache.del(key);
-        }
-      }
+      });
     });
 
     it('retires old credential namespaces when the bounded cache fills', async () => {
@@ -702,37 +706,35 @@ describe('OpenAiDecisionsProvider', () => {
     ['Sec-WebSocket-Key', 'score'],
     ['X-Session-Access-Mode', 'us'],
   ])('preserves noncredential %s metadata in responses and the cache', async (name, value) => {
-    const actualCache =
-      await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-    vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-    const cache = actualCache.getCache();
-    const write = vi.spyOn(cache, 'set');
-    const answers = [
-      {
-        name: 'classification',
-        type: 'choice',
-        choice: value,
-        confidence: 0.8,
-        probabilities: [
-          { value, probability: 0.8 },
-          { value: 'other', probability: 0.2 },
-        ],
-      },
-    ];
-    const data = { ...response(answers), metadata: { [value]: value } };
-    vi.mocked(fetchWithRetries).mockImplementation(async () => new Response(JSON.stringify(data)));
-    const config = {
-      headers: { [name]: value },
-      questions: [
+    await withRealCache(async ({ actualCache, write }) => {
+      const answers = [
         {
           name: 'classification',
           type: 'choice',
-          instructions: 'Choose.',
-          choices: [{ value }, { value: 'other' }],
+          choice: value,
+          confidence: 0.8,
+          probabilities: [
+            { value, probability: 0.8 },
+            { value: 'other', probability: 0.2 },
+          ],
         },
-      ],
-    };
-    try {
+      ];
+      const data = { ...response(answers), metadata: { [value]: value } };
+      vi.mocked(fetchWithRetries).mockImplementation(
+        async () => new Response(JSON.stringify(data)),
+      );
+      const config = {
+        headers: { [name]: value },
+        questions: [
+          {
+            name: 'classification',
+            type: 'choice',
+            instructions: 'Choose.',
+            choices: [{ value }, { value: 'other' }],
+          },
+        ],
+      };
+
       await actualCache.withCacheEnabled(true, async () => {
         const fresh = await provider(config).callApi(`metadata ${name}`);
         const cached = await provider(config).callApi(`metadata ${name}`);
@@ -748,47 +750,42 @@ describe('OpenAiDecisionsProvider', () => {
           value,
         );
       });
-    } finally {
-      for (const [key] of write.mock.calls) {
-        await cache.del(key);
-      }
-    }
+    });
   });
 
   describe('effective Cloud authentication', () => {
     it.each(['Authorization', 'X-Session'])(
       'isolates rotated %s credentials and sanitizes fresh and cached responses',
       async (headerName) => {
-        vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('https://cloud.example');
-        const token = vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue('cloud-first-credential');
-        vi.spyOn(cloudConfig, 'getAuthHeaderName').mockReturnValue(headerName);
-        const actualCache =
-          await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-        vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-        const cache = actualCache.getCache();
-        const write = vi.spyOn(cache, 'set');
-        const debug = vi.spyOn(logger, 'debug');
-        vi.mocked(fetchWithRetries).mockImplementation(async (_url, options) => {
-          const authorization = new Headers(options?.headers).get(headerName);
-          expect(authorization).toBe(`Bearer ${token.mock.results.at(-1)?.value}`);
-          expect(options?.skipCloudAuthInjection).toBe(true);
-          if (headerName !== 'Authorization') {
-            expect(options?.restrictCloudAuthRedirects).toBe(true);
-          }
-          return new Response(
-            JSON.stringify({ ...response(), echo: { [authorization!]: authorization } }),
-            {
-              headers: { 'x-request-id': `request ${authorization}` },
-              statusText: `OK ${authorization}`,
-            },
-          );
-        });
-        const config = {
-          apiKey: undefined,
-          apiKeyRequired: false,
-          apiBaseUrl: 'https://cloud.example/v1',
-        };
-        try {
+        await withRealCache(async ({ actualCache, write }) => {
+          vi.spyOn(cloudConfig, 'getApiHost').mockReturnValue('https://cloud.example');
+          const token = vi
+            .spyOn(cloudConfig, 'getApiKey')
+            .mockReturnValue('cloud-first-credential');
+          vi.spyOn(cloudConfig, 'getAuthHeaderName').mockReturnValue(headerName);
+
+          const debug = vi.spyOn(logger, 'debug');
+          vi.mocked(fetchWithRetries).mockImplementation(async (_url, options) => {
+            const authorization = new Headers(options?.headers).get(headerName);
+            expect(authorization).toBe(`Bearer ${token.mock.results.at(-1)?.value}`);
+            expect(options?.skipCloudAuthInjection).toBe(true);
+            if (headerName !== 'Authorization') {
+              expect(options?.restrictCloudAuthRedirects).toBe(true);
+            }
+            return new Response(
+              JSON.stringify({ ...response(), echo: { [authorization!]: authorization } }),
+              {
+                headers: { 'x-request-id': `request ${authorization}` },
+                statusText: `OK ${authorization}`,
+              },
+            );
+          });
+          const config = {
+            apiKey: undefined,
+            apiKeyRequired: false,
+            apiBaseUrl: 'https://cloud.example/v1',
+          };
+
           await actualCache.withCacheEnabled(true, async () => {
             const first = await provider(config).callApi(`Cloud ${headerName}`);
             const firstCached = await provider(config).callApi(`Cloud ${headerName}`);
@@ -816,11 +813,7 @@ describe('OpenAiDecisionsProvider', () => {
               expect(JSON.stringify(value)).not.toMatch(/cloud-(?:first|second)-credential/);
             }
           });
-        } finally {
-          for (const [key] of write.mock.calls) {
-            await cache.del(key);
-          }
-        }
+        });
       },
     );
 
@@ -971,29 +964,25 @@ describe('OpenAiDecisionsProvider', () => {
   it.each(['enabled', 'disabled', 'bypass'] as const)(
     'evicts inconsistent usage instead of reusing it when cache is %s',
     async (mode) => {
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const cache = actualCache.getCache();
-      const write = vi.spyOn(cache, 'set');
-      vi.mocked(fetchWithRetries).mockImplementation(
-        async () =>
-          new Response(
-            JSON.stringify({
-              ...response(),
-              usage: { input_tokens: 100, output_tokens: 20, total_tokens: 1 },
-            }),
-            { status: 200 },
-          ),
-      );
-      const instance = provider();
-      const prompt = `Inconsistent usage ${mode}`;
-      const context: CallApiContextParams = {
-        vars: {},
-        prompt: { raw: prompt, label: prompt },
-        bustCache: mode === 'bypass',
-      };
-      try {
+      await withRealCache(async ({ actualCache, cache, write }) => {
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () =>
+            new Response(
+              JSON.stringify({
+                ...response(),
+                usage: { input_tokens: 100, output_tokens: 20, total_tokens: 1 },
+              }),
+              { status: 200 },
+            ),
+        );
+        const instance = provider();
+        const prompt = `Inconsistent usage ${mode}`;
+        const context: CallApiContextParams = {
+          vars: {},
+          prompt: { raw: prompt, label: prompt },
+          bustCache: mode === 'bypass',
+        };
+
         await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
           for (let attempt = 0; attempt < 2; attempt++) {
             const result = await instance.callApi(prompt, context);
@@ -1007,11 +996,7 @@ describe('OpenAiDecisionsProvider', () => {
             expect(await cache.get(key)).toBeUndefined();
           }
         });
-      } finally {
-        for (const [key] of write.mock.calls) {
-          await cache.del(key);
-        }
-      }
+      });
     },
   );
 
@@ -1379,12 +1364,7 @@ describe('OpenAiDecisionsProvider', () => {
         { value: 1, label: 'Urgent', probability: 0.75 },
       ],
     };
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: response([answer]),
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockAnswers([answer]);
     const result = await provider({ questions: [scoreQuestion] }).callApi('text');
     expect(result.error).toBeUndefined();
     expect(JSON.parse(result.output as string)).toEqual({ answers: [answer] });
@@ -1408,12 +1388,7 @@ describe('OpenAiDecisionsProvider', () => {
         ],
       },
     ];
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: response(answers),
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    mockAnswers(answers);
     const result = await provider({ questions }).callApi('text');
     expect(result.error).toBeUndefined();
     expect(requestBody().questions).toEqual(questions);
@@ -1670,38 +1645,37 @@ describe('OpenAiDecisionsProvider', () => {
   it.each(['enabled', 'disabled', 'bypass'] as const)(
     'redacts subscription-key query URLs from malformed JSON failures (%s)',
     async (mode) => {
-      const credential = '0123456789abcdef0123456789abcdef';
-      const apiBaseUrl = `https://gateway.example/v1?subscription-key=${credential}`;
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const write = vi.spyOn(actualCache.getCache(), 'set');
-      const debug = vi.spyOn(logger, 'debug');
-      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-        new Response(`{"error":"${apiBaseUrl}",`, {
-          status: 401,
-          statusText: `Denied ${credential}`,
-        }),
-      );
-      const instance = provider({ apiKey: undefined, apiKeyRequired: false, apiBaseUrl });
-      await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
-        const result = await instance.callApi(`Query parse fixture ${mode}`, {
-          vars: {},
-          prompt: { raw: 'text', label: 'text' },
-          bustCache: mode === 'bypass',
-        });
-        expect(result.error).toContain('Invalid JSON. HTTP 401.');
-        expect(result.error).toContain('subscription-key=');
-        expect(result.output).toBeUndefined();
-        expect(result.raw).toBeUndefined();
-        expect(write).not.toHaveBeenCalled();
-        expect(vi.mocked(fetchWithRetries).mock.calls[0]![0]).toBe(
-          apiBaseUrl.replace('/v1', '/v1/decisions'),
+      await withRealCache(async ({ actualCache, write }) => {
+        const credential = '0123456789abcdef0123456789abcdef';
+        const apiBaseUrl = `https://gateway.example/v1?subscription-key=${credential}`;
+
+        const debug = vi.spyOn(logger, 'debug');
+        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+          new Response(`{"error":"${apiBaseUrl}",`, {
+            status: 401,
+            statusText: `Denied ${credential}`,
+          }),
         );
-        for (const value of [result, debug.mock.calls]) {
-          expect(JSON.stringify(value)).not.toContain(credential);
-          expect(JSON.stringify(value)).not.toContain(apiBaseUrl);
-        }
+        const instance = provider({ apiKey: undefined, apiKeyRequired: false, apiBaseUrl });
+        await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+          const result = await instance.callApi(`Query parse fixture ${mode}`, {
+            vars: {},
+            prompt: { raw: 'text', label: 'text' },
+            bustCache: mode === 'bypass',
+          });
+          expect(result.error).toContain('Invalid JSON. HTTP 401.');
+          expect(result.error).toContain('subscription-key=');
+          expect(result.output).toBeUndefined();
+          expect(result.raw).toBeUndefined();
+          expect(write).not.toHaveBeenCalled();
+          expect(vi.mocked(fetchWithRetries).mock.calls[0]![0]).toBe(
+            apiBaseUrl.replace('/v1', '/v1/decisions'),
+          );
+          for (const value of [result, debug.mock.calls]) {
+            expect(JSON.stringify(value)).not.toContain(credential);
+            expect(JSON.stringify(value)).not.toContain(apiBaseUrl);
+          }
+        });
       });
     },
   );
@@ -1837,71 +1811,67 @@ describe('OpenAiDecisionsProvider', () => {
   ])(
     'sanitizes $name before real cache storage and cache-hit diagnostics',
     async ({ config, credentials }) => {
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const cache = actualCache.getCache();
-      const write = vi.spyOn(cache, 'set');
-      const debug = vi.spyOn(logger, 'debug');
-      vi.mocked(fetchWithRetries).mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            ...response(),
-            echo: credentials,
-            diagnostics: Object.fromEntries(
-              credentials.map((credential) => [credential, credential]),
-            ),
-          }),
-          {
-            status: 200,
-            statusText: `OK ${credentials.join(' ')}`,
-            headers: {
-              'content-type': 'application/json',
-              'x-request-id': `request ${credentials.join(' ')}`,
-              'retry-after': '2',
-              'x-gateway-auth': 'unknown-response-secret',
+      await withRealCache(async ({ actualCache, write }) => {
+        const debug = vi.spyOn(logger, 'debug');
+        vi.mocked(fetchWithRetries).mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              ...response(),
+              echo: credentials,
+              diagnostics: Object.fromEntries(
+                credentials.map((credential) => [credential, credential]),
+              ),
+            }),
+            {
+              status: 200,
+              statusText: `OK ${credentials.join(' ')}`,
+              headers: {
+                'content-type': 'application/json',
+                'x-request-id': `request ${credentials.join(' ')}`,
+                'retry-after': '2',
+                'x-gateway-auth': 'unknown-response-secret',
+              },
             },
-          },
-        ),
-      );
-      const instance = provider({
-        apiKey: undefined,
-        apiKeyRequired: false,
-        ...config,
-      });
-      await actualCache.withCacheEnabled(true, async () => {
-        const fresh = await instance.callApi('cache fixture');
-        const cached = await instance.callApi('cache fixture');
-        expect(fresh.error).toBeUndefined();
-        expect(cached.cached).toBe(true);
-        expect(cached.output).toBe(fresh.output);
-        expect(fetchWithRetries).toHaveBeenCalledTimes(1);
-        expect(write).toHaveBeenCalledTimes(1);
-        const stored = JSON.parse(write.mock.calls[0]![1] as string);
-        const redactedEcho = credentials.map(() => '[REDACTED]').join(' ');
-        expect(stored.statusText).toBe(`OK ${redactedEcho}`);
-        expect(stored.data).toEqual({
-          ...response(),
-          echo: credentials.map(() => '[REDACTED]'),
-          diagnostics: { '[REDACTED]': '[REDACTED]' },
+          ),
+        );
+        const instance = provider({
+          apiKey: undefined,
+          apiKeyRequired: false,
+          ...config,
         });
-        expect(fresh.raw).toEqual(stored.data);
-        expect(cached.raw).toEqual(stored.data);
-        if (typeof config.apiBaseUrl === 'string') {
-          expect(vi.mocked(fetchWithRetries).mock.calls[0]![0]).toBe(
-            config.apiBaseUrl.replace('/v1', '/v1/decisions'),
-          );
-        }
-        expect(stored.headers).toEqual({
-          'x-request-id': `request ${redactedEcho}`,
-          'retry-after': '2',
-        });
-        for (const value of [fresh, cached, write.mock.calls, debug.mock.calls]) {
-          for (const credential of [...credentials, 'unknown-response-secret']) {
-            expect(JSON.stringify(value)).not.toContain(credential);
+        await actualCache.withCacheEnabled(true, async () => {
+          const fresh = await instance.callApi('cache fixture');
+          const cached = await instance.callApi('cache fixture');
+          expect(fresh.error).toBeUndefined();
+          expect(cached.cached).toBe(true);
+          expect(cached.output).toBe(fresh.output);
+          expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+          expect(write).toHaveBeenCalledTimes(1);
+          const stored = JSON.parse(write.mock.calls[0]![1] as string);
+          const redactedEcho = credentials.map(() => '[REDACTED]').join(' ');
+          expect(stored.statusText).toBe(`OK ${redactedEcho}`);
+          expect(stored.data).toEqual({
+            ...response(),
+            echo: credentials.map(() => '[REDACTED]'),
+            diagnostics: { '[REDACTED]': '[REDACTED]' },
+          });
+          expect(fresh.raw).toEqual(stored.data);
+          expect(cached.raw).toEqual(stored.data);
+          if (typeof config.apiBaseUrl === 'string') {
+            expect(vi.mocked(fetchWithRetries).mock.calls[0]![0]).toBe(
+              config.apiBaseUrl.replace('/v1', '/v1/decisions'),
+            );
           }
-        }
-        await cache.del(write.mock.calls[0]![0]);
+          expect(stored.headers).toEqual({
+            'x-request-id': `request ${redactedEcho}`,
+            'retry-after': '2',
+          });
+          for (const value of [fresh, cached, write.mock.calls, debug.mock.calls]) {
+            for (const credential of [...credentials, 'unknown-response-secret']) {
+              expect(JSON.stringify(value)).not.toContain(credential);
+            }
+          }
+        });
       });
     },
   );
@@ -1921,64 +1891,60 @@ describe('OpenAiDecisionsProvider', () => {
   )(
     'preserves cookie metadata while redacting recognized credentials ($mode, $cookieName)',
     async ({ mode, cookieName }) => {
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const cache = actualCache.getCache();
-      const write = vi.spyOn(cache, 'set');
-      const session = '0123456789abcdef0123456789abcdef';
-      const csrf = 'csrf-cookie-private';
-      const cookie = `locale=en; region=us; session_mode=score; ${cookieName}="${encodeURIComponent(session)}"; csrf=%22${csrf}%22`;
-      const answers = [
-        {
-          name: 'locale',
-          type: 'choice',
-          choice: 'en',
-          confidence: 0.8,
-          probabilities: [
-            { value: 'en', probability: 0.8 },
-            { value: 'us', probability: 0.2 },
-          ],
-        },
-      ];
-      const data = {
-        ...response(answers),
-        diagnostics: { locale: 'en', region: 'us', session_mode: 'score', session, csrf, cookie },
-      };
-      const expected = {
-        ...data,
-        diagnostics: {
-          locale: 'en',
-          region: 'us',
-          session_mode: 'score',
-          session: '[REDACTED]',
-          csrf: '[REDACTED]',
-          cookie: '[REDACTED]',
-        },
-      };
-      vi.mocked(fetchWithRetries).mockImplementation(
-        async () => new Response(JSON.stringify(data)),
-      );
-      const instance = provider({
-        headers: { Cookie: cookie },
-        questions: [
+      await withRealCache(async ({ actualCache, write }) => {
+        const session = '0123456789abcdef0123456789abcdef';
+        const csrf = 'csrf-cookie-private';
+        const cookie = `locale=en; region=us; session_mode=score; ${cookieName}="${encodeURIComponent(session)}"; csrf=%22${csrf}%22`;
+        const answers = [
           {
             name: 'locale',
             type: 'choice',
-            instructions: 'Choose.',
-            choices: [{ value: 'en' }, { value: 'us' }],
+            choice: 'en',
+            confidence: 0.8,
+            probabilities: [
+              { value: 'en', probability: 0.8 },
+              { value: 'us', probability: 0.2 },
+            ],
           },
-        ],
-      });
-      const context =
-        mode === 'bypass'
-          ? {
-              vars: {},
-              prompt: { raw: 'cookie fixture', label: 'cookie fixture' },
-              bustCache: true,
-            }
-          : undefined;
-      try {
+        ];
+        const data = {
+          ...response(answers),
+          diagnostics: { locale: 'en', region: 'us', session_mode: 'score', session, csrf, cookie },
+        };
+        const expected = {
+          ...data,
+          diagnostics: {
+            locale: 'en',
+            region: 'us',
+            session_mode: 'score',
+            session: '[REDACTED]',
+            csrf: '[REDACTED]',
+            cookie: '[REDACTED]',
+          },
+        };
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () => new Response(JSON.stringify(data)),
+        );
+        const instance = provider({
+          headers: { Cookie: cookie },
+          questions: [
+            {
+              name: 'locale',
+              type: 'choice',
+              instructions: 'Choose.',
+              choices: [{ value: 'en' }, { value: 'us' }],
+            },
+          ],
+        });
+        const context =
+          mode === 'bypass'
+            ? {
+                vars: {},
+                prompt: { raw: 'cookie fixture', label: 'cookie fixture' },
+                bustCache: true,
+              }
+            : undefined;
+
         await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
           const fresh = await instance.callApi(`cookie fixture ${mode}`, context);
           const repeated = await instance.callApi(`cookie fixture ${mode}`, context);
@@ -1998,86 +1964,78 @@ describe('OpenAiDecisionsProvider', () => {
             new Headers(vi.mocked(fetchWithRetries).mock.calls[0]![1]?.headers).get('cookie'),
           ).toBe(cookie);
         });
-      } finally {
-        for (const [key] of write.mock.calls) {
-          await cache.del(key);
-        }
-      }
+      });
     },
   );
 
   it.each(['enabled', 'disabled', 'bypass'] as const)(
     'redacts response body credentials before raw results and cache storage (%s)',
     async (mode) => {
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const cache = actualCache.getCache();
-      const write = vi.spyOn(cache, 'set');
-      const debug = vi.spyOn(logger, 'debug');
-      const credential = 'body/fixture+[REDACTED]';
-      const encoded = encodeURIComponent(credential);
-      const answers = [
-        {
-          name: 'token',
-          type: 'choice',
-          choice: false,
-          confidence: 0.75,
-          probabilities: [
-            { value: false, probability: 0.75 },
-            { value: 'password', probability: 0.25 },
-          ],
-        },
-      ];
-      const data = {
-        ...response(answers),
-        diagnostics: {
-          token: 'public token description',
-          password: 'public password label',
-          nested: [
-            { [credential]: { [encoded]: `request-${credential}; encoded ${encoded}` } },
-            [null, false, 42, 'unchanged'],
-          ],
-        },
-      };
-      const expected = {
-        ...data,
-        diagnostics: {
-          ...data.diagnostics,
-          nested: [
-            { '[REDACTED]': { '[REDACTED]': 'request-[REDACTED]; encoded [REDACTED]' } },
-            [null, false, 42, 'unchanged'],
-          ],
-        },
-      };
-      vi.mocked(fetchWithRetries).mockImplementation(
-        async () =>
-          new Response(JSON.stringify(data), {
-            status: 200,
-            statusText: 'OK',
-            headers: { 'content-type': 'application/json' },
-          }),
-      );
-      const instance = provider({
-        apiKey: credential,
-        questions: [
+      await withRealCache(async ({ actualCache, write }) => {
+        const debug = vi.spyOn(logger, 'debug');
+        const credential = 'body/fixture+[REDACTED]';
+        const encoded = encodeURIComponent(credential);
+        const answers = [
           {
             name: 'token',
             type: 'choice',
-            instructions: 'Choose the matching value.',
-            choices: [{ value: false }, { value: 'password' }],
+            choice: false,
+            confidence: 0.75,
+            probabilities: [
+              { value: false, probability: 0.75 },
+              { value: 'password', probability: 0.25 },
+            ],
           },
-        ],
-      });
-      const context: CallApiContextParams = {
-        vars: {},
-        prompt: { raw: 'body fixture', label: 'body fixture' },
-        bustCache: mode === 'bypass',
-      };
-      await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
-        const fresh = await instance.callApi('body fixture', context);
-        const repeated = await instance.callApi('body fixture', context);
-        try {
+        ];
+        const data = {
+          ...response(answers),
+          diagnostics: {
+            token: 'public token description',
+            password: 'public password label',
+            nested: [
+              { [credential]: { [encoded]: `request-${credential}; encoded ${encoded}` } },
+              [null, false, 42, 'unchanged'],
+            ],
+          },
+        };
+        const expected = {
+          ...data,
+          diagnostics: {
+            ...data.diagnostics,
+            nested: [
+              { '[REDACTED]': { '[REDACTED]': 'request-[REDACTED]; encoded [REDACTED]' } },
+              [null, false, 42, 'unchanged'],
+            ],
+          },
+        };
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () =>
+            new Response(JSON.stringify(data), {
+              status: 200,
+              statusText: 'OK',
+              headers: { 'content-type': 'application/json' },
+            }),
+        );
+        const instance = provider({
+          apiKey: credential,
+          questions: [
+            {
+              name: 'token',
+              type: 'choice',
+              instructions: 'Choose the matching value.',
+              choices: [{ value: false }, { value: 'password' }],
+            },
+          ],
+        });
+        const context: CallApiContextParams = {
+          vars: {},
+          prompt: { raw: 'body fixture', label: 'body fixture' },
+          bustCache: mode === 'bypass',
+        };
+        await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+          const fresh = await instance.callApi('body fixture', context);
+          const repeated = await instance.callApi('body fixture', context);
+
           expect(fresh.error).toBeUndefined();
           expect(fresh.raw).toEqual(expected);
           expect(repeated.raw).toEqual(expected);
@@ -2094,11 +2052,7 @@ describe('OpenAiDecisionsProvider', () => {
             expect(JSON.stringify(value)).not.toContain(credential);
             expect(JSON.stringify(value)).not.toContain(encoded);
           }
-        } finally {
-          for (const [key] of write.mock.calls) {
-            await cache.del(key);
-          }
-        }
+        });
       });
     },
   );
@@ -2110,83 +2064,79 @@ describe('OpenAiDecisionsProvider', () => {
   )(
     'preserves fixed response structure when a password collides ($password, $mode)',
     async ({ password, mode }) => {
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const cache = actualCache.getCache();
-      const write = vi.spyOn(cache, 'set');
-      const answers = [
-        { name: 'a', type: 'predicate', probability: 0.9 },
-        {
-          name: 'b',
-          type: 'choice',
-          choice: true,
-          confidence: 0.8,
-          probabilities: [
-            { value: true, probability: 0.8 },
-            { value: false, probability: 0.2 },
-          ],
-        },
-        {
-          name: 'c',
-          type: 'score',
-          score: 0.75,
-          confidence: 0.9,
-          probabilities: [
-            { value: 0, label: 'Low', probability: 0.25 },
-            { value: 1, label: 'High', probability: 0.75 },
-          ],
-        },
-        { name: 'd', type: 'refusal' },
-      ];
-      const data = {
-        ...response(answers),
-        usage: {
-          ...usage,
-          input_tokens_details: {
-            ...usage.input_tokens_details,
-            extra: { [password]: password },
-          },
-          output_tokens_details: {
-            ...usage.output_tokens_details,
-            extra: { [password]: password },
-          },
-        },
-        diagnostics: { [password]: { type: password, input_tokens: password } },
-      };
-      vi.mocked(fetchWithRetries).mockImplementation(
-        async () => new Response(JSON.stringify(data), { status: 200 }),
-      );
-      const instance = provider({
-        apiKey: undefined,
-        apiKeyRequired: false,
-        headers: {
-          Authorization: `Basic ${Buffer.from(`account:${password}`).toString('base64')}`,
-        },
-        questions: [
-          { name: 'a', type: 'predicate', instructions: 'Assess' },
+      await withRealCache(async ({ actualCache, write }) => {
+        const answers = [
+          { name: 'a', type: 'predicate', probability: 0.9 },
           {
             name: 'b',
             type: 'choice',
-            instructions: 'Assess',
-            choices: [{ value: true }, { value: false }],
+            choice: true,
+            confidence: 0.8,
+            probabilities: [
+              { value: true, probability: 0.8 },
+              { value: false, probability: 0.2 },
+            ],
           },
           {
             name: 'c',
             type: 'score',
-            instructions: 'Assess',
-            levels: [{ label: 'Low' }, { label: 'High' }],
+            score: 0.75,
+            confidence: 0.9,
+            probabilities: [
+              { value: 0, label: 'Low', probability: 0.25 },
+              { value: 1, label: 'High', probability: 0.75 },
+            ],
           },
-          { name: 'd', type: 'predicate', instructions: 'Assess' },
-        ],
-      });
-      const prompt = `Protocol fixture ${password} ${mode}`;
-      const context: CallApiContextParams = {
-        vars: {},
-        prompt: { raw: prompt, label: prompt },
-        bustCache: mode === 'bypass',
-      };
-      try {
+          { name: 'd', type: 'refusal' },
+        ];
+        const data = {
+          ...response(answers),
+          usage: {
+            ...usage,
+            input_tokens_details: {
+              ...usage.input_tokens_details,
+              extra: { [password]: password },
+            },
+            output_tokens_details: {
+              ...usage.output_tokens_details,
+              extra: { [password]: password },
+            },
+          },
+          diagnostics: { [password]: { type: password, input_tokens: password } },
+        };
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () => new Response(JSON.stringify(data), { status: 200 }),
+        );
+        const instance = provider({
+          apiKey: undefined,
+          apiKeyRequired: false,
+          headers: {
+            Authorization: `Basic ${Buffer.from(`account:${password}`).toString('base64')}`,
+          },
+          questions: [
+            { name: 'a', type: 'predicate', instructions: 'Assess' },
+            {
+              name: 'b',
+              type: 'choice',
+              instructions: 'Assess',
+              choices: [{ value: true }, { value: false }],
+            },
+            {
+              name: 'c',
+              type: 'score',
+              instructions: 'Assess',
+              levels: [{ label: 'Low' }, { label: 'High' }],
+            },
+            { name: 'd', type: 'predicate', instructions: 'Assess' },
+          ],
+        });
+        const prompt = `Protocol fixture ${password} ${mode}`;
+        const context: CallApiContextParams = {
+          vars: {},
+          prompt: { raw: prompt, label: prompt },
+          bustCache: mode === 'bypass',
+        };
+
         await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
           const fresh = await instance.callApi(prompt, context);
           const repeated = await instance.callApi(prompt, context);
@@ -2222,11 +2172,7 @@ describe('OpenAiDecisionsProvider', () => {
           expect(refused.isRefusal).toBe(true);
           expect(refused.tokenUsage).toMatchObject({ total: 165, prompt: 164, completion: 1 });
         });
-      } finally {
-        for (const [key] of write.mock.calls) {
-          await cache.del(key);
-        }
-      }
+      });
     },
   );
 
@@ -2239,40 +2185,36 @@ describe('OpenAiDecisionsProvider', () => {
   )(
     'preserves selected and unselected classifier labels for credential $credential (cache $enabled)',
     async ({ credential, labels, apiKey, enabled }) => {
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const cache = actualCache.getCache();
-      const write = vi.spyOn(cache, 'set');
-      const answers = [
-        {
-          name: 'classification',
-          type: 'choice',
-          choice: labels[0],
-          confidence: 0.8,
-          probabilities: [
-            { value: labels[0], probability: 0.8 },
-            { value: labels[1], probability: 0.2 },
-          ],
-        },
-      ];
-      const data = { ...response(answers), diagnostics: { [credential]: labels } };
-      vi.mocked(fetchWithRetries).mockImplementation(
-        async () => new Response(JSON.stringify(data), { status: 200 }),
-      );
-      const instance = provider({
-        ...(apiKey
-          ? { apiKey: credential }
-          : {
-              headers: {
-                Authorization: `Basic ${Buffer.from(`account:${credential}`).toString('base64')}`,
-              },
-            }),
-        instructions: 'Choose a category',
-        labels,
-      });
-      const output = `Category fixture ${credential} ${enabled}`;
-      try {
+      await withRealCache(async ({ actualCache, write }) => {
+        const answers = [
+          {
+            name: 'classification',
+            type: 'choice',
+            choice: labels[0],
+            confidence: 0.8,
+            probabilities: [
+              { value: labels[0], probability: 0.8 },
+              { value: labels[1], probability: 0.2 },
+            ],
+          },
+        ];
+        const data = { ...response(answers), diagnostics: { [credential]: labels } };
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () => new Response(JSON.stringify(data), { status: 200 }),
+        );
+        const instance = provider({
+          ...(apiKey
+            ? { apiKey: credential }
+            : {
+                headers: {
+                  Authorization: `Basic ${Buffer.from(`account:${credential}`).toString('base64')}`,
+                },
+              }),
+          instructions: 'Choose a category',
+          labels,
+        });
+        const output = `Category fixture ${credential} ${enabled}`;
+
         await actualCache.withCacheEnabled(enabled, async () => {
           const fresh = await instance.callClassificationApi(output);
           const grading = await matchesClassification(labels[0], output, 0.5, {
@@ -2291,92 +2233,84 @@ describe('OpenAiDecisionsProvider', () => {
             expect(JSON.stringify(stored.diagnostics)).not.toContain(credential);
           }
         });
-      } finally {
-        for (const [key] of write.mock.calls) {
-          await cache.del(key);
-        }
-      }
+      });
     },
   );
 
   it.each(['enabled', 'disabled', 'bypass'] as const)(
     'preserves configured response identities without exempting diagnostic echoes (%s)',
     async (mode) => {
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const cache = actualCache.getCache();
-      const write = vi.spyOn(cache, 'set');
-      const answers = [
-        { name: 'test', type: 'predicate', probability: 0.9 },
-        {
-          name: 'test-choice',
-          type: 'choice',
-          choice: 'test',
-          confidence: 0.8,
-          probabilities: [
-            { value: 'test', probability: 0.8 },
-            { value: 'other_test', probability: 0.2 },
-          ],
-        },
-        {
-          name: 'test-score',
-          type: 'score',
-          score: 0.75,
-          confidence: 0.9,
-          probabilities: [
-            { value: 0, label: 'test_low', probability: 0.25 },
-            { value: 1, label: 'test_high', probability: 0.75 },
-          ],
-        },
-      ];
-      const data = {
-        ...response(answers),
-        model: 'gpt-test-model',
-        diagnostics: {
-          test: {
-            model: 'gpt-test-model',
-            name: 'test',
-            choice: 'other_test',
-            label: 'test_low',
-            instructions: 'test instruction',
-            description: 'test description',
-            input: 'test input',
+      await withRealCache(async ({ actualCache, write }) => {
+        const answers = [
+          { name: 'test', type: 'predicate', probability: 0.9 },
+          {
+            name: 'test-choice',
+            type: 'choice',
+            choice: 'test',
+            confidence: 0.8,
+            probabilities: [
+              { value: 'test', probability: 0.8 },
+              { value: 'other_test', probability: 0.2 },
+            ],
           },
-        },
-      };
-      vi.mocked(fetchWithRetries).mockImplementation(
-        async () => new Response(JSON.stringify(data), { status: 200 }),
-      );
-      const instance = new OpenAiDecisionsProvider('gpt-test-model', {
-        config: {
-          apiKey: 'test',
-          questions: [
-            { name: 'test', type: 'predicate', instructions: 'test instruction' },
-            {
-              name: 'test-choice',
-              type: 'choice',
-              instructions: 'Choose',
-              choices: [
-                { value: 'test', description: 'test description' },
-                { value: 'other_test' },
-              ],
+          {
+            name: 'test-score',
+            type: 'score',
+            score: 0.75,
+            confidence: 0.9,
+            probabilities: [
+              { value: 0, label: 'test_low', probability: 0.25 },
+              { value: 1, label: 'test_high', probability: 0.75 },
+            ],
+          },
+        ];
+        const data = {
+          ...response(answers),
+          model: 'gpt-test-model',
+          diagnostics: {
+            test: {
+              model: 'gpt-test-model',
+              name: 'test',
+              choice: 'other_test',
+              label: 'test_low',
+              instructions: 'test instruction',
+              description: 'test description',
+              input: 'test input',
             },
-            {
-              name: 'test-score',
-              type: 'score',
-              instructions: 'Score',
-              levels: [{ label: 'test_low' }, { label: 'test_high' }],
-            },
-          ],
-        },
-      });
-      const context: CallApiContextParams = {
-        vars: {},
-        prompt: { raw: 'test input', label: 'Public identities' },
-        bustCache: mode === 'bypass',
-      };
-      try {
+          },
+        };
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () => new Response(JSON.stringify(data), { status: 200 }),
+        );
+        const instance = new OpenAiDecisionsProvider('gpt-test-model', {
+          config: {
+            apiKey: 'test',
+            questions: [
+              { name: 'test', type: 'predicate', instructions: 'test instruction' },
+              {
+                name: 'test-choice',
+                type: 'choice',
+                instructions: 'Choose',
+                choices: [
+                  { value: 'test', description: 'test description' },
+                  { value: 'other_test' },
+                ],
+              },
+              {
+                name: 'test-score',
+                type: 'score',
+                instructions: 'Score',
+                levels: [{ label: 'test_low' }, { label: 'test_high' }],
+              },
+            ],
+          },
+        });
+        const context: CallApiContextParams = {
+          vars: {},
+          prompt: { raw: 'test input', label: 'Public identities' },
+          bustCache: mode === 'bypass',
+        };
+
         await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
           const fresh = await instance.callApi('test input', context);
           const repeated = await instance.callApi('test input', context);
@@ -2396,11 +2330,7 @@ describe('OpenAiDecisionsProvider', () => {
             expect(JSON.parse(write.mock.calls[0]![1] as string).data).toEqual(fresh.raw);
           }
         });
-      } finally {
-        for (const [key] of write.mock.calls) {
-          await cache.del(key);
-        }
-      }
+      });
     },
   );
 
@@ -2411,32 +2341,28 @@ describe('OpenAiDecisionsProvider', () => {
   )(
     'preserves public model substrings while redacting private echoes ($mode, private: $echoPrivateCredential)',
     async ({ mode, echoPrivateCredential }) => {
-      const actualCache =
-        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-      const cache = actualCache.getCache();
-      const write = vi.spyOn(cache, 'set');
-      const privateCredential = 'private-gateway-credential';
-      const suffix = echoPrivateCredential ? `/${privateCredential}` : '';
-      const model = `gpt-6-luna-2026-10-01${suffix}`;
-      const expectedModel = `gpt-6-luna-2026-10-01${echoPrivateCredential ? '/[REDACTED]' : ''}`;
-      const diagnosticModel = expectedModel.replace('luna', '[REDACTED]');
-      const data = {
-        ...response(),
-        model,
-        diagnostics: { model, nested: { model }, luna: 'luna' },
-      };
-      vi.mocked(fetchWithRetries).mockImplementation(
-        async () => new Response(JSON.stringify(data), { status: 200 }),
-      );
-      const instance = provider({ apiKey: 'luna', headers: { 'X-Api-Key': privateCredential } });
-      const prompt = `Resolved model fixture ${mode} ${echoPrivateCredential}`;
-      const context: CallApiContextParams = {
-        vars: {},
-        prompt: { raw: prompt, label: prompt },
-        bustCache: mode === 'bypass',
-      };
-      try {
+      await withRealCache(async ({ actualCache, write }) => {
+        const privateCredential = 'private-gateway-credential';
+        const suffix = echoPrivateCredential ? `/${privateCredential}` : '';
+        const model = `gpt-6-luna-2026-10-01${suffix}`;
+        const expectedModel = `gpt-6-luna-2026-10-01${echoPrivateCredential ? '/[REDACTED]' : ''}`;
+        const diagnosticModel = expectedModel.replace('luna', '[REDACTED]');
+        const data = {
+          ...response(),
+          model,
+          diagnostics: { model, nested: { model }, luna: 'luna' },
+        };
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () => new Response(JSON.stringify(data), { status: 200 }),
+        );
+        const instance = provider({ apiKey: 'luna', headers: { 'X-Api-Key': privateCredential } });
+        const prompt = `Resolved model fixture ${mode} ${echoPrivateCredential}`;
+        const context: CallApiContextParams = {
+          vars: {},
+          prompt: { raw: prompt, label: prompt },
+          bustCache: mode === 'bypass',
+        };
+
         await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
           const fresh = await instance.callApi(prompt, context);
           const repeated = await instance.callApi(prompt, context);
@@ -2477,11 +2403,7 @@ describe('OpenAiDecisionsProvider', () => {
           expect(JSON.stringify(failure)).not.toContain('luna');
           expect(JSON.stringify(failure)).not.toContain(privateCredential);
         });
-      } finally {
-        for (const [key] of write.mock.calls) {
-          await cache.del(key);
-        }
-      }
+      });
     },
   );
 
@@ -2489,53 +2411,50 @@ describe('OpenAiDecisionsProvider', () => {
     it.each(['token', 'score'])(
       'preserves protocol fields and grading labels for username %s',
       async (username) => {
-        const password = 'opaque-password/123';
-        const pair = `${username}:${password}`;
-        const basic = Buffer.from(pair).toString('base64');
-        const credentials = [password, pair, basic, encodeURIComponent(password)];
-        const auth =
-          source === 'header'
-            ? { headers: { Authorization: `Basic ${basic}` } }
-            : {
-                apiBaseUrl: `https://${username}:${encodeURIComponent(password)}@gateway.example/v1`,
-              };
-        const actualCache =
-          await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-        vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-        const cache = actualCache.getCache();
-        const write = vi.spyOn(cache, 'set');
-        const answers = [
-          {
-            name: 'grade',
-            type: 'score',
-            score: 0.75,
-            confidence: 0.9,
-            probabilities: [
-              { value: 0, label: username, probability: 0.25 },
-              { value: 1, label: 'Other', probability: 0.75 },
-            ],
-          },
-        ];
-        const echo = `Account ${username}; credentials ${credentials.join('; ')}`;
-        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              ...response(answers),
-              diagnostics: { [username]: 'Public identifier', [password]: echo },
-            }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-          ),
-        );
-        const instance = provider({
-          ...auth,
-          apiKey: undefined,
-          apiKeyRequired: false,
-          levels: [username, 'Other'],
-        });
-        await actualCache.withCacheEnabled(true, async () => {
-          const fresh = await instance.callApi('', rubricContext('Is correct', 'Answer'));
-          const cached = await instance.callApi('', rubricContext('Is correct', 'Answer'));
-          try {
+        await withRealCache(async ({ actualCache, write }) => {
+          const password = 'opaque-password/123';
+          const pair = `${username}:${password}`;
+          const basic = Buffer.from(pair).toString('base64');
+          const credentials = [password, pair, basic, encodeURIComponent(password)];
+          const auth =
+            source === 'header'
+              ? { headers: { Authorization: `Basic ${basic}` } }
+              : {
+                  apiBaseUrl: `https://${username}:${encodeURIComponent(password)}@gateway.example/v1`,
+                };
+
+          const answers = [
+            {
+              name: 'grade',
+              type: 'score',
+              score: 0.75,
+              confidence: 0.9,
+              probabilities: [
+                { value: 0, label: username, probability: 0.25 },
+                { value: 1, label: 'Other', probability: 0.75 },
+              ],
+            },
+          ];
+          const echo = `Account ${username}; credentials ${credentials.join('; ')}`;
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                ...response(answers),
+                diagnostics: { [username]: 'Public identifier', [password]: echo },
+              }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            ),
+          );
+          const instance = provider({
+            ...auth,
+            apiKey: undefined,
+            apiKeyRequired: false,
+            levels: [username, 'Other'],
+          });
+          await actualCache.withCacheEnabled(true, async () => {
+            const fresh = await instance.callApi('', rubricContext('Is correct', 'Answer'));
+            const cached = await instance.callApi('', rubricContext('Is correct', 'Answer'));
+
             expect(fresh.error).toBeUndefined();
             expect(fresh.output).toMatchObject({ pass: true, score: 0.75 });
             expect(cached.output).toEqual(fresh.output);
@@ -2553,24 +2472,20 @@ describe('OpenAiDecisionsProvider', () => {
                 expect(JSON.stringify(value)).not.toContain(credential);
               }
             }
-          } finally {
-            for (const [key] of write.mock.calls) {
-              await cache.del(key);
+          });
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+            new Response(JSON.stringify({ error: { message: echo } }), {
+              status: 401,
+              statusText: 'Unauthorized',
+            }),
+          );
+          await actualCache.withCacheEnabled(false, async () => {
+            const failure = await instance.callApi('failure');
+            expect(failure.error).toContain(`Account ${username}`);
+            for (const credential of credentials) {
+              expect(JSON.stringify(failure)).not.toContain(credential);
             }
-          }
-        });
-        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-          new Response(JSON.stringify({ error: { message: echo } }), {
-            status: 401,
-            statusText: 'Unauthorized',
-          }),
-        );
-        await actualCache.withCacheEnabled(false, async () => {
-          const failure = await instance.callApi('failure');
-          expect(failure.error).toContain(`Account ${username}`);
-          for (const credential of credentials) {
-            expect(JSON.stringify(failure)).not.toContain(credential);
-          }
+          });
         });
       },
     );
@@ -2578,45 +2493,42 @@ describe('OpenAiDecisionsProvider', () => {
     it.each(['enabled', 'disabled', 'bypass'] as const)(
       'redacts credential-shaped usernames with a password when cache is %s',
       async (mode) => {
-        const username = 'sk-proj-fixture12345678901234567890/+';
-        const encodedUsername = encodeURIComponent(username);
-        const password = 'dummy-password';
-        const pair = `${username}:${password}`;
-        const basic = Buffer.from(pair).toString('base64');
-        const credentials = [username, encodedUsername, password, pair, basic];
-        const auth =
-          source === 'header'
-            ? { headers: { Authorization: `Basic ${basic}` } }
-            : {
-                apiBaseUrl: `https://${encodedUsername}:${password}@gateway.example/v1`,
-              };
-        const actualCache =
-          await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
-        vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
-        const cache = actualCache.getCache();
-        const write = vi.spyOn(cache, 'set');
-        const echo = `Credentials ${credentials.join('; ')}`;
-        const sanitizedEcho =
-          'Credentials [REDACTED]; [REDACTED]; [REDACTED]; [REDACTED]; [REDACTED]';
-        const data = {
-          ...response(),
-          diagnostics: { [username]: { [encodedUsername]: echo }, public: 'token score' },
-        };
-        vi.mocked(fetchWithRetries).mockImplementation(
-          async () =>
-            new Response(JSON.stringify(data), {
-              status: 200,
-              headers: { 'content-type': 'application/json', 'x-request-id': echo },
-            }),
-        );
-        const instance = provider({ ...auth, apiKey: undefined, apiKeyRequired: false });
-        const prompt = `Credential-shaped username fixture ${source} ${mode}`;
-        const context: CallApiContextParams = {
-          vars: {},
-          prompt: { raw: prompt, label: prompt },
-          bustCache: mode === 'bypass',
-        };
-        try {
+        await withRealCache(async ({ actualCache, write }) => {
+          const username = 'sk-proj-fixture12345678901234567890/+';
+          const encodedUsername = encodeURIComponent(username);
+          const password = 'dummy-password';
+          const pair = `${username}:${password}`;
+          const basic = Buffer.from(pair).toString('base64');
+          const credentials = [username, encodedUsername, password, pair, basic];
+          const auth =
+            source === 'header'
+              ? { headers: { Authorization: `Basic ${basic}` } }
+              : {
+                  apiBaseUrl: `https://${encodedUsername}:${password}@gateway.example/v1`,
+                };
+
+          const echo = `Credentials ${credentials.join('; ')}`;
+          const sanitizedEcho =
+            'Credentials [REDACTED]; [REDACTED]; [REDACTED]; [REDACTED]; [REDACTED]';
+          const data = {
+            ...response(),
+            diagnostics: { [username]: { [encodedUsername]: echo }, public: 'token score' },
+          };
+          vi.mocked(fetchWithRetries).mockImplementation(
+            async () =>
+              new Response(JSON.stringify(data), {
+                status: 200,
+                headers: { 'content-type': 'application/json', 'x-request-id': echo },
+              }),
+          );
+          const instance = provider({ ...auth, apiKey: undefined, apiKeyRequired: false });
+          const prompt = `Credential-shaped username fixture ${source} ${mode}`;
+          const context: CallApiContextParams = {
+            vars: {},
+            prompt: { raw: prompt, label: prompt },
+            bustCache: mode === 'bypass',
+          };
+
           await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
             const fresh = await instance.callApi(prompt, context);
             const repeated = await instance.callApi(prompt, context);
@@ -2661,11 +2573,7 @@ describe('OpenAiDecisionsProvider', () => {
               expect(JSON.stringify(failure)).not.toContain(credential);
             }
           });
-        } finally {
-          for (const [key] of write.mock.calls) {
-            await cache.del(key);
-          }
-        }
+        });
       },
     );
 
@@ -2804,12 +2712,7 @@ describe('OpenAiDecisionsProvider', () => {
           ? { name: 'second', type: 'refusal' }
           : { name: 'second', type: 'predicate', probability: 0.3 },
       ];
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: response(answers),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockAnswers(answers);
       const result = await provider({
         questions: [predicateQuestion, { ...predicateQuestion, name: 'second' }],
       }).callApi('text');

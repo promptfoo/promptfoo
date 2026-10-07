@@ -26,6 +26,37 @@ vi.mock('../../src/util/fetch/index', async (importOriginal) => ({
 }));
 
 describe('matchesClassification', () => {
+  function decisionsProvider() {
+    return new OpenAiDecisionsProvider('classification-fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        instructions: 'Classify the output.',
+        labels: ['safe', 'unsafe'],
+      },
+    });
+  }
+
+  function decisionsResponse(refusal = false) {
+    return Response.json({
+      model: 'classification-fixture',
+      answers: [
+        refusal
+          ? { name: 'classification', type: 'refusal' }
+          : {
+              name: 'classification',
+              type: 'choice',
+              choice: 'safe',
+              confidence: 0.625,
+              probabilities: [
+                { value: 'safe', probability: 0.625 },
+                { value: 'unsafe', probability: 0.375 },
+              ],
+            },
+      ],
+      usage: { input_tokens: 9, output_tokens: 1, total_tokens: 10 },
+    });
+  }
+
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -88,7 +119,7 @@ describe('matchesClassification', () => {
           incurredTokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
         },
       };
-      const provider = Object.assign(createMockProvider(), {
+      const provider = createMockProvider({
         callClassificationApi: vi.fn().mockResolvedValue(response),
       });
 
@@ -116,7 +147,7 @@ describe('matchesClassification', () => {
       classification: { classA: 0.625 },
       tokenUsage: { prompt: 12, completion: 4, cached: 16, numRequests: 0 },
     };
-    const provider = Object.assign(createMockProvider(), {
+    const provider = createMockProvider({
       callClassificationApi: vi.fn().mockResolvedValue(response),
     });
 
@@ -151,7 +182,7 @@ describe('matchesClassification', () => {
         cached,
         tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
       };
-      const provider = Object.assign(createMockProvider(), {
+      const provider = createMockProvider({
         callClassificationApi: vi.fn().mockResolvedValue(classificationResponse),
       });
 
@@ -181,36 +212,8 @@ describe('matchesClassification', () => {
   ])(
     'accounts for real cached Decisions classifications with a $verdict verdict',
     async ({ verdict, threshold, refusal, pass }) => {
-      vi.mocked(fetchWithRetries).mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            model: 'classification-fixture',
-            answers: [
-              refusal
-                ? { name: 'classification', type: 'refusal' }
-                : {
-                    name: 'classification',
-                    type: 'choice',
-                    choice: 'safe',
-                    confidence: 0.625,
-                    probabilities: [
-                      { value: 'safe', probability: 0.625 },
-                      { value: 'unsafe', probability: 0.375 },
-                    ],
-                  },
-            ],
-            usage: { input_tokens: 9, output_tokens: 1, total_tokens: 10 },
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
-      );
-      const provider = new OpenAiDecisionsProvider('classification-fixture', {
-        config: {
-          apiKey: 'fixture-key',
-          instructions: 'Classify the output.',
-          labels: ['safe', 'unsafe'],
-        },
-      });
+      vi.mocked(fetchWithRetries).mockResolvedValue(decisionsResponse(refusal));
+      const provider = decisionsProvider();
 
       await withCacheEnabled(true, async () => {
         const output = `Classification accounting fixture: ${verdict}`;
@@ -251,7 +254,7 @@ describe('matchesClassification', () => {
       classification: { classA: 0.625 },
       tokenUsage: undefined,
     };
-    const provider = Object.assign(createMockProvider(), {
+    const provider = createMockProvider({
       callClassificationApi: vi.fn().mockResolvedValue(response),
     });
 
@@ -280,35 +283,6 @@ describe('matchesClassification', () => {
   );
 
   describe('Decisions cancellation through grading execution context', () => {
-    function provider() {
-      return new OpenAiDecisionsProvider('classification-cancellation-fixture', {
-        config: {
-          apiKey: 'fixture-key',
-          instructions: 'Classify the output.',
-          labels: ['safe', 'unsafe'],
-        },
-      });
-    }
-
-    function response() {
-      return Response.json({
-        model: 'classification-cancellation-fixture',
-        answers: [
-          {
-            name: 'classification',
-            type: 'choice',
-            choice: 'safe',
-            confidence: 0.625,
-            probabilities: [
-              { value: 'safe', probability: 0.625 },
-              { value: 'unsafe', probability: 0.375 },
-            ],
-          },
-        ],
-        usage: { input_tokens: 9, output_tokens: 1, total_tokens: 10 },
-      });
-    }
-
     beforeEach(async () => {
       const actualFetch = await vi.importActual<typeof import('../../src/util/fetch/index')>(
         '../../src/util/fetch/index',
@@ -320,14 +294,14 @@ describe('matchesClassification', () => {
       const controller = new AbortController();
       const reason = new Error('Evaluation cancelled before classification');
       controller.abort(reason);
-      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response());
+      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(decisionsResponse());
       vi.stubGlobal('fetch', fetch);
 
       await withCacheEnabled(false, async () => {
         await expect(
           withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
             matchesClassification('safe', 'Pre-aborted classifier fixture', 0.5, {
-              provider: provider(),
+              provider: decisionsProvider(),
             }),
           ),
         ).rejects.toBe(reason);
@@ -350,7 +324,7 @@ describe('matchesClassification', () => {
             const onAbort = () => reject(signal?.reason);
             release = () => {
               signal?.removeEventListener('abort', onAbort);
-              resolve(response());
+              resolve(decisionsResponse());
             };
             signal?.addEventListener('abort', onAbort, { once: true });
             markStarted(signal);
@@ -361,7 +335,7 @@ describe('matchesClassification', () => {
       await withCacheEnabled(false, async () => {
         const settled = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
           matchesClassification('safe', 'In-flight classifier fixture', 0.5, {
-            provider: provider(),
+            provider: decisionsProvider(),
           }),
         ).then(
           (result) => ({ result }),
