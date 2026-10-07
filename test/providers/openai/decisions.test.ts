@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../../src/assertions/index';
 import { applyRagInverse } from '../../../src/assertions/ragDefaults';
 import { fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import { matchesClassification } from '../../../src/matchers/classification';
 import { matchesSelectBest } from '../../../src/matchers/comparison';
 import {
@@ -21,6 +22,7 @@ import { OpenAiDecisionsProvider } from '../../../src/providers/openai/decisions
 import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
+import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { CallApiContextParams } from '../../../src/types/providers';
@@ -28,6 +30,11 @@ import type { CallApiContextParams } from '../../../src/types/providers';
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),
+}));
+
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/fetch/index')>()),
+  fetchWithRetries: vi.fn(),
 }));
 
 const imageUrl = 'data:image/png;base64,iVBORw0KGgo=';
@@ -713,13 +720,166 @@ describe('OpenAiDecisionsProvider', () => {
     expect(result.error).not.toContain('fixture-key');
   });
 
+  it.each([
+    { suffix: 'u:p@gateway.example/v1', credentials: ['u:p', 'dTpw'] },
+    {
+      suffix: 'us%40er:p%40ss%3Aword@gateway.example/v1',
+      credentials: [
+        'us%40er',
+        'p%40ss%3Aword',
+        'us@er',
+        'p@ss:word',
+        Buffer.from('us@er:p@ss:word').toString('base64'),
+      ],
+    },
+    {
+      suffix: 'user:bad%zz%40secret@gateway.example/v1',
+      credentials: ['user:bad%zz%40secret', Buffer.from('user:bad%zz%40secret').toString('base64')],
+    },
+    { suffix: 'gateway.example/v1?api_key=shorturlsecret', credentials: ['shorturlsecret'] },
+    {
+      suffix: 'gateway.example/v1?api_key=sh%6Frt%2Bsecret',
+      credentials: ['sh%6Frt%2Bsecret', 'short+secret'],
+    },
+    {
+      suffix: 'gateway.example/v1?tenant=unchanged;api-key=shorturlsecret',
+      credentials: ['shorturlsecret'],
+    },
+    {
+      suffix: 'gateway.example/v1?api_key=firstsecret&api_key=secondsecret',
+      credentials: ['firstsecret', 'secondsecret'],
+    },
+  ])(
+    'redacts URL credentials in diagnostics without rewriting $suffix',
+    async ({ suffix, credentials }) => {
+      const apiBaseUrl = `https://${suffix}`;
+      const message = `Request rejected: ${credentials.join('; ')}. Support requires an update.`;
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: { message } },
+        cached: false,
+        status: 401,
+        statusText: message,
+        headers: { 'x-request-id': message },
+      });
+      const result = await provider({
+        apiKey: undefined,
+        apiKeyRequired: false,
+        apiBaseUrl,
+      }).callApi('text');
+      for (const credential of credentials) {
+        expect(JSON.stringify(result)).not.toContain(credential);
+      }
+      expect(result.error).toContain('Request rejected');
+      expect(result.error).toContain('Support requires an update.');
+      expect(vi.mocked(fetchWithCache).mock.calls[0]![0]).toBe(
+        apiBaseUrl.replace('/v1', '/v1/decisions'),
+      );
+      expect(
+        new Headers(vi.mocked(fetchWithCache).mock.calls[0]![1]?.headers).has('authorization'),
+      ).toBe(false);
+    },
+  );
+
+  it('keeps ordinary URL query values and explicit authorization unchanged', async () => {
+    const apiBaseUrl = 'https://u:p@gateway.example/v1?tenant=acme&page_token=cursor';
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        error: { message: 'The acme tenant requires cursor support for user u password p.' },
+      },
+      cached: false,
+      status: 401,
+      statusText: 'Unauthorized',
+    });
+    const result = await provider({
+      apiBaseUrl,
+      headers: { Authorization: 'Bearer explicit-key' },
+    }).callApi('text');
+    expect(result.error).toContain(
+      'The acme tenant requires cursor support for user [REDACTED] password [REDACTED].',
+    );
+    const [url, options] = vi.mocked(fetchWithCache).mock.calls[0]!;
+    expect(url).toBe(apiBaseUrl.replace('/v1', '/v1/decisions'));
+    expect(new Headers(options?.headers).get('authorization')).toBe('Bearer explicit-key');
+  });
+
+  it.each([
+    'REDACTED',
+    'prefix[REDACTED]suffix',
+    '[REDACTED]suffix',
+    'prefix[REDACTED]',
+    '[RED',
+    '[REDACTED',
+    '[',
+  ])('keeps response metadata sanitization idempotent for credential %s', async (credential) => {
+    await provider({ apiKey: credential }).callApi('text');
+    const options = vi.mocked(fetchWithCache).mock.calls[0]![4];
+    expect(typeof options).toBe('object');
+    if (typeof options !== 'object' || !options?.sanitizeResponseMetadata) {
+      throw new Error('Missing metadata sanitizer');
+    }
+    const first = options.sanitizeResponseMetadata({
+      statusText: `Failure ${credential}`,
+      headers: { 'x-request-id': `request ${credential}` },
+    });
+    expect(first).toEqual({
+      statusText: 'Failure [REDACTED]',
+      headers: { 'x-request-id': 'request [REDACTED]' },
+    });
+    expect(options.sanitizeResponseMetadata(first)).toEqual(first);
+  });
+
+  it('sanitizes response metadata before real cache storage and cache-hit diagnostics', async () => {
+    const actualCache =
+      await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+    vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+    const cache = actualCache.getCache();
+    const write = vi.spyOn(cache, 'set');
+    const debug = vi.spyOn(logger, 'debug');
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify(response()), {
+        status: 200,
+        statusText: 'OK dTpw shorturlsecret',
+        headers: {
+          'content-type': 'application/json',
+          'x-request-id': 'request dTpw shorturlsecret',
+          'retry-after': '2',
+          'x-gateway-auth': 'unknown-response-secret',
+        },
+      }),
+    );
+    const instance = provider({
+      apiKey: undefined,
+      apiKeyRequired: false,
+      apiBaseUrl: 'https://u:p@gateway.example/v1?api_key=shorturlsecret',
+    });
+    await actualCache.withCacheEnabled(true, async () => {
+      const fresh = await instance.callApi('cache fixture');
+      const cached = await instance.callApi('cache fixture');
+      expect(fresh.error).toBeUndefined();
+      expect(cached.cached).toBe(true);
+      expect(cached.output).toBe(fresh.output);
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledTimes(1);
+      const stored = JSON.parse(write.mock.calls[0]![1] as string);
+      expect(stored.statusText).toBe('OK [REDACTED] [REDACTED]');
+      expect(stored.headers).toEqual({
+        'x-request-id': 'request [REDACTED] [REDACTED]',
+        'retry-after': '2',
+      });
+      for (const value of [fresh, cached, write.mock.calls, debug.mock.calls]) {
+        expect(JSON.stringify(value)).not.toMatch(/dTpw|shorturlsecret|unknown-response-secret/);
+      }
+      await cache.del(write.mock.calls[0]![0]);
+    });
+  });
+
   describe.each(['Basic', 'Token', 'Custom+Auth'])('%s authorization diagnostics', (scheme) => {
     it.each(['api-error', 'rate-limit', 'transport-error', 'success'])(
       'redacts complete and bare short credentials from %s',
       async (kind) => {
         const credential = 'dTpw';
         const authorization = `${scheme} ${credential}`;
-        const message = `Failure ${authorization}; credential ${credential}`;
+        const message = `Failure ${authorization}; credential ${credential}; request-${credential}; req_${credential}_suffix`;
         const headers = { 'x-request-id': `request ${credential}` };
         if (kind === 'rate-limit') {
           vi.mocked(fetchWithCache).mockRejectedValue(

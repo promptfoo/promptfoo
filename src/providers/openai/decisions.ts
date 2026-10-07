@@ -9,7 +9,12 @@ import {
   isAbortError,
 } from '../../util/fetch/errors';
 import { renderVarsInObject } from '../../util/render';
-import { isNonCredentialHeader, sanitizeObject } from '../../util/sanitizer';
+import {
+  isNonCredentialHeader,
+  sanitizeObject,
+  sanitizeUrlEncodedString,
+} from '../../util/sanitizer';
+import { escapeRegExp } from '../../util/text';
 import { normalizeResponsesInput } from '../responses/input';
 import { getResponsesTokenUsage } from '../responses/processor';
 import { getRequestTimeoutMs } from '../shared';
@@ -175,6 +180,38 @@ function hasSensitiveValue(value: unknown): boolean {
   return value !== null && typeof value === 'object'
     ? Object.values(value).some(hasSensitiveValue)
     : false;
+}
+
+/** Collect URL authentication forms without changing the gateway request URL. */
+function getUrlCredentials(value: string): string[] {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return [];
+  }
+  const credentials: string[] = [];
+  if (url.username || url.password) {
+    const raw = [url.username, url.password];
+    const decoded = raw.map((part) => {
+      try {
+        return decodeURIComponent(part);
+      } catch {
+        return part;
+      }
+    });
+    const pair = decoded.join(':');
+    const basic = Buffer.from(pair).toString('base64');
+    credentials.push(...raw, ...decoded, raw.join(':'), pair, basic, `Basic ${basic}`);
+  }
+  for (const segment of url.search.slice(1).split(/[&;]/)) {
+    const separator = segment.indexOf('=');
+    if (separator !== -1 && sanitizeUrlEncodedString(segment) !== segment) {
+      const [, decoded] = Array.from(new URLSearchParams(segment))[0];
+      credentials.push(segment.slice(separator + 1), decoded);
+    }
+  }
+  return credentials;
 }
 
 /** Check correspondence before an eval can mistake a malformed result for a successful answer. */
@@ -462,22 +499,34 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     // Some API errors echo the supplied credential. Keep it out of eval results as well as logs.
     const secrets = [
       apiKey,
+      ...getUrlCredentials(this.getApiUrl(config)),
       ...Object.entries(headers)
         .filter(([name]) => !isNonCredentialHeader(name))
         .flatMap(([, value]) => [
           value,
           value.trim().replace(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\s+/, ''),
         ]),
-    ].filter((secret): secret is string => Boolean(secret));
+    ]
+      .filter((secret): secret is string => Boolean(secret))
+      .sort((left, right) => right.length - left.length);
     // Gateways can echo credentials in response bodies before provider-level redaction runs.
     headers['x-promptfoo-silent'] = 'true';
-    const errorText = (value: unknown): string => {
-      let message = String(sanitizeObject(String(value), { sanitizeUrls: true }));
-      for (const secret of secrets) {
-        message = message.split(secret).join('[REDACTED]');
-      }
-      return message;
-    };
+    // Longer credentials match before markers; single-character userinfo cannot erase words.
+    // One pass preserves existing markers while redacting credentials that contain a marker.
+    const credentialPattern = new RegExp(
+      [...secrets, '[REDACTED]']
+        .sort((left, right) => right.length - left.length)
+        .map((secret) =>
+          secret.length > 1 ? escapeRegExp(secret) : `(?<!\\w)${escapeRegExp(secret)}(?!\\w)`,
+        )
+        .join('|'),
+      'g',
+    );
+    const errorText = (value: unknown): string =>
+      String(sanitizeObject(String(value), { sanitizeUrls: true })).replace(
+        credentialPattern,
+        '[REDACTED]',
+      );
     // Only retain diagnostics used by the scheduler; gateways can echo arbitrary auth headers.
     const responseHeaders = (values: Record<string, string> = {}) =>
       Object.fromEntries(
@@ -516,7 +565,15 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        { bust, cacheKey, repeatIndex: context?.repeatIndex },
+        {
+          bust,
+          cacheKey,
+          repeatIndex: context?.repeatIndex,
+          sanitizeResponseMetadata: ({ statusText, headers }) => ({
+            statusText: errorText(statusText),
+            headers: responseHeaders(headers),
+          }),
+        },
         config.maxRetries,
       );
       deleteFromCache = response.deleteFromCache;
