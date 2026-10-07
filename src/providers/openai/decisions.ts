@@ -34,6 +34,8 @@ import type { OpenAiSharedOptions } from './types';
 
 const choiceValue = z.union([z.string(), z.boolean()]);
 const probability = z.number().min(0).max(1);
+// Promptfoo allows one percentage point of rounding error, plus floating-point slack.
+const DISTRIBUTION_TOLERANCE = 0.01 + 1e-12;
 const questionFields = { name: z.string().optional(), instructions: z.string() };
 const levelSchema = z.object({ label: z.string(), description: z.string().optional() }).strict();
 const gradingLevelsSchema = z
@@ -268,6 +270,13 @@ function answersMatchQuestions(
       if (answer.type === 'refusal') {
         return true;
       }
+      if (
+        (answer.type === 'choice' || answer.type === 'score') &&
+        Math.abs(answer.probabilities.reduce((sum, item) => sum + item.probability, 0) - 1) >
+          DISTRIBUTION_TOLERANCE
+      ) {
+        return false;
+      }
       if (answer.type === 'choice' && question.type === 'choice') {
         return (
           question.choices.some(({ value }) => value === answer.choice) &&
@@ -280,8 +289,14 @@ function answersMatchQuestions(
         );
       }
       if (answer.type === 'score' && question.type === 'score') {
+        const maxScore = question.levels.length - 1;
+        const expectedScore = answer.probabilities.reduce(
+          (sum, item) => sum + item.value * item.probability,
+          0,
+        );
         return (
-          answer.score <= question.levels.length - 1 &&
+          answer.score <= maxScore &&
+          Math.abs(answer.score - expectedScore) / maxScore <= DISTRIBUTION_TOLERANCE &&
           answer.probabilities.length === question.levels.length &&
           new Set(answer.probabilities.map(({ value }) => value)).size === question.levels.length &&
           answer.probabilities.every(
@@ -565,11 +580,25 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
         .join('|'),
       'g',
     );
+    const redactCredentials = (value: string): string =>
+      value.replace(credentialPattern, '[REDACTED]');
     const errorText = (value: unknown): string =>
-      String(sanitizeObject(String(value), { sanitizeUrls: true })).replace(
-        credentialPattern,
-        '[REDACTED]',
-      );
+      redactCredentials(String(sanitizeObject(String(value), { sanitizeUrls: true })));
+    // Preserve Decisions values and types, redacting only credentials known to this request.
+    const responseData = (value: unknown): unknown => {
+      if (typeof value === 'string') {
+        return redactCredentials(value);
+      }
+      if (Array.isArray(value)) {
+        return value.map(responseData);
+      }
+      if (value !== null && typeof value === 'object') {
+        return Object.fromEntries(
+          Object.entries(value).map(([key, item]) => [redactCredentials(key), responseData(item)]),
+        );
+      }
+      return value;
+    };
     // Only retain diagnostics used by the scheduler; gateways can echo arbitrary auth headers.
     const responseHeaders = (values: Record<string, string> = {}) =>
       Object.fromEntries(
@@ -612,7 +641,8 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
           bust,
           cacheKey,
           repeatIndex: context?.repeatIndex,
-          sanitizeResponseMetadata: ({ statusText, headers }) => ({
+          sanitizeResponse: ({ data, statusText, headers }) => ({
+            data: responseData(data),
             statusText: errorText(statusText),
             headers: responseHeaders(headers),
           }),

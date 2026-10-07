@@ -158,6 +158,7 @@ export interface ProviderSimilarityResponse {
 export interface ProviderClassificationResponse {
   error?: string;
   classification?: Record<string, number>;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface FunctionToolCallValidator {

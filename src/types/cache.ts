@@ -1,4 +1,5 @@
-type FetchResponseMetadata = {
+type SanitizableResponse = {
+  data: unknown;
   statusText: string;
   headers: Record<string, string>;
 };
@@ -15,8 +16,8 @@ export type CacheOptions = {
   /** Precomputed, credential-free cache identity for callers with tenant-scoped keys. */
   cacheKey?: string;
   /**
-   * Source-only, idempotent sanitizer applied before response metadata is stored or returned.
+   * Source-only, idempotent sanitizer applied before response data and metadata are stored or returned.
    * Caching requires an explicit cacheKey identifying the request and sanitizer policy.
    */
-  sanitizeResponseMetadata?: (metadata: FetchResponseMetadata) => FetchResponseMetadata;
+  sanitizeResponse?: (response: SanitizableResponse) => SanitizableResponse;
 };

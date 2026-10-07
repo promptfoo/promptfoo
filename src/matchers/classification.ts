@@ -1,5 +1,5 @@
 import { callGradingProvider, getAndCheckProvider } from './providers';
-import { graderFail } from './shared';
+import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
 
@@ -29,13 +29,17 @@ export async function matchesClassification(
   );
 
   if (!resp.classification) {
-    return graderFail(resp.error || 'Unknown error fetching classification');
+    return graderFail(resp.error || 'Unknown error fetching classification', resp.tokenUsage);
   }
   const scores = Object.values(resp.classification);
   if (scores.length === 0) {
     // No scores means there is no verdict, even when a specific label was requested.
-    return graderFail('No classification scores returned');
+    return graderFail('No classification scores returned', resp.tokenUsage);
   }
+
+  const tokenUsageResult = resp.tokenUsage
+    ? { tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage) }
+    : {};
 
   let score: number;
   if (expected === undefined) {
@@ -53,6 +57,7 @@ export async function matchesClassification(
       pass: true,
       score,
       reason,
+      ...tokenUsageResult,
     };
   }
   return {
@@ -62,5 +67,6 @@ export async function matchesClassification(
       expected === undefined
         ? `Maximum classification score ${score.toFixed(2)} < ${threshold}`
         : `Classification ${expected} has score ${score.toFixed(2)} < ${threshold}`,
+    ...tokenUsageResult,
   };
 }

@@ -635,14 +635,15 @@ export function claimCacheKeyOnce(cacheKey: string): boolean {
   return true;
 }
 
-function getResponseMetadata(
+function getSanitizedResponse(
+  data: unknown,
   statusText: string,
   headers: Record<string, string> | undefined,
-  sanitizeResponseMetadata?: CacheOptions['sanitizeResponseMetadata'],
+  sanitizeResponse?: CacheOptions['sanitizeResponse'],
 ) {
-  return sanitizeResponseMetadata
-    ? sanitizeResponseMetadata({ statusText, headers: { ...headers } })
-    : { statusText, headers };
+  return sanitizeResponse
+    ? sanitizeResponse({ data, statusText, headers: { ...headers } })
+    : { data, statusText, headers };
 }
 
 function serializeFetchResponse(
@@ -651,14 +652,14 @@ function serializeFetchResponse(
   statusText: string,
   headers: Record<string, string> | undefined,
   latencyMs: number | undefined,
-  sanitizeResponseMetadata?: CacheOptions['sanitizeResponseMetadata'],
+  sanitizeResponse?: CacheOptions['sanitizeResponse'],
 ): SerializedFetchResponse {
-  const metadata = getResponseMetadata(statusText, headers, sanitizeResponseMetadata);
+  const sanitized = getSanitizedResponse(data, statusText, headers, sanitizeResponse);
   return JSON.stringify({
-    data,
+    data: sanitized.data,
     status,
-    statusText: metadata.statusText,
-    headers: metadata.headers,
+    statusText: sanitized.statusText,
+    headers: sanitized.headers,
     latencyMs,
   });
 }
@@ -668,20 +669,21 @@ function deserializeFetchResponse<T>(
   cached: boolean,
   cache: Cache,
   cacheKey: string,
-  sanitizeResponseMetadata?: CacheOptions['sanitizeResponseMetadata'],
+  sanitizeResponse?: CacheOptions['sanitizeResponse'],
 ) {
   const parsedResponse = JSON.parse(response);
-  const metadata = getResponseMetadata(
+  const sanitized = getSanitizedResponse(
+    parsedResponse.data,
     parsedResponse.statusText,
     parsedResponse.headers,
-    sanitizeResponseMetadata,
+    sanitizeResponse,
   );
   return {
     cached,
-    data: parsedResponse.data as T,
+    data: sanitized.data as T,
     status: parsedResponse.status,
-    statusText: metadata.statusText,
-    headers: metadata.headers,
+    statusText: sanitized.statusText,
+    headers: sanitized.headers,
     latencyMs: parsedResponse.latencyMs,
     deleteFromCache: async () => {
       await cache.del(cacheKey);
@@ -701,7 +703,7 @@ function deserializeFetchResponse<T>(
           statusText,
           headers ?? {},
           parsedResponse.latencyMs,
-          sanitizeResponseMetadata,
+          sanitizeResponse,
         ),
       );
       logger.debug(`Updated cached response: ${cacheKey}`);
@@ -773,7 +775,7 @@ async function prepareFetchResponse(
   isIdempotent: boolean,
   format: 'json' | 'text',
   logEnabled: boolean,
-  sanitizeResponseMetadata?: CacheOptions['sanitizeResponseMetadata'],
+  sanitizeResponse?: CacheOptions['sanitizeResponse'],
 ): Promise<PreparedFetchResponse> {
   const result = await fetchAndReadBody(
     url,
@@ -786,59 +788,9 @@ async function prepareFetchResponse(
   const response = result.resp;
   const responseText = result.respText;
   const fetchLatencyMs = result.fetchLatencyMs;
-  const { statusText, headers } = getResponseMetadata(
-    response.statusText,
-    Object.fromEntries(response.headers.entries()),
-    sanitizeResponseMetadata,
-  );
-
+  let parsedData: unknown;
   try {
-    const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
-    const serializedResponse = serializeFetchResponse(
-      parsedData,
-      response.status,
-      statusText,
-      headers,
-      fetchLatencyMs,
-    );
-
-    if (!response.ok) {
-      return {
-        response:
-          responseText === ''
-            ? serializeFetchResponse(
-                `Empty Response: ${response.status}: ${statusText}`,
-                response.status,
-                statusText,
-                headers,
-                fetchLatencyMs,
-              )
-            : serializedResponse,
-        cacheable: false,
-      };
-    }
-
-    if (format === 'json' && parsedData?.error) {
-      if (logEnabled) {
-        logger.debug(
-          `Not caching ${sanitizeUrlForLogging(getRequestUrlString(url))} because it contains an 'error' key: ${parsedData.error}`,
-        );
-      }
-      return {
-        response: serializedResponse,
-        cacheable: false,
-      };
-    }
-
-    if (logEnabled) {
-      logger.debug(
-        `Storing ${sanitizeUrlForLogging(getRequestUrlString(url))} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
-      );
-    }
-    return {
-      response: serializedResponse,
-      cacheable: true,
-    };
+    parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
   } catch (err) {
     throw new Error(
       `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
@@ -846,6 +798,44 @@ async function prepareFetchResponse(
       }. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
     );
   }
+  // Capture cacheability before a sanitizer can remove or change an upstream error.
+  const responseError =
+    format === 'json' &&
+    parsedData !== null &&
+    typeof parsedData === 'object' &&
+    'error' in parsedData
+      ? parsedData.error
+      : undefined;
+  const serializedResponse = serializeFetchResponse(
+    !response.ok && responseText === ''
+      ? `Empty Response: ${response.status}: ${response.statusText}`
+      : parsedData,
+    response.status,
+    response.statusText,
+    Object.fromEntries(response.headers.entries()),
+    fetchLatencyMs,
+    sanitizeResponse,
+  );
+
+  if (!response.ok) {
+    return { response: serializedResponse, cacheable: false };
+  }
+
+  if (responseError) {
+    if (logEnabled) {
+      logger.debug(
+        `Not caching ${sanitizeUrlForLogging(getRequestUrlString(url))} because it contains an 'error' key: ${sanitizeResponse ? serializedResponse : responseError}`,
+      );
+    }
+    return { response: serializedResponse, cacheable: false };
+  }
+
+  if (logEnabled) {
+    logger.debug(
+      `Storing ${sanitizeUrlForLogging(getRequestUrlString(url))} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
+    );
+  }
+  return { response: serializedResponse, cacheable: true };
 }
 
 /**
@@ -894,12 +884,7 @@ export async function fetchWithCache<T = unknown>(
   const fetchOptions = preserveCloudAuthRedirects(url, options);
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
-  const {
-    bust = false,
-    repeatIndex,
-    cacheKey: providedCacheKey,
-    sanitizeResponseMetadata,
-  } = cacheOptions;
+  const { bust = false, repeatIndex, cacheKey: providedCacheKey, sanitizeResponse } = cacheOptions;
   const logEnabled =
     new Headers(getFetchWithProxyHeaders(url, fetchOptions)).get('x-promptfoo-silent') !== 'true';
 
@@ -917,9 +902,9 @@ export async function fetchWithCache<T = unknown>(
       'Request-time authentication requires cache bypass or an explicit principal-scoped cache key.',
     );
   }
-  if (cacheEnabled && !bust && sanitizeResponseMetadata && !providedCacheKey) {
+  if (cacheEnabled && !bust && sanitizeResponse && !providedCacheKey) {
     throw new Error(
-      'Response metadata sanitization requires cache bypass or an explicit cache key identifying the sanitizer policy.',
+      'Response sanitization requires cache bypass or an explicit cache key identifying the sanitizer policy.',
     );
   }
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
@@ -943,23 +928,9 @@ export async function fetchWithCache<T = unknown>(
       isIdempotent,
       logEnabled,
     );
+    let parsedData: unknown;
     try {
-      const metadata = getResponseMetadata(
-        resp.statusText,
-        Object.fromEntries(resp.headers.entries()),
-        sanitizeResponseMetadata,
-      );
-      return {
-        cached: false,
-        data: format === 'json' ? JSON.parse(respText) : respText,
-        status: resp.status,
-        statusText: metadata.statusText,
-        headers: metadata.headers,
-        latencyMs: fetchLatencyMs,
-        deleteFromCache: async () => {
-          // No-op when cache is disabled
-        },
-      };
+      parsedData = format === 'json' ? JSON.parse(respText) : respText;
     } catch (err) {
       throw new Error(
         `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
@@ -967,6 +938,23 @@ export async function fetchWithCache<T = unknown>(
         }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
       );
     }
+    const sanitized = getSanitizedResponse(
+      parsedData,
+      resp.statusText,
+      Object.fromEntries(resp.headers.entries()),
+      sanitizeResponse,
+    );
+    return {
+      cached: false,
+      data: sanitized.data as T,
+      status: resp.status,
+      statusText: sanitized.statusText,
+      headers: sanitized.headers,
+      latencyMs: fetchLatencyMs,
+      deleteFromCache: async () => {
+        // No-op when cache is disabled
+      },
+    };
   }
 
   const cache = getCacheInstance();
@@ -978,10 +966,10 @@ export async function fetchWithCache<T = unknown>(
       true,
       cache,
       cacheKey,
-      sanitizeResponseMetadata,
+      sanitizeResponse,
     );
     if (logEnabled) {
-      const loggedResponse = sanitizeResponseMetadata
+      const loggedResponse = sanitizeResponse
         ? serializeFetchResponse(
             result.data,
             result.status,
@@ -1010,7 +998,7 @@ export async function fetchWithCache<T = unknown>(
         isIdempotent,
         format,
         logEnabled,
-        sanitizeResponseMetadata,
+        sanitizeResponse,
       );
       if (preparedResponse.cacheable) {
         await cache.set(cacheKey, preparedResponse.response);
@@ -1023,13 +1011,7 @@ export async function fetchWithCache<T = unknown>(
   }
 
   const response = await inflightResponse;
-  const result = deserializeFetchResponse<T>(
-    response,
-    false,
-    cache,
-    cacheKey,
-    sanitizeResponseMetadata,
-  );
+  const result = deserializeFetchResponse<T>(response, false, cache, cacheKey, sanitizeResponse);
   return coalesced ? { ...result, coalesced: true } : result;
 }
 

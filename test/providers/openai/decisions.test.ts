@@ -357,6 +357,40 @@ describe('OpenAiDecisionsProvider', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
+  describe.each([
+    {
+      name: 'header-only',
+      config: { headers: { Authorization: 'Basic dTpw' } },
+      url: 'https://api.openai.com/v1/decisions',
+      authorization: 'Basic dTpw',
+    },
+    {
+      name: 'URL userinfo',
+      config: { apiBaseUrl: 'https://u:p@gateway.example/v1' },
+      url: 'https://u:p@gateway.example/v1/decisions',
+      authorization: null,
+    },
+  ])('$name gateway authentication without an OpenAI key', ({ config, url, authorization }) => {
+    it('requires the explicit apiKeyRequired opt-out', async () => {
+      await expect(provider({ ...config, apiKey: undefined }).callApi('text')).rejects.toThrow(
+        /API key/i,
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('accepts apiKeyRequired false without changing gateway authentication', async () => {
+      const result = await provider({
+        ...config,
+        apiKey: undefined,
+        apiKeyRequired: false,
+      }).callApi('text');
+      expect(result.error).toBeUndefined();
+      const [requestUrl, options] = vi.mocked(fetchWithCache).mock.calls[0]!;
+      expect(requestUrl).toBe(url);
+      expect(new Headers(options?.headers).get('authorization')).toBe(authorization);
+    });
+  });
+
   it('honors scoped credentials, gateway paths, organization, and custom headers', async () => {
     const instance = new OpenAiDecisionsProvider('gpt-6-luna', {
       env: {
@@ -656,6 +690,109 @@ describe('OpenAiDecisionsProvider', () => {
     },
   );
 
+  describe.each(['choice', 'score'] as const)('%s probability mass policy', (type) => {
+    it.each([
+      { probabilities: [0.33, 0.33, 0.33], valid: true },
+      { probabilities: [0.2, 0.3, 0.51], valid: true },
+      { probabilities: [0.2, 0.3, 0.49], valid: true },
+      { probabilities: [0.2, 0.3, 0.51000001], valid: false },
+      { probabilities: [0.4, 0.5, 0.5], valid: false },
+      { probabilities: [0, 0, 0], valid: false },
+    ])(
+      'validates rounded distribution $probabilities (valid: $valid)',
+      async ({ probabilities, valid }) => {
+        const labels = ['Low', 'Middle', 'High'];
+        const question = {
+          name: 'numeric',
+          type,
+          instructions: 'Assess the response.',
+          ...(type === 'choice'
+            ? { choices: labels.map((value) => ({ value })) }
+            : { levels: labels.map((label) => ({ label })) }),
+        };
+        const answer = {
+          name: 'numeric',
+          type,
+          confidence: 0.123,
+          ...(type === 'choice'
+            ? { choice: labels[probabilities.indexOf(Math.max(...probabilities))] }
+            : {
+                score: probabilities.reduce(
+                  (sum, probability, value) => sum + value * probability,
+                  0,
+                ),
+              }),
+          probabilities: [2, 0, 1].map((value) => ({
+            ...(type === 'choice' ? { value: labels[value] } : { value, label: labels[value] }),
+            probability: probabilities[value],
+          })),
+        };
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: response([answer]),
+          cached: true,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache,
+        });
+        const result = await provider({ questions: [question] }).callApi('text');
+        if (valid) {
+          expect(result.error).toBeUndefined();
+          expect(JSON.parse(result.output as string)).toEqual({ answers: [answer] });
+          expect(deleteFromCache).not.toHaveBeenCalled();
+        } else {
+          expect(result.error).toContain('Invalid OpenAI Decisions API response');
+          expect(result.output).toBeUndefined();
+          expect(deleteFromCache).toHaveBeenCalledOnce();
+        }
+      },
+    );
+  });
+
+  describe.each([2, 10])('normalized score consistency policy with %s levels', (count) => {
+    it.each([
+      { difference: 0.01, valid: true },
+      { difference: -0.01, valid: true },
+      { difference: 0.01000001, valid: false },
+    ])(
+      'allows one percentage point of error: $difference (valid: $valid)',
+      async ({ difference, valid }) => {
+        const levels = Array.from({ length: count }, (_, i) => ({ label: String(i) }));
+        const answer = {
+          name: 'urgency',
+          type: 'score',
+          score: (0.3 + difference) * (count - 1),
+          confidence: 0.91,
+          probabilities: levels
+            .map(({ label }, value) => ({
+              label,
+              value,
+              probability: value === 0 ? 0.7 : value === count - 1 ? 0.3 : 0,
+            }))
+            .reverse(),
+        };
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: response([answer]),
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache,
+        });
+        const result = await provider({ questions: [{ ...scoreQuestion, levels }] }).callApi(
+          'text',
+        );
+        if (valid) {
+          expect(result.error).toBeUndefined();
+          expect(JSON.parse(result.output as string)).toEqual({ answers: [answer] });
+          expect(deleteFromCache).not.toHaveBeenCalled();
+        } else {
+          expect(result.error).toContain('Invalid OpenAI Decisions API response');
+          expect(result.output).toBeUndefined();
+          expect(deleteFromCache).toHaveBeenCalledOnce();
+        }
+      },
+    );
+  });
+
   it('preserves fractional expected scores', async () => {
     const answer = {
       name: 'urgency',
@@ -906,22 +1043,24 @@ describe('OpenAiDecisionsProvider', () => {
     '[RED',
     '[REDACTED',
     '[',
-  ])('keeps response metadata sanitization idempotent for credential %s', async (credential) => {
+  ])('keeps response sanitization idempotent for credential %s', async (credential) => {
     await provider({ apiKey: credential }).callApi('text');
     const options = vi.mocked(fetchWithCache).mock.calls[0]![4];
     expect(typeof options).toBe('object');
-    if (typeof options !== 'object' || !options?.sanitizeResponseMetadata) {
-      throw new Error('Missing metadata sanitizer');
+    if (typeof options !== 'object' || !options?.sanitizeResponse) {
+      throw new Error('Missing response sanitizer');
     }
-    const first = options.sanitizeResponseMetadata({
+    const first = options.sanitizeResponse({
+      data: { echo: credential },
       statusText: `Failure ${credential}`,
       headers: { 'x-request-id': `request ${credential}` },
     });
     expect(first).toEqual({
+      data: { echo: '[REDACTED]' },
       statusText: 'Failure [REDACTED]',
       headers: { 'x-request-id': 'request [REDACTED]' },
     });
-    expect(options.sanitizeResponseMetadata(first)).toEqual(first);
+    expect(options.sanitizeResponse(first)).toEqual(first);
   });
 
   it.each([
@@ -988,6 +1127,103 @@ describe('OpenAiDecisionsProvider', () => {
           }
         }
         await cache.del(write.mock.calls[0]![0]);
+      });
+    },
+  );
+
+  it.each(['enabled', 'disabled', 'bypass'] as const)(
+    'redacts response body credentials before raw results and cache storage (%s)',
+    async (mode) => {
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const cache = actualCache.getCache();
+      const write = vi.spyOn(cache, 'set');
+      const debug = vi.spyOn(logger, 'debug');
+      const credential = 'body/fixture+[REDACTED]';
+      const encoded = encodeURIComponent(credential);
+      const answers = [
+        {
+          name: 'token',
+          type: 'choice',
+          choice: false,
+          confidence: 0.75,
+          probabilities: [
+            { value: false, probability: 0.75 },
+            { value: 'password', probability: 0.25 },
+          ],
+        },
+      ];
+      const data = {
+        ...response(answers),
+        diagnostics: {
+          token: 'public token description',
+          password: 'public password label',
+          nested: [
+            { [credential]: { [encoded]: `request-${credential}; encoded ${encoded}` } },
+            [null, false, 42, 'unchanged'],
+          ],
+        },
+      };
+      const expected = {
+        ...data,
+        diagnostics: {
+          ...data.diagnostics,
+          nested: [
+            { '[REDACTED]': { '[REDACTED]': 'request-[REDACTED]; encoded [REDACTED]' } },
+            [null, false, 42, 'unchanged'],
+          ],
+        },
+      };
+      vi.mocked(fetchWithRetries).mockImplementation(
+        async () =>
+          new Response(JSON.stringify(data), {
+            status: 200,
+            statusText: 'OK',
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
+      const instance = provider({
+        apiKey: credential,
+        questions: [
+          {
+            name: 'token',
+            type: 'choice',
+            instructions: 'Choose the matching value.',
+            choices: [{ value: false }, { value: 'password' }],
+          },
+        ],
+      });
+      const context: CallApiContextParams = {
+        vars: {},
+        prompt: { raw: 'body fixture', label: 'body fixture' },
+        bustCache: mode === 'bypass',
+      };
+      await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+        const fresh = await instance.callApi('body fixture', context);
+        const repeated = await instance.callApi('body fixture', context);
+        try {
+          expect(fresh.error).toBeUndefined();
+          expect(fresh.raw).toEqual(expected);
+          expect(repeated.raw).toEqual(expected);
+          expect(fresh.output).toBe(JSON.stringify({ answers }));
+          expect(repeated.output).toBe(fresh.output);
+          expect(fresh.tokenUsage).toMatchObject({ total: 165, prompt: 164, completion: 1 });
+          expect(repeated.cached).toBe(mode === 'enabled');
+          expect(fetchWithRetries).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 2);
+          expect(write).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 0);
+          if (mode === 'enabled') {
+            expect(JSON.parse(write.mock.calls[0]![1] as string).data).toEqual(expected);
+          }
+          for (const value of [fresh, repeated, write.mock.calls, debug.mock.calls]) {
+            expect(JSON.stringify(value)).not.toContain(credential);
+            expect(JSON.stringify(value)).not.toContain(encoded);
+          }
+        } finally {
+          for (const [key] of write.mock.calls) {
+            await cache.del(key);
+          }
+        }
       });
     },
   );
@@ -1240,6 +1476,26 @@ describe('OpenAiDecisionsProvider', () => {
   });
 
   describe('llm-rubric grading', () => {
+    it('fails rubric grading on an inconsistent score instead of using its claimed maximum', async () => {
+      mockAnswers([
+        {
+          name: 'grade',
+          type: 'score',
+          score: 1,
+          confidence: 1,
+          probabilities: [
+            { value: 0, label: 'Fail', probability: 1 },
+            { value: 1, label: 'Pass', probability: 0 },
+          ],
+        },
+      ]);
+      const result = await matchesLlmRubric('Is correct', 'Incorrect answer', {
+        provider: provider({ levels: ['Fail', 'Pass'] }),
+      });
+      expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+      expect(result.reason).toContain('Invalid OpenAI Decisions API response');
+    });
+
     it('asks a predicate about the output and preserves usage through the matcher', async () => {
       mockAnswers([{ name: 'grade', type: 'predicate', probability: 0.12 }]);
       const result = await matchesLlmRubric('Speaks like a pirate', 'Good morning, sir.', {
@@ -1733,6 +1989,26 @@ describe('OpenAiDecisionsProvider', () => {
             ],
           },
         ]);
+      },
+    );
+
+    it.each(['billing', 'technical'])(
+      'rejects a non-normalized classifier distribution for %s',
+      async (label) => {
+        mockAnswers([
+          {
+            ...answer,
+            probabilities: [
+              { value: 'technical', probability: 0.9 },
+              { value: 'billing', probability: 0.9 },
+            ],
+          },
+        ]);
+        const result = await matchesClassification(label, 'Refund please', 0.5, {
+          provider: provider({ instructions, labels: ['billing', 'technical'] }),
+        });
+        expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+        expect(result.reason).toContain('Invalid OpenAI Decisions API response');
       },
     );
 

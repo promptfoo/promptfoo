@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { matchesClassification } from '../../src/matchers/classification';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -13,6 +13,10 @@ import type {
 } from '../../src/types/index';
 
 describe('matchesClassification', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   class TestGrader implements ApiProvider {
     async callApi(): Promise<ProviderResponse> {
       throw new Error('Not implemented');
@@ -46,6 +50,120 @@ describe('matchesClassification', () => {
       pass: true,
       reason: `Classification ${expected} has score 0.60 >= ${threshold}`,
       score: 0.6,
+    });
+  });
+
+  it.each([
+    { threshold: 0.5, pass: true, comparison: '>=' },
+    { threshold: 0.75, pass: false, comparison: '<' },
+  ])(
+    'preserves token usage for a fractional verdict with pass=$pass',
+    async ({ threshold, pass, comparison }) => {
+      const response: ProviderClassificationResponse = {
+        classification: { classA: 0.625 },
+        tokenUsage: {
+          prompt: 12,
+          completion: 4,
+          numRequests: 1,
+          completionDetails: { reasoning: 2 },
+          incurredTokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+        },
+      };
+      const provider = Object.assign(createMockProvider(), {
+        callClassificationApi: vi.fn().mockResolvedValue(response),
+      });
+
+      await expect(
+        matchesClassification('classA', 'Sample output', threshold, { provider }),
+      ).resolves.toEqual({
+        pass,
+        score: 0.625,
+        reason: `Classification classA has score 0.63 ${comparison} ${threshold}`,
+        tokensUsed: {
+          total: 16,
+          prompt: 12,
+          completion: 4,
+          cached: 0,
+          numRequests: 1,
+          completionDetails: { reasoning: 2 },
+          incurredTokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+        },
+      });
+    },
+  );
+
+  it('preserves cached tokens without recording a new classification request', async () => {
+    const response: ProviderClassificationResponse = {
+      classification: { classA: 0.625 },
+      tokenUsage: { prompt: 12, completion: 4, cached: 16, numRequests: 0 },
+    };
+    const provider = Object.assign(createMockProvider(), {
+      callClassificationApi: vi.fn().mockResolvedValue(response),
+    });
+
+    await expect(
+      matchesClassification(undefined, 'Sample output', 0.5, { provider }),
+    ).resolves.toEqual({
+      pass: true,
+      score: 0.625,
+      reason: 'Maximum classification score 0.63 >= 0.5',
+      tokensUsed: {
+        total: 0,
+        prompt: 12,
+        completion: 4,
+        cached: 16,
+        numRequests: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+      },
+    });
+  });
+
+  it.each([
+    { response: { error: 'Request timed out' }, reason: 'Request timed out' },
+    { response: {}, reason: 'Unknown error fetching classification' },
+    { response: { classification: {} }, reason: 'No classification scores returned' },
+  ])('retains reported usage when grading fails: $reason', async ({ response, reason }) => {
+    const classificationResponse: ProviderClassificationResponse = {
+      ...response,
+      tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+    };
+    const provider = Object.assign(createMockProvider(), {
+      callClassificationApi: vi.fn().mockResolvedValue(classificationResponse),
+    });
+
+    await expect(
+      matchesClassification('classA', 'Sample output', 0.5, { provider }),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason,
+      tokensUsed: {
+        total: 16,
+        prompt: 12,
+        completion: 4,
+        cached: 0,
+        numRequests: 1,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+      },
+      metadata: { graderError: true },
+    });
+  });
+
+  it('preserves the result shape for providers with undefined token usage', async () => {
+    const response: ProviderClassificationResponse = {
+      classification: { classA: 0.625 },
+      tokenUsage: undefined,
+    };
+    const provider = Object.assign(createMockProvider(), {
+      callClassificationApi: vi.fn().mockResolvedValue(response),
+    });
+
+    await expect(
+      matchesClassification('classA', 'Sample output', 0.5, { provider }),
+    ).resolves.toEqual({
+      pass: true,
+      score: 0.625,
+      reason: 'Classification classA has score 0.63 >= 0.5',
     });
   });
 
