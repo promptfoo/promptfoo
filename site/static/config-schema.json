@@ -342,6 +342,9 @@
         "FIREWORKS_API_KEY": {
           "type": "string"
         },
+        "FLEXAI_API_KEY": {
+          "type": "string"
+        },
         "GITHUB_TOKEN": {
           "type": "string"
         },

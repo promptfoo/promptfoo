@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: FlexAI chat and embedding models
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+# Both models and the embedding grader run on a single `FLEXAI_API_KEY`.
+providers:
+  - id: flexai:DeepSeek-V4-Flash-0731
+    label: 'DeepSeek V4 Flash'
+  - id: flexai:gpt-oss-120b
+    label: 'gpt-oss-120b (low reasoning)'
+    config:
+      reasoning_effort: low
+      showThinking: false
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: flexai:embedding:bge-m3
+
+tests:
+  - vars:
+      question: What is the chemical symbol for gold?
+    assert:
+      - type: icontains
+        value: Au
+  - vars:
+      question: Why does ice float on liquid water?
+    assert:
+      - type: icontains-any
+        value: [dense, density]
+      - type: similar
+        value: Ice floats because it is less dense than liquid water.
+        threshold: 0.6

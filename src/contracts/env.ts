@@ -58,6 +58,7 @@ export const ProviderEnvOverridesSchema = z.object({
   FAL_KEY: z.string().optional(),
   FIREWORKS_API_BASE_URL: z.string().optional(),
   FIREWORKS_API_KEY: z.string().optional(),
+  FLEXAI_API_KEY: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),
   GOOGLE_API_HOST: z.string().optional(),
   GOOGLE_API_BASE_URL: z.string().optional(),
