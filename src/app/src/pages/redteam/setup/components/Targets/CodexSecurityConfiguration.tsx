@@ -137,12 +137,12 @@ export default function CodexSecurityConfiguration({
   };
 
   const updateScopedPaths = (value: string) => {
-    setScopedPaths(value);
     const nextConfig: ProviderOptions['config'] = { ...config };
     const paths = value
       .split(',')
       .map((path) => path.trim())
       .filter(Boolean);
+    setScopedPaths(paths.length > 0 ? value : '');
     if (paths.length > 0) {
       nextConfig.paths = paths;
     } else {

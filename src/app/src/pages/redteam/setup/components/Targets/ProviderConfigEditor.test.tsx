@@ -118,10 +118,12 @@ function StatefulCodexSecurityEditor({
   initialConfig = {},
   initialId = 'openai:codex-security:gpt-5.6-luna',
   allowRename = false,
+  alternateTarget,
 }: {
   initialConfig?: ProviderOptions['config'];
   initialId?: string;
   allowRename?: boolean;
+  alternateTarget?: ProviderOptions;
 }) {
   const [provider, setProvider] = React.useState<ProviderOptions>({
     id: initialId,
@@ -143,6 +145,9 @@ function StatefulCodexSecurityEditor({
           value={provider.label ?? ''}
           onChange={(event) => setProvider({ ...provider, label: event.target.value })}
         />
+      )}
+      {alternateTarget && (
+        <button onClick={() => setProvider(alternateTarget)}>Switch target</button>
       )}
       <ProviderConfigEditor
         provider={provider}
@@ -1091,7 +1096,8 @@ describe('ProviderConfigEditor', () => {
     renderWithProviders(<StatefulCodexSecurityEditor />);
     const pathsInput = screen.getByLabelText('Scoped paths');
 
-    await user.type(pathsInput, '  src/auth, ');
+    await user.click(pathsInput);
+    await user.paste('  src/auth, ');
     expect(pathsInput).toHaveValue('  src/auth, ');
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
       paths: ['src/auth'],
@@ -1129,6 +1135,41 @@ describe('ProviderConfigEditor', () => {
     expect(pathsInput).toHaveValue('src/auth, src/api');
     expect(otherInput).toHaveValue(value);
   });
+
+  it.each(['   ', ',,,', ' , , '])(
+    'keeps empty scoped paths blank after clearing and switching targets with draft %j',
+    async (draft) => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StatefulCodexSecurityEditor
+          initialConfig={{ paths: ['src/auth'] }}
+          alternateTarget={{
+            id: 'openai:codex-security:gpt-5.6-luna',
+            label: 'Other target',
+            config: { repository: '/repos/other' },
+          }}
+        />,
+      );
+      const pathsInput = screen.getByLabelText('Scoped paths');
+
+      await user.clear(pathsInput);
+      await user.type(pathsInput, draft);
+      expect(
+        JSON.parse(screen.getByTestId('codex-security-config').textContent!),
+      ).not.toHaveProperty('paths');
+      await user.click(screen.getByRole('button', { name: 'Switch target' }));
+      expect(pathsInput).toHaveValue('');
+
+      await user.type(pathsInput, draft);
+      expect(pathsInput).toHaveValue('');
+      await user.type(pathsInput, 'src/api, ');
+      expect(pathsInput).toHaveValue('src/api, ');
+      expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
+        repository: '/repos/other',
+        paths: ['src/api'],
+      });
+    },
+  );
 
   it('removes cleared optional paths, scan cost, and finding files', async () => {
     const user = userEvent.setup();
