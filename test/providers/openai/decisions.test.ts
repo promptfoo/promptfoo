@@ -1141,7 +1141,7 @@ describe('OpenAiDecisionsProvider', () => {
         });
       }
       const result = await provider().callApi('text');
-      expect(result.metadata?.http.headers).toEqual({
+      expect(result.metadata?.http?.headers).toEqual({
         'x-request-id': 'request [REDACTED]',
         'retry-after': '2',
         'x-ratelimit-remaining-tokens': '0',
