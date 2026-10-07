@@ -767,6 +767,28 @@ async function fetchAndReadBody(
   throw new Error('Exhausted body retries without returning or throwing');
 }
 
+function parseFetchResponse(
+  url: RequestInfo,
+  response: Response,
+  responseText: string,
+  format: 'json' | 'text',
+  sanitizeResponse?: CacheOptions['sanitizeResponse'],
+): unknown {
+  try {
+    return format === 'json' ? JSON.parse(responseText) : responseText;
+  } catch (err) {
+    const message = `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}:`;
+    if (sanitizeResponse) {
+      // Malformed JSON cannot pass through the sanitizer. Body text, parser excerpts,
+      // and statusText can all contain escaped credentials, so omit them entirely.
+      throw new Error(`${message} Invalid JSON. HTTP ${response.status}.`);
+    }
+    throw new Error(
+      `${message} ${(err as Error).message}. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
+    );
+  }
+}
+
 async function prepareFetchResponse(
   url: RequestInfo,
   options: RequestInit,
@@ -788,16 +810,7 @@ async function prepareFetchResponse(
   const response = result.resp;
   const responseText = result.respText;
   const fetchLatencyMs = result.fetchLatencyMs;
-  let parsedData: unknown;
-  try {
-    parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
-  } catch (err) {
-    throw new Error(
-      `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
-        (err as Error).message
-      }. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
-    );
-  }
+  const parsedData = parseFetchResponse(url, response, responseText, format, sanitizeResponse);
   // Capture cacheability before a sanitizer can remove or change an upstream error.
   const responseError =
     format === 'json' &&
@@ -928,16 +941,7 @@ export async function fetchWithCache<T = unknown>(
       isIdempotent,
       logEnabled,
     );
-    let parsedData: unknown;
-    try {
-      parsedData = format === 'json' ? JSON.parse(respText) : respText;
-    } catch (err) {
-      throw new Error(
-        `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
-          (err as Error).message
-        }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
-      );
-    }
+    const parsedData = parseFetchResponse(url, resp, respText, format, sanitizeResponse);
     const sanitized = getSanitizedResponse(
       parsedData,
       resp.statusText,

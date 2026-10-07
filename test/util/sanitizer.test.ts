@@ -51,7 +51,13 @@ describe('isCredentialHeader', () => {
     'subscription_key',
     'subscriptionKey',
     'OcpApimSubscriptionKey',
-  ])('recognizes subscription credentials under %s regardless of value shape', (name) => {
+    'X-Functions-Key',
+    'X-Arbitrary-Vendor-Key',
+    'arbitraryVendorKey',
+    'X-Session-Access',
+    'vendorSessionAccess',
+    'X-Gateway-Authentication',
+  ])('recognizes credential headers under %s regardless of value shape', (name) => {
     expect(isCredentialHeader(name, 'short')).toBe(true);
   });
 
@@ -60,9 +66,34 @@ describe('isCredentialHeader', () => {
     'X-Subscription-Tier',
     'X-Subscription-Region',
     'X-Correlation-Id',
+    'Idempotency-Key',
+    'Cache-Key',
+    'X-Routing-Key',
+    'X-Partition-Key',
+    'X-Public-Key',
+    'Sec-WebSocket-Key',
+    'idempotencyKey',
+    'X-Session-Id',
+    'X-Access-Region',
+    'X-Session-Access-Mode',
+    'X-Monkey',
   ])('preserves ordinary metadata under %s', (name) => {
     expect(isCredentialHeader(name, 'us')).toBe(false);
     expect(isCredentialHeader(name, '0123456789abcdef0123456789abcdef')).toBe(false);
+  });
+});
+
+describe('credential values under public key-role headers', () => {
+  it.each([
+    'Idempotency-Key',
+    'Cache-Key',
+    'X-Routing-Key',
+    'X-Partition-Key',
+    'X-Public-Key',
+    'Sec-WebSocket-Key',
+  ])('still detects credential value evidence under %s', (name) => {
+    expect(isCredentialHeader(name, 'Bearer short-credential')).toBe(true);
+    expect(isCredentialHeader(name, 'sk-abcdefghijklmnopqrstuvw')).toBe(true);
   });
 });
 

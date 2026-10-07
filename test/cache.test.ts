@@ -533,6 +533,65 @@ describe('fetchWithCache', () => {
       expect(debug).not.toHaveBeenCalled();
     });
 
+    describe.each(['enabled', 'disabled', 'bust'] as const)(
+      'malformed JSON with cache %s',
+      (mode) => {
+        beforeEach(() => {
+          if (mode === 'disabled') {
+            disableCache();
+          }
+        });
+
+        it.each([
+          ['quote', '"quoted\\"secret"'],
+          ['backslash', '"backslash\\\\secret"'],
+          ['control', '"control\\n\\tsecret"'],
+          ['unicode', '"unicode\\u0073ecret"'],
+        ])('omits %s-escaped passwords from parse errors', async (_encoding, encodedPassword) => {
+          const password = JSON.parse(encodedPassword);
+          const body = `{"error":${encodedPassword},`;
+          const sanitizer = vi.fn(sanitizeResponse);
+          mockFetchWithRetries.mockResolvedValueOnce(
+            new Response(body, { status: 401, statusText: `Unauthorized ${encodedPassword}` }),
+          );
+
+          const error = await fetchWithCache(url, {}, 1000, 'json', {
+            cacheKey: cacheOptions.cacheKey,
+            bust: mode === 'bust',
+            sanitizeResponse: sanitizer,
+          }).catch((err: unknown) => err);
+
+          expect(error).toBeInstanceOf(Error);
+          expect((error as Error).message).toBe(
+            `Error parsing response from ${url}: Invalid JSON. HTTP 401.`,
+          );
+          expect(String(error)).not.toContain(password);
+          expect(String(error)).not.toContain(encodedPassword);
+          expect((error as Error).cause).toBeUndefined();
+          expect(sanitizer).not.toHaveBeenCalled();
+          expect(getCache().set).not.toHaveBeenCalled();
+          expect(debug).not.toHaveBeenCalled();
+        });
+
+        it('preserves parse diagnostics when no sanitizer is provided', async () => {
+          const body = 'upstream returned invalid JSON';
+          mockFetchWithRetries.mockResolvedValueOnce(
+            new Response(body, { status: 502, statusText: 'Bad Gateway' }),
+          );
+
+          const error = await fetchWithCache(url, {}, 1000, 'json', {
+            bust: mode === 'bust',
+          }).catch((err: unknown) => err);
+
+          expect(error).toBeInstanceOf(Error);
+          expect((error as Error).message).toContain(`Error parsing response from ${url}:`);
+          expect((error as Error).message).toContain('Unexpected token');
+          expect((error as Error).message).toContain('HTTP 502 Bad Gateway');
+          expect((error as Error).message).toContain(`Received text: ${body}`);
+        });
+      },
+    );
+
     it('preserves ordinary response data, metadata, and logging when no sanitizer is provided', async () => {
       mockFetchWithRetries.mockResolvedValueOnce(
         new Response(JSON.stringify(rawData), rawMetadata),

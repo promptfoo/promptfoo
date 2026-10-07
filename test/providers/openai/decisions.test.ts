@@ -694,6 +694,13 @@ describe('OpenAiDecisionsProvider', () => {
     ['Accept-Language', 'en'],
     ['X-Subscription-Id', 'us'],
     ['X-Subscription-Tier', 'score'],
+    ['Idempotency-Key', 'us'],
+    ['Cache-Key', 'en'],
+    ['X-Routing-Key', 'score'],
+    ['X-Partition-Key', 'us'],
+    ['X-Public-Key', 'en'],
+    ['Sec-WebSocket-Key', 'score'],
+    ['X-Session-Access-Mode', 'us'],
   ])('preserves noncredential %s metadata in responses and the cache', async (name, value) => {
     const actualCache =
       await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
@@ -1349,6 +1356,31 @@ describe('OpenAiDecisionsProvider', () => {
 
   it.each([
     {
+      name: 'Azure Functions key',
+      config: { headers: { 'X-Functions-Key': '1123456789abcdef0123456789abcdef' } },
+      credentials: ['1123456789abcdef0123456789abcdef'],
+    },
+    {
+      name: 'session access credential',
+      config: { headers: { 'X-Session-Access': '2123456789abcdef0123456789abcdef' } },
+      credentials: ['2123456789abcdef0123456789abcdef'],
+    },
+    {
+      name: 'arbitrary vendor key',
+      config: { headers: { 'X-Arbitrary-Vendor-Key': 'vendor-private-value' } },
+      credentials: ['vendor-private-value'],
+    },
+    {
+      name: 'gateway authentication',
+      config: { headers: { 'X-Gateway-Authentication': 'gateway-private-value' } },
+      credentials: ['gateway-private-value'],
+    },
+    {
+      name: 'credential value in a public key-role header',
+      config: { headers: { 'Cache-Key': 'Bearer private-credential-value' } },
+      credentials: ['private-credential-value'],
+    },
+    {
       name: 'Azure APIM subscription key',
       config: { headers: { 'Ocp-Apim-Subscription-Key': '0123456789abcdef0123456789abcdef' } },
       credentials: ['0123456789abcdef0123456789abcdef'],
@@ -1517,6 +1549,16 @@ describe('OpenAiDecisionsProvider', () => {
   });
 
   it.each([
+    {
+      name: 'Functions key and session access',
+      config: {
+        headers: {
+          'X-Functions-Key': '1123456789abcdef0123456789abcdef',
+          'X-Session-Access': '2123456789abcdef0123456789abcdef',
+        },
+      },
+      credentials: ['1123456789abcdef0123456789abcdef', '2123456789abcdef0123456789abcdef'],
+    },
     {
       name: 'subscription keys',
       config: {
