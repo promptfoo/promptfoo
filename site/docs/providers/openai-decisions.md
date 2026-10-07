@@ -64,11 +64,12 @@ npx promptfoo@latest eval --no-cache -o results.json
 | `safety_identifier`                                | Optional stable pseudonymous end-user identifier, at most 128 characters, or `null`.                                            |
 | `apiKey`, `apiKeyEnvar`                            | Standard OpenAI credential overrides. Defaults to `OPENAI_API_KEY`.                                                             |
 | `apiKeyRequired`                                   | Whether an OpenAI API key is required. Defaults to `true`.                                                                      |
+| `useDefaultApiKey`                                 | Set to `false` to disable fallback to ambient `OPENAI_API_KEY`; explicitly configured keys are still honored.                   |
 | `apiBaseUrl`, `apiHost`, `organization`, `headers` | Standard OpenAI endpoint and header overrides.                                                                                  |
 | `maxRetries`                                       | HTTP retry limit. Set to `0` to disable retries.                                                                                |
 | `cost`, `inputCost`, `outputCost`                  | Optional per-token prices. Set `cost` for a flat rate, or both `inputCost` and `outputCost`, to enable a cost estimate.         |
 
-For gateway-only authentication through a custom `Authorization` header or URL userinfo, explicitly set `apiKeyRequired: false`; those credentials do not satisfy the OpenAI API-key check.
+For gateway-only authentication through a custom `Authorization` header or URL userinfo, set both `apiKeyRequired: false` and `useDefaultApiKey: false`. This skips the OpenAI API-key check and disables ambient `OPENAI_API_KEY` fallback; explicitly configured keys are still honored.
 
 The rendered prompt becomes the request's `input`. Text prompts are sent as strings. A JSON array must contain user messages whose content is a string or text/image parts. The provider accepts Responses-style `input_text` and `input_image` parts and normalizes Chat Completions-style `text` and `image_url` parts. Images must be inline base64 data URLs; hosted image URLs and file IDs are not supported. A request can include up to 128 images. Other roles, tool items, and audio inputs are rejected. Multiple messages form one input, so use separate test cases to evaluate independent inputs.
 
