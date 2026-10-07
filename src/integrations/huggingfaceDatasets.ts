@@ -164,7 +164,13 @@ export async function fetchHuggingFaceDataset(
   let offset = 0;
   let pageSize = MAX_PAGE_SIZE; // Number of rows per request (adaptive)
   const queryParamLimit = queryParams.get('limit');
-  const userLimit = limit ?? (queryParamLimit ? Number.parseInt(queryParamLimit, 10) : undefined);
+  let userLimit = limit;
+  if (userLimit === undefined && queryParamLimit !== null) {
+    userLimit = queryParamLimit.trim() === '' ? Number.NaN : Number(queryParamLimit);
+  }
+  if (userLimit !== undefined && (!Number.isInteger(userLimit) || userLimit < 0)) {
+    throw new Error('[HF Dataset] Invalid limit: expected a finite non-negative integer');
+  }
   let totalRows: number | undefined;
 
   // Honor explicit 0 limit and avoid network traffic

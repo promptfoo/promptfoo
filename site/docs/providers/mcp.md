@@ -18,6 +18,7 @@ To use the MCP provider, you need to have an MCP server running. This can be a l
 
 1. An MCP server (local or remote)
 2. Node.js dependencies for MCP SDK (automatically handled by promptfoo)
+3. For a `.py` script in `server.path`, Python 3 and the script's dependencies must be installed. The provider runs `python3` on macOS/Linux and `python` on Windows, so that command must be available on `PATH` and meet the server's Python version requirements.
 
 ## Basic Configuration
 
@@ -68,6 +69,8 @@ rather than collapsing to an empty string, so a missing credential fails visibly
 A stdio server can also be started from a script with `path`, which accepts `.js` and `.py` files
 and is resolved relative to the config file. Use it in place of `command`/`args`: `args` is not
 applied to a `path` server, and `command` takes precedence when both are set.
+To select a virtual environment or a different Python executable, use `command` with the
+interpreter path and pass the script path in `args`.
 
 ```yaml
 providers:

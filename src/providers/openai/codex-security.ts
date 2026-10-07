@@ -263,6 +263,8 @@ function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage
 }
 
 export class OpenAICodexSecurityProvider implements ApiProvider {
+  private cleanupGeneration = 0;
+
   readonly config: OpenAICodexSecurityConfig;
   readonly env?: EnvOverrides;
 
@@ -291,6 +293,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    this.cleanupGeneration++;
+    providerRegistry.unregister(this);
     const clients = Array.from(this.activeClients);
     this.activeClients.clear();
     const results = await Promise.allSettled(clients.map((client) => client.close()));
@@ -302,11 +306,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   async callApi(
@@ -314,6 +314,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     const observers: ScanObservers = { warnings: [] };
 
     try {
@@ -343,6 +344,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       }
 
       const module = await loadCodexSecurity();
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        return { error: 'Codex Security operation was interrupted by cleanup.' };
+      }
       const effort = config.model_reasoning_effort ?? config.reasoning_effort;
       const codexOverrides = {
         ...config.codex_overrides,
@@ -359,6 +363,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           : {}),
         ...(Object.keys(codexOverrides).length > 0 ? { codexOverrides } : {}),
       });
+      providerRegistry.register(this);
       this.activeClients.add(client);
 
       try {
