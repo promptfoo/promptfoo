@@ -1,5 +1,5 @@
 import {
-  claimCacheKeyOnce,
+  claimBackgroundUsageOnce,
   type FetchWithCacheResult,
   fetchWithCache,
   getScopedCacheKey,
@@ -158,10 +158,19 @@ type BackgroundRequest = {
   hasPerPromptAuthorization: boolean;
   signal?: AbortSignal;
 };
+type DeferredBackgroundCache = Pick<
+  FetchWithCacheResult<OpenAIResponsesResponse>,
+  'deleteFromCache' | 'updateCache'
+>;
+type BackgroundCreationResult = FetchWithCacheResult<OpenAIResponsesResponse> & {
+  requiresAttribution?: boolean;
+};
+
 const inFlightBackgroundCreations = new Map<
   string,
   {
     promise: Promise<FetchWithCacheResult<OpenAIResponsesResponse>>;
+    deferredCache?: DeferredBackgroundCache;
     subscribers: number;
     billed: boolean;
   }
@@ -272,6 +281,8 @@ function getBackgroundCacheIdentity(
   const hasSensitiveBody = hasSensitiveBackgroundCacheValue(parsedBody);
   const key = sha256(
     JSON.stringify({
+      // Older workers use marker files; keep their pending jobs in a separate cache.
+      version: 2,
       url: hasSensitiveUrlPath ? '[sensitive]' : sanitizedUrl,
       method: request.method,
       headers: cacheHeaders,
@@ -326,7 +337,7 @@ async function cancelBackgroundResponse(
 }
 
 async function pollBackgroundResponse(
-  initial: OpenAIResponsesResponse,
+  initial: BackgroundResponseResult,
   url: string,
   authentication: Pick<BackgroundRequest, 'headers' | 'getAuthHeaders'>,
   timeout: number,
@@ -335,19 +346,17 @@ async function pollBackgroundResponse(
   deadline = Date.now() + timeout,
   cancelOnStop = true,
 ): Promise<BackgroundResponseResult> {
-  if (!initial.id) {
+  const responseId = initial.data.id;
+  if (!responseId) {
     return {
-      data: initial,
+      data: initial.data,
       status: 0,
       statusText: 'Error',
       error: 'Background response is missing its response ID.',
     };
   }
 
-  let data = initial;
-  let status = 200;
-  let statusText = 'OK';
-  let responseHeaders: Record<string, string> | undefined;
+  let { data, status, statusText, headers: responseHeaders } = initial;
   let firstPoll = true;
   let deadlineSignal: AbortSignal | undefined;
 
@@ -363,13 +372,13 @@ async function pollBackgroundResponse(
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) {
         if (cancelOnStop) {
-          await cancelBackgroundResponse(initial.id, url, authentication);
+          await cancelBackgroundResponse(responseId, url, authentication);
         }
         return {
           data,
           status: 0,
           statusText: 'Error',
-          error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+          error: `Background response ${responseId} timed out after ${timeout}ms.`,
           timedOut: true,
         };
       }
@@ -377,7 +386,7 @@ async function pollBackgroundResponse(
       deadlineSignal = AbortSignal.timeout(remainingMs);
       const pollSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
       const polled = await fetchWithCache<OpenAIResponsesResponse>(
-        appendOpenAiApiPath(url, encodeURIComponent(initial.id)),
+        appendOpenAiApiPath(url, encodeURIComponent(responseId)),
         {
           method: 'GET',
           headers: authentication.headers,
@@ -399,7 +408,7 @@ async function pollBackgroundResponse(
         const shouldCancel =
           status >= 400 && status < 500 && ![404, 408, 409, 410, 425, 429].includes(status);
         if (shouldCancel) {
-          await cancelBackgroundResponse(initial.id, url, authentication);
+          await cancelBackgroundResponse(responseId, url, authentication);
         }
         return {
           data,
@@ -414,19 +423,19 @@ async function pollBackgroundResponse(
   } catch (error) {
     if (signal?.aborted) {
       if (cancelOnStop) {
-        await cancelBackgroundResponse(initial.id, url, authentication);
+        await cancelBackgroundResponse(responseId, url, authentication);
       }
       throw error;
     }
     if (deadlineSignal?.aborted || Date.now() >= deadline) {
       if (cancelOnStop) {
-        await cancelBackgroundResponse(initial.id, url, authentication);
+        await cancelBackgroundResponse(responseId, url, authentication);
       }
       return {
         data,
         status: 0,
         statusText: 'Error',
-        error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+        error: `Background response ${responseId} timed out after ${timeout}ms.`,
         timedOut: true,
       };
     }
@@ -442,12 +451,13 @@ async function createBackgroundResponseWithCancellation(
   timeout: number,
   bustCache: boolean | undefined,
   maxRetries: number | undefined,
-): Promise<FetchWithCacheResult<OpenAIResponsesResponse>> {
+  deferredCache?: DeferredBackgroundCache,
+): Promise<BackgroundCreationResult> {
   const signal = request.signal;
   const cacheIdentity = getBackgroundCacheIdentity(url, request);
   const canCoalesce = isCacheEnabled() && !bustCache && cacheIdentity.coalescable;
   const effectiveCacheOptions = cacheIdentity.cacheable
-    ? { bust: bustCache, cacheKey: cacheIdentity.key }
+    ? { bust: deferredCache ? true : bustCache, cacheKey: cacheIdentity.key }
     : true;
   const cacheKey = getScopedCacheKey(cacheIdentity.key);
   let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
@@ -464,8 +474,24 @@ async function createBackgroundResponseWithCancellation(
       'json',
       effectiveCacheOptions,
       maxRetries,
-    );
-    inFlight = { promise, subscribers: 0, billed: false };
+    ).then(async (created) => {
+      // Keep pending jobs resumable even if creation loses its last subscriber.
+      if (
+        deferredCache?.updateCache &&
+        created.status >= 200 &&
+        created.status < 300 &&
+        (created.data.status === 'queued' || created.data.status === 'in_progress')
+      ) {
+        await deferredCache.updateCache(
+          created.data,
+          created.status,
+          created.statusText,
+          created.headers,
+        );
+      }
+      return created;
+    });
+    inFlight = { promise, deferredCache, subscribers: 0, billed: false };
     if (canCoalesce) {
       inFlightBackgroundCreations.set(cacheKey, inFlight);
       void promise
@@ -524,12 +550,21 @@ async function createBackgroundResponseWithCancellation(
   });
 
   try {
-    const created = await Promise.race([inFlight.promise, cancellation]);
+    const fetched = await Promise.race([inFlight.promise, cancellation]);
+    const created = inFlight.deferredCache
+      ? {
+          ...fetched,
+          ...inFlight.deferredCache,
+          requiresAttribution: fetched.status >= 200 && fetched.status < 300,
+        }
+      : fetched;
     if (
       created.cached ||
       created.status < 200 ||
       created.status >= 300 ||
-      (created.data.status !== 'completed' && created.data.status !== 'incomplete')
+      (inFlight.deferredCache
+        ? created.data.status === 'queued' || created.data.status === 'in_progress'
+        : created.data.status !== 'completed' && created.data.status !== 'incomplete')
     ) {
       return created;
     }
@@ -545,17 +580,18 @@ async function createBackgroundResponseWithCancellation(
 }
 
 async function resolveBackgroundResponse(
-  initial: OpenAIResponsesResponse,
+  initial: BackgroundResponseResult,
   url: string,
   request: BackgroundRequest,
   timeout: number,
   maxRetries: number | undefined,
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
+  updateCache: FetchWithCacheResult<OpenAIResponsesResponse>['updateCache'],
   cancelOnStop: boolean,
   deadline = Date.now() + timeout,
 ): Promise<BackgroundResponseResult> {
-  const polled = await pollBackgroundResponse(
+  let polled = await pollBackgroundResponse(
     initial,
     url,
     request,
@@ -565,66 +601,91 @@ async function resolveBackgroundResponse(
     deadline,
     cancelOnStop,
   );
-  if (!cached || !polled.error || (polled.status !== 404 && polled.status !== 410)) {
-    return polled;
+  if (cached && polled.error && (polled.status === 404 || polled.status === 410)) {
+    await deleteFromCache?.();
+    const retried = await createBackgroundResponseWithCancellation(
+      url,
+      request,
+      Math.max(1, deadline - Date.now()),
+      cancelOnStop,
+      maxRetries,
+      { deleteFromCache, updateCache },
+    );
+    if (retried.status < 200 || retried.status >= 300) {
+      return {
+        data: retried.data,
+        status: retried.status,
+        statusText: retried.statusText,
+        headers: retried.headers,
+        error: `API error: ${retried.status} ${retried.statusText}\n${JSON.stringify(retried.data)}`,
+        retried: true,
+      };
+    }
+
+    polled =
+      retried.data.status === 'queued' || retried.data.status === 'in_progress'
+        ? await pollBackgroundResponse(
+            retried,
+            url,
+            request,
+            timeout,
+            maxRetries,
+            request.signal,
+            deadline,
+            cancelOnStop,
+          )
+        : {
+            data: retried.data,
+            status: retried.status,
+            statusText: retried.statusText,
+            headers: retried.headers,
+            shared: retried.cached,
+          };
+    polled.retried = true;
   }
 
-  await deleteFromCache?.();
-  const retried = await createBackgroundResponseWithCancellation(
-    url,
-    request,
-    Math.max(1, deadline - Date.now()),
-    cancelOnStop,
-    maxRetries,
-  );
-  if (retried.status < 200 || retried.status >= 300) {
-    return {
-      data: retried.data,
-      status: retried.status,
-      statusText: retried.statusText,
-      headers: retried.headers,
-      error: `API error: ${retried.status} ${retried.statusText}\n${JSON.stringify(retried.data)}`,
-      retried: true,
-    };
+  if (
+    !polled.error &&
+    (polled.data.status === 'completed' || polled.data.status === 'incomplete') &&
+    !cancelOnStop &&
+    isCacheEnabled()
+  ) {
+    const billingIdentity = getBackgroundCacheIdentity(url, request, polled.data.id);
+    if (billingIdentity.cacheable) {
+      // Finish attribution before releasing any subscriber of the shared operation.
+      try {
+        polled.shared = !(await claimBackgroundUsageOnce(
+          `openai:background-billing:${billingIdentity.key}`,
+          { signal: request.signal, deadline },
+        ));
+      } catch (error) {
+        if (!request.signal?.aborted && Date.now() >= deadline) {
+          return {
+            ...polled,
+            error: `Background response ${polled.data.id} timed out after ${timeout}ms.`,
+            timedOut: true,
+          };
+        }
+        throw error;
+      }
+    }
   }
-
-  if (retried.data.status === 'queued' || retried.data.status === 'in_progress') {
-    return {
-      ...(await pollBackgroundResponse(
-        retried.data,
-        url,
-        request,
-        timeout,
-        maxRetries,
-        request.signal,
-        deadline,
-        cancelOnStop,
-      )),
-      retried: true,
-    };
-  }
-
-  return {
-    data: retried.data,
-    status: retried.status,
-    statusText: retried.statusText,
-    headers: retried.headers,
-    retried: true,
-  };
+  return polled;
 }
 
 async function coalesceBackgroundResponse(
-  initial: OpenAIResponsesResponse,
+  initial: BackgroundResponseResult,
   url: string,
   request: BackgroundRequest,
   timeout: number,
   maxRetries: number | undefined,
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
+  updateCache: FetchWithCacheResult<OpenAIResponsesResponse>['updateCache'],
   cancelOnStop: boolean,
   deadline?: number,
 ): Promise<BackgroundResponseResult> {
-  const cacheIdentity = getBackgroundCacheIdentity(url, request, initial.id);
+  const cacheIdentity = getBackgroundCacheIdentity(url, request, initial.data.id);
   if (!cacheIdentity.coalescable) {
     return resolveBackgroundResponse(
       initial,
@@ -634,6 +695,7 @@ async function coalesceBackgroundResponse(
       maxRetries,
       cached,
       deleteFromCache,
+      updateCache,
       cancelOnStop,
       deadline,
     );
@@ -650,6 +712,7 @@ async function coalesceBackgroundResponse(
       maxRetries,
       cached,
       deleteFromCache,
+      updateCache,
       cancelOnStop,
       deadline,
     );
@@ -704,13 +767,14 @@ async function coalesceBackgroundResponse(
       }
       release();
       return await coalesceBackgroundResponse(
-        result.data,
+        result,
         url,
         request,
         timeout,
         maxRetries,
         cached,
         deleteFromCache,
+        updateCache,
         cancelOnStop,
         deadline,
       );
@@ -1392,19 +1456,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let statusText: string;
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
-    let updateCache:
-      | ((
-          data: OpenAIResponsesResponse,
-          status: number,
-          statusText: string,
-          headers?: Record<string, string>,
-        ) => Promise<void>)
-      | undefined;
+    let updateCache: FetchWithCacheResult<OpenAIResponsesResponse>['updateCache'];
     let responseHeaders: Record<string, string> | undefined;
     let pollingBackground = false;
+    let requiresBackgroundAttribution: boolean | undefined;
     try {
       const url = appendOpenAiApiPath(this.getApiUrl(), 'responses');
-      const backgroundDeadline = body.background && !body.stream ? Date.now() + timeout : undefined;
+      const backgroundDeadline = body.background ? Date.now() + timeout : undefined;
       const customHeaders = this.getOpenAiRequestHeaders(config.headers);
       const hasCustomHeader = (name: string) =>
         Object.keys(customHeaders).some((header) => header.toLowerCase() === name);
@@ -1599,15 +1657,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           clearTimeout(timeoutHandle);
         }
       } else {
-        ({
-          data,
-          cached,
-          status,
-          statusText,
-          deleteFromCache,
-          updateCache,
-          headers: responseHeaders,
-        } = body.background
+        const response: BackgroundCreationResult = body.background
           ? await createBackgroundResponseWithCancellation(
               url,
               request,
@@ -1628,7 +1678,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               'json',
               this.shouldBustCache(context),
               config.maxRetries,
-            ));
+            );
+        ({
+          data,
+          cached,
+          status,
+          statusText,
+          deleteFromCache,
+          updateCache,
+          headers: responseHeaders,
+          requiresAttribution: requiresBackgroundAttribution,
+        } = response);
       }
 
       const policyResponse = this.getPolicyResponse(
@@ -1639,7 +1699,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         statusText,
         responseHeaders,
       );
-      if (policyResponse) {
+      if (policyResponse && !requiresBackgroundAttribution) {
         return policyResponse;
       }
       if (status < 200 || status >= 300) {
@@ -1680,20 +1740,24 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
       }
 
-      if (body.background && (data.status === 'queued' || data.status === 'in_progress')) {
+      if (
+        body.background &&
+        (requiresBackgroundAttribution || data.status === 'queued' || data.status === 'in_progress')
+      ) {
         pollingBackground = true;
         const cancelOnStop =
           !isCacheEnabled() ||
           Boolean(this.shouldBustCache(context)) ||
           !getBackgroundCacheIdentity(url, request, data.id).cacheable;
         const polled = await coalesceBackgroundResponse(
-          data,
+          { data, status, statusText, headers: responseHeaders },
           url,
           request,
           timeout,
           config.maxRetries,
           cached,
           deleteFromCache,
+          updateCache,
           cancelOnStop,
           backgroundDeadline,
         );
@@ -1703,12 +1767,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           !polled.error &&
           (polled.data.status === 'completed' || polled.data.status === 'incomplete')
         ) {
-          const billingIdentity = getBackgroundCacheIdentity(url, request, polled.data.id);
-          cached =
-            billingIdentity.cacheable &&
-            isCacheEnabled() &&
-            !this.shouldBustCache(context) &&
-            !claimCacheKeyOnce(`openai:background-billing:${billingIdentity.key}`);
+          cached = false;
         }
         data = polled.data;
         status = polled.status;

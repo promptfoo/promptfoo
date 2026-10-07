@@ -307,6 +307,21 @@ describe('cache configuration', () => {
     rmSync.mockRestore();
   });
 
+  it('should surface a failed durable claim without memoizing success', async () => {
+    mockProcessEnv({ NODE_ENV: 'production' });
+    mkdirSyncMock.mockImplementation(() => {
+      throw Object.assign(new Error('Permission denied'), { code: 'EACCES' });
+    });
+    const cacheModule = await import('../src/cache');
+
+    await expect(cacheModule.claimBackgroundUsageOnce('read-only-claim')).rejects.toThrow(
+      'Failed to persist a one-time cache claim',
+    );
+    await expect(cacheModule.claimBackgroundUsageOnce('read-only-claim')).rejects.toThrow(
+      'Failed to persist a one-time cache claim',
+    );
+  });
+
   it('should respect custom cache path', async () => {
     mockProcessEnv({ PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
     mockProcessEnv({ NODE_ENV: 'production' });
