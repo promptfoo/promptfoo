@@ -862,9 +862,7 @@ describe('OpenAiDecisionsProvider', () => {
     {
       suffix: 'us%40er:p%40ss%3Aword@gateway.example/v1',
       credentials: [
-        'us%40er',
         'p%40ss%3Aword',
-        'us@er',
         'p@ss:word',
         Buffer.from('us@er:p@ss:word').toString('base64'),
       ],
@@ -954,7 +952,7 @@ describe('OpenAiDecisionsProvider', () => {
           Authorization: `Basic ${Buffer.from('gateway-user:p@ss:word').toString('base64')}`,
         },
       },
-      credentials: ['gateway-user:p@ss:word', 'gateway-user', 'p@ss:word'],
+      credentials: ['gateway-user:p@ss:word', 'p@ss:word'],
     },
     {
       name: 'encoded custom authorization',
@@ -1028,7 +1026,7 @@ describe('OpenAiDecisionsProvider', () => {
       headers: { Authorization: 'Bearer explicit-key' },
     }).callApi('text');
     expect(result.error).toContain(
-      'The acme tenant requires cursor support for user [REDACTED] password [REDACTED].',
+      'The acme tenant requires cursor support for user u password [REDACTED].',
     );
     const [url, options] = vi.mocked(fetchWithCache).mock.calls[0]!;
     expect(url).toBe(apiBaseUrl.replace('/v1', '/v1/decisions'));
@@ -1227,6 +1225,129 @@ describe('OpenAiDecisionsProvider', () => {
       });
     },
   );
+
+  describe.each(['header', 'url'] as const)('%s Basic account identifiers', (source) => {
+    it.each(['token', 'score'])(
+      'preserves protocol fields and grading labels for username %s',
+      async (username) => {
+        const password = 'opaque-password/123';
+        const pair = `${username}:${password}`;
+        const basic = Buffer.from(pair).toString('base64');
+        const credentials = [password, pair, basic, encodeURIComponent(password)];
+        const auth =
+          source === 'header'
+            ? { headers: { Authorization: `Basic ${basic}` } }
+            : {
+                apiBaseUrl: `https://${username}:${encodeURIComponent(password)}@gateway.example/v1`,
+              };
+        const actualCache =
+          await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+        vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+        const cache = actualCache.getCache();
+        const write = vi.spyOn(cache, 'set');
+        const answers = [
+          {
+            name: 'grade',
+            type: 'score',
+            score: 0.75,
+            confidence: 0.9,
+            probabilities: [
+              { value: 0, label: username, probability: 0.25 },
+              { value: 1, label: 'Other', probability: 0.75 },
+            ],
+          },
+        ];
+        const echo = `Account ${username}; credentials ${credentials.join('; ')}`;
+        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              ...response(answers),
+              diagnostics: { [username]: 'Public identifier', [password]: echo },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+        const instance = provider({
+          ...auth,
+          apiKey: undefined,
+          apiKeyRequired: false,
+          levels: [username, 'Other'],
+        });
+        await actualCache.withCacheEnabled(true, async () => {
+          const fresh = await instance.callApi('', rubricContext('Is correct', 'Answer'));
+          const cached = await instance.callApi('', rubricContext('Is correct', 'Answer'));
+          try {
+            expect(fresh.error).toBeUndefined();
+            expect(fresh.output).toMatchObject({ pass: true, score: 0.75 });
+            expect(cached.output).toEqual(fresh.output);
+            expect(cached.cached).toBe(true);
+            expect(fresh.raw).toMatchObject({ answers, usage });
+            expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+            expect(write).toHaveBeenCalledOnce();
+            const stored = JSON.parse(write.mock.calls[0]![1] as string);
+            expect(stored.data.diagnostics).toEqual({
+              [username]: 'Public identifier',
+              '[REDACTED]': `Account ${username}; credentials [REDACTED]; [REDACTED]; [REDACTED]; [REDACTED]`,
+            });
+            for (const value of [fresh, cached, write.mock.calls]) {
+              for (const credential of credentials) {
+                expect(JSON.stringify(value)).not.toContain(credential);
+              }
+            }
+          } finally {
+            for (const [key] of write.mock.calls) {
+              await cache.del(key);
+            }
+          }
+        });
+        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: { message: echo } }), {
+            status: 401,
+            statusText: 'Unauthorized',
+          }),
+        );
+        await actualCache.withCacheEnabled(false, async () => {
+          const failure = await instance.callApi('failure');
+          expect(failure.error).toContain(`Account ${username}`);
+          for (const credential of credentials) {
+            expect(JSON.stringify(failure)).not.toContain(credential);
+          }
+        });
+      },
+    );
+
+    it('protects username-only authentication as a credential', async () => {
+      const username = 'opaque-account-credential';
+      const auth =
+        source === 'header'
+          ? {
+              headers: { Authorization: `Basic ${Buffer.from(`${username}:`).toString('base64')}` },
+            }
+          : { apiBaseUrl: `https://${username}@gateway.example/v1` };
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: { message: `Invalid credential ${username}` } },
+        cached: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      });
+      const result = await provider({ ...auth, apiKey: undefined, apiKeyRequired: false }).callApi(
+        'text',
+      );
+      expect(result.error).toContain('Invalid credential [REDACTED]');
+      expect(result.error).not.toContain(username);
+      const options = vi.mocked(fetchWithCache).mock.calls[0]![4];
+      if (typeof options !== 'object' || !options?.sanitizeResponse) {
+        throw new Error('Missing response sanitizer');
+      }
+      expect(
+        options.sanitizeResponse({
+          data: { [username]: username },
+          statusText: 'OK',
+          headers: {},
+        }).data,
+      ).toEqual({ '[REDACTED]': '[REDACTED]' });
+    });
+  });
 
   describe.each(['Basic', 'Token', 'Custom+Auth'])('%s authorization diagnostics', (scheme) => {
     it.each(['api-error', 'rate-limit', 'transport-error', 'success'])(
