@@ -1,3 +1,8 @@
+type FetchResponseMetadata = {
+  statusText: string;
+  headers: Record<string, string>;
+};
+
 /**
  * Options for cache behavior in fetchWithCache.
  * Supports per-repeat caching when evaluations use repeat > 1.
@@ -9,4 +14,9 @@ export type CacheOptions = {
   repeatIndex?: number;
   /** Precomputed, credential-free cache identity for callers with tenant-scoped keys. */
   cacheKey?: string;
+  /**
+   * Source-only, idempotent sanitizer applied before response metadata is stored or returned.
+   * Caching requires an explicit cacheKey identifying the request and sanitizer policy.
+   */
+  sanitizeResponseMetadata?: (metadata: FetchResponseMetadata) => FetchResponseMetadata;
 };

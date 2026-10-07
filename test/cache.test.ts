@@ -28,6 +28,8 @@ import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
+import type { CacheOptions } from '../src/types/cache';
+
 vi.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
 }));
@@ -357,6 +359,243 @@ describe('fetchWithCache', () => {
 
   afterAll(() => {
     enableCache(); // Reset to default state
+  });
+
+  describe('response metadata sanitization', () => {
+    const secret = 'sensitive-response-credential';
+    const rawMetadata = {
+      statusText: `OK ${secret}`,
+      headers: {
+        'x-gateway-auth': secret,
+        'x-request-id': `req-${secret}`,
+        'retry-after': '5',
+      },
+    };
+    const safeMetadata = {
+      statusText: 'OK [REDACTED]',
+      headers: { 'x-request-id': 'req-[REDACTED]', 'retry-after': '5' },
+    };
+    const sanitizeResponseMetadata: NonNullable<CacheOptions['sanitizeResponseMetadata']> = ({
+      statusText,
+      headers,
+    }) => ({
+      statusText: statusText.replaceAll(secret, '[REDACTED]'),
+      headers: Object.fromEntries(
+        Object.entries(headers)
+          .filter(([name]) => name === 'x-request-id' || name === 'retry-after')
+          .map(([name, value]) => [name, value.replaceAll(secret, '[REDACTED]')]),
+      ),
+    });
+    const cacheOptions = { cacheKey: 'metadata-policy:request', sanitizeResponseMetadata };
+    let debug: MockInstance;
+
+    beforeEach(() => {
+      debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      debug.mockClear();
+      vi.mocked(getCache().set).mockClear();
+    });
+
+    afterEach(() => {
+      debug.mockRestore();
+    });
+
+    it('sanitizes before storage and logging while preserving coalescing and cache hits', async () => {
+      const upstream = new Response(JSON.stringify(response), rawMetadata);
+      mockFetchWithRetries.mockResolvedValueOnce(upstream);
+
+      const [first, coalesced] = await Promise.all([
+        fetchWithCache(url, {}, 1000, 'json', cacheOptions),
+        fetchWithCache(url, {}, 1000, 'json', cacheOptions),
+      ]);
+      const cached = await fetchWithCache(url, {}, 1000, 'json', cacheOptions);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect([first.cached, coalesced.cached, cached.cached]).toEqual([false, false, true]);
+      expect(first.coalesced).toBeUndefined();
+      expect(coalesced.coalesced).toBe(true);
+      for (const result of [first, coalesced, cached]) {
+        expect(result).toMatchObject({
+          ...safeMetadata,
+          data: response,
+          status: 200,
+          latencyMs: first.latencyMs,
+        });
+      }
+      expect(first.latencyMs).toEqual(expect.any(Number));
+      const stored = vi.mocked(getCache().set).mock.calls[0][1] as string;
+      expect(JSON.parse(stored)).toMatchObject({ ...safeMetadata, data: response, status: 200 });
+      expect(stored).not.toContain(secret);
+      expect(debug).toHaveBeenCalledWith(expect.stringContaining('Storing'));
+      expect(debug).toHaveBeenCalledWith(expect.stringContaining('Returning cached response'));
+      expect(JSON.stringify(debug.mock.calls)).not.toContain(secret);
+      expect(upstream.headers.get('x-gateway-auth')).toBe(secret);
+      expect(upstream.statusText).toBe(rawMetadata.statusText);
+    });
+
+    it('requires an explicit key when metadata sanitization and caching are enabled', async () => {
+      await expect(
+        fetchWithCache(url, {}, 1000, 'json', { sanitizeResponseMetadata }),
+      ).rejects.toThrow('explicit cache key identifying the sanitizer policy');
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
+      expect(getCache().set).not.toHaveBeenCalled();
+    });
+
+    it.each(['bust', 'disabled'] as const)(
+      'sanitizes %s responses without requiring a key',
+      async (mode) => {
+        if (mode === 'disabled') {
+          disableCache();
+        }
+        mockFetchWithRetries.mockResolvedValue(new Response(JSON.stringify(response), rawMetadata));
+
+        const result = await fetchWithCache(url, {}, 1000, 'json', {
+          bust: mode === 'bust',
+          sanitizeResponseMetadata,
+        });
+
+        expect(result).toMatchObject({
+          ...safeMetadata,
+          data: response,
+          status: 200,
+          cached: false,
+        });
+        expect(getCache().set).not.toHaveBeenCalled();
+      },
+    );
+
+    it('sanitizes metadata supplied through updateCache before storing it', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(new Response(JSON.stringify(response)));
+      const first = await fetchWithCache(url, {}, 1000, 'json', cacheOptions);
+
+      await first.updateCache?.(
+        { data: 'updated' },
+        201,
+        rawMetadata.statusText,
+        rawMetadata.headers,
+      );
+      const cached = await fetchWithCache(url, {}, 1000, 'json', cacheOptions);
+
+      expect(cached).toMatchObject({
+        ...safeMetadata,
+        cached: true,
+        status: 201,
+        data: { data: 'updated' },
+        latencyMs: first.latencyMs,
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(JSON.stringify(vi.mocked(getCache().set).mock.calls)).not.toContain(secret);
+      expect(rawMetadata.headers['x-gateway-auth']).toBe(secret);
+    });
+
+    it('sanitizes existing cached metadata before returning or logging it', async () => {
+      await getCache().set(
+        'fetch:v3:metadata-policy:request',
+        JSON.stringify({ ...rawMetadata, data: response, status: 200, latencyMs: 12 }),
+      );
+
+      const result = await fetchWithCache(url, {}, 1000, 'json', cacheOptions);
+
+      expect(result).toMatchObject({
+        ...safeMetadata,
+        data: response,
+        cached: true,
+        latencyMs: 12,
+      });
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
+      expect(JSON.stringify(debug.mock.calls)).not.toContain(secret);
+    });
+
+    it('fails without storing raw metadata if the sanitizer throws', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        new Response(JSON.stringify(response), rawMetadata),
+      );
+
+      await expect(
+        fetchWithCache(url, {}, 1000, 'json', {
+          cacheKey: cacheOptions.cacheKey,
+          sanitizeResponseMetadata: () => {
+            throw new Error('Cannot sanitize response');
+          },
+        }),
+      ).rejects.toThrow('Cannot sanitize response');
+
+      expect(getCache().set).not.toHaveBeenCalled();
+      expect(debug).not.toHaveBeenCalled();
+    });
+
+    it('preserves ordinary response metadata and logging when no sanitizer is provided', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        new Response(JSON.stringify(response), rawMetadata),
+      );
+      const result = await fetchWithCache(url, {}, 1000);
+
+      expect(result).toMatchObject(rawMetadata);
+      expect(JSON.stringify(vi.mocked(getCache().set).mock.calls)).toContain(secret);
+      expect(debug).toHaveBeenCalledWith(expect.stringContaining('Storing'));
+    });
+
+    it.each(['object', 'Headers', 'tuples', 'Request'] as const)(
+      'suppresses response logs for silent %s headers on both misses and hits',
+      async (kind) => {
+        const headerName = 'X-Promptfoo-Silent';
+        const headers: HeadersInit =
+          kind === 'Headers'
+            ? new Headers({ [headerName]: 'true' })
+            : kind === 'tuples'
+              ? [[headerName, 'true']]
+              : { [headerName]: 'true' };
+        Object.freeze(headers);
+        const request = kind === 'Request' ? new Request(url, { headers }) : url;
+        const options = kind === 'Request' ? {} : { headers };
+        mockFetchWithRetries.mockResolvedValueOnce(new Response(JSON.stringify({ data: secret })));
+
+        const first = await fetchWithCache(request, options, 1000);
+        const cached = await fetchWithCache(request, options, 1000);
+
+        expect(first.cached).toBe(false);
+        expect(cached.cached).toBe(true);
+        expect(cached.data).toEqual({ data: secret });
+        expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+        expect(debug).not.toHaveBeenCalled();
+        expect(new Headers(headers).get('x-promptfoo-silent')).toBe('true');
+      },
+    );
+
+    it('uses explicit replacement headers to enable logging for a silent Request', async () => {
+      const request = new Request(url, { headers: { 'x-promptfoo-silent': 'true' } });
+      mockFetchWithRetries.mockResolvedValueOnce(new Response(JSON.stringify(response)));
+
+      await fetchWithCache(request, { headers: {} }, 1000);
+
+      expect(debug).toHaveBeenCalledWith(expect.stringContaining('Storing'));
+      expect(request.headers.get('x-promptfoo-silent')).toBe('true');
+    });
+
+    it('does not log silent error envelopes that are excluded from caching', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(new Response(JSON.stringify({ error: secret })));
+
+      const result = await fetchWithCache(url, { headers: { 'x-promptfoo-silent': 'true' } }, 1000);
+
+      expect(result.data).toEqual({ error: secret });
+      expect(getCache().set).not.toHaveBeenCalled();
+      expect(debug).not.toHaveBeenCalled();
+    });
+
+    it('preserves silent body-read retries without logging transport error messages', async () => {
+      const failed = new Response();
+      vi.spyOn(failed, 'text').mockRejectedValue(
+        Object.assign(new Error(secret), { code: 'ECONNRESET' }),
+      );
+      mockFetchWithRetries
+        .mockResolvedValueOnce(failed)
+        .mockResolvedValueOnce(new Response(JSON.stringify(response)));
+
+      const result = await fetchWithCache(url, { headers: { 'x-promptfoo-silent': 'true' } }, 1000);
+
+      expect(result.data).toEqual(response);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(debug).not.toHaveBeenCalled();
+    });
   });
 
   describe('with cache enabled', () => {
