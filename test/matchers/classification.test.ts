@@ -175,7 +175,7 @@ describe('matchesClassification', () => {
     { verdict: 'refusal', threshold: 0.5, refusal: true, pass: false },
   ])(
     'accounts for real cached Decisions classifications with a $verdict verdict',
-    async ({ threshold, refusal, pass }) => {
+    async ({ verdict, threshold, refusal, pass }) => {
       vi.mocked(fetchWithRetries).mockResolvedValue(
         new Response(
           JSON.stringify({
@@ -208,10 +208,9 @@ describe('matchesClassification', () => {
       });
 
       await withCacheEnabled(true, async () => {
-        const fresh = await matchesClassification('safe', 'Sample output', threshold, { provider });
-        const cached = await matchesClassification('safe', 'Sample output', threshold, {
-          provider,
-        });
+        const output = `Classification accounting fixture: ${verdict}`;
+        const fresh = await matchesClassification('safe', output, threshold, { provider });
+        const cached = await matchesClassification('safe', output, threshold, { provider });
         expect(fetchWithRetries).toHaveBeenCalledTimes(1);
 
         const assertionsResult = new AssertionsResult();

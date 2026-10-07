@@ -494,6 +494,197 @@ describe('OpenAiDecisionsProvider', () => {
     expect(keys[2]).not.toBe(keys[0]);
   });
 
+  describe('shared in-process cache namespaces', () => {
+    it.each(['rubric-string', 'rubric-inline', 'classifier-inline'] as const)(
+      'reuses responses through normal %s grader resolution',
+      async (kind) => {
+        const actualCache =
+          await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+        vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+        const cache = actualCache.getCache();
+        const write = vi.spyOn(cache, 'set');
+        const restoreKey = mockProcessEnv({ OPENAI_API_KEY: 'grader-cache-fixture-key' });
+        const id = 'openai:decisions:gpt-6-luna';
+        const grading =
+          kind === 'rubric-string'
+            ? { provider: id }
+            : {
+                provider: {
+                  id,
+                  config: {
+                    apiKey: 'grader-cache-fixture-key',
+                    ...(kind === 'classifier-inline'
+                      ? { instructions: 'Choose.', labels: ['yes', 'no'] }
+                      : {}),
+                  },
+                },
+              };
+        const answers =
+          kind === 'classifier-inline'
+            ? [
+                {
+                  name: 'classification',
+                  type: 'choice',
+                  choice: 'yes',
+                  confidence: 0.7,
+                  probabilities: [
+                    { value: 'yes', probability: 0.8 },
+                    { value: 'no', probability: 0.2 },
+                  ],
+                },
+              ]
+            : [{ name: 'grade', type: 'predicate', probability: 0.8 }];
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () =>
+            new Response(JSON.stringify(response(answers)), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+        );
+        const grade = () =>
+          kind === 'classifier-inline'
+            ? matchesClassification('yes', `${kind} fixture`, 0.5, grading)
+            : matchesLlmRubric('Is correct', `${kind} fixture`, grading);
+        try {
+          await actualCache.withCacheEnabled(true, async () => {
+            const [first, coalesced] = await Promise.all([grade(), grade()]);
+            const cached = await grade();
+            for (const result of [first, coalesced, cached]) {
+              expect(result).toMatchObject({ pass: true, score: 0.8 });
+            }
+            expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+            expect(write).toHaveBeenCalledTimes(1);
+            expect(cached.tokensUsed).toMatchObject({ total: 165, cached: 165 });
+          });
+        } finally {
+          restoreKey();
+          for (const [key] of write.mock.calls) {
+            await cache.del(key);
+          }
+        }
+      },
+    );
+
+    it('shares equivalent headers while isolating credentials, tenants, and request bodies', async () => {
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const cache = actualCache.getCache();
+      const write = vi.spyOn(cache, 'set');
+      vi.mocked(fetchWithRetries).mockImplementation(
+        async () =>
+          new Response(JSON.stringify(response()), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
+      const config = {
+        apiKey: 'namespace-auth-key',
+        headers: { 'X-Tenant': 'tenant-a', 'X-Mode': 'default' },
+      };
+      try {
+        await actualCache.withCacheEnabled(true, async () => {
+          const first = await provider(config).callApi('namespace fixture');
+          const equivalent = await provider({
+            ...config,
+            headers: { 'x-mode': 'default', 'x-tenant': 'tenant-a' },
+          }).callApi('namespace fixture');
+          const credential = await provider({ ...config, apiKey: 'namespace-other-key' }).callApi(
+            'namespace fixture',
+          );
+          const tenant = await provider({
+            ...config,
+            headers: { ...config.headers, 'X-Tenant': 'tenant-b' },
+          }).callApi('namespace fixture');
+          const body = await provider(config).callApi('different namespace fixture');
+          expect(equivalent.cached).toBe(true);
+          for (const result of [first, credential, tenant, body]) {
+            expect(result.error).toBeUndefined();
+            expect(result.cached).toBe(false);
+          }
+          expect(fetchWithRetries).toHaveBeenCalledTimes(4);
+          expect(write).toHaveBeenCalledTimes(4);
+          for (const [key] of write.mock.calls) {
+            expect(key).not.toMatch(
+              /namespace-auth-key|namespace-other-key|tenant-a|tenant-b|Bearer/,
+            );
+          }
+        });
+      } finally {
+        for (const [key] of write.mock.calls) {
+          await cache.del(key);
+        }
+      }
+    });
+
+    it('retires old credential namespaces when the bounded cache fills', async () => {
+      const instance = provider({ apiKey: 'namespace-retirement-key' });
+      await instance.callApi('bounded fixture');
+      for (let i = 0; i < 256; i++) {
+        await provider({ apiKey: `namespace-retirement-${i}` }).callApi('bounded fixture');
+      }
+      await instance.callApi('bounded fixture');
+      const first = vi.mocked(fetchWithCache).mock.calls[0]![4] as { cacheKey: string };
+      const last = vi.mocked(fetchWithCache).mock.lastCall![4] as { cacheKey: string };
+      expect(last.cacheKey).not.toBe(first.cacheKey);
+    });
+
+    it('retires credential namespaces after thirty minutes without use', async () => {
+      const actualLru = await vi.importActual<typeof import('lru-cache')>('lru-cache');
+      let now = 100;
+      vi.doMock('lru-cache', () => ({
+        ...actualLru,
+        LRUCache: class extends actualLru.LRUCache<string, string> {
+          constructor(
+            options: ConstructorParameters<typeof actualLru.LRUCache<string, string>>[0],
+          ) {
+            super({ ...options, perf: { now: () => now } });
+          }
+        },
+      }));
+      vi.resetModules();
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const { OpenAiDecisionsProvider: ClockedProvider } = await import(
+          '../../../src/providers/openai/decisions'
+        );
+        const instance = new ClockedProvider('gpt-6-luna', {
+          config: { apiKey: 'namespace-expiry-key', questions: [predicateQuestion] },
+        });
+        await instance.callApi('expiry fixture');
+        now += 30 * 60 * 1000 + 2;
+        await vi.advanceTimersByTimeAsync(30 * 60 * 1000 + 2);
+        await instance.callApi('expiry fixture');
+        const [first, expired] = vi
+          .mocked(fetchWithCache)
+          .mock.calls.map((call) => (call[4] as { cacheKey: string }).cacheKey);
+        expect(expired).not.toBe(first);
+      } finally {
+        vi.doUnmock('lru-cache');
+        vi.resetModules();
+        vi.useRealTimers();
+      }
+    });
+
+    it('creates a fresh namespace when the provider module is reinitialized', async () => {
+      const config = { apiKey: 'namespace-module-key', questions: [predicateQuestion] };
+      await provider(config).callApi('module fixture');
+      vi.resetModules();
+      try {
+        const { OpenAiDecisionsProvider: FreshProvider } = await import(
+          '../../../src/providers/openai/decisions'
+        );
+        await new FreshProvider('gpt-6-luna', { config }).callApi('module fixture');
+        const [original, fresh] = vi
+          .mocked(fetchWithCache)
+          .mock.calls.map((call) => (call[4] as { cacheKey: string }).cacheKey);
+        expect(fresh).not.toBe(original);
+      } finally {
+        vi.resetModules();
+      }
+    });
+  });
+
   it('marks cached usage without billing another request', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: response(),
@@ -2255,7 +2446,7 @@ describe('OpenAiDecisionsProvider', () => {
                 ),
           createProviderRateLimitOptions(),
         );
-        await vi.runAllTimersAsync();
+        await vi.advanceTimersByTimeAsync(1000);
         const result = await pending;
         expect(result.error).toContain('429');
         expect(result).toMatchObject({
@@ -2296,7 +2487,7 @@ describe('OpenAiDecisionsProvider', () => {
       );
       await vi.advanceTimersByTimeAsync(99);
       expect(fetchWithCache).toHaveBeenCalledTimes(1);
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(1);
       expect((await second).error).toBeUndefined();
       expect(fetchWithCache).toHaveBeenCalledTimes(2);
     } finally {

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { LRUCache } from 'lru-cache';
 import { z } from 'zod';
 import { fetchWithCache } from '../../cache';
 import { extractProviderResponseAttributes, withGenAISpan } from '../../tracing/genaiTracer';
@@ -31,6 +32,15 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
+
+// Equivalent grader instances share random namespaces within this process. Credentials stay
+// only in bounded memory, expire after inactivity, and never enter persisted cache keys.
+const cacheScopes = new LRUCache<string, string>({
+  max: 256,
+  ttl: 30 * 60 * 1000,
+  ttlAutopurge: true,
+  updateAgeOnGet: true,
+});
 
 const choiceValue = z.union([z.string(), z.boolean()]);
 const probability = z.number().min(0).max(1);
@@ -325,9 +335,6 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     // fetchWithCache owns transport retries; do not replay an exhausted request.
     return true;
   }
-
-  // Transport credentials remain in memory; only random namespaces reach the disk cache.
-  private readonly cacheScopes = new Map<string, string>();
 
   constructor(
     modelName: string,
@@ -624,10 +631,10 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     try {
       const url = appendOpenAiApiPath(this.getApiUrl(config), 'decisions');
       const transport = JSON.stringify([url, Array.from(new Headers(headers).entries()).sort()]);
-      let scope = this.cacheScopes.get(transport);
+      let scope = cacheScopes.get(transport);
       if (!scope) {
         scope = randomUUID();
-        this.cacheScopes.set(transport, scope);
+        cacheScopes.set(transport, scope);
       }
       // Zod reconstructs each request object in schema order, canonicalizing its keys.
       const bust = this.shouldBustCache(context) || hasSensitiveValue(body);
