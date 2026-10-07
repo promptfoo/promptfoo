@@ -692,6 +692,8 @@ describe('OpenAiDecisionsProvider', () => {
     ['X-Tenant', 'token'],
     ['X-Display-Name', 'score'],
     ['Accept-Language', 'en'],
+    ['X-Subscription-Id', 'us'],
+    ['X-Subscription-Tier', 'score'],
   ])('preserves noncredential %s metadata in responses and the cache', async (name, value) => {
     const actualCache =
       await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
@@ -1347,6 +1349,16 @@ describe('OpenAiDecisionsProvider', () => {
 
   it.each([
     {
+      name: 'Azure APIM subscription key',
+      config: { headers: { 'Ocp-Apim-Subscription-Key': '0123456789abcdef0123456789abcdef' } },
+      credentials: ['0123456789abcdef0123456789abcdef'],
+    },
+    {
+      name: 'custom subscription key',
+      config: { headers: { 'X-Subscription-Key': 'short-subscription-value' } },
+      credentials: ['short-subscription-value'],
+    },
+    {
       name: 'credential-named custom header',
       config: { headers: { 'X-Gateway-Auth': 'gateway-secret-value' } },
       credentials: ['gateway-secret-value'],
@@ -1506,6 +1518,16 @@ describe('OpenAiDecisionsProvider', () => {
 
   it.each([
     {
+      name: 'subscription keys',
+      config: {
+        headers: {
+          'Ocp-Apim-Subscription-Key': '0123456789abcdef0123456789abcdef',
+          'X-Subscription-Key': 'short-subscription-value',
+        },
+      },
+      credentials: ['0123456789abcdef0123456789abcdef', 'short-subscription-value'],
+    },
+    {
       name: 'URL userinfo and query',
       config: { apiBaseUrl: 'https://u:p@gateway.example/v1?api_key=shorturlsecret' },
       credentials: ['dTpw', 'shorturlsecret'],
@@ -1532,7 +1554,7 @@ describe('OpenAiDecisionsProvider', () => {
       const write = vi.spyOn(cache, 'set');
       const debug = vi.spyOn(logger, 'debug');
       vi.mocked(fetchWithRetries).mockResolvedValue(
-        new Response(JSON.stringify(response()), {
+        new Response(JSON.stringify({ ...response(), echo: credentials }), {
           status: 200,
           statusText: `OK ${credentials.join(' ')}`,
           headers: {

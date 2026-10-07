@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  isCredentialHeader,
   isSecretEnvVarName,
   looksLikeSecret,
   preserveTracingCredentialReferences,
@@ -39,6 +40,29 @@ describe('sanitizeRuntimeOptions', () => {
         providerFilter: 'selected-target',
       }),
     ).toEqual({ providerFilter: 'selected-target' });
+  });
+});
+
+describe('isCredentialHeader', () => {
+  it.each([
+    'Ocp-Apim-Subscription-Key',
+    'ocp-apim-subscription-key',
+    'X-Subscription-Key',
+    'subscription_key',
+    'subscriptionKey',
+    'OcpApimSubscriptionKey',
+  ])('recognizes subscription credentials under %s regardless of value shape', (name) => {
+    expect(isCredentialHeader(name, 'short')).toBe(true);
+  });
+
+  it.each([
+    'X-Subscription-Id',
+    'X-Subscription-Tier',
+    'X-Subscription-Region',
+    'X-Correlation-Id',
+  ])('preserves ordinary metadata under %s', (name) => {
+    expect(isCredentialHeader(name, 'us')).toBe(false);
+    expect(isCredentialHeader(name, '0123456789abcdef0123456789abcdef')).toBe(false);
   });
 });
 

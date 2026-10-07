@@ -457,7 +457,7 @@ export function isCredentialHeader(name: string, value: string): boolean {
   const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
   return (
     isSecretField(name) ||
-    /(?:^|[-_\s])(?:api[-_\s]?key|access[-_\s]?key|auth(?:orization)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
+    /(?:^|[-_\s])(?:(?:api|access|subscription)[-_\s]?key|auth(?:orization)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
       normalizedName,
     ) ||
     normalizedName.replace(/[-_]/g, '') === 'xhoneycombteam' ||
