@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import { applyRagInverse } from '../../../src/assertions/ragDefaults';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesClassification } from '../../../src/matchers/classification';
@@ -18,6 +19,7 @@ import {
 } from '../../../src/matchers/rag';
 import { OpenAiDecisionsProvider } from '../../../src/providers/openai/decisions';
 import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -368,6 +370,22 @@ describe('OpenAiDecisionsProvider', () => {
     expect(options?.headers).not.toHaveProperty('X-OpenAI-Originator');
   });
 
+  it.each(['x-promptfoo-silent', 'X-Promptfoo-Silent', 'X-PROMPTFOO-SILENT'])(
+    'forces silent transport diagnostics despite a %s override',
+    async (header) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: { message: 'Expected true instead of false' } },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+      const result = await provider({ headers: { [header]: 'false' } }).callApi('text');
+      const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0]![1]?.headers);
+      expect(headers.get('x-promptfoo-silent')).toBe('true');
+      expect(result.error).toContain('Expected true instead of false');
+    },
+  );
+
   it('applies prompt-scoped transport overrides with case-insensitive headers', async () => {
     await provider().callApi('text', {
       vars: {},
@@ -695,6 +713,44 @@ describe('OpenAiDecisionsProvider', () => {
     expect(result.error).not.toContain('fixture-key');
   });
 
+  describe.each(['Basic', 'Token', 'Custom+Auth'])('%s authorization diagnostics', (scheme) => {
+    it.each(['api-error', 'rate-limit', 'transport-error', 'success'])(
+      'redacts complete and bare short credentials from %s',
+      async (kind) => {
+        const credential = 'dTpw';
+        const authorization = `${scheme} ${credential}`;
+        const message = `Failure ${authorization}; credential ${credential}`;
+        const headers = { 'x-request-id': `request ${credential}` };
+        if (kind === 'rate-limit') {
+          vi.mocked(fetchWithCache).mockRejectedValue(
+            new HttpRateLimitError({ status: 429, statusText: message, headers }),
+          );
+        } else if (kind === 'transport-error') {
+          vi.mocked(fetchWithCache).mockRejectedValue(new Error(message));
+        } else {
+          vi.mocked(fetchWithCache).mockResolvedValue({
+            data: kind === 'success' ? response() : { error: { message } },
+            cached: false,
+            status: kind === 'success' ? 200 : 401,
+            statusText: message,
+            headers,
+          });
+        }
+        const result = await provider({ headers: { Authorization: authorization } }).callApi(
+          'text',
+        );
+        expect(JSON.stringify(result)).not.toContain(credential);
+        expect(JSON.stringify(result)).toContain('[REDACTED]');
+        if (kind !== 'transport-error') {
+          expect(result.metadata?.http?.headers?.['x-request-id']).toBe('request [REDACTED]');
+        }
+        if (kind === 'success') {
+          expect(result.metadata?.requestId).toBe('request [REDACTED]');
+        }
+      },
+    );
+  });
+
   it.each([true, false])(
     'only marks a complete refusal as global refusal (all refused: %s)',
     async (allRefused) => {
@@ -941,6 +997,49 @@ describe('OpenAiDecisionsProvider', () => {
       },
     );
 
+    describe.each(['predicate', 'score'] as const)('%s assertion-threshold reasons', (type) => {
+      it.each([false, true])(
+        'explains the assertion cutoff before negation (inverse: %s)',
+        async (inverse) => {
+          const levels = ['Low', 'Medium', 'High'];
+          mockAnswers([
+            type === 'predicate'
+              ? { name: 'grade', type, probability: 0.6 }
+              : {
+                  name: 'grade',
+                  type,
+                  score: 1.2,
+                  confidence: 0.6,
+                  probabilities: levels.map((label, value) => ({
+                    label,
+                    value,
+                    probability: [0.1, 0.6, 0.3][value],
+                  })),
+                },
+          ]);
+          const result = await runAssertion({
+            assertion: {
+              type: inverse ? 'not-llm-rubric' : 'llm-rubric',
+              value: 'Is correct',
+              threshold: 0.8,
+            },
+            prompt: '2+2?',
+            providerResponse: { output: '4' },
+            test: {
+              options: {
+                provider: provider({ threshold: 0.5, ...(type === 'score' ? { levels } : {}) }),
+              },
+            },
+          });
+          expect(result).toMatchObject({
+            pass: inverse,
+            score: inverse ? 0.4 : 0.6,
+            reason: 'Score 0.6 below threshold 0.8',
+          });
+        },
+      );
+    });
+
     const precisionCases = [
       { score: 0.4999996, threshold: 0.5, pass: false },
       { score: 0.5000004, threshold: 0.5000003, pass: true },
@@ -1000,41 +1099,49 @@ describe('OpenAiDecisionsProvider', () => {
       },
     );
 
-    it('normalizes expected score over named levels', async () => {
-      const levels = [
-        'Poor',
-        { label: 'Partial', description: 'Some requirements met' },
-        'Complete',
-      ];
-      mockAnswers([
-        {
+    it.each([
+      { threshold: 0.7, pass: true },
+      { threshold: 0.8, pass: false },
+    ])(
+      'normalizes expected score over named levels at threshold $threshold',
+      async ({ threshold, pass }) => {
+        const levels = [
+          'Poor',
+          { label: 'Partial', description: 'Some requirements met' },
+          'Complete',
+        ];
+        mockAnswers([
+          {
+            name: 'grade',
+            type: 'score',
+            score: 1.43,
+            confidence: 0.5,
+            probabilities: [
+              { value: 0, label: 'Poor', probability: 0 },
+              { value: 1, label: 'Partial', probability: 0.57 },
+              { value: 2, label: 'Complete', probability: 0.43 },
+            ],
+          },
+        ]);
+        const result = await provider({ levels, threshold }).callApi(
+          '',
+          rubricContext('Meets requirements', 'Answer'),
+        );
+        expect(requestBody().questions[0]).toEqual({
           name: 'grade',
           type: 'score',
-          score: 1.43,
-          confidence: 0.5,
-          probabilities: [
-            { value: 0, label: 'Poor', probability: 0 },
-            { value: 1, label: 'Partial', probability: 0.57 },
-            { value: 2, label: 'Complete', probability: 0.43 },
-          ],
-        },
-      ]);
-      const result = await provider({ levels, threshold: 0.7 }).callApi(
-        '',
-        rubricContext('Meets requirements', 'Answer'),
-      );
-      expect(requestBody().questions[0]).toEqual({
-        name: 'grade',
-        type: 'score',
-        instructions: 'Meets requirements',
-        levels: [{ label: 'Poor' }, levels[1], { label: 'Complete' }],
-      });
-      expect(result.output).toEqual({
-        pass: true,
-        score: 0.715,
-        reason: 'Decisions score 1.43 on levels 0–2 (0.715 normalized) >= threshold 0.7',
-      });
-    });
+          instructions: 'Meets requirements',
+          levels: [{ label: 'Poor' }, levels[1], { label: 'Complete' }],
+        });
+        expect(result.output).toEqual({
+          pass,
+          score: 0.715,
+          ...(!pass && {
+            reason: 'Decisions score 1.43 on levels 0–2 (0.715 normalized) < threshold 0.8',
+          }),
+        });
+      },
+    );
 
     it.each(['', '0.5', -1, 2, Number.NaN])('rejects invalid threshold %j', async (threshold) => {
       const result = await provider({ threshold }).callApi(
@@ -1439,6 +1546,88 @@ describe('OpenAiDecisionsProvider', () => {
     await expect(
       provider().callApi('text', undefined, { abortSignal: controller.signal }),
     ).rejects.toBe(controller.signal.reason);
+  });
+
+  it.each(['direct', 'rubric', 'classifier'] as const)(
+    'does not replay transport-exhausted %s calls through the scheduler',
+    async (mode) => {
+      vi.useFakeTimers();
+      const restoreSchedulerEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 0 });
+      try {
+        vi.mocked(fetchWithCache).mockRejectedValue(
+          new HttpRateLimitError({
+            status: 429,
+            statusText: 'Too Many Requests',
+            code: 'rate_limit_exceeded',
+            retryAfterMs: 100,
+          }),
+        );
+        const instance = provider({
+          maxRetries: 2,
+          instructions: 'Select a label',
+          labels: ['a', 'b'],
+        });
+        const pending = registry.execute(
+          instance,
+          () =>
+            mode === 'classifier'
+              ? instance.callClassificationApi('text')
+              : instance.callApi(
+                  'text',
+                  mode === 'rubric' ? rubricContext('Is correct', 'text') : undefined,
+                ),
+          createProviderRateLimitOptions(),
+        );
+        await vi.runAllTimersAsync();
+        const result = await pending;
+        expect(result.error).toContain('429');
+        expect(result).toMatchObject({
+          metadata: {
+            rateLimitKind: 'rate_limit',
+            http: { headers: { 'retry-after-ms': '100' } },
+          },
+        });
+        expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      } finally {
+        registry.dispose();
+        restoreSchedulerEnv();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('still paces subsequent calls using transport-exhausted rate-limit headers', async () => {
+    vi.useFakeTimers();
+    const restoreSchedulerEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 0 });
+    try {
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new HttpRateLimitError({ status: 429, statusText: 'Too Many Requests', retryAfterMs: 100 }),
+      );
+      const instance = provider({ maxRetries: 2 });
+      const first = await registry.execute(
+        instance,
+        () => instance.callApi('first'),
+        createProviderRateLimitOptions(),
+      );
+      expect(first.error).toContain('429');
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      const second = registry.execute(
+        instance,
+        () => instance.callApi('second'),
+        createProviderRateLimitOptions(),
+      );
+      await vi.advanceTimersByTimeAsync(99);
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      await vi.runAllTimersAsync();
+      expect((await second).error).toBeUndefined();
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+      restoreSchedulerEnv();
+      vi.useRealTimers();
+    }
   });
 
   it.each([

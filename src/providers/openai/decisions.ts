@@ -221,6 +221,11 @@ function answersMatchQuestions(
 export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
   declare config: DecisionsOptions;
 
+  get handlesOwnRetries(): boolean {
+    // fetchWithCache owns transport retries; do not replay an exhausted request.
+    return true;
+  }
+
   // Transport credentials remain in memory; only random namespaces reach the disk cache.
   private readonly cacheScopes = new Map<string, string>();
 
@@ -379,12 +384,13 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     const top = question.type === 'score' ? question.levels.length - 1 : 1;
     const score = raw / top;
     const pass = score >= threshold.data;
-    const comparison = `${pass ? '>=' : '<'} threshold ${threshold.data}`;
+    const comparison = `< threshold ${threshold.data}`;
     const reason =
       answer.type === 'predicate'
         ? `Decisions predicate probability ${raw} ${comparison}`
         : `Decisions score ${raw} on levels 0–${top} (${score} normalized) ${comparison}`;
-    return { ...result, output: { pass, score, reason } };
+    // Let the matcher explain its final verdict when the provider threshold passes.
+    return { ...result, output: { pass, score, ...(!pass && { reason }) } };
   }
 
   private async ask(
@@ -442,22 +448,29 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const headers = {
-      ...(hasHeaderOverride(config.headers, 'Content-Type')
-        ? {}
-        : { 'Content-Type': 'application/json' }),
-      ...(apiKey && !hasHeaderOverride(config.headers, 'Authorization')
-        ? { Authorization: `Bearer ${apiKey}` }
-        : {}),
-      ...this.getOpenAiRequestHeaders(config.headers, config),
-    };
+    const headers = Object.fromEntries(
+      Object.entries({
+        ...(hasHeaderOverride(config.headers, 'Content-Type')
+          ? {}
+          : { 'Content-Type': 'application/json' }),
+        ...(apiKey && !hasHeaderOverride(config.headers, 'Authorization')
+          ? { Authorization: `Bearer ${apiKey}` }
+          : {}),
+        ...this.getOpenAiRequestHeaders(config.headers, config),
+      }).filter(([name]) => name.toLowerCase() !== 'x-promptfoo-silent'),
+    );
     // Some API errors echo the supplied credential. Keep it out of eval results as well as logs.
     const secrets = [
       apiKey,
       ...Object.entries(headers)
         .filter(([name]) => !isNonCredentialHeader(name))
-        .map(([, value]) => value.replace(/^Bearer\s+/i, '')),
+        .flatMap(([, value]) => [
+          value,
+          value.trim().replace(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\s+/, ''),
+        ]),
     ].filter((secret): secret is string => Boolean(secret));
+    // Gateways can echo credentials in response bodies before provider-level redaction runs.
+    headers['x-promptfoo-silent'] = 'true';
     const errorText = (value: unknown): string => {
       let message = String(sanitizeObject(String(value), { sanitizeUrls: true }));
       for (const secret of secrets) {
