@@ -1,7 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AssertionsResult } from '../../src/assertions/assertionsResult';
+import { withCacheEnabled } from '../../src/cache';
 import { matchesClassification } from '../../src/matchers/classification';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
+import { OpenAiDecisionsProvider } from '../../src/providers/openai/decisions';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+import { fetchWithRetries } from '../../src/util/fetch/index';
+import { accumulateGradingTokenUsage, createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { createMockProvider } from '../factories/provider';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -12,9 +17,18 @@ import type {
   ProviderResponse,
 } from '../../src/types/index';
 
+vi.mock('../../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/fetch/index')>()),
+  fetchWithRetries: vi.fn(),
+}));
+
 describe('matchesClassification', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.resetAllMocks();
   });
 
   class TestGrader implements ApiProvider {
@@ -118,36 +132,115 @@ describe('matchesClassification', () => {
     });
   });
 
-  it.each([
-    { response: { error: 'Request timed out' }, reason: 'Request timed out' },
-    { response: {}, reason: 'Unknown error fetching classification' },
-    { response: { classification: {} }, reason: 'No classification scores returned' },
-  ])('retains reported usage when grading fails: $reason', async ({ response, reason }) => {
-    const classificationResponse: ProviderClassificationResponse = {
-      ...response,
-      tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
-    };
-    const provider = Object.assign(createMockProvider(), {
-      callClassificationApi: vi.fn().mockResolvedValue(classificationResponse),
-    });
+  it.each(
+    [
+      { response: { error: 'Request timed out' }, reason: 'Request timed out' },
+      { response: {}, reason: 'Unknown error fetching classification' },
+      { response: { classification: {} }, reason: 'No classification scores returned' },
+    ].flatMap((testCase) => [false, true].map((cached) => ({ ...testCase, cached }))),
+  )(
+    'retains reported usage when grading fails: $reason (cached=$cached)',
+    async ({ response, reason, cached }) => {
+      const classificationResponse: ProviderClassificationResponse = {
+        ...response,
+        cached,
+        tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+      };
+      const provider = Object.assign(createMockProvider(), {
+        callClassificationApi: vi.fn().mockResolvedValue(classificationResponse),
+      });
 
-    await expect(
-      matchesClassification('classA', 'Sample output', 0.5, { provider }),
-    ).resolves.toEqual({
-      pass: false,
-      score: 0,
-      reason,
-      tokensUsed: {
-        total: 16,
-        prompt: 12,
-        completion: 4,
-        cached: 0,
-        numRequests: 1,
-        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-      },
-      metadata: { graderError: true },
-    });
-  });
+      await expect(
+        matchesClassification('classA', 'Sample output', 0.5, { provider }),
+      ).resolves.toEqual({
+        pass: false,
+        score: 0,
+        reason,
+        tokensUsed: {
+          total: 16,
+          prompt: 12,
+          completion: 4,
+          cached: 0,
+          numRequests: 1,
+          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        },
+        metadata: { graderError: true, ...(cached && { cachedResponse: true }) },
+      });
+    },
+  );
+
+  it.each([
+    { verdict: 'passing', threshold: 0.5, refusal: false, pass: true },
+    { verdict: 'failing', threshold: 0.9, refusal: false, pass: false },
+    { verdict: 'refusal', threshold: 0.5, refusal: true, pass: false },
+  ])(
+    'accounts for real cached Decisions classifications with a $verdict verdict',
+    async ({ threshold, refusal, pass }) => {
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            model: 'classification-fixture',
+            answers: [
+              refusal
+                ? { name: 'classification', type: 'refusal' }
+                : {
+                    name: 'classification',
+                    type: 'choice',
+                    choice: 'safe',
+                    confidence: 0.625,
+                    probabilities: [
+                      { value: 'safe', probability: 0.625 },
+                      { value: 'unsafe', probability: 0.375 },
+                    ],
+                  },
+            ],
+            usage: { input_tokens: 9, output_tokens: 1, total_tokens: 10 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+      const provider = new OpenAiDecisionsProvider('classification-fixture', {
+        config: {
+          apiKey: 'fixture-key',
+          instructions: 'Classify the output.',
+          labels: ['safe', 'unsafe'],
+        },
+      });
+
+      await withCacheEnabled(true, async () => {
+        const fresh = await matchesClassification('safe', 'Sample output', threshold, { provider });
+        const cached = await matchesClassification('safe', 'Sample output', threshold, {
+          provider,
+        });
+        expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+
+        const assertionsResult = new AssertionsResult();
+        assertionsResult.addResult({ index: 0, result: fresh });
+        assertionsResult.addResult({ index: 1, result: cached });
+        const result = await assertionsResult.testResult();
+        const accounting = createEmptyTokenUsage();
+        accumulateGradingTokenUsage(accounting, result.tokensUsed, {
+          cached: result.metadata?.cachedResponse,
+        });
+
+        expect(accounting).toMatchObject({
+          assertions: { total: 20, cached: 10, numRequests: 2 },
+          incurredTokenUsage: { assertions: { total: 10, numRequests: 1 } },
+        });
+        expect(result.metadata?.cachedResponse).toBeUndefined();
+        expect(cached).toMatchObject({
+          pass,
+          score: refusal ? 0 : 0.625,
+          metadata: { cachedResponse: true, ...(refusal && { graderError: true }) },
+        });
+        expect(fresh.metadata?.cachedResponse).toBeUndefined();
+        if (refusal) {
+          expect(fresh.metadata?.graderError).toBe(true);
+          expect(cached.reason).toContain('refused to classify');
+        }
+      });
+    },
+  );
 
   it('preserves the result shape for providers with undefined token usage', async () => {
     const response: ProviderClassificationResponse = {

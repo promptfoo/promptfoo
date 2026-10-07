@@ -29,12 +29,23 @@ export async function matchesClassification(
   );
 
   if (!resp.classification) {
-    return graderFail(resp.error || 'Unknown error fetching classification', resp.tokenUsage);
+    const failure = graderFail(
+      resp.error || 'Unknown error fetching classification',
+      resp.tokenUsage,
+    );
+    return {
+      ...failure,
+      ...(resp.cached && { metadata: { ...failure.metadata, cachedResponse: true } }),
+    };
   }
   const scores = Object.values(resp.classification);
   if (scores.length === 0) {
     // No scores means there is no verdict, even when a specific label was requested.
-    return graderFail('No classification scores returned', resp.tokenUsage);
+    const failure = graderFail('No classification scores returned', resp.tokenUsage);
+    return {
+      ...failure,
+      ...(resp.cached && { metadata: { ...failure.metadata, cachedResponse: true } }),
+    };
   }
 
   const tokenUsageResult = resp.tokenUsage
@@ -58,6 +69,7 @@ export async function matchesClassification(
       score,
       reason,
       ...tokenUsageResult,
+      ...(resp.cached && { metadata: { cachedResponse: true } }),
     };
   }
   return {
@@ -68,5 +80,6 @@ export async function matchesClassification(
         ? `Maximum classification score ${score.toFixed(2)} < ${threshold}`
         : `Classification ${expected} has score ${score.toFixed(2)} < ${threshold}`,
     ...tokenUsageResult,
+    ...(resp.cached && { metadata: { cachedResponse: true } }),
   };
 }

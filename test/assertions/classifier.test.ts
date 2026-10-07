@@ -86,6 +86,7 @@ describe('handleClassifier', () => {
       score: 0.25,
       reason: 'classification failed',
       tokensUsed: { total: 0, cached: 16, numRequests: 0 },
+      metadata: { cachedResponse: true },
     });
     const params = createParams({
       assertion: {
@@ -102,6 +103,7 @@ describe('handleClassifier', () => {
       score: 0.75,
       reason: 'classification failed',
       tokensUsed: { total: 0, cached: 16, numRequests: 0 },
+      metadata: { cachedResponse: true },
     });
 
     expect(mockedMatchesClassification).toHaveBeenCalledWith(
@@ -131,7 +133,7 @@ describe('handleClassifier', () => {
         score: 0,
         reason: 'Unknown error fetching classification',
         tokensUsed: { total: 5, prompt: 3, completion: 2 },
-        metadata: { graderError: true },
+        metadata: { graderError: true, cachedResponse: true },
       });
       const params = createParams({
         assertion: {
@@ -149,7 +151,7 @@ describe('handleClassifier', () => {
         score: 0,
         reason: 'Unknown error fetching classification',
         tokensUsed: { total: 5, prompt: 3, completion: 2 },
-        metadata: { graderError: true },
+        metadata: { graderError: true, cachedResponse: true },
       });
     },
   );
