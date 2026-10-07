@@ -1517,6 +1517,11 @@ describe('OpenAiDecisionsProvider', () => {
       config: { headers: { 'X-Session': '64b2f1d7-8ab3-45ef-9816-7364c501b907' } },
       credentials: ['64b2f1d7-8ab3-45ef-9816-7364c501b907'],
     },
+    ...['xsession', 'XSESSION', 'xSeSsIoN'].map((name) => ({
+      name: `session header UUID ${name}`,
+      config: { headers: { [name]: '64b2f1d7-8ab3-45ef-9816-7364c501b907' } },
+      credentials: ['64b2f1d7-8ab3-45ef-9816-7364c501b907'],
+    })),
     {
       name: 'custom subscription key',
       config: { headers: { 'X-Subscription-Key': 'short-subscription-value' } },
@@ -1774,6 +1779,16 @@ describe('OpenAiDecisionsProvider', () => {
       },
       credentials: ['64b2f1d7-8ab3-45ef-9816-7364c501b907', '31ab524c-4086-4b47-b839-489f4c7ad302'],
     },
+    ...['xsession', 'XSESSION', 'xSeSsIoN'].map((name) => ({
+      name: `session header UUIDs ${name}`,
+      config: {
+        headers: {
+          [name]: '64b2f1d7-8ab3-45ef-9816-7364c501b907',
+          [`${name}Id`]: '31ab524c-4086-4b47-b839-489f4c7ad302',
+        },
+      },
+      credentials: ['64b2f1d7-8ab3-45ef-9816-7364c501b907', '31ab524c-4086-4b47-b839-489f4c7ad302'],
+    })),
     {
       name: 'subscription keys',
       config: {
@@ -1857,7 +1872,13 @@ describe('OpenAiDecisionsProvider', () => {
           });
           expect(fresh.raw).toEqual(stored.data);
           expect(cached.raw).toEqual(stored.data);
-          if (typeof config.apiBaseUrl === 'string') {
+          const headers = new Headers(vi.mocked(fetchWithRetries).mock.calls[0]![1]?.headers);
+          if ('headers' in config) {
+            for (const [name, value] of Object.entries(config.headers)) {
+              expect(headers.get(name)).toBe(value);
+            }
+          }
+          if ('apiBaseUrl' in config) {
             expect(vi.mocked(fetchWithRetries).mock.calls[0]![0]).toBe(
               config.apiBaseUrl.replace('/v1', '/v1/decisions'),
             );
