@@ -89,7 +89,9 @@ export async function getProviderFromCloud(
 ): Promise<ProviderOptions & { id: string }> {
   const resolver = cloudProviderResolver.getStore();
   if (resolver) {
-    return parseCloudProvider(id, await resolver(id, localOptions));
+    const prepared = await resolver(id, localOptions);
+    // The HTTP schema strips custom env keys; typed host options must retain them.
+    return { ...parseCloudProvider(id, prepared), ...(prepared.env && { env: prepared.env }) };
   }
   if (!cloudConfig.isEnabled()) {
     throw new Error(
@@ -722,24 +724,37 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ errors: ['Unknown error'] }));
-      const errors: { type: string; id: string; message: string }[] = Array.isArray(
-        errorData.errors,
-      )
-        ? errorData.errors.map((error: any) => {
-            // Handle both new structured error format and legacy string format
-            if (typeof error === 'string') {
-              return { type: 'config', id: 'unknown', message: error };
-            }
-            return error;
-          })
-        : [
-            {
-              type: 'config',
-              id: 'unknown',
-              message: errorData.error || 'Permission check failed',
-            },
-          ];
+      const body: unknown = await response.json().catch(() => null);
+      const errorData: Record<string, unknown> = isRecord(body)
+        ? body
+        : { errors: ['Unknown error'] };
+      const errors: { type: string; id: string; message: string }[] =
+        Array.isArray(errorData.errors) && errorData.errors.length > 0
+          ? errorData.errors.map((error: unknown) => {
+              // Handle both new structured error format and legacy string format
+              if (typeof error === 'string') {
+                return { type: 'config', id: 'unknown', message: error };
+              }
+              if (
+                isRecord(error) &&
+                typeof error.type === 'string' &&
+                typeof error.id === 'string' &&
+                typeof error.message === 'string'
+              ) {
+                return { type: error.type, id: error.id, message: error.message };
+              }
+              return { type: 'config', id: 'unknown', message: 'Unknown error' };
+            })
+          : [
+              {
+                type: 'config',
+                id: 'unknown',
+                message:
+                  typeof errorData.error === 'string' && errorData.error
+                    ? errorData.error
+                    : 'Permission check failed',
+              },
+            ];
 
       if (response.status === 403) {
         throw new ConfigPermissionError(
@@ -821,15 +836,13 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     );
   }
   try {
-    // Encode the ids as search params
+    // Encode policy and team IDs as search params.
     const searchParams = new URLSearchParams();
     ids.forEach((id) => {
       searchParams.append('id', id);
     });
-    const response = await makeRequest(
-      `/custom-policies/?${searchParams.toString()}&teamId=${teamId}`,
-      'GET',
-    );
+    searchParams.append('teamId', teamId);
+    const response = await makeRequest(`/custom-policies/?${searchParams.toString()}`, 'GET');
 
     if (!response.ok) {
       const errorMessage = await response.text();
