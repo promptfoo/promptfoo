@@ -1019,6 +1019,74 @@ describe('OpenAiDecisionsProvider', () => {
     expect(deleteFromCache).toHaveBeenCalledOnce();
   });
 
+  it.each(['fresh', 'cached', 'coalesced'] as const)(
+    'preserves validated accounting for a %s mismatched answer',
+    async (mode) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: response([{ name: 'different', type: 'predicate', probability: 0.5 }]),
+        cached: mode === 'cached',
+        coalesced: mode === 'coalesced',
+        status: 200,
+        statusText: 'OK',
+        latencyMs: 27,
+        headers: { 'x-request-id': 'req-mismatch', 'retry-after-ms': '1250' },
+        deleteFromCache,
+      });
+      const result = await provider({ inputCost: 0.01, outputCost: 0.02 }).callApi('text');
+      expect(result.error).toContain('Invalid OpenAI Decisions API response');
+      expect(result.output).toBeUndefined();
+      expect(result.raw).toBeUndefined();
+      expect(result.cached).toBe(mode !== 'fresh');
+      expect(result.latencyMs).toBe(27);
+      expect(result.cost).toBeCloseTo(mode === 'fresh' ? 1.66 : 0);
+      expect(result.tokenUsage).toEqual(
+        mode === 'fresh'
+          ? {
+              total: 165,
+              prompt: 164,
+              completion: 1,
+              cached: 64,
+              numRequests: 1,
+              completionDetails: {
+                reasoning: 0,
+                cacheCreationInputTokens: 0,
+                cacheReadInputTokens: 64,
+              },
+            }
+          : { total: 165, cached: 165 },
+      );
+      if (mode === 'fresh') {
+        expect(result.metadata?.http).toMatchObject({
+          status: 200,
+          headers: { 'x-request-id': 'req-mismatch', 'retry-after-ms': '1250' },
+        });
+      } else {
+        expect(result.metadata?.http).toBeUndefined();
+      }
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    response([{ name: 'needs_human', type: 'predicate', probability: 2 }]),
+    { ...response(), usage: { ...usage, input_tokens: -1 } },
+  ])('does not recover accounting from schema-invalid response %#', async (data) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data,
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      latencyMs: 27,
+      deleteFromCache,
+    });
+    const result = await provider({ inputCost: 0.01, outputCost: 0.02 }).callApi('text');
+    expect(result.error).toContain('Invalid OpenAI Decisions API response');
+    expect(result.tokenUsage).toBeUndefined();
+    expect(result.cost).toBeUndefined();
+    expect(result.output).toBeUndefined();
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
   it('rejects reordered answers even when they have the same type', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: response([
@@ -1855,6 +1923,61 @@ describe('OpenAiDecisionsProvider', () => {
       ).toEqual({ '[REDACTED]': '[REDACTED]' });
     });
   });
+
+  it.each(['rate-limit', 'api-error'] as const)(
+    'redacts JSON-escaped Basic passwords from %s diagnostics',
+    async (kind) => {
+      const password = 'quoted"password\\[REDACTED]tail';
+      const escaped = JSON.stringify(password).slice(1, -1);
+      const message = `Rejected ${JSON.stringify(password)}`;
+      const headers = { 'x-request-id': `request-${escaped}`, 'retry-after-ms': '1250' };
+      if (kind === 'rate-limit') {
+        vi.mocked(fetchWithCache).mockRejectedValue(
+          new HttpRateLimitError({
+            status: 429,
+            statusText: message,
+            headers,
+            retryAfterMs: 1250,
+            code: 'rate_limit_exceeded',
+          }),
+        );
+      } else {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { error: { message } },
+          status: 401,
+          statusText: message,
+          headers,
+          cached: false,
+        });
+      }
+      const result = await provider({
+        headers: {
+          Authorization: `Basic ${Buffer.from(`account:${password}`).toString('base64')}`,
+        },
+      }).callApi('text');
+      expect(result.error).toContain('Rejected "[REDACTED]"');
+      expect(result.output).toBeUndefined();
+      expect(result.metadata?.http).toEqual({
+        status: kind === 'rate-limit' ? 429 : 401,
+        statusText: 'Rejected "[REDACTED]"',
+        headers: { 'x-request-id': 'request-[REDACTED]', 'retry-after-ms': '1250' },
+      });
+      for (const value of [
+        result.error,
+        result.metadata?.http?.statusText,
+        result.metadata?.http?.headers?.['x-request-id'],
+      ]) {
+        expect(value).not.toContain(password);
+        expect(value).not.toContain(escaped);
+      }
+      if (kind === 'rate-limit') {
+        expect(result.metadata?.rateLimitKind).toBe('rate_limit');
+        const scheduling = createProviderRateLimitOptions();
+        expect(scheduling.isRateLimited?.(result)).toBe(true);
+        expect(scheduling.getRetryAfter?.(result)).toBe(1250);
+      }
+    },
+  );
 
   describe.each(['Basic', 'Token', 'Custom+Auth'])('%s authorization diagnostics', (scheme) => {
     it.each(['api-error', 'rate-limit', 'transport-error', 'success'])(

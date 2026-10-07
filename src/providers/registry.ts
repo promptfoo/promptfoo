@@ -1192,12 +1192,16 @@ export const providerMap: ProviderFactory[] = [
       }
       const isLiveProvider =
         modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
+      const providerEnv =
+        modelType === 'decisions'
+          ? mergeProviderEnv(providerPath, context.env, providerOptions.env)
+          : providerOptions.env;
       if (
         !isLiveProvider &&
         modelType !== 'agents' &&
         (modelType !== 'assistant' || assistantModel)
       ) {
-        const apiUrl = resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env);
+        const apiUrl = resolveOpenAiApiUrl(providerOptions.config ?? {}, providerEnv);
         assertOpenAiApiModel(assistantModel || effectiveApiModel, apiUrl, { allowTranscription });
       }
       if (modelType === 'chat') {
@@ -1240,7 +1244,7 @@ export const providerMap: ProviderFactory[] = [
         const { OpenAiDecisionsProvider } = await import('./openai/decisions');
         return new OpenAiDecisionsProvider(modelName || configuredModel || '', {
           ...providerOptions,
-          env: { ...context.env, ...providerOptions.env },
+          env: providerEnv,
         });
       }
       if (modelType === 'transcription') {

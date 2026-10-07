@@ -16,6 +16,7 @@ import { getProviderFactories, mergeProviderEnv, providerMap } from '../../src/p
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
+import type { OpenAiDecisionsProvider } from '../../src/providers/openai/decisions';
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
@@ -106,6 +107,82 @@ describe('Provider Registry', () => {
 
       expect(provider.constructor.name).toBe('OpenAiDecisionsProvider');
       expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'suite-key');
+    });
+
+    describe.each(['factory', 'loader'] as const)('%s environment precedence', (route) => {
+      it.each(
+        [
+          { model: 'o1-preview', error: 'has been retired' },
+          { model: 'gpt-5.3-codex-spark', error: 'only available through openai:codex-sdk' },
+        ].flatMap((modelCase) =>
+          [
+            {
+              name: 'suite gateway',
+              suiteUrl: 'https://suite.example/v1',
+              providerEnv: undefined,
+              expectedUrl: 'https://suite.example/v1',
+              expectedKey: 'suite-key',
+              rejected: false,
+            },
+            {
+              name: 'provider first-party override',
+              suiteUrl: 'https://suite.example/v1',
+              providerEnv: { OPENAI_API_BASE_URL: 'https://api.openai.com/v1' },
+              expectedUrl: 'https://api.openai.com/v1',
+              expectedKey: 'suite-key',
+              rejected: true,
+            },
+            {
+              name: 'provider gateway override',
+              suiteUrl: 'https://api.openai.com/v1',
+              providerEnv: {
+                OPENAI_API_BASE_URL: 'https://provider.example/v1',
+                OPENAI_API_KEY: 'provider-key',
+              },
+              expectedUrl: 'https://provider.example/v1',
+              expectedKey: 'provider-key',
+              rejected: false,
+            },
+            {
+              name: 'undefined provider overrides',
+              suiteUrl: 'https://suite.example/v1',
+              providerEnv: { OPENAI_API_BASE_URL: undefined, OPENAI_API_KEY: undefined },
+              expectedUrl: 'https://suite.example/v1',
+              expectedKey: 'suite-key',
+              rejected: false,
+            },
+          ].map((envCase) => ({ ...modelCase, ...envCase })),
+        ),
+      )(
+        'uses $name consistently for $model',
+        async ({ model, error, suiteUrl, providerEnv, expectedUrl, expectedKey, rejected }) => {
+          const providerPath = `openai:decisions:${model}`;
+          const options: ProviderOptions = { env: providerEnv };
+          const context: LoadApiProviderContext = {
+            options,
+            env: { OPENAI_API_BASE_URL: suiteUrl, OPENAI_API_KEY: 'suite-key' },
+          };
+          const factories = await getProviderFactories(providerPath);
+          const factory = factories.find((entry) => entry.test(providerPath))!;
+          const pending =
+            route === 'factory'
+              ? factory.create(providerPath, options, context)
+              : loadApiProvider(providerPath, context);
+
+          if (rejected) {
+            await expect(pending).rejects.toThrow(error);
+            return;
+          }
+
+          const provider = (await pending) as OpenAiDecisionsProvider;
+          expect(provider.constructor.name).toBe('OpenAiDecisionsProvider');
+          expect(provider.getApiUrl()).toBe(expectedUrl);
+          expect(provider.env).toEqual({
+            OPENAI_API_BASE_URL: expectedUrl,
+            OPENAI_API_KEY: expectedKey,
+          });
+        },
+      );
     });
 
     it('requires an explicit Decisions model', async () => {

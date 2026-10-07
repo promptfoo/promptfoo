@@ -610,11 +610,12 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     ]
       .filter((secret): secret is string => Boolean(secret))
       .flatMap((secret) => {
+        const variants = [secret, JSON.stringify(secret).slice(1, -1)];
         try {
-          return [secret, encodeURIComponent(secret)];
+          return [...variants, encodeURIComponent(secret)];
         } catch {
           // Invalid Unicode must still reach the existing request error handling.
-          return [secret];
+          return variants;
         }
       });
     // Gateways can echo credentials in response bodies before provider-level redaction runs.
@@ -622,7 +623,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     // Longer credentials match before markers; single-character userinfo cannot erase words.
     // One pass preserves existing markers while redacting credentials that contain a marker.
     const credentialPattern = new RegExp(
-      [...secrets, '[REDACTED]']
+      [...new Set([...secrets, '[REDACTED]'])]
         .sort((left, right) => right.length - left.length)
         .map((secret) =>
           secret.length > 1 ? escapeRegExp(secret) : `(?<!\\w)${escapeRegExp(secret)}(?!\\w)`,
@@ -724,7 +725,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       }
 
       const result = responseSchema.safeParse(data);
-      if (!result.success || !answersMatchQuestions(result.data.answers, body.questions)) {
+      if (!result.success) {
         await deleteFromCache?.();
         return {
           error: 'Invalid OpenAI Decisions API response: answers or usage do not match the request',
@@ -741,14 +742,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
               cachedResponse: cached,
             })
           : undefined;
-      return {
-        output: JSON.stringify({ answers }),
-        raw: data,
-        metadata: {
-          ...httpMetadata,
-          model,
-          requestId: http.headers['x-request-id'],
-        },
+      const accounting = {
         cached,
         latencyMs,
         tokenUsage: cached
@@ -757,8 +751,26 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
               ...getResponsesTokenUsage(result.data, false),
               cached: usage.input_tokens_details?.cached_tokens,
             },
-        ...(answers.every((answer) => answer.type === 'refusal') ? { isRefusal: true } : {}),
         ...(cost === undefined ? {} : { cost }),
+      };
+      if (!answersMatchQuestions(answers, body.questions)) {
+        await deleteFromCache?.();
+        return {
+          ...accounting,
+          error: 'Invalid OpenAI Decisions API response: answers or usage do not match the request',
+          metadata: httpMetadata,
+        };
+      }
+      return {
+        ...accounting,
+        output: JSON.stringify({ answers }),
+        raw: data,
+        metadata: {
+          ...httpMetadata,
+          model,
+          requestId: http.headers['x-request-id'],
+        },
+        ...(answers.every((answer) => answer.type === 'refusal') ? { isRefusal: true } : {}),
       };
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
