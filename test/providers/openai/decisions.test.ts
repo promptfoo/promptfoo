@@ -2026,6 +2026,100 @@ describe('OpenAiDecisionsProvider', () => {
       },
     );
 
+    it.each(['enabled', 'disabled', 'bypass'] as const)(
+      'redacts credential-shaped usernames with a password when cache is %s',
+      async (mode) => {
+        const username = 'sk-proj-fixture12345678901234567890/+';
+        const encodedUsername = encodeURIComponent(username);
+        const password = 'dummy-password';
+        const pair = `${username}:${password}`;
+        const basic = Buffer.from(pair).toString('base64');
+        const credentials = [username, encodedUsername, password, pair, basic];
+        const auth =
+          source === 'header'
+            ? { headers: { Authorization: `Basic ${basic}` } }
+            : {
+                apiBaseUrl: `https://${encodedUsername}:${password}@gateway.example/v1`,
+              };
+        const actualCache =
+          await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+        vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+        const cache = actualCache.getCache();
+        const write = vi.spyOn(cache, 'set');
+        const echo = `Credentials ${credentials.join('; ')}`;
+        const sanitizedEcho =
+          'Credentials [REDACTED]; [REDACTED]; [REDACTED]; [REDACTED]; [REDACTED]';
+        const data = {
+          ...response(),
+          diagnostics: { [username]: { [encodedUsername]: echo }, public: 'token score' },
+        };
+        vi.mocked(fetchWithRetries).mockImplementation(
+          async () =>
+            new Response(JSON.stringify(data), {
+              status: 200,
+              headers: { 'content-type': 'application/json', 'x-request-id': echo },
+            }),
+        );
+        const instance = provider({ ...auth, apiKey: undefined, apiKeyRequired: false });
+        const prompt = `Credential-shaped username fixture ${source} ${mode}`;
+        const context: CallApiContextParams = {
+          vars: {},
+          prompt: { raw: prompt, label: prompt },
+          bustCache: mode === 'bypass',
+        };
+        try {
+          await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+            const fresh = await instance.callApi(prompt, context);
+            const repeated = await instance.callApi(prompt, context);
+            expect(fresh.error).toBeUndefined();
+            expect(fresh.raw).toEqual({
+              ...response(),
+              diagnostics: {
+                '[REDACTED]': { '[REDACTED]': sanitizedEcho },
+                public: 'token score',
+              },
+            });
+            expect(repeated.raw).toEqual(fresh.raw);
+            expect(fresh.output).toBe(JSON.stringify({ answers: response().answers }));
+            expect(fresh.tokenUsage).toMatchObject({ total: 165, prompt: 164, completion: 1 });
+            expect(fresh.metadata?.http?.headers?.['x-request-id']).toBe(sanitizedEcho);
+            expect(repeated.cached).toBe(mode === 'enabled');
+            expect(fetchWithRetries).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 2);
+            expect(write).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 0);
+            if (mode === 'enabled') {
+              expect(JSON.parse(write.mock.calls[0]![1] as string).data).toEqual(fresh.raw);
+            }
+            for (const value of [fresh, repeated, write.mock.calls]) {
+              for (const credential of credentials) {
+                expect(JSON.stringify(value)).not.toContain(credential);
+              }
+            }
+            vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+              new Response(JSON.stringify({ error: { message: echo } }), {
+                status: 401,
+                statusText: echo,
+                headers: { 'x-request-id': echo },
+              }),
+            );
+            const failure = await instance.callApi(`${prompt} failure`, context);
+            expect(failure.error).toContain(sanitizedEcho);
+            expect(failure.metadata?.http).toEqual({
+              status: 401,
+              statusText: sanitizedEcho,
+              headers: { 'x-request-id': sanitizedEcho },
+            });
+            for (const credential of credentials) {
+              expect(JSON.stringify(failure)).not.toContain(credential);
+            }
+          });
+        } finally {
+          for (const [key] of write.mock.calls) {
+            await cache.del(key);
+          }
+        }
+      },
+    );
+
     it('protects username-only authentication as a credential', async () => {
       const username = 'opaque-account-credential';
       const auth =

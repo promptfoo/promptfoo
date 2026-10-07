@@ -17,6 +17,7 @@ import {
 import { renderVarsInObject } from '../../util/render';
 import {
   isCredentialHeader,
+  looksLikeSecret,
   sanitizeObject,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
@@ -221,9 +222,13 @@ function getHeaderCredentials(name: string, value: string): string[] {
       separator !== -1 &&
       bytes.toString('base64').replace(/=+$/, '') === basic[1].replace(/=+$/, '')
     ) {
-      // With a password, the username identifies the account; alone it may be the credential.
+      // Preserve public account names, but some gateways use API keys as Basic usernames.
+      const username = decoded.slice(0, separator);
       const password = decoded.slice(separator + 1);
-      credentials.push(decoded, password || decoded.slice(0, separator));
+      credentials.push(decoded, password || username);
+      if (looksLikeSecret(username)) {
+        credentials.push(username);
+      }
     }
   }
   if (name.toLowerCase() === 'cookie') {
@@ -274,6 +279,9 @@ function getUrlCredentials(value: string): string[] {
       basic,
       `Basic ${basic}`,
     );
+    if (looksLikeSecret(decoded[0])) {
+      credentials.push(raw[0], decoded[0]);
+    }
   }
   const sanitizedSegments = sanitizeUrlForLogging(url.pathname).split('/');
   for (const [index, segment] of url.pathname.split('/').entries()) {
