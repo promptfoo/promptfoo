@@ -54,11 +54,20 @@ describe('isCredentialHeader', () => {
     'X-Functions-Key',
     'X-Arbitrary-Vendor-Key',
     'arbitraryVendorKey',
+    'X-Session',
+    'x-session',
+    'X-Session-Id',
+    'X-SessionId',
+    'xSession',
+    'vendorSession',
+    'vendorSessionId',
+    'vendor_session_id',
     'X-Session-Access',
     'vendorSessionAccess',
     'X-Gateway-Authentication',
   ])('recognizes credential headers under %s regardless of value shape', (name) => {
     expect(isCredentialHeader(name, 'short')).toBe(true);
+    expect(isCredentialHeader(name, '9be880e3-e5dc-4be7-8739-a4b587fdfb13')).toBe(true);
   });
 
   it.each([
@@ -73,13 +82,20 @@ describe('isCredentialHeader', () => {
     'X-Public-Key',
     'Sec-WebSocket-Key',
     'idempotencyKey',
-    'X-Session-Id',
+    'X-Session-Timeout',
+    'X-Session-Type',
+    'X-Session-Mode',
+    'X-Session-Id-Mode',
+    'vendorSessionTimeout',
+    'vendorSessionType',
+    'vendorSessionMode',
     'X-Access-Region',
     'X-Session-Access-Mode',
     'X-Monkey',
   ])('preserves ordinary metadata under %s', (name) => {
     expect(isCredentialHeader(name, 'us')).toBe(false);
     expect(isCredentialHeader(name, '0123456789abcdef0123456789abcdef')).toBe(false);
+    expect(isCredentialHeader(name, '9be880e3-e5dc-4be7-8739-a4b587fdfb13')).toBe(false);
   });
 });
 

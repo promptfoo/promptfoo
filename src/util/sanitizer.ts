@@ -464,7 +464,7 @@ export function isCredentialHeader(name: string, value: string): boolean {
   return (
     isSecretField(name) ||
     (!publicKeyRole && /(?:^|[-_\s])key$/.test(normalizedName)) ||
-    /(?:^|[-_\s])session[-_\s]?access$/.test(normalizedName) ||
+    /(?:^|[-_\s])session(?:[-_\s]?(?:access|id))?$/.test(normalizedName) ||
     /(?:^|[-_\s])(?:(?:api|access|subscription)[-_\s]?key|auth(?:orization|entication)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
       normalizedName,
     ) ||

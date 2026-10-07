@@ -655,17 +655,32 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       value.replace(credentialPattern, '[REDACTED]');
     const errorText = (value: unknown): string =>
       redactCredentials(String(sanitizeObject(String(value), { sanitizeUrls: true })));
-    // Preserve Decisions values and types, redacting only credentials known to this request.
-    const responseData = (value: unknown): unknown => {
+    // Fixed protocol keys and literal tags are public structure, even when a credential matches.
+    // Data strings and unknown diagnostic keys still require credential redaction.
+    const responseData = (value: unknown, schema?: z.core.$ZodType): unknown => {
+      if (schema instanceof z.ZodOptional) {
+        schema = schema.unwrap();
+      }
+      if (schema instanceof z.ZodDiscriminatedUnion) {
+        schema = schema.options.find((option) => z.safeParse(option, value).success);
+      }
+      if (schema instanceof z.ZodLiteral && schema.safeParse(value).success) {
+        return value;
+      }
       if (typeof value === 'string') {
         return redactCredentials(value);
       }
       if (Array.isArray(value)) {
-        return value.map(responseData);
+        const element = schema instanceof z.ZodArray ? schema.element : undefined;
+        return value.map((item) => responseData(item, element));
       }
       if (value !== null && typeof value === 'object') {
+        const shape = schema instanceof z.ZodObject ? schema.shape : undefined;
         return Object.fromEntries(
-          Object.entries(value).map(([key, item]) => [redactCredentials(key), responseData(item)]),
+          Object.entries(value).map(([key, item]) => {
+            const field = shape && Object.hasOwn(shape, key) ? shape[key] : undefined;
+            return [field ? key : redactCredentials(key), responseData(item, field)];
+          }),
         );
       }
       return value;
@@ -714,7 +729,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
           cacheKey,
           repeatIndex: context?.repeatIndex,
           sanitizeResponse: ({ data, statusText, headers }) => ({
-            data: responseData(data),
+            data: responseData(data, responseSchema),
             statusText: errorText(statusText),
             headers: responseHeaders(headers),
           }),

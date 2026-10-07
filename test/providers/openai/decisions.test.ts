@@ -1454,6 +1454,11 @@ describe('OpenAiDecisionsProvider', () => {
       credentials: ['0123456789abcdef0123456789abcdef'],
     },
     {
+      name: 'session header UUID',
+      config: { headers: { 'X-Session': '64b2f1d7-8ab3-45ef-9816-7364c501b907' } },
+      credentials: ['64b2f1d7-8ab3-45ef-9816-7364c501b907'],
+    },
+    {
       name: 'custom subscription key',
       config: { headers: { 'X-Subscription-Key': 'short-subscription-value' } },
       credentials: ['short-subscription-value'],
@@ -1661,6 +1666,16 @@ describe('OpenAiDecisionsProvider', () => {
         },
       },
       credentials: ['1123456789abcdef0123456789abcdef', '2123456789abcdef0123456789abcdef'],
+    },
+    {
+      name: 'session header UUIDs',
+      config: {
+        headers: {
+          'X-Session': '64b2f1d7-8ab3-45ef-9816-7364c501b907',
+          'X-Session-Id': '31ab524c-4086-4b47-b839-489f4c7ad302',
+        },
+      },
+      credentials: ['64b2f1d7-8ab3-45ef-9816-7364c501b907', '31ab524c-4086-4b47-b839-489f4c7ad302'],
     },
     {
       name: 'subscription keys',
@@ -1933,6 +1948,133 @@ describe('OpenAiDecisionsProvider', () => {
           }
         }
       });
+    },
+  );
+
+  it.each(
+    ['in', 'token', 'score', 'refusal'].flatMap((password) =>
+      (['enabled', 'disabled', 'bypass'] as const).map((mode) => ({ password, mode })),
+    ),
+  )(
+    'preserves fixed response structure when a password collides ($password, $mode)',
+    async ({ password, mode }) => {
+      const actualCache =
+        await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+      vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+      const cache = actualCache.getCache();
+      const write = vi.spyOn(cache, 'set');
+      const answers = [
+        { name: 'a', type: 'predicate', probability: 0.9 },
+        {
+          name: 'b',
+          type: 'choice',
+          choice: true,
+          confidence: 0.8,
+          probabilities: [
+            { value: true, probability: 0.8 },
+            { value: false, probability: 0.2 },
+          ],
+        },
+        {
+          name: 'c',
+          type: 'score',
+          score: 0.75,
+          confidence: 0.9,
+          probabilities: [
+            { value: 0, label: 'Low', probability: 0.25 },
+            { value: 1, label: 'High', probability: 0.75 },
+          ],
+        },
+        { name: 'd', type: 'refusal' },
+      ];
+      const data = {
+        ...response(answers),
+        usage: {
+          ...usage,
+          input_tokens_details: {
+            ...usage.input_tokens_details,
+            extra: { [password]: password },
+          },
+          output_tokens_details: {
+            ...usage.output_tokens_details,
+            extra: { [password]: password },
+          },
+        },
+        diagnostics: { [password]: { type: password, input_tokens: password } },
+      };
+      vi.mocked(fetchWithRetries).mockImplementation(
+        async () => new Response(JSON.stringify(data), { status: 200 }),
+      );
+      const instance = provider({
+        apiKey: undefined,
+        apiKeyRequired: false,
+        headers: {
+          Authorization: `Basic ${Buffer.from(`account:${password}`).toString('base64')}`,
+        },
+        questions: [
+          { name: 'a', type: 'predicate', instructions: 'Assess' },
+          {
+            name: 'b',
+            type: 'choice',
+            instructions: 'Assess',
+            choices: [{ value: true }, { value: false }],
+          },
+          {
+            name: 'c',
+            type: 'score',
+            instructions: 'Assess',
+            levels: [{ label: 'Low' }, { label: 'High' }],
+          },
+          { name: 'd', type: 'predicate', instructions: 'Assess' },
+        ],
+      });
+      const prompt = `Protocol fixture ${password} ${mode}`;
+      const context: CallApiContextParams = {
+        vars: {},
+        prompt: { raw: prompt, label: prompt },
+        bustCache: mode === 'bypass',
+      };
+      try {
+        await actualCache.withCacheEnabled(mode !== 'disabled', async () => {
+          const fresh = await instance.callApi(prompt, context);
+          const repeated = await instance.callApi(prompt, context);
+          expect(fresh.error).toBeUndefined();
+          expect(fresh.output).toBe(JSON.stringify({ answers }));
+          expect(fresh.raw).toMatchObject({ answers, usage });
+          expect(fresh.tokenUsage).toMatchObject({ total: 165, prompt: 164, completion: 1 });
+          expect(repeated.raw).toEqual(fresh.raw);
+          expect(repeated.cached).toBe(mode === 'enabled');
+          expect(fetchWithRetries).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 2);
+          expect(write).toHaveBeenCalledTimes(mode === 'enabled' ? 1 : 0);
+          const diagnostics = (fresh.raw as typeof data).diagnostics;
+          expect(JSON.stringify(diagnostics)).not.toContain(password);
+          expect(diagnostics).toHaveProperty('[REDACTED]');
+          for (const details of ['input_tokens_details', 'output_tokens_details'] as const) {
+            expect((fresh.raw as typeof data).usage[details].extra).toEqual({
+              '[REDACTED]': '[REDACTED]',
+            });
+          }
+          if (mode === 'enabled') {
+            expect(JSON.parse(write.mock.calls[0]![1] as string).data).toEqual(fresh.raw);
+          }
+        });
+        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+          new Response(JSON.stringify(response([{ name: 'grade', type: 'refusal' }])), {
+            status: 200,
+          }),
+        );
+        await actualCache.withCacheEnabled(false, async () => {
+          const refused = await instance.callApi('', rubricContext('Assess', 'Output'));
+          expect(refused.error).toBe('OpenAI Decisions refused to grade the output.');
+          expect(refused.output).toBeUndefined();
+          expect(refused.isRefusal).toBe(true);
+          expect(refused.tokenUsage).toMatchObject({ total: 165, prompt: 164, completion: 1 });
+        });
+      } finally {
+        for (const [key] of write.mock.calls) {
+          await cache.del(key);
+        }
+      }
     },
   );
 
