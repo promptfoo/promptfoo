@@ -1,12 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import { matchesClassification } from '../../../src/matchers/classification';
+import { matchesLlmRubric, matchesTrajectoryGoalSuccess } from '../../../src/matchers/llmGrading';
 import { OpenAiDecisionsProvider } from '../../../src/providers/openai/decisions';
+import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
+
+import type { CallApiContextParams } from '../../../src/types/providers';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),
 }));
+
+const imageUrl = 'data:image/png;base64,iVBORw0KGgo=';
+
+function rubricContext(rubric: unknown, output: unknown): CallApiContextParams {
+  return {
+    prompt: { raw: 'rendered grading prompt', label: 'llm-rubric' },
+    vars: { rubric, output } as CallApiContextParams['vars'],
+  };
+}
+
+function mockAnswers(answers: unknown[]) {
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: response(answers),
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+  });
+}
 
 const predicateQuestion = {
   name: 'needs_human',
@@ -202,7 +225,7 @@ describe('OpenAiDecisionsProvider', () => {
             { type: 'text', text: 'Second observation' },
             {
               type: 'image_url',
-              image_url: { url: 'https://example.com/image.png', detail: 'low' },
+              image_url: { url: imageUrl, detail: 'low' },
             },
           ],
         },
@@ -215,7 +238,7 @@ describe('OpenAiDecisionsProvider', () => {
         role: 'user',
         content: [
           { type: 'input_text', text: 'Second observation' },
-          { type: 'input_image', image_url: 'https://example.com/image.png', detail: 'low' },
+          { type: 'input_image', image_url: imageUrl, detail: 'low' },
         ],
       },
     ]);
@@ -252,19 +275,13 @@ describe('OpenAiDecisionsProvider', () => {
   it.each([
     undefined,
     [],
-    Array.from({ length: 65 }, () => ({ type: 'predicate', instructions: 'Check.' })),
-    [predicateQuestion, predicateQuestion],
     [{ type: 'unsupported', instructions: 'Check.' }],
     [{ type: 'predicate' }],
     [{ ...predicateQuestion, name: null }],
-    [{ ...choiceQuestion, choices: [{ value: false }] }],
     [{ ...choiceQuestion, choices: [{ value: false }, { value: false }] }],
     [{ ...choiceQuestion, choices: [{ value: 0 }, { value: 1 }] }],
     [{ ...choiceQuestion, choices: [{ value: 'a', description: 3 }, { value: 'b' }] }],
-    [{ ...choiceQuestion, choices: Array.from({ length: 256 }, (_, i) => ({ value: String(i) })) }],
-    [{ ...scoreQuestion, levels: [{ label: 'Only one' }] }],
     [{ ...scoreQuestion, levels: ['Low', 'High'] }],
-    [{ ...scoreQuestion, levels: Array.from({ length: 11 }, (_, i) => ({ label: String(i) })) }],
   ])('rejects invalid questions %# before network', async (questions) => {
     const result = await provider({ questions }).callApi('text');
     expect(result.error).toMatch(/questions/i);
@@ -272,7 +289,7 @@ describe('OpenAiDecisionsProvider', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
-  it.each([64, 3, 'x'.repeat(65)])(
+  it.each([64, 3, 'x'.repeat(129)])(
     'rejects invalid safety identifier %s',
     async (safety_identifier) => {
       const result = await provider({ safety_identifier }).callApi('text');
@@ -283,7 +300,7 @@ describe('OpenAiDecisionsProvider', () => {
 
   it('validates rendered fields before sending a request', async () => {
     const result = await provider({ safety_identifier: '{{identifier}}' }).callApi('text', {
-      vars: { identifier: 'x'.repeat(65) },
+      vars: { identifier: 'x'.repeat(129) },
       prompt: { raw: 'text', label: 'text' },
     });
     expect(result.error).toMatch(/safety_identifier/);
@@ -398,10 +415,9 @@ describe('OpenAiDecisionsProvider', () => {
     expect(result.cost).toBe(0);
   });
 
-  it('does not persist signed image credentials in the cache', async () => {
-    const imageUrl = 'https://example.com/image.png?X-Amz-Signature=sensitive-image-signature';
-    const input = [{ role: 'user', content: [{ type: 'input_image', image_url: imageUrl }] }];
-    await provider().callApi(JSON.stringify(input));
+  it('does not persist signed URLs embedded in input in the cache', async () => {
+    const input = 'https://example.com/image.png?X-Amz-Signature=sensitive-image-signature';
+    await provider().callApi(input);
     expect(requestBody().input).toEqual(input);
     expect(vi.mocked(fetchWithCache).mock.calls[0]![4]).toMatchObject({
       bust: true,
@@ -441,15 +457,12 @@ describe('OpenAiDecisionsProvider', () => {
     },
   );
 
-  it.each([new Error('Request timed out'), new DOMException('Request aborted', 'AbortError')])(
-    'reports transport failure %s',
-    async (error) => {
-      vi.mocked(fetchWithCache).mockRejectedValue(error);
-      const result = await provider().callApi('text');
-      expect(result.error).toContain(error.message);
-      expect(result.output).toBeUndefined();
-    },
-  );
+  it.each([new Error('Request timed out')])('reports transport failure %s', async (error) => {
+    vi.mocked(fetchWithCache).mockRejectedValue(error);
+    const result = await provider().callApi('text');
+    expect(result.error).toContain(error.message);
+    expect(result.output).toBeUndefined();
+  });
 
   it.each([
     null,
@@ -526,7 +539,7 @@ describe('OpenAiDecisionsProvider', () => {
         choice: false,
         confidence: 1,
         probabilities: [
-          { value: 'billing', probability: 0 },
+          { value: false, probability: 0 },
           { value: false, probability: 1 },
         ],
       },
@@ -669,6 +682,371 @@ describe('OpenAiDecisionsProvider', () => {
       expect(result.error).toBeUndefined();
       expect(JSON.parse(result.output as string)).toEqual({ answers });
       expect(Boolean(result.isRefusal)).toBe(allRefused);
+    },
+  );
+  it('accepts the public safety identifier limit and nullable image detail', async () => {
+    const input = [
+      { role: 'user', content: [{ type: 'input_image', image_url: imageUrl, detail: null }] },
+    ];
+    await provider({ safety_identifier: 'x'.repeat(128) }).callApi(JSON.stringify(input));
+    expect(requestBody().input).toEqual(input);
+    expect(requestBody().safety_identifier).toHaveLength(128);
+  });
+
+  it.each(
+    [
+      [{ ...choiceQuestion, choices: [{ value: 'only' }] }],
+      [{ ...scoreQuestion, levels: [{ label: 'only' }] }],
+      Array.from({ length: 65 }, () => ({ type: 'predicate', instructions: 'Check.' })),
+      [
+        {
+          ...choiceQuestion,
+          choices: Array.from({ length: 256 }, (_, i) => ({ value: String(i) })),
+        },
+      ],
+      [{ ...scoreQuestion, levels: Array.from({ length: 11 }, (_, i) => ({ label: String(i) })) }],
+    ].map((questions) => ({ questions })),
+  )('does not enforce undocumented question cardinality limits %#', async ({ questions }) => {
+    await provider({ questions }).callApi('text');
+    expect(fetchWithCache).toHaveBeenCalledOnce();
+    expect(requestBody().questions).toEqual(questions);
+  });
+
+  it.each(['https://example.com/image.png', 'file-123', 'data:text/plain;base64,aGVsbG8='])(
+    'rejects unsupported image URL %s before network',
+    async (url) => {
+      const result = await provider().callApi(
+        JSON.stringify([{ role: 'user', content: [{ type: 'input_image', image_url: url }] }]),
+      );
+      expect(result.error).toMatch(/input/);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects more than 128 images across messages', async () => {
+    const image = { type: 'input_image', image_url: imageUrl };
+    const result = await provider().callApi(
+      JSON.stringify([
+        { role: 'user', content: Array(64).fill(image) },
+        { role: 'user', content: Array(65).fill(image) },
+      ]),
+    );
+    expect(result.error).toContain('128 images');
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('accepts choice and score distributions in any order', async () => {
+    const answers = [
+      {
+        name: null,
+        type: 'choice',
+        choice: false,
+        confidence: 0.8,
+        probabilities: [
+          { value: 'billing', probability: 0.1 },
+          { value: false, probability: 0.9 },
+        ],
+      },
+      {
+        name: 'urgency',
+        type: 'score',
+        score: 0.7,
+        confidence: 0.6,
+        probabilities: [
+          { value: 1, label: 'Urgent', probability: 0.7 },
+          { value: 0, label: 'Routine', probability: 0.3 },
+        ],
+      },
+    ];
+    mockAnswers(answers);
+    const result = await provider({ questions: [choiceQuestion, scoreQuestion] }).callApi('text');
+    expect(result.error).toBeUndefined();
+    expect(JSON.parse(result.output as string)).toEqual({ answers });
+  });
+
+  describe('llm-rubric grading', () => {
+    it('asks a predicate about the output and preserves usage through the matcher', async () => {
+      mockAnswers([{ name: 'grade', type: 'predicate', probability: 0.12 }]);
+      const result = await matchesLlmRubric('Speaks like a pirate', 'Good morning, sir.', {
+        provider: provider(),
+      });
+      expect(requestBody()).toMatchObject({
+        input: 'Good morning, sir.',
+        questions: [{ name: 'grade', type: 'predicate', instructions: 'Speaks like a pirate' }],
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0.12,
+        tokensUsed: { total: 165, prompt: 164, completion: 1 },
+      });
+      expect(result.reason).toContain('predicate probability 0.12 < threshold 0.5');
+    });
+
+    it.each([
+      { providerThreshold: undefined, assertionThreshold: 0.3, pass: false },
+      { providerThreshold: 0.3, assertionThreshold: 0.5, pass: false },
+      { providerThreshold: 0.3, assertionThreshold: 0.3, pass: true },
+    ])(
+      'respects provider and assertion thresholds %j',
+      async ({ providerThreshold, assertionThreshold, pass }) => {
+        mockAnswers([{ name: 'grade', type: 'predicate', probability: 0.4 }]);
+        const result = await matchesLlmRubric(
+          'Is polite',
+          'Thanks!',
+          { provider: provider({ threshold: providerThreshold }) },
+          undefined,
+          { type: 'llm-rubric', value: 'Is polite', threshold: assertionThreshold },
+        );
+        expect(result).toMatchObject({ pass, score: 0.4 });
+      },
+    );
+
+    it('normalizes expected score over named levels', async () => {
+      const levels = [
+        'Poor',
+        { label: 'Partial', description: 'Some requirements met' },
+        'Complete',
+      ];
+      mockAnswers([
+        {
+          name: 'grade',
+          type: 'score',
+          score: 1.43,
+          confidence: 0.5,
+          probabilities: [
+            { value: 0, label: 'Poor', probability: 0 },
+            { value: 1, label: 'Partial', probability: 0.57 },
+            { value: 2, label: 'Complete', probability: 0.43 },
+          ],
+        },
+      ]);
+      const result = await provider({ levels, threshold: 0.7 }).callApi(
+        '',
+        rubricContext('Meets requirements', 'Answer'),
+      );
+      expect(requestBody().questions[0]).toEqual({
+        name: 'grade',
+        type: 'score',
+        instructions: 'Meets requirements',
+        levels: [{ label: 'Poor' }, levels[1], { label: 'Complete' }],
+      });
+      expect(result.output).toEqual({
+        pass: true,
+        score: 0.715,
+        reason: 'Decisions score 1.43 on levels 0–2 (0.715 normalized) >= threshold 0.7',
+      });
+    });
+
+    it.each(['', '0.5', -1, 2, Number.NaN])('rejects invalid threshold %j', async (threshold) => {
+      const result = await provider({ threshold }).callApi(
+        '',
+        rubricContext('Is polite', 'Thanks'),
+      );
+      expect(result.error).toContain('threshold');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it.each([[], ['Only'], [1, 2], [{ label: 'Low' }, {}]].map((levels) => ({ levels })))(
+      'rejects malformed grading levels %j',
+      async ({ levels }) => {
+        const result = await provider({ levels }).callApi('', rubricContext('Is polite', 'Thanks'));
+        expect(result.error).toContain('levels');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([false, 0, null, { key: 'value' }, ['a', 'b']])(
+      'grades structured output as text %j',
+      async (output) => {
+        mockAnswers([{ name: 'grade', type: 'predicate', probability: 0.8 }]);
+        const result = await provider().callApi('', rubricContext('Matches schema', output));
+        expect(result.error).toBeUndefined();
+        expect(requestBody().input).toBe(JSON.stringify(output));
+      },
+    );
+
+    it('does not re-render grader instructions or output', async () => {
+      mockAnswers([{ name: 'grade', type: 'predicate', probability: 0.2 }]);
+      const context = rubricContext('Contains {{literal}}', 'Output {{literal}}');
+      context.vars.literal = 'unexpected';
+      await provider().callApi('', context);
+      expect(requestBody().input).toBe('Output {{literal}}');
+      expect(requestBody().questions[0].instructions).toBe('Contains {{literal}}');
+    });
+
+    it('returns an explicit error for refusal while preserving token usage', async () => {
+      mockAnswers([{ name: 'grade', type: 'refusal' }]);
+      const result = await provider().callApi('', rubricContext('Is polite', 'Thanks'));
+      expect(result.error).toContain('refused to grade');
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage?.total).toBe(165);
+    });
+
+    it('fails closed for llm-rubric without grading variables', async () => {
+      const result = await provider().callApi('text', {
+        prompt: { raw: 'text', label: 'llm-rubric' },
+        vars: {},
+      });
+      expect(result.error).toContain('rubric and output');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it.each(['agent-rubric', 'trajectory:goal-success'])(
+      'rejects unsupported grader %s even with questions configured',
+      async (label) => {
+        const result = await provider().callApi('text', {
+          prompt: { raw: 'text', label },
+          vars: {},
+        });
+        expect(result.error).toContain(`cannot grade \`${label}\``);
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it('cannot pass a trajectory grader by returning an answers object', async () => {
+      const result = await matchesTrajectoryGoalSuccess('Book a flight', '[]', 'Done', {
+        provider: provider(),
+      });
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('cannot grade');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('classification', () => {
+    const instructions = 'Which team should handle this?';
+    const answer = {
+      name: 'classification',
+      type: 'choice',
+      choice: 'billing',
+      confidence: 0.8,
+      probabilities: [
+        { value: 'technical', probability: 0.12 },
+        { value: 'billing', probability: 0.88 },
+      ],
+    };
+
+    it.each([['billing', 'technical'], { billing: 'Payments and refunds', technical: null }])(
+      'classifies from labels or label descriptions %j',
+      async (labels) => {
+        mockAnswers([answer]);
+        const result = await provider({ instructions, labels }).callClassificationApi(
+          'My card was charged twice',
+        );
+        expect(result).toEqual({ classification: { billing: 0.88, technical: 0.12 } });
+        expect(requestBody().questions).toEqual([
+          {
+            name: 'classification',
+            type: 'choice',
+            instructions,
+            choices: [
+              {
+                value: 'billing',
+                ...(Array.isArray(labels) ? {} : { description: labels.billing }),
+              },
+              { value: 'technical' },
+            ],
+          },
+        ]);
+      },
+    );
+
+    it('integrates with the classifier matcher', async () => {
+      mockAnswers([answer]);
+      const result = await matchesClassification('billing', 'Refund please', 0.5, {
+        provider: provider({ instructions, labels: ['billing', 'technical'] }),
+      });
+      expect(result).toMatchObject({ pass: true, score: 0.88 });
+    });
+
+    it.each([
+      {},
+      { instructions },
+      { labels: ['a'] },
+      { instructions, labels: [] },
+      { instructions, labels: {} },
+      { instructions, labels: ['a', 'a'] },
+      { instructions, labels: [true, false] },
+      { instructions, labels: { a: 3 } },
+    ])('rejects invalid classifier config %j', async (config) => {
+      const result = await provider(config).callClassificationApi('text');
+      expect(result.error).toBeTruthy();
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('reports refusal as an error, not a probability distribution', async () => {
+      mockAnswers([{ name: 'classification', type: 'refusal' }]);
+      const result = await provider({
+        instructions,
+        labels: ['billing', 'technical'],
+      }).callClassificationApi('text');
+      expect(result.error).toContain('refused to classify');
+      expect(result.classification).toBeUndefined();
+    });
+  });
+
+  it('propagates caller cancellation instead of converting it into an evaluation error', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    vi.mocked(fetchWithCache).mockRejectedValue(controller.signal.reason);
+    await expect(
+      provider().callApi('text', undefined, { abortSignal: controller.signal }),
+    ).rejects.toBe(controller.signal.reason);
+  });
+
+  it.each([
+    { code: 'rate_limit_exceeded', kind: 'rate_limit' },
+    { code: 'credit_balance_exhausted', kind: 'quota' },
+  ])('preserves retry timing and scheduler classification for $code', async ({ code, kind }) => {
+    vi.mocked(fetchWithCache).mockRejectedValue(
+      new HttpRateLimitError({
+        status: 429,
+        statusText: 'Too Many Requests',
+        code,
+        retryAfterMs: 1250,
+        headers: { 'x-request-id': 'req-123' },
+      }),
+    );
+    const result = await provider().callApi('text');
+    expect(result.error).toContain('429');
+    expect(result.metadata).toMatchObject({
+      rateLimitKind: kind,
+      http: { status: 429, headers: { 'retry-after-ms': '1250', 'x-request-id': 'req-123' } },
+    });
+  });
+  it.each([false, true])(
+    'keeps echoed credentials out of HTTP error metadata (rate limit: %s)',
+    async (rateLimit) => {
+      const headers = {
+        authorization: 'Bearer fixture-key',
+        'x-gateway-auth': 'unknown-response-secret',
+        'set-cookie': 'session=server-secret',
+        'x-request-id': 'request fixture-key',
+        'retry-after': '2',
+        'x-ratelimit-remaining-tokens': '0',
+      };
+      if (rateLimit) {
+        vi.mocked(fetchWithCache).mockRejectedValue(
+          new HttpRateLimitError({ status: 429, statusText: 'Failure fixture-key', headers }),
+        );
+      } else {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { error: { message: 'Failure fixture-key' } },
+          cached: false,
+          status: 401,
+          statusText: 'Failure fixture-key',
+          headers,
+        });
+      }
+      const result = await provider().callApi('text');
+      expect(result.metadata?.http.headers).toEqual({
+        'x-request-id': 'request [REDACTED]',
+        'retry-after': '2',
+        'x-ratelimit-remaining-tokens': '0',
+      });
+      expect(JSON.stringify(result)).not.toMatch(
+        /fixture-key|unknown-response-secret|server-secret/,
+      );
     },
   );
 });

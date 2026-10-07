@@ -9,7 +9,7 @@ The `openai:decisions` provider calls OpenAI's standalone `/v1/decisions` endpoi
 
 :::note
 
-The Decisions API is in alpha and requires an enabled OpenAI project. Model availability and the API contract may change.
+The Decisions API is in [public beta](https://developers.openai.com/api/docs/guides/decisions), with `gpt-6-luna` as the currently supported model.
 
 :::
 
@@ -57,14 +57,17 @@ npx promptfoo@latest eval --no-cache -o results.json
 | Option                                             | Description                                                                                                                     |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `model`                                            | Required when using bare `openai:decisions`. A model in `openai:decisions:<model>` takes precedence. There is no default model. |
-| `questions`                                        | Required array of 1–64 predicate, choice, or score questions.                                                                   |
-| `safety_identifier`                                | Optional stable pseudonymous end-user identifier, at most 64 characters, or `null`.                                             |
+| `questions`                                        | One or more predicate, choice, or score questions. Required when testing the provider directly.                                 |
+| `threshold`                                        | Pass cutoff for `llm-rubric`, from 0 to 1. Defaults to `0.5`.                                                                   |
+| `levels`                                           | Ordered score levels for `llm-rubric`, as strings or `{ label, description? }` objects. Omit to use a predicate.                |
+| `instructions`, `labels`                           | Required for `classifier`: a question and a list of labels or a map of label to description.                                    |
+| `safety_identifier`                                | Optional stable pseudonymous end-user identifier, at most 128 characters, or `null`.                                            |
 | `apiKey`, `apiKeyEnvar`                            | Standard OpenAI credential overrides. Defaults to `OPENAI_API_KEY`.                                                             |
 | `apiBaseUrl`, `apiHost`, `organization`, `headers` | Standard OpenAI endpoint and header overrides.                                                                                  |
 | `maxRetries`                                       | HTTP retry limit. Set to `0` to disable retries.                                                                                |
 | `cost`, `inputCost`, `outputCost`                  | Optional per-token prices. Set `cost` for a flat rate, or both `inputCost` and `outputCost`, to enable a cost estimate.         |
 
-The rendered prompt becomes the request's `input`. Text prompts are sent as strings. A JSON array must contain user messages whose content is a string or text/image parts. The provider accepts Responses-style `input_text` and `input_image` parts and normalizes Chat Completions-style `text` and `image_url` parts. Other roles, tool items, and audio inputs are rejected. Multiple messages form one input, so use separate test cases to evaluate independent inputs.
+The rendered prompt becomes the request's `input`. Text prompts are sent as strings. A JSON array must contain user messages whose content is a string or text/image parts. The provider accepts Responses-style `input_text` and `input_image` parts and normalizes Chat Completions-style `text` and `image_url` parts. Images must be inline base64 data URLs; hosted image URLs and file IDs are not supported. A request can include up to 128 images. Other roles, tool items, and audio inputs are rejected. Multiple messages form one input, so use separate test cases to evaluate independent inputs.
 
 Promptfoo does not infer a default Decisions price. Cost estimates require the explicit per-token prices above. Cached results are scoped to the current provider instance and its credential identity: repeated requests within one eval can use the cache, but separate runs do not reuse those results.
 
@@ -72,11 +75,11 @@ Promptfoo does not infer a default Decisions price. Cost estimates require the e
 
 Every question requires `type` and `instructions`. An optional `name` identifies its answer; supplied names must be unique within the request. Answers preserve question order and echo the name, or use `null` when omitted. Questions are evaluated independently.
 
-| Type        | Additional configuration                                                                          | Answer                                                             |
-| ----------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `predicate` | None; `instructions` states the proposition to evaluate.                                          | `probability` that the proposition holds, between 0 and 1.         |
-| `choice`    | `choices`: 2–255 objects with a unique string or Boolean `value` and optional `description`.      | Selected `choice`, a full `probabilities` array, and `confidence`. |
-| `score`     | `levels`: 2–10 objects ordered lowest to highest, each with a `label` and optional `description`. | Expected `score`, a full `probabilities` array, and `confidence`.  |
+| Type        | Additional configuration                                                                                 | Answer                                                             |
+| ----------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `predicate` | None; `instructions` states the proposition to evaluate.                                                 | `probability` that the proposition holds, between 0 and 1.         |
+| `choice`    | `choices`: Two or more objects with a unique string or Boolean `value` and optional `description`.       | Selected `choice`, a full `probabilities` array, and `confidence`. |
+| `score`     | `levels`: Two or more objects ordered lowest to highest, each with a `label` and optional `description`. | Expected `score`, a full `probabilities` array, and `confidence`.  |
 
 Choice values keep their original types: Boolean `true` and `false` are returned as Booleans. When a choice has no description, its value supplies the scoring text.
 
@@ -113,6 +116,74 @@ assert:
 ```
 
 Probabilities describe the answer conditional on no refusal. Choice and score `confidence` measures distribution concentration, not a calibrated probability that the answer is correct. Predicate answers contain a probability without a confidence field.
+
+## Grade and classify outputs
+
+Like the [TypeSafe Jev provider](./typesafe.md), Decisions can grade another provider's output with `llm-rubric` and `classifier`.
+
+Set it as the grading provider to turn each rubric into a predicate about the output:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{reply}}'
+
+providers:
+  - echo
+
+defaultTest:
+  options:
+    provider: openai:decisions:gpt-6-luna
+
+tests:
+  - vars:
+      reply: I'm sorry your order arrived damaged. A replacement ships today at no cost to you.
+    assert:
+      - type: llm-rubric
+        value: The reply apologizes to the customer
+```
+
+The predicate probability is the assertion score. Set the provider's `config.threshold` to change its pass cutoff from `0.5`. An assertion-level `threshold` must also pass when supplied. `not-llm-rubric` passes below the cutoff.
+
+For an ordered rubric, set `levels` on the grading provider:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: How well does the reply resolve the customer's problem?
+    provider:
+      id: openai:decisions:gpt-6-luna
+      config:
+        threshold: 0.75
+        levels:
+          - Ignores the customer's problem
+          - Acknowledges the problem but offers no fix
+          - Acknowledges the problem and offers a concrete fix
+```
+
+List levels from low to high. The expected score is divided by `levels.length - 1` to produce a grading score from 0 to 1. For example, `1.5` across three levels becomes `0.75`.
+
+For classification, set a question in `instructions` and options in `labels`:
+
+```yaml
+assert:
+  - type: classifier
+    value: resolution
+    threshold: 0.8
+    provider:
+      id: openai:decisions:gpt-6-luna
+      config:
+        instructions: What is this support reply doing?
+        labels:
+          resolution: Resolves the issue or offers a concrete fix
+          deflection: Redirects the customer without helping
+          question: Asks the customer for more information
+```
+
+`labels` can also be a list such as `[resolution, deflection, question]`. The assertion checks the probability of its `value`, which must match a label exactly. Set the assertion's `threshold` explicitly: it defaults to `1`, and the provider's `config.threshold` applies only to `llm-rubric`.
+
+Each assertion sends a separate request. A refusal or malformed answer fails grading, including negated assertions. Decisions returns scores rather than a generated rationale, so the grading reason describes how Promptfoo derived the verdict. `llm-rubric` reads the rubric and output directly; custom `rubricPrompt` text is not sent to the API. Other model-graded assertions that require text generation are not supported.
+
+The [example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-decisions) includes `promptfooconfig.grading.yaml` with fixed support replies for grading and classification. Tune thresholds on representative outputs before relying on them.
 
 For a runnable example covering all three question types, use:
 

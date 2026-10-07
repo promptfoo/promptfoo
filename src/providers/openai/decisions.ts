@@ -3,6 +3,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { fetchWithCache } from '../../cache';
 import { extractProviderResponseAttributes, withGenAISpan } from '../../tracing/genaiTracer';
+import {
+  formatRateLimitErrorMessage,
+  HttpRateLimitError,
+  isAbortError,
+} from '../../util/fetch/errors';
 import { renderVarsInObject } from '../../util/render';
 import { isNonCredentialHeader, sanitizeObject } from '../../util/sanitizer';
 import { normalizeResponsesInput } from '../responses/input';
@@ -16,6 +21,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderClassificationResponse,
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
@@ -23,6 +29,12 @@ import type { OpenAiSharedOptions } from './types';
 const choiceValue = z.union([z.string(), z.boolean()]);
 const probability = z.number().min(0).max(1);
 const questionFields = { name: z.string().optional(), instructions: z.string() };
+const levelSchema = z.object({ label: z.string(), description: z.string().optional() }).strict();
+const gradingLevelsSchema = z
+  .array(z.union([z.string().transform((label) => ({ label })), levelSchema]))
+  .min(2);
+// These JSON graders treat an object without a pass field as passing.
+const UNSUPPORTED_GRADER_LABELS = ['agent-rubric', 'trajectory:goal-success'];
 const questionSchema = z.discriminatedUnion('type', [
   z.object({ ...questionFields, type: z.literal('predicate') }).strict(),
   z
@@ -31,8 +43,7 @@ const questionSchema = z.discriminatedUnion('type', [
       type: z.literal('choice'),
       choices: z
         .array(z.object({ value: choiceValue, description: z.string().optional() }).strict())
-        .min(2)
-        .max(255)
+        .min(1)
         .refine(
           (choices) => new Set(choices.map((choice) => choice.value)).size === choices.length,
           {
@@ -45,26 +56,11 @@ const questionSchema = z.discriminatedUnion('type', [
     .object({
       ...questionFields,
       type: z.literal('score'),
-      levels: z
-        .array(z.object({ label: z.string(), description: z.string().optional() }).strict())
-        .min(2)
-        .max(10),
+      levels: z.array(levelSchema).min(1),
     })
     .strict(),
 ]);
-const questionsSchema = z
-  .array(questionSchema)
-  .min(1)
-  .max(64)
-  .refine(
-    (questions) => {
-      const names = questions.flatMap((question) =>
-        question.name === undefined ? [] : [question.name],
-      );
-      return new Set(names).size === names.length;
-    },
-    { message: 'Question names must be unique within the request' },
-  );
+const questionsSchema = z.array(questionSchema).min(1);
 
 const inputSchema = z.union([
   z.string(),
@@ -79,8 +75,13 @@ const inputSchema = z.union([
             z.object({ type: z.literal('input_text'), text: z.string() }),
             z.object({
               type: z.literal('input_image'),
-              image_url: z.string(),
-              detail: z.enum(['auto', 'low', 'high', 'original']).optional(),
+              image_url: z
+                .string()
+                .regex(
+                  /^data:image\/[^;,]+;base64,/i,
+                  'Decisions images must be inline base64 data URLs',
+                ),
+              detail: z.enum(['auto', 'low', 'high', 'original']).nullable().optional(),
             }),
           ]),
         ),
@@ -90,9 +91,21 @@ const inputSchema = z.union([
 ]);
 const requestSchema = z.object({
   model: z.string().trim().min(1),
-  input: inputSchema,
+  input: inputSchema.refine(
+    (input) =>
+      typeof input === 'string' ||
+      input.reduce(
+        (count, message) =>
+          count +
+          (Array.isArray(message.content)
+            ? message.content.filter((part) => part.type === 'input_image').length
+            : 0),
+        0,
+      ) <= 128,
+    { message: 'Decisions accepts at most 128 images per request' },
+  ),
   questions: questionsSchema,
-  safety_identifier: z.string().max(64).nullable().optional(),
+  safety_identifier: z.string().max(128).nullable().optional(),
 });
 
 const answerName = { name: z.string().nullable() };
@@ -137,6 +150,13 @@ interface DecisionsOptions extends OpenAiSharedOptions {
   model?: string;
   questions?: z.infer<typeof questionsSchema>;
   safety_identifier?: string | null;
+  /** llm-rubric: minimum normalized score to pass. */
+  threshold?: number;
+  /** llm-rubric: ordered score levels, low to high. Omit for a predicate. */
+  levels?: Array<string | z.infer<typeof levelSchema>>;
+  /** classifier: what to decide and the possible string labels. */
+  instructions?: string;
+  labels?: string[] | Record<string, string | null>;
 }
 
 function hasSensitiveValue(value: unknown): boolean {
@@ -167,15 +187,20 @@ function answersMatchQuestions(
         return (
           question.choices.some(({ value }) => value === answer.choice) &&
           answer.probabilities.length === question.choices.length &&
-          answer.probabilities.every(({ value }, i) => value === question.choices[i].value)
+          new Set(answer.probabilities.map(({ value }) => value)).size ===
+            question.choices.length &&
+          answer.probabilities.every(({ value }) =>
+            question.choices.some((choice) => choice.value === value),
+          )
         );
       }
       if (answer.type === 'score' && question.type === 'score') {
         return (
           answer.score <= question.levels.length - 1 &&
           answer.probabilities.length === question.levels.length &&
+          new Set(answer.probabilities.map(({ value }) => value)).size === question.levels.length &&
           answer.probabilities.every(
-            ({ value, label }, i) => value === i && label === question.levels[i].label,
+            ({ value, label }) => value >= 0 && label === question.levels[value]?.label,
           )
         );
       }
@@ -213,6 +238,116 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const config: DecisionsOptions = { ...this.config, ...context?.prompt?.config };
+    const label = context?.prompt?.label;
+    if (label && UNSUPPORTED_GRADER_LABELS.includes(label)) {
+      return {
+        error: `OpenAI Decisions cannot grade \`${label}\` assertions. Use \`llm-rubric\` or \`classifier\`.`,
+      };
+    }
+    if (context && label === 'llm-rubric') {
+      return this.grade(config, context, options);
+    }
+    return this.ask(prompt, config, context, options);
+  }
+
+  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
+    const parsed = z
+      .object({
+        instructions: z.string().min(1),
+        labels: z.union([z.array(z.string()).min(1), z.record(z.string(), z.string().nullable())]),
+      })
+      .safeParse(this.config);
+    if (!parsed.success) {
+      return {
+        error:
+          'OpenAI Decisions classifier needs `instructions` and `labels` (strings or a label-to-description map).',
+      };
+    }
+    const { instructions, labels } = parsed.data;
+    const choices = Array.isArray(labels)
+      ? labels.map((value) => ({ value }))
+      : Object.entries(labels).map(([value, description]) => ({
+          value,
+          ...(description === null ? {} : { description }),
+        }));
+    const result = await this.ask(prompt, {
+      ...this.config,
+      questions: [{ name: 'classification', type: 'choice', instructions, choices }],
+    });
+    if (result.error) {
+      return { error: result.error };
+    }
+    const answer = responseSchema.parse(result.raw).answers[0];
+    if (answer.type !== 'choice') {
+      return { error: 'OpenAI Decisions refused to classify the input.' };
+    }
+    return {
+      classification: Object.fromEntries(
+        answer.probabilities.map(({ value, probability }) => [value, probability]),
+      ),
+    };
+  }
+
+  private async grade(
+    config: DecisionsOptions,
+    context: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const threshold = probability.safeParse(config.threshold ?? 0.5);
+    if (!threshold.success) {
+      return { error: 'OpenAI Decisions `threshold` must be a number from 0 to 1.' };
+    }
+    const { rubric, output } = context.vars;
+    if (rubric === undefined || output === undefined) {
+      return { error: 'OpenAI Decisions `llm-rubric` requires rubric and output variables.' };
+    }
+    const levels =
+      config.levels === undefined ? undefined : gradingLevelsSchema.safeParse(config.levels);
+    if (levels && !levels.success) {
+      return {
+        error:
+          'OpenAI Decisions `levels` must list at least two strings or {label, description?} objects, ordered low to high.',
+      };
+    }
+    const instructions = typeof rubric === 'string' ? rubric : JSON.stringify(rubric);
+    const question: z.infer<typeof questionSchema> = levels?.success
+      ? { name: 'grade', type: 'score', instructions, levels: levels.data }
+      : { name: 'grade', type: 'predicate', instructions };
+    const result = await this.ask(
+      typeof output === 'string' ? output : JSON.stringify(output),
+      { ...config, questions: [question] },
+      context,
+      options,
+    );
+    if (result.error) {
+      return result;
+    }
+    const answer = responseSchema.parse(result.raw).answers[0];
+    if (answer.type !== 'predicate' && answer.type !== 'score') {
+      return {
+        ...result,
+        output: undefined,
+        error: 'OpenAI Decisions refused to grade the output.',
+      };
+    }
+    const raw = answer.type === 'predicate' ? answer.probability : answer.score;
+    const top = question.type === 'score' ? question.levels.length - 1 : 1;
+    const score = Number((raw / top).toFixed(6));
+    const pass = score >= threshold.data;
+    const comparison = `${pass ? '>=' : '<'} threshold ${threshold.data}`;
+    const reason =
+      answer.type === 'predicate'
+        ? `Decisions predicate probability ${raw} ${comparison}`
+        : `Decisions score ${raw} on levels 0–${top} (${score} normalized) ${comparison}`;
+    return { ...result, output: { pass, score, reason } };
+  }
+
+  private async ask(
+    prompt: string,
+    config: DecisionsOptions,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey(config);
     if ((config.apiKeyRequired ?? true) && !apiKey) {
       throw new Error(this.getMissingApiKeyErrorMessage(config));
@@ -221,7 +356,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     let body: z.infer<typeof requestSchema>;
     try {
       let input: unknown = prompt;
-      if (prompt.trimStart().startsWith('[')) {
+      if (context?.prompt?.label !== 'llm-rubric' && prompt.trimStart().startsWith('[')) {
         try {
           input = normalizeResponsesInput(JSON.parse(prompt));
         } catch {
@@ -231,7 +366,10 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       body = requestSchema.parse({
         model: context?.prompt?.config?.model ?? this.modelName,
         input,
-        questions: renderVarsInObject(config.questions, context?.vars),
+        questions:
+          context?.prompt?.label === 'llm-rubric'
+            ? config.questions
+            : renderVarsInObject(config.questions, context?.vars),
         safety_identifier: renderVarsInObject(config.safety_identifier, context?.vars),
       });
       assertOpenAiApiModel(body.model, this.getApiUrl(config));
@@ -277,21 +415,30 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       ...this.getOpenAiRequestHeaders(config.headers, config),
     };
     // Some API errors echo the supplied credential. Keep it out of eval results as well as logs.
+    const secrets = [
+      apiKey,
+      ...Object.entries(headers)
+        .filter(([name]) => !isNonCredentialHeader(name))
+        .map(([, value]) => value.replace(/^Bearer\s+/i, '')),
+    ].filter((secret): secret is string => Boolean(secret));
     const errorText = (value: unknown): string => {
       let message = String(sanitizeObject(String(value), { sanitizeUrls: true }));
-      const secrets = [
-        apiKey,
-        ...Object.entries(headers)
-          .filter(([name]) => !isNonCredentialHeader(name))
-          .map(([, value]) => value.replace(/^Bearer\s+/i, '')),
-      ];
       for (const secret of secrets) {
-        if (secret) {
-          message = message.replaceAll(secret, '[REDACTED]');
-        }
+        message = message.split(secret).join('[REDACTED]');
       }
       return message;
     };
+    // Only retain diagnostics used by the scheduler; gateways can echo arbitrary auth headers.
+    const responseHeaders = (values: Record<string, string> = {}) =>
+      Object.fromEntries(
+        Object.entries(values)
+          .filter(([name]) =>
+            /^(?:retry-after(?:-ms)?|x-request-id|(?:x-)?ratelimit-(?:limit|remaining|reset)(?:-(?:requests|tokens))?)$/i.test(
+              name,
+            ),
+          )
+          .map(([name, value]) => [name.toLowerCase(), errorText(value)]),
+      );
 
     let deleteFromCache: (() => Promise<void>) | undefined;
     try {
@@ -324,6 +471,11 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       );
       deleteFromCache = response.deleteFromCache;
       const { data, status, latencyMs } = response;
+      const http = {
+        status,
+        statusText: errorText(response.statusText),
+        headers: responseHeaders(response.headers),
+      };
       const cached = response.cached || response.coalesced === true;
       const apiError = z.object({ error: z.object({ message: z.string() }) }).safeParse(data);
       if (status < 200 || status >= 300 || apiError.success) {
@@ -334,6 +486,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
               ? apiError.data.error.message
               : response.statusText || 'Request failed',
           )}`,
+          metadata: { http },
         };
       }
 
@@ -357,22 +510,45 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       return {
         output: JSON.stringify({ answers }),
         raw: data,
-        metadata: { model },
+        metadata: {
+          model,
+          requestId: http.headers['x-request-id'],
+        },
         cached,
         latencyMs,
         tokenUsage: cached
           ? { total: usage.total_tokens, cached: usage.total_tokens }
           : {
               ...getResponsesTokenUsage(result.data, false),
-              ...(usage.input_tokens_details?.cached_tokens === undefined
-                ? {}
-                : { cached: usage.input_tokens_details.cached_tokens }),
+              cached: usage.input_tokens_details?.cached_tokens,
             },
         ...(answers.every((answer) => answer.type === 'refusal') ? { isRefusal: true } : {}),
         ...(cost === undefined ? {} : { cost }),
       };
     } catch (error) {
+      options?.abortSignal?.throwIfAborted();
+      if (isAbortError(error)) {
+        throw error;
+      }
       await deleteFromCache?.();
+      if (error instanceof HttpRateLimitError) {
+        return {
+          error: `OpenAI Decisions API error: ${errorText(formatRateLimitErrorMessage(error))}`,
+          metadata: {
+            rateLimitKind: error.kind,
+            http: {
+              status: error.status,
+              statusText: errorText(error.statusText),
+              headers: {
+                ...responseHeaders(error.headers),
+                ...(error.retryAfterMs === undefined
+                  ? {}
+                  : { 'retry-after-ms': String(error.retryAfterMs) }),
+              },
+            },
+          },
+        };
+      }
       return { error: `OpenAI Decisions API call failed: ${errorText(error)}` };
     }
   }
