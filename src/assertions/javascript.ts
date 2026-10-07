@@ -7,11 +7,11 @@ import { asGradingResult, normalizeScriptAssertionResult } from './scriptResultN
 import type { AssertionParams } from '../types/index';
 
 /**
- * Acorn's standalone tokenizer lacks the parser's property-name normalization.
+ * Acorn's property-name token context can misclassify following operators.
  * Treat names after . or ?. as identifiers so following operators and calls do not
  * interpret them as keywords. Assertion source and token offsets remain unchanged.
  */
-const assertionTokenizer = Parser.extend((BaseParser) => {
+const assertionParser = Parser.extend((BaseParser) => {
   const tokenizerPrototype = BaseParser.prototype as Parser & {
     updateContext(previousType: TokenType): void;
     next(ignoreEscapeSequenceInKeyword: boolean): void;
@@ -21,8 +21,8 @@ const assertionTokenizer = Parser.extend((BaseParser) => {
     declare type: TokenType;
 
     next(): void {
-      // Escaped keywords are valid property names. Standalone tokenization lacks
-      // that grammar context; leave syntax validation to the unchanged Function body.
+      // Escaped keywords are valid property names. Leave their syntax validation
+      // to the unchanged Function body rather than the lexical keyword guard.
       tokenizerPrototype.next.call(this, true);
     }
 
@@ -39,34 +39,69 @@ const assertionTokenizer = Parser.extend((BaseParser) => {
   };
 });
 
+function insertReturnAfterSemicolon(code: string, semicolonIndex: number): string {
+  const statements = code.slice(0, semicolonIndex + 1);
+  const expression = code.slice(semicolonIndex + 1).trim();
+  return `${statements} return ${expression}`;
+}
+
 /**
- * Finds the last top-level semicolon followed by code. Tokenization keeps comment,
- * string, regex, and template contents from becoming statement separators.
+ * Finds statement separators using JavaScript grammar so async and generator
+ * expressions distinguish regular expressions from division correctly.
  */
 function findLastStatementSemicolon(code: string): number {
+  const prefix = 'function __assertion__() {\n';
   let depth = 0;
   let pendingSemiIndex = -1;
   let lastSemiIndex = -1;
-
-  for (const token of assertionTokenizer.tokenizer(code, { ecmaVersion: 'latest' })) {
-    const label = token.type.label;
-    if (label === 'eof') {
-      break;
+  try {
+    assertionParser.parse(prefix + code + '\n}', {
+      ecmaVersion: 'latest',
+      onToken(token) {
+        const start = token.start - prefix.length;
+        if (start < 0 || start >= code.length || token.type === tokTypes.eof) {
+          return;
+        }
+        const label = token.type.label;
+        if (label === ';' && depth === 0) {
+          pendingSemiIndex = start;
+          return;
+        }
+        lastSemiIndex = pendingSemiIndex;
+        if (label === '(' || label === '[' || label === '{' || label === '${') {
+          depth++;
+        } else if (label === ')' || label === ']' || label === '}') {
+          depth--;
+        }
+      },
+    });
+  } catch (error) {
+    if (!(error instanceof SyntaxError) || lastSemiIndex === -1) {
+      throw error;
     }
-    if (label === ';' && depth === 0) {
-      // Wait for another token so terminal semicolons and trailing comments do
-      // not displace the separator before the final expression.
-      pendingSemiIndex = token.start;
-      continue;
+    // A bare final object is an expression only after return insertion. Validate
+    // that one complete candidate; never drop source or retry arbitrary semicolons.
+    const returnStart = lastSemiIndex + 1;
+    const candidate = assertionParser.parse(
+      prefix + insertReturnAfterSemicolon(code, lastSemiIndex) + '\n}',
+      { ecmaVersion: 'latest' },
+    );
+    const declaration = candidate.body[0];
+    if (declaration.type !== 'FunctionDeclaration') {
+      throw error;
     }
-    lastSemiIndex = pendingSemiIndex;
-    if (label === '(' || label === '[' || label === '{' || label === '${') {
-      depth++;
-    } else if (label === ')' || label === ']' || label === '}') {
-      depth--;
+    const statements = declaration.body.body.filter(
+      (statement) => statement.type !== 'EmptyStatement',
+    );
+    const last = statements[statements.length - 1];
+    if (
+      last?.type !== 'ReturnStatement' ||
+      last.start !== prefix.length + returnStart + 1 ||
+      !last.argument
+    ) {
+      throw error;
     }
   }
-
   return lastSemiIndex;
 }
 
@@ -98,11 +133,10 @@ export function buildFunctionBody(code: string): string {
     // Find the last semicolon that's actually a statement separator (not inside a string)
     const lastSemiIndex = findLastStatementSemicolon(trimmed);
     if (lastSemiIndex !== -1) {
-      const statements = trimmed.slice(0, lastSemiIndex + 1);
       const expression = trimmed.slice(lastSemiIndex + 1).trim();
       if (expression) {
         // Inject return before the final expression
-        return `${statements} return ${expression}`;
+        return insertReturnAfterSemicolon(trimmed, lastSemiIndex);
       }
     }
     // No semicolon or no final expression - use as-is (will likely error or return undefined)

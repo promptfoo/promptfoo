@@ -348,6 +348,23 @@ describe('buildFunctionBody', () => {
     expect(() => new Function(buildFunctionBody(code))).toThrow(SyntaxError);
   });
 
+  it.each([
+    'const x = 1; { pass: true, score: 1 }; false',
+    'const x = ; { pass: true, score: 1 }',
+    'const x = 1; { pass: true, score: 1 } garbage',
+    'const x = 1; return true; { pass: true, score: 1 } garbage',
+    'const f = async () => await /unterminated; true',
+    'const f = () => await /[a-z]+/.test("a"); f()',
+  ])('rejects malformed code without returning an earlier object: %s', (code) => {
+    expect(() => new Function(buildFunctionBody(code))).toThrow(SyntaxError);
+  });
+
+  it('preserves the complete prefix when returning a final object', () => {
+    const code =
+      'const f = async () => await /[;/*]/.test(";"); throw new Error("prefix"); { pass: true, score: 1 }';
+    expect(() => new Function(buildFunctionBody(code))()).toThrow('prefix');
+  });
+
   it('should not modify expressions starting with const-like words', () => {
     // "constant" starts with "const" but isn't a declaration
     expect(buildFunctionBody('constant === true')).toBe('return constant === true');
@@ -412,6 +429,126 @@ const javascriptFunctionFailAssertion: Assertion = {
     reason: 'Assertion failed',
   }),
 };
+
+describe('JavaScript async declaration grading', () => {
+  it.each(
+    ['\r', '\u2028', '\u2029', ' '].flatMap((separator) =>
+      [true, false].map((pass) => ({ separator, pass })),
+    ),
+  )(
+    'returns a bare grading object after separator $separator with pass $pass',
+    async ({ separator, pass }) => {
+      const result = await runAssertion({
+        prompt: 'Test prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'javascript',
+          value: `const x = ${pass};${separator}{ pass: x, score: 0.75, reason: "bare object" }`,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'text' },
+      });
+      expect(result).toMatchObject({ pass, score: 0.75, reason: 'bare object' });
+    },
+  );
+
+  it.each([
+    ['async arrow', 'const f = async () => await /[a-z]+/.test(output); f()'],
+    ['async block', 'const f = async () => { return await /[;/*]/.test(output); }; f()'],
+    ['async function', 'const f = async function () { return await /[a-z;]+/.test(output); }; f()'],
+    ['async method', 'const f = { async run() { return await /[a-z]+/.test(output); } }; f.run()'],
+    [
+      'async class',
+      'const F = class { async run() { return await /[a-z]+/.test(output); } }; new F().run()',
+    ],
+    [
+      'nested async function',
+      'const f = async () => { const g = async () => await /[a-z]+/.test(output); return g(); }; f()',
+    ],
+    [
+      'async template',
+      'const f = async () => `${await /[;/*]/.test(output)};`; f().then(value => value === "true;")',
+    ],
+    [
+      'async generator',
+      'const f = async function* () { yield await /[;/*]/.test(output); }; f().next().then(result => result.value)',
+    ],
+    ['generator regex', 'const f = function* () { yield /[;/*]/.test(output); }; f().next().value'],
+    [
+      'comment and terminal semicolons',
+      'const f = async () => await /* ; */ /[;/*]/.test(output); f();; // ;',
+    ],
+    ['await identifier', 'const await = 4; await / 2 === 2'],
+    ['yield identifier', 'const yield = 4; yield / 2 === 2'],
+    [
+      'nested await identifier',
+      'const f = async () => { const g = function () { const await = 4; return await / 2 === 2; }; return g(); }; f()',
+    ],
+    [
+      'new.target function context',
+      'const f = async () => await /[a-z]+/.test(output); const target = new.target; f().then(value => value && target === undefined)',
+    ],
+  ])('grades %s with its JavaScript grammar context', async (_name, value) => {
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type: 'javascript', value },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'a;z' },
+    });
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+  });
+
+  it.each([
+    { type: 'javascript' as const, pass: false, score: 0 },
+    { type: 'not-javascript' as const, pass: true, score: 1 },
+  ])('preserves false and inverse grades for $type', async ({ type, pass, score }) => {
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type, value: 'const f = async () => await /[0-9]+/.test(output); f()' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'a;z' },
+    });
+    expect(result).toMatchObject({ pass, score });
+    expect(result.reason).not.toContain('threw error');
+  });
+
+  it('preserves a promised numeric score', async () => {
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'javascript',
+        value: 'const f = async () => await /[a-z]+/.test(output) ? 0.75 : 0; f()',
+        threshold: 0.8,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'a;z' },
+    });
+    expect(result).toMatchObject({ pass: false, score: 0.75 });
+    expect(result.reason).not.toContain('threw error');
+  });
+
+  it.each([
+    'const f = async () => ({ pass: await /[a-z]+/.test(output), score: 0.75, reason: "async grade", metadata: { source: "regex" } }); f()',
+    'const f = async () => await /[a-z]+/.test(output); { pass: true, score: 0.75, reason: "async grade", metadata: { source: "regex" } }; /* ; */',
+  ])('preserves returned grading result fields: %s', async (value) => {
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type: 'javascript', value },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'a;z' },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0.75,
+      reason: 'async grade',
+      metadata: { source: 'regex' },
+    });
+  });
+});
 
 describe('JavaScript declaration grading', () => {
   it.each([
