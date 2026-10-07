@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isApiProvider, isProviderOptions } from '../../src/types/providers';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ProviderOptions } from '../../src/types/providers';
+import type { ApiModerationProvider, ProviderOptions } from '../../src/types/providers';
 
 describe('isApiProvider', () => {
   it('should correctly identify valid ApiProvider objects', () => {
@@ -106,5 +106,17 @@ describe('isProviderOptions', () => {
     edgeCases.forEach((options) => {
       expect(isProviderOptions(options)).toBe(true);
     });
+  });
+});
+
+describe('ApiModerationProvider', () => {
+  // `ApiModerationProvider` is re-exported from the package root, so `context`/`options`
+  // must stay optional: requiring them breaks every downstream two-argument call.
+  it('stays callable with just a prompt and a response', async () => {
+    const provider: ApiModerationProvider = Object.assign(createMockProvider(), {
+      callModerationApi: async () => ({ flags: [] }),
+    });
+
+    await expect(provider.callModerationApi('prompt', 'response')).resolves.toEqual({ flags: [] });
   });
 });
