@@ -7,9 +7,9 @@ import { asGradingResult, normalizeScriptAssertionResult } from './scriptResultN
 import type { AssertionParams } from '../types/index';
 
 /**
- * Acorn 8.18 treats some property names after ?. as expression starters, so division
- * can be read as a regex. Apply its ordinary-dot property rule to optional
- * properties as well, without rewriting assertion source or changing token offsets.
+ * Acorn's standalone tokenizer lacks the parser's property-name normalization.
+ * Treat names after . or ?. as identifiers so following operators and calls do not
+ * interpret them as keywords. Assertion source and token offsets remain unchanged.
  */
 const assertionTokenizer = Parser.extend((BaseParser) => {
   const tokenizerPrototype = BaseParser.prototype as Parser & {
@@ -27,12 +27,14 @@ const assertionTokenizer = Parser.extend((BaseParser) => {
     }
 
     updateContext(previousType: TokenType): void {
-      tokenizerPrototype.updateContext.call(
-        this,
-        previousType === tokTypes.questionDot && (this.type.keyword || this.type === tokTypes.name)
-          ? tokTypes.dot
-          : previousType,
-      );
+      if (
+        (previousType === tokTypes.dot || previousType === tokTypes.questionDot) &&
+        (this.type.keyword || this.type === tokTypes.name)
+      ) {
+        this.type = tokTypes.name;
+        previousType = tokTypes.dot;
+      }
+      tokenizerPrototype.updateContext.call(this, previousType);
     }
   };
 });

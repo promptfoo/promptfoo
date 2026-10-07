@@ -273,6 +273,26 @@ describe('buildFunctionBody', () => {
       'optional yield property in generator',
       'const fn = function* () { const x = { yield: 4 }; return x?.yield / 2; }; fn().next().value === 2',
     ],
+    [
+      'optional keyword property followed by multiplication and arrow body',
+      'const x = { function: 4 }; const n = x?.function * 2; const f = () => {}; n === 8',
+    ],
+    [
+      'dot keyword property followed by multiplication and arrow body',
+      'const x = { function: 4 }; const n = x.function * 2; const f = () => {}; n === 8',
+    ],
+    [
+      'optional keyword property call followed by division',
+      'const x = { if: () => 4 }; const n = x?.if() / 2; const f = () => {}; n === 2',
+    ],
+    [
+      'dot keyword property call followed by division',
+      'const x = { while: () => 4 }; const n = x.while() / 2; const f = () => {}; n === 2',
+    ],
+    [
+      'generator declaration followed by division and arrow body',
+      'const g = function* () { yield 4; }; const n = g().next().value / 2; const f = () => {}; n === 2',
+    ],
     ['function body new.target', 'const x = new.target; x === undefined'],
     ['optional class property', 'const x = { class: 4 }; x?.class / 2 === 2'],
     ['optional function property', 'const x = { function: 4 }; x?.function / 2 === 2'],
@@ -394,6 +414,25 @@ const javascriptFunctionFailAssertion: Assertion = {
 };
 
 describe('JavaScript declaration grading', () => {
+  it.each([
+    { output: '{"function":4}', pass: true, score: 1 },
+    { output: '{"function":2}', pass: false, score: 0 },
+  ])('grades keyword property multiplication for $output', async (testCase) => {
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'javascript',
+        value:
+          'const x = JSON.parse(output); const n = x?.function * 2; const f = () => {}; n === 8',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: testCase.output },
+    });
+    expect(result).toMatchObject({ pass: testCase.pass, score: testCase.score });
+    expect(result.reason).not.toContain('threw error');
+  });
+
   it.each([
     { output: '{"default":4}', pass: true, score: 1 },
     { output: '{"default":2}', pass: false, score: 0 },
