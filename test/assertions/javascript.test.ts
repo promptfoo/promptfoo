@@ -431,6 +431,27 @@ const javascriptFunctionFailAssertion: Assertion = {
 };
 
 describe('JavaScript async declaration grading', () => {
+  it.each(
+    ['\r', '\u2028', '\u2029', ' '].flatMap((separator) =>
+      [true, false].map((pass) => ({ separator, pass })),
+    ),
+  )(
+    'returns a bare grading object after separator $separator with pass $pass',
+    async ({ separator, pass }) => {
+      const result = await runAssertion({
+        prompt: 'Test prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'javascript',
+          value: `const x = ${pass};${separator}{ pass: x, score: 0.75, reason: "bare object" }`,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'text' },
+      });
+      expect(result).toMatchObject({ pass, score: 0.75, reason: 'bare object' });
+    },
+  );
+
   it.each([
     ['async arrow', 'const f = async () => await /[a-z]+/.test(output); f()'],
     ['async block', 'const f = async () => { return await /[;/*]/.test(output); }; f()'],

@@ -39,6 +39,12 @@ const assertionParser = Parser.extend((BaseParser) => {
   };
 });
 
+function insertReturnAfterSemicolon(code: string, semicolonIndex: number): string {
+  const statements = code.slice(0, semicolonIndex + 1);
+  const expression = code.slice(semicolonIndex + 1).trim();
+  return `${statements} return ${expression}`;
+}
+
 /**
  * Finds statement separators using JavaScript grammar so async and generator
  * expressions distinguish regular expressions from division correctly.
@@ -77,7 +83,7 @@ function findLastStatementSemicolon(code: string): number {
     // that one complete candidate; never drop source or retry arbitrary semicolons.
     const returnStart = lastSemiIndex + 1;
     const candidate = assertionParser.parse(
-      prefix + code.slice(0, returnStart) + 'return ' + code.slice(returnStart) + '\n}',
+      prefix + insertReturnAfterSemicolon(code, lastSemiIndex) + '\n}',
       { ecmaVersion: 'latest' },
     );
     const declaration = candidate.body[0];
@@ -90,7 +96,7 @@ function findLastStatementSemicolon(code: string): number {
     const last = statements[statements.length - 1];
     if (
       last?.type !== 'ReturnStatement' ||
-      last.start !== prefix.length + returnStart ||
+      last.start !== prefix.length + returnStart + 1 ||
       !last.argument
     ) {
       throw error;
@@ -127,11 +133,10 @@ export function buildFunctionBody(code: string): string {
     // Find the last semicolon that's actually a statement separator (not inside a string)
     const lastSemiIndex = findLastStatementSemicolon(trimmed);
     if (lastSemiIndex !== -1) {
-      const statements = trimmed.slice(0, lastSemiIndex + 1);
       const expression = trimmed.slice(lastSemiIndex + 1).trim();
       if (expression) {
         // Inject return before the final expression
-        return `${statements} return ${expression}`;
+        return insertReturnAfterSemicolon(trimmed, lastSemiIndex);
       }
     }
     // No semicolon or no final expression - use as-is (will likely error or return undefined)
