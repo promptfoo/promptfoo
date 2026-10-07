@@ -4,8 +4,11 @@ import { withCacheEnabled } from '../../src/cache';
 import { matchesClassification } from '../../src/matchers/classification';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
 import { OpenAiDecisionsProvider } from '../../src/providers/openai/decisions';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
-import { fetchWithRetries } from '../../src/util/fetch/index';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
+import { clearAgentCache, fetchWithRetries } from '../../src/util/fetch/index';
 import { accumulateGradingTokenUsage, createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { createMockProvider } from '../factories/provider';
 
@@ -29,6 +32,8 @@ describe('matchesClassification', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetAllMocks();
+    vi.unstubAllGlobals();
+    clearAgentCache();
   });
 
   class TestGrader implements ApiProvider {
@@ -256,6 +261,128 @@ describe('matchesClassification', () => {
       pass: true,
       score: 0.625,
       reason: 'Classification classA has score 0.63 >= 0.5',
+    });
+  });
+
+  it.each([false, true])(
+    'forwards grading call options only when a signal exists (%s)',
+    async (withSignal) => {
+      const abortSignal = withSignal ? new AbortController().signal : undefined;
+      const provider = new TestGrader();
+      const call = vi.spyOn(provider, 'callClassificationApi');
+
+      await withProviderCallExecutionContext({ abortSignal }, () =>
+        matchesClassification('classA', 'Sample output', 0.5, { provider }),
+      );
+
+      expect(call).toHaveBeenCalledWith('Sample output', ...(abortSignal ? [{ abortSignal }] : []));
+    },
+  );
+
+  describe('Decisions cancellation through grading execution context', () => {
+    function provider() {
+      return new OpenAiDecisionsProvider('classification-cancellation-fixture', {
+        config: {
+          apiKey: 'fixture-key',
+          instructions: 'Classify the output.',
+          labels: ['safe', 'unsafe'],
+        },
+      });
+    }
+
+    function response() {
+      return Response.json({
+        model: 'classification-cancellation-fixture',
+        answers: [
+          {
+            name: 'classification',
+            type: 'choice',
+            choice: 'safe',
+            confidence: 0.625,
+            probabilities: [
+              { value: 'safe', probability: 0.625 },
+              { value: 'unsafe', probability: 0.375 },
+            ],
+          },
+        ],
+        usage: { input_tokens: 9, output_tokens: 1, total_tokens: 10 },
+      });
+    }
+
+    beforeEach(async () => {
+      const actualFetch = await vi.importActual<typeof import('../../src/util/fetch/index')>(
+        '../../src/util/fetch/index',
+      );
+      vi.mocked(fetchWithRetries).mockImplementation(actualFetch.fetchWithRetries);
+    });
+
+    it('does not send a request when grading has already been aborted', async () => {
+      const controller = new AbortController();
+      const reason = new Error('Evaluation cancelled before classification');
+      controller.abort(reason);
+      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response());
+      vi.stubGlobal('fetch', fetch);
+
+      await withCacheEnabled(false, async () => {
+        await expect(
+          withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+            matchesClassification('safe', 'Pre-aborted classifier fixture', 0.5, {
+              provider: provider(),
+            }),
+          ),
+        ).rejects.toBe(reason);
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('aborts an in-flight classifier transport request without returning a verdict', async () => {
+      const controller = new AbortController();
+      const reason = new Error('Evaluation cancelled during classification');
+      let markStarted!: (signal: AbortSignal | null | undefined) => void;
+      const started = new Promise<AbortSignal | null | undefined>((resolve) => {
+        markStarted = resolve;
+      });
+      let release = () => {};
+      const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(
+        (_url, options) =>
+          new Promise<Response>((resolve, reject) => {
+            const signal = options?.signal;
+            const onAbort = () => reject(signal?.reason);
+            release = () => {
+              signal?.removeEventListener('abort', onAbort);
+              resolve(response());
+            };
+            signal?.addEventListener('abort', onAbort, { once: true });
+            markStarted(signal);
+          }),
+      );
+      vi.stubGlobal('fetch', fetch);
+
+      await withCacheEnabled(false, async () => {
+        const settled = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+          matchesClassification('safe', 'In-flight classifier fixture', 0.5, {
+            provider: provider(),
+          }),
+        ).then(
+          (result) => ({ result }),
+          (error) => ({ error }),
+        );
+        try {
+          const signal = await Promise.race([
+            started,
+            settled.then(() => {
+              throw new Error('Classifier finished before reaching transport');
+            }),
+          ]);
+          controller.abort(reason);
+          expect(signal?.aborted).toBe(true);
+          expect(await settled).toEqual({ error: reason });
+          expect(fetch).toHaveBeenCalledTimes(1);
+        } finally {
+          release();
+          await settled;
+        }
+      });
     });
   });
 

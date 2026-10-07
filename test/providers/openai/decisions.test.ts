@@ -2722,13 +2722,108 @@ describe('OpenAiDecisionsProvider', () => {
     });
   });
 
-  it('propagates caller cancellation instead of converting it into an evaluation error', async () => {
+  it.each(['direct', 'rubric', 'classifier'] as const)(
+    'rejects already-aborted %s calls before cache or transport',
+    async (mode) => {
+      const controller = new AbortController();
+      controller.abort();
+      const instance = provider({ instructions: 'Choose.', labels: ['yes', 'no'] });
+      const options = { abortSignal: controller.signal };
+      const pending =
+        mode === 'classifier'
+          ? instance.callClassificationApi('text', options)
+          : instance.callApi(
+              'text',
+              mode === 'rubric' ? rubricContext('Is correct', 'text') : undefined,
+              options,
+            );
+      await expect(pending).rejects.toBe(controller.signal.reason);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+      expect(fetchWithRetries).not.toHaveBeenCalled();
+    },
+  );
+
+  it('forwards classifier cancellation and retry settings', async () => {
+    const abortSignal = new AbortController().signal;
+    mockAnswers([
+      {
+        name: 'classification',
+        type: 'choice',
+        choice: 'yes',
+        confidence: 0.8,
+        probabilities: [
+          { value: 'yes', probability: 0.8 },
+          { value: 'no', probability: 0.2 },
+        ],
+      },
+    ]);
+    const result = await provider({
+      maxRetries: 2,
+      instructions: 'Choose.',
+      labels: ['yes', 'no'],
+    }).callClassificationApi('text', { abortSignal });
+    expect(result.classification).toEqual({ yes: 0.8, no: 0.2 });
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: abortSignal }),
+      expect.any(Number),
+      'json',
+      expect.any(Object),
+      2,
+    );
+  });
+
+  it('cancels classifier retry backoff without sending another request', async () => {
+    const actualCache =
+      await vi.importActual<typeof import('../../../src/cache')>('../../../src/cache');
+    const actualFetch = await vi.importActual<typeof import('../../../src/util/fetch/index')>(
+      '../../../src/util/fetch/index',
+    );
+    vi.mocked(fetchWithCache).mockImplementation(actualCache.fetchWithCache);
+    vi.mocked(fetchWithRetries).mockImplementation(actualFetch.fetchWithRetries);
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    let started!: () => void;
+    const firstRequest = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const rawFetch = vi.fn().mockImplementation(async () => {
+      started();
+      return new Response(
+        JSON.stringify({ error: { code: 'rate_limit_exceeded', message: 'Try again.' } }),
+        {
+          status: 429,
+          headers: { 'retry-after-ms': '100' },
+        },
+      );
+    });
+    vi.stubGlobal('fetch', rawFetch);
     const controller = new AbortController();
-    controller.abort();
-    vi.mocked(fetchWithCache).mockRejectedValue(controller.signal.reason);
-    await expect(
-      provider().callApi('text', undefined, { abortSignal: controller.signal }),
-    ).rejects.toBe(controller.signal.reason);
+    const reason = new Error('Classification cancelled');
+    try {
+      await actualCache.withCacheEnabled(false, async () => {
+        const pending = provider({
+          instructions: 'Choose.',
+          labels: ['yes', 'no'],
+          maxRetries: 2,
+        }).callClassificationApi('text', { abortSignal: controller.signal });
+        const settled = pending.then(
+          (result) => ({ result }),
+          (error: unknown) => ({ error }),
+        );
+        await firstRequest;
+        await vi.advanceTimersByTimeAsync(0);
+        expect(rawFetch).toHaveBeenCalledTimes(1);
+        controller.abort(reason);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(await settled).toEqual({ error: reason });
+        expect(rawFetch).toHaveBeenCalledTimes(1);
+        expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
   });
 
   it.each(['direct', 'rubric', 'classifier'] as const)(

@@ -1,4 +1,8 @@
-import { callGradingProvider, getAndCheckProvider } from './providers';
+import {
+  callGradingProvider,
+  getAndCheckProvider,
+  getGradingProviderCallOptions,
+} from './providers';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
@@ -24,8 +28,11 @@ export async function matchesClassification(
     'classification check',
   )) as ApiClassificationProvider;
 
+  const callApiOptions = getGradingProviderCallOptions();
   const resp = await callGradingProvider(finalProvider, 'classification', () =>
-    finalProvider.callClassificationApi(output),
+    callApiOptions
+      ? finalProvider.callClassificationApi(output, callApiOptions)
+      : finalProvider.callClassificationApi(output),
   );
 
   if (!resp.classification) {

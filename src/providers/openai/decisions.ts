@@ -384,7 +384,10 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     return this.ask(input, config, context, options);
   }
 
-  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
+  async callClassificationApi(
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderClassificationResponse> {
     const parsed = z
       .object({
         instructions: z.string().min(1),
@@ -404,10 +407,15 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
           value,
           ...(description === null ? {} : { description }),
         }));
-    const result = await this.ask(prompt, {
-      ...this.config,
-      questions: [{ name: 'classification', type: 'choice', instructions, choices }],
-    });
+    const result = await this.ask(
+      prompt,
+      {
+        ...this.config,
+        questions: [{ name: 'classification', type: 'choice', instructions, choices }],
+      },
+      undefined,
+      options,
+    );
     if (result.error) {
       return result;
     }
@@ -511,6 +519,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey(config);
     if ((config.apiKeyRequired ?? true) && !apiKey) {
       throw new Error(this.getMissingApiKeyErrorMessage(config));
