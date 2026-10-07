@@ -43,6 +43,19 @@ describe('sanitizeRuntimeOptions', () => {
   });
 });
 
+function headerCaseVariants(name: string): Set<string> {
+  const mixed = name.replace(/[a-z]/gi, (letter, index) =>
+    index % 2 === 0 ? letter.toLowerCase() : letter.toUpperCase(),
+  );
+  return new Set([
+    name,
+    name.toLowerCase(),
+    name.toUpperCase(),
+    mixed,
+    mixed.replace(/key$/i, 'Key'),
+  ]);
+}
+
 describe('isCredentialHeader', () => {
   it.each([
     'Ocp-Apim-Subscription-Key',
@@ -74,9 +87,15 @@ describe('isCredentialHeader', () => {
     'VENDORSESSIONACCESS',
     'vEnDoRsEsSiOnAcCeSs',
     'X-Gateway-Authentication',
+    'X-Gateway-Token',
+    'X-Gateway-Cookie',
   ])('recognizes credential headers under %s regardless of value shape', (name) => {
-    expect(isCredentialHeader(name, 'short')).toBe(true);
-    expect(isCredentialHeader(name, '9be880e3-e5dc-4be7-8739-a4b587fdfb13')).toBe(true);
+    for (const variant of headerCaseVariants(name)) {
+      expect(isCredentialHeader(variant, 'short'), variant).toBe(true);
+      expect(isCredentialHeader(variant, '9be880e3-e5dc-4be7-8739-a4b587fdfb13'), variant).toBe(
+        true,
+      );
+    }
   });
 
   it.each([
@@ -91,6 +110,8 @@ describe('isCredentialHeader', () => {
     'X-Public-Key',
     'Sec-WebSocket-Key',
     'idempotencyKey',
+    'xPublicKey',
+    'secWebSocketKey',
     'X-Session-Timeout',
     'X-Session-Type',
     'X-Session-Mode',
@@ -106,12 +127,22 @@ describe('isCredentialHeader', () => {
     'vendorSessionMode',
     'X-Access-Region',
     'X-Session-Access-Mode',
-    'X-Monkey',
   ])('preserves ordinary metadata under %s', (name) => {
-    expect(isCredentialHeader(name, 'us')).toBe(false);
-    expect(isCredentialHeader(name, '0123456789abcdef0123456789abcdef')).toBe(false);
-    expect(isCredentialHeader(name, '9be880e3-e5dc-4be7-8739-a4b587fdfb13')).toBe(false);
+    for (const variant of headerCaseVariants(name)) {
+      expect(isCredentialHeader(variant, 'us'), variant).toBe(false);
+      expect(isCredentialHeader(variant, '0123456789abcdef0123456789abcdef'), variant).toBe(false);
+      expect(isCredentialHeader(variant, '9be880e3-e5dc-4be7-8739-a4b587fdfb13'), variant).toBe(
+        false,
+      );
+    }
   });
+  // HTTP cannot distinguish Monkey from MonKey; unknown key suffixes are conservatively secret.
+  it.each(['X-Monkey', 'X-MonKey', 'x-monkey', 'X-MONKEY'])(
+    'treats ambiguous key suffix %s consistently',
+    (name) => {
+      expect(isCredentialHeader(name, 'short')).toBe(true);
+    },
+  );
 });
 
 describe('credential values under public key-role headers', () => {
@@ -123,8 +154,10 @@ describe('credential values under public key-role headers', () => {
     'X-Public-Key',
     'Sec-WebSocket-Key',
   ])('still detects credential value evidence under %s', (name) => {
-    expect(isCredentialHeader(name, 'Bearer short-credential')).toBe(true);
-    expect(isCredentialHeader(name, 'sk-abcdefghijklmnopqrstuvw')).toBe(true);
+    for (const variant of headerCaseVariants(name)) {
+      expect(isCredentialHeader(variant, 'Bearer short-credential'), variant).toBe(true);
+      expect(isCredentialHeader(variant, 'sk-abcdefghijklmnopqrstuvw'), variant).toBe(true);
+    }
   });
 });
 

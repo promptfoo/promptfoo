@@ -458,15 +458,17 @@ export function isCredentialHeader(name: string, value: string): boolean {
   // These key roles identify requests, routing, or public material rather than authenticate.
   // Exempt only name inference; credential-shaped values still take precedence below.
   const publicKeyRole =
-    /^(?:x[-_\s])?(?:(?:idempotency|cache|routing|partition|public)[-_\s]?key|sec[-_\s]web[-_\s]?socket[-_\s]key)$/.test(
-      normalizedName,
+    /^x?(?:(?:idempotency|cache|routing|partition|public)key|secwebsocketkey)$/.test(
+      name.replace(/[-_\s]/g, '').toLowerCase(),
     );
   return (
     isSecretField(name) ||
-    (!publicKeyRole && /(?:^|[-_\s])key$/.test(normalizedName)) ||
+    (!publicKeyRole && /key$/i.test(name)) ||
     /session(?:[-_\s]?(?:access|id))?$/i.test(name) ||
-    /(?:^|[-_\s])(?:(?:api|access|subscription)[-_\s]?key|auth(?:orization|entication)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
-      normalizedName,
+    [name, normalizedName].some((candidate) =>
+      /(?:^|[-_\s])(?:(?:api|access|subscription)[-_\s]?key|auth(?:orization|entication)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
+        candidate,
+      ),
     ) ||
     normalizedName.replace(/[-_]/g, '') === 'xhoneycombteam' ||
     /^(?:bearer|basic|token|api[-_]?key)\s+\S+/i.test(value.trim()) ||

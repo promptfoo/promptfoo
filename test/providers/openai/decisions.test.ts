@@ -705,6 +705,9 @@ describe('OpenAiDecisionsProvider', () => {
     ['X-Public-Key', 'en'],
     ['Sec-WebSocket-Key', 'score'],
     ['X-Session-Access-Mode', 'us'],
+    ['X-PuBlic-Key', 'us'],
+    ['cAcHe-Key', 'score'],
+    ['xpublickey', 'en'],
   ])('preserves noncredential %s metadata in responses and the cache', async (name, value) => {
     await withRealCache(async ({ actualCache, write }) => {
       const answers = [
@@ -1522,6 +1525,19 @@ describe('OpenAiDecisionsProvider', () => {
       config: { headers: { [name]: '64b2f1d7-8ab3-45ef-9816-7364c501b907' } },
       credentials: ['64b2f1d7-8ab3-45ef-9816-7364c501b907'],
     })),
+    ...[
+      'X-Functions-kEy',
+      'Ocp-Apim-Subscription-kEy',
+      'arbitraryvendorkey',
+      'ARBITRARYVENDORKEY',
+      'aRbItRaRyVeNdOrKeY',
+      'X-Gateway-aUtHeNtIcAtIoN',
+      'X-Gateway-tOkEn',
+    ].map((name) => ({
+      name: `case-insensitive header ${name}`,
+      config: { headers: { [name]: '0123456789abcdef0123456789abcdef' } },
+      credentials: ['0123456789abcdef0123456789abcdef'],
+    })),
     {
       name: 'custom subscription key',
       config: { headers: { 'X-Subscription-Key': 'short-subscription-value' } },
@@ -1788,6 +1804,19 @@ describe('OpenAiDecisionsProvider', () => {
         },
       },
       credentials: ['64b2f1d7-8ab3-45ef-9816-7364c501b907', '31ab524c-4086-4b47-b839-489f4c7ad302'],
+    })),
+    ...[
+      'X-Functions-kEy',
+      'Ocp-Apim-Subscription-kEy',
+      'arbitraryvendorkey',
+      'ARBITRARYVENDORKEY',
+      'aRbItRaRyVeNdOrKeY',
+      'X-Gateway-aUtHeNtIcAtIoN',
+      'X-Gateway-tOkEn',
+    ].map((name) => ({
+      name: `case-insensitive header ${name}`,
+      config: { headers: { [name]: '0123456789abcdef0123456789abcdef' } },
+      credentials: ['0123456789abcdef0123456789abcdef'],
     })),
     {
       name: 'subscription keys',
