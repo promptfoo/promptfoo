@@ -43,14 +43,17 @@ describe('synthesize', () => {
     expect(result).toEqual([{ metric: 'metric1', value: 'test question', type: 'pi' }]);
   });
 
-  it('should throw a clear error when the questions response has an unexpected shape', async () => {
+  it.each([
+    '[{"label": "metric1"}, {"label": "metric2"}]',
+    { questions: [null] },
+    { questions: [{ label: 'metric1' }] },
+    { questions: [{ label: 1, question: 'Is it correct?' }] },
+  ])('rejects an unexpected questions response: %j', async (output) => {
     // Valid JSON, but not the expected {questions: [...]} shape. Previously
     // sampleArray(undefined) threw an unhandled TypeError.
     const mockProvider = createMockProvider({
       id: 'mock-provider',
-      callApi: vi
-        .fn<ApiProvider['callApi']>()
-        .mockResolvedValue({ output: '[{"label": "metric1"}, {"label": "metric2"}]' }),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output }),
     });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 

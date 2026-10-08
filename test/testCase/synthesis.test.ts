@@ -36,15 +36,18 @@ describe('synthesize', () => {
     expect(result).toEqual([{ var1: 'value1' }, { var2: 'value2' }]);
   });
 
-  it('should throw a clear error when the personas response has an unexpected shape', async () => {
+  it.each([
+    '[{"name": "Alice"}, {"name": "Bob"}]',
+    { personas: 'Alice' },
+    { personas: [null] },
+    { personas: [{ name: 'Alice' }] },
+  ])('rejects an unexpected personas response: %j', async (output) => {
     // Provider returns a valid JSON array of objects, but not the expected
     // {personas: string[]} shape (e.g. a custom HTTP provider whose response
     // differs from OpenAI's). Should fail with a clear message, not a TypeError.
     const mockProvider = createMockProvider({
       id: 'mock-provider',
-      callApi: vi
-        .fn<ApiProvider['callApi']>()
-        .mockResolvedValue({ output: '[{"name": "Alice"}, {"name": "Bob"}]' }),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output }),
     });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
@@ -57,6 +60,7 @@ describe('synthesize', () => {
         numTestCasesPerPersona: 1,
       }),
     ).rejects.toThrow(/Expected a JSON object of the form \{personas: string\[\]\}/);
+    expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
   it('should find the personas object even when it is not the first JSON object in the response', async () => {

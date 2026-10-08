@@ -143,9 +143,10 @@ export async function synthesize({
     respObjects.length >= 1,
     `Expected at least one JSON object in the response for personas, got ${respObjects.length}`,
   );
-  const personasObject = respObjects.find((obj): obj is { personas: string[] } =>
-    Array.isArray((obj as { personas?: unknown }).personas),
-  );
+  const personasObject = respObjects.find((obj): obj is { personas: string[] } => {
+    const personas = (obj as { personas?: unknown }).personas;
+    return Array.isArray(personas) && personas.every((persona) => typeof persona === 'string');
+  });
   invariant(
     personasObject,
     () =>
