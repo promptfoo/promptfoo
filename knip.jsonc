@@ -33,9 +33,14 @@
       ],
       "ignoreFiles": [],
       "ignoreDependencies": [
+        // Yarn injects pnpapi as a runtime builtin; the filesystem MCP launcher resolves its loader.
+        "pnpapi",
         // Imported by test/code-scan-action/*.test.ts; declared in
         // code-scan-action/package.json rather than the root manifest.
         "@actions/*",
+        // Optional peer loaded lazily only by Transformers providers. Consumers opt
+        // in; unit tests mock it and the package artifact test installs the real SDK.
+        "@huggingface/transformers",
         // Install-side-effect git-hook tool; never imported.
         "block-no-verify",
         // Transitive pin for google-auth-library behavior (see comments in
@@ -90,11 +95,16 @@
     // POSIX utility used by workspace FIFO regression tests.
     "mkfifo",
     "modelaudit",
+    // POSIX process-tree discovery for package fixture cleanup.
+    "ps",
     "ruby",
     "security"
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
+    // Cloud-consumed: server/src/worker/redteamRun imports withCloudProviderResolver
+    // from @promptfoo/util/cloud to supply prepared saved providers during a run.
+    "src/util/cloud.ts": ["exports"],
     // Internal intentional alias/duplicate-export patterns.
     "src/contracts/api/user.ts": ["duplicates"],
     // Cloud-consumed: server/src/task/hydra.ts and server/src/task/h4rm3l

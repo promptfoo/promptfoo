@@ -39,7 +39,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
-| [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [cost](#cost)                                                   | Inference cost limit or zero-weight cost metric                    |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
@@ -308,6 +308,21 @@ assert:
   - type: cost
     threshold: 0.001
 ```
+
+To record the provider's cost in USD without a pass/fail limit, omit `threshold` and set a named `metric` with `weight: 0`. The measurement is reported without contributing to the aggregate quality score. Missing, negative, or non-finite costs produce an error instead of a zero measurement.
+
+```yaml
+defaultTest:
+  assert:
+    - type: cost
+      metric: inference_cost
+      weight: 0
+derivedMetrics:
+  - name: average_inference_cost
+    value: 'inference_cost / __count'
+```
+
+Threshold-based `cost` assertions, including `not-cost`, continue to report binary pass/fail scores.
 
 ### Equality
 
@@ -1449,7 +1464,7 @@ METEOR requires the optional `natural` package. Install it before using METEOR a
 npm install natural@^8.1.0
 ```
 
-If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
 :::
 
 #### How METEOR Works
