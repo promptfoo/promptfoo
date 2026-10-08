@@ -10,7 +10,7 @@
  * - `tool_calls`: Model made function/tool calls
  *
  * **Provider Mappings:**
- * - OpenAI: `function_call` (legacy) → `tool_calls` (current)
+ * - OpenAI: `function_call` (legacy) → `tool_calls` (current), Responses `max_output_tokens` → `length`
  * - Anthropic: `end_turn` → `stop`, `stop_sequence` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `refusal` → `content_filter`, `pause_turn` → `pause_turn`
  * - Vercel AI SDK: `tool-calls` → `tool_calls`, `content-filter` → `content_filter`
  *
@@ -33,6 +33,9 @@ export const FINISH_REASON_MAP: Record<string, string> = {
 
   // OpenAI - Legacy mappings
   function_call: 'tool_calls', // Legacy function calling → modern tool calling
+
+  // OpenAI - Responses API incomplete reason
+  max_output_tokens: 'length',
 
   // Anthropic - Messages API mappings
   end_turn: 'stop', // Natural completion

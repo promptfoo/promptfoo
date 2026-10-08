@@ -106,8 +106,7 @@ try {
   assert.equal(metadata.width, 2);
   assert.equal(metadata.height, 3);
   assert.equal(metadata.format, 'png');
-  // Docker does not download Chromium; verify the remote-browser plugin can load.
-  assert.equal(require('puppeteer-extra-plugin-stealth')().name, 'stealth');
+  // Browser automation is opt-in; the base image does not install browser peers or Chromium.
 
   // An enum requires transpilation; do not preload tsx and mask a broken CLI loader.
   writeFixture('helper.ts', 'export enum Prefix { Value = "fixture:" }\n');
