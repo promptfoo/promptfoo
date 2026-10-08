@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
+import EvalResult from '../../src/models/evalResult';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
@@ -128,6 +129,36 @@ describe('table search and filtered metrics', () => {
     expect(
       metrics.reduce((n, m) => n + m.testPassCount + m.testFailCount + m.testErrorCount, 0),
     ).toBe(1);
+  });
+
+  it.each([
+    ['test_case', sql`test_case`],
+    ['prompt', sql`prompt`],
+    ['provider', sql`provider`],
+  ])('loads required %s artifacts with valid JSON but invalid shapes', async (_name, column) => {
+    for (const artifact of ['null', '[]', '"legacy"', '42', 'true']) {
+      const eval_ = await create([{ metadata: { note: 'shape-needle' } }]);
+      const db = await getDb();
+      await db.run(sql`UPDATE eval_results SET ${column} = ${artifact}
+        WHERE eval_id = ${eval_.id} AND test_idx = 0`);
+      const page = await eval_.getTablePage({ searchQuery: 'shape-needle' });
+      expect(page.body.map((row) => row.testIdx)).toEqual([0]);
+      expect(page.filteredCount).toBe(1);
+      const [hydrated] = await EvalResult.findManyByEvalIdAndTestIndices(eval_.id, [0]);
+      if (_name === 'test_case') {
+        expect(hydrated.testCase).toEqual({});
+      }
+      if (_name === 'prompt') {
+        expect(hydrated.prompt).toEqual({ raw: '', label: '' });
+      }
+      if (_name === 'provider') {
+        expect(hydrated.provider).toEqual({ id: '' });
+      }
+      const stored = await db.get<{ artifact: string }>(
+        sql`SELECT ${column} AS artifact FROM eval_results WHERE eval_id = ${eval_.id}`,
+      );
+      expect(stored?.artifact).toBe(artifact);
+    }
   });
 
   it.each([

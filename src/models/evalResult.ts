@@ -944,8 +944,14 @@ export default class EvalResult {
 
     const db = await getDb();
     // A search can match a valid artifact on a row with another malformed artifact.
-    const validJson = <T extends AnyColumn>(column: T, fallback = 'null') =>
-      sql`CASE WHEN json_valid(${column}) THEN ${column} ELSE ${fallback} END`.mapWith(column);
+    const validJson = <T extends AnyColumn>(column: T, fallback = 'null') => {
+      // Required artifacts must be objects; JSON null, arrays, and scalars are also invalid.
+      const valid =
+        fallback === 'null'
+          ? sql`json_valid(${column})`
+          : sql`CASE WHEN json_valid(${column}) THEN json_type(${column}) = 'object' ELSE 0 END`;
+      return sql`CASE WHEN ${valid} THEN ${column} ELSE ${fallback} END`.mapWith(column);
+    };
     const results = await db
       .select({
         ...getTableColumns(evalResultsTable),
