@@ -44,6 +44,7 @@ export function addProviderTestCases(
   config: Record<string, unknown>,
   definition: StrategyDefinition & {
     providerName: string;
+    defaults?: Record<string, unknown>;
     forwardPluginInputs?: boolean;
   },
 ): TestCase[] {
@@ -58,6 +59,7 @@ export function addProviderTestCases(
         id: definition.providerName,
         config: {
           injectVar,
+          ...definition.defaults,
           ...config,
           ...(inputs && { inputs }),
         },

@@ -25,17 +25,13 @@ export function createAdaptiveMultiTurnStrategy(
   return (testCases, injectVar, config) => {
     const scanId = crypto.randomUUID(); // Generate once for all tests in this scan
 
-    return addProviderTestCases(
-      testCases,
-      injectVar,
-      { scanId, ...config },
-      {
-        providerName,
-        metricSuffix,
-        strategyId,
-        forwardPluginInputs: true,
-      },
-    );
+    return addProviderTestCases(testCases, injectVar, config, {
+      providerName,
+      defaults: { scanId },
+      metricSuffix,
+      strategyId,
+      forwardPluginInputs: true,
+    });
   };
 }
 

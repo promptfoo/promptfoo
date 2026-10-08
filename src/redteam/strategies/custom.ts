@@ -12,14 +12,10 @@ export function addCustom(
   const variant = strategyId.includes(':') ? strategyId.split(':')[1] : '';
   const displayName = variant ? `Custom:${variant}` : 'Custom';
 
-  return addProviderTestCases(
-    testCases,
-    injectVar,
-    { variant, ...config },
-    {
-      providerName: `promptfoo:redteam:${strategyId}`,
-      metricSuffix: displayName,
-      strategyId,
-    },
-  );
+  return addProviderTestCases(testCases, injectVar, config, {
+    providerName: `promptfoo:redteam:${strategyId}`,
+    defaults: { variant },
+    metricSuffix: displayName,
+    strategyId,
+  });
 }
