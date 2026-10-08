@@ -65,6 +65,7 @@ For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`.
 | -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
 | GPT-5.6+ text, image inputs, and tools | `openai:<model>`                           | [Responses API](#responses-api)                                          |
 | Chat Completions                       | `openai:chat:<model>`                      | [Parameters](#configuring-parameters)                                    |
+| Classification and scoring             | `openai:decisions:<model>`                 | [Decisions API](./openai-decisions.md)                                   |
 | Embeddings                             | `openai:embedding:<model>`                 | [Embedding dimensions](#reducing-embedding-dimensions)                   |
 | Moderation                             | `openai:moderation:omni-moderation-latest` | [Moderation assertions](/docs/configuration/expected-outputs/moderation) |
 | Image generation                       | `openai:image:<model>`                     | [Images](#images)                                                        |
@@ -73,7 +74,7 @@ For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`.
 | Conversational Realtime                | `openai:realtime:gpt-realtime-2.1`         | [Realtime](#realtime-api-models)                                         |
 | Full-duplex voice                      | `openai:live:gpt-live-1`                   | [GPT-Live](./openai-live.md)                                             |
 
-For file transcription, see [audio transcription](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
+For file transcription, see [audio transcription](#audio-transcription). For Agents SDK and Codex workflows, see [agent providers](#agentic-providers).
 
 Daybreak models require separate approval and use Responses, not Chat Completions. Use `openai:responses:gpt-daybreak-blue-latest` or `openai:responses:gpt-daybreak-red-latest`. Their shorthand IDs also select Responses on native OpenAI endpoints, preserving the alias in the request. See the [Blue](https://developers.openai.com/api/docs/models/gpt-daybreak-blue-latest) and [Red](https://developers.openai.com/api/docs/models/gpt-daybreak-red-latest) model cards.
 
@@ -1152,7 +1153,6 @@ Choose a provider that matches the application you are testing:
 | Managed Codex sessions and hosted sandboxes         | [OpenAI Agents API](/docs/providers/openai-agents-api)                |
 | TypeScript Agents SDK tools, handoffs, and sessions | [OpenAI Agents SDK](/docs/providers/openai-agents)                    |
 | Python Agents SDK application                       | [Agents SDK Python guide](/docs/guides/evaluate-openai-agents-python) |
-| ChatKit integration                                 | [OpenAI ChatKit](/docs/providers/openai-chatkit)                      |
 | Coding workflow with working-directory access       | [Codex SDK](/docs/providers/openai-codex-sdk)                         |
 | Codex Security scan or finding validation           | [Codex Security SDK](/docs/providers/openai-codex-security)           |
 | App-server events, approvals, and thread lifecycle  | [Codex app-server](/docs/providers/openai-codex-app-server)           |

@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.123.1",
+  "version": "0.124.0",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -227,7 +227,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.282",
+    "@anthropic-ai/claude-agent-sdk": "0.3.283",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -241,7 +241,7 @@
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
     "@openai/agents": "^0.14.1",
-    "@openai/codex-security": "^0.1.31",
+    "@openai/codex-security": "^0.2.0",
     "@slack/web-api": "^8.1.1",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
@@ -285,7 +285,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.282",
+    "@anthropic-ai/claude-agent-sdk": "0.3.283",
     "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -311,7 +311,7 @@
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
     "read-excel-file": "^9.3.9",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",
@@ -331,6 +331,7 @@
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
+    "acorn": "^8.18.0",
     "ai": "^6.0.286",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
@@ -417,7 +418,7 @@
     "@ibm-cloud/watsonx-ai": "*",
     "@langfuse/client": "*",
     "@openai/agents": "*",
-    "@openai/codex-security": "*",
+    "@openai/codex-security": "^0.2.0",
     "@slack/web-api": "*",
     "ibm-cloud-sdk-core": "*",
     "playwright": "*",
