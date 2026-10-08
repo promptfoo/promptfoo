@@ -20,6 +20,24 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it('selects a registered Bedrock Agent provider ID', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'Agent' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(
+      screen.getByText('AWS Bedrock Agents', { exact: true }).closest('[role="button"]')!,
+    );
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'bedrock-agent:your-agent-id', config: {}, label: 'Agent' },
+      'bedrock-agent',
+    );
+  });
+
   it.each([
     ['OpenAI', 'openai', 'openai:gpt-6-sol'],
     ['Anthropic', 'anthropic', 'anthropic:messages:claude-sonnet-5'],
@@ -505,7 +523,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-6 Luna, Sol, and Astra; GPT-5.6 Terra')).toBeVisible();
+    expect(screen.getByText('GPT-6.1 Sol, GPT-6 Luna and Astra, and GPT-5.6 Terra')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {
