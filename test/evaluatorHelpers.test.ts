@@ -645,16 +645,16 @@ describe('evaluatorHelpers', () => {
       expect(resolveVariables(variables)).toEqual(expected);
     });
 
-    it('should insert substituted values literally when they contain dollar-sign sequences', () => {
-      const variables = {
-        greeting: 'Say {{price}}!',
-        price: 'costs $`5 (was $&; see $1)',
-      };
-      expect(resolveVariables(variables)).toEqual({
-        greeting: 'Say costs $`5 (was $&; see $1)!',
-        price: 'costs $`5 (was $&; see $1)',
-      });
-    });
+    it.each(['ordinary text', '$$', '$&', '$`', "$'", '$1', '$99', '$<name>'])(
+      'should insert %s literally into repeated placeholders',
+      (price) => {
+        const variables = { greeting: 'Say {{price}} then {{price}}!', price };
+        expect(resolveVariables(variables)).toEqual({
+          greeting: `Say ${price} then ${price}!`,
+          price,
+        });
+      },
+    );
 
     it('should resolve a placeholder whose value is only a replacement pattern', () => {
       const variables = { alias: '{{pattern}}', pattern: '$&' };
