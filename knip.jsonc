@@ -33,6 +33,8 @@
       ],
       "ignoreFiles": [],
       "ignoreDependencies": [
+        // Yarn injects pnpapi as a runtime builtin; the filesystem MCP launcher resolves its loader.
+        "pnpapi",
         // Imported by test/code-scan-action/*.test.ts; declared in
         // code-scan-action/package.json rather than the root manifest.
         "@actions/*",
@@ -43,9 +45,7 @@
         "block-no-verify",
         // Transitive pin for google-auth-library behavior (see comments in
         // src/providers/google/auth.ts); never imported directly.
-        "gcp-metadata",
-        // Transitive pin; never imported directly.
-        "langium"
+        "gcp-metadata"
       ],
       "paths": {
         "@promptfoo/*": ["./src/*"]
@@ -76,10 +76,7 @@
         // Docusaurus aliasing/preset conventions resolved at build time.
         "@theme/*",
         "@mui/*",
-        "@generated/*",
-        // Transitive pins for the Docusaurus build; never imported directly.
-        "dompurify",
-        "langium"
+        "@generated/*"
       ]
     },
     "code-scan-action": {
@@ -94,11 +91,16 @@
     // POSIX utility used by workspace FIFO regression tests.
     "mkfifo",
     "modelaudit",
+    // POSIX process-tree discovery for package fixture cleanup.
+    "ps",
     "ruby",
     "security"
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
+    // Cloud-consumed: server/src/worker/redteamRun imports withCloudProviderResolver
+    // from @promptfoo/util/cloud to supply prepared saved providers during a run.
+    "src/util/cloud.ts": ["exports"],
     // Internal intentional alias/duplicate-export patterns.
     "src/contracts/api/user.ts": ["duplicates"],
     // Cloud-consumed: server/src/task/hydra.ts and server/src/task/h4rm3l

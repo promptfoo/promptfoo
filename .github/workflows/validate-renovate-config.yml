@@ -2,17 +2,14 @@ name: Validate Renovate Config
 
 on:
   pull_request:
-    paths:
+    paths: &watched-paths
       - 'renovate.json'
       - '.nvmrc'
       - '.github/workflows/validate-renovate-config.yml'
   push:
     branches:
       - main
-    paths:
-      - 'renovate.json'
-      - '.nvmrc'
-      - '.github/workflows/validate-renovate-config.yml'
+    paths: *watched-paths
 
 permissions:
   contents: read
@@ -24,7 +21,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
