@@ -489,8 +489,7 @@ export async function synthesize({
     questionsWrapper,
     () =>
       `Expected a JSON object of the form {questions: [...]} in the questions response, but the provider returned a different shape. ` +
-      `Check the provider's transformResponse and that it returns the model's text content. ` +
-      `Received: ${output.slice(0, 200)}`,
+      `Check the provider's transformResponse and that it returns the model's text content.`,
   );
   const questions = sampleArray(questionsWrapper.questions, numQuestions);
 
