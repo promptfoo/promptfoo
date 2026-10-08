@@ -243,7 +243,7 @@ describe('ResultsCharts', () => {
     }).not.toThrow();
   });
 
-  it('should render without errors when scores array has a single data point', () => {
+  it.each([2, -2])('counts uniform custom scores of %s in a single histogram bin', (score) => {
     const mockTable = {
       head: {
         prompts: [
@@ -252,15 +252,13 @@ describe('ResultsCharts', () => {
         ],
         vars: [],
       },
-      body: [
-        {
-          outputs: [
-            { score: 0.8, pass: true, text: 'valid output' },
-            { score: 0.8, pass: true, text: 'valid output' },
-          ],
-          vars: [],
-        },
-      ],
+      body: Array.from({ length: 3 }, () => ({
+        outputs: [
+          { score, pass: score > 0, text: 'valid output' },
+          { score, pass: score > 0, text: 'valid output' },
+        ],
+        vars: [],
+      })),
     };
 
     const scores = calculateScores(mockTable);
@@ -275,7 +273,12 @@ describe('ResultsCharts', () => {
 
     const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
 
-    expect(() => render(<ResultsCharts {...defaultProps} scores={scores} />)).not.toThrow();
+    const histogram = vi
+      .mocked(Chart)
+      .mock.calls.map(([, config]) => config)
+      .find((config) => config.options?.plugins?.title?.text === 'Score Distribution');
+    expect(histogram?.data.labels).toEqual([score]);
+    expect(histogram?.data.datasets.map((dataset) => dataset.data)).toEqual([[3], [3]]);
 
     const canvasElements = container.querySelectorAll('canvas');
     expect(canvasElements.length).toBeGreaterThan(0);
