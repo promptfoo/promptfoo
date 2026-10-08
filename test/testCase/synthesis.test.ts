@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
 import {
   extractPersonas,
@@ -16,10 +16,6 @@ vi.mock('../../src/providers', () => ({
 }));
 
 describe('synthesize', () => {
-  afterEach(() => {
-    vi.mocked(loadApiProvider).mockReset();
-  });
-
   it('should generate test cases based on prompts and personas', async () => {
     let i = 0;
     const mockProvider = createMockProvider({
@@ -70,14 +66,17 @@ describe('synthesize', () => {
     ).rejects.toThrow(/vars/);
   });
 
-  it('rejects a non-list personas property before generating cases', async () => {
-    const mockProvider = createMockProvider({ response: { output: '{"personas": "Persona 1"}' } });
-    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
-    await expect(
-      synthesize({ provider: 'mock-provider', prompts: ['Test prompt'], tests: [] }),
-    ).rejects.toThrow('Expected at least one user persona in the response');
-    expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
-  });
+  it.each([{ personas: 'Persona 1' }, { personas: [null] }])(
+    'rejects unusable personas before generating cases: %j',
+    async (output) => {
+      const mockProvider = createMockProvider({ response: { output } });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+      await expect(
+        synthesize({ provider: 'mock-provider', prompts: ['Test prompt'], tests: [] }),
+      ).rejects.toThrow('Expected at least one user persona in the response');
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('should handle persona responses formatted as an array of objects', async () => {
     let i = 0;
@@ -154,6 +153,34 @@ describe('synthesize', () => {
         numTestCasesPerPersona: 1,
       }),
     ).rejects.toThrow(/Expected at least one user persona in the response/);
+  });
+
+  it('should find the personas object even when it is not the first JSON object in the response', async () => {
+    let i = 0;
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
+        if (i === 0) {
+          i++;
+          // A leading, non-persona JSON object precedes the real one.
+          return Promise.resolve({
+            output: '{"note": "here are the personas"}\n{"personas": ["Persona 1"]}',
+          });
+        }
+        return Promise.resolve({ output: '{"vars": [{"var1": "value1"}]}' });
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Test prompt'],
+      tests: [],
+      numPersonas: 1,
+      numTestCasesPerPersona: 1,
+    });
+
+    expect(result).toEqual([{ var1: 'value1' }]);
   });
 });
 
