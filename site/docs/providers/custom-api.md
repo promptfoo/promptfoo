@@ -101,6 +101,28 @@ module.exports = class OpenAIProvider {
 }
 ```
 
+Return an `error` for failed requests. Omitting `output` or returning `output: null` or `output: undefined` also produces an error, including in red team scans. The literal strings `"null"` and `"undefined"` are response content and are graded normally.
+
+### Looking up text-token prices
+
+Custom providers can import `getModelPricing` from `promptfoo` to look up the installed version's OpenAI or Anthropic catalog rates. Pass the provider name (`openai` or `anthropic`) and an exact model ID; unknown providers, unknown models, and models without catalog prices return `undefined`.
+
+```javascript
+import { getModelPricing } from 'promptfoo';
+
+const pricing = getModelPricing('anthropic', 'claude-3-haiku-20240307');
+const promptTokens = 1000;
+const completionTokens = 200;
+const rates =
+  pricing?.longContext && promptTokens > pricing.longContext.threshold
+    ? pricing.longContext
+    : pricing;
+const cost = rates ? rates.input * promptTokens + rates.output * completionTokens : undefined;
+// Include cost and tokenUsage in your ProviderResponse.
+```
+
+`input` and `output` are USD per text token. `longContext`, when present in the catalog, includes an input-token `threshold` and the rates above that threshold. The returned object is a copy. This is a catalog lookup, not a complete billing calculator: it does not fetch live prices or include cache discounts, service tiers, regional adjustments, tools, audio, or image charges. Prefer a provider-reported total when available.
+
 ### Guardrail Responses
 
 To use [`guardrails` or `not-guardrails`](/docs/configuration/expected-outputs/guardrails), return `guardrails` beside `output`, not inside `output` or `metadata`. Set `flagged` explicitly; the directional fields only identify the stage that fired. Keep vendor-specific assessments and scores under `metadata`.
