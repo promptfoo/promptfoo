@@ -350,6 +350,53 @@ describe('HydraProvider', () => {
     expect(snapshots.at(-1)?.tokenUsage?.assertions?.total).toBe(23);
   });
 
+  it('checkpoints completed transform usage while the target is pending', async () => {
+    const controller = new AbortController();
+    const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
+    mockAgentProvider.callApi.mockResolvedValue({
+      output: 'Synthetic probe',
+      tokenUsage: { total: 3, numRequests: 1 },
+    });
+    mockApplyRuntimeTransforms.mockResolvedValue({
+      prompt: 'Transformed probe',
+      originalPrompt: 'Synthetic probe',
+      tokenUsage: { total: 17, numRequests: 1 },
+    });
+    let finishTarget!: () => void;
+    mockTargetProvider.callApi.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishTarget = () => resolve({ output: 'Late target response' });
+        }),
+    );
+    const provider = new HydraProvider({
+      injectVar: 'input',
+      maxTurns: 1,
+      _perTurnLayers: ['base64'],
+    });
+    const attack = provider.callApi(
+      '',
+      {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Synthetic objective' },
+        prompt: { raw: '{{input}}', label: 'test' },
+      },
+      {
+        abortSignal: controller.signal,
+        onProgress: (response) => snapshots.push(structuredClone(response)),
+      },
+    );
+    await vi.waitFor(() => expect(mockTargetProvider.callApi).toHaveBeenCalledOnce());
+    expect(snapshots.at(-1)).toMatchObject({
+      tokenUsage: { numRequests: 0, attacker: { total: 20, numRequests: 2 } },
+      metadata: { redteamHistory: [] },
+    });
+    controller.abort();
+    const stopped = expect(attack).rejects.toThrow();
+    finishTarget();
+    await stopped;
+  });
+
   describe('constructor', () => {
     it('should initialize with default config values', () => {
       const provider = new HydraProvider({

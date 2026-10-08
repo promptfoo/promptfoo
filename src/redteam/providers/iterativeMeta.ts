@@ -378,6 +378,7 @@ export async function runMetaAgentRedteam({
       );
       if (lastTransformResult.tokenUsage) {
         accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+        publishProgress();
       }
 
       if (lastTransformResult.error) {

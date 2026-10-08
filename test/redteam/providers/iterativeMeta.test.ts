@@ -304,6 +304,58 @@ describe('RedteamIterativeMetaProvider', () => {
     expect(snapshots.at(-1)?.tokenUsage?.assertions?.total).toBe(23);
   });
 
+  it('checkpoints completed transform usage while the target is pending', async () => {
+    const transforms = await import('../../../src/redteam/shared/runtimeTransform');
+    const transformSpy = vi
+      .spyOn(transforms, 'applyRuntimeTransforms')
+      .mockResolvedValue({
+        prompt: 'Transformed probe',
+        originalPrompt: 'Synthetic probe',
+        tokenUsage: { total: 17, numRequests: 1 },
+      });
+    try {
+      const controller = new AbortController();
+      const snapshots: ProviderResponse[] = [];
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Synthetic probe',
+        tokenUsage: { total: 3, numRequests: 1 },
+      });
+      let finishTarget!: () => void;
+      mockGetTargetResponse.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishTarget = () => resolve({ output: 'Late target response' });
+          }),
+      );
+      const attack = runMetaAgentRedteam({
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        perTurnLayers: ['base64'],
+        options: {
+          abortSignal: controller.signal,
+          onProgress: (response) => snapshots.push(structuredClone(response)),
+        },
+        prompt: { raw: '{{query}}', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        vars: { query: 'Synthetic objective' },
+      });
+      await vi.waitFor(() => expect(mockGetTargetResponse).toHaveBeenCalledOnce());
+      expect(snapshots.at(-1)).toMatchObject({
+        tokenUsage: { numRequests: 0, attacker: { total: 20, numRequests: 2 } },
+        metadata: { redteamHistory: [] },
+      });
+      controller.abort();
+      const stopped = expect(attack).rejects.toThrow();
+      finishTarget();
+      await stopped;
+    } finally {
+      transformSpy.mockRestore();
+    }
+  });
+
   describe('constructor', () => {
     it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
       mockShouldGenerateRemote.mockReturnValue(false);

@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import { getTargetResponse } from '../../src/redteam/providers/shared';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { ResultFailureReason } from '../../src/types/index';
 import { sleep } from '../../src/util/time';
@@ -249,6 +250,165 @@ describeEvaluator('partial provider evidence', () => {
     expect(summary.stats.tokenUsage.assertions).toMatchObject({ total: 23, numRequests: 1 });
     // The checkpoint cannot add internal grading to the normal response a second time.
     expect(finalResponse.tokenUsage?.assertions).toBeUndefined();
+  });
+
+  it.each([0, 1, 2])(
+    'preserves cumulative history and media when final history has %i entries',
+    async (finalHistoryLength) => {
+      vi.useFakeTimers();
+      vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+      const history = [
+        {
+          prompt: 'First probe',
+          output: 'Backtracked response',
+          outputImage: { data: 'YQ==', format: 'png' },
+        },
+        {
+          prompt: 'Second probe',
+          output: 'Completed response',
+          outputAudio: { data: 'Yg==', format: 'wav' },
+        },
+      ];
+      const images = [{ data: 'YQ==', mimeType: 'image/png' }];
+      const provider: ApiProvider = {
+        id: () => 'synthetic-history-provider',
+        delay: 100,
+        callApi: vi.fn(async (_prompt, _context, options) => {
+          options?.onProgress?.({
+            output: 'Completed response',
+            images,
+            tokenUsage: { numRequests: 2, total: 22 },
+            metadata: { redteamHistory: history },
+          });
+          return {
+            output: 'Completed response',
+            tokenUsage: { numRequests: 2, total: 22 },
+            metadata: {
+              stopReason: 'Completed strategy',
+              redteamHistory: history
+                .slice(0, finalHistoryLength)
+                .map(({ prompt, output }) => ({ prompt, output })),
+            },
+          };
+        }),
+      };
+      const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
+      const record = new Eval({});
+      const evaluation = evaluate(suite, record, { timeoutMs: 50 });
+      await vi.advanceTimersByTimeAsync(50);
+      await evaluation;
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results[0]).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        tokenUsage: { numRequests: 2 },
+        response: { images },
+        metadata: { redteamHistory: history, stopReason: 'Completed strategy' },
+      });
+    },
+  );
+
+  it('uses AbortError so target wrappers stop instead of retrying after a timeout', async () => {
+    vi.useFakeTimers();
+    let attackerCalls = 0;
+    const target: ApiProvider = {
+      id: () => 'synthetic-abort-target',
+      callApi: async (_prompt, _context, options) => {
+        const signal = options!.abortSignal!;
+        signal.throwIfAborted();
+        return new Promise((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
+        );
+      },
+    };
+    const provider: ApiProvider = {
+      id: () => 'synthetic-iterative-provider',
+      callApi: async (prompt, context, options) => {
+        for (let i = 0; i < 3; i++) {
+          attackerCalls++;
+          await getTargetResponse(target, prompt, context, options);
+        }
+        return { output: 'Unexpected completion' };
+      },
+    };
+    const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
+    const record = new Eval({});
+    const evaluation = evaluate(suite, record, { timeoutMs: 50 });
+    await vi.advanceTimersByTimeAsync(50);
+    await evaluation;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(attackerCalls).toBe(1);
+    expect((await record.toEvaluateSummary()).results[0].failureReason).toBe(
+      ResultFailureReason.ERROR,
+    );
+  });
+
+  it.each(['timeout', 'abort'])(
+    'retains recoverable evidence when persistence fails during %s',
+    async (interruption) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const provider: ApiProvider = {
+        id: () => 'synthetic-save-failure-provider',
+        callApi: vi.fn((_prompt, _context, options) => {
+          options?.onProgress?.({ output: 'Recoverable response', tokenUsage: { numRequests: 1 } });
+          return new Promise<never>(() => {});
+        }),
+      };
+      const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
+      const record = new Eval({});
+      vi.spyOn(record, 'addResult').mockRejectedValue(new Error('SQLITE_BUSY'));
+      const evaluation = evaluate(suite, record, {
+        timeoutMs: interruption === 'timeout' ? 50 : 0,
+        abortSignal: controller.signal,
+      });
+      await vi.advanceTimersByTimeAsync(interruption === 'timeout' ? 50 : 0);
+      if (interruption === 'abort') {
+        controller.abort();
+      }
+      await evaluation;
+      expect(record.resultPersistenceFailed).toBe(true);
+      expect(await record.getFailedResultsByTestIdx(0)).toEqual([
+        expect.objectContaining({
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          response: expect.objectContaining({ output: 'Recoverable response' }),
+        }),
+      ]);
+    },
+  );
+
+  it('keeps hook-added input columns when an in-flight request is cancelled', async () => {
+    const controller = new AbortController();
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeEach' && 'test' in context) {
+        context.test.vars = { ...context.test.vars, hookInput: 'captured input' };
+      }
+      return context;
+    });
+    const provider: ApiProvider = {
+      id: () => 'synthetic-hook-provider',
+      callApi: vi.fn((_prompt, _context, options) => {
+        options?.onProgress?.({ output: 'Completed response', tokenUsage: { numRequests: 1 } });
+        return new Promise<never>(() => {});
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Probe')],
+      tests: [{}],
+      extensions: ['file://synthetic-hook.js'],
+    };
+    const record = await Eval.create({}, suite.prompts);
+    vi.useFakeTimers();
+    const evaluation = evaluate(suite, record, { timeoutMs: 0, abortSignal: controller.signal });
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    await evaluation;
+    const table = await record.getTablePage({ filters: [] });
+    expect(table.head.vars).toContain('hookInput');
+    expect(table.body[0].vars).toContain('captured input');
   });
 
   it('uses a completed response once when it beats the timeout', async () => {

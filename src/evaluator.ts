@@ -1675,6 +1675,7 @@ async function runEvalInternal({
   let setup = state.setup;
   let latencyMs = 0;
   let partialResult: EvaluateResult | undefined;
+  let providerProgress: ProviderResponse | undefined;
   let acceptingProgress = true;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
@@ -1726,11 +1727,37 @@ async function runEvalInternal({
       if (!serialized) {
         return;
       }
-      const snapshot = normalizeCachedTargetResponse(JSON.parse(serialized));
+      const reportedResponse: ProviderResponse = JSON.parse(serialized);
+      const progressResponse = completed ? providerProgress : undefined;
+      const completedHistory = progressResponse?.metadata?.redteamHistory;
+      const finalHistory = reportedResponse.metadata?.redteamHistory;
+      const snapshot = normalizeCachedTargetResponse(
+        progressResponse
+          ? {
+              ...progressResponse,
+              ...reportedResponse,
+              metadata: {
+                ...progressResponse.metadata,
+                ...reportedResponse.metadata,
+                // Normal strategy results can select a successful branch and omit
+                // completed error/backtrack probes from their display history.
+                ...(Array.isArray(completedHistory) &&
+                  (!Array.isArray(finalHistory) ||
+                    completedHistory.length >= finalHistory.length) && {
+                    redteamHistory: completedHistory,
+                  }),
+              },
+            }
+          : reportedResponse,
+      );
       // Strategy responses carry internal grading separately from target usage.
       // Account for that completed work if interruption occurs after callApi returns,
       // without changing the response used by normal assertion accounting.
-      const storedGrade = completed ? snapshot.metadata?.storedGraderResult : undefined;
+      // If the final response omits usage, the retained progress usage is already accounted.
+      const storedGrade =
+        completed && (!progressResponse || reportedResponse.tokenUsage)
+          ? reportedResponse.metadata?.storedGraderResult
+          : undefined;
       if (storedGrade?.tokensUsed) {
         snapshot.tokenUsage ??= createEmptyTokenUsage();
         accumulateGradingTokenUsage(snapshot.tokenUsage, storedGrade.tokensUsed, {
@@ -1753,6 +1780,7 @@ async function runEvalInternal({
       });
       accumulateResponseTokenUsage(partialResult.tokenUsage!, snapshot);
       onProviderProgress?.(partialResult);
+      return partialResult;
     };
     checkpoint({ tokenUsage: createEmptyTokenUsage() });
     const runExecution = () =>
@@ -1761,7 +1789,15 @@ async function runEvalInternal({
         async () => {
           const providerCall = await callProviderForRunEval({
             abortSignal,
-            onProgress: onProviderProgress || abortSignal ? checkpoint : undefined,
+            onProgress:
+              onProviderProgress || abortSignal
+                ? (response) => {
+                    const progress = checkpoint(response);
+                    if (progress) {
+                      providerProgress = progress.response;
+                    }
+                  }
+                : undefined,
             evalId,
             filters,
             promptForRender: {
@@ -3803,7 +3839,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private async persistEvalRow(row: EvaluateResult): Promise<void> {
+  private async persistEvalRow(row: EvaluateResult, stream = true): Promise<void> {
     this.currentResultKeys.add(getResultIndexKey(row));
     setComparisonError(row);
     if (row.testCase.assert?.some((assertion) => assertion.type === 'select-best')) {
@@ -3841,8 +3877,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
     }
 
-    for (const writer of this.fileWriters) {
-      await writer.write(sanitizeResultForJsonlArtifact(row));
+    if (stream) {
+      for (const writer of this.fileWriters) {
+        await writer.write(sanitizeResultForJsonlArtifact(row));
+      }
     }
   }
 
@@ -4143,7 +4181,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         if (timeoutMs > 0) {
           timeoutId = setTimeout(() => {
             didTimeout = true;
-            abortController.abort(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+            abortController.abort(
+              new DOMException(`Evaluation timed out after ${timeoutMs}ms`, 'AbortError'),
+            );
           }, timeoutMs);
         }
       });
@@ -4201,8 +4241,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       partialResult,
     );
     this.trackFinalJsonlResult(timeoutResult);
-    await this.store.appendResult(timeoutResult);
-    this.trackRowStats(timeoutResult);
+    await this.persistEvalRow(timeoutResult, false);
+    this.trackCompletedRow(evalStep, timeoutResult, context);
 
     const { metrics } = context.prompts[evalStep.promptIdx];
     if (metrics) {

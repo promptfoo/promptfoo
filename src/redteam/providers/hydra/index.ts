@@ -638,6 +638,7 @@ export class HydraProvider implements ApiProvider {
         );
         if (lastTransformResult.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+          publishProgress();
         }
 
         // Skip turn if transform failed
