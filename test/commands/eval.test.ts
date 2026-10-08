@@ -238,6 +238,15 @@ describe('evalCommand', () => {
     );
   });
 
+  it('should include --safe-mode option in help text', () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    const helpText = cmd.helpInformation();
+    expect(helpText).toContain('--safe-mode');
+    expect(helpText).toContain(
+      'Disable dynamic inline JavaScript execution for transforms and assertions',
+    );
+  });
+
   it('should apply resolved author when --no-write is used', async () => {
     const cmdObj = { table: false, write: false };
     const config = {} as UnifiedConfig;
