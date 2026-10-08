@@ -3,6 +3,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -869,7 +870,9 @@ async function runInstalledCodingSdkEval(
   withOptionalDependencies: boolean,
 ): Promise<void> {
   const fixturesDir = path.join(consumerDir, 'coding-sdks');
-  fs.cpSync(path.join(ROOT, 'test/fixtures/coding-sdks'), fixturesDir, { recursive: true });
+  fs.cpSync(path.join(ROOT, 'test/fixtures/package-artifact/coding-sdks'), fixturesDir, {
+    recursive: true,
+  });
   // The Codex SDK sends `exec` first. Let Node load that fixture on every platform.
   fs.copyFileSync(path.join(fixturesDir, 'codex.mjs'), path.join(consumerDir, 'exec'));
   const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');
@@ -1486,6 +1489,7 @@ async function main(): Promise<void> {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
+    const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
     timePhase('inspect declaration documentation', () =>
       assertProviderTypeDocumentation(installedPackageDir),
     );
