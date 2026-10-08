@@ -4,6 +4,7 @@ import path from 'path';
 
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
 import { getEnvString, getProcessEnv } from '../../envars';
 import {
@@ -25,6 +26,7 @@ import {
   isDefinitiveBillingCode,
   isHardQuotaCode,
 } from '../../util/fetch/errors';
+import { getPackageVersion } from '../../util/packageVersion';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
@@ -103,7 +105,7 @@ function isValidTraceparent(traceparent: string | undefined): traceparent is str
  * OpenAI Codex SDK Provider
  *
  * This provider requires the @openai/codex-sdk package to be installed separately:
- *   npm install @openai/codex-sdk
+ *   npm install promptfoo @openai/codex-sdk@^0.156.1
  *
  * Key features:
  * - Supports API key auth or existing Codex/ChatGPT login state
@@ -633,11 +635,9 @@ function buildCodexRateLimitResponse(
   };
 }
 
-/**
- * Helper to load the OpenAI Codex SDK ESM module
- * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
- */
-async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
+export const CODEX_SDK_VERSION_RANGE = '^0.156.1';
+
+export function resolveCodexSdkPackage(): string | null {
   const basePaths = [
     cliState.basePath ? path.resolve(cliState.basePath) : undefined,
     process.cwd(),
@@ -645,24 +645,34 @@ async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
     path.resolve(getDirectory(), '../..'),
   ].filter((candidate): candidate is string => Boolean(candidate));
 
-  let codexPath: string | null = null;
   for (const basePath of new Set(basePaths)) {
-    codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
-    if (codexPath) {
-      break;
+    const entryPoint = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+    if (entryPoint) {
+      return entryPoint;
     }
   }
+  return null;
+}
 
+async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
+  const codexPath = resolveCodexSdkPackage();
   if (!codexPath) {
     throw new Error(
       dedent`The @openai/codex-sdk package is required but not installed.
 
       To use the OpenAI Codex SDK provider, install it with:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
       Requires Node.js >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
+    );
+  }
+
+  const version = getPackageVersion('@openai/codex-sdk', codexPath);
+  if (!version || !semverSatisfies(version, CODEX_SDK_VERSION_RANGE)) {
+    throw new Error(
+      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}`,
     );
   }
 
@@ -684,7 +694,7 @@ async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
       - Corrupted installation
 
       Try reinstalling:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
