@@ -1324,7 +1324,6 @@ async function applyRunEvalResponseOutcome({
   abortSignal,
   deferGrading,
   evalId,
-  isRedteam,
   latencyMs,
   prompt,
   promptIdx,
@@ -1343,7 +1342,6 @@ async function applyRunEvalResponseOutcome({
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
   evalId?: string;
-  isRedteam: boolean;
   latencyMs: number;
   prompt: Prompt;
   promptIdx: number;
@@ -1367,7 +1365,12 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    applyEmptyResponseOutcome(ret, isRedteam);
+    // An absent provider result is an integration error, including in redteam
+    // scans. An intentional empty string still proceeds to the assertions.
+    ret.success = false;
+    ret.score = 0;
+    ret.error = 'No output';
+    ret.failureReason = ResultFailureReason.ERROR;
     return;
   }
 
@@ -1390,16 +1393,6 @@ async function applyRunEvalResponseOutcome({
     traceContext,
     vars,
   });
-}
-
-function applyEmptyResponseOutcome(ret: EvaluateResult, isRedteam: boolean) {
-  if (isRedteam) {
-    ret.success = true;
-  } else {
-    ret.success = false;
-    ret.score = 0;
-    ret.error = 'No output';
-  }
 }
 
 async function gradeRunEvalResponse({
@@ -1793,7 +1786,6 @@ async function runEvalInternal({
             abortSignal,
             deferGrading,
             evalId,
-            isRedteam,
             latencyMs,
             prompt,
             promptIdx: promptIndex,

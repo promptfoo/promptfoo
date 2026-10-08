@@ -600,12 +600,12 @@ async function doEvalWithEnv(
       };
     }
 
-    // Resolve runtime options. If resuming, prefer persisted options stored with the eval.
+    // Resume and error retries must preserve the original expansion and cache settings.
     let repeat: number;
     let cache: boolean | undefined;
     let maxConcurrency: number;
     let delay: number;
-    if (resumeRaw) {
+    if (resumeEval) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
         {}) as InternalEvaluateOptions;
@@ -640,7 +640,7 @@ async function doEvalWithEnv(
     // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
     // For resume mode, include persisted value as "explicit", with fallback to config when
     // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
-    const explicitMaxConcurrency = resumeRaw
+    const explicitMaxConcurrency = resumeEval
       ? ((resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined)?.maxConcurrency ??
         cmdObj.maxConcurrency ??
         commandLineOptions?.maxConcurrency ??
@@ -1083,11 +1083,9 @@ async function doEvalWithEnv(
 
     // Check if scan was aborted due to target error (efficient DB query, not loading all results)
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
-    const observedRepeatStability = evalRecord.getObservedRepeatStability();
-    const repeatStability =
-      resumeEval && observedRepeatStability
-        ? await evalRecord.getRepeatStability()
-        : observedRepeatStability;
+    const repeatStability = resumeEval
+      ? await evalRecord.getRepeatStability()
+      : await evalRecord.getObservedRepeatStability();
 
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({

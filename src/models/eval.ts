@@ -347,7 +347,7 @@ export default class Eval {
   // instance is what lets later grading build on earlier grading instead of a stale row.
   private failedEvalResults = new Map<string, EvalResult>();
   private finalJsonlResults = new Map<string, EvaluateResult>();
-  private observedRepeatResults = new Map<string, EvaluateResult>();
+  private observedRepeatedResults = false;
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -769,7 +769,7 @@ export default class Eval {
 
   async addResult(result: EvaluateResult) {
     if (result.repeatGroupId !== undefined) {
-      this.observedRepeatResults.set(getResultIndexKey(result), result);
+      this.observedRepeatedResults = true;
     }
     const httpStatus = result.response?.metadata?.http?.status;
     if (
@@ -796,7 +796,7 @@ export default class Eval {
   recordFinalJsonlResult(result: EvaluateResult) {
     this.finalJsonlResults.set(getResultIndexKey(result), result);
     if (result.repeatGroupId !== undefined) {
-      this.observedRepeatResults.set(getResultIndexKey(result), result);
+      this.observedRepeatedResults = true;
     }
   }
 
@@ -804,8 +804,10 @@ export default class Eval {
     return Array.from(this.finalJsonlResults.values());
   }
 
-  getObservedRepeatStability(): RepeatStabilitySummary | undefined {
-    return calculateRepeatStability(this.observedRepeatResults.values());
+  async getObservedRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
+    // Read final grading from the existing result store. Retaining each raw response
+    // here both defeats persisted-eval batching and reports stale comparison verdicts.
+    return this.observedRepeatedResults ? this.getRepeatStability() : undefined;
   }
 
   recordResultPersistenceFailure(result: EvaluateResult) {
@@ -1481,9 +1483,23 @@ export default class Eval {
     }
 
     const calculator = new RepeatStabilityCalculator();
-    for await (const batch of this.fetchResultsBatched()) {
-      calculator.addResults(batch);
+    // Failed writes and their finalized comparisons are already retained for artifact
+    // recovery. Prefer those authoritative rows over stale or missing database rows.
+    const recovered = new Map<string, EvalResult | EvaluateResult>(this.failedResults);
+    for (const [key, result] of this.failedEvalResults) {
+      recovered.set(key, result);
     }
+    for (const [key, result] of this.finalJsonlResults) {
+      recovered.set(key, result);
+    }
+    for await (const batch of this.fetchResultsBatched()) {
+      for (const result of batch) {
+        const key = getResultIndexKey(result);
+        calculator.addResult(recovered.get(key) ?? result);
+        recovered.delete(key);
+      }
+    }
+    calculator.addResults(recovered.values());
     return calculator.getSummary();
   }
 
@@ -1507,8 +1523,15 @@ export default class Eval {
 
     const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
-    const results = this.results.map((r) => r.toEvaluateResult(stripFlags));
-    const repeatStability = calculateRepeatStability(results);
+    const calculator = new RepeatStabilityCalculator();
+    const results = this.results.map((result) => {
+      const exported = result.toEvaluateResult(stripFlags);
+      // Output stripping must not turn cached grading into independent samples.
+      // Keep projected labels in the summary while using the original cache evidence.
+      calculator.addResult({ ...exported, gradingResult: result.gradingResult });
+      return exported;
+    });
+    const repeatStability = calculator.getSummary();
 
     return {
       version: 3,

@@ -105,7 +105,7 @@ export class RepeatStabilityCalculator {
     const group = this.groups.get(key) ?? {
       repeatGroupId: result.repeatGroupId,
       promptIdx: result.promptIdx,
-      provider: result.provider,
+      provider: { id: result.provider.id, label: result.provider.label },
       description: result.description ?? result.testCase.description,
       promptLabel: result.prompt.label,
       repetitions: 0,

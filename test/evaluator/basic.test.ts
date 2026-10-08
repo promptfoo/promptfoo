@@ -12,6 +12,32 @@ import { mockApiProvider, mockReasoningApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator basic flows', () => {
+  it('reports final comparison verdicts for repeated tests', async () => {
+    const provider = {
+      id: () => 'repeated-comparison',
+      callApi: async (prompt: string, context: { repeatIndex?: number } | undefined) => ({
+        output: (prompt === 'first') === (context?.repeatIndex === 0) ? 'hello' : 'no match',
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('first'), toPrompt('second')],
+      tests: [
+        {
+          assert: [
+            { type: 'javascript', value: 'output === "hello" ? 0.9 : 0.8' },
+            { type: 'max-score' },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { repeat: 2 });
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+    expect(summary.repeatStability?.unstableGroups).toBe(2);
+    expect(await evalRecord.getObservedRepeatStability()).toEqual(summary.repeatStability);
+  });
+
   it('evaluate with vars', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -546,7 +572,7 @@ describeEvaluator('evaluator basic flows', () => {
       unstableGroups: 0,
       groups: [{ repetitions: 3, passed: 3, failed: 0, errors: 0 }],
     });
-    expect(evalRecord.getObservedRepeatStability()).toEqual(summary.repeatStability);
+    expect(await evalRecord.getObservedRepeatStability()).toEqual(summary.repeatStability);
   });
 
   it('keeps expanded variable combinations in separate repeat groups', async () => {

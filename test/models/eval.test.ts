@@ -16,7 +16,12 @@ import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
-import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
+import {
+  type EvaluateResult,
+  type EvaluateSummaryV3,
+  type Prompt,
+  ResultFailureReason,
+} from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
@@ -68,6 +73,46 @@ describe('evaluator', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('repeat stability export', () => {
+    it('includes final comparison verdicts for a row that failed persistence', async () => {
+      const evaluation = await Eval.create({}, [], { id: 'repeat-failed-persistence' });
+      const row = createEvaluateResult({
+        repeatGroupId: 'recovered',
+        repeatIndex: 0,
+        success: true,
+      });
+      evaluation.recordResultPersistenceFailure(row);
+      const [recovered] = await evaluation.getFailedResultsByTestIdx(row.testIdx);
+      recovered.success = false;
+      recovered.failureReason = ResultFailureReason.ASSERT;
+      const summary = await evaluation.getRepeatStability();
+      expect(summary?.groups[0]).toMatchObject({ repetitions: 1, passed: 0, failed: 1 });
+      expect(await EvalResult.findManyByEvalId(evaluation.id)).toEqual([]);
+    });
+
+    it('keeps cached grader evidence when grading details are stripped', async () => {
+      const evaluation = new Eval({ env: { PROMPTFOO_STRIP_GRADING_RESULT: 'true' } });
+      await evaluation.addResult(
+        createEvaluateResult({
+          repeatGroupId: 'repeated',
+          repeatIndex: 0,
+          response: { output: 'fresh target output' },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'cached grading',
+            metadata: { cachedResponse: true },
+          },
+        }),
+      );
+      const summary = (await evaluation.toEvaluateSummary()) as EvaluateSummaryV3;
+      expect(summary.version).toBe(3);
+      expect(summary.results[0].gradingResult).toBeNull();
+      expect(summary.repeatStability?.cachedResults).toBe(1);
+      expect(summary.repeatStability?.groups[0].passRateConfidenceInterval).toBeUndefined();
+    });
   });
 
   describe('addPrompts', () => {
