@@ -170,11 +170,19 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
 const RECALCULATE_BATCH_SIZE = 1000;
 
 /**
- * Recalculates prompt metrics based on current results after ERROR results have been deleted.
+ * Recalculates prompt metrics from saved results.
  * Uses streaming batched iteration to avoid OOM with large evaluations (40K+ results).
  */
-export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
-  logger.debug('Recalculating prompt metrics after deleting ERROR results');
+export async function recalculatePromptMetrics(
+  evalRecord: Eval,
+  { preserveDerivedMetrics = false }: { preserveDerivedMetrics?: boolean } = {},
+): Promise<void> {
+  logger.debug('Recalculating prompt metrics from saved results');
+  const derivedMetricNames = preserveDerivedMetrics
+    ? (cliState.config?.derivedMetrics ?? evalRecord.config.derivedMetrics ?? []).map(
+        (metric) => metric.name,
+      )
+    : [];
 
   const startTime = Date.now();
   let batchNumber = 0;
@@ -305,6 +313,17 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
   // Update prompt metrics with recalculated values
   for (const [promptIdx, newMetrics] of promptMetricsMap.entries()) {
     if (promptIdx < evalRecord.prompts.length) {
+      // Derived values may depend on functions and prior steps. Preserve only configured
+      // derived entries; ordinary named assertion metrics above remain row-authoritative.
+      const previousNamedScores = evalRecord.prompts[promptIdx].metrics?.namedScores;
+      for (const name of derivedMetricNames) {
+        if (
+          previousNamedScores &&
+          Object.prototype.hasOwnProperty.call(previousNamedScores, name)
+        ) {
+          newMetrics.namedScores[name] = previousNamedScores[name];
+        }
+      }
       evalRecord.prompts[promptIdx].metrics = newMetrics;
     }
   }

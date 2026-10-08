@@ -3860,7 +3860,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private async persistEvalRow(
     row: EvaluateResult,
-    { stream = true, resumable = false }: { stream?: boolean; resumable?: boolean } = {},
+    { resumable = false }: { resumable?: boolean } = {},
   ): Promise<EvaluateResult | undefined> {
     this.currentResultKeys.add(getResultIndexKey(row));
     setComparisonError(row);
@@ -3904,14 +3904,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
     let previous: TResult | undefined;
     try {
-      if (cliState.resume && this.store.persisted) {
-        previous = (await this.store.readResultsByTestIdx(row.testIdx)).find(
-          (candidate) =>
-            candidate.promptIdx === row.promptIdx &&
-            candidate.failureReason === ResultFailureReason.ERROR &&
-            candidate.metadata?.[PROMPTFOO_METADATA_KEY]?.resumable === true,
-        );
-      }
+      previous = await this.findResumableCheckpoint(row);
       if (previous) {
         await this.store.appendResult(row, { replace: previous });
       } else {
@@ -3931,12 +3924,25 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
     }
 
-    if (stream) {
-      for (const writer of this.fileWriters) {
-        await writer.write(sanitizeResultForJsonlArtifact(row));
-      }
-    }
     return previous ? this.store.toEvaluateResult(previous) : undefined;
+  }
+
+  private async findResumableCheckpoint(row: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
+    if (!cliState.resume || !this.store.persisted) {
+      return undefined;
+    }
+    return (await this.store.readResultsByTestIdx(row.testIdx)).find(
+      (candidate) =>
+        candidate.promptIdx === row.promptIdx &&
+        candidate.failureReason === ResultFailureReason.ERROR &&
+        candidate.metadata?.[PROMPTFOO_METADATA_KEY]?.resumable === true,
+    );
+  }
+
+  private async streamEvalRow(row: EvaluateResult) {
+    for (const writer of this.fileWriters) {
+      await writer.write(sanitizeResultForJsonlArtifact(row));
+    }
   }
 
   private updatePromptMetricsForRow({
@@ -4148,6 +4154,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         row,
       });
 
+      // Account for the committed result before a fallible artifact write.
+      await this.streamEvalRow(row);
+
       // The row that stops the eval is counted first, like any other error. Otherwise the
       // summary and the exit code would report only the rows that passed before it.
       if (this.abortIfTargetUnavailable(row, context)) {
@@ -4323,7 +4332,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     this.trackFinalJsonlResult(timeoutResult);
     // Paused CLI runs return before final export; stream their authoritative cancellation row.
     const previousRow = await this.persistEvalRow(timeoutResult, {
-      stream: !didTimeout,
       resumable: !didTimeout,
     });
     this.trackCompletedRow(evalStep, timeoutResult, context);
@@ -4343,6 +4351,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         previousRow,
         row: timeoutResult,
       });
+    }
+
+    if (!didTimeout) {
+      await this.streamEvalRow(timeoutResult);
     }
 
     context.numComplete++;
@@ -5340,14 +5352,32 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         continue;
       }
       const evalStep = runEvalOptions[i];
-      const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
+      const checkpoint = await this.findResumableCheckpoint(evalStep);
+      // Queued work has no new target response. Retain its prior evidence and resumability;
+      // replacing the row also protects it from retry cleanup that names the old ERROR ID.
+      const timeoutResult = checkpoint
+        ? this.store.toEvaluateResult(checkpoint)
+        : createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       this.trackFinalJsonlResult(timeoutResult);
-      await this.store.appendResult(timeoutResult);
+      const previousRow = await this.persistEvalRow(timeoutResult, {
+        resumable: Boolean(checkpoint),
+      });
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
-        metrics.testErrorCount += 1;
-        metrics.totalLatencyMs += timeoutResult.latencyMs;
+        this.updatePromptMetricsForRow({
+          derivedMetrics: undefined,
+          evalStep,
+          mathjsModule: null,
+          metrics,
+          promptEvalCount:
+            metrics.testPassCount +
+            metrics.testFailCount +
+            metrics.testErrorCount +
+            (previousRow ? 0 : 1),
+          previousRow,
+          row: timeoutResult,
+        });
       }
     }
   }
@@ -5513,7 +5543,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     const { prompts, columnsByProvider } = buildCompletedPrompts(testSuite, this.store);
 
-    await this.store.appendPrompts(prompts);
+    await cliState.withConfig(
+      {
+        ...cliState.config,
+        derivedMetrics: testSuite.derivedMetrics ?? cliState.config?.derivedMetrics,
+      },
+      () => this.store.appendPrompts(prompts),
+    );
 
     let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);

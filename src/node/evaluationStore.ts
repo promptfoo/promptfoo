@@ -1,10 +1,13 @@
 import EvalResult, { asEvaluateResult } from '../models/evalResult';
+import { recalculatePromptMetrics } from './retry';
 
 import type { EvaluationStore } from '../evaluator/runtime';
 import type Eval from '../models/eval';
 import type { CompletedPrompt, EvaluateResult } from '../types/index';
 
 export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
+  private promptsPrepared = false;
+
   constructor(readonly evaluation: Eval) {}
 
   get id() {
@@ -37,8 +40,20 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
       : this.evaluation.addResult(result);
   }
 
-  appendPrompts(prompts: CompletedPrompt[]): Promise<void> {
-    return this.evaluation.addPrompts(prompts);
+  async appendPrompts(prompts: CompletedPrompt[]): Promise<void> {
+    if (
+      !this.promptsPrepared &&
+      this.persisted &&
+      (await EvalResult.hasResumableCheckpoints(this.id))
+    ) {
+      // A checkpoint row can commit before its aggregate metrics. Rebuild once before
+      // resumed work subtracts any checkpoint contribution, using the saved rows.
+      this.evaluation.prompts = prompts;
+      await recalculatePromptMetrics(this.evaluation, { preserveDerivedMetrics: true });
+    } else {
+      await this.evaluation.addPrompts(prompts);
+    }
+    this.promptsPrepared = true;
   }
 
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): boolean {

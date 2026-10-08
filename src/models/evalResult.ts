@@ -781,6 +781,14 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } as T;
 }
 
+function resumableCheckpointFilter() {
+  return sql`${evalResultsTable.failureReason} = ${ResultFailureReason.ERROR} AND
+    COALESCE(json_extract(
+      CASE WHEN json_valid(${evalResultsTable.metadata}) THEN ${evalResultsTable.metadata} ELSE '{}' END,
+      '$.__promptfoo.resumable'
+    ), 0) = 1`;
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -976,6 +984,17 @@ export default class EvalResult {
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
+  static async hasResumableCheckpoints(evalId: string): Promise<boolean> {
+    const db = await getDb();
+    const row = await db
+      .select({ id: evalResultsTable.id })
+      .from(evalResultsTable)
+      .where(and(eq(evalResultsTable.evalId, evalId), resumableCheckpointFilter()))
+      .limit(1)
+      .get();
+    return Boolean(row);
+  }
+
   /**
    * Returns a set of completed (testIdx,promptIdx) pairs for a given eval.
    * Key format: `${testIdx}:${promptIdx}`
@@ -992,11 +1011,7 @@ export default class EvalResult {
       eq(evalResultsTable.evalId, evalId),
       // Cancellation checkpoints are unfinished cases, unlike ordinary provider errors
       // and per-case timeouts. They remain eligible for ordinary resume.
-      sql`NOT (${evalResultsTable.failureReason} = ${ResultFailureReason.ERROR} AND
-        COALESCE(json_extract(
-          CASE WHEN json_valid(${evalResultsTable.metadata}) THEN ${evalResultsTable.metadata} ELSE '{}' END,
-          '$.__promptfoo.resumable'
-        ), 0) = 1)`,
+      sql`NOT (${resumableCheckpointFilter()})`,
       opts?.excludeErrors
         ? ne(evalResultsTable.failureReason, ResultFailureReason.ERROR)
         : undefined,
