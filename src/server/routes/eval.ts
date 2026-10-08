@@ -715,27 +715,29 @@ evalRouter.post(
         return;
       }
 
-      // Imported results can contain malformed components.
+      // Historical assertion counts use truthiness, including for imported legacy components.
       const previousComponents = Array.isArray(result.gradingResult?.componentResults)
         ? result.gradingResult.componentResults.filter(
-            (component) => typeof component?.pass === 'boolean',
+            (component) => component !== null && typeof component === 'object',
           )
         : [];
       if (gradingResult.componentResults === undefined) {
-        gradingResult.componentResults = previousComponents.map((component) =>
-          component.assertion?.type === HUMAN_ASSERTION_TYPE &&
-          (component.pass !== gradingResult.pass || component.score !== gradingResult.score)
-            ? {
-                ...component,
-                pass: gradingResult.pass,
-                score: gradingResult.score,
-                reason:
-                  typeof gradingResult.reason === 'string'
-                    ? gradingResult.reason
-                    : 'Manual result (overrides all other grading results)',
-              }
-            : component,
-        );
+        gradingResult.componentResults = previousComponents
+          .filter((component) => typeof component.pass === 'boolean')
+          .map((component) =>
+            component.assertion?.type === HUMAN_ASSERTION_TYPE &&
+            (component.pass !== gradingResult.pass || component.score !== gradingResult.score)
+              ? {
+                  ...component,
+                  pass: gradingResult.pass,
+                  score: gradingResult.score,
+                  reason:
+                    typeof gradingResult.reason === 'string'
+                      ? gradingResult.reason
+                      : 'Manual result (overrides all other grading results)',
+                }
+              : component,
+          );
       }
       const updatedComponents = gradingResult.componentResults ?? [];
       const successChanged = result.success !== gradingResult.pass;

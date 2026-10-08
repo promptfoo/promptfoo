@@ -257,19 +257,24 @@ describe('eval routes', () => {
         SET grading_result = ${JSON.stringify(legacyGrade)}
         WHERE id = ${result.id}
       `);
-      metrics.assertPassCount += 1;
+      metrics.assertPassCount += 2;
       await eval_.save();
 
-      const annotationRes = await api
-        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send({ pass: true, score: 1, comment: 'Reviewed' });
-      expect(annotationRes.status).toBe(200);
-      expect(annotationRes.body.gradingResult.componentResults).toEqual([
-        human,
-        ...(result.gradingResult.componentResults ?? []),
-      ]);
-      const annotatedEval = await Eval.findById(eval_.id);
-      expect(annotatedEval?.prompts[result.promptIdx].metrics).toEqual(metrics);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const annotationRes = await api
+          .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+          .send({ pass: true, score: 1, comment: 'Reviewed' });
+        expect(annotationRes.status).toBe(200);
+        expect(annotationRes.body.gradingResult.componentResults).toEqual([
+          human,
+          ...(result.gradingResult.componentResults ?? []),
+        ]);
+        const annotatedEval = await Eval.findById(eval_.id);
+        expect(annotatedEval?.prompts[result.promptIdx].metrics).toEqual({
+          ...metrics,
+          assertPassCount: 2,
+        });
+      }
 
       const payload = createManualRatingPayload(result, false);
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -290,6 +295,65 @@ describe('eval routes', () => {
         });
       }
     });
+
+    it.each([
+      { resultIndex: 0, legacyPass: 'true', pass: false, score: 0, passes: 0, failures: 2 },
+      { resultIndex: 1, legacyPass: 0, pass: true, score: 1, passes: 2, failures: 0 },
+    ])(
+      'reconciles legacy human pass=$legacyPass on replacement and retry',
+      async ({ resultIndex, legacyPass, pass, score, passes, failures }) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const result = (await eval_.getResults())[resultIndex];
+        invariant(result.id, 'Result ID is required');
+        const originalMetrics = eval_.prompts[result.promptIdx].metrics;
+        const legacyGrade = {
+          pass: result.success,
+          score: result.score,
+          reason: 'Legacy manual rating',
+          componentResults: [
+            {
+              pass: legacyPass,
+              score: result.score,
+              reason: 'Legacy manual rating',
+              assertion: { type: 'human' },
+            },
+          ],
+        };
+        const db = await getDb();
+        await db.run(sql`
+        UPDATE eval_results
+        SET grading_result = ${JSON.stringify(legacyGrade)}
+        WHERE id = ${result.id}
+      `);
+        const payload = {
+          pass,
+          score,
+          reason: 'Manual correction',
+          componentResults: [
+            { pass, score, reason: 'Manual correction', assertion: { type: 'human' } },
+          ],
+        };
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const res = await api
+            .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+            .send(payload);
+          expect(res.status).toBe(200);
+          const updatedResult = await EvalResult.findById(result.id);
+          expect(updatedResult?.gradingResult).toEqual(payload);
+          const updatedEval = await Eval.findById(eval_.id);
+          expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual({
+            ...originalMetrics,
+            score: resultIndex === 0 ? 0 : 2,
+            testPassCount: passes,
+            testFailCount: failures,
+            assertPassCount: passes,
+            assertFailCount: failures,
+          });
+        }
+      },
+    );
 
     it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
       const eval_ = await EvalFactory.create();
