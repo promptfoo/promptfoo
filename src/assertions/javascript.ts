@@ -1,4 +1,4 @@
-import { Parser, type TokenType, tokTypes } from 'acorn';
+import { Parser, type TokenType, tokTypes, type YieldExpression } from 'acorn';
 import { type GradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
@@ -15,10 +15,19 @@ const assertionParser = Parser.extend((BaseParser) => {
   const tokenizerPrototype = BaseParser.prototype as Parser & {
     updateContext(previousType: TokenType): void;
     next(ignoreEscapeSequenceInKeyword: boolean): void;
+    parseYield(forInit: boolean): YieldExpression;
   };
 
   return class extends BaseParser {
     declare type: TokenType;
+    declare exprAllowed: boolean;
+
+    parseYield(forInit: boolean): YieldExpression {
+      // Acorn's lexical context can miss async generators and generator methods.
+      // The grammar has identified yield here, so its operand can start a regex.
+      this.exprAllowed = true;
+      return tokenizerPrototype.parseYield.call(this, forInit);
+    }
 
     next(): void {
       // Escaped keywords are valid property names. Leave their syntax validation
