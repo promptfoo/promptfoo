@@ -4,6 +4,7 @@ import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import * as llmGrading from '../../../../src/matchers/llmGrading';
 import { determineRequestBody, HttpProvider } from '../../../../src/providers/http';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
+import { parseChatPrompt } from '../../../../src/providers/shared';
 import {
   getGradingAssertionHash,
   getGradingInputHash,
@@ -1498,6 +1499,56 @@ describe('HydraProvider', () => {
     });
 
     it.each([
+      ['YAML template', '- role: user\n  content: {{input}}', 'Hello. # hidden@example.com'],
+      ['YAML input', '{{input}}', '- role: user\n  content: Hello. # hidden@example.com'],
+      [
+        'malformed JSON leaf',
+        '[{"role":"user","content":"{{input}}","other":"{% unfinished"}]',
+        'hidden@example.com',
+      ],
+      [
+        'custom JSON filter',
+        '[{"role":"user","content":"{{input}}","other":"{{other | custom}}"}]',
+        'hidden@example.com","content":"Hello.',
+      ],
+    ])('does not credit text removed by %s processing', async (_name, raw, input) => {
+      const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+        '../../../../src/evaluatorHelpers',
+      );
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+      mockAgentProvider.callApi.mockReset();
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({ output: input })
+        .mockResolvedValueOnce({ output: followUp });
+      const context = gradingContext();
+      context.prompt.raw = raw;
+      context.filters = { custom: (value: string) => value };
+      context.vars.other = 'Other context.';
+      const parsedRequests: unknown[] = [];
+      const target = context.originalProvider!;
+      const originalCall = target.callApi.bind(target);
+      target.callApi = async (prompt, callContext, options) => {
+        parsedRequests.push(parseChatPrompt(prompt, [{ role: 'user', content: prompt }]));
+        return originalCall(prompt, callContext, options);
+      };
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+      const result = await provider.callApi('', context);
+      expect(JSON.stringify(parsedRequests[0])).not.toContain('hidden@example.com');
+      expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript ?? '').not.toContain(
+        'hidden@example.com',
+      );
+      expect(JSON.stringify(result.metadata.messages)).not.toContain('hidden@example.com');
+      expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+        getGradingInputHash(
+          result.metadata.redteamFinalPrompt!,
+          result.output,
+          result.metadata.messages,
+          'pii',
+        ),
+      );
+    });
+
+    it.each([
       ['question', 'Hello. {# My email is supplied@example.com. #}'],
       ['user_context', '{% if false %}supplied@example.com{% endif %}'],
       ['user_context', '{{env.HYDRA_CONTEXT_CANARY}}'],
@@ -1533,6 +1584,45 @@ describe('HydraProvider', () => {
       expect(mockTargetProvider.callApi.mock.calls[0][0]).toBe(payload);
       const history = JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript);
       expect(JSON.parse(history[0].content)).toEqual({ [field]: payload });
+    });
+
+    it('does not credit JSON-looking HTTP text bodies returned unrendered', async () => {
+      const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+        '../../../../src/evaluatorHelpers',
+      );
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+      mockAgentProvider.callApi.mockReset();
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ question: 'Hello.', user_context: 'hidden@example.com' }),
+          materializationHandled: true,
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ question: followUp, user_context: 'Earlier context.' }),
+          materializationHandled: true,
+        });
+      const context = gradingContext();
+      context.prompt.raw = '{{question}}';
+      const body = '{"prompt":"{{prompt}}","context":"{{user_context}}","other":"{% unfinished"}';
+      const target = new HttpProvider('https://example.com/chat', {
+        config: { method: 'POST', headers: { 'content-type': 'text/plain' }, body },
+      });
+      const sentBodies: unknown[] = [];
+      vi.spyOn(target, 'callApi').mockImplementation(async (prompt, targetContext) => {
+        sentBodies.push(determineRequestBody(false, prompt, body, targetContext!.vars));
+        return mockTargetProvider.callApi(prompt, targetContext);
+      });
+      context.originalProvider = target;
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+        stateful: true,
+        inputs: { question: 'Question', user_context: 'Context' },
+      });
+      const result = await provider.callApi('', context);
+      expect(sentBodies).toEqual([body, body]);
+      expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
+      expect(JSON.stringify(result.metadata.messages)).not.toContain('hidden@example.com');
     });
 
     it('does not credit duplicate JSON members removed from a delivered HTTP side input', async () => {

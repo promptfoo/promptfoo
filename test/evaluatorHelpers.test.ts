@@ -2038,6 +2038,22 @@ describe('getRenderedInputVariables', () => {
     }
   });
 
+  it.each([
+    '{"prompt":"{{prompt}}","context":"{{user_context}}"}',
+    '{"prompt":"{{prompt}}","context":"{{user_context}}","other":"{% unfinished"}',
+  ])('leaves serialized HTTP body templates unattributed: %s', (body) => {
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'question',
+        { forwardsPrompt: false, body },
+        prompt,
+        undefined,
+        vars.question,
+      ),
+    ).toEqual({ vars: {}, forwardsPrompt: false });
+  });
+
   it('does not credit HTTP reserved aliases or overwritten inject variables as side inputs', () => {
     const result = getRenderedInputVariables(
       { question: vars.question, token: 'not-the-auth-token' },
@@ -2050,6 +2066,59 @@ describe('getRenderedInputVariables', () => {
 });
 
 describe('rendered input serialization boundaries', () => {
+  it.each([
+    ['- role: user\n  content: {{input}}', 'Hello. # hidden@example.com'],
+    ['{{input}}', '- role: user\n  content: Hello. # hidden@example.com'],
+  ])('omits YAML-parsed prompts from static attribution: %s', async (raw, input) => {
+    const prompt = { raw, label: 'YAML' };
+    const rendered = await renderPrompt(prompt, { input }, undefined, undefined, ['input']);
+    expect(
+      getRenderedInputVariables(
+        { input },
+        'input',
+        { forwardsPrompt: true },
+        prompt,
+        undefined,
+        rendered,
+      ),
+    ).toEqual({ vars: {}, forwardsPrompt: false });
+  });
+
+  it('does not credit a JSON interpolation when a malformed sibling leaves it unrendered', async () => {
+    const prompt = {
+      raw: '{"content":"{{input}}","other":"{% unfinished"}',
+      label: 'malformed leaf',
+    };
+    const vars = { input: 'hidden@example.com' };
+    const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
+    expect(JSON.parse(rendered).content).toBe('{{input}}');
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'input',
+        { forwardsPrompt: true },
+        prompt,
+        undefined,
+        rendered,
+      ).vars,
+    ).toEqual({});
+  });
+
+  it('does not credit JSON contributions discarded by a custom-filter render fallback', async () => {
+    const prompt = {
+      raw: '{"content":"{{input}}","other":"{{other | custom}}"}',
+      label: 'custom leaf',
+    };
+    const vars = { input: 'hidden@example.com","content":"Hello.', other: 'other' };
+    const filters = { custom: (value: string) => value };
+    const rendered = await renderPrompt(prompt, vars, filters, undefined, Object.keys(vars));
+    expect(JSON.parse(rendered).content).toBe('Hello.');
+    expect(
+      getRenderedInputVariables(vars, 'input', { forwardsPrompt: true }, prompt, filters, rendered)
+        .vars,
+    ).toEqual({});
+  });
+
   it('ignores JSON prompt keys while retaining interpolated values', () => {
     const vars = { input: 'supplied@example.com' };
     const request = { forwardsPrompt: true };

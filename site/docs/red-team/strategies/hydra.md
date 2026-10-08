@@ -64,7 +64,7 @@ Grading history records attack contributions and observed replies. Stateful inpu
 
 Generated inputs remain literal during prompt rendering. JSON-valued contributions retain only members that survive JSON parsing; their contents never redefine message roles.
 
-Inputs with uncertain forwarding remain unattributed: arbitrary prompt functions, conditional templates, text templates that construct JSON structures, embedded JSON body templates, HTTP request transforms, raw or multipart HTTP requests, and provider wrappers without sent-prompt evidence. Unused variables, operator variables, and materialized media are excluded. This conservative history is not a normalized copy of the full provider conversation.
+Inputs with uncertain forwarding remain unattributed: arbitrary prompt functions, conditional templates, YAML chat payloads, JSON templates with unsupported expressions or malformed leaves, text templates that construct JSON structures, stringified or embedded JSON body templates, HTTP request transforms, raw or multipart HTTP requests, and provider wrappers without sent-prompt evidence. Unused variables, operator variables, and materialized media are excluded. This conservative history is not a normalized copy of the full provider conversation.
 
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
 

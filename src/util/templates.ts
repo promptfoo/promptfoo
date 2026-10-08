@@ -599,6 +599,41 @@ export function analyzeTemplateReference(
   };
 }
 
+/** Prove a JSON template leaf cannot fail into the raw-text rendering fallback. */
+export function isSimpleInputTemplate(
+  template: string,
+  inputs: Record<string, string>,
+  filters?: NunjucksFilterMap,
+): boolean {
+  const parsed = parseNunjucksTemplate(template);
+  if (!parsed.ok || !Array.isArray(parsed.ast.children)) {
+    return false;
+  }
+  const isInput = (node: unknown) => {
+    const name = getSymbolName(node);
+    return name !== undefined && Object.prototype.hasOwnProperty.call(inputs, name);
+  };
+  return parsed.ast.children.every(
+    (output) =>
+      isNunjucksAstNode(output) &&
+      output.typename === 'Output' &&
+      Array.isArray(output.children) &&
+      output.children.every(
+        (node) =>
+          isInput(node) ||
+          (isNunjucksAstNode(node) &&
+            (node.typename === 'TemplateData' ||
+              (node.typename === 'Filter' &&
+                getSymbolName(node.name) === 'trim' &&
+                !filters?.trim &&
+                isNunjucksAstNode(node.args) &&
+                Array.isArray(node.args.children) &&
+                node.args.children.length === 1 &&
+                isInput(node.args.children[0])))),
+      ),
+  );
+}
+
 /** Only unconditional, value-preserving interpolation establishes input provenance. */
 export function isDirectTemplateReference(
   template: string,

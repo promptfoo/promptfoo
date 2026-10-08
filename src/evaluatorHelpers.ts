@@ -30,6 +30,7 @@ import {
   extractVariablesFromTemplate,
   getNunjucksEngine,
   isDirectTemplateReference,
+  isSimpleInputTemplate,
 } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -60,21 +61,25 @@ export function getRenderedInputVariables(
       )
     );
   };
-  // HTTP parses JSON string bodies before rendering their values; keys are not
-  // interpolated. Inspect the same values without executing a second render.
-  let body = request.body;
-  if (typeof body === 'string') {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      // A non-JSON body is a text template.
-    }
-  }
+  // String bodies may use HTTP's text renderer, which returns the entire raw
+  // template on error. Only complete references are provable without its mode.
+  const body = request.body;
   let promptTemplate: unknown = prompt?.raw;
   let parsedPromptTemplate = false;
+  const hasSafeJsonLeaves = (value: unknown): boolean =>
+    typeof value === 'string'
+      ? isSimpleInputTemplate(value, inputVars, filters)
+      : value === null ||
+        typeof value !== 'object' ||
+        Object.values(value).every(hasSafeJsonLeaves);
   if (prompt && !getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
     try {
       promptTemplate = JSON.parse(prompt.raw);
+      // Any failing leaf makes renderPrompt retry the whole JSON as raw text.
+      // Do not attribute even a simple sibling interpolation in that case.
+      if (!hasSafeJsonLeaves(promptTemplate)) {
+        promptTemplate = undefined;
+      }
       parsedPromptTemplate = true;
     } catch {
       // Non-JSON prompts render as text.
@@ -91,9 +96,12 @@ export function getRenderedInputVariables(
   }
   const reserved = request.reservedVariables ?? [];
   const forwardsPrompt =
-    request.forwardsPrompt ||
-    referencesInput(body, 'prompt', undefined, true) ||
-    (!reserved.includes(injectVar) && referencesInput(body, injectVar, undefined, true));
+    // parseChatPrompt interprets this prefix as YAML, which can discard input
+    // comments and scalars. Its textual inputs are not safe attribution evidence.
+    !renderedPrompt?.trimStart().startsWith('- role:') &&
+    (request.forwardsPrompt ||
+      referencesInput(body, 'prompt', undefined, true) ||
+      (!reserved.includes(injectVar) && referencesInput(body, injectVar, undefined, true)));
   const vars = Object.fromEntries(
     Object.entries(inputVars).filter(([name]) => {
       const throughPrompt =
