@@ -1,4 +1,5 @@
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { normalizeRedteamConfigForPreview } from '@promptfoo/redteam/sharedFrontend';
 import { countSelectedCustomIntents } from '../../utils/plugins';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
@@ -65,7 +66,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   audio: 1,
   'authoritative-markup-injection': 1,
   base64: 1,
-  basic: 1,
+  basic: 0, // The base cases are counted separately below.
   'best-of-n': 1,
   camelcase: 1,
   citation: 1,
@@ -102,9 +103,9 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
 };
 
 export function getEstimatedProbes(config: Config) {
-  const numTests = config.numTests ?? 5;
+  const { numTests, plugins, strategies, language } = normalizeRedteamConfigForPreview(config);
   const pluginCounts = new Map<string, number>();
-  for (const entry of config.plugins) {
+  for (const entry of plugins) {
     const plugin = typeof entry === 'string' ? { id: entry } : entry;
     const severity = 'severity' in plugin ? plugin.severity : undefined;
     // Match config deduplication: the last count wins for the same options and severity.
@@ -115,20 +116,23 @@ export function getEstimatedProbes(config: Config) {
       plugin.id === 'intent'
         ? countSelectedCustomIntents({ plugins: [plugin] })
         : pluginNumTests || numTests;
-    const language = plugin.config?.language ?? config.language;
-    const numLanguages = Array.isArray(language) ? language.length : 1;
+    const pluginLanguage = plugin.config?.language ?? language;
+    const numLanguages = Array.isArray(pluginLanguage) ? pluginLanguage.length : 1;
     pluginCounts.set(key, count * numLanguages);
   }
   const baseProbes = Array.from(pluginCounts.values()).reduce((total, count) => total + count, 0);
 
   // Calculate total multiplier for all active strategies
-  const strategyMultiplier = config.strategies.reduce((total, strategy) => {
+  const strategyMultiplier = strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
     return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
   }, 0);
 
-  return baseProbes * (1 + strategyMultiplier);
+  const basicStrategy = strategies.find((strategy) => getStrategyId(strategy) === 'basic');
+  const includeBasicTests =
+    typeof basicStrategy === 'object' ? (basicStrategy.config?.enabled ?? true) : true;
+  return baseProbes * ((includeBasicTests ? 1 : 0) + strategyMultiplier);
 }
 
 export function getEstimatedDuration(config: Config): string {

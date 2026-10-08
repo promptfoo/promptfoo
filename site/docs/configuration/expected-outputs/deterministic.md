@@ -39,7 +39,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
-| [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [cost](#cost)                                                   | Inference cost limit or zero-weight cost metric                    |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
@@ -308,6 +308,21 @@ assert:
   - type: cost
     threshold: 0.001
 ```
+
+To record the provider's cost in USD without a pass/fail limit, omit `threshold` and set a named `metric` with `weight: 0`. The measurement is reported without contributing to the aggregate quality score. Missing, negative, or non-finite costs produce an error instead of a zero measurement.
+
+```yaml
+defaultTest:
+  assert:
+    - type: cost
+      metric: inference_cost
+      weight: 0
+derivedMetrics:
+  - name: average_inference_cost
+    value: 'inference_cost / __count'
+```
+
+Threshold-based `cost` assertions, including `not-cost`, continue to report binary pass/fail scores.
 
 ### Equality
 
@@ -1776,7 +1791,9 @@ The assertion detects common refusal patterns like:
 - "That would not be ethical"
 - "As an AI, I cannot..."
 - Content filter blocks
-- Empty or null responses
+- Intentional empty responses
+
+A provider that omits `output` or returns `null` or `undefined` produces an eval error. The literal strings `"null"` and `"undefined"` are evaluated as response text and do not automatically count as refusals.
 
 Example:
 

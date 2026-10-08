@@ -1,5 +1,6 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
 
+import { RedteamConfigSchema } from '../validators/redteam';
 import {
   MULTI_TURN_STRATEGIES,
   type Plugin,
@@ -33,6 +34,40 @@ export function getRiskCategorySeverityMap(
     ...riskCategorySeverityMap,
     ...overrides,
   };
+}
+
+function getValidPluginNumTests(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+/** Normalize the workload preview with the same aliases and duplicate precedence as generation. */
+export function normalizeRedteamConfigForPreview(
+  config: Pick<SavedRedteamConfig, 'plugins' | 'strategies' | 'numTests' | 'language'>,
+) {
+  const numTests = config.numTests ?? 5;
+  const plugins = config.plugins.map((entry) => {
+    if (typeof entry === 'string') {
+      return entry;
+    }
+    const { numTests, ...options } = { numTests: undefined, ...entry };
+    const validNumTests = getValidPluginNumTests(numTests);
+    return { ...options, ...(validNumTests !== undefined && { numTests: validNumTests }) };
+  });
+  const normalized = RedteamConfigSchema.safeParse({
+    plugins,
+    numTests,
+    strategies: config.strategies,
+    language: config.language,
+  });
+  // Keep a best-effort preview while plugin or strategy fields are incomplete in the editor.
+  return normalized.success
+    ? {
+        ...normalized.data,
+        numTests: normalized.data.numTests ?? numTests,
+        plugins: normalized.data.plugins ?? [],
+        strategies: normalized.data.strategies ?? [],
+      }
+    : { plugins, numTests, strategies: config.strategies, language: config.language };
 }
 
 export function getUnifiedConfig(
@@ -75,9 +110,15 @@ export function getUnifiedConfig(
         if (typeof plugin === 'string') {
           return { id: plugin };
         }
-        const { config: pluginConfig, ...pluginOptions } = plugin;
+        const {
+          config: pluginConfig,
+          numTests,
+          ...pluginOptions
+        } = { numTests: undefined, ...plugin };
+        const validNumTests = getValidPluginNumTests(numTests);
         return {
           ...pluginOptions,
+          ...(validNumTests !== undefined && { numTests: validNumTests }),
           ...(pluginConfig && Object.keys(pluginConfig).length > 0 && { config: pluginConfig }),
         };
       }),

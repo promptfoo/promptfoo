@@ -373,7 +373,7 @@ See [Plugins](/docs/red-team/plugins/) for more information.
 - As a string: `"plugin-id"`
 - As an object: `{ id: "plugin-id", numTests: 10 }`
 
-Plugins use the global `numTests` value unless an override is set. The web setup preserves per-plugin settings through import, editing, and export.
+Plugins use the global `numTests` value unless an override is set. The web setup preserves per-plugin settings through import, editing, and export. Per-plugin counts must be positive integers; invalid stored overrides are omitted on export or run so the global count applies. Workload estimates expand plugin collections and aliases before applying their counts.
 
 #### Available Plugins
 

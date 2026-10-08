@@ -283,16 +283,16 @@ describe('RedTeamSetupPage', () => {
       );
       await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
       await waitFor(() => expect(useRedTeamConfig.getState().config.plugins).toEqual([plugin]));
-      expect(getEstimatedProbes(useRedTeamConfig.getState().config)).toBe(34);
-      expect(getEstimatedDuration(useRedTeamConfig.getState().config)).toBe('~19s');
+      expect(getEstimatedProbes(useRedTeamConfig.getState().config)).toBe(17);
+      expect(getEstimatedDuration(useRedTeamConfig.getState().config)).toBe('~14s');
 
       act(() =>
         useRedTeamConfig
           .getState()
           .updatePlugins([{ id: 'bola', config: { targetSystems: ['edited'] } }]),
       );
-      expect(getEstimatedProbes(useRedTeamConfig.getState().config)).toBe(34);
-      expect(getEstimatedDuration(useRedTeamConfig.getState().config)).toBe('~19s');
+      expect(getEstimatedProbes(useRedTeamConfig.getState().config)).toBe(17);
+      expect(getEstimatedDuration(useRedTeamConfig.getState().config)).toBe('~14s');
       const exported = loadYaml(generateOrderedYaml(useRedTeamConfig.getState().config));
       expect(exported).toMatchObject({
         redteam: {
@@ -495,22 +495,24 @@ redteam:
       });
     });
 
-    it('should preserve legacy GPT-5 target IDs when loading a YAML config', async () => {
-      const user = userEvent.setup();
+    it.each(['openai:gpt-5-mini', 'openai:gpt-6.1-sol'])(
+      'preserves OpenAI target %s when loading a YAML config',
+      async (modelId) => {
+        const user = userEvent.setup();
 
-      render(
-        <MemoryRouter initialEntries={['/redteam/setup']}>
-          <RedTeamSetupPage />
-        </MemoryRouter>,
-      );
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
 
-      const loadButton = screen.getByRole('button', { name: /Load Config/i });
-      await user.click(loadButton);
+        const loadButton = screen.getByRole('button', { name: /Load Config/i });
+        await user.click(loadButton);
 
-      const yamlContent = `
-description: Legacy GPT-5 target config
+        const yamlContent = `
+description: OpenAI target config
 targets:
-  - openai:gpt-5-mini
+  - ${modelId}
 prompts:
   - "{{prompt}}"
 redteam:
@@ -518,19 +520,20 @@ redteam:
   plugins:
     - shell-injection
 `;
-      const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+        const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      expect(fileInput).toBeTruthy();
-      await user.upload(fileInput, file);
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput).toBeTruthy();
+        await user.upload(fileInput, file);
 
-      await waitFor(() => {
-        const { config, providerType } = useRedTeamConfig.getState();
-        expect(config.target.id).toBe('openai:gpt-5-mini');
-        expect(config.target.label).toBe('openai:gpt-5-mini');
-        expect(providerType).toBe('openai');
-      });
-    });
+        await waitFor(() => {
+          const { config, providerType } = useRedTeamConfig.getState();
+          expect(config.target.id).toBe(modelId);
+          expect(config.target.label).toBe(modelId);
+          expect(providerType).toBe('openai');
+        });
+      },
+    );
 
     it('preserves the dated Sonnet 4.5 preset when importing a saved YAML configuration', async () => {
       const user = userEvent.setup();
@@ -570,14 +573,49 @@ redteam:
     });
 
     it.each([
-      ['vertex:gemini-3.1-pro-preview', 'global'],
-      ['vertex:gemini-2.5-pro', undefined],
-      ['vertex:gemini-3.6-flash', 'global'],
-      ['vertex:gemini-3.7-flash', 'global'],
-      ['vertex:gemini-3.8-flash', 'global'],
-    ])(
-      'should preserve legacy Vertex target ID %s when loading a YAML config',
-      async (targetId, region) => {
+      ['vertex:gemini-3.8-flash', undefined],
+      ['vertex:gemini-3.7-flash', undefined],
+      ['vertex:gemini-3.6-flash', undefined],
+      ['vertex:gemini-3.5-flash-lite', undefined],
+      [{ id: 'vertex:gemini-3.6-flash', config: { region: 'eu' } }, 'eu'],
+    ] as const)(
+      'preserves omitted or explicit Vertex regions when importing %j',
+      async (target, region) => {
+        const user = userEvent.setup();
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
+        await user.click(screen.getByRole('button', { name: /Load Config/i }));
+        const file = new File(
+          [
+            JSON.stringify({
+              targets: [target],
+              prompts: ['{{prompt}}'],
+              redteam: { purpose: 'Test' },
+            }),
+          ],
+          'config.yaml',
+          { type: 'text/yaml' },
+        );
+        await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+        await waitFor(() => {
+          const { config } = useRedTeamConfig.getState();
+          expect(config.target.id).toBe(typeof target === 'string' ? target : target.id);
+          expect(config.target.config?.region).toBe(region);
+          const exported = loadYaml(generateOrderedYaml(config)) as {
+            targets: { config?: { region?: string } }[];
+          };
+          expect(exported.targets[0].config?.region).toBe(region);
+        });
+      },
+    );
+
+    it.each(['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'])(
+      'should preserve existing Vertex target ID %s when loading a YAML config',
+      async (targetId) => {
         const user = userEvent.setup();
 
         render(
@@ -610,7 +648,6 @@ redteam:
           const { config, providerType } = useRedTeamConfig.getState();
           expect(config.target.id).toBe(targetId);
           expect(config.target.label).toBe(targetId);
-          expect(config.target.config?.region).toBe(region);
           expect(providerType).toBe('vertex');
         });
       },

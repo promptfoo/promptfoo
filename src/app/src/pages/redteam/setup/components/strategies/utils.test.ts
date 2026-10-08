@@ -40,6 +40,9 @@ describe('getStrategyId', () => {
 
 describe('getEstimatedProbes', () => {
   it.each([
+    { plugins: [{ id: 'toxicity', numTests: 2 }], numTests: 5, expected: 12 },
+    { plugins: [{ id: 'bola', numTests: -2 }], numTests: 5, expected: 5 },
+    { plugins: [{ id: 'bola', numTests: 1.5 }], numTests: 5, expected: 5 },
     { plugins: [{ id: 'bola', numTests: 500 }], numTests: 5, expected: 500 },
     { plugins: [{ id: 'bola', numTests: 2 }], numTests: 50, expected: 2 },
     { plugins: [{ id: 'bola', numTests: 0 }], numTests: 5, expected: 5 },
@@ -97,7 +100,7 @@ describe('getEstimatedProbes', () => {
       strategies: ['basic', 'jailbreak'],
       language: ['en', 'es'],
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(144); // (2 + 3 + 1) * (1 + 1 + 10) * 2
+    expect(getEstimatedProbes(config)).toBe(132); // (2 + 3 + 1) * (1 + 10) * 2
   });
 
   it('applies strategy and language factors to each plugin override', () => {
@@ -108,7 +111,26 @@ describe('getEstimatedProbes', () => {
       strategies: ['basic', { id: 'jailbreak' }],
       language: ['en', 'es'],
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(528); // (5 + 17) * (1 + 1 + 10) * 2
+    expect(getEstimatedProbes(config)).toBe(484); // (5 + 17) * (1 + 10) * 2
+  });
+
+  it.each(['basic', { id: 'basic' }])('counts basic cases once for %j', (strategy) => {
+    const config = {
+      ...baseConfig,
+      plugins: [{ id: 'bola', numTests: 2 }],
+      strategies: [strategy],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(2);
+  });
+
+  it('omits base cases when the basic strategy is disabled', () => {
+    const config = {
+      ...baseConfig,
+      plugins: [{ id: 'bola', numTests: 2 }],
+      strategies: [{ id: 'basic', config: { enabled: false } }, 'base64'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(2);
+    expect(getEstimatedProbes({ ...config, strategies: [config.strategies[0]] })).toBe(0);
   });
 
   it('counts duplicate plugin configurations once using the last override', () => {
@@ -170,9 +192,9 @@ describe('getEstimatedProbes', () => {
       ...baseConfig,
       numTests: 5,
       plugins: ['plugin1'],
-      strategies: ['basic', 'jailbreak'], // multipliers 1 and 10
+      strategies: ['basic', 'jailbreak'], // Base cases plus a multiplier of 10
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(60); // (5*1) + (5*1*(1+10))
+    expect(getEstimatedProbes(config)).toBe(55); // 5 base cases + 5*10 jailbreak probes
   });
 
   it('should handle global language configuration with multiple languages', () => {
@@ -205,7 +227,7 @@ describe('getEstimatedProbes', () => {
       strategies: ['basic', 'jailbreak'],
       language: ['en', 'es'],
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(240); // ((10) + (10*11)) * 2 languages
+    expect(getEstimatedProbes(config)).toBe(220); // (10 + 10*10) * 2 languages
   });
 
   it('should use default numTests when not specified', () => {
@@ -214,7 +236,7 @@ describe('getEstimatedProbes', () => {
       plugins: ['plugin1'],
       strategies: ['basic'],
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(10); // (5*1) + (5*1*1)
+    expect(getEstimatedProbes(config)).toBe(5); // The basic strategy uses the existing base cases
   });
 });
 
@@ -359,10 +381,8 @@ describe('getEstimatedDuration', () => {
       strategies: ['basic'],
       maxConcurrency: 10,
     } as Config;
-    expect(getEstimatedDuration(config)).toBe('~6m'); // 8s generation + 300s probes
-    expect(getEstimatedDuration({ ...config, plugins: [{ id: 'bola', numTests: 2 }] })).toBe(
-      '~10s',
-    );
+    expect(getEstimatedDuration(config)).toBe('~3m'); // 8s generation + 150s probes
+    expect(getEstimatedDuration({ ...config, plugins: [{ id: 'bola', numTests: 2 }] })).toBe('~9s');
   });
 
   it('should return duration in seconds for very short runs', () => {
@@ -448,7 +468,7 @@ describe('getEstimatedDuration', () => {
       ...baseConfig,
       numTests: 5,
       plugins: ['plugin1'],
-      strategies: ['basic'], // multiplier 1
+      strategies: ['basic'], // Base cases only
       maxConcurrency: 5,
     } as Config;
     const configJailbreakTree = {

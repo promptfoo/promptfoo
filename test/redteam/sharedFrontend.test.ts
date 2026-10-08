@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
+import { RedteamConfigSchema } from '../../src/validators/redteam';
 
 import type { Plugin } from '../../src/redteam/constants';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
@@ -143,6 +144,19 @@ describe('getUnifiedConfig', () => {
     expect(result.redteam.purpose).toBe('testing');
   });
 
+  it.each([0, -2, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'omits an invalid plugin count %s so generation uses the global count',
+    (numTests) => {
+      const result = getUnifiedConfig({
+        ...baseConfig,
+        numTests: 7,
+        plugins: [{ id: 'bola', numTests, severity: Severity.High }],
+      });
+      expect(result.redteam.plugins).toEqual([{ id: 'bola', severity: Severity.High }]);
+      expect(result.redteam.numTests).toBe(7);
+    },
+  );
+
   it('should handle defaultTest transformation', () => {
     const configWithDefaultTest: SavedRedteamConfig = {
       ...baseConfig,
@@ -203,6 +217,28 @@ describe('getUnifiedConfig', () => {
       expect(result.redteam.numTests).toBe(5);
     },
   );
+
+  it('preserves alias overrides through export and generation config normalization', () => {
+    const exported = getUnifiedConfig({
+      ...baseConfig,
+      numTests: 5,
+      plugins: [
+        { id: 'toxicity', numTests: 2, severity: Severity.Critical, config: { language: 'fr' } },
+      ],
+      strategies: ['basic'],
+    });
+    const normalized = RedteamConfigSchema.parse(exported.redteam);
+    expect(normalized.plugins).toHaveLength(6);
+    expect(
+      normalized.plugins?.every(
+        (plugin) =>
+          plugin.numTests === 2 &&
+          plugin.severity === Severity.Critical &&
+          plugin.config?.language === 'fr',
+      ),
+    ).toBe(true);
+    expect(normalized.plugins?.every((plugin) => plugin.id.startsWith('harmful:'))).toBe(true);
+  });
 
   it('should transform strategies with stateful config', () => {
     const configWithStrategies: SavedRedteamConfig = {

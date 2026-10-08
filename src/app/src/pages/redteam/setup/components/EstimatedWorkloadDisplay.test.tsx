@@ -27,8 +27,8 @@ describe('workload previews with plugin overrides', () => {
         <EstimatedDurationDisplay config={config} />
       </TooltipProvider>,
     );
-    expect(screen.getByText('10')).toBeInTheDocument();
-    expect(screen.getByText('~38s')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText('~23s')).toBeInTheDocument();
     expect(screen.queryByText('0')).not.toBeInTheDocument();
   });
 
@@ -52,8 +52,8 @@ describe('workload previews with plugin overrides', () => {
         <EstimatedDurationDisplay config={config} />
       </TooltipProvider>,
     );
-    expect(screen.getByText('4')).toBeInTheDocument();
-    expect(screen.getByText('~15s')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('~9s')).toBeInTheDocument();
     expect(screen.queryByText('200')).not.toBeInTheDocument();
   });
 
@@ -76,12 +76,12 @@ describe('workload previews with plugin overrides', () => {
       </TooltipProvider>
     );
     const { rerender } = render(previews(config));
-    expect(screen.getByText('1,000')).toBeInTheDocument();
-    expect(screen.getByText('~6m')).toBeInTheDocument();
+    expect(screen.getByText('500')).toBeInTheDocument();
+    expect(screen.getByText('~3m')).toBeInTheDocument();
 
     rerender(previews({ ...config, plugins: [{ id: 'bola', numTests: 2 }] }));
-    expect(screen.getByText('4')).toBeInTheDocument();
-    expect(screen.getByText('~10s')).toBeInTheDocument();
-    expect(screen.queryByText('1,000')).not.toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('~9s')).toBeInTheDocument();
+    expect(screen.queryByText('500')).not.toBeInTheDocument();
   });
 });
