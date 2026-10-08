@@ -24,6 +24,7 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { getProviderFactories, mergeProviderEnv } from './registry';
+import { normalizeResponsesInput } from './responses/input';
 
 import type { EnvOverrides } from '../types/env';
 import type { CallApiContextParams, LoadApiProviderContext, TestSuiteConfig } from '../types/index';
@@ -38,7 +39,9 @@ import type {
 /** Static request paths whose forwarding behavior is owned by these implementations. */
 export function getProviderRequestTemplates(
   provider: ApiProvider,
+  renderedPrompt: string,
   context?: CallApiContextParams,
+  hasSentPromptEvidence = false,
 ): { forwardsPrompt: boolean; body?: unknown; reservedVariables?: string[] } {
   // IDs and URL-shaped config are not implementation evidence. Custom providers
   // and subclasses can replace the request, so they need response.prompt evidence.
@@ -81,10 +84,26 @@ export function getProviderRequestTemplates(
           ? 'prompt'
           : undefined;
   const effectiveConfig = { ...config, ...context?.prompt?.config };
+  if (prototype === OpenAiResponsesProvider.prototype) {
+    try {
+      const parsed = JSON.parse(renderedPrompt);
+      if (
+        Array.isArray(parsed) &&
+        JSON.stringify(normalizeResponsesInput(parsed)) !== JSON.stringify(parsed)
+      ) {
+        // This is the provider's own conversion. Changed content parts can
+        // discard fields, so their original templates do not prove delivery.
+        return { forwardsPrompt: false };
+      }
+    } catch {
+      // The Responses provider sends non-JSON prompts as literal text.
+    }
+  }
   return {
     forwardsPrompt:
-      override !== undefined &&
-      !Object.prototype.hasOwnProperty.call(effectiveConfig.passthrough ?? {}, override),
+      override === undefined
+        ? hasSentPromptEvidence
+        : !Object.prototype.hasOwnProperty.call(effectiveConfig.passthrough ?? {}, override),
   };
 }
 

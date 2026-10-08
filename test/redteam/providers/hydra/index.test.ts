@@ -3,6 +3,7 @@ import * as blobExtractor from '../../../../src/blobs/extractor';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import * as llmGrading from '../../../../src/matchers/llmGrading';
 import { determineRequestBody, HttpProvider } from '../../../../src/providers/http';
+import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { parseChatPrompt } from '../../../../src/providers/shared';
 import {
@@ -1631,6 +1632,78 @@ describe('HydraProvider', () => {
       expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
       expect(JSON.stringify(result.metadata.messages)).not.toContain('hidden@example.com');
     });
+
+    it.each(['text', 'native-part', 'converted-part', 'generated-part'] as const)(
+      'uses Responses-normalized delivery evidence for %s input',
+      async (format) => {
+        const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+          '../../../../src/evaluatorHelpers',
+        );
+        vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+        const supplied = 'supplied@example.com';
+        const imageMessage = (caption: string) => [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: 'https://example.com/image.png', caption },
+              },
+            ],
+          },
+        ];
+        const supported = format === 'text' || format === 'native-part';
+        const context = gradingContext();
+        context.prompt.raw =
+          format === 'generated-part'
+            ? '{{input}}'
+            : JSON.stringify(
+                format === 'converted-part'
+                  ? imageMessage('{{input}}')
+                  : [
+                      {
+                        role: 'user',
+                        content:
+                          format === 'text'
+                            ? '{{input}}'
+                            : [{ type: 'input_text', text: '{{input}}' }],
+                      },
+                    ],
+              );
+        mockAgentProvider.callApi.mockReset();
+        mockAgentProvider.callApi
+          .mockResolvedValueOnce({
+            output: format === 'generated-part' ? JSON.stringify(imageMessage(supplied)) : supplied,
+          })
+          .mockResolvedValueOnce({ output: followUp });
+        const target = new OpenAiResponsesProvider('test-model');
+        const sentInputs: unknown[] = [];
+        vi.spyOn(target, 'callApi').mockImplementation(async (prompt, callContext) => {
+          sentInputs.push((await target.getOpenAiBody(prompt, callContext)).body.input);
+          return {
+            // Even explicit pre-normalization evidence cannot override the known conversion.
+            prompt,
+            ...(await mockTargetProvider.callApi(prompt, callContext)),
+          };
+        });
+        context.originalProvider = target;
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+        const result = await provider.callApi('', context);
+        expect(JSON.stringify(sentInputs[0]).includes(supplied)).toBe(supported);
+        expect(
+          (mockGrader.getResult.mock.calls[1][7].conversationTranscript ?? '').includes(supplied),
+        ).toBe(supported);
+        expect(JSON.stringify(result.metadata.messages).includes(supplied)).toBe(supported);
+        expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+          getGradingInputHash(
+            result.metadata.redteamFinalPrompt!,
+            result.output,
+            result.metadata.messages,
+            'pii',
+          ),
+        );
+      },
+    );
 
     it('does not credit duplicate JSON members removed from a delivered HTTP side input', async () => {
       const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(

@@ -549,12 +549,9 @@ export async function getTargetRequestTemplates(
   context?: CallApiContextParams,
 ) {
   const { getProviderRequestTemplates } = await loadProviderModule();
-  const templates = getProviderRequestTemplates(provider, context);
-  return {
-    ...templates,
-    // Exact string equality avoids guessing how an opaque adapter parses chat.
-    forwardsPrompt: templates.forwardsPrompt || response.prompt === prompt,
-  };
+  // Exact string equality is evidence for opaque adapters only; it must not
+  // override a known built-in request replacement or normalization.
+  return getProviderRequestTemplates(provider, prompt, context, response.prompt === prompt);
 }
 
 /**
