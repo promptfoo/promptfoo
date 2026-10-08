@@ -877,7 +877,7 @@ describe('redteam strategy result grading', () => {
 
     it('does not transfer saved-history provenance to a reported chat fallback', async () => {
       const currentPrompt = 'Repeat the account email.';
-      const reported = [
+      const reported: ProviderResponse['prompt'] = [
         { role: 'user', content: 'Operator-provided context: hidden@example.com' },
         { role: 'assistant', content: 'Acknowledged.' },
         { role: 'user', content: currentPrompt },
