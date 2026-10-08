@@ -4241,7 +4241,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       partialResult,
     );
     this.trackFinalJsonlResult(timeoutResult);
-    await this.persistEvalRow(timeoutResult, false);
+    // Paused CLI runs return before final export; stream their authoritative cancellation row.
+    await this.persistEvalRow(timeoutResult, !didTimeout);
     this.trackCompletedRow(evalStep, timeoutResult, context);
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -4748,6 +4749,34 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!assertion) {
       return;
     }
+    // Partial outputs are evidence, not completed comparison candidates. Grader errors can
+    // be retried, and ordinary assertion failures remain eligible for comparison.
+    const comparableResults = resultsToCompare.filter(
+      (result) => result.failureReason !== ResultFailureReason.ERROR || getComparisonError(result),
+    );
+    if (comparableResults.length === 0) {
+      return;
+    }
+    if (comparableResults.length === 1 && resultsToCompare.length > 1) {
+      const result = comparableResults[0];
+      // No comparison is possible; retain the completed row's other assertion verdicts.
+      await this.applySelectBestGradingResult({
+        gradingResult: {
+          pass: true,
+          score: result.score,
+          reason: 'Comparison skipped: only one completed candidate',
+          assertion: {
+            type: assertion.type,
+            value: assertion.value,
+            metric: assertion.metric,
+            weight: assertion.weight,
+          },
+        },
+        metrics: prompts[result.promptIdx]?.metrics,
+        result,
+      });
+      return;
+    }
     let gradingResults: GradingResult[];
     try {
       const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
@@ -4770,7 +4799,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       };
 
       const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
-      const outputs = resultsToCompare.map((r) => r.response?.output || '');
+      const outputs = comparableResults.map((r) => r.response?.output || '');
       gradingResults = await withCacheNamespace(
         repeatCacheContext
           ? getRepeatCacheNamespace(
@@ -4809,10 +4838,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
-      for (const result of resultsToCompare) {
-        if (result.failureReason === ResultFailureReason.ERROR && !getComparisonError(result)) {
-          continue;
-        }
+      for (const result of comparableResults) {
         const previous = {
           success: result.success,
           score: result.score,
@@ -4837,8 +4863,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     for (let index = 0; index < gradingResults.length; index++) {
       await this.applySelectBestGradingResult({
         gradingResult: gradingResults[index],
-        metrics: prompts[resultsToCompare[index].promptIdx]?.metrics,
-        result: resultsToCompare[index],
+        metrics: prompts[comparableResults[index].promptIdx]?.metrics,
+        result: comparableResults[index],
       });
     }
 

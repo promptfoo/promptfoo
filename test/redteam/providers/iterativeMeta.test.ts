@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getBlobByHash } from '../../../src/blobs';
+import * as blobExtractor from '../../../src/blobs/extractor';
 import { runEval } from '../../../src/evaluator';
+import { runDbMigrations } from '../../../src/migrate';
 import RedteamIterativeMetaProvider, {
   runMetaAgentRedteam,
 } from '../../../src/redteam/providers/iterativeMeta';
@@ -304,15 +307,73 @@ describe('RedteamIterativeMetaProvider', () => {
     expect(snapshots.at(-1)?.tokenUsage?.assertions?.total).toBe(23);
   });
 
+  it('retains externalized audio from an earlier completed turn after a text-only turn', async () => {
+    await runDbMigrations();
+    const blobStorage = vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(true);
+    try {
+      const controller = new AbortController();
+      const snapshots: import('../../../src/types/index').ProviderResponse[] = [];
+      const audio = Buffer.alloc(2048, 1);
+      let finishNextAttack!: () => void;
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({ output: 'First probe' })
+        .mockResolvedValueOnce({ output: 'Second probe' })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishNextAttack = () => resolve({ output: 'Late probe' });
+            }),
+        );
+      mockGetTargetResponse
+        .mockResolvedValueOnce({
+          output: 'Completed audio response',
+          audio: { data: audio.toString('base64'), format: 'wav' },
+        })
+        .mockResolvedValueOnce({ output: 'Completed text response' });
+      const attack = runMetaAgentRedteam({
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 3,
+        options: {
+          abortSignal: controller.signal,
+          onProgress: (response) => snapshots.push(structuredClone(response)),
+        },
+        prompt: { raw: '{{query}}', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: { assert: [{ type: 'promptfoo:redteam:pii' }], metadata: { pluginId: 'pii' } },
+        vars: { query: 'Synthetic objective' },
+      });
+      await vi.waitFor(() => expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3));
+      const checkpoint = snapshots.at(-1)!;
+      expect(checkpoint.metadata?.redteamHistory).toHaveLength(2);
+      const storedAudio = checkpoint.metadata?.redteamHistory[0].outputAudio;
+      expect(storedAudio).toMatchObject({
+        format: 'wav',
+        blobRef: { uri: expect.stringMatching(/^promptfoo:\/\/blob\//), sizeBytes: 2048 },
+      });
+      expect(storedAudio.data).toBeUndefined();
+      expect(checkpoint.audio).toBeUndefined();
+      expect((await getBlobByHash(storedAudio.blobRef.hash)).data).toEqual(audio);
+      const checkpointCount = snapshots.length;
+      controller.abort();
+      const stopped = expect(attack).rejects.toThrow();
+      finishNextAttack();
+      await stopped;
+      expect(snapshots).toHaveLength(checkpointCount);
+    } finally {
+      blobStorage.mockRestore();
+    }
+  });
+
   it('checkpoints completed transform usage while the target is pending', async () => {
     const transforms = await import('../../../src/redteam/shared/runtimeTransform');
-    const transformSpy = vi
-      .spyOn(transforms, 'applyRuntimeTransforms')
-      .mockResolvedValue({
-        prompt: 'Transformed probe',
-        originalPrompt: 'Synthetic probe',
-        tokenUsage: { total: 17, numRequests: 1 },
-      });
+    const transformSpy = vi.spyOn(transforms, 'applyRuntimeTransforms').mockResolvedValue({
+      prompt: 'Transformed probe',
+      originalPrompt: 'Synthetic probe',
+      tokenUsage: { total: 17, numRequests: 1 },
+    });
     try {
       const controller = new AbortController();
       const snapshots: ProviderResponse[] = [];

@@ -500,10 +500,9 @@ export async function runMetaAgentRedteam({
         promptAudio: lastTransformResult?.audio,
         promptImage: lastTransformResult?.image,
         output: response.output,
-        outputAudio:
-          response.audio?.data && response.audio?.format
-            ? { data: response.audio.data, format: response.audio.format }
-            : undefined,
+        outputAudio: response.audio
+          ? { ...response.audio, format: response.audio.format || 'wav' }
+          : undefined,
         outputImage:
           response.image?.data && response.image?.format
             ? { data: response.image.data, format: response.image.format }
@@ -538,10 +537,9 @@ export async function runMetaAgentRedteam({
     );
     lastResponse = targetResponse;
     completedTurn.output = targetResponse.output;
-    completedTurn.outputAudio =
-      targetResponse.audio?.data && targetResponse.audio?.format
-        ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
-        : undefined;
+    completedTurn.outputAudio = targetResponse.audio
+      ? { ...targetResponse.audio, format: targetResponse.audio.format || 'wav' }
+      : undefined;
     completedTurn.outputImage =
       targetResponse.image?.data && targetResponse.image?.format
         ? { data: targetResponse.image.data, format: targetResponse.image.format }

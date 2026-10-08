@@ -742,7 +742,7 @@ export class HydraProvider implements ApiProvider {
           promptImage: lastTransformResult?.image,
           output: scrubOutputForHistory(response.output),
           outputAudio: response.audio
-            ? { data: response.audio.data || '', format: response.audio.format || 'wav' }
+            ? { ...response.audio, format: response.audio.format || 'wav' }
             : undefined,
           outputImage:
             response.image?.data && response.image?.format
@@ -896,7 +896,7 @@ export class HydraProvider implements ApiProvider {
 
       completedTurn.output = historyOutput;
       completedTurn.outputAudio = targetResponse.audio
-        ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
+        ? { ...targetResponse.audio, format: targetResponse.audio.format || 'wav' }
         : undefined;
       completedTurn.outputImage =
         targetResponse.image?.data && targetResponse.image?.format

@@ -264,6 +264,79 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(failingWriter.close).toHaveBeenCalledOnce();
   });
 
+  it.each([0, 1000])(
+    'streams user cancellation once with timeoutMs=%s and ignores late completion',
+    async (timeoutMs) => {
+      vi.useFakeTimers();
+      const resultWriter = createResultWriter();
+      const runtime = createRuntime([resultWriter]);
+      const evalRecord = createEvalRecord();
+      const appendResult = vi.spyOn(evalRecord, 'addResult');
+      const controller = new AbortController();
+      let finishProvider!: () => void;
+      const provider: ApiProvider = {
+        id: () => 'checkpointing-provider',
+        callApi: vi.fn<ApiProvider['callApi']>((_prompt, _context, options) => {
+          options?.onProgress?.({
+            output: 'Completed probe',
+            tokenUsage: { total: 11, numRequests: 1 },
+            metadata: { redteamHistory: [{ output: 'Completed probe' }] },
+          });
+          return new Promise((resolve) => {
+            finishProvider = () => {
+              const response = { output: 'Late completion' };
+              options?.onProgress?.(response);
+              resolve(response);
+            };
+          });
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}],
+      };
+
+      try {
+        const evaluation = evaluate(
+          testSuite,
+          evalRecord,
+          { abortSignal: controller.signal, timeoutMs },
+          runtime,
+        );
+        await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledOnce());
+        controller.abort();
+        await evaluation;
+
+        expect(appendResult).toHaveBeenCalledOnce();
+        expect(resultWriter.write).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.ERROR,
+            response: expect.objectContaining({
+              output: 'Completed probe',
+              tokenUsage: expect.objectContaining({ total: 11, numRequests: 1 }),
+            }),
+            metadata: expect.objectContaining({
+              incomplete: true,
+              redteamHistory: [{ output: 'Completed probe' }],
+            }),
+          }),
+        );
+        expect(resultWriter.close).toHaveBeenCalledOnce();
+
+        finishProvider();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(appendResult).toHaveBeenCalledOnce();
+        expect(resultWriter.write).toHaveBeenCalledOnce();
+        expect(resultWriter.close).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it('persists per-call timeout rows without streaming them', async () => {
     vi.useFakeTimers();
     const resultWriter = createResultWriter();
