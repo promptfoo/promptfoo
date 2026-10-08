@@ -175,7 +175,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
           : undefined;
 
       const response: ProviderResponse = {
-        output: sttResponse.text ?? undefined,
+        output: sttResponse.text,
         metadata: {
           transcription: sttResponse,
           audio: audioMetadata,
@@ -335,12 +335,11 @@ export class ElevenLabsSTTProvider implements ApiProvider {
     try {
       const cache = await getCache();
       const cacheKey = await this.getCacheKey(audioFilePath);
-      const cached = await cache.get<ProviderResponse>(cacheKey);
+      const cached = await cache.get(cacheKey);
 
       if (cached) {
         return {
           ...cached,
-          output: cached.output ?? undefined,
           cached: true,
         };
       }

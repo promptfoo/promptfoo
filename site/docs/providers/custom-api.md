@@ -101,7 +101,7 @@ module.exports = class OpenAIProvider {
 }
 ```
 
-Return an `error` for failed requests. Omitting `output` or returning `output: undefined` also produces an error. An explicit `output: null` is valid JSON data, not a missing response. Direct evals preserve it in saved responses and hook context; text-based graders receive its JSON representation, `null`.
+Return an `error` for failed requests. Omitting `output` or returning `output: null` or `output: undefined` also produces an error, including in red team scans. The literal strings `"null"` and `"undefined"` are response content and are graded normally.
 
 ### Looking up text-token prices
 

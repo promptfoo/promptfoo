@@ -249,15 +249,13 @@ describe('util', () => {
       expect(result).toBeNull();
     });
 
-    it('accepts explicit null from an output transform', async () => {
-      await expect(transform('null', 'test', { vars: {} })).resolves.toBeNull();
-      await expect(transform('output', null, { vars: {} })).resolves.toBeNull();
-    });
-
-    it('rejects null from a variables transform', async () => {
-      await expect(
-        transform('null', {}, { vars: {} }, true, TransformInputType.VARS),
-      ).rejects.toThrow('Transform function did not return a value');
+    it('throws error when validateReturn is true and function returns null', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = 'null'; // Will be wrapped with "return" automatically
+      await expect(transform(transformFunction, output, context, true)).rejects.toThrow(
+        'Transform function did not return a value',
+      );
     });
 
     it('handles file transform function errors gracefully', async () => {

@@ -215,16 +215,16 @@ export function getTransformLabel(t: string | TransformFunction | null | undefin
  * @param codeOrFilepathOrFn - A TransformFunction, inline JavaScript code, or a file path
  * starting with 'file://'. File paths can include a function name
  * (e.g., 'file://transform.js:myFunction'). Python files default to 'get_transform'.
- * @param transformInput - The input to transform. Can be a string, object, null, or undefined.
+ * @param transformInput - The input to transform. Can be a string, object, or undefined.
  * @param context - Context object passed to the transform function (vars, prompt, metadata).
- * @param validateReturn - If true (default), rejects undefined results and null variable-transform results.
+ * @param validateReturn - If true (default), throws when the transform returns null/undefined.
  * @param inputType - Whether the first parameter is named 'output' or 'vars' in inline code.
  * @returns A promise that resolves to the transformed output.
- * @throws When the transform is unloadable, throws, or (with `validateReturn`) returns undefined or null vars.
+ * @throws When the transform is unloadable, throws, or (with `validateReturn`) returns null/undefined.
  */
 export async function transform(
   codeOrFilepathOrFn: string | TransformFunction,
-  transformInput: string | object | null | undefined,
+  transformInput: string | object | undefined,
   context: TransformContext,
   validateReturn: boolean = true,
   inputType: TransformInputType = TransformInputType.OUTPUT,
@@ -264,10 +264,7 @@ export async function transform(
     throw error;
   }
 
-  if (
-    validateReturn &&
-    (ret === undefined || (ret === null && inputType === TransformInputType.VARS))
-  ) {
+  if (validateReturn && (ret === null || ret === undefined)) {
     throw new Error(
       `Transform function did not return a value\n\n${getTransformLabel(codeOrFilepathOrFn)}`,
     );

@@ -64,44 +64,6 @@ describe('Mistral', () => {
       vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
     });
 
-    it.each([
-      [null, undefined],
-      [undefined, undefined],
-      ['', ''],
-      ['null', 'null'],
-    ])('distinguishes absent content from returned text: %j', async (content, expected) => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { choices: [{ message: { content, tool_calls: [] } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await provider.callApi('Test prompt');
-
-      expect(result.output).toBe(expected);
-      expect(result.error).toBeUndefined();
-    });
-
-    it('normalizes cached protocol-null output without losing cache metadata', async () => {
-      vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(getCache().get).mockResolvedValue({
-        output: null,
-        tokenUsage: { total: 10 },
-        cost: 0.1,
-      });
-
-      const result = await provider.callApi('Test prompt');
-
-      expect(result).toMatchObject({
-        output: undefined,
-        cached: true,
-        tokenUsage: { total: 10, cached: 10 },
-        cost: 0.1,
-      });
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    });
-
     it('should create a provider with default options', () => {
       expect(provider.modelName).toBe('mistral-tiny');
       expect(provider.config).toEqual({});

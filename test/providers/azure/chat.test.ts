@@ -400,34 +400,6 @@ describe('AzureChatCompletionProvider', () => {
       },
     );
 
-    it.each(['json_schema', 'json_object'] as const)(
-      'retains parsed JSON null in %s responses',
-      async (type) => {
-        provider.config.response_format =
-          type === 'json_object'
-            ? { type }
-            : {
-                type,
-                json_schema: {
-                  name: 'result',
-                  strict: true,
-                  schema: { type: 'object', properties: {}, additionalProperties: false },
-                },
-              };
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: { choices: [{ message: { content: 'null' }, finish_reason: 'stop' }] },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
-
-        const result = await provider.callApi('Return JSON null');
-
-        expect(result.output).toBeNull();
-        expect(result.error).toBeUndefined();
-      },
-    );
-
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
       const mockResponse = {
         id: 'mock-id',

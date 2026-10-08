@@ -17,28 +17,6 @@ describe('CohereChatCompletionProvider', () => {
     vi.unstubAllEnvs();
   });
 
-  it.each([
-    [null, undefined],
-    [undefined, undefined],
-    ['', ''],
-    ['null', 'null'],
-  ])('distinguishes absent v1 response text from JSON text: %j', async (text, expected) => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { text },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-    const provider = new CohereChatCompletionProvider('command-a-03-2025', {
-      config: { apiKey: 'test-key' },
-    });
-
-    const response = await provider.callApi('Test prompt');
-
-    expect(response.output).toBe(expected);
-    expect(response.error).toBeUndefined();
-  });
-
   it('recognizes the published Command A+ model ID', () => {
     expect(CohereChatCompletionProvider.COHERE_CHAT_MODELS).toContain('command-a-plus-05-2026');
   });

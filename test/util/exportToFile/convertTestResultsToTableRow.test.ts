@@ -401,9 +401,6 @@ describe('convertTestResultsToTableRow', () => {
       const row = convertTestResultsToTableRow(results, varsForHeader);
 
       expect(row.outputs[0].text).toBe('Null response');
-
-      results[0].error = undefined;
-      expect(convertTestResultsToTableRow(results, varsForHeader).outputs[0].text).toBe('null');
     });
 
     it('should handle object output', () => {

@@ -1015,6 +1015,7 @@ async function collectExternalTraceAfterProviderCall({
   const needsTraceForGrading =
     !providerFailed &&
     !response?.error &&
+    response?.output !== null &&
     response?.output !== undefined &&
     hasTraceAwareAssertions(test.assert);
 
@@ -1201,7 +1202,7 @@ function updateConversationHistory({
   conversations[conversationKey].push({
     prompt: renderedJson || renderedPrompt,
     input: conversationLastInput || renderedJson || renderedPrompt,
-    output: response.output === undefined ? '' : response.output,
+    output: response.output || '',
     metadata: response.metadata,
   });
 }
@@ -1358,9 +1359,9 @@ async function applyRunEvalResponseOutcome({
     return;
   }
 
-  if (response.output === undefined) {
+  if (response.output === null || response.output === undefined) {
     // An absent provider result is an integration error, including in redteam
-    // scans. Explicit null and empty strings still proceed to the assertions.
+    // scans. An intentional empty string still proceeds to the assertions.
     ret.success = false;
     ret.score = 0;
     ret.error = 'No output';
@@ -1534,7 +1535,7 @@ async function transformRunEvalResponse({
     });
   }
 
-  invariant(processedResponse.output !== undefined, 'Response output should not be undefined');
+  invariant(processedResponse.output != null, 'Response output should not be null');
   const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
     evalId,
     testIdx,
@@ -1798,13 +1799,8 @@ async function runEvalInternal({
             accumulateResponseTokenUsage(ret.tokenUsage, response);
           }
 
-          if (
-            test.options?.storeOutputAs &&
-            ret.response?.output !== undefined &&
-            (!ret.response.error || ret.response.output) &&
-            registers
-          ) {
-            // Preserve valid falsy data, but keep provider-error placeholders out of registers.
+          if (test.options?.storeOutputAs && ret.response?.output && registers) {
+            // Save the output in a register for later use
             registers[test.options.storeOutputAs] = ret.response.output;
           }
 
@@ -4624,9 +4620,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       };
 
       const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
-      const outputs = resultsToCompare.map((r) =>
-        r.response?.output === undefined ? '' : r.response.output,
-      );
+      const outputs = resultsToCompare.map((r) => r.response?.output || '');
       gradingResults = await withCacheNamespace(
         repeatCacheContext
           ? getRepeatCacheNamespace(
@@ -4775,9 +4769,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
-    const outputs = resultsToCompare.map((r) =>
-      r.response?.output === undefined ? '' : r.response.output,
-    );
+    const outputs = resultsToCompare.map((r) => r.response?.output || '');
     const maxScoreGradingResults = await selectMaxScore(
       outputs,
       resultsToCompare,

@@ -2889,7 +2889,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: model.output(mergedConfig, JSON.parse(cachedResponse as string)) ?? undefined,
+          output: model.output(mergedConfig, JSON.parse(cachedResponse as string)),
           tokenUsage: createEmptyTokenUsage(),
           cached: true,
         };
@@ -3025,7 +3025,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
 
       return {
-        output: model.output(mergedConfig, output) ?? undefined,
+        output: model.output(mergedConfig, output),
         tokenUsage,
         cost,
         ...(output['amazon-bedrock-guardrailAction']

@@ -58,7 +58,7 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
           result.vars.prompt?.toString() ||
           result.prompt.raw ||
           '',
-        Response: result.response?.output === null ? 'null' : result.response?.output || '',
+        Response: result.response?.output || '',
         Pass:
           result.gradingResult?.pass === true
             ? `Pass${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`

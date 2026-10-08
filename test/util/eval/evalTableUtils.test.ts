@@ -1306,58 +1306,6 @@ describe('evalTableUtils', () => {
       return chunks.join('');
     }
 
-    it('streams null data and preserves provider errors separately from assertion failures', async () => {
-      const csv = await runStreamEvalCsv({
-        vars: [],
-        prompts: [createCompletedPrompt('Prompt')],
-        results: [
-          {
-            testIdx: 0,
-            promptIdx: 0,
-            response: { output: null },
-            success: true,
-            score: 1,
-            failureReason: ResultFailureReason.NONE,
-          },
-          {
-            testIdx: 1,
-            promptIdx: 0,
-            response: { output: null },
-            success: false,
-            score: 0,
-            failureReason: ResultFailureReason.ERROR,
-            error: 'Target request failed',
-          },
-          {
-            testIdx: 2,
-            promptIdx: 0,
-            response: { output: null },
-            success: false,
-            score: 0,
-            failureReason: ResultFailureReason.ASSERT,
-            error: 'Expected text',
-            gradingResult: { reason: 'Expected text' },
-          },
-          {
-            testIdx: 3,
-            promptIdx: 0,
-            response: { output: null },
-            success: false,
-            score: 0,
-            failureReason: ResultFailureReason.NONE,
-            error: 'No output',
-            gradingResult: null,
-          },
-        ],
-      });
-      const rows = parseCsv(csv);
-      expect(rows[1].slice(0, 3)).toEqual(['null', 'PASS', '1.00']);
-      expect(rows[2].slice(0, 3)).toEqual(['Target request failed', 'ERROR', '0.00']);
-      expect(rows[3].slice(0, 3)).toEqual(['null', 'FAIL', '0.00']);
-      expect(rows[3][4]).toBe('Expected text');
-      expect(rows[4].slice(0, 3)).toEqual(['No output', 'ERROR', '0.00']);
-    });
-
     it('should include dedicated metric columns when streaming CSV', async () => {
       const csv = await runStreamEvalCsv({
         vars: ['name'],

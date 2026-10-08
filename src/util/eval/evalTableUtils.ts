@@ -285,8 +285,7 @@ function batchToStreamRows(
     testIdx: number;
     promptIdx: number;
     testCase?: { vars?: Record<string, unknown>; description?: string };
-    response?: { output?: string | null };
-    error?: string | null;
+    response?: { output?: string };
     success: boolean;
     score?: number;
     namedScores?: Record<string, number>;
@@ -312,12 +311,8 @@ function batchToStreamRows(
       };
       rowsByTestIdx.set(result.testIdx, row);
     }
-    const nullOutputText =
-      (result.failureReason === ResultFailureReason.ERROR || !result.gradingResult) && result.error
-        ? result.error
-        : 'null';
     row.outputs[result.promptIdx] = {
-      text: result.response?.output === null ? nullOutputText : (result.response?.output ?? ''),
+      text: result.response?.output ?? '',
       pass: result.success,
       score: result.score,
       namedScores: result.namedScores,

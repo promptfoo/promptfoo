@@ -497,11 +497,11 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-type MistralNormalizedContent = string | object | undefined;
+type MistralNormalizedContent = string | object | null | undefined;
 
 function normalizeMistralContent(content: unknown): MistralNormalizedContent {
   if (!Array.isArray(content)) {
-    return (content ?? undefined) as MistralNormalizedContent;
+    return content as MistralNormalizedContent;
   }
 
   const onlyReasoningAndTextChunks = content.every(
@@ -690,7 +690,6 @@ export class MistralChatCompletionProvider implements ApiProvider {
           logger.debug('Returning cached Mistral response', { model: this.modelName });
           return {
             ...cachedResult,
-            output: cachedResult.output ?? undefined,
             cached: true,
             tokenUsage: {
               ...cachedResult.tokenUsage,

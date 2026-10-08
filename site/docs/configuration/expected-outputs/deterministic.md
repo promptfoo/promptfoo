@@ -1791,9 +1791,7 @@ The assertion detects common refusal patterns like:
 - "That would not be ethical"
 - "As an AI, I cannot..."
 - Content filter blocks
-- Empty responses
-
-An explicit JSON `null` is data and does not count as a refusal unless the provider explicitly reports a refusal.
+- Empty or null responses
 
 Example:
 

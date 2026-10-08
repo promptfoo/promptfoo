@@ -1,10 +1,5 @@
-import {
-  type EvaluateTableOutput,
-  type EvaluateTableRow,
-  ResultFailureReason,
-} from '../../types/index';
-
 import type EvalResult from '../../models/evalResult';
+import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
@@ -12,13 +7,7 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
   let outputTextDisplay: string;
   if (rawOutput !== null && typeof rawOutput === 'object') {
     outputTextDisplay = JSON.stringify(rawOutput);
-  } else if (
-    rawOutput === undefined ||
-    rawOutput === '' ||
-    (rawOutput === null &&
-      (result.failureReason === ResultFailureReason.ERROR || !result.gradingResult) &&
-      result.error)
-  ) {
+  } else if (rawOutput == null || rawOutput === '') {
     outputTextDisplay = result.error || '';
   } else {
     outputTextDisplay = String(rawOutput);

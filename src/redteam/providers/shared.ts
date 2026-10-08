@@ -578,7 +578,7 @@ export async function getTargetResponse(
   const hasOutput =
     targetRespRaw &&
     Object.prototype.hasOwnProperty.call(targetRespRaw, 'output') &&
-    targetRespRaw.output !== undefined;
+    targetRespRaw.output != null;
 
   if (targetRespRaw?.error) {
     const output = hasOutput
@@ -619,7 +619,7 @@ export async function getTargetResponse(
     `
     Target returned malformed response: expected either \`output\` or \`error\` property to be set.
 
-    Note: Empty strings and null are valid output values; undefined is not.
+    Note: Empty strings are valid output values; null and undefined are not.
     `,
   );
 }

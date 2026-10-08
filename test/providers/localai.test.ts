@@ -7,37 +7,10 @@ vi.mock('../../src/cache', () => ({
 
 import { fetchWithCache } from '../../src/cache';
 
-describe('LocalAI providers', () => {
+describe('LocalAI temperature handling', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
-
-  describe.each([LocalAiChatProvider, LocalAiCompletionProvider])(
-    '%s text responses',
-    (Provider) => {
-      it.each([
-        [null, undefined],
-        [undefined, undefined],
-        ['', ''],
-        ['null', 'null'],
-      ])(
-        'normalizes absent wire text while preserving returned text: %j',
-        async (text, expected) => {
-          vi.mocked(fetchWithCache).mockResolvedValue({
-            data: { choices: [{ message: { content: text }, text }] },
-            cached: false,
-            status: 200,
-            statusText: 'OK',
-          });
-
-          const response = await new Provider('test-model').callApi('Test prompt');
-
-          expect(response.output).toBe(expected);
-          expect(response.error).toBeUndefined();
-        },
-      );
-    },
-  );
 
   it('should send temperature: 0 to the API when explicitly configured (chat)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({

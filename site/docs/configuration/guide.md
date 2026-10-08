@@ -643,7 +643,7 @@ For test transforms specifically:
 
 Note that only one transform is applied at the test case level - either from `defaultTest` or the individual test case, not both.
 
-The `TestCase.options.transform` field is a Javascript snippet that modifies the LLM output before it is run through the test assertions. Output transforms may return JSON `null` as data; returning `undefined` is an error. Variable transforms must still return an object.
+The `TestCase.options.transform` field is a Javascript snippet that modifies the LLM output before it is run through the test assertions.
 
 It is a function that takes a string output and a context object:
 

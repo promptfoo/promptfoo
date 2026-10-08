@@ -82,23 +82,6 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
-    it.each([
-      [null, undefined],
-      [undefined, undefined],
-      ['', ''],
-      ['null', 'null'],
-    ])('distinguishes absent completion text from JSON text: %j', async (text, expected) => {
-      mockFetchWithCache.mockResolvedValue({
-        ...mockResponse,
-        data: { ...mockResponse.data, choices: [{ text }] },
-      });
-
-      const result = await new OpenAiCompletionProvider('gpt-3.5-turbo-instruct').callApi('Test');
-
-      expect(result.output).toBe(expected);
-      expect(result.error).toBeUndefined();
-    });
-
     it('records standard text-completion model attributes and token usage', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
       const { attributes, restore } = recordSpanAttributes();

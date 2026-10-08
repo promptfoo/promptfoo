@@ -1158,23 +1158,18 @@ describe('shared redteam provider utilities', () => {
         });
       });
 
-      it('rejects undefined output even when an undefined error field is present', async () => {
-        const mockProvider = createMockProvider({
-          response: { output: undefined, error: undefined, tokenUsage: { numRequests: 1 } },
-        });
+      it.each([null, undefined])(
+        'rejects output %s even with an undefined error field',
+        async (output) => {
+          const mockProvider = createMockProvider({
+            response: { output, error: undefined, tokenUsage: { numRequests: 1 } },
+          });
 
-        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-          /Target returned malformed response/,
-        );
-      });
-
-      it('serializes explicit JSON null as data', async () => {
-        const mockProvider = createMockProvider({ response: { output: null } });
-        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
-          output: 'null',
-          tokenUsage: { numRequests: 1 },
-        });
-      });
+          await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
+            /Target returned malformed response/,
+          );
+        },
+      );
 
       it('keeps malformed-response diagnostics free of raw provider metadata', async () => {
         const mockProvider = createMockProvider({
@@ -1198,7 +1193,7 @@ describe('shared redteam provider utilities', () => {
 
         expect(error).toBeInstanceOf(Error);
         expect(error.message).toContain('expected either `output` or `error` property to be set');
-        expect(error.message).toContain('undefined is not');
+        expect(error.message).toContain('null and undefined are not');
         expect(error.message).not.toContain('CANARY');
         expect(error.message).not.toContain('metadata');
       });
@@ -1223,7 +1218,7 @@ describe('shared redteam provider utilities', () => {
         });
 
         await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
-          output: output === undefined ? '' : 'null',
+          output: '',
           error: 'Target request failed',
           sessionId: 'error-session',
           tokenUsage: { numRequests: 1, total: 12 },
@@ -1243,7 +1238,7 @@ describe('shared redteam provider utilities', () => {
           });
 
           await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
-            output: output === undefined ? '' : output === null ? 'null' : output,
+            output: output ?? '',
             conversationEnded: true,
             conversationEndReason: 'thread_closed',
             tokenUsage: { numRequests: 1, total: 12 },

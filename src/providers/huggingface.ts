@@ -275,7 +275,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       }
 
       return {
-        output: (response.data.generated_text || response.data[0]?.generated_text) ?? undefined,
+        output: response.data.generated_text || response.data[0]?.generated_text,
       };
     } catch (err) {
       return {

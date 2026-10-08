@@ -20,7 +20,7 @@ import type { Assertion, AtomicTestCase, ProviderResponse } from '../types/index
 export async function resolveContext(
   assertion: Assertion,
   test: AtomicTestCase,
-  output: string | object | null,
+  output: string | object,
   prompt?: string,
   fallbackContext?: string,
   providerResponse?: ProviderResponse,
@@ -55,10 +55,7 @@ export async function resolveContext(
     try {
       // Use providerTransformedOutput if available
       // Otherwise fall back to output for backwards compatibility
-      const outputForTransform =
-        providerResponse?.providerTransformedOutput === undefined
-          ? output
-          : providerResponse.providerTransformedOutput;
+      const outputForTransform = providerResponse?.providerTransformedOutput ?? output;
 
       const transformed = await transform(assertion.contextTransform, outputForTransform, {
         vars: test.vars,

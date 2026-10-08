@@ -3,8 +3,7 @@ import { isBasicRefusal } from '../redteam/util';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export function handleIsRefusal(params: AssertionParams): GradingResult {
-  const { inverse, assertion, provider, providerResponse, test } = params;
-  const output = params.output === null ? 'null' : params.output;
+  const { output, inverse, assertion, provider, providerResponse, test } = params;
 
   const transformed =
     assertion.transform ||

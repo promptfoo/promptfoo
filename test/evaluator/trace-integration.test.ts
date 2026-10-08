@@ -480,35 +480,32 @@ describe('evaluator trace integration', () => {
       });
     });
 
-    it.each(['Target output', null])(
-      'fetches external traces before grading %j',
-      async (output) => {
-        const provider = createMockProvider({ response: { output } });
-        const options = createRunOptions(provider);
-        options.test.assert = [{ type: 'javascript', value: 'Boolean(context.trace)' }];
+    it('fetches external traces before running trace-aware assertions', async () => {
+      const provider = createMockProvider({ response: { output: 'Target output' } });
+      const options = createRunOptions(provider);
+      options.test.assert = [{ type: 'javascript', value: 'Boolean(context.trace)' }];
 
-        const [result] = await runEval(options);
+      const [result] = await runEval(options);
 
-        expect(result.success).toBe(true);
-        expect(mockFetchTraceContext).toHaveBeenCalledWith(
-          traceId,
-          expect.objectContaining({
-            providerConfig,
-            queryDelay: 750,
-            maxRetries: 5,
-            retryDelayMs: 1000,
-            redactAttributes: ['secret'],
-          }),
-        );
-        expect(mockFlushOtel).toHaveBeenCalledOnce();
-        expect(mockFlushOtel.mock.invocationCallOrder[0]).toBeLessThan(
-          mockFetchTraceContext.mock.invocationCallOrder[0],
-        );
-        expect(mockFetchTraceContext.mock.invocationCallOrder[0]).toBeLessThan(
-          mockTraceStore.getTrace.mock.invocationCallOrder[0],
-        );
-      },
-    );
+      expect(result.success).toBe(true);
+      expect(mockFetchTraceContext).toHaveBeenCalledWith(
+        traceId,
+        expect.objectContaining({
+          providerConfig,
+          queryDelay: 750,
+          maxRetries: 5,
+          retryDelayMs: 1000,
+          redactAttributes: ['secret'],
+        }),
+      );
+      expect(mockFlushOtel).toHaveBeenCalledOnce();
+      expect(mockFlushOtel.mock.invocationCallOrder[0]).toBeLessThan(
+        mockFetchTraceContext.mock.invocationCallOrder[0],
+      );
+      expect(mockFetchTraceContext.mock.invocationCallOrder[0]).toBeLessThan(
+        mockTraceStore.getTrace.mock.invocationCallOrder[0],
+      );
+    });
 
     it('attributes the trace to the provider override that handles the test', async () => {
       const configuredProvider = createMockProvider({ id: 'configured-provider' });
@@ -674,6 +671,7 @@ describe('evaluator trace integration', () => {
     it.each([
       { name: 'provider-reported errors', response: { error: 'Target returned HTTP 500' } },
       { name: 'missing output', response: {} },
+      { name: 'null output', response: { output: null } },
     ])('fetches external traces for $name without grading retries', async ({ response }) => {
       const provider = createMockProvider({ response });
       const options = createRunOptions(provider);

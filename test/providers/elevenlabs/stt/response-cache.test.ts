@@ -76,33 +76,6 @@ afterEach(() => {
 });
 
 describe('ElevenLabs STT full-response caching', () => {
-  describe.each([false, true])('transcription text with cached=%s', (cached) => {
-    it.each([
-      [null, undefined],
-      [undefined, undefined],
-      ['', ''],
-      ['null', 'null'],
-    ])('distinguishes absent text from returned text: %j', async (text, expected) => {
-      const wireResponse = { ...transcription, text };
-      if (cached) {
-        cache.get.mockResolvedValueOnce({
-          output: text,
-          metadata: { transcription: wireResponse },
-        });
-      } else {
-        vi.mocked(ElevenLabsClient.prototype.upload).mockResolvedValueOnce(wireResponse);
-      }
-
-      const response = await createProvider().callApi(audioPath);
-
-      expect(response.output).toBe(expected);
-      expect(response.error).toBeUndefined();
-      expect(response.cached).toBe(cached);
-      expect(response.metadata?.transcription).toEqual(wireResponse);
-      expect(ElevenLabsClient.prototype.upload).toHaveBeenCalledTimes(cached ? 0 : 1);
-    });
-  });
-
   it('calculates WER when enabled after the same audio was cached without it', async () => {
     const withoutWER = createProvider({ referenceText: 'hello world', calculateWER: false });
     const withWER = createProvider({ referenceText: 'hello world', calculateWER: true });

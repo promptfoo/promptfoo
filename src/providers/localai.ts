@@ -95,7 +95,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
 
     try {
       return {
-        output: data.choices[0].message.content ?? undefined,
+        output: data.choices[0].message.content,
       };
     } catch (err) {
       return {
@@ -181,7 +181,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
 
     try {
       return {
-        output: data.choices[0].text ?? undefined,
+        output: data.choices[0].text,
       };
     } catch (err) {
       return {

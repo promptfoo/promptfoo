@@ -3019,28 +3019,6 @@ describe('VertexChatProvider.callPalm2Api', () => {
     vi.clearAllMocks();
   });
 
-  describe.each([false, true])('native text output with cached=%s', (cached) => {
-    it.each([null, undefined, '', 'null'])(
-      'normalizes only absent protocol text %j',
-      async (content) => {
-        const provider = new VertexChatProvider('chat-bison');
-        const request = mockVertexRequest({
-          predictions: [{ candidates: [{ content }] }],
-        });
-        mockCacheGet.mockResolvedValue(
-          cached ? JSON.stringify({ output: content, cached: false }) : null,
-        );
-
-        const response = await provider.callApi('Return a response');
-
-        expect(response.error).toBeUndefined();
-        expect(response.output).toBe(content ?? undefined);
-        expect(response.cached).toBe(cached);
-        expect(request).toHaveBeenCalledTimes(cached ? 0 : 1);
-      },
-    );
-  });
-
   it('hashes Palm2 request body cache keys without leaking prompts', async () => {
     const prompt = 'palm2-secret-prompt-value';
     const provider = new VertexChatProvider('chat-bison', {
