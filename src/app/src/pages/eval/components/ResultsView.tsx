@@ -47,7 +47,7 @@ import { useComparisonEvalIds } from './useComparisonEvalIds';
 import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
-import type { VisibilityState } from '@tanstack/react-table';
+import type { PaginationState, VisibilityState } from '@tanstack/react-table';
 
 import type { ActiveView } from './EvalHeader';
 import type { ResultsFilter } from './store';
@@ -65,6 +65,8 @@ interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
+  onPaginationChange?: (pagination: PaginationState) => void;
+  onRetry?: () => void;
 }
 
 interface ResultsChartsSectionProps {
@@ -244,6 +246,8 @@ export default function ResultsView({
   recentEvals,
   onRecentEvalSelected,
   defaultEvalId,
+  onPaginationChange,
+  onRetry,
 }: ResultsViewProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -251,6 +255,7 @@ export default function ResultsView({
 
   const {
     table,
+    tableError,
 
     config,
     setConfig,
@@ -967,6 +972,23 @@ export default function ResultsView({
             </div>
           )}
         </EvalHeader>
+        {tableError && (
+          <div className="px-4 pt-4">
+            <Alert variant="destructive">
+              <AlertContent>
+                <AlertTitle>Unable to load results</AlertTitle>
+                <AlertDescription>
+                  Previously loaded results are shown. Retry or adjust the filters and page size.
+                </AlertDescription>
+              </AlertContent>
+              {onRetry && (
+                <Button variant="outline" onClick={onRetry}>
+                  Retry
+                </Button>
+              )}
+            </Alert>
+          </div>
+        )}
         {activeView === 'results' && (
           <div className="px-4 flex flex-1 min-h-0 flex-col">
             <ResultsTable
@@ -980,6 +1002,7 @@ export default function ResultsView({
               debouncedSearchText={debouncedSearchText}
               onFailureFilterToggle={handleFailureFilterToggle}
               zoom={resultsTableZoom}
+              onPaginationChange={onPaginationChange}
             />
           </div>
         )}

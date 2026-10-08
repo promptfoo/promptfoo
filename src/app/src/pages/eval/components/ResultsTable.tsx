@@ -59,6 +59,7 @@ import type {
   CellContext,
   ColumnDef,
   ColumnSizingState,
+  PaginationState,
   Row,
   VisibilityState,
 } from '@tanstack/react-table';
@@ -1530,6 +1531,7 @@ interface ResultsTableProps {
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   zoom: number;
+  onPaginationChange?: (pagination: PaginationState) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -1662,6 +1664,7 @@ function ResultsTable({
   showStats,
   onFailureFilterToggle,
   zoom,
+  onPaginationChange,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -1699,6 +1702,10 @@ function ResultsTable({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+
+  React.useEffect(() => {
+    onPaginationChange?.(pagination);
+  }, [onPaginationChange, pagination]);
 
   // Persist column sizing state to prevent header resize flicker during pagination.
   // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).

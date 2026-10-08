@@ -15,6 +15,7 @@ import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
+import type { PaginationState } from '@tanstack/react-table';
 import './Eval.css';
 
 import { useToast } from '@app/hooks/useToast';
@@ -69,6 +70,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const {
     table,
     tableError,
+    tableSource,
     setTable,
     config,
     setConfig,
@@ -80,8 +82,6 @@ export default function Eval({ fetchId }: EvalOptions) {
   } = useTableStore();
 
   const { filterMode } = useFilterMode();
-  const filterModeRef = useRef(filterMode);
-  filterModeRef.current = filterMode;
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
   const [comparisonEvalIds, updateComparisonEvalIds] = useComparisonEvalIds(fetchId);
@@ -99,6 +99,10 @@ export default function Eval({ fetchId }: EvalOptions) {
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
   const loadRequestIdRef = useRef(0);
+  const tablePaginationRef = useRef<PaginationState>({ pageIndex: 0, pageSize: 50 });
+  const handlePaginationChange = useCallback((pagination: PaginationState) => {
+    tablePaginationRef.current = pagination;
+  }, []);
   currentEvalIdRef.current = evalId;
 
   // ================================
@@ -134,6 +138,10 @@ export default function Eval({ fetchId }: EvalOptions) {
     async (id: string, isBackgroundUpdate = false) => {
       const requestId = ++loadRequestIdRef.current;
       try {
+        const pagination =
+          currentEvalIdRef.current === id
+            ? tablePaginationRef.current
+            : { pageIndex: 0, pageSize: 50 };
         setFailed(false);
         const comparisons = comparisonEvalIds.filter((comparisonId) => comparisonId !== id);
         setComparisonEvalIds(comparisons);
@@ -145,14 +153,15 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
-          filterMode: filterModeRef.current,
+          ...pagination,
+          filterMode,
           searchText: new URLSearchParams(searchRef.current).get('search') || '',
           filters: Object.values(filters.values).filter((filter) => {
             if (filter.type === 'metadata') {
               return Boolean(filter.field && (filter.operator === 'exists' || filter.value));
             }
-            if (filter.type === 'metric') {
-              return Boolean(filter.field && (filter.operator === 'is_defined' || filter.value));
+            if (filter.type === 'metric' && filter.operator === 'is_defined') {
+              return Boolean(filter.field);
             }
             return Boolean(filter.value);
           }),
@@ -177,6 +186,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       fetchEvalData,
       setFailed,
       setEvalId,
+      filterMode,
       comparisonEvalIds,
       setComparisonEvalIds,
       setInComparisonMode,
@@ -553,7 +563,12 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Rendering
   // ================================
 
-  if (failed || tableError) {
+  const tableMatchesSelection =
+    tableSource?.evalId === evalId &&
+    JSON.stringify(tableSource?.comparisonEvalIds) ===
+      JSON.stringify(comparisonEvalIds.filter((id) => id !== evalId));
+
+  if (failed || (tableError && (!table || !tableMatchesSelection))) {
     if (comparisonEvalIds.length > 0) {
       return (
         <div className="notice space-y-3">
@@ -590,6 +605,12 @@ export default function Eval({ fetchId }: EvalOptions) {
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}
         onRecentEvalSelected={handleRecentEvalSelection}
+        onPaginationChange={handlePaginationChange}
+        onRetry={() => {
+          if (evalId) {
+            void loadEvalById(evalId);
+          }
+        }}
       />
     </ShiftKeyProvider>
   );

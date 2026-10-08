@@ -304,6 +304,7 @@ interface TableState {
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   tableError: boolean;
+  tableSource: { evalId: string; comparisonEvalIds: string[] } | null;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
 
@@ -552,6 +553,7 @@ export const useTableStore = create<TableState>()(
     setVersion: (version: number) => set(() => ({ version })),
 
     table: null,
+    tableSource: null,
 
     /**
      * Note: This method is only used when ratings are updated; therefore filters
@@ -561,6 +563,7 @@ export const useTableStore = create<TableState>()(
       set((prevState) => ({
         table,
         tableError: false,
+        tableSource: table ? prevState.tableSource : null,
         highlightedResultsCount: computeHighlightCount(table),
         userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
@@ -580,6 +583,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table,
           tableError: false,
+          tableSource: null,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(table),
           userRatedResultsCount: computeUserRatedCount(table),
@@ -605,6 +609,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table: results.table,
           tableError: false,
+          tableSource: null,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(results.table),
           userRatedResultsCount: computeUserRatedCount(results.table),
@@ -734,6 +739,7 @@ export const useTableStore = create<TableState>()(
           set((prevState) => ({
             table: data.table,
             tableError: false,
+            tableSource: { evalId: id, comparisonEvalIds },
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),

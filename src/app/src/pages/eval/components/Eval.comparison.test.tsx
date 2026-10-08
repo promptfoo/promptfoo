@@ -55,6 +55,9 @@ vi.mock('./EvalOutputCell', () => ({
   ),
 }));
 vi.mock('./ResultsCharts', () => ({ default: () => null }));
+vi.mock('@app/pages/redteam/report/components/Report', () => ({
+  default: () => <div data-testid="report">Report</div>,
+}));
 vi.mock('./ResultsFilters/FiltersForm', () => ({ default: () => null }));
 vi.mock('./ShareModal', () => ({ default: () => null }));
 vi.mock('./ConfigModal', () => ({ default: () => null }));
@@ -77,6 +80,18 @@ function Navigation() {
       </button>
       <button onClick={() => navigate('/eval/eval-c')}>Other eval</button>
       <button onClick={() => navigate('/eval')}>Latest eval</button>
+      <button onClick={() => navigate('/eval/eval-a?comparisonEvalIds=deleted')}>
+        Invalid comparison
+      </button>
+      <button
+        onClick={() =>
+          navigate(
+            `/eval/eval-a?mode=failures&filter=${encodeURIComponent(JSON.stringify([{ id: 'report-filter', type: 'plugin', operator: 'equals', value: 'synthetic-plugin', logicOperator: 'and', sortIndex: 0 }]))}`,
+          )
+        }
+      >
+        Report logs
+      </button>
       <button onClick={() => navigate(-1)}>Back</button>
       <button onClick={() => navigate(1)}>Forward</button>
     </>
@@ -441,10 +456,11 @@ describe('evaluation comparison URLs', () => {
       await screen.findByText('eval-a row-50');
       const defaultApi = vi.mocked(callApi).getMockImplementation()!;
       let finishParent!: (response: Response) => void;
+      let comparisonRequests = 0;
       vi.mocked(callApi).mockImplementation((path, options) => {
         const url = new URL(String(path), window.location.origin);
         if (url.pathname === '/eval/eval-a/table' && url.searchParams.has('comparisonEvalIds')) {
-          if (url.searchParams.get('offset') === '0') {
+          if (++comparisonRequests === 1) {
             return new Promise((resolve) => {
               finishParent = resolve;
             });
@@ -547,6 +563,104 @@ describe('evaluation comparison URLs', () => {
     vi.mocked(callApi).mockRejectedValue(new Error('Network unavailable'));
     renderPage('/eval');
     expect(await screen.findByText('404 Eval not found')).toBeInTheDocument();
+  });
+
+  it('hydrates filters when opening same-eval logs from the report', async () => {
+    const user = userEvent.setup();
+    renderPage('/eval/eval-a?view=report');
+    await screen.findByTestId('report');
+    vi.mocked(callApi).mockClear();
+    await user.click(screen.getByRole('button', { name: 'Report logs' }));
+    await screen.findByTestId('comparison-columns');
+    await waitFor(() => expect(tableRequests().length).toBeGreaterThan(0));
+    const request = tableRequests()[tableRequests().length - 1];
+    expect(request.searchParams.get('filterMode')).toBe('failures');
+    expect(request.searchParams.getAll('filter').map((filter) => JSON.parse(filter))).toEqual([
+      expect.objectContaining({ type: 'plugin', operator: 'equals', value: 'synthetic-plugin' }),
+    ]);
+  });
+
+  it('forwards legacy metric filters without a field in saved URLs', async () => {
+    const filter = JSON.stringify([
+      {
+        id: 'legacy-filter',
+        type: 'metric',
+        operator: 'equals',
+        value: 'accuracy',
+        logicOperator: 'and',
+        sortIndex: 0,
+      },
+    ]);
+    renderPage(`/eval/eval-a?filter=${encodeURIComponent(filter)}`);
+    await screen.findByTestId('comparison-columns');
+    expect(
+      tableRequests()[0]
+        .searchParams.getAll('filter')
+        .map((value) => JSON.parse(value)),
+    ).toEqual([expect.objectContaining({ type: 'metric', operator: 'equals', value: 'accuracy' })]);
+  });
+
+  it('does not present a previous comparison as the failed new selection', async () => {
+    const user = userEvent.setup();
+    renderPage('/eval/eval-a?comparisonEvalIds=eval-b');
+    await waitFor(() =>
+      expect(screen.getByTestId('comparison-columns')).toHaveTextContent('eval-a,eval-b'),
+    );
+    await user.click(screen.getByRole('button', { name: 'Invalid comparison' }));
+    await screen.findByText(/Unable to load comparison/);
+    expect(screen.queryByTestId('comparison-columns')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear comparison' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-a$/),
+    );
+  });
+
+  it('keeps page controls and retries after a transient page failure', async () => {
+    tableFixture.realTable = true;
+    tableFixture.rowCount = 120;
+    const user = userEvent.setup();
+    renderPage('/eval/eval-a');
+    await screen.findByText('eval-a row-0');
+    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+    let failed = false;
+    vi.mocked(callApi).mockImplementation((path, options) => {
+      const url = new URL(String(path), window.location.origin);
+      if (url.pathname.endsWith('/table') && url.searchParams.get('offset') === '50' && !failed) {
+        failed = true;
+        return Promise.resolve(new Response(null, { status: 503 }));
+      }
+      return defaultApi(path, options);
+    });
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    await screen.findByText('Unable to load results');
+    expect(screen.getByRole('combobox', { name: 'Results per page' })).toBeInTheDocument();
+    expect(screen.queryByText('404 Eval not found')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText('eval-a row-50');
+    expect(screen.queryByText('Unable to load results')).not.toBeInTheDocument();
+  });
+
+  it('keeps the page-size selector usable after a 413 response', async () => {
+    tableFixture.realTable = true;
+    tableFixture.rowCount = 120;
+    const user = userEvent.setup();
+    renderPage('/eval/eval-a');
+    await screen.findByText('eval-a row-0');
+    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+    vi.mocked(callApi).mockImplementation((path, options) => {
+      const url = new URL(String(path), window.location.origin);
+      if (url.pathname.endsWith('/table') && url.searchParams.get('limit') === '100') {
+        return Promise.resolve(new Response(null, { status: 413 }));
+      }
+      return defaultApi(path, options);
+    });
+    await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
+    await user.click(screen.getByRole('option', { name: '100' }));
+    await screen.findByText('Unable to load results');
+    await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
+    await user.click(screen.getByRole('option', { name: '10' }));
+    await waitFor(() => expect(screen.getAllByTestId('output')).toHaveLength(10));
+    expect(screen.queryByText('Unable to load results')).not.toBeInTheDocument();
   });
 
   it.each([200, 404])(
