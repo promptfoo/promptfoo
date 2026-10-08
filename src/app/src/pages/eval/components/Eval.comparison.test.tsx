@@ -76,6 +76,7 @@ function Navigation() {
         Other comparison
       </button>
       <button onClick={() => navigate('/eval/eval-c')}>Other eval</button>
+      <button onClick={() => navigate('/eval')}>Latest eval</button>
       <button onClick={() => navigate(-1)}>Back</button>
       <button onClick={() => navigate(1)}>Forward</button>
     </>
@@ -384,6 +385,124 @@ describe('evaluation comparison URLs', () => {
       expect(useTableStore.getState().isFetching).toBe(false);
     },
   );
+
+  it('reloads the latest route without retaining compared columns', async () => {
+    tableFixture.realTable = true;
+    tableFixture.rowCount = 120;
+    const user = userEvent.setup();
+    renderPage('/eval/eval-a?comparisonEvalIds=eval-b');
+    await screen.findByText('eval-b row-0');
+    await user.click(screen.getByRole('button', { name: 'Latest eval' }));
+    await waitFor(() => expect(screen.getAllByTestId('output')).toHaveLength(50));
+    expect(screen.queryByText('eval-b row-0')).not.toBeInTheDocument();
+    expect(useResultsViewSettingsStore.getState().comparisonEvalIds).toEqual([]);
+  });
+
+  it('recovers a failed comparison on the local latest-eval route', async () => {
+    const user = userEvent.setup();
+    renderPage('/eval?comparisonEvalIds=deleted');
+    await act(async () => {
+      await socketHandlers.get('init')!({ evalId: 'eval-a' });
+    });
+    await screen.findByText(/Unable to load comparison/);
+    await user.click(screen.getByRole('button', { name: 'Clear comparison' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-a$/),
+    );
+  });
+
+  it('preserves custom page size when changing filter mode', async () => {
+    tableFixture.realTable = true;
+    tableFixture.rowCount = 120;
+    const user = userEvent.setup();
+    renderPage('/eval/eval-a');
+    await screen.findByText('eval-a row-0');
+    await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
+    await user.click(screen.getByRole('option', { name: '10' }));
+    await waitFor(() => expect(screen.getAllByTestId('output')).toHaveLength(10));
+    await user.click(screen.getByRole('button', { name: 'Passes' }));
+    await waitFor(() => expect(useTableStore.getState().isFetching).toBe(false));
+    expect(screen.getAllByTestId('output')).toHaveLength(10);
+    expect(screen.getByRole('combobox', { name: 'Results per page' })).toHaveTextContent('10');
+  });
+
+  it.each([
+    { parentStatus: 500, pageStatus: 200 },
+    { parentStatus: 200, pageStatus: 500 },
+  ])(
+    'uses the latest page outcome when parent=$parentStatus and page=$pageStatus',
+    async ({ parentStatus, pageStatus }) => {
+      tableFixture.realTable = true;
+      tableFixture.rowCount = 120;
+      const user = userEvent.setup();
+      renderPage('/eval/eval-a');
+      await screen.findByText('eval-a row-0');
+      await user.click(screen.getByRole('button', { name: 'Next page' }));
+      await screen.findByText('eval-a row-50');
+      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      let finishParent!: (response: Response) => void;
+      vi.mocked(callApi).mockImplementation((path, options) => {
+        const url = new URL(String(path), window.location.origin);
+        if (url.pathname === '/eval/eval-a/table' && url.searchParams.has('comparisonEvalIds')) {
+          if (url.searchParams.get('offset') === '0') {
+            return new Promise((resolve) => {
+              finishParent = resolve;
+            });
+          }
+          if (pageStatus !== 200) {
+            return Promise.resolve(new Response(null, { status: pageStatus }));
+          }
+        }
+        return defaultApi(path, options);
+      });
+      await user.click(screen.getByRole('button', { name: /Eval actions/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Compare with another eval' }));
+      await user.click(screen.getByRole('button', { name: 'Select comparison B' }));
+      if (pageStatus === 200) {
+        await screen.findByText('eval-b row-50');
+      } else {
+        await screen.findByText(/Unable to load comparison/);
+      }
+      await act(async () => {
+        finishParent(
+          parentStatus === 200
+            ? await defaultApi('/eval/eval-a/table?comparisonEvalIds=eval-b')
+            : new Response(null, { status: parentStatus }),
+        );
+      });
+      if (pageStatus === 200) {
+        expect(screen.getByText('eval-b row-50')).toBeInTheDocument();
+        expect(screen.queryByText(/Unable to load comparison/)).not.toBeInTheDocument();
+      } else {
+        expect(screen.getByText(/Unable to load comparison/)).toBeInTheDocument();
+      }
+    },
+  );
+
+  it('does not load a stale latest-eval response after navigating to a pinned evaluation', async () => {
+    const user = userEvent.setup();
+    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+    let finishRecents!: (response: Response) => void;
+    let deferred = false;
+    vi.mocked(callApi).mockImplementation((path, options) => {
+      if (path === '/results' && !deferred) {
+        deferred = true;
+        return new Promise((resolve) => {
+          finishRecents = resolve;
+        });
+      }
+      return defaultApi(path, options);
+    });
+    renderPage('/eval');
+    await user.click(screen.getByRole('button', { name: 'Other eval' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-c$/),
+    );
+    await act(async () => {
+      finishRecents(await defaultApi('/results'));
+    });
+    expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-c$/);
+  });
 
   it.each([200, 404])(
     'keeps the current comparison when an earlier navigation resolves late with %s',

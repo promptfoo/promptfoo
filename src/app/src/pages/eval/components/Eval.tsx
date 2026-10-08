@@ -68,6 +68,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const {
     table,
+    tableError,
     setTable,
     config,
     setConfig,
@@ -79,6 +80,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   } = useTableStore();
 
   const { filterMode } = useFilterMode();
+  const filterModeRef = useRef(filterMode);
+  filterModeRef.current = filterMode;
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
   const [comparisonEvalIds, updateComparisonEvalIds] = useComparisonEvalIds(fetchId);
@@ -142,7 +145,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
-          filterMode,
+          filterMode: filterModeRef.current,
           searchText: new URLSearchParams(searchRef.current).get('search') || '',
           filters: Object.values(filters.values).filter((filter) => {
             if (filter.type === 'metadata') {
@@ -159,7 +162,6 @@ export default function Eval({ fetchId }: EvalOptions) {
           return false;
         }
         if (!data) {
-          setFailed(true);
           return false;
         }
         return true;
@@ -175,7 +177,6 @@ export default function Eval({ fetchId }: EvalOptions) {
       fetchEvalData,
       setFailed,
       setEvalId,
-      filterMode,
       comparisonEvalIds,
       setComparisonEvalIds,
       setInComparisonMode,
@@ -183,6 +184,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   );
 
   const clearEvalState = useCallback(() => {
+    setFailed(false);
     setTable(null);
     setConfig(null);
     setEvalId('');
@@ -194,8 +196,7 @@ export default function Eval({ fetchId }: EvalOptions) {
    * Populates the table store from a websocket signal. Explicit /eval/:id routes stay
    * pinned (they only reload when their own eval changes), while the root /eval route
    * follows the latest eval. Held in a ref (below) so the socket effect never has to tear
-   * down and reopen the connection when this handler's dependencies (e.g. filterMode via
-   * loadEvalById, or fetchId on navigation) change.
+   * down and reopen the connection when the route or comparison selection changes.
    */
   const handleResultsFile = async (data: EvalRefreshSignal) => {
     if (!data) {
@@ -401,11 +402,12 @@ export default function Eval({ fetchId }: EvalOptions) {
       return;
     }
 
+    let cancelled = false;
     if (fetchId) {
       logger.debug('[Eval] Fetching eval by id', { fetchId });
       const run = async () => {
         const success = await loadEvalById(fetchId);
-        if (success) {
+        if (success && !cancelled) {
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
           fetchRecentFileEvals({ reportFailure: false });
@@ -413,15 +415,18 @@ export default function Eval({ fetchId }: EvalOptions) {
         }
       };
       run();
-    } else if (!IS_RUNNING_LOCALLY) {
+    } else {
       logger.debug('[Eval] Fetching eval via recent', {});
       // Fetch from server
       const run = async () => {
         const evals = await fetchRecentFileEvals();
+        if (cancelled) {
+          return;
+        }
         if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
-          if (success) {
+          if (success && !cancelled) {
             setDefaultEvalId(defaultEvalId);
             // Note: setLoaded(true) is handled by the useEffect that watches for table updates
           }
@@ -432,6 +437,9 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
       run();
     }
+    return () => {
+      cancelled = true;
+    };
   }, [
     apiBaseUrl,
     clearEvalState,
@@ -539,7 +547,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Rendering
   // ================================
 
-  if (failed) {
+  if (failed || tableError) {
     if (comparisonEvalIds.length > 0) {
       return (
         <div className="notice space-y-3">

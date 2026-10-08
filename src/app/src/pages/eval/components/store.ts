@@ -303,6 +303,7 @@ interface TableState {
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+  tableError: boolean;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
 
@@ -559,6 +560,7 @@ export const useTableStore = create<TableState>()(
     setTable: (table: EvaluateTable | null) => {
       set((prevState) => ({
         table,
+        tableError: false,
         highlightedResultsCount: computeHighlightCount(table),
         userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
@@ -577,6 +579,7 @@ export const useTableStore = create<TableState>()(
 
         set((prevState) => ({
           table,
+          tableError: false,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(table),
           userRatedResultsCount: computeUserRatedCount(table),
@@ -601,6 +604,7 @@ export const useTableStore = create<TableState>()(
 
         set((prevState) => ({
           table: results.table,
+          tableError: false,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(results.table),
           userRatedResultsCount: computeUserRatedCount(results.table),
@@ -634,6 +638,7 @@ export const useTableStore = create<TableState>()(
     userRatedResultsCount: 0,
 
     isFetching: false,
+    tableError: false,
     isStreaming: false,
     setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
 
@@ -662,6 +667,7 @@ export const useTableStore = create<TableState>()(
 
       set({
         isFetching: skipLoadingState ? get().isFetching : true,
+        tableError: false,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
@@ -727,6 +733,7 @@ export const useTableStore = create<TableState>()(
 
           set((prevState) => ({
             table: data.table,
+            tableError: false,
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
@@ -758,7 +765,7 @@ export const useTableStore = create<TableState>()(
         }
 
         if (requestId === evalDataRequestId) {
-          set({ isFetching: false });
+          set({ isFetching: false, tableError: true });
         }
         return null;
       } catch (error) {
@@ -768,6 +775,7 @@ export const useTableStore = create<TableState>()(
         console.error('Error fetching eval data:', error);
         set({
           isFetching: false,
+          tableError: true,
           isStreaming: false,
           metadataKeysLoading: false,
           currentMetadataKeysRequest: null,
