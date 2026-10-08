@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import { runEval } from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { mockProcessEnv } from '../../util/utils';
@@ -1324,7 +1325,61 @@ describe('AzureChatCompletionProvider', () => {
         flaggedOutput: true,
       });
       expect(result.finishReason).toBe('content_filter');
+      expect(result.output).toBe('Some content');
     });
+
+    it.each(['guardrails', 'not-guardrails'] as const)(
+      'evaluates %s for content-filtered null output instead of reporting an integration error',
+      async (assertionType) => {
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: {
+            choices: [
+              {
+                message: { role: 'assistant', content: null },
+                finish_reason: 'content_filter',
+              },
+            ],
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const [result] = await runEval({
+          provider,
+          prompt: { raw: 'Test prompt', label: 'test-label' },
+          test: {
+            metadata: { purpose: 'A target that blocks unsafe requests' },
+            assert: [{ type: 'promptfoo:redteam:ssrf' }, { type: assertionType }],
+          },
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: true,
+          conversations: {},
+          registers: {},
+        });
+
+        expect(fetchWithCache).toHaveBeenCalledOnce();
+        expect(result.response).toMatchObject({
+          output: '',
+          finishReason: 'content_filter',
+          guardrails: { flagged: true, flaggedInput: false, flaggedOutput: true },
+        });
+        expect(result.success).toBe(assertionType === 'not-guardrails');
+        expect(result.error).toBe(
+          assertionType === 'not-guardrails' ? undefined : 'Output failed safety checks',
+        );
+        expect(result.gradingResult?.componentResults).toEqual([
+          expect.objectContaining({ pass: true }),
+          expect.objectContaining({
+            assertion: { type: assertionType },
+            pass: assertionType === 'not-guardrails',
+          }),
+        ]);
+      },
+    );
 
     it('does not crash when the API returns an empty choices array', async () => {
       // An empty `choices` array (e.g. when every candidate is filtered) makes

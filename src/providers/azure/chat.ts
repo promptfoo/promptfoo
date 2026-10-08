@@ -602,7 +602,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             );
           } else {
             // No callbacks configured, return raw tool/function calls
-            output = toolCalls ?? functionCall;
+            // A confirmed content-filter block is intentionally empty, not a
+            // missing provider response. Preserve any returned tool calls.
+            output = toolCalls ?? functionCall ?? (flaggedOutput ? '' : undefined);
           }
         } else if (
           config.response_format?.type === 'json_schema' ||
