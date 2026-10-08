@@ -1,3 +1,5 @@
+import type { ComponentProps } from 'react';
+
 import { mockObjectUrl, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
@@ -5,7 +7,6 @@ import userEvent from '@testing-library/user-event';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportDownloadButton from './ReportDownloadButton';
-import type { ResultsFile } from '@promptfoo/types';
 
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({ recordEvent: vi.fn() }),
@@ -45,7 +46,7 @@ describe('ReportDownloadButton CSV response data', () => {
             },
           ],
         },
-      } as unknown as ResultsFile;
+      } as unknown as ComponentProps<typeof ReportDownloadButton>['evalData'];
       const user = userEvent.setup();
       renderWithProviders(<ReportDownloadButton evalDescription="JSON data" evalData={data} />);
 
