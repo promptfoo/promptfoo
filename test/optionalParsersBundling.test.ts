@@ -2,6 +2,9 @@ import { fileURLToPath } from 'node:url';
 
 import { Rolldown } from 'tsdown';
 import { expect, it } from 'vitest';
+import { withWebpackBundle } from './helpers/webpack';
+
+import type { AssertionParams } from '../src/types/index';
 
 it.each([
   ['../src/evaluatorHelpers.ts', 'pdf-parse'],
@@ -43,4 +46,19 @@ it.each([
   } finally {
     await consumer.close();
   }
+});
+
+it('loads the installed SQL parser after consumer Webpack bundling', async () => {
+  await withWebpackBundle<typeof import('../src/assertions/sql')>(
+    new URL('../src/assertions/sql.ts', import.meta.url),
+    async ({ handleIsSql }) => {
+      const result = await handleIsSql({
+        assertion: { type: 'is-sql' },
+        outputString: 'SELECT name FROM users',
+        renderedValue: { allowedTables: ['select::null::users'] },
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    },
+  );
 });

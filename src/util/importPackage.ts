@@ -3,5 +3,5 @@
  * Optional peers must remain loadable only when their feature is used.
  */
 export async function importPackage(packageName: string): Promise<unknown> {
-  return import(packageName);
+  return import(/* webpackIgnore: true */ packageName);
 }

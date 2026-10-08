@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import nodeModule from 'node:module';
 import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -62,8 +62,10 @@ vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
     resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
+  const createRequire = vi.fn().mockReturnValue(mockRequire);
   return {
-    createRequire: vi.fn().mockReturnValue(mockRequire),
+    createRequire,
+    default: { createRequire },
   };
 });
 
@@ -360,7 +362,7 @@ describe('evaluatorHelpers', () => {
       };
       const evaluateOptions = {};
 
-      const require = createRequire('');
+      const require = nodeModule.createRequire('');
       vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
 
       // Register dynamic module mock for the package

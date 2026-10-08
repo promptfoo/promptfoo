@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import nodeModule from 'node:module';
 import fs from 'fs/promises';
 import * as path from 'path';
 
@@ -42,7 +42,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   const installHelp =
     'Install it alongside promptfoo with: npm install promptfoo pdf-parse@^2.4.5 (or npm install -g promptfoo pdf-parse@^2.4.5 for a global install).';
   try {
-    const entryPoint = createRequire(import.meta.url).resolve('pdf-parse');
+    const entryPoint = nodeModule.createRequire(import.meta.url).resolve('pdf-parse');
     const version = getPackageVersion('pdf-parse', entryPoint);
     if (!version || !semverSatisfies(version, '^2.4.5')) {
       throw new Error(

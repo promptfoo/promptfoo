@@ -1,4 +1,4 @@
-import * as nodeModule from 'node:module';
+import nodeModule from 'node:module';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
@@ -8,7 +8,7 @@ import type { Assertion, AssertionParams, GradingResult } from '../../src/types/
 
 vi.mock('node:module', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:module')>();
-  return { ...actual, createRequire: vi.fn(actual.createRequire) };
+  return { ...actual, default: { ...actual, createRequire: vi.fn(actual.createRequire) } };
 });
 
 const assertion: Assertion = {

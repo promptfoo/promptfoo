@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import nodeModule from 'node:module';
 
 import { type Option as sqlParserOption } from 'node-sql-parser';
 import semverSatisfies from 'semver/functions/satisfies.js';
@@ -128,7 +128,7 @@ async function createSqlParser() {
   const installMessage = `node-sql-parser is not installed. ${installHelp}`;
   let sqlParserModule: SqlParserModule;
   try {
-    const entryPoint = createRequire(import.meta.url).resolve('node-sql-parser');
+    const entryPoint = nodeModule.createRequire(import.meta.url).resolve('node-sql-parser');
     const version = getPackageVersion('node-sql-parser', entryPoint);
     if (!version || !semverSatisfies(version, '^5.4.0')) {
       throw new Error(

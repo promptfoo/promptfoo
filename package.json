@@ -245,6 +245,7 @@
     "tsdown": "0.23.0",
     "typescript": "^7.0.0",
     "vitest": "^5.0.2",
+    "webpack": "5.111.1",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
