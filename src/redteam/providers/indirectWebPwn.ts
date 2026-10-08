@@ -44,6 +44,7 @@ interface IndirectWebPwnConfig {
  * Metadata returned by the Indirect Web Pwn provider.
  */
 interface IndirectWebPwnMetadata extends BaseRedteamMetadata {
+  redteamOutputIsText?: boolean;
   redteamFinalPrompt?: string;
   stopReason: 'Attack succeeded' | 'Max fetch attempts reached' | 'Error';
   webPageUuid?: string;
@@ -258,6 +259,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     const redteamHistory: Array<{ prompt: string; output: string }> = [];
 
     let lastOutput = '';
+    let lastOutputIsText: boolean | undefined;
     let targetError: string | undefined;
     let stopReason: IndirectWebPwnMetadata['stopReason'] = 'Max fetch attempts reached';
     let webPageUuid: string | undefined;
@@ -335,6 +337,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         messages.push({ role: 'assistant', content: responseOutput });
         redteamHistory.push({ prompt: fetchPrompt, output: responseOutput });
         lastOutput = responseOutput;
+        lastOutputIsText = targetResponse.outputIsText;
 
         // 3. Check if page was fetched
         const tracking = await this.checkPageFetched(webPage.uuid, evalId);
@@ -381,6 +384,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       output: lastOutput,
       ...(targetError ? { error: targetError } : {}),
       metadata: {
+        redteamOutputIsText: lastOutputIsText,
         redteamFinalPrompt: messages[messages.length - 2]?.content || '',
         messages: messages as unknown as Record<string, unknown>[],
         stopReason,

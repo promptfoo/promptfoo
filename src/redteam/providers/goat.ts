@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { RedteamGradingConfigError } from '../grading/errors';
 import { getTargetConversation } from '../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
@@ -833,6 +834,7 @@ export default class GoatProvider implements ApiProvider {
           };
           const { grade, rubric } = await runRedteamGrader(
             grader,
+            { assertion: assertToUse, targetProvider, prompt: context.prompt, context },
             gradedTurn.prompt,
             gradedTurn.output,
             test,
@@ -876,6 +878,9 @@ export default class GoatProvider implements ApiProvider {
           }
         }
       } catch (error) {
+        if (error instanceof RedteamGradingConfigError) {
+          throw error;
+        }
         // Re-throw abort errors to properly cancel the operation
         if (error instanceof Error && error.name === 'AbortError') {
           logger.debug('[GOAT] Operation aborted');

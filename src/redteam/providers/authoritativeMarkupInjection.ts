@@ -139,6 +139,10 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       options,
     );
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+    const targetMetadata = {
+      ...targetResponse.metadata,
+      redteamOutputIsText: typeof targetResponse.output === 'string',
+    };
 
     logger.debug('[AuthoritativeMarkupInjection] Target response', {
       response: targetResponse,
@@ -147,6 +151,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     if (targetResponse.error) {
       return {
         ...targetResponse,
+        metadata: targetMetadata,
         tokenUsage: totalTokenUsage,
       };
     }
@@ -155,7 +160,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       ...targetResponse,
       prompt: renderedAttackerPrompt,
       metadata: {
-        ...targetResponse.metadata,
+        ...targetMetadata,
         redteamFinalPrompt: renderedAttackerPrompt,
       },
       tokenUsage: totalTokenUsage,

@@ -1654,7 +1654,15 @@ describe('shared redteam provider utilities', () => {
           withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
         },
         () =>
-          runRedteamGrader(grader, 'attack prompt', 'target output', test, undefined, undefined),
+          runRedteamGrader(
+            grader,
+            {},
+            'attack prompt',
+            'target output',
+            test,
+            undefined,
+            undefined,
+          ),
       );
 
       expect(result).toEqual({ grade, rubric: 'custom rubric' });

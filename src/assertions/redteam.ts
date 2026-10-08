@@ -37,6 +37,9 @@ const TEXT_PROVENANCE_PROVIDERS = new Set([
   'promptfoo:redteam:goat',
   'promptfoo:redteam:custom',
   'promptfoo:redteam:mischievous-user',
+  'promptfoo:redteam:best-of-n',
+  'promptfoo:redteam:authoritative-markup-injection',
+  'promptfoo:redteam:indirect-web-pwn',
 ]);
 
 /**

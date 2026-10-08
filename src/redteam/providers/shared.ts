@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 
+import { isExternalAssertionValue, resolveExternalAssertionValue } from '../../assertions/utils';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
@@ -36,6 +37,7 @@ import {
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
+import { RedteamGradingConfigError } from '../grading/errors';
 import {
   getGradingAssertionHash,
   getGradingInputHash,
@@ -48,6 +50,7 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGraderBase } from '../plugins/base';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -630,25 +633,126 @@ export async function getTargetResponse(
   };
 }
 
-interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
-  id: string;
-  getResult: (
-    prompt: string,
-    output: string,
-    test: AtomicTestCase,
-    ...args: TArgs
-  ) => Promise<TResult>;
-}
+/** Trace every strategy grader and prepare opt-in numeric inputs at the shared boundary. */
+export function runRedteamGrader(
+  grader: Pick<RedteamGraderBase, 'id' | 'getResult'>,
+  input: {
+    assertion?: AssertionOrSet;
+    targetProvider?: ApiProvider;
+    prompt?: CallApiContextParams['prompt'];
+    context?: CallApiContextParams;
+  },
+  ...args: Parameters<RedteamGraderBase['getResult']>
+): ReturnType<RedteamGraderBase['getResult']> {
+  const [
+    prompt,
+    output,
+    test,
+    provider,
+    value,
+    additionalRubric,
+    skipRefusalCheck,
+    gradingContext,
+  ] = args;
+  const invoke = async (): ReturnType<RedteamGraderBase['getResult']> => {
+    // Legacy rubric grading keeps its existing inputs. Only explicit numeric
+    // checks (including external references) need deterministic input parity.
+    const assertion = input.assertion;
+    const isNumeric = (candidate: unknown) =>
+      typeof candidate === 'object' &&
+      candidate !== null &&
+      Object.prototype.hasOwnProperty.call(candidate, 'type') &&
+      'type' in candidate &&
+      candidate.type === 'numeric';
+    if (
+      grader.id !== 'promptfoo:redteam:financial:calculation-error' ||
+      !isSingleAssertion(assertion) ||
+      (!isNumeric(value) && !isExternalAssertionValue(value))
+    ) {
+      return grader.getResult(...args);
+    }
 
-/** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
-export function runRedteamGrader<TResult, TArgs extends unknown[]>(
-  grader: TraceableRedteamGrader<TResult, TArgs>,
-  prompt: string,
-  output: string,
-  test: AtomicTestCase,
-  ...args: TArgs
-): Promise<TResult> {
-  const invoke = () => grader.getResult(prompt, output, test, ...args);
+    const assertionPrompt = input.context?.originalAssertionInput?.prompt ?? prompt;
+    const vars = input.context?.originalAssertionInput?.getVars() ?? test.vars ?? {};
+    const assertionTest = (input.context?.test as AtomicTestCase | undefined) ?? test;
+    const providerResponse = gradingContext?.providerResponse ?? { output };
+    const transformPrompt = input.prompt ?? { raw: prompt, label: prompt };
+    let preparedOutput: ProviderResponse['output'] = output;
+    let outputIsText = gradingContext?.outputIsText === true;
+    let resolved: Awaited<ReturnType<typeof resolveExternalAssertionValue>>;
+    try {
+      if (input.targetProvider?.transform) {
+        preparedOutput = await transform(input.targetProvider.transform, preparedOutput, {
+          vars,
+          prompt: transformPrompt,
+        });
+      }
+      outputIsText &&= typeof preparedOutput === 'string';
+      const providerTransformedOutput = preparedOutput;
+      const testTransform = assertionTest.options?.transform || assertionTest.options?.postprocess;
+      if (testTransform) {
+        preparedOutput = await transform(testTransform, preparedOutput, {
+          vars,
+          prompt: transformPrompt,
+          ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
+        });
+      }
+      outputIsText &&= typeof preparedOutput === 'string';
+      const assertionProviderResponse = {
+        ...providerResponse,
+        output: preparedOutput,
+        providerTransformedOutput,
+      };
+      if (assertion.transform) {
+        preparedOutput = await transform(assertion.transform, preparedOutput, {
+          vars,
+          prompt: { label: assertionPrompt },
+          ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
+        });
+      }
+      outputIsText &&= typeof preparedOutput === 'string';
+      resolved = await resolveExternalAssertionValue(
+        assertion,
+        preparedOutput,
+        {
+          prompt: assertionPrompt,
+          vars,
+          test: assertionTest,
+          logProbs: providerResponse.logProbs,
+          provider: input.targetProvider,
+          providerResponse: assertionProviderResponse,
+          ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
+          ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
+          ...(gradingContext?.traceData && { trace: gradingContext.traceData }),
+        },
+        assertion.type,
+      );
+    } catch (error) {
+      if (
+        error instanceof RedteamGradingConfigError ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
+        throw error;
+      }
+      throw new RedteamGradingConfigError(error instanceof Error ? error.message : String(error));
+    }
+    if (resolved.errorResult) {
+      return { grade: resolved.errorResult, rubric: typeof value === 'string' ? value : '' };
+    }
+    if (!isNumeric(resolved.renderedValue)) {
+      return grader.getResult(...args);
+    }
+    return grader.getResult(
+      prompt,
+      typeof preparedOutput === 'string' ? preparedOutput : JSON.stringify(preparedOutput),
+      test,
+      provider,
+      resolved.renderedValue,
+      additionalRubric,
+      skipRefusalCheck,
+      { ...gradingContext, outputIsText },
+    );
+  };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
     return invoke();

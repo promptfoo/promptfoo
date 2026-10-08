@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import { sanitizeProvider } from '../../../src/models/evalResult';
+import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
@@ -7,7 +9,7 @@ import {
   type MockApiProvider,
 } from '../../factories/provider';
 
-import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
 const mockFetchWithProxy = vi.fn();
 const mockRenderPrompt = vi.fn();
@@ -46,6 +48,7 @@ describe('BestOfNProvider - Runtime Behavior', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockFetchWithProxy.mockReset();
     vi.mocked(neverGenerateRemote).mockReset();
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     mockRenderPrompt.mockReset();
@@ -78,6 +81,7 @@ describe('BestOfNProvider - Runtime Behavior', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass abortSignal to fetchWithProxy', async () => {
@@ -131,6 +135,84 @@ describe('BestOfNProvider - Runtime Behavior', () => {
       options,
     );
   });
+
+  it.each([true, false])(
+    'grades the selected response using its original type despite a later failed candidate (text: %s)',
+    async (outputIsText) => {
+      const llmGrader = vi
+        .spyOn(RedteamGraderBase.prototype, 'getResult')
+        .mockRejectedValue(new Error('Numeric grading must not call an LLM'));
+      const output = outputIsText ? '{"amount":100}' : { amount: 100 };
+      let resolveLaterResponse!: (response: ProviderResponse) => void;
+      const laterResponse = new Promise<ProviderResponse>((resolve) => {
+        resolveLaterResponse = resolve;
+      });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output,
+          metadata: { redteamOutputIsText: !outputIsText, selected: true },
+        })
+        .mockImplementationOnce(() => laterResponse);
+      const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 2 });
+
+      const pendingResult = provider.callApi('test prompt', createMockContext(mockTargetProvider));
+      await vi.waitFor(() => expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2));
+      resolveLaterResponse({
+        output: outputIsText ? { amount: 99 } : '{"amount":99}',
+        error: 'Later candidate failed',
+        metadata: { redteamOutputIsText: outputIsText },
+      });
+      const result = await pendingResult;
+
+      expect(result.output).toEqual(output);
+      expect(result.error).toBeUndefined();
+      expect(result.metadata).toMatchObject({
+        redteamOutputIsText: outputIsText,
+        redteamFinalPrompt: 'candidate 1',
+        selected: true,
+      });
+      const grade = runAssertion({
+        prompt: 'Return the amount as JSON',
+        test: { provider: provider.id(), metadata: { purpose: 'A financial calculator' } },
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          value: { type: 'numeric', expected: { amount: 100 } },
+        },
+        providerResponse: result,
+      });
+      if (outputIsText) {
+        await expect(grade).resolves.toMatchObject({ pass: true, score: 1 });
+      } else {
+        await expect(grade).rejects.toThrow(/requires raw JSON text/);
+      }
+      expect(llmGrader).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([true, false])(
+    'reports the final failed candidate source type (text: %s)',
+    async (outputIsText) => {
+      const output = outputIsText ? '{"amount":100}' : { amount: 100 };
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: outputIsText ? { amount: 99 } : '{"amount":99}',
+          error: 'First candidate failed',
+        })
+        .mockResolvedValueOnce({
+          output,
+          error: 'Final candidate failed',
+          metadata: { redteamOutputIsText: !outputIsText },
+        });
+      const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+      expect(result.output).toEqual(output);
+      expect(result.error).toBe('Final candidate failed');
+      expect(result.metadata).toMatchObject({ redteamOutputIsText: outputIsText, sessionIds: [] });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('preserves fresh target usage when a cached candidate finishes after a fresh candidate', async () => {
     const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });

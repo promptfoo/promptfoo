@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
+import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import IndirectWebPwnProvider from '../../../src/redteam/providers/indirectWebPwn';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
@@ -32,7 +34,113 @@ function mockJsonResponse(payload: unknown, ok = true) {
 describe('IndirectWebPwnProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchWithRetries.mockReset();
   });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    mockFetchWithRetries.mockReset();
+  });
+
+  it.each([true, false])(
+    'grades the final response using its source type before serialization (text: %s)',
+    async (outputIsText) => {
+      const llmGrader = vi
+        .spyOn(RedteamGraderBase.prototype, 'getResult')
+        .mockRejectedValue(new Error('Numeric grading must not call an LLM'));
+      mockFetchWithRetries
+        .mockResolvedValueOnce(
+          mockJsonResponse({ uuid: 'web-numeric', fullUrl: 'https://example.com/web-numeric' }),
+        )
+        .mockResolvedValueOnce(mockJsonResponse({ wasFetched: false, fetchCount: 0 }))
+        .mockResolvedValueOnce(mockJsonResponse({ wasFetched: true, fetchCount: 1 }))
+        .mockResolvedValue(mockJsonResponse({ wasExfiltrated: false, exfilCount: 0 }));
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockResolvedValueOnce({
+          output: outputIsText ? { amount: 99 } : '{"amount":99}',
+          metadata: { redteamOutputIsText: outputIsText },
+        })
+        .mockResolvedValueOnce({
+          output: outputIsText ? '{"amount":100}' : { amount: 100 },
+          metadata: { redteamOutputIsText: !outputIsText },
+        });
+      const provider = new IndirectWebPwnProvider({
+        injectVar: 'query',
+        maxFetchAttempts: 2,
+        useLlm: false,
+      });
+
+      const result = await provider.callApi('Return the amount as JSON', {
+        originalProvider: targetProvider,
+        vars: { query: 'Return the amount as JSON' },
+        prompt: { raw: '{{query}}', label: 'test' },
+      });
+
+      expect(result.output).toBe('{"amount":100}');
+      expect(result.metadata).toMatchObject({
+        redteamOutputIsText: outputIsText,
+        stopReason: 'Attack succeeded',
+        fetchAttempts: 2,
+      });
+      expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
+      const grade = runAssertion({
+        prompt: 'Return the amount as JSON',
+        test: { provider: provider.id(), metadata: { purpose: 'A financial calculator' } },
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          value: { type: 'numeric', expected: { amount: 100 } },
+        },
+        providerResponse: result,
+      });
+      if (outputIsText) {
+        await expect(grade).resolves.toMatchObject({ pass: true, score: 1 });
+      } else {
+        await expect(grade).rejects.toThrow(/requires raw JSON text/);
+      }
+      expect(llmGrader).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([true, false])(
+    'retains the earlier output source when a later target response fails (text: %s)',
+    async (outputIsText) => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(
+          mockJsonResponse({ uuid: 'web-retained', fullUrl: 'https://example.com/web-retained' }),
+        )
+        .mockResolvedValueOnce(mockJsonResponse({ wasFetched: false, fetchCount: 0 }));
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockResolvedValueOnce({
+          output: outputIsText ? '{"amount":100}' : { amount: 100 },
+          metadata: { redteamOutputIsText: !outputIsText },
+        })
+        .mockResolvedValueOnce({
+          output: outputIsText ? { amount: 99 } : '{"amount":99}',
+          error: 'Target failed',
+          metadata: { redteamOutputIsText: outputIsText },
+        });
+      const provider = new IndirectWebPwnProvider({ injectVar: 'query', maxFetchAttempts: 2 });
+
+      const result = await provider.callApi('Return the amount as JSON', {
+        originalProvider: targetProvider,
+        vars: { query: 'Return the amount as JSON' },
+        prompt: { raw: '{{query}}', label: 'test' },
+      });
+
+      expect(result.output).toBe('{"amount":100}');
+      expect(result.error).toBe('Target failed');
+      expect(result.metadata).toMatchObject({
+        redteamOutputIsText: outputIsText,
+        stopReason: 'Error',
+        fetchAttempts: 2,
+      });
+      expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('should count one probe per target fetch attempt', async () => {
     mockFetchWithRetries

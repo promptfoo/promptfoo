@@ -14,6 +14,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { RedteamGradingConfigError } from '../../grading/errors';
 import { getTargetConversation } from '../../grading/storedResult';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
@@ -613,6 +614,7 @@ export class CustomProvider implements ApiProvider {
             };
             const { grade, rubric } = await runRedteamGrader(
               grader,
+              { assertion: assertToUse, targetProvider: provider, prompt, context },
               gradedTurn.prompt,
               gradedTurn.output,
               test,
@@ -708,6 +710,9 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
+        if (error instanceof RedteamGradingConfigError) {
+          throw error;
+        }
         // Re-throw abort errors to properly cancel the operation
         if (error instanceof Error && error.name === 'AbortError') {
           logger.debug('[Custom] Operation aborted');

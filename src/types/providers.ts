@@ -84,6 +84,8 @@ export interface CallApiContextParams {
   getCache?: any;
   logger?: winston.Logger;
   originalProvider?: ApiProvider;
+  /** Original evaluator inputs for strategy-side assertion preparation; never persisted. */
+  originalAssertionInput?: { prompt: string; getVars: () => Record<string, VarValue> };
   prompt: Prompt;
   vars: Record<string, VarValue>;
   debug?: boolean;

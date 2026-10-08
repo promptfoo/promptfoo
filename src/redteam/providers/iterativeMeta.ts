@@ -622,6 +622,7 @@ export async function runMetaAgentRedteam({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
+          { assertion: assertToUse, targetProvider, prompt, context },
           finalAttackPrompt,
           targetResponse.output,
           iterationTest,

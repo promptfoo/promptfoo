@@ -939,6 +939,7 @@ export class HydraProvider implements ApiProvider {
 
           const { grade, rubric } = await runRedteamGrader(
             grader,
+            { assertion: assertToUse, targetProvider, prompt, context },
             lastFinalAttackPrompt || nextMessage,
             targetResponse.output,
             test,

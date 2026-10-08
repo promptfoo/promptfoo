@@ -224,12 +224,11 @@ export default class BestOfNProvider implements ApiProvider {
           }
         }
 
-        if (!successfulResponse) {
-          aggregatedResponse.metadata = {
-            ...(aggregatedResponse.metadata ?? {}),
-            sessionIds,
-          };
-        }
+        aggregatedResponse.metadata = {
+          ...aggregatedResponse.metadata,
+          redteamOutputIsText: typeof aggregatedResponse.output === 'string',
+          ...(successfulResponse ? {} : { sessionIds }),
+        };
 
         return aggregatedResponse;
       }

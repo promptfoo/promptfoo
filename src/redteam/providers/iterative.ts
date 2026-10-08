@@ -637,6 +637,7 @@ export async function runRedteamConversation({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
+          { assertion: assertToUse, targetProvider, prompt, context },
           finalInjectVar,
           targetResponse.output,
           iterationTest,

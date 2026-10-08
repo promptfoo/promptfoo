@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
+import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
@@ -46,6 +48,7 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockFetchWithProxy.mockReset();
 
     // Dynamic import after mocks are set up
     const module = await import('../../../src/redteam/providers/authoritativeMarkupInjection');
@@ -65,6 +68,7 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass abortSignal to fetchWithProxy', async () => {
@@ -117,6 +121,64 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       options,
     );
   });
+
+  it.each([true, false])(
+    'grades raw target text and ignores a conflicting target marker (text: %s)',
+    async (outputIsText) => {
+      const llmGrader = vi
+        .spyOn(RedteamGraderBase.prototype, 'getResult')
+        .mockRejectedValue(new Error('Numeric grading must not call an LLM'));
+      const output = outputIsText ? '{"amount":100}' : { amount: 100 };
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output,
+        metadata: { redteamOutputIsText: !outputIsText, retained: true },
+      });
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+      expect(result.output).toEqual(output);
+      expect(result.metadata).toMatchObject({
+        redteamOutputIsText: outputIsText,
+        redteamFinalPrompt: 'injected content',
+        retained: true,
+      });
+      const grade = runAssertion({
+        prompt: 'Return the amount as JSON',
+        test: { provider: provider.id(), metadata: { purpose: 'A financial calculator' } },
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          value: { type: 'numeric', expected: { amount: 100 } },
+        },
+        providerResponse: result,
+      });
+      if (outputIsText) {
+        await expect(grade).resolves.toMatchObject({ pass: true, score: 1 });
+      } else {
+        await expect(grade).rejects.toThrow(/requires raw JSON text/);
+      }
+      expect(llmGrader).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([true, false])(
+    'derives the source type on a target error response (text: %s)',
+    async (outputIsText) => {
+      const output = outputIsText ? '{"amount":100}' : { amount: 100 };
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output,
+        error: 'Target failed',
+        metadata: { redteamOutputIsText: !outputIsText, retained: true },
+      });
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+
+      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+      expect(result.output).toEqual(output);
+      expect(result.error).toBe('Target failed');
+      expect(result.metadata).toMatchObject({ redteamOutputIsText: outputIsText, retained: true });
+    },
+  );
 
   describe('Token Usage Tracking', () => {
     it('keeps remote attack generation separate from target tokens and probes', async () => {

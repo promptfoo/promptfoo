@@ -5,6 +5,7 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../../src/assertions/index';
 import { fetchWithCache } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import { HttpProvider } from '../../../src/providers/http';
 import { RedteamGradingConfigError } from '../../../src/redteam/grading/errors';
 import {
@@ -486,12 +487,14 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
     async (extension) => {
       const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'numeric-reference-'));
       const referencePath = path.join(directory, `reference.${extension}`);
+      const previousBasePath = cliState.basePath;
+      cliState.basePath = directory;
       const prompt = 'Return an amount';
       const output = '{"amount":101}';
       const pluginId = 'financial:calculation-error';
       const assertion: Assertion = {
         type: 'promptfoo:redteam:financial:calculation-error',
-        value: `file://${referencePath}`,
+        value: `file://reference.${extension}`,
       };
       if (extension === 'cjs') {
         await fs.writeFile(
@@ -548,6 +551,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
         }
         expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
       } finally {
+        cliState.basePath = previousBasePath;
         await fs.rm(directory, { recursive: true, force: true });
       }
     },

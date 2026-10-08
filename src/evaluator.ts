@@ -1091,6 +1091,7 @@ async function callActiveProvider({
     filters,
     originalProvider,
     promptForRender,
+    renderedPrompt,
     repeatIndex,
     test,
     testIndex,
@@ -1132,6 +1133,7 @@ function buildCallApiContext({
   filters,
   originalProvider,
   promptForRender,
+  renderedPrompt,
   repeatIndex,
   test,
   testIndex,
@@ -1142,6 +1144,7 @@ function buildCallApiContext({
   filters: RunEvalOptions['nunjucksFilters'];
   originalProvider: ApiProvider;
   promptForRender: Prompt;
+  renderedPrompt: string;
   repeatIndex: number;
   test: AtomicTestCase;
   testIndex: number;
@@ -1153,6 +1156,16 @@ function buildCallApiContext({
     prompt: promptForRender,
     filters,
     originalProvider,
+    ...(test.assert?.some(
+      (assertion) => assertion.type === 'promptfoo:redteam:financial:calculation-error',
+    )
+      ? {
+          originalAssertionInput: {
+            prompt: renderedPrompt,
+            getVars: () => omitEvalRuntimeVars(vars),
+          },
+        }
+      : {}),
     test,
     logger: logger as unknown as winston.Logger,
     getCache,

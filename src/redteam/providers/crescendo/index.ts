@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { RedteamGradingConfigError } from '../../grading/errors';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -739,6 +740,7 @@ export class CrescendoProvider implements ApiProvider {
             };
             const { grade, rubric } = await runRedteamGrader(
               grader,
+              { assertion: assertToUse, targetProvider: provider, prompt, context },
               gradedTurn.prompt,
               gradedTurn.output,
               test,
@@ -818,6 +820,9 @@ export class CrescendoProvider implements ApiProvider {
         }
         logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
+        if (error instanceof RedteamGradingConfigError) {
+          throw error;
+        }
         // Re-throw abort errors to properly cancel the operation
         if (error instanceof Error && error.name === 'AbortError') {
           logger.debug('[Crescendo] Operation aborted');
