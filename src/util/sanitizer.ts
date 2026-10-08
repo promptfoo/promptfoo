@@ -226,7 +226,7 @@ export const SECRET_FIELD_NAMES = new Set([
 ]);
 
 // Ambiguous names need a complete segment match: oauth/useSession/sameSiteCookie are settings.
-const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES].filter(
+const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES, 'subscriptionkey'].filter(
   (name) => !['auth', 'session', 'cookie', 'setcookie'].includes(name),
 );
 
@@ -454,23 +454,29 @@ function isSafeTracingCredentialTemplate(value: unknown): value is string {
   return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
 }
 
-function isTracingCredentialHeader(name: string, value: string): boolean {
-  const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+export function isCredentialHeader(name: string, value: string): boolean {
+  const normalizedName = name.replace(/[-_\s]/g, '').toLowerCase();
+  // These key roles identify requests, routing, or public material rather than authenticate.
+  // Exempt only name inference; credential-shaped values still take precedence below.
+  const publicKeyRole =
+    /^x?(?:(?:idempotency|cache|routing|partition|public)key|secwebsocketkey)$/.test(
+      normalizedName,
+    );
   return (
-    isSecretField(name) ||
-    /(?:^|[-_\s])(?:api[-_\s]?key|access[-_\s]?key|auth(?:orization)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
+    isSecretField(normalizedName) ||
+    (!publicKeyRole && normalizedName.endsWith('key')) ||
+    /session(?:access|id)?$/.test(normalizedName) ||
+    /(?:api|access|subscription)key|auth|token|password|passwd|secret|credential|cookie|jwt/.test(
       normalizedName,
     ) ||
-    normalizedName.replace(/[-_]/g, '') === 'xhoneycombteam' ||
+    normalizedName === 'xhoneycombteam' ||
     /^(?:bearer|basic|token|api[-_]?key)\s+\S+/i.test(value.trim()) ||
     looksLikeSecret(value.trim())
   );
 }
 
 function isNonSensitiveTracingHeader(name: string, value: string): boolean {
-  return (
-    SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()) && !isTracingCredentialHeader(name, value)
-  );
+  return SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()) && !isCredentialHeader(name, value);
 }
 
 function getTracingTemplateEnvironmentVariable(template: string): string | undefined {
@@ -1332,7 +1338,7 @@ function sanitizePlainObject(
           name,
           isSafeTracingCredentialTemplate(item) ||
           (typeof item === 'string' &&
-            !isTracingCredentialHeader(name, item) &&
+            !isCredentialHeader(name, item) &&
             (isNonCredentialHeader(name) || SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase())))
             ? item
             : REDACTED,
