@@ -4,7 +4,7 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { extractBlobHashesFromValue } from './blobRefs';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
-import { type BlobRef, recordBlobReference, storeBlob } from './index';
+import { type BlobRef, hasBlobReferenceOwner, recordBlobReference, storeBlob } from './index';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -124,6 +124,10 @@ async function maybeStore(
   }
 
   if (!isBlobStorageEnabled()) {
+    return null;
+  }
+
+  if (context.evalId && !(await hasBlobReferenceOwner(context.evalId))) {
     return null;
   }
 

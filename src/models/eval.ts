@@ -3,6 +3,7 @@ import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import {
+  blobReferencesTable,
   datasetsTable,
   evalResultsTable,
   evalsTable,
@@ -1482,6 +1483,16 @@ export default class Eval {
     };
   }
 
+  async appendTraces(traces: TraceData[]): Promise<boolean> {
+    // The trace store normalizes each span's status into statusCode/statusMessage on write.
+    const imported = await getTraceStore().importTraces(this.id, traces);
+    if (imported) {
+      // Shared traces arrive after results; refresh any open viewers.
+      notifyEvaluationChanged(this.id);
+    }
+    return imported;
+  }
+
   async getTraces(): Promise<TraceData[]> {
     try {
       const traceStore = getTraceStore();
@@ -1679,9 +1690,34 @@ export default class Eval {
           .run();
       }
 
-      // Copy results in batches to avoid memory exhaustion
       const BATCH_SIZE = 1000;
       let offset = 0;
+      while (true) {
+        const blobRefs = await tx
+          .select()
+          .from(blobReferencesTable)
+          .where(eq(blobReferencesTable.evalId, this.id))
+          .limit(BATCH_SIZE)
+          .offset(offset)
+          .all();
+        if (blobRefs.length === 0) {
+          break;
+        }
+        await tx
+          .insert(blobReferencesTable)
+          .values(
+            blobRefs.map((ref) => ({
+              ...ref,
+              id: crypto.randomUUID(),
+              evalId: newEvalId,
+            })),
+          )
+          .run();
+        offset += BATCH_SIZE;
+      }
+
+      // Copy results in batches to avoid memory exhaustion
+      offset = 0;
 
       while (true) {
         // Fetch batch from source eval

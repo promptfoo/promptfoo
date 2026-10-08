@@ -49,6 +49,7 @@ vi.mock('@app/hooks/useShiftKey', () => {
 vi.mock('@app/utils/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
+  getApiBaseUrl: vi.fn(() => ''),
 }));
 
 const mockNavigate = vi.fn();
@@ -63,19 +64,31 @@ vi.mock('./EvalOutputCell', () => {
       onRating,
       rowIndex,
       rowPositionIndex,
+      promptIndex,
+      tracePromptIndex,
+      testCaseId,
       searchText,
+      evaluationId,
     }: {
       onRating: any;
       rowIndex?: number;
       rowPositionIndex?: number;
+      promptIndex?: number;
+      tracePromptIndex?: number;
+      testCaseId?: string;
       searchText?: string;
+      evaluationId?: string;
     }) => {
       return (
         <div
           data-testid="eval-output-cell"
           data-rowindex={rowIndex}
           data-rowpositionindex={rowPositionIndex}
+          data-promptindex={promptIndex}
+          data-tracepromptindex={tracePromptIndex}
+          data-testcaseid={testCaseId}
           data-searchtext={searchText}
+          data-evaluationid={evaluationId}
         >
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
@@ -845,6 +858,172 @@ describe('ResultsTable Metrics Display', () => {
       );
     });
 
+    it.each([
+      ['comparison-eval', 'comparison-eval'],
+      ['unselected-eval', '123'],
+    ])(
+      'scopes comparison media from %s to a selected evaluation',
+      (sourceEvalId, expectedEvalId) => {
+        const hash = 'a'.repeat(64);
+        vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+          inComparisonMode: true,
+          comparisonEvalIds: ['comparison-eval'],
+          renderMarkdown: true,
+        });
+        vi.mocked(useTableStore).mockReturnValue({
+          config: {},
+          evalId: '123',
+          setTable: vi.fn(),
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+          table: {
+            head: mockTable.head,
+            body: [
+              {
+                ...mockTable.body[0],
+                outputs: [
+                  {
+                    pass: true,
+                    score: 1,
+                    text: `promptfoo://blob/${hash}`,
+                    sourceEvalId,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+        expect(container.querySelector('[data-testid=eval-output-cell]')).toHaveAttribute(
+          'data-evaluationid',
+          expectedEvalId,
+        );
+      },
+    );
+
+    it.each([
+      ['comparison-test', 'comparison-test'],
+      [undefined, 'comparison-output'],
+    ])(
+      'keeps comparison trace coordinates and source test-case ID: %s',
+      (sourceTestCaseId, expectedId) => {
+        vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+          inComparisonMode: true,
+          comparisonEvalIds: ['comparison-eval'],
+          renderMarkdown: true,
+        });
+        vi.mocked(useTableStore).mockReturnValue({
+          config: {},
+          evalId: '123',
+          setTable: vi.fn(),
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+          table: {
+            head: { ...mockTable.head, prompts: [{}, {}, {}] },
+            body: [
+              {
+                ...mockTable.body[0],
+                test: { metadata: { testCaseId: 'main-test' } },
+                outputs: [
+                  null,
+                  null,
+                  {
+                    pass: true,
+                    score: 1,
+                    text: 'comparison output',
+                    id: 'comparison-output',
+                    sourceTestCaseId,
+                    sourceEvalId: 'comparison-eval',
+                    sourcePromptIndex: 0,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+
+        renderWithProviders(<ResultsTable {...defaultProps} />);
+
+        const cell = screen.getByTestId('eval-output-cell');
+        expect(cell).toHaveAttribute('data-promptindex', '2');
+        expect(cell).toHaveAttribute('data-tracepromptindex', '0');
+        expect(cell).toHaveAttribute('data-testcaseid', expectedId);
+      },
+    );
+
+    it('remounts a failed blob image and its open lightbox after a table refresh', async () => {
+      const user = userEvent.setup();
+      const blobHash = '2'.repeat(64);
+      const createTable = () => ({
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1,
+                text: 'test output',
+                metadata: {
+                  [FILE_METADATA_KEY]: {
+                    imageVar: {
+                      path: '/path/to/input.png',
+                      type: 'image',
+                      format: 'png',
+                    },
+                  },
+                },
+              },
+            ],
+            test: {},
+            vars: [`promptfoo://blob/${blobHash}`],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: ['imageVar'],
+        },
+      });
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: createTable(),
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: { metric: [] },
+        },
+      }));
+
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      const firstImage = screen.getByRole('img', { name: 'Input image' });
+      act(() => {
+        firstImage.dispatchEvent(new Event('error'));
+      });
+      await user.click(firstImage);
+      const openMainImage = screen.getByRole('img', { name: 'Input image' });
+      const firstLightboxImage = screen.getByRole('img', { name: 'Lightbox' });
+      act(() => {
+        openMainImage.dispatchEvent(new Event('error'));
+      });
+      act(() => {
+        firstLightboxImage.dispatchEvent(new Event('error'));
+      });
+
+      // ResultsTable is memoized; changing a prop models the render that a real Zustand table
+      // update triggers internally.
+      rerender(<ResultsTable {...defaultProps} maxTextLength={101} />);
+
+      const refreshedImage = screen.getByRole('img', { name: 'Input image' });
+      const refreshedLightboxImage = screen.getByRole('img', { name: 'Lightbox' });
+      expect(refreshedImage).not.toBe(openMainImage);
+      expect(refreshedLightboxImage).not.toBe(firstLightboxImage);
+      expect(refreshedLightboxImage).toHaveAttribute('src', `/api/blobs/${blobHash}?evalId=123`);
+    });
+
     it('renders variable video from file metadata', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
@@ -896,6 +1075,111 @@ describe('ResultsTable Metrics Display', () => {
       expect(videoSource).toHaveAttribute('type', 'video/mp4');
       expect(screen.getByText('/path/to/input.mp4 (video/mp4)')).toBeInTheDocument();
     });
+
+    it.each(['promptfoo://blob/', '/api/blobs/'])(
+      'scopes embedded Markdown variable images with prefix %s to the displayed evaluation',
+      (prefix) => {
+        const hash = 'a'.repeat(64);
+        vi.mocked(useTableStore).mockImplementation(() => ({
+          config: {},
+          evalId: 'image-eval',
+          setTable: vi.fn(),
+          table: {
+            body: [
+              {
+                outputs: [{ pass: true, score: 1, text: 'test output' }],
+                test: {},
+                vars: [`Preview: ![sample](${prefix}${hash})`],
+              },
+            ],
+            head: { prompts: [{}], vars: ['preview'] },
+          },
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+        }));
+
+        renderWithProviders(<ResultsTable {...defaultProps} maxTextLength={1000} />);
+
+        expect(screen.getByRole('img', { name: 'sample' })).toHaveAttribute(
+          'src',
+          `/api/blobs/${hash}?evalId=image-eval`,
+        );
+      },
+    );
+
+    it('scopes decoded audio previews to the displayed evaluation', () => {
+      const hash = 'a'.repeat(64);
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: { redteam: { injectVar: 'audio_prompt' } },
+        evalId: 'audio-eval',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: { metadata: { strategyId: 'audio', originalText: 'spoken prompt' } },
+              vars: [`promptfoo://blob/${hash}`],
+            },
+          ],
+          head: { prompts: [{}], vars: ['audio_prompt'] },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(container.querySelector('audio source')).toHaveAttribute(
+        'src',
+        `/api/blobs/${hash}?evalId=audio-eval`,
+      );
+      expect(screen.getByText('spoken prompt')).toBeInTheDocument();
+    });
+
+    it.each(['provider', 'transform', 'primary'])(
+      'keeps %s variable media bound to the evaluation that supplied it',
+      (source) => {
+        const hash = 'b'.repeat(64);
+        const image = `promptfoo://blob/${hash}`;
+        const markdown = `Preview: ![comparison sample](${image})`;
+        const comparison = {
+          pass: true,
+          score: 1,
+          text: 'comparison output',
+          sourceEvalId: 'comparison-eval',
+          ...(source === 'provider'
+            ? { response: { prompt: image } }
+            : { metadata: { transformDisplayVars: { prompt: markdown } } }),
+        };
+        vi.mocked(useTableStore).mockImplementation(() => ({
+          config: {},
+          evalId: 'primary-eval',
+          setTable: vi.fn(),
+          table: {
+            body: [
+              {
+                outputs: [{ pass: true, score: 1, text: 'primary output' }, comparison],
+                test: {},
+                vars: [source === 'primary' ? markdown : ''],
+              },
+            ],
+            head: { prompts: [{}, {}], vars: ['prompt'] },
+          },
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+        }));
+
+        renderWithProviders(<ResultsTable {...defaultProps} maxTextLength={1000} />);
+
+        const expectedEval = source === 'primary' ? 'primary-eval' : 'comparison-eval';
+        expect(
+          screen.getByRole('img', {
+            name: source === 'provider' ? 'Base64 encoded image' : 'comparison sample',
+          }),
+        ).toHaveAttribute('src', `/api/blobs/${hash}?evalId=${expectedEval}`);
+      },
+    );
 
     it('shows original image text for the injected prompt variable when image cells are rendered', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({

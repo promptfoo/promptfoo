@@ -899,6 +899,7 @@ async function callProviderForRunEval({
   evalId,
   filters,
   promptForRender,
+  promptIndex,
   provider,
   rateLimitRegistry,
   renderedPrompt,
@@ -921,6 +922,7 @@ async function callProviderForRunEval({
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
+  promptIndex: number;
   renderedPrompt: string;
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -948,6 +950,7 @@ async function callProviderForRunEval({
           providerInvoked = true;
         },
         promptForRender,
+        promptIndex,
         provider,
         rateLimitRegistry,
         renderedPrompt,
@@ -1058,6 +1061,7 @@ async function callActiveProvider({
   filters,
   onProviderInvoked,
   promptForRender,
+  promptIndex,
   provider,
   rateLimitRegistry,
   renderedPrompt,
@@ -1074,6 +1078,7 @@ async function callActiveProvider({
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
   promptForRender: Prompt;
+  promptIndex: number;
   renderedPrompt: string;
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -1091,6 +1096,7 @@ async function callActiveProvider({
     filters,
     originalProvider,
     promptForRender,
+    promptIndex,
     repeatIndex,
     test,
     testIndex,
@@ -1132,6 +1138,7 @@ function buildCallApiContext({
   filters,
   originalProvider,
   promptForRender,
+  promptIndex,
   repeatIndex,
   test,
   testIndex,
@@ -1142,6 +1149,7 @@ function buildCallApiContext({
   filters: RunEvalOptions['nunjucksFilters'];
   originalProvider: ApiProvider;
   promptForRender: Prompt;
+  promptIndex: number;
   repeatIndex: number;
   test: AtomicTestCase;
   testIndex: number;
@@ -1157,6 +1165,7 @@ function buildCallApiContext({
     logger: logger as unknown as winston.Logger,
     getCache,
     repeatIndex,
+    promptIdx: promptIndex,
     testIdx: testIndex,
   };
 
@@ -1717,6 +1726,7 @@ async function runEvalInternal({
                 ? { ...rendered.setup.prompt.config, working_dir: stepWorkspace.dir }
                 : rendered.setup.prompt.config,
             },
+            promptIndex,
             provider,
             rateLimitRegistry,
             renderedPrompt: rendered.renderedPrompt,

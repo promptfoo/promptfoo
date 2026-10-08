@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShareAuthorizedBlob } from '../../src/blobs';
 import { uploadBlobRemote } from '../../src/blobs/remoteUpload';
-import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from '../../src/blobs/shareUpload';
+import {
+  createRemoteBlobUploadCache,
+  recordResultBlobRefsForShare,
+  uploadBlobRefsForShare,
+  uploadRecordedResultBlobRefsForShare,
+  uploadTraceBlobRefsForShare,
+} from '../../src/blobs/shareUpload';
 import logger from '../../src/logger';
 
 import type { StoredBlob } from '../../src/blobs';
@@ -30,21 +36,22 @@ const storedBlob: StoredBlob = {
     sizeBytes: 11,
   },
 };
+const remoteBlobResult = {
+  deduplicated: false,
+  ref: {
+    hash: 'a'.repeat(64),
+    mimeType: 'image/png',
+    provider: 'cloud',
+    sizeBytes: 11,
+    uri: 'promptfoo://blob/' + 'a'.repeat(64),
+  },
+};
 
 describe('share-time blob upload', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getShareAuthorizedBlob).mockResolvedValue(storedBlob);
-    vi.mocked(uploadBlobRemote).mockResolvedValue({
-      deduplicated: false,
-      ref: {
-        hash: 'a'.repeat(64),
-        mimeType: 'image/png',
-        provider: 'cloud',
-        sizeBytes: 11,
-        uri: `promptfoo://blob/${'a'.repeat(64)}`,
-      },
-    });
+    vi.mocked(uploadBlobRemote).mockResolvedValue(remoteBlobResult);
   });
 
   it('uploads each referenced blob only once when the share context is unchanged', async () => {
@@ -152,6 +159,193 @@ describe('share-time blob upload', () => {
     });
   });
 
+  it('plans result provenance without reading bytes until final upload', async () => {
+    const hash = '7'.repeat(64);
+    const cache = createRemoteBlobUploadCache();
+    const context = {
+      localEvalId: 'local-eval-plan',
+      remoteEvalId: 'remote-eval-plan',
+      promptIdx: 1,
+      testIdx: 2,
+    };
+
+    recordResultBlobRefsForShare(`promptfoo://blob/${hash}`, cache, context);
+    expect(getShareAuthorizedBlob).not.toHaveBeenCalled();
+    expect(uploadBlobRemote).not.toHaveBeenCalled();
+
+    await uploadRecordedResultBlobRefsForShare(cache);
+    expect(getShareAuthorizedBlob).toHaveBeenCalledWith(hash, 'local-eval-plan');
+    expect(uploadBlobRemote).toHaveBeenCalledOnce();
+  });
+
+  it.each(['result', 'trace'] as const)(
+    'bounds %s uploads while allowing independent rows to overlap',
+    async (kind) => {
+      const cache = createRemoteBlobUploadCache();
+      let activeUploads = 0;
+      let maxActiveUploads = 0;
+      const releaseUploads: Array<() => void> = [];
+      vi.mocked(uploadBlobRemote).mockImplementation(async () => {
+        activeUploads += 1;
+        maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+        await new Promise<void>((resolve) => releaseUploads.push(resolve));
+        activeUploads -= 1;
+        return remoteBlobResult;
+      });
+      const hash = 'a'.repeat(64);
+      for (let i = 0; i < 5; i++) {
+        recordResultBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+          localEvalId: 'local-eval-plan',
+          remoteEvalId: 'remote-eval-plan',
+          promptIdx: i,
+        });
+      }
+
+      const uploadPromise =
+        kind === 'result'
+          ? uploadRecordedResultBlobRefsForShare(cache)
+          : uploadTraceBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+              localEvalId: 'local-eval-plan',
+              remoteEvalId: 'remote-eval-plan',
+            });
+      await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(4));
+      releaseUploads.shift()?.();
+      await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(5));
+      releaseUploads.splice(0).forEach((release) => release());
+      await uploadPromise;
+      expect(uploadBlobRemote).toHaveBeenCalledTimes(5);
+      expect(maxActiveUploads).toBe(4);
+    },
+  );
+
+  it.each(['distinct hashes', 'shared hash across rows'])(
+    'bounds trace uploads while overlapping %s',
+    async (scenario) => {
+      const cache = createRemoteBlobUploadCache();
+      const context = { localEvalId: 'local-eval-trace', remoteEvalId: 'remote-eval-trace' };
+      const refs = Array.from(
+        { length: 5 },
+        (_, i) => `promptfoo://blob/${String(scenario === 'distinct hashes' ? i : 0).repeat(64)}`,
+      );
+      if (scenario === 'shared hash across rows') {
+        refs.forEach((ref, testIdx) =>
+          recordResultBlobRefsForShare(ref, cache, { ...context, testIdx }),
+        );
+      }
+      let active = 0;
+      let peak = 0;
+      const releases: Array<() => void> = [];
+      vi.mocked(uploadBlobRemote).mockImplementation(async () => {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active--;
+        return remoteBlobResult;
+      });
+      const pending = uploadTraceBlobRefsForShare(refs, cache, context);
+      try {
+        await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(4));
+        releases.shift()?.();
+        await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(5));
+        releases.splice(0).forEach((release) => release());
+        await pending;
+        expect(peak).toBe(4);
+        if (scenario === 'shared hash across rows') {
+          expect(
+            vi
+              .mocked(uploadBlobRemote)
+              .mock.calls.map((call) => call[2]?.testIdx)
+              .sort(),
+          ).toEqual([0, 1, 2, 3, 4]);
+        }
+      } finally {
+        vi.mocked(uploadBlobRemote).mockResolvedValue(remoteBlobResult);
+        releases.splice(0).forEach((release) => release());
+        await pending;
+      }
+    },
+  );
+
+  it('uses recorded result provenance for a blob later referenced by a trace', async () => {
+    const hash = '8'.repeat(64);
+    const cache = createRemoteBlobUploadCache();
+    recordResultBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-result',
+      remoteEvalId: 'remote-eval-result',
+      promptIdx: 4,
+      testIdx: 3,
+    });
+
+    await uploadTraceBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-result',
+      remoteEvalId: 'remote-eval-result',
+    });
+
+    expect(uploadBlobRemote).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval-result',
+      kind: 'image',
+      location: 'share',
+      promptIdx: 4,
+      testIdx: 3,
+    });
+  });
+
+  it('retains inline result provenance without scheduling a duplicate upload', async () => {
+    const hash = 'a'.repeat(64);
+    const uri = `promptfoo://blob/${hash}`;
+    const cache = createRemoteBlobUploadCache();
+    recordResultBlobRefsForShare(
+      { output: uri },
+      cache,
+      { localEvalId: 'source', remoteEvalId: 'recipient', promptIdx: 0, testIdx: 0 },
+      { output: 'data:image/png;base64,aW1hZ2U=' },
+    );
+
+    await uploadRecordedResultBlobRefsForShare(cache);
+    expect(getShareAuthorizedBlob).not.toHaveBeenCalled();
+    expect(uploadBlobRemote).not.toHaveBeenCalled();
+
+    await uploadTraceBlobRefsForShare(uri, cache, {
+      localEvalId: 'source',
+      remoteEvalId: 'recipient',
+    });
+    expect(uploadBlobRemote).toHaveBeenCalledOnce();
+    expect(uploadBlobRemote).toHaveBeenCalledWith(storedBlob.data, 'image/png', {
+      evalId: 'recipient',
+      kind: 'image',
+      location: 'share',
+      promptIdx: 0,
+      testIdx: 0,
+    });
+  });
+
+  it('uploads remaining result refs while retaining provenance for inline media', async () => {
+    const inlineHash = 'a'.repeat(64);
+    const remainingHash = 'b'.repeat(64);
+    const inlineUri = `promptfoo://blob/${inlineHash}`;
+    const remainingUri = `promptfoo://blob/${remainingHash}`;
+    const cache = createRemoteBlobUploadCache();
+    const context = { localEvalId: 'source', remoteEvalId: 'recipient', promptIdx: 2, testIdx: 1 };
+    recordResultBlobRefsForShare([inlineUri, remainingUri], cache, context, [
+      'data:image/png;base64,aW1hZ2U=',
+      remainingUri,
+    ]);
+
+    await uploadRecordedResultBlobRefsForShare(cache);
+    expect(getShareAuthorizedBlob).toHaveBeenCalledExactlyOnceWith(remainingHash, 'source');
+
+    await uploadTraceBlobRefsForShare([inlineUri, remainingUri], cache, {
+      localEvalId: 'source',
+      remoteEvalId: 'recipient',
+    });
+    expect(getShareAuthorizedBlob).toHaveBeenCalledTimes(2);
+    expect(getShareAuthorizedBlob).toHaveBeenLastCalledWith(inlineHash, 'source');
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
+    for (const call of vi.mocked(uploadBlobRemote).mock.calls) {
+      expect(call[2]).toMatchObject({ promptIdx: 2, testIdx: 1 });
+    }
+  });
+
   it('does not upload a copied blob URI that is not share-authorized for the eval', async () => {
     const hash = 'd'.repeat(64);
     vi.mocked(getShareAuthorizedBlob).mockResolvedValue(null);
@@ -242,6 +436,38 @@ describe('share-time blob upload', () => {
     expect(uploadBlobRemote).toHaveBeenCalledOnce();
   });
 
+  it('bounds unique blob preparation to one upload at a time', async () => {
+    const firstHash = '1'.repeat(64);
+    const secondHash = '2'.repeat(64);
+    let activeUploads = 0;
+    let maxActiveUploads = 0;
+    vi.mocked(uploadBlobRemote).mockImplementation(async () => {
+      activeUploads += 1;
+      maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+      await Promise.resolve();
+      activeUploads -= 1;
+      return {
+        deduplicated: false,
+        ref: {
+          hash: firstHash,
+          mimeType: 'image/png',
+          provider: 'cloud',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${firstHash}`,
+        },
+      };
+    });
+
+    await uploadBlobRefsForShare(
+      [`promptfoo://blob/${firstHash}`, `promptfoo://blob/${secondHash}`],
+      createRemoteBlobUploadCache(),
+      { localEvalId: 'local-eval-bounded', remoteEvalId: 'remote-eval-bounded' },
+    );
+
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
+    expect(maxActiveUploads).toBe(1);
+  });
+
   it('skips the blob without failing the share when the authorization check errors', async () => {
     const hash = '9'.repeat(64);
     vi.mocked(getShareAuthorizedBlob).mockRejectedValue(new Error('db locked'));
@@ -260,6 +486,35 @@ describe('share-time blob upload', () => {
         error: 'db locked',
         hash,
       }),
+    );
+  });
+
+  it('uses an explicit remote target after authorizing the local blob', async () => {
+    const hash = '7'.repeat(64);
+    const target = {
+      url: 'https://self-hosted.example/api/blobs',
+      authHeaders: { 'X-Share-Token': 'token' },
+    };
+
+    await uploadBlobRefsForShare(
+      `promptfoo://blob/${hash}`,
+      createRemoteBlobUploadCache(),
+      { localEvalId: 'local-eval', remoteEvalId: 'remote-eval' },
+      target,
+    );
+
+    expect(getShareAuthorizedBlob).toHaveBeenCalledWith(hash, 'local-eval');
+    expect(uploadBlobRemote).toHaveBeenCalledWith(
+      Buffer.from('image-bytes'),
+      'image/png',
+      {
+        evalId: 'remote-eval',
+        kind: 'image',
+        location: 'share',
+        promptIdx: undefined,
+        testIdx: undefined,
+      },
+      target,
     );
   });
 });

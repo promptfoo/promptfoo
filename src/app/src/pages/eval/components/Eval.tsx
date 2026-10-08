@@ -78,7 +78,8 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const { filterMode } = useFilterMode();
 
-  const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
+  const { comparisonEvalIds, setInComparisonMode, setComparisonEvalIds } =
+    useResultsViewSettingsStore();
 
   // ================================
   // State
@@ -163,7 +164,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   /**
    * Populates the table store from a websocket signal. Explicit /eval/:id routes stay
-   * pinned (they only reload when their own eval changes), while the root /eval route
+   * pinned, including updates to their comparison evals, while the root /eval route
    * follows the latest eval. Held in a ref (below) so the socket effect never has to tear
    * down and reopen the connection when this handler's dependencies (e.g. filterMode via
    * loadEvalById, or fetchId on navigation) change.
@@ -177,6 +178,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
     const deletedEvalIds = 'deletedEvalIds' in data ? data.deletedEvalIds : undefined;
     const scopedEvalId = 'evalId' in data ? data.evalId : undefined;
+    const displayedEvalId = fetchId ?? currentEvalIdRef.current;
 
     // Reload the displayed table in the background, suppressing the page-level loading
     // flash. Streaming is scoped to the actual reload so signals that don't change the
@@ -191,13 +193,16 @@ export default function Eval({ fetchId }: EvalOptions) {
       }
     };
 
-    // Pinned /eval/:id route + a scoped update for THIS eval: reload it directly via
-    // /eval/:id/table. The recent-evals list is only needed for the dropdown, so fetch it
-    // concurrently and don't let a transient /api/results failure drop the pinned eval's refresh.
-    if (fetchId && deletedEvalIds === undefined && scopedEvalId === fetchId) {
+    // Refresh the displayed table when one of its evaluations changes, even if recents fail.
+    if (
+      displayedEvalId &&
+      deletedEvalIds === undefined &&
+      scopedEvalId &&
+      (scopedEvalId === fetchId || comparisonEvalIds.includes(scopedEvalId))
+    ) {
       const [recents] = await Promise.all([
         fetchRecentFileEvals({ reportFailure: false }),
-        reloadInBackground(fetchId),
+        reloadInBackground(displayedEvalId),
       ]);
       if (recents && recents.length > 0) {
         setDefaultEvalId(recents[0].evalId);
@@ -228,7 +233,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const latestEvalId = newRecentEvals[0].evalId;
-    const displayedEvalId = fetchId ?? currentEvalIdRef.current;
     setDefaultEvalId(latestEvalId);
 
     if (deletedEvalIds) {

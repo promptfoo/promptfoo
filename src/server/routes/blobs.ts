@@ -1,7 +1,17 @@
-import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, like, or, sql } from 'drizzle-orm';
 import express from 'express';
-import { getBlobStorageProvider, isSafeInlineBlobMimeType, type StoredBlob } from '../../blobs';
+import {
+  BLOB_MAX_BASE64_SIZE,
+  BLOB_MAX_SIZE,
+  getBlobStorageProvider,
+  getBlobUrl,
+  isBlobAllowedForShare,
+  isSafeInlineBlobMimeType,
+  type StoredBlob,
+  storeBlob,
+} from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
+import { BLOB_MIME_TYPE_FALLBACK, sanitizeBlobMimeType } from '../../blobs/mimeTypes';
 import { getDb } from '../../database';
 import {
   blobAssetsTable,
@@ -10,16 +20,80 @@ import {
   evalsTable,
 } from '../../database/tables';
 import logger from '../../logger';
+import { notifyEvaluationChanged } from '../../models/evalMutation';
 import { BlobsSchemas } from '../../types/api/blobs';
 import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const blobsRouter = express.Router();
 
-// Strict MIME type validation to prevent header injection attacks
-// Only allow: type/subtype where both are alphanumeric with dash/underscore/plus
-// Periods are NOT allowed to prevent attacks like "audio/wav.html" being interpreted as HTML
-const SAFE_MIME_TYPE_REGEX = /^[a-z]+\/[a-z0-9_+-]+$/i;
+function decodeBase64(value: string): Buffer | null {
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
+    return null;
+  }
+  const data = Buffer.from(value, 'base64');
+  if (data.length === 0) {
+    // Pad-only input (e.g. "=") passes the charset check but decodes to nothing.
+    return null;
+  }
+  const normalizedInput = value.replace(/=+$/, '');
+  const normalizedOutput = data.toString('base64').replace(/=+$/, '');
+  return normalizedInput === normalizedOutput ? data : null;
+}
+
+blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
+  if (!isBlobStorageEnabled()) {
+    res.status(404).json({ error: 'Blob storage disabled' });
+    return;
+  }
+
+  if (typeof req.body?.data === 'string' && req.body.data.length > BLOB_MAX_BASE64_SIZE) {
+    res.status(413).json({ error: 'Blob exceeds maximum size' });
+    return;
+  }
+
+  const bodyResult = BlobsSchemas.Upload.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    replyValidationError(res, bodyResult.error);
+    return;
+  }
+
+  const data = decodeBase64(bodyResult.data.data);
+  if (!data) {
+    res.status(400).json({ error: 'Invalid base64 data' });
+    return;
+  }
+  if (data.length > BLOB_MAX_SIZE) {
+    res.status(413).json({ error: 'Blob exceeds maximum size' });
+    return;
+  }
+
+  const { context } = bodyResult.data;
+  const { evalId } = context;
+
+  // Use the same passive-media policy as portable imports.
+  const mimeType = sanitizeBlobMimeType(bodyResult.data.mimeType);
+  // The library kind must match the stored MIME, including deduplicated objects.
+  const refContext = { ...context, kindFromMimeType: getKindFromMimeType };
+  try {
+    const db = await getDb();
+    const evalExists = await db
+      .select({ id: evalsTable.id })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evalId))
+      .get();
+    if (!evalExists) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    const result = await storeBlob(data, mimeType, refContext);
+    notifyEvaluationChanged(evalId);
+    res.json(BlobsSchemas.Upload.Response.parse(result));
+  } catch (error) {
+    sendError(res, 500, 'Failed to store blob', error);
+  }
+});
 
 /**
  * Determine media kind from mime type
@@ -121,6 +195,9 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
 
     // Build WHERE conditions for filtering
     const filterConditions = [];
+    filterConditions.push(
+      or(isNotNull(blobReferencesTable.kind), eq(blobReferencesTable.location, 'import')),
+    );
 
     if (hash) {
       filterConditions.push(eq(blobAssetsTable.hash, hash));
@@ -226,7 +303,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
           // Pick one reference per blob: most recent by created_at, rowid as tiebreaker
           eq(
             blobReferencesTable.id,
-            sql`(SELECT r2.id FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash}${evalFilterClause} ORDER BY r2.created_at DESC, r2.rowid DESC LIMIT 1)`,
+            sql`(SELECT r2.id FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash}${evalFilterClause} AND (r2.kind IS NOT NULL OR r2.location = 'import') ORDER BY r2.created_at DESC, r2.rowid DESC LIMIT 1)`,
           ),
         ),
       )
@@ -312,7 +389,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
         sizeBytes: item.sizeBytes,
         kind: item.kind || getKindFromMimeType(item.mimeType),
         createdAt: parseTimestamp(item.createdAt),
-        url: `/api/blobs/${item.hash}`,
+        url: `/api/blobs/${item.hash}?evalId=${encodeURIComponent(item.evalId)}`,
         context: {
           evalId: item.evalId,
           evalDescription: item.evalDescription || undefined,
@@ -378,7 +455,9 @@ blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<v
   try {
     const db = await getDb();
 
-    const conditions = [];
+    const conditions = [
+      or(isNotNull(blobReferencesTable.kind), eq(blobReferencesTable.location, 'import')),
+    ];
     if (search) {
       // Escape SQL LIKE wildcards so user input is treated as literal text.
       // First escape backslashes (the ESCAPE character), then escape % and _.
@@ -447,43 +526,47 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  // Security: Check that a reference exists for this blob
-  // NOTE: In the OSS version, this is a local-only server with no user authentication.
-  // For multi-tenant deployments (e.g., Promptfoo Cloud), additional authorization is needed:
-  // - Verify the requesting user has access to the evaluation (reference.evalId)
-  // - Check user/team ownership before serving the blob
-  // - Implement proper session/token-based authentication
-  const reference = await db
-    .select({ evalId: blobReferencesTable.evalId })
-    .from(blobReferencesTable)
-    .where(eq(blobReferencesTable.blobHash, hash))
-    .get();
+  const queryResult = BlobsSchemas.Get.Query.safeParse(req.query);
+  if (!queryResult.success) {
+    replyValidationError(res, queryResult.error);
+    return;
+  }
+  const { evalId } = queryResult.data;
 
-  if (!reference) {
+  // Blob references are scoped to the evaluation being viewed. Deployments with user
+  // authentication must additionally verify access to that evaluation.
+  if (!(await isBlobAllowedForShare(hash, evalId))) {
     logger.warn('[BlobRoute] Missing reference for blob access', { hash });
     res.status(403).json({ error: 'Not authorized to access this blob' });
     return;
   }
 
+  const assetMimeType = sanitizeBlobMimeType(asset.mimeType);
   let blob: StoredBlob;
   try {
-    const provider = getBlobStorageProvider();
-    blob = await provider.getByHash(hash);
-    // Retained objects can have a different MIME from their later import registration.
-    // Only redirect when the stored MIME agrees with the registered passive type.
+    blob = await getBlobStorageProvider().getByHash(hash);
+  } catch (error) {
+    logger.error('[BlobRoute] Failed to load blob', { error, hash });
+    res.status(404).json({ error: 'Blob not found' });
+    return;
+  }
+
+  try {
+    // Retained storage metadata can differ from a later import's registered MIME.
     const presigned =
-      isSafeInlineBlobMimeType(asset.mimeType) &&
-      blob.metadata.mimeType.toLowerCase() === asset.mimeType.toLowerCase()
-        ? await provider.getUrl(hash)
+      asset.provider !== 'local' &&
+      asset.provider !== 'filesystem' &&
+      assetMimeType !== BLOB_MIME_TYPE_FALLBACK &&
+      assetMimeType === asset.mimeType.trim().toLowerCase() &&
+      blob.metadata.mimeType.toLowerCase() === assetMimeType
+        ? await getBlobUrl(hash)
         : null;
     if (presigned) {
       res.redirect(302, presigned);
       return;
     }
   } catch (error) {
-    logger.error('[BlobRoute] Failed to load blob', { error, hash });
-    res.status(404).json({ error: 'Blob not found' });
-    return;
+    logger.debug('[BlobRoute] Failed to create blob redirect', { error, hash });
   }
 
   const dataResult = BlobsSchemas.Get.BinaryResponse.safeParse(blob.data);
@@ -493,19 +576,12 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   }
 
   // Validate MIME type before setting header to prevent injection attacks
-  // Match the registered-MIME getter while reusing the bytes already read above.
-  const mimeType = asset.mimeType;
-  if (SAFE_MIME_TYPE_REGEX.test(mimeType)) {
-    res.setHeader('Content-Type', mimeType);
-  } else {
-    logger.warn('[BlobRoute] Invalid MIME type, using fallback', { mimeType, hash });
-    res.setHeader('Content-Type', 'application/octet-stream');
-  }
-  // Deduplicated bytes can retain MIME metadata from before a failed import/store.
-  // Keep opaque storage metadata intact, but never render active content inline here.
+  const mimeType = assetMimeType;
+  res.setHeader('Content-Type', mimeType);
   if (!isSafeInlineBlobMimeType(mimeType)) {
     res.setHeader('Content-Disposition', 'attachment');
   }
+  // Defense in depth: never let the browser MIME-sniff stored bytes into active content.
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

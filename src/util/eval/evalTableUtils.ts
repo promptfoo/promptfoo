@@ -631,6 +631,15 @@ export function mergeComparisonTables(
   mainTable: TablePageResult,
   comparisonData: Array<{ evalId: string; table: TablePageResult }>,
 ): TablePageResult {
+  const sourceOutputs = (evalId: string, row: EvaluateTableRow) => {
+    const testCaseId = row.test?.metadata?.testCaseId;
+    return row.outputs.map((output, sourcePromptIndex) => ({
+      ...output,
+      sourceEvalId: evalId,
+      sourcePromptIndex,
+      sourceTestCaseId: typeof testCaseId === 'string' ? testCaseId : undefined,
+    }));
+  };
   return {
     head: {
       prompts: [
@@ -651,14 +660,14 @@ export function mergeComparisonTables(
     },
     body: mainTable.body.map((row) => {
       const testIdx = row.testIdx;
-      // Find matching rows in comparison tables by test index
-      const matchingRows = comparisonData
-        .map(({ table }) => table.body.find((compRow) => compRow.testIdx === testIdx))
-        .filter((r): r is EvaluateTableRow => r !== undefined);
+      const comparedOutputs = comparisonData.flatMap(({ evalId, table }) => {
+        const comparisonRow = table.body.find((compRow) => compRow.testIdx === testIdx);
+        return comparisonRow ? sourceOutputs(evalId, comparisonRow) : [];
+      });
 
       return {
         ...row,
-        outputs: [...row.outputs, ...matchingRows.flatMap((r) => r.outputs)],
+        outputs: [...sourceOutputs(mainEvalId, row), ...comparedOutputs],
       };
     }),
   };

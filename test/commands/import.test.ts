@@ -526,7 +526,7 @@ describe('importCommand', () => {
         storedMimeType: 'image/png',
         importedMimeType: 'image/png',
         expectedMimeType: 'image/png',
-        redirect: true,
+        redirect: false,
         contents: Buffer.from(
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5K0AAAAASUVORK5CYII=',
           'base64',
@@ -602,7 +602,7 @@ describe('importCommand', () => {
             ),
           ).toEqual([{ eval_id: sampleData.evalId, location: 'import' }]);
           const response = await request(app)
-            .get(`/api/blobs/${hash}`)
+            .get(`/api/blobs/${hash}?evalId=${sampleData.evalId}`)
             .redirects(1)
             .buffer(true)
             .parse((res, callback) => {
@@ -627,7 +627,9 @@ describe('importCommand', () => {
           expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
           await expect(getShareAuthorizedBlob(hash, 'unrelated-eval')).resolves.toBeNull();
           await db.run(sql`DELETE FROM blob_references WHERE blob_hash = ${hash}`);
-          expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(403);
+          expect(
+            (await request(app).get(`/api/blobs/${hash}?evalId=${sampleData.evalId}`)).status,
+          ).toBe(403);
           expect(fs.readFileSync(blobPath)).toEqual(data);
         } finally {
           getUrl.mockRestore();
