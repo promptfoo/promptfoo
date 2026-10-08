@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 
 import * as yaml from 'js-yaml';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -249,6 +250,36 @@ describe('exact artifact release', () => {
     expect(mirror.if).toContain("needs.build.result == 'success'");
     expect(mirror.if).not.toContain('needs.build-npm');
     expect(mirror.if).not.toContain('needs.publish-npm.result');
+  });
+
+  it.each([
+    { npm: 'success', mirror: 'success', cancelled: false, runs: true },
+    { npm: 'skipped', mirror: 'success', cancelled: false, runs: true },
+    { npm: 'failure', mirror: 'success', cancelled: false, runs: true },
+    { npm: 'success', mirror: 'failure', cancelled: false, runs: false },
+    { npm: 'skipped', mirror: 'skipped', cancelled: false, runs: false },
+    { npm: 'skipped', mirror: 'cancelled', cancelled: false, runs: false },
+    { npm: 'success', mirror: 'success', cancelled: true, runs: false },
+  ])('schedules action provenance for publication results %j', (scenario) => {
+    const attestation = workflow.jobs['attest-code-scan-action'];
+    const expression = (attestation.if ?? 'success()')
+      .replace(/^\s*\$\{\{\s*|\s*\}\}\s*$/g, '')
+      .replaceAll('needs.publish-code-scan-action.result', 'mirrorResult');
+    // GitHub implicitly requires success across the dependency chain unless
+    // the guard uses a status function. Evaluate this guard's JS-compatible
+    // expression against the skipped npm ancestor of an action-only release.
+    const hasStatusFunction = /\b(always|cancelled|success|failure)\s*\(/.test(expression);
+    const scheduled = runInNewContext(
+      hasStatusFunction ? expression : 'success() && (' + expression + ')',
+      {
+        always: () => true,
+        cancelled: () => scenario.cancelled,
+        success: () =>
+          !scenario.cancelled && scenario.npm === 'success' && scenario.mirror === 'success',
+        mirrorResult: scenario.mirror,
+      },
+    );
+    expect(scheduled).toBe(scenario.runs);
   });
 
   it('detects current packers and legacy native SQLite from tag manifests', () => {
