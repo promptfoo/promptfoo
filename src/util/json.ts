@@ -221,15 +221,12 @@ function extractStrictJsonObject(
 ): { object: object; end: number } | undefined {
   let depth = 0;
   let inString = false;
-  let escaped = false;
 
   for (let index = start; index < Math.min(start + maxLength, str.length); index++) {
     const char = str[index];
     if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
+      if (char === '\\') {
+        index++;
       } else if (char === '"') {
         inString = false;
       }
