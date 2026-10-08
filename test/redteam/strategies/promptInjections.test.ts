@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import data from '../../../src/redteam/strategies/promptInjections/data';
 import { addInjections } from '../../../src/redteam/strategies/promptInjections/index';
 
 import type { TestCase } from '../../../src/types/index';
@@ -49,6 +50,19 @@ describe('addInjections', () => {
       expect(testCase.vars?.prompt).toBeDefined();
       expect(testCase.vars?.prompt).not.toBe('Hello world'); // Should be modified
     });
+  });
+
+  it('should include the attack prompt in every template', async () => {
+    const testCases: TestCase[] = [{ vars: { prompt: 'Hello world' } }];
+
+    const result = await addInjections(testCases, 'prompt', { sample: data.length });
+
+    expect(result).toHaveLength(data.length);
+    expect(
+      result
+        .map((testCase) => String(testCase.vars?.prompt))
+        .filter((prompt) => !prompt.includes('Hello world')),
+    ).toEqual([]);
   });
 
   it('should preserve an explicit sample size of 0', async () => {
