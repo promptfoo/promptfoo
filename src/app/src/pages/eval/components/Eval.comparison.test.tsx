@@ -1,3 +1,4 @@
+import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, cleanup, screen, waitFor } from '@testing-library/react';
@@ -70,6 +71,7 @@ vi.mock('./EvalSelectorDialog', () => ({
 
 const initialTableState = useTableStore.getState();
 const initialSettings = useResultsViewSettingsStore.getState();
+const initialApiConfig = useApiConfig.getState();
 
 function Navigation() {
   const navigate = useNavigate();
@@ -186,6 +188,7 @@ afterEach(() => {
   cleanup();
   useTableStore.setState(initialTableState);
   useResultsViewSettingsStore.setState(initialSettings);
+  useApiConfig.setState(initialApiConfig);
   vi.restoreAllMocks();
 });
 
@@ -425,6 +428,71 @@ describe('evaluation comparison URLs', () => {
       expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-a$/),
     );
   });
+
+  it.each(['http', 'network'])(
+    'keeps the loaded latest evaluation when a filter change cannot refresh recents (%s)',
+    async (failure) => {
+      tableFixture.realTable = true;
+      tableFixture.rowCount = 120;
+      const user = userEvent.setup();
+      renderPage('/eval');
+      await screen.findByText('eval-a row-0');
+      await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
+      await user.click(screen.getByRole('option', { name: '10' }));
+      await waitFor(() => expect(screen.getAllByTestId('output')).toHaveLength(10));
+      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      vi.mocked(callApi).mockImplementation((path, options) => {
+        if (path === '/results') {
+          return failure === 'http'
+            ? Promise.resolve(new Response(null, { status: 503 }))
+            : Promise.reject(new Error('Network unavailable'));
+        }
+        return defaultApi(path, options);
+      });
+      await user.click(screen.getByRole('button', { name: 'Passes' }));
+      await waitFor(() => expect(useTableStore.getState().isFetching).toBe(false));
+      const requests = tableRequests();
+      expect(requests[requests.length - 1].searchParams.get('filterMode')).toBe('passes');
+      expect(requests[requests.length - 1].searchParams.get('limit')).toBe('10');
+      expect(screen.queryByText('404 Eval not found')).not.toBeInTheDocument();
+      expect(screen.getByText('eval-a row-0')).toBeInTheDocument();
+      expect(screen.getAllByTestId('output')).toHaveLength(10);
+    },
+  );
+
+  it.each(['/eval', '/eval/eval-a'])(
+    'does not retain another API server’s results after a failed server switch on %s',
+    async (route) => {
+      renderPage(route);
+      await screen.findByTestId('comparison-columns');
+      await waitFor(() => expect(useTableStore.getState().isFetching).toBe(false));
+      vi.mocked(callApi).mockResolvedValue(new Response(null, { status: 404 }));
+      await act(async () => {
+        useApiConfig.getState().setApiBaseUrl('http://other-api.example');
+      });
+      await screen.findByText('404 Eval not found');
+      expect(screen.queryByTestId('comparison-columns')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Eval actions/ })).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(['http', 'network', 'empty'])(
+    'keeps initial unavailable and empty latest-evaluation lookups distinct (%s)',
+    async (outcome) => {
+      vi.mocked(callApi).mockImplementation(() =>
+        outcome === 'network'
+          ? Promise.reject(new Error('Network unavailable'))
+          : Promise.resolve(
+              outcome === 'http'
+                ? new Response(null, { status: 503 })
+                : new Response(JSON.stringify({ data: [] })),
+            ),
+      );
+      renderPage('/eval');
+      await screen.findByText(outcome === 'empty' ? 'Welcome to Promptfoo' : '404 Eval not found');
+      expect(tableRequests()).toHaveLength(0);
+    },
+  );
 
   it('preserves custom page size when changing filter mode', async () => {
     tableFixture.realTable = true;

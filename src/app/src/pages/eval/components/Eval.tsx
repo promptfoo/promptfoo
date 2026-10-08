@@ -453,7 +453,16 @@ export default function Eval({ fetchId }: EvalOptions) {
           return;
         }
         if (!evals) {
-          setFailed(true);
+          const current = useTableStore.getState();
+          if (
+            current.table &&
+            current.tableSource?.evalId === current.evalId &&
+            current.tableSource.apiBaseUrl === apiBaseUrl
+          ) {
+            await loadEvalById(current.evalId);
+          } else {
+            setFailed(true);
+          }
           return;
         }
         if (evals.length > 0) {
@@ -581,6 +590,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ================================
 
   const tableMatchesSelection =
+    tableSource?.apiBaseUrl === apiBaseUrl &&
     tableSource?.evalId === evalId &&
     JSON.stringify(tableSource?.comparisonEvalIds) ===
       JSON.stringify(comparisonEvalIds.filter((id) => id !== evalId));

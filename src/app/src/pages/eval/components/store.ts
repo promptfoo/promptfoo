@@ -1,4 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
@@ -304,7 +305,11 @@ interface TableState {
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   tableError: boolean;
-  tableSource: { evalId: string; comparisonEvalIds: string[] } | null;
+  tableSource: {
+    apiBaseUrl: string | undefined;
+    evalId: string;
+    comparisonEvalIds: string[];
+  } | null;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
 
@@ -724,6 +729,7 @@ export const useTableStore = create<TableState>()(
         });
 
         // Remove the origin as it was only added to satisfy the URL constructor.
+        const { apiBaseUrl } = useApiConfig.getState();
         const resp = await callApi(url.toString().replace(window.location.origin, ''));
 
         if (resp.ok) {
@@ -743,7 +749,7 @@ export const useTableStore = create<TableState>()(
           set((prevState) => ({
             table: data.table,
             tableError: false,
-            tableSource: { evalId: id, comparisonEvalIds },
+            tableSource: { apiBaseUrl, evalId: id, comparisonEvalIds },
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
