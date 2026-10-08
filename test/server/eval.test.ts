@@ -10,6 +10,8 @@ import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
+import type { EvaluateResult, GradingResult } from '../../src/types/index';
+
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
   return {
@@ -94,19 +96,24 @@ describe('eval routes', () => {
     );
   }
 
-  function createManualRatingPayload(originalResult: any, pass: boolean) {
-    const payload = { ...originalResult.gradingResult };
+  function createManualRatingPayload(
+    originalResult: Pick<EvaluateResult, 'gradingResult'>,
+    pass: boolean,
+  ): GradingResult {
     const score = pass ? 1 : 0;
-    payload.componentResults?.push({
+    const reason = 'Manual result (overrides all other grading results)';
+    return {
+      ...originalResult.gradingResult,
       pass,
       score,
-      reason: 'Manual result (overrides all other grading results)',
-      assertion: { type: 'human' },
-    });
-    payload.reason = 'Manual result (overrides all other grading results)';
-    payload.pass = pass;
-    payload.score = score;
-    return payload;
+      reason,
+      componentResults: [
+        ...(originalResult.gradingResult?.componentResults?.filter(
+          (result) => result.assertion?.type !== 'human',
+        ) ?? []),
+        { pass, score, reason, assertion: { type: 'human' } },
+      ],
+    };
   }
 
   describe('POST /', () => {
@@ -239,6 +246,156 @@ describe('eval routes', () => {
         evalSaveSpy.mock.invocationCallOrder[0],
       );
     });
+
+    it.each([
+      { resultIndex: 0, manualOverride: false },
+      { resultIndex: 1, manualOverride: false },
+      { resultIndex: 0, manualOverride: true },
+      { resultIndex: 1, manualOverride: true },
+    ])(
+      'keeps metrics unchanged across repeated annotations ($resultIndex, manual=$manualOverride)',
+      async ({ resultIndex, manualOverride }) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const result = (await eval_.getResults())[resultIndex];
+        const url = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+        const gradingResult = manualOverride
+          ? createManualRatingPayload(result, !result.success)
+          : result.gradingResult;
+        invariant(gradingResult, 'Grading result is required');
+
+        if (manualOverride) {
+          expect((await api.post(url).send(gradingResult)).status).toBe(200);
+        }
+        const before = await Eval.findById(eval_.id);
+        invariant(before, 'Eval is required');
+        const expectedMetrics = before.prompts[result.promptIdx].metrics;
+
+        for (const comment of ['Note', '!highlight Note', '!highlight Edited', 'Edited', '', '']) {
+          const payload = { ...gradingResult, comment };
+          const res = await api.post(url).send(payload);
+          expect(res.status).toBe(200);
+          expect(res.body.gradingResult).toEqual(payload);
+          const updatedEval = await Eval.findById(eval_.id);
+          expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual(expectedMetrics);
+        }
+      },
+    );
+
+    it.each([{ componentResults: undefined }, { componentResults: [] }])(
+      'handles a grading result without assertion components ($componentResults)',
+      async ({ componentResults }) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const result = (await eval_.getResults())[0];
+        invariant(result instanceof EvalResult, 'EvalResult is required');
+        invariant(result.gradingResult, 'Grading result is required');
+        result.gradingResult.componentResults = componentResults;
+        await result.save();
+        const metrics = eval_.prompts[result.promptIdx].metrics;
+        invariant(metrics, 'Metrics are required');
+        metrics.assertPassCount = 0;
+        await eval_.save();
+        const url = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+
+        for (const [gradingResult, assertPassCount] of [
+          [{ ...result.gradingResult, comment: '!highlight Note' }, 0],
+          [createManualRatingPayload(result, true), 1],
+          [result.gradingResult, 0],
+        ] as const) {
+          expect((await api.post(url).send(gradingResult)).status).toBe(200);
+          const updatedEval = await Eval.findById(eval_.id);
+          expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual({
+            ...metrics,
+            assertPassCount,
+          });
+        }
+      },
+    );
+
+    it.each([0, 1])(
+      'accounts for adding, flipping, and clearing manual assertions on result %i',
+      async (resultIndex) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const result = (await eval_.getResults())[resultIndex];
+        const url = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+        const originalGradingResult = result.gradingResult;
+        invariant(originalGradingResult, 'Grading result is required');
+        const originalMetrics = eval_.prompts[result.promptIdx].metrics;
+        const passingMetrics = {
+          ...originalMetrics,
+          score: resultIndex === 0 ? 1 : 2,
+          testPassCount: resultIndex === 0 ? 1 : 2,
+          testFailCount: resultIndex === 0 ? 1 : 0,
+          assertPassCount: 2,
+          assertFailCount: 1,
+        };
+        const failingMetrics = {
+          ...originalMetrics,
+          score: resultIndex === 0 ? 0 : 1,
+          testPassCount: resultIndex === 0 ? 0 : 1,
+          testFailCount: resultIndex === 0 ? 2 : 1,
+          assertPassCount: 1,
+          assertFailCount: 2,
+        };
+
+        for (const [gradingResult, expectedMetrics] of [
+          [createManualRatingPayload(result, true), passingMetrics],
+          [createManualRatingPayload(result, false), failingMetrics],
+          [originalGradingResult, originalMetrics],
+          [createManualRatingPayload(result, true), passingMetrics],
+          [originalGradingResult, originalMetrics],
+        ] as const) {
+          // Retrying any rating must not count the same assertion twice.
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const res = await api.post(url).send(gradingResult);
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(gradingResult.pass);
+            expect(res.body.score).toBe(gradingResult.score);
+            expect(res.body.gradingResult).toEqual(gradingResult);
+            const updatedEval = await Eval.findById(eval_.id);
+            expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual(expectedMetrics);
+          }
+        }
+      },
+    );
+
+    it.each([
+      { resultIndex: 0, manualOverride: false },
+      { resultIndex: 1, manualOverride: false },
+      { resultIndex: 0, manualOverride: true },
+      { resultIndex: 1, manualOverride: true },
+    ])(
+      'updates score totals without changing counts ($resultIndex, manual=$manualOverride)',
+      async ({ resultIndex, manualOverride }) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const result = (await eval_.getResults())[resultIndex];
+        const url = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+        const gradingResult = manualOverride
+          ? createManualRatingPayload(result, !result.success)
+          : result.gradingResult;
+        invariant(gradingResult, 'Grading result is required');
+        if (manualOverride) {
+          expect((await api.post(url).send(gradingResult)).status).toBe(200);
+        }
+        const before = await Eval.findById(eval_.id);
+        const originalMetrics = before?.prompts[result.promptIdx].metrics;
+        invariant(originalMetrics, 'Metrics are required');
+
+        for (const score of [0.25, 0.75, 0.75]) {
+          const res = await api.post(url).send({ ...gradingResult, score });
+          expect(res.status).toBe(200);
+          expect(res.body.score).toBe(score);
+          const updatedEval = await Eval.findById(eval_.id);
+          expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual({
+            ...originalMetrics,
+            score: originalMetrics.score - gradingResult.score + score,
+          });
+        }
+      },
+    );
 
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();
