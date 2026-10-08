@@ -187,6 +187,14 @@ describe('PROMPTFOO_DISABLE_OBJECT_STRINGIFY environment variable', () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_OBJECT_STRINGIFY: 'false' });
     });
 
+    it('renders null values and null array entries as JSON text', async () => {
+      const result = await renderLlmRubricPrompt(
+        '{{output}}|{% for item in items %}{{item}}{% endfor %}',
+        { output: null, items: [null] },
+      );
+      expect(result).toBe('null|null');
+    });
+
     it('should stringify objects to prevent [object Object] issues', async () => {
       const template = 'Product: {{product}}';
       const product = { name: 'Headphones', price: 99.99 };
@@ -213,6 +221,14 @@ describe('PROMPTFOO_DISABLE_OBJECT_STRINGIFY environment variable', () => {
   describe('Object access enabled (PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true)', () => {
     beforeEach(() => {
       mockProcessEnv({ PROMPTFOO_DISABLE_OBJECT_STRINGIFY: 'true' });
+    });
+
+    it('preserves typed null values when object access is enabled', async () => {
+      const result = await renderLlmRubricPrompt('{{output | dump}}|{{items | dump}}', {
+        output: null,
+        items: [null],
+      });
+      expect(result).toBe('null|[null]');
     });
 
     it('should allow direct object property access', async () => {

@@ -614,8 +614,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             config.response_format?.type === 'json_object')
         ) {
           try {
-            // Preserve valid JSON null text instead of representing a missing response.
-            output = JSON.parse(output) ?? output;
+            output = JSON.parse(output);
           } catch (err) {
             logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
           }

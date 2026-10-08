@@ -60,6 +60,23 @@ function makeSuite() {
 }
 
 describeEvaluator('select-best runtime grading configuration', () => {
+  it('preserves null data when comparing outputs', async () => {
+    const { grader, suite, target } = makeSuite();
+    vi.mocked(target.callApi).mockImplementation(async (prompt) => ({
+      output: prompt === 'first' ? null : 'candidate',
+    }));
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+    await evaluate(suite, record, { maxConcurrency: 1 });
+
+    expect(grader.callApi).toHaveBeenCalledOnce();
+    expect(JSON.parse(vi.mocked(grader.callApi).mock.calls[0][0])[0].content).toContain(
+      '<Text index="0">\nnull\n</Text>',
+    );
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(rows.find((row) => row.promptIdx === 0)?.response).toHaveProperty('output', null);
+  });
+
   it.each([0, 10000])('grades the replacement test with timeoutMs=%s', async (timeoutMs) => {
     const { grader, suite } = makeSuite();
     vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {

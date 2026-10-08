@@ -164,6 +164,9 @@ describe('convertResultsToTable', () => {
 
     const result = convertResultsToTable(resultsFile);
     expect(result.body[0].outputs[0].text).toBe('Provider returned null');
+
+    resultsFile.results.results[0].error = undefined;
+    expect(convertResultsToTable(resultsFile).body[0].outputs[0].text).toBe('null');
   });
 
   it('should preserve falsy var values like 0 and false', () => {

@@ -401,7 +401,7 @@ describe('AzureChatCompletionProvider', () => {
     );
 
     it.each(['json_schema', 'json_object'] as const)(
-      'preserves JSON null text in %s responses',
+      'retains parsed JSON null in %s responses',
       async (type) => {
         provider.config.response_format =
           type === 'json_object'
@@ -423,7 +423,7 @@ describe('AzureChatCompletionProvider', () => {
 
         const result = await provider.callApi('Return JSON null');
 
-        expect(result.output).toBe('null');
+        expect(result.output).toBeNull();
         expect(result.error).toBeUndefined();
       },
     );

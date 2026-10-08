@@ -4,9 +4,10 @@ import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
-import { mockApiProvider, toPrompt } from './helpers';
+import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator transforms', () => {
@@ -433,7 +434,7 @@ describeEvaluator('evaluator transforms', () => {
     const mockApiProviderNoOutput: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-no-output'),
       callApi: vi.fn().mockResolvedValue({
-        output: null,
+        output: undefined,
         tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
       }),
     };
@@ -456,6 +457,59 @@ describeEvaluator('evaluator transforms', () => {
     expect(summary.results[0].score).toBe(0);
     expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
   });
+
+  it.each([false, true])(
+    'preserves null data with a provider transform=%s',
+    async (transformed) => {
+      const provider: ApiProvider = {
+        id: () => 'null-data-provider',
+        callApi: vi.fn().mockResolvedValue({ output: transformed ? '{"value":null}' : null }),
+        ...(transformed ? { transform: 'JSON.parse(output).value' } : {}),
+      };
+      const assertion = vi.fn(
+        (output, context) => output === 'null' && context.providerResponse.output === null,
+      );
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Return a JSON value')],
+        redteam: {},
+        extensions: ['file://null-data-hook.js'],
+        tests: [
+          {
+            options: { provider: mockGradingApiProviderPasses },
+            assert: [
+              { type: 'javascript', value: assertion },
+              { type: 'javascript', value: 'output === null' },
+              { type: 'is-json', value: { type: 'null' } },
+              { type: 'llm-rubric', value: 'The output is valid for this task' },
+            ],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+      await evaluate(suite, record, {});
+      const summary = await record.toEvaluateSummary();
+
+      expect(assertion).toHaveBeenCalledWith(
+        'null',
+        expect.objectContaining({ providerResponse: expect.objectContaining({ output: null }) }),
+      );
+      expect(mockGradingApiProviderPasses.callApi).toHaveBeenCalledOnce();
+      expect(
+        JSON.parse(vi.mocked(mockGradingApiProviderPasses.callApi).mock.calls[0][0])[1].content,
+      ).toContain('<Output>\nnull\n</Output>');
+      expect(runExtensionHook).toHaveBeenCalledWith(
+        suite.extensions,
+        'afterEach',
+        expect.objectContaining({
+          result: expect.objectContaining({ response: expect.objectContaining({ output: null }) }),
+        }),
+      );
+      expect(summary.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
+      expect(summary.results[0].response).toHaveProperty('output', null);
+    },
+  );
 
   it('evaluate with false output', async () => {
     const mockApiProviderNoOutput: ApiProvider = {

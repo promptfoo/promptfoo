@@ -7,7 +7,7 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
   let outputTextDisplay: string;
   if (rawOutput !== null && typeof rawOutput === 'object') {
     outputTextDisplay = JSON.stringify(rawOutput);
-  } else if (rawOutput == null || rawOutput === '') {
+  } else if (rawOutput === undefined || rawOutput === '') {
     outputTextDisplay = result.error || '';
   } else {
     outputTextDisplay = String(rawOutput);

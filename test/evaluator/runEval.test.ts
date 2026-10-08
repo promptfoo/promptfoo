@@ -751,7 +751,7 @@ describe('runEval', () => {
   it.each([false, true])(
     'errors on missing provider outputs with isRedteam=%s',
     async (isRedteam) => {
-      for (const response of [{}, { output: undefined }, { output: null }]) {
+      for (const response of [{}, { output: undefined }]) {
         const provider: ApiProvider = {
           id: () => 'missing-output-provider',
           callApi: vi.fn().mockResolvedValue(response),
@@ -777,6 +777,7 @@ describe('runEval', () => {
   );
 
   it.each([
+    { output: null },
     { output: '' },
     { output: 'null' },
     { output: 'undefined' },
@@ -802,6 +803,28 @@ describe('runEval', () => {
     expect(result.success).toBe(false);
     expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
     expect(result.error).not.toContain('No output');
+  });
+
+  it('preserves JSON null in conversation history', async () => {
+    const provider: ApiProvider = {
+      id: () => 'null-provider',
+      callApi: vi.fn().mockResolvedValue({ output: null }),
+    };
+    const conversations: Record<string, any[]> = {};
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: { assert: [{ type: 'is-json', value: { type: 'null' } }] },
+      conversations,
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(Object.values(conversations)[0][0]).toHaveProperty('output', null);
+    expect(result.response).toHaveProperty('output', null);
   });
 
   it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(

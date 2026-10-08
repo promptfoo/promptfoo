@@ -146,7 +146,7 @@ describe('exportToFile utils', () => {
       expect(booleanOutput.text).toBe('false');
     });
 
-    it('should handle null output by falling back to error', () => {
+    it('preserves null data while retaining explicit error precedence', () => {
       const resultWithError: Partial<EvalResult> = {
         id: 'test-1',
         evalId: 'eval-1',
@@ -186,7 +186,7 @@ describe('exportToFile utils', () => {
       const outputWithoutError = convertEvalResultToTableCell(resultWithoutError as EvalResult);
 
       expect(outputWithError.text).toBe('Provider returned null');
-      expect(outputWithoutError.text).toBe('');
+      expect(outputWithoutError.text).toBe('null');
     });
   });
 

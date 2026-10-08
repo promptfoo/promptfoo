@@ -1816,7 +1816,7 @@ describe('OpenAI Provider', () => {
     });
 
     it.each([
-      { content: 'null', expected: 'null' },
+      { content: 'null', expected: null },
       { content: 'false', expected: false },
       { content: '0', expected: 0 },
     ])(

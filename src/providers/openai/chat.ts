@@ -1022,8 +1022,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       // Handle structured output
       if (config.response_format?.type === 'json_schema' && typeof output === 'string') {
         try {
-          // Preserve valid JSON null text instead of representing a missing response.
-          output = JSON.parse(output) ?? output;
+          output = JSON.parse(output);
         } catch (error) {
           logger.error(`Failed to parse JSON output: ${error}`);
         }

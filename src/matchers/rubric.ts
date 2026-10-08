@@ -111,20 +111,20 @@ export async function loadRubricPrompt(
 }
 
 function processContextForTemplating(
-  context: Record<string, VarValue>,
+  context: Record<string, VarValue | null>,
   enableObjectAccess: boolean,
-): Record<string, VarValue> {
+): Record<string, VarValue | null> {
   if (enableObjectAccess) {
     return context;
   }
 
   return Object.fromEntries(
     Object.entries(context).map(([key, value]) => {
-      if (value && typeof value === 'object') {
+      if (typeof value === 'object') {
         if (Array.isArray(value)) {
           return [
             key,
-            value.map((item) => (item && typeof item === 'object' ? JSON.stringify(item) : item)),
+            value.map((item) => (typeof item === 'object' ? JSON.stringify(item) : item)),
           ];
         }
         return [key, JSON.stringify(value)];
@@ -136,7 +136,7 @@ function processContextForTemplating(
 
 export async function renderLlmRubricPrompt(
   rubricPrompt: string,
-  context: Record<string, VarValue>,
+  context: Record<string, VarValue | null>,
 ) {
   const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
   const processedContext = processContextForTemplating(context, enableObjectAccess);

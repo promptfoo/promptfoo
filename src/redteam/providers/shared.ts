@@ -578,7 +578,7 @@ export async function getTargetResponse(
   const hasOutput =
     targetRespRaw &&
     Object.prototype.hasOwnProperty.call(targetRespRaw, 'output') &&
-    targetRespRaw.output != null;
+    targetRespRaw.output !== undefined;
 
   if (targetRespRaw?.error) {
     const output = hasOutput
