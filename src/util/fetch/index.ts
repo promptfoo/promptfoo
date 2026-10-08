@@ -1,7 +1,6 @@
-import * as fsPromises from 'node:fs/promises';
-import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
+import { LRUCache } from 'lru-cache';
 import { getProxyForUrl } from 'proxy-from-env';
 import { Agent, type Dispatcher, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
@@ -12,6 +11,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
+import { isFipsEnabled } from '../fips';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
@@ -23,6 +23,7 @@ import {
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
+import { assertFipsDispatcher, resolveTlsOptions } from './tls';
 
 import type { FetchOptions } from './types';
 
@@ -59,11 +60,35 @@ async function resolveAuthenticationHeaders(
 // Without caching, concurrent requests race on setGlobalDispatcher(),
 // corrupting TLS session state and producing "bad record mac" errors.
 //
-// Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
-// creation time. This is acceptable because these env vars don't change
-// mid-process. If that assumption changes, add cache-invalidation logic.
-const cachedAgents: Map<number, Dispatcher> = new Map();
-const cachedProxyAgents: Map<string, Dispatcher> = new Map();
+// Trust settings can vary between concurrent evals. Never share a connection
+// pool across TLS policies, CA contents, or runtime FIPS modes.
+interface PooledAgent {
+  dispatcher: Dispatcher;
+  requests: number;
+  evicted: boolean;
+}
+
+function closeEvictedAgent(agent: PooledAgent): void {
+  if (agent.evicted && agent.requests === 0 && typeof agent.dispatcher.close === 'function') {
+    // Graceful close also lets response bodies finish streaming.
+    void Promise.resolve(agent.dispatcher.close()).catch((error) => {
+      logger.debug('Failed to close an evicted HTTP dispatcher', { error });
+    });
+  }
+}
+
+function createAgentCache(): LRUCache<string, PooledAgent> {
+  return new LRUCache<string, PooledAgent>({
+    max: 32,
+    disposeAfter(agent) {
+      agent.evicted = true;
+      closeEvictedAgent(agent);
+    },
+  });
+}
+
+const cachedAgents = createAgentCache();
+const cachedProxyAgents = createAgentCache();
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -88,23 +113,14 @@ function getConnectionPoolSize(): number {
  * Exported for testing only.
  */
 export function clearAgentCache(): void {
-  for (const agent of cachedAgents.values()) {
-    if (typeof agent.close === 'function') {
-      agent.close();
-    }
-  }
   cachedAgents.clear();
-  for (const agent of cachedProxyAgents.values()) {
-    if (typeof agent.close === 'function') {
-      agent.close();
-    }
-  }
   cachedProxyAgents.clear();
 }
 
-function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
+function getOrCreateAgent(tlsOptions: ConnectionOptions): PooledAgent {
   const concurrency = getConnectionPoolSize();
-  const existing = cachedAgents.get(concurrency);
+  const cacheKey = JSON.stringify([concurrency, isFipsEnabled(), tlsOptions]);
+  const existing = cachedAgents.get(cacheKey);
   if (existing) {
     return existing;
   }
@@ -117,17 +133,14 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   })
     .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
-  cachedAgents.set(concurrency, agent);
-  return agent;
+  const entry = { dispatcher: agent, requests: 0, evicted: false };
+  cachedAgents.set(cacheKey, entry);
+  return entry;
 }
 
-function getProxyAgentCacheKey(proxyUrl: string, concurrency: number): string {
-  return `${proxyUrl}::${concurrency}`;
-}
-
-function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
+function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): PooledAgent {
   const concurrency = getConnectionPoolSize();
-  const cacheKey = getProxyAgentCacheKey(proxyUrl, concurrency);
+  const cacheKey = JSON.stringify([proxyUrl, concurrency, isFipsEnabled(), tlsOptions]);
   const existing = cachedProxyAgents.get(cacheKey);
   if (existing) {
     return existing;
@@ -143,8 +156,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
   })
     .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
-  cachedProxyAgents.set(cacheKey, agent);
-  return agent;
+  const entry = { dispatcher: agent, requests: 0, evicted: false };
+  cachedProxyAgents.set(cacheKey, entry);
+  return entry;
 }
 
 /**
@@ -276,77 +290,73 @@ export async function fetchWithProxy(
     }
   }
 
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-  };
-
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      if (logEnabled) {
-        logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-      }
-    } catch (e) {
-      if (logEnabled) {
-        logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-      }
-    }
-  }
+  assertFipsDispatcher(finalOptions.dispatcher);
+  const resolvedTlsOptions = resolveTlsOptions(logEnabled);
+  const tlsOptions =
+    resolvedTlsOptions instanceof Promise ? await resolvedTlsOptions : resolvedTlsOptions;
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.
   // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
+  let pooledAgent: PooledAgent | undefined;
   if (!finalOptions.dispatcher) {
     if (proxyUrl) {
       if (logEnabled) {
         logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
       }
-      finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
+      pooledAgent = getOrCreateProxyAgent(proxyUrl, tlsOptions);
     } else {
-      finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
+      pooledAgent = getOrCreateAgent(tlsOptions);
     }
+    pooledAgent.requests++;
+    finalOptions.dispatcher = pooledAgent.dispatcher;
   }
 
-  // Transient error retry logic (502/503/504/524 with matching status text).
-  // When a provider sets maxRetries: 0 and the caller did not pass an explicit
-  // disableTransientRetries, honor the provider intent via the retry context.
-  const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
-  const maxTransientRetries = disableTransientRetries ? 0 : 3;
+  try {
+    // Transient error retry logic (502/503/504/524 with matching status text).
+    // When a provider sets maxRetries: 0 and the caller did not pass an explicit
+    // disableTransientRetries, honor the provider intent via the retry context.
+    const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
+    const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
-  for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    let attemptOptions = finalOptions;
-    if (getAuthHeaders) {
-      attemptOptions = {
-        ...finalOptions,
-        headers: await resolveAuthenticationHeaders(
-          getAuthHeaders,
-          finalOptions.headers,
-          combinedSignal,
-        ),
-      };
-    }
-    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
-
-    if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
-      const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-      if (logEnabled) {
-        logger.debug(
-          `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
-        );
+    for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+      let attemptOptions = finalOptions;
+      if (getAuthHeaders) {
+        attemptOptions = {
+          ...finalOptions,
+          headers: await resolveAuthenticationHeaders(
+            getAuthHeaders,
+            finalOptions.headers,
+            combinedSignal,
+          ),
+        };
       }
-      await sleep(backoffMs);
-      continue;
+      const response = await monkeyPatchFetch(finalUrl, attemptOptions);
+
+      if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
+        const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        if (logEnabled) {
+          logger.debug(
+            `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+          );
+        }
+        await sleep(backoffMs);
+        continue;
+      }
+
+      return response;
     }
 
-    return response;
+    // This should be unreachable, but TypeScript needs it
+    throw new Error('Unexpected end of transient retry loop');
+  } finally {
+    // Authentication and retry delays can outlive the cache entry. Only close
+    // an evicted pool once every request that acquired it has finished.
+    if (pooledAgent) {
+      pooledAgent.requests--;
+      closeEvictedAgent(pooledAgent);
+    }
   }
-
-  // This should be unreachable, but TypeScript needs it
-  throw new Error('Unexpected end of transient retry loop');
 }
 
 export function fetchWithTimeout(

@@ -4,6 +4,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { ellipsize } from '../util/text';
+import { fingerprintCacheIdentity } from './cacheFingerprint';
 import type { Cache } from 'cache-manager';
 
 import type { EnvOverrides } from '../types/env';
@@ -83,7 +84,7 @@ function getAuthCacheNamespace(apiKey: string | undefined): string {
     return 'no-api-key';
   }
 
-  return createHmac('sha256', apiKey).update(`${FAL_CACHE_KEY_HMAC_KEY}:auth`).digest('hex');
+  return fingerprintCacheIdentity(apiKey, `${FAL_CACHE_KEY_HMAC_KEY}:auth`);
 }
 
 function generateInputHash(input: unknown): string {
