@@ -52,9 +52,22 @@ COPY . .
 WORKDIR /app
 RUN npm run build
 
+# Install production dependencies separately so the runtime image excludes
+# the app and docs build tools. Keep optional native packages, peers, and tsx.
+FROM base AS production-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+# npm omits packages declared as both dev and optional dependencies with --omit=dev.
+# Remove this stage's dev declarations to retain those SDKs. Keep the lockfile
+# unchanged and copy the original manifest from the builder into the final image.
+RUN --mount=type=cache,target=/root/.npm \
+    npm pkg delete devDependencies && \
+    npm ci --omit=dev --workspaces=false --install-links --include=peer --ignore-scripts && \
+    npm rebuild ./node_modules/esbuild
+
 FROM base AS server
 WORKDIR /app
-COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules
+COPY --from=production-deps --chown=promptfoo:promptfoo /app/node_modules ./node_modules
 COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json
 COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist
 

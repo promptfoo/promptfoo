@@ -535,6 +535,9 @@ async function doEvalWithEnv(
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
     cliState.basePath = _basePath;
+    if (commandLineOptions?.safeMode) {
+      cliState.safeMode = true;
+    }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';
@@ -1323,10 +1326,14 @@ async function doEvalWithEnv(
   const runEvaluation = (initialization?: boolean) => {
     // Each watch run starts clean and retains its resolved env through output and cleanup.
     const runEnv: EnvOverrides = {};
-    return cliState.withConfig(undefined, () =>
-      cliState.withBasePath(undefined, () =>
-        cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
-      ),
+    return cliState.withSafeMode(
+      Boolean(cmdObj.safeMode || defaultConfig.commandLineOptions?.safeMode),
+      () =>
+        cliState.withConfig(undefined, () =>
+          cliState.withBasePath(undefined, () =>
+            cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
+          ),
+        ),
     );
   };
 
