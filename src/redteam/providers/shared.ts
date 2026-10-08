@@ -548,6 +548,11 @@ export async function getTargetRequestTemplates(
   response: ProviderResponse,
   context?: CallApiContextParams,
 ) {
+  if (response.error) {
+    // An attempted call may fail locally before sending anything (for example,
+    // while rendering HTTP headers). It cannot prove current-input delivery.
+    return { forwardsPrompt: false };
+  }
   const { getProviderRequestTemplates } = await loadProviderModule();
   // Exact string equality is evidence for opaque adapters only; it must not
   // override a known built-in request replacement or normalization.

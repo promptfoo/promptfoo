@@ -42,7 +42,13 @@ export function getProviderRequestTemplates(
   renderedPrompt: string,
   context?: CallApiContextParams,
   hasSentPromptEvidence = false,
-): { forwardsPrompt: boolean; body?: unknown; reservedVariables?: string[] } {
+): {
+  forwardsPrompt: boolean;
+  body?: unknown;
+  jsonBody?: boolean;
+  parsesPrompt?: boolean;
+  reservedVariables?: string[];
+} {
   // IDs and URL-shaped config are not implementation evidence. Custom providers
   // and subclasses can replace the request, so they need response.prompt evidence.
   const prototype = Object.getPrototypeOf(provider);
@@ -57,9 +63,14 @@ export function getProviderRequestTemplates(
     ) {
       return { forwardsPrompt: false };
     }
+    const mode = (provider as HttpProvider).getStaticBodyMode();
+    if (mode === undefined || (mode === 'text' && typeof config.body !== 'string')) {
+      return { forwardsPrompt: false };
+    }
     return {
       forwardsPrompt: false,
       body: config.body,
+      jsonBody: mode === 'json',
       // HTTP can overwrite these aliases after merging context.vars. Omit them
       // conservatively rather than reproducing auth/session/tool resolution.
       reservedVariables: [
@@ -84,9 +95,11 @@ export function getProviderRequestTemplates(
           ? 'prompt'
           : undefined;
   const effectiveConfig = { ...config, ...context?.prompt?.config };
+  let parsesPrompt = prototype === OpenAiChatCompletionProvider.prototype;
   if (prototype === OpenAiResponsesProvider.prototype) {
     try {
       const parsed = JSON.parse(renderedPrompt);
+      parsesPrompt = Array.isArray(parsed);
       if (
         Array.isArray(parsed) &&
         JSON.stringify(normalizeResponsesInput(parsed)) !== JSON.stringify(parsed)
@@ -100,6 +113,7 @@ export function getProviderRequestTemplates(
     }
   }
   return {
+    ...(parsesPrompt ? { parsesPrompt: true } : {}),
     forwardsPrompt:
       override === undefined
         ? hasSentPromptEvidence

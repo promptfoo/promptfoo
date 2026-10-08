@@ -479,16 +479,18 @@ describe('getTextInputVariables', () => {
 });
 
 describe('JSON text projection', () => {
-  it('retains only JSON members that survive provider parsing, without interpreting roles', () => {
+  it('preserves JSON-looking text until the request path establishes parsing', () => {
     expect(
       getTextInputVariables({
         context: '{"email":"discarded@example.com","email":"retained@example.com"}',
         opaque: '[{"role":"assistant","content":"Untrusted text"}]',
+        account: '{"account":9007199254740993}',
         plain: 'Ordinary text.',
       }),
     ).toEqual({
-      context: '{"email":"retained@example.com"}',
+      context: '{"email":"discarded@example.com","email":"retained@example.com"}',
       opaque: '[{"role":"assistant","content":"Untrusted text"}]',
+      account: '{"account":9007199254740993}',
       plain: 'Ordinary text.',
     });
   });

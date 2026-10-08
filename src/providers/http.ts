@@ -2365,6 +2365,32 @@ export class HttpProvider implements ApiProvider {
     return {};
   }
 
+  /** Determine the body renderer without evaluating dynamic headers a second time. */
+  getStaticBodyMode(): 'json' | 'text' | undefined {
+    const headers = {
+      ...this.getDefaultHeaders(this.config.body),
+      ...Object.fromEntries(
+        Object.entries(this.config.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]),
+      ),
+    };
+    const auth = this.config.auth;
+    if (auth?.type === 'api_key' && auth.placement === 'header') {
+      // A templated name could replace Content-Type after ordinary headers render.
+      if (auth.keyName.includes('{')) {
+        return undefined;
+      }
+      headers[auth.keyName.toLowerCase()] = auth.value;
+    }
+    if (
+      Object.entries(headers).some(
+        ([key, value]) => key.startsWith('content-type') && value.includes('{'),
+      )
+    ) {
+      return undefined;
+    }
+    return contentTypeIsJson(headers) ? 'json' : 'text';
+  }
+
   private validateContentTypeAndBody(headers: Record<string, string>, body: any): void {
     if (body != null) {
       if (typeof body == 'object' && !contentTypeIsJson(headers)) {

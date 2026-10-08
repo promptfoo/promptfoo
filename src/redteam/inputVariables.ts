@@ -684,21 +684,9 @@ export function getTextInputVariables(
   inputs?: Inputs,
 ): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(variables)
-      .filter(([name]) => inputs?.[name] === undefined || getInputType(inputs[name]) === 'text')
-      .map(([name, value]) => {
-        try {
-          const parsed = JSON.parse(value);
-          // Providers can parse a complete JSON value. Retain only members that
-          // survive that conversion, without interpreting role/content as messages.
-          if (parsed !== null && typeof parsed === 'object') {
-            return [name, JSON.stringify(parsed)];
-          }
-        } catch {
-          // Ordinary text remains literal.
-        }
-        return [name, value];
-      }),
+    Object.entries(variables).filter(
+      ([name]) => inputs?.[name] === undefined || getInputType(inputs[name]) === 'text',
+    ),
   );
 }
 

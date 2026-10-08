@@ -39,7 +39,13 @@ import { loadYaml } from './util/yamlLoad';
 export function getRenderedInputVariables(
   inputVars: Record<string, string>,
   injectVar: string,
-  request: { forwardsPrompt: boolean; body?: unknown; reservedVariables?: string[] },
+  request: {
+    forwardsPrompt: boolean;
+    body?: unknown;
+    jsonBody?: boolean;
+    parsesPrompt?: boolean;
+    reservedVariables?: string[];
+  },
   prompt?: Prompt,
   filters?: NunjucksFilterMap,
   renderedPrompt?: string,
@@ -111,8 +117,24 @@ export function getRenderedInputVariables(
     (request.forwardsPrompt ||
       referencesInput(body, 'prompt', undefined, true) ||
       (!reserved.includes(injectVar) && referencesInput(body, injectVar, undefined, true)));
+  const projectJsonValue = (value: string, objectsOnly: boolean): string | undefined => {
+    try {
+      const parsed = JSON.parse(value);
+      if (objectsOnly && (parsed === null || typeof parsed !== 'object')) {
+        return value;
+      }
+      // HTTP omits a null root body. Parsing is deliberately only one level:
+      // JSON strings inside a parsed object remain literal in the actual request.
+      if (parsed === null) {
+        return undefined;
+      }
+      return typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+    } catch {
+      return value;
+    }
+  };
   const vars = Object.fromEntries(
-    Object.entries(inputVars).filter(([name]) => {
+    Object.entries(inputVars).flatMap(([name, value]) => {
       const throughPrompt =
         forwardsPrompt &&
         (!prompt ||
@@ -128,7 +150,26 @@ export function getRenderedInputVariables(
         name !== injectVar &&
         !reserved.includes(name) &&
         referencesInput(body, name, undefined, true);
-      return throughPrompt || throughBody;
+      if (throughPrompt) {
+        // A value embedded in text or a rendered JSON string is not itself parsed.
+        // Only the complete prompt crosses the provider's JSON parsing boundary.
+        const wholePrompt = !prompt || isDirectTemplateReference(prompt.raw, name, filters, true);
+        if (!wholePrompt || (!request.parsesPrompt && !request.jsonBody)) {
+          return [[name, value]];
+        }
+        const projected = projectJsonValue(
+          value,
+          !request.parsesPrompt && typeof body !== 'string',
+        );
+        return projected === undefined ? [] : [[name, projected]];
+      }
+      if (throughBody) {
+        const projected = request.jsonBody
+          ? projectJsonValue(value, typeof body !== 'string')
+          : value;
+        return projected === undefined ? [] : [[name, projected]];
+      }
+      return [];
     }),
   );
   return { vars, forwardsPrompt };

@@ -1836,6 +1836,134 @@ describe('HydraProvider', () => {
       },
     );
 
+    it.each([
+      {
+        name: 'literal JSON with duplicate keys and a large number',
+        raw: '{{input}}',
+        body: '{{prompt}}',
+        json: false,
+        input:
+          '{"email":"first@example.com","email":"last@example.com","account":9007199254740993}',
+        sent: '{"email":"first@example.com","email":"last@example.com","account":9007199254740993}',
+        history:
+          '{"email":"first@example.com","email":"last@example.com","account":9007199254740993}',
+      },
+      {
+        name: 'literal JSON embedded in ordinary text',
+        raw: 'Details: {{input}}',
+        body: { message: '{{prompt}}' },
+        json: true,
+        input: '{"account":9007199254740993}',
+        sent: { message: 'Details: {"account":9007199254740993}' },
+        history: '{"account":9007199254740993}',
+      },
+      {
+        name: 'parsed object discards duplicate members and rounds large numbers',
+        raw: '{{input}}',
+        body: { message: '{{prompt}}' },
+        json: true,
+        input:
+          '{"email":"first@example.com","email":"last@example.com","account":9007199254740993}',
+        sent: { message: { email: 'last@example.com', account: 9007199254740992 } },
+        history: '{"email":"last@example.com","account":9007199254740992}',
+      },
+      {
+        name: 'root JSON body parses a primitive',
+        raw: '{{input}}',
+        body: '{{prompt}}',
+        json: true,
+        input: '9007199254740993',
+        sent: 9007199254740992,
+        history: '9007199254740992',
+      },
+      {
+        name: 'nested JSON body keeps primitive text literal',
+        raw: '{{input}}',
+        body: { message: '{{prompt}}' },
+        json: true,
+        input: '9007199254740993',
+        sent: { message: '9007199254740993' },
+        history: '9007199254740993',
+      },
+      {
+        name: 'string inside a parsed object is not reparsed',
+        raw: '{{input}}',
+        body: { message: '{{prompt}}' },
+        json: true,
+        input: JSON.stringify({ value: '{"account":9007199254740993}' }),
+        sent: { message: { value: '{"account":9007199254740993}' } },
+        history: JSON.stringify({ value: '{"account":9007199254740993}' }),
+      },
+      {
+        name: 'JSON prompt leaf remains literal inside parsed outer object',
+        raw: '{"content":"{{input}}"}',
+        body: { message: '{{prompt}}' },
+        json: true,
+        input: '{"account":9007199254740993}',
+        sent: { message: { content: '{"account":9007199254740993}' } },
+        history: '{"account":9007199254740993}',
+      },
+    ])(
+      'records what HTTP receives for $name',
+      async ({ raw, body, json, input, sent, history }) => {
+        const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+          '../../../../src/evaluatorHelpers',
+        );
+        vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+        mockAgentProvider.callApi.mockReset();
+        mockAgentProvider.callApi
+          .mockResolvedValueOnce({ output: input })
+          .mockResolvedValueOnce({ output: followUp });
+        const context = gradingContext();
+        context.prompt.raw = raw;
+        const target = new HttpProvider('https://example.com/chat', {
+          config: {
+            method: 'POST',
+            body,
+            headers: { 'content-type': json ? 'application/json' : 'text/plain' },
+          },
+        });
+        const sentBodies: unknown[] = [];
+        vi.spyOn(target, 'callApi').mockImplementation(async (prompt, targetContext) => {
+          sentBodies.push(determineRequestBody(json, prompt, body, targetContext!.vars));
+          return mockTargetProvider.callApi(prompt, targetContext);
+        });
+        context.originalProvider = target;
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+        const result = await provider.callApi('', context);
+        expect(sentBodies[0]).toEqual(sent);
+        expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)[0]).toEqual(
+          {
+            role: 'user',
+            content: history,
+          },
+        );
+        expect(result.metadata.messages[0]).toEqual({ role: 'user', content: history });
+      },
+    );
+
+    it('does not mark input as verified when HTTP header rendering fails before sending', async () => {
+      const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+        '../../../../src/evaluatorHelpers',
+      );
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+      const context = gradingContext();
+      context.prompt.raw = '{{input}}';
+      context.originalProvider = new HttpProvider('https://example.com/chat', {
+        config: {
+          method: 'POST',
+          body: { message: '{{prompt}}' },
+          headers: { 'x-probe': '{{ input | missing_probe_filter }}' },
+        },
+      });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1, stateful: true });
+      const result = await provider.callApi('', context);
+      expect(result.error).toContain('missing_probe_filter');
+      expect(result.metadata.messages).toEqual([{ role: 'assistant', content: '' }]);
+      expect(result.metadata.redteamCurrentTurnStart).toBe(0);
+      expect(mockGrader.getResult).not.toHaveBeenCalled();
+    });
+
     it('does not credit duplicate JSON members removed from a delivered HTTP side input', async () => {
       const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
         '../../../../src/evaluatorHelpers',

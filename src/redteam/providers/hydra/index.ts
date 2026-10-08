@@ -729,7 +729,14 @@ export class HydraProvider implements ApiProvider {
       const currentGradingContent = replaysHistory
         ? processedMessage
         : lastTransformResult && forwardsPrompt
-          ? getTextInputVariables({ input: lastTransformResult.prompt }).input
+          ? getRenderedInputVariables(
+              { [this.injectVar]: lastTransformResult.prompt },
+              this.injectVar,
+              requestTemplates,
+              undefined,
+              undefined,
+              finalTargetPrompt,
+            ).vars[this.injectVar]
           : currentRenderInputVars
             ? Object.keys(deliveredInputVars).length > 0
               ? JSON.stringify(deliveredInputVars)

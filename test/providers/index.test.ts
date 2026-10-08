@@ -2624,8 +2624,79 @@ describe('getProviderRequestTemplates', () => {
     });
     const result = getProviderRequestTemplates(provider, 'User input');
     expect(result.body).toEqual(body);
+    expect(result.jsonBody).toBe(true);
     expect(result.reservedVariables).toEqual(
       expect.arrayContaining(['token', 'tools', 'sessionId']),
     );
+  });
+
+  it.each([
+    [{}, false],
+    [{ headers: { 'Content-Type': 'application/json' } }, true],
+    [{ headers: { 'Content-Type': 'text/plain' } }, false],
+    [{ headers: { 'Content-Type': '{{format}}' } }, undefined],
+    [
+      {
+        auth: {
+          type: 'api_key',
+          placement: 'header',
+          keyName: 'Content-Type',
+          value: 'application/json',
+        },
+      },
+      true,
+    ],
+    [
+      {
+        auth: {
+          type: 'api_key',
+          placement: 'header',
+          keyName: '{{header}}',
+          value: 'application/json',
+        },
+      },
+      undefined,
+    ],
+  ] as const)(
+    'classifies HTTP string bodies only with static Content-Type: %j',
+    async (config, expected) => {
+      const provider = new HttpProvider('https://example.com/chat', {
+        config: { method: 'POST', body: '{{prompt}}', ...config },
+      });
+      const actualHeaders = await provider.getHeaders(
+        { 'content-type': 'application/x-www-form-urlencoded' },
+        { format: 'application/json', header: 'Content-Type' },
+      );
+      const request = getProviderRequestTemplates(provider, 'User input', undefined, true);
+      expect(request.jsonBody).toBe(expected);
+      if (expected === undefined) {
+        expect(request).toEqual({ forwardsPrompt: false });
+      } else {
+        expect(actualHeaders['content-type'].includes('application/json')).toBe(expected);
+      }
+    },
+  );
+
+  it('distinguishes literal Responses objects from parsed message arrays', async () => {
+    const provider = new OpenAiResponsesProvider('test-model');
+    const literal = '{"account":9007199254740993}';
+    const messages = '[{"role":"user","content":"text","account":9007199254740993}]';
+    expect((await provider.getOpenAiBody(literal)).body.input).toBe(literal);
+    expect((await provider.getOpenAiBody(messages)).body.input).toEqual([
+      { role: 'user', content: 'text', account: 9007199254740992 },
+    ]);
+    expect(
+      getProviderRequestTemplates(provider, '{"account":9007199254740993}').parsesPrompt,
+    ).toBeUndefined();
+    expect(
+      getProviderRequestTemplates(provider, '[{"role":"user","content":"text"}]').parsesPrompt,
+    ).toBe(true);
+    expect(
+      getProviderRequestTemplates(new OpenAiCompletionProvider('test-model'), '[1]').parsesPrompt,
+    ).toBeUndefined();
+    expect(
+      getProviderRequestTemplates(new OpenAiChatCompletionProvider('test-model'), '[1]')
+        .parsesPrompt,
+    ).toBe(true);
   });
 });
