@@ -88,6 +88,12 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
     ['{"amount":0.109999999999999999}', 0.1, 0.01, true],
     ['{"amount":1.1e-1}', 0.1, 0.01, true],
     ['{"amount":0.10}', 0.1, 0, true],
+    ['{"amount":1' + '0'.repeat(100) + '.005}', 1e100, 0.01, true],
+    ['{"amount":1' + '0'.repeat(100) + '.015}', 1e100, 0.01, false],
+    ['{"amount":-1}', 1e-100, 1, false],
+    ['{"amount":1}', -1e-100, 1, false],
+    ['{"amount":1e-9999999999999999}', 0, 0, false],
+    ['{"amount":0e-9999999999999999}', 0, 0, true],
     ['{"amount":0.11,"nested":{"amount":99}}', 0.1, 0.01, true],
     ['{"amount":0.2,"nested":{"amount":0.1}}', 0.1, 0.01, false],
   ])('preserves numeric tokens in %s', async (output, expected, absoluteTolerance, pass) => {
@@ -97,6 +103,15 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
       absoluteTolerance,
     });
     expect(result.grade.pass).toBe(pass);
+  });
+
+  it('reports unsupported decimal underflow as a numeric contract failure', async () => {
+    const result = await grade('{"amount":1e-9999999999999999}', {
+      type: 'numeric',
+      expected: { amount: 0 },
+    });
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.reason).toContain('outside the supported decimal range');
   });
 
   it.each([

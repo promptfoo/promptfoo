@@ -286,7 +286,7 @@ Use a prompt template such as `{{prompt}}` and your target provider. Keep expect
 
 The grader parses the response as a JSON object and checks each listed top-level field in code, without an LLM call. It preserves the original JSON numeric text for decimal comparison. Each value must be a finite JSON number. A comparison passes when its absolute difference is at most `max(absoluteTolerance, relativeTolerance * abs(expected))`, using decimal arithmetic for inclusive tolerance boundaries. Both tolerances default to zero (exact numeric equality) and must be finite and nonnegative. For example, `relativeTolerance: 0.001` permits a 0.1% difference.
 
-All expected fields must pass. In this example, `{"netUsd": 1349.27}` passes and `{"netUsd": 1354.69}` fails. Invalid reference configuration produces a grading error. Refusals, missing fields, numeric strings, Markdown fences, and other non-JSON responses fail the explicit numeric output contract; that failure does not by itself establish an arithmetic error.
+All expected fields must pass. In this example, `{"netUsd": 1349.27}` passes and `{"netUsd": 1354.69}` fails. Invalid reference configuration produces a grading error. Refusals, missing fields, numeric strings, Markdown fences, non-JSON responses, and numeric tokens outside the supported decimal range fail the explicit numeric output contract; that failure does not by itself establish an arithmetic error.
 
 Only listed numeric fields are checked, not formulas or additional prose. References must match the exact question and units, including after any changes to input quantities. Assertions without `value.type: numeric` retain the existing LLM grading behavior.
 
