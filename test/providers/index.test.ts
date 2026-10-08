@@ -56,33 +56,51 @@ import RedteamImageIterativeProvider from '../../src/redteam/providers/iterative
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 import { ProviderSchemas } from '../../src/types/api/providers';
 import { checkProviderApiKeys } from '../../src/util/provider';
+import { createChatCompletion } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
-vi.mock('proxy-agent', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
+const { createProxyAgentFactory, createExecFileFactory, createLocalGenerationFactory } =
+  await vi.hoisted(() => import('../factories/moduleMocks'));
 
-    ProxyAgent: vi.fn().mockImplementation(function () {
-      return {};
-    }),
-  };
+const createEmptyHttpBody = () => ({
+  body: {},
 });
+
+const createInvalidProviderSecrets = () => ({
+  config: {
+    apiKey: 'sk-proj-invalid-provider-secret',
+  },
+  headers: {
+    Authorization: 'Bearer invalid-provider-secret-token',
+  },
+});
+
+const createCustomProviderConfig = () => ({
+  config: { foo: 'bar' },
+});
+
+const createOpenAiEnvOverride = () => ({
+  OPENAI_API_KEY: 'override-key',
+});
+
+const createAblitEnvOptions = () => ({
+  env: {
+    ABLIT_KEY: 'provider-key',
+  },
+});
+
+const createJsonProviderConfig = () => ({
+  id: 'openai:gpt-4o-mini',
+  config: { key: 'value1' },
+});
+
+vi.mock('proxy-agent', createProxyAgentFactory());
 
 const mockExecFile = vi.hoisted(() => vi.fn());
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('child_process')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      execFile: mockExecFile,
-    },
-    execFile: mockExecFile,
-  };
-});
+vi.mock('child_process', createExecFileFactory(mockExecFile));
 
 vi.mock('../../src/esm', async () => ({
   ...(await vi.importActual('../../src/esm')),
@@ -131,14 +149,7 @@ vi.mock('../../src/database', async (importOriginal) => {
   };
 });
 
-vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    shouldGenerateRemote: vi.fn().mockReturnValue(false),
-    neverGenerateRemote: vi.fn().mockReturnValue(false),
-    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
-  };
-});
+vi.mock('../../src/redteam/remoteGeneration', createLocalGenerationFactory());
 vi.mock('../../src/providers/websocket');
 
 vi.mock('../../src/globalConfig/accounts', async (importOriginal) => ({
@@ -223,12 +234,7 @@ describe('call provider apis', () => {
   it('AzureOpenAiChatCompletionProvider callApi', async () => {
     const mockResponse = {
       ...defaultMockResponse,
-      text: vi.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
+      text: vi.fn().mockResolvedValue(JSON.stringify(createChatCompletion())),
     };
     mockFetch.mockResolvedValue(mockResponse);
 
@@ -287,12 +293,7 @@ describe('call provider apis', () => {
 
     const mockResponse = {
       ...defaultMockResponse,
-      text: vi.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
+      text: vi.fn().mockResolvedValue(JSON.stringify(createChatCompletion())),
     };
     mockFetch.mockResolvedValue(mockResponse);
 
@@ -670,24 +671,14 @@ describe('loadApiProvider', () => {
     expect(provider.id()).not.toContain('secret');
   });
 
-  it('loadApiProvider with huggingface:text-generation', async () => {
-    const provider = await loadApiProvider('huggingface:text-generation:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceTextGenerationProvider);
-  });
-
-  it('loadApiProvider with huggingface:feature-extraction', async () => {
-    const provider = await loadApiProvider('huggingface:feature-extraction:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceFeatureExtractionProvider);
-  });
-
-  it('loadApiProvider with huggingface:text-classification', async () => {
-    const provider = await loadApiProvider('huggingface:text-classification:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceTextClassificationProvider);
-  });
-
-  it('loadApiProvider with hf:text-classification', async () => {
-    const provider = await loadApiProvider('hf:text-classification:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceTextClassificationProvider);
+  it.each([
+    ['huggingface:text-generation', HuggingfaceTextGenerationProvider],
+    ['huggingface:feature-extraction', HuggingfaceFeatureExtractionProvider],
+    ['huggingface:text-classification', HuggingfaceTextClassificationProvider],
+    ['hf:text-classification', HuggingfaceTextClassificationProvider],
+  ] as const)('loadApiProvider with %s', async (prefix, Provider) => {
+    const provider = await loadApiProvider(`${prefix}:foobar/baz`);
+    expect(provider).toBeInstanceOf(Provider);
   });
 
   it('loadApiProvider with bedrock:completion', async () => {
@@ -1178,19 +1169,13 @@ describe('loadApiProvider', () => {
   it('loadApiProviders with RawProviderConfig[]', async () => {
     const rawProviderConfigs: ProviderOptionsMap[] = [
       {
-        'openai:chat:abc123': {
-          config: { foo: 'bar' },
-        },
+        'openai:chat:abc123': createCustomProviderConfig(),
       },
       {
-        'openai:completion:def456': {
-          config: { foo: 'bar' },
-        },
+        'openai:completion:def456': createCustomProviderConfig(),
       },
       {
-        'anthropic:completion:ghi789': {
-          config: { foo: 'bar' },
-        },
+        'anthropic:completion:ghi789': createCustomProviderConfig(),
       },
     ];
     const providers = await loadApiProviders(rawProviderConfigs);
@@ -1218,14 +1203,7 @@ describe('loadApiProvider', () => {
   });
 
   it('redacts invalid provider config details before formatting load errors', async () => {
-    const provider = {
-      config: {
-        apiKey: 'sk-proj-invalid-provider-secret',
-      },
-      headers: {
-        Authorization: 'Bearer invalid-provider-secret-token',
-      },
-    };
+    const provider = createInvalidProviderSecrets();
 
     let message = '';
     try {
@@ -1256,9 +1234,7 @@ describe('loadApiProvider', () => {
 
     const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
       options: {
-        config: {
-          body: {},
-        },
+        config: createEmptyHttpBody(),
       },
     });
     expect(provider.id()).toBe('https://api.example.com:8080/query');
@@ -1273,9 +1249,7 @@ describe('loadApiProvider', () => {
         MY_PORT: '8080',
       },
       options: {
-        config: {
-          body: {},
-        },
+        config: createEmptyHttpBody(),
       },
     });
 
@@ -1472,9 +1446,7 @@ describe('loadApiProvider', () => {
   it('passes provider env overrides to provider instances', async () => {
     const provider = (await loadApiProvider('openai:chat', {
       options: {
-        env: {
-          OPENAI_API_KEY: 'override-key',
-        },
+        env: createOpenAiEnvOverride(),
         config: {
           apiKeyRequired: false,
         },
@@ -1495,11 +1467,7 @@ describe('loadApiProvider', () => {
         env: {
           ABLIT_API_BASE_URL: 'https://context.example.com/v1',
         },
-        options: {
-          env: {
-            ABLIT_KEY: 'provider-key',
-          },
-        },
+        options: createAblitEnvOptions(),
       })) as AbliterationProvider;
 
       expect(provider.env?.ABLIT_API_BASE_URL).toBe('https://context.example.com/v1');
@@ -1531,11 +1499,7 @@ describe('loadApiProvider', () => {
 
     try {
       const provider = (await loadApiProvider('abliteration:abliterated-model', {
-        options: {
-          env: {
-            ABLIT_KEY: 'provider-key',
-          },
-        },
+        options: createAblitEnvOptions(),
       })) as AbliterationProvider;
 
       expect(provider.env?.ABLIT_API_BASE_URL).toBe('https://cli-state.example.com/v1');
@@ -1578,9 +1542,7 @@ describe('loadApiProvider', () => {
   it('loads OpenAI Codex app-server providers with model-in-path config', async () => {
     const provider = (await loadApiProvider('openai:codex-app-server:gpt-5.4', {
       options: {
-        env: {
-          OPENAI_API_KEY: 'override-key',
-        },
+        env: createOpenAiEnvOverride(),
       },
     })) as OpenAICodexAppServerProvider;
 
@@ -1595,9 +1557,7 @@ describe('loadApiProvider', () => {
     const [provider] = (await loadApiProviders([
       {
         id: 'openai:codex-app-server:gpt-5.4',
-        env: {
-          OPENAI_API_KEY: 'override-key',
-        },
+        env: createOpenAiEnvOverride(),
       },
     ])) as OpenAICodexAppServerProvider[];
 
@@ -1651,9 +1611,7 @@ describe('loadApiProvider', () => {
         env: {
           HOST: 'dev.example.com',
         },
-        config: {
-          body: {},
-        },
+        config: createEmptyHttpBody(),
       },
     });
 
@@ -1663,9 +1621,7 @@ describe('loadApiProvider', () => {
         env: {
           HOST: 'prod.example.com',
         },
-        config: {
-          body: {},
-        },
+        config: createEmptyHttpBody(),
       },
     });
 
@@ -1684,9 +1640,7 @@ describe('loadApiProvider', () => {
         env: {
           HOST: 'options-host.com', // Should override context.env.HOST
         },
-        config: {
-          body: {},
-        },
+        config: createEmptyHttpBody(),
       },
     });
 
@@ -1730,10 +1684,7 @@ describe('loadApiProvider', () => {
 
   it('loadApiProvider with json filepath containing multiple providers', async () => {
     const mockJsonContent = JSON.stringify([
-      {
-        id: 'openai:gpt-4o-mini',
-        config: { key: 'value1' },
-      },
+      createJsonProviderConfig(),
       {
         id: 'anthropic:messages:claude-3-5-sonnet-20241022',
         config: { key: 'value2' },
@@ -1970,10 +1921,7 @@ describe('getProviderIds', () => {
   });
 
   it('handles .json extension', () => {
-    const mockJsonContent = JSON.stringify({
-      id: 'openai:gpt-4o-mini',
-      config: { key: 'value1' },
-    });
+    const mockJsonContent = JSON.stringify(createJsonProviderConfig());
     vi.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
 
     const providerIds = getProviderIds('file://path/to/provider.json');
@@ -2087,14 +2035,7 @@ describe('getProviderIds', () => {
   });
 
   it('redacts invalid provider config details before formatting id extraction errors', () => {
-    const provider = {
-      config: {
-        apiKey: 'sk-proj-invalid-provider-secret',
-      },
-      headers: {
-        Authorization: 'Bearer invalid-provider-secret-token',
-      },
-    };
+    const provider = createInvalidProviderSecrets();
 
     let message = '';
     try {
