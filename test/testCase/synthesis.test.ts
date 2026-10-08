@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
 import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
 import { createMockProvider } from '../factories/provider';
@@ -11,10 +11,6 @@ vi.mock('../../src/providers', () => ({
 }));
 
 describe('synthesize', () => {
-  afterEach(() => {
-    vi.mocked(loadApiProvider).mockReset();
-  });
-
   it('should generate test cases based on prompts and personas', async () => {
     let i = 0;
     const mockProvider = createMockProvider({
@@ -41,10 +37,18 @@ describe('synthesize', () => {
   });
 
   it.each([
-    { output: [{ name: 'Persona 1' }, { name: 'Persona 2' }] },
-    { output: '{"personas": "Persona 1"}' },
-  ])('rejects a response without a personas array: $output', async ({ output }) => {
-    const mockProvider = createMockProvider({ response: { output } });
+    '[{"name": "Alice"}, {"name": "Bob"}]',
+    { personas: 'Alice' },
+    { personas: [null] },
+    { personas: [{ name: 'Alice' }] },
+  ])('rejects an unexpected personas response: %j', async (output) => {
+    // Provider returns a valid JSON array of objects, but not the expected
+    // {personas: string[]} shape (e.g. a custom HTTP provider whose response
+    // differs from OpenAI's). Should fail with a clear message, not a TypeError.
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output }),
+    });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
     await expect(
@@ -52,9 +56,39 @@ describe('synthesize', () => {
         provider: 'mock-provider',
         prompts: ['Test prompt'],
         tests: [],
+        numPersonas: 2,
+        numTestCasesPerPersona: 1,
       }),
-    ).rejects.toThrow('Expected the personas response to contain a "personas" array.');
+    ).rejects.toThrow(/Expected a JSON object of the form \{personas: string\[\]\}/);
     expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should find the personas object even when it is not the first JSON object in the response', async () => {
+    let i = 0;
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
+        if (i === 0) {
+          i++;
+          // A leading, non-persona JSON object precedes the real one.
+          return Promise.resolve({
+            output: '{"note": "here are the personas"}\n{"personas": ["Persona 1"]}',
+          });
+        }
+        return Promise.resolve({ output: '{"vars": [{"var1": "value1"}]}' });
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Test prompt'],
+      tests: [],
+      numPersonas: 1,
+      numTestCasesPerPersona: 1,
+    });
+
+    expect(result).toEqual([{ var1: 'value1' }]);
   });
 });
 
