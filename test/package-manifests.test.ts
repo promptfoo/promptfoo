@@ -136,13 +136,15 @@ function validateDockerInstallCommands(dockerfile: string): void {
   for (const [command, ...args] of commands) {
     // Keep Docker npm commands auditable: global options must follow the subcommand.
     // Reject unsupported shapes instead of silently skipping a hidden install.
-    expect(['ci', 'rebuild', 'run']).toContain(command);
+    expect(['ci', 'rebuild', 'run', 'pkg']).toContain(command);
     if (command === 'ci') {
       expect(args).toContain('--ignore-scripts');
       expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
     } else if (command === 'rebuild') {
       // Package names and globs can rebuild untrusted nested dependencies.
       expect(args).toEqual(['./node_modules/esbuild']);
+    } else if (command === 'pkg') {
+      expect(args).toEqual(['delete', 'devDependencies']);
     }
   }
 }
@@ -684,6 +686,8 @@ describe('package manifests', () => {
   });
 
   it.each([
+    'RUN npm pkg delete dependencies',
+    'RUN npm pkg delete optionalDependencies',
     'RUN npm ci',
     String.raw`RUN n\pm ci`,
     `RUN n'p'm ci`,
