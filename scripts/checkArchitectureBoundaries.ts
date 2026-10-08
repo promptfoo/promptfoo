@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   compareEdgesToBaseline,
@@ -14,7 +13,7 @@ import {
   scanArchitectureSources,
 } from './architectureUtils';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(import.meta.dirname, '..');
 const config = readLayerConfig(repoRoot);
 const sourceScan = scanArchitectureSources(repoRoot, config);
 const violations = findViolations(repoRoot, config, sourceScan);
