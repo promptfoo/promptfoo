@@ -6,6 +6,7 @@ import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { ResultFailureReason } from '../../src/types/index';
+import { sleep } from '../../src/util/time';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -199,6 +200,55 @@ describeEvaluator('partial provider evidence', () => {
     expect(summary.results[0].response?.output).toBe('Completed response');
     expect(summary.results[0].response?.metadata?.headers?.['content-type']).toBe('text/plain');
     expect(JSON.stringify(summary)).not.toContain('synthetic-secret');
+  });
+
+  it('retains completed strategy grading usage during outer provider pacing', async () => {
+    vi.useFakeTimers();
+    vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+    const finalResponse: ProviderResponse = {
+      output: 'Completed response',
+      tokenUsage: { numRequests: 1, total: 11 },
+      metadata: {
+        storedGraderResult: {
+          pass: true,
+          score: 1,
+          reason: 'Synthetic grade',
+          tokensUsed: { total: 23, numRequests: 1 },
+        },
+      },
+    };
+    let lateProgress: CallApiOptionsParams['onProgress'];
+    const provider: ApiProvider = {
+      id: () => 'synthetic-graded-provider',
+      delay: 100,
+      callApi: vi.fn(async (_prompt, _context, options) => {
+        options?.onProgress?.({
+          output: 'Completed response',
+          tokenUsage: { numRequests: 1, total: 11, assertions: { total: 23, numRequests: 1 } },
+        });
+        lateProgress = options?.onProgress;
+        return finalResponse;
+      }),
+    };
+    const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
+    const record = new Eval({});
+    const evaluation = evaluate(suite, record, { timeoutMs: 50 });
+    await vi.advanceTimersByTimeAsync(0);
+    lateProgress?.({ output: 'Late callback after return', tokenUsage: { numRequests: 100 } });
+    await vi.advanceTimersByTimeAsync(50);
+    await evaluation;
+    const summary = await record.toEvaluateSummary();
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0]).toMatchObject({
+      success: false,
+      score: 0,
+      failureReason: ResultFailureReason.ERROR,
+      response: { output: 'Completed response' },
+      tokenUsage: { numRequests: 1, total: 11, assertions: { total: 23, numRequests: 1 } },
+    });
+    expect(summary.stats.tokenUsage.assertions).toMatchObject({ total: 23, numRequests: 1 });
+    // The checkpoint cannot add internal grading to the normal response a second time.
+    expect(finalResponse.tokenUsage?.assertions).toBeUndefined();
   });
 
   it('uses a completed response once when it beats the timeout', async () => {

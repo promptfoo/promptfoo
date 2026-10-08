@@ -1716,7 +1716,7 @@ async function runEvalInternal({
           },
         );
     const executionTraceContext = traceContext;
-    const checkpoint: NonNullable<CallApiOptionsParams['onProgress']> = (response) => {
+    const checkpoint = (response: ProviderResponse, completed = false) => {
       if ((!onProviderProgress && !abortSignal) || !acceptingProgress || abortSignal?.aborted) {
         return;
       }
@@ -1727,6 +1727,16 @@ async function runEvalInternal({
         return;
       }
       const snapshot = normalizeCachedTargetResponse(JSON.parse(serialized));
+      // Strategy responses carry internal grading separately from target usage.
+      // Account for that completed work if interruption occurs after callApi returns,
+      // without changing the response used by normal assertion accounting.
+      const storedGrade = completed ? snapshot.metadata?.storedGraderResult : undefined;
+      if (storedGrade?.tokensUsed) {
+        snapshot.tokenUsage ??= createEmptyTokenUsage();
+        accumulateGradingTokenUsage(snapshot.tokenUsage, storedGrade.tokensUsed, {
+          cached: storedGrade.metadata?.cachedResponse,
+        });
+      }
       partialResult = createEvaluateResult({
         fileMetadata: state.fileMetadata,
         latencyMs: 0,
@@ -1771,7 +1781,8 @@ async function runEvalInternal({
             vars: state.vars,
           });
           abortSignal?.throwIfAborted();
-          checkpoint(providerCall.response);
+          checkpoint(providerCall.response, true);
+          acceptingProgress = false;
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
