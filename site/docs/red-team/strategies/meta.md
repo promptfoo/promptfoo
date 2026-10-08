@@ -53,6 +53,8 @@ This provides broader coverage of potential vulnerabilities at the cost of more 
 
 The meta-agent stops when it finds a vulnerability, determines the target is secure, or reaches max iterations.
 
+If Cloud explicitly reports that the upstream provider rejected a coordination request as invalid JSON (`invalid_json`), the strategy stops and reports the error while retaining completed attempts. Other errors continue through the existing retry and iteration behavior.
+
 ## When to Use
 
 **Use `jailbreak:meta` when:**
