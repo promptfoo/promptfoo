@@ -3922,6 +3922,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         this.failedResumeWrites.add(getResultIndexKey(row));
       }
       this.store.recordResultPersistenceFailure(row);
+      // Non-streamed timeout rows also need a copy when this is the first failed write.
+      this.trackFinalJsonlResult(row);
       const resultSummary = summarizeEvaluateResultForLogging(row);
       logger.error('[Evaluator] Error saving result', {
         error,

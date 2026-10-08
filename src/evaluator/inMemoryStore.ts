@@ -81,6 +81,11 @@ export class InMemoryEvaluationStore
     } else {
       this.evaluation.results.push(result);
     }
+    const key = getResultIndexKey(result);
+    this.failedResultsByIndex.delete(key);
+    this.finalResultsByIndex.delete(key);
+    this.syncFailedResults();
+    this.syncFinalResults();
   }
 
   async appendPrompts(prompts: CompletedPrompt[]): Promise<void> {

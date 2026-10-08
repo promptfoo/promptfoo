@@ -379,7 +379,9 @@ export class HydraProvider implements ApiProvider {
 
     // Include every completed probe in checkpoints, even responses that are
     // backtracked or still awaiting grading. Keep normal grading history intact.
-    const completedTargetHistory: typeof redteamHistory = [];
+    const completedTargetHistory: Array<
+      (typeof redteamHistory)[number] & Pick<TargetResponse, 'images'>
+    > = [];
     const callOptions = options ? { ...options, onProgress: undefined } : undefined;
     const publishProgress = () => {
       options?.abortSignal?.throwIfAborted();
@@ -721,7 +723,7 @@ export class HydraProvider implements ApiProvider {
             },
           }
         : context;
-      let checkpointedTurn: (typeof redteamHistory)[number] | undefined;
+      let checkpointedTurn: (typeof completedTargetHistory)[number] | undefined;
       const checkpointTargetResponse = (response: TargetResponse) => {
         options?.abortSignal?.throwIfAborted();
         // Delayed targets checkpoint before pacing; other targets checkpoint on return.
@@ -741,6 +743,7 @@ export class HydraProvider implements ApiProvider {
           promptAudio: lastTransformResult?.audio,
           promptImage: lastTransformResult?.image,
           output: scrubOutputForHistory(response.output),
+          images: response.images,
           outputAudio: response.audio
             ? { ...response.audio, format: response.audio.format || 'wav' }
             : undefined,
@@ -895,6 +898,7 @@ export class HydraProvider implements ApiProvider {
       lastResponseMessages = [...this.conversationHistory];
 
       completedTurn.output = historyOutput;
+      completedTurn.images = targetResponse.images;
       completedTurn.outputAudio = targetResponse.audio
         ? { ...targetResponse.audio, format: targetResponse.audio.format || 'wav' }
         : undefined;

@@ -1,6 +1,9 @@
 import './setup';
 
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import { expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
@@ -13,6 +16,7 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { ResultFailureReason, type TestSuite } from '../../src/types/index';
+import { writeMultipleOutputs } from '../../src/util/output';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -199,6 +203,100 @@ describeEvaluator('evaluator runtime ports', () => {
       success: false,
       failureReason: ResultFailureReason.ASSERT,
     });
+  });
+
+  it('compares the newly saved response after an in-memory resume recovers a failed write', async () => {
+    const state = createInMemoryEvaluation({ persisted: true });
+    const store = new InMemoryEvaluationStore(state);
+    const runtime = createInMemoryRuntime(store);
+    const append = vi
+      .spyOn(store, 'appendResult')
+      .mockRejectedValueOnce(new Error('Synthetic write failure'));
+    const grader: ApiProvider = {
+      id: () => 'synthetic-resume-grader',
+      callApi: vi.fn(async () => ({ output: '0' })),
+    };
+    const target: ApiProvider = {
+      id: () => 'synthetic-resume-target',
+      callApi: vi.fn(async (prompt) => ({ output: `Old ${prompt}` })),
+    };
+    const suite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('first'), toPrompt('second')],
+      tests: [
+        {
+          options: { rubricPrompt: '{{ outputs | dump }}' },
+          assert: [{ type: 'select-best', value: 'Choose the best', provider: grader }],
+        },
+      ],
+    };
+    cliState.resume = true;
+    try {
+      await evaluate(suite, state, { maxConcurrency: 1 }, runtime);
+      expect(state.failedResults).toHaveLength(1);
+      store.recordFinalResult(state.failedResults[0]);
+      vi.mocked(target.callApi).mockImplementation(async (prompt) => ({ output: `New ${prompt}` }));
+      await evaluate(suite, state, { maxConcurrency: 1 }, runtime);
+      expect(grader.callApi).toHaveBeenCalledTimes(2);
+      const inputs = JSON.parse(vi.mocked(grader.callApi).mock.calls[1][0]);
+      expect(inputs).toHaveLength(2);
+      expect(inputs).toEqual(expect.arrayContaining(['New first', 'Old second']));
+      expect(state.results.find((row) => row.promptIdx === 0)?.response?.output).toBe('New first');
+      expect(state.failedResults).toEqual([]);
+      expect(state.finalResults).toEqual([]);
+    } finally {
+      append.mockRestore();
+    }
+  });
+
+  it('exports timeout evidence when the timeout row is the first failed database write', async () => {
+    const outputDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-timeout-recovery-'));
+    const outputPath = path.join(outputDir, 'results.jsonl');
+    const resultWriter = createResultWriter();
+    const runtime = createRuntime([resultWriter]);
+    const record = createEvalRecord();
+    const append = vi
+      .spyOn(record, 'addResult')
+      .mockRejectedValue(new Error('Synthetic write failure'));
+    const target: ApiProvider = {
+      id: () => 'synthetic-timeout-evidence',
+      callApi: vi.fn((_prompt, _context, options) => {
+        options?.onProgress?.({
+          output: 'Completed probe',
+          tokenUsage: { total: 11, numRequests: 1 },
+          metadata: { redteamHistory: [{ output: 'Completed probe' }] },
+        });
+        return new Promise<never>(() => {});
+      }),
+    };
+    const suite: TestSuite = { providers: [target], prompts: [toPrompt('Probe')], tests: [{}] };
+    vi.useFakeTimers();
+    try {
+      const evaluation = evaluate(suite, record, { timeoutMs: 10 }, runtime);
+      await vi.advanceTimersByTimeAsync(10);
+      await evaluation;
+      vi.useRealTimers();
+      expect(resultWriter.write).not.toHaveBeenCalled();
+      await writeMultipleOutputs([outputPath], record, null);
+      const rows = (await readFile(outputPath, 'utf8'))
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        response: { output: 'Completed probe' },
+        metadata: { incomplete: true, redteamHistory: [{ output: 'Completed probe' }] },
+        tokenUsage: { total: 11, numRequests: 1 },
+      });
+    } finally {
+      vi.useRealTimers();
+      append.mockRestore();
+      await rm(outputDir, { recursive: true, force: true });
+    }
   });
 
   it('requires an explicit runtime for non-default evaluation records', () => {

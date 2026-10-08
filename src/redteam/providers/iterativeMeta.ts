@@ -197,7 +197,9 @@ export async function runMetaAgentRedteam({
   // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
   let lastFinalAttackPrompt: string | undefined;
 
-  const completedTargetHistory: IterativeMetaMetadata['redteamHistory'] = [];
+  const completedTargetHistory: Array<
+    IterativeMetaMetadata['redteamHistory'][number] & Pick<TargetResponse, 'images'>
+  > = [];
   const callOptions = options ? { ...options, onProgress: undefined } : undefined;
   const publishProgress = () => {
     options?.abortSignal?.throwIfAborted();
@@ -486,7 +488,7 @@ export async function runMetaAgentRedteam({
           vars: updatedVars,
         }
       : iterationContext;
-    let checkpointedTurn: IterativeMetaMetadata['redteamHistory'][number] | undefined;
+    let checkpointedTurn: (typeof completedTargetHistory)[number] | undefined;
     const checkpointTargetResponse = (response: TargetResponse) => {
       options?.abortSignal?.throwIfAborted();
       // Delayed targets checkpoint before pacing; other targets checkpoint on return.
@@ -500,6 +502,7 @@ export async function runMetaAgentRedteam({
         promptAudio: lastTransformResult?.audio,
         promptImage: lastTransformResult?.image,
         output: response.output,
+        images: response.images,
         outputAudio: response.audio
           ? { ...response.audio, format: response.audio.format || 'wav' }
           : undefined,
@@ -537,6 +540,7 @@ export async function runMetaAgentRedteam({
     );
     lastResponse = targetResponse;
     completedTurn.output = targetResponse.output;
+    completedTurn.images = targetResponse.images;
     completedTurn.outputAudio = targetResponse.audio
       ? { ...targetResponse.audio, format: targetResponse.audio.format || 'wav' }
       : undefined;

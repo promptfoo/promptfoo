@@ -352,67 +352,82 @@ describe('HydraProvider', () => {
     expect(snapshots.at(-1)?.tokenUsage?.assertions?.total).toBe(23);
   });
 
-  it('retains externalized audio from an earlier completed turn after a text-only turn', async () => {
-    await runDbMigrations();
-    const blobStorage = vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(true);
-    try {
-      const controller = new AbortController();
-      const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
-      const audio = Buffer.alloc(2048, 1);
-      let finishNextAttack!: () => void;
-      mockAgentProvider.callApi
-        .mockResolvedValueOnce({ output: 'First probe' })
-        .mockResolvedValueOnce({ output: 'Second probe' })
-        .mockImplementationOnce(
-          () =>
-            new Promise((resolve) => {
-              finishNextAttack = () => resolve({ output: 'Late probe' });
-            }),
+  it.each(['audio', 'images'] as const)(
+    'retains externalized %s from an earlier completed turn after a text-only turn',
+    async (mediaKind) => {
+      await runDbMigrations();
+      const blobStorage = vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(true);
+      try {
+        const controller = new AbortController();
+        const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
+        const media = Buffer.alloc(2048, 1);
+        let finishNextAttack!: () => void;
+        mockAgentProvider.callApi
+          .mockResolvedValueOnce({ output: 'First probe' })
+          .mockResolvedValueOnce({ output: 'Second probe' })
+          .mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                finishNextAttack = () => resolve({ output: 'Late probe' });
+              }),
+          );
+        mockTargetProvider.callApi
+          .mockResolvedValueOnce({
+            output: 'Completed media response',
+            ...(mediaKind === 'audio'
+              ? { audio: { data: media.toString('base64'), format: 'wav' } }
+              : {
+                  images: [
+                    {
+                      data: 'data:image/png;base64,' + media.toString('base64'),
+                      mimeType: 'image/png',
+                    },
+                  ],
+                }),
+          })
+          .mockResolvedValueOnce({ output: 'Completed text response' });
+        const test: AtomicTestCase = {
+          assert: [{ type: 'promptfoo:redteam:pii' }],
+          metadata: { pluginId: 'pii' },
+        };
+        const attack = new HydraProvider({ injectVar: 'input', maxTurns: 3 }).callApi(
+          '',
+          {
+            originalProvider: mockTargetProvider,
+            vars: { input: 'Synthetic objective' },
+            prompt: { raw: '{{input}}', label: 'test' },
+            test,
+          },
+          {
+            abortSignal: controller.signal,
+            onProgress: (response) => snapshots.push(structuredClone(response)),
+          },
         );
-      mockTargetProvider.callApi
-        .mockResolvedValueOnce({
-          output: 'Completed audio response',
-          audio: { data: audio.toString('base64'), format: 'wav' },
-        })
-        .mockResolvedValueOnce({ output: 'Completed text response' });
-      const test: AtomicTestCase = {
-        assert: [{ type: 'promptfoo:redteam:pii' }],
-        metadata: { pluginId: 'pii' },
-      };
-      const attack = new HydraProvider({ injectVar: 'input', maxTurns: 3 }).callApi(
-        '',
-        {
-          originalProvider: mockTargetProvider,
-          vars: { input: 'Synthetic objective' },
-          prompt: { raw: '{{input}}', label: 'test' },
-          test,
-        },
-        {
-          abortSignal: controller.signal,
-          onProgress: (response) => snapshots.push(structuredClone(response)),
-        },
-      );
-      await vi.waitFor(() => expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3));
-      const checkpoint = snapshots.at(-1)!;
-      expect(checkpoint.metadata?.redteamHistory).toHaveLength(2);
-      const storedAudio = checkpoint.metadata?.redteamHistory[0].outputAudio;
-      expect(storedAudio).toMatchObject({
-        format: 'wav',
-        blobRef: { uri: expect.stringMatching(/^promptfoo:\/\/blob\//), sizeBytes: 2048 },
-      });
-      expect(storedAudio.data).toBeUndefined();
-      expect(checkpoint.audio).toBeUndefined();
-      expect((await getBlobByHash(storedAudio.blobRef.hash)).data).toEqual(audio);
-      const checkpointCount = snapshots.length;
-      controller.abort();
-      const stopped = expect(attack).rejects.toThrow();
-      finishNextAttack();
-      await stopped;
-      expect(snapshots).toHaveLength(checkpointCount);
-    } finally {
-      blobStorage.mockRestore();
-    }
-  });
+        await vi.waitFor(() => expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3));
+        const checkpoint = snapshots.at(-1)!;
+        expect(checkpoint.metadata?.redteamHistory).toHaveLength(2);
+        const storedMedia =
+          mediaKind === 'audio'
+            ? checkpoint.metadata?.redteamHistory[0].outputAudio
+            : checkpoint.metadata?.redteamHistory[0].images?.[0];
+        expect(storedMedia).toMatchObject({
+          ...(mediaKind === 'audio' ? { format: 'wav' } : { mimeType: 'image/png' }),
+          blobRef: { uri: expect.stringMatching(/^promptfoo:\/\/blob\//), sizeBytes: 2048 },
+        });
+        expect(storedMedia.data).toBeUndefined();
+        expect(checkpoint[mediaKind]).toBeUndefined();
+        expect((await getBlobByHash(storedMedia.blobRef.hash)).data).toEqual(media);
+        const checkpointCount = snapshots.length;
+        controller.abort();
+        const stopped = expect(attack).rejects.toThrow();
+        finishNextAttack();
+        await stopped;
+        expect(snapshots).toHaveLength(checkpointCount);
+      } finally {
+        blobStorage.mockRestore();
+      }
+    },
+  );
 
   it('checkpoints completed transform usage while the target is pending', async () => {
     const controller = new AbortController();
