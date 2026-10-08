@@ -668,6 +668,51 @@ describe('N8nProvider', () => {
       expect(retryOptions.getRetryAfter?.(result, undefined)).toBe(30_000);
     });
 
+    it('keeps hard quota failures out of scheduler backoff', async () => {
+      vi.mocked(fetchWithRetries).mockRejectedValue(
+        new HttpRateLimitError({
+          status: 429,
+          code: 'credit_balance_exhausted',
+          headers: { 'retry-after': '60' },
+        }),
+      );
+      const result = await new N8nProvider('https://n8n.example.com/webhook/agent').callApi(
+        'Hello',
+      );
+      expect(result.metadata).toMatchObject({ rateLimitKind: 'quota', rateLimitRetryable: false });
+      expect(createProviderRateLimitOptions().isRateLimited?.(result, undefined)).toBe(false);
+      expect(fetchWithRetries).toHaveBeenCalledOnce();
+    });
+
+    it.each(['response', 'rate-limit error'])(
+      'sanitizes credentials from %s headers',
+      async (source) => {
+        const headers = {
+          'set-cookie': 'session=secret-cookie',
+          authorization: 'Bearer secret-auth',
+          'x-api-key': 'secret-key',
+          'retry-after': '30',
+          'x-request-id': 'request-safe',
+        };
+        if (source === 'response') {
+          vi.mocked(fetchWithRetries).mockResolvedValue(
+            createMockResponse('denied', { status: 401, headers }),
+          );
+        } else {
+          vi.mocked(fetchWithRetries).mockRejectedValue(
+            new HttpRateLimitError({ status: 429, headers }),
+          );
+        }
+        const result = await new N8nProvider('https://n8n.example.com/webhook/agent').callApi(
+          'Hello',
+        );
+        expect(JSON.stringify(result)).not.toContain('secret-');
+        expect(result.metadata?.http).toMatchObject({
+          headers: { 'retry-after': '30', 'x-request-id': 'request-safe' },
+        });
+      },
+    );
+
     it('should treat n8n error payloads as provider errors', async () => {
       vi.mocked(fetchWithRetries).mockResolvedValue(
         createMockResponse({ error: 'Workflow failed' }),

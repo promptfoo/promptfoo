@@ -120,6 +120,34 @@ describe('file prompt labels', () => {
     },
   );
 
+  it.each(['txt', 'md'])(
+    'keeps config-relative %s glob IDs and labels stable',
+    async (extension) => {
+      const id = `file://prompts/*.${extension}`;
+      fs.writeFileSync(
+        path.join(directory, 'project', 'promptfooconfig.json'),
+        JSON.stringify({
+          prompts: [{ id, label: 'Group' }],
+          providers: [{ id: 'echo', prompts: [id] }],
+          tests: [{ prompts: [id], vars: { topic: 'labels' } }],
+        }),
+      );
+      process.chdir(path.join(directory, 'project'));
+      const { testSuite } = await resolve('promptfooconfig.json');
+      expect(testSuite.prompts.map((p) => p.id)).toEqual(
+        extension === 'txt'
+          ? [`${id}:prompts/multi.txt:1`, `${id}:prompts/multi.txt:2`]
+          : [`${id}:prompts/doc.md`],
+      );
+      expect(testSuite.prompts.every((p) => doesPromptRefMatch(id, p))).toBe(true);
+      expect(testSuite.prompts.map((p) => p.label)).toEqual(
+        extension === 'txt'
+          ? [`Group: ${multiPrompt}: First {{topic}}`, `Group: ${multiPrompt}: Second {{topic}}`]
+          : ['Group: prompts/doc.md'],
+      );
+    },
+  );
+
   it('normalizes only the generated path in text labels with an authored prefix', async () => {
     const fileName = 'labeled.txt';
     const filePath = path.join(directory, 'project', fileName);

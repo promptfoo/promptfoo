@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import logger from '../logger';
 import { fetchWithRetries } from '../util/fetch';
 import { isHttpRateLimitError } from '../util/fetch/errors';
+import { sanitizeObject } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs } from './shared';
 
@@ -590,7 +591,9 @@ export class N8nProvider implements ApiProvider {
             http: {
               status: response.status,
               statusText: response.statusText,
-              headers: Object.fromEntries(response.headers.entries()),
+              headers: sanitizeObject(Object.fromEntries(response.headers.entries()), {
+                context: 'response headers',
+              }),
             },
           },
         };
@@ -605,12 +608,19 @@ export class N8nProvider implements ApiProvider {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       logger.error(`[n8n] Request failed: ${errorMessage}`);
-      const http = isHttpRateLimitError(err)
-        ? { status: err.status, statusText: err.statusText, headers: err.headers }
-        : undefined;
       return {
         error: `n8n webhook call error: ${errorMessage}`,
-        ...(http && { metadata: { http, rateLimitRetryable: http.status === 429 } }),
+        ...(isHttpRateLimitError(err) && {
+          metadata: {
+            http: {
+              status: err.status,
+              statusText: err.statusText,
+              headers: sanitizeObject(err.headers, { context: 'response headers' }),
+            },
+            rateLimitKind: err.kind,
+            rateLimitRetryable: err.kind === 'rate_limit',
+          },
+        }),
       };
     }
 

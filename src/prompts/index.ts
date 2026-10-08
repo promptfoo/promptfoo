@@ -223,7 +223,12 @@ async function processPrompt(
           ...prompt,
           raw: rawPath,
           id: prompt.id && `${prompt.id}:${relativePath}`,
-          label: prompt.label && `${prompt.label}: ${relativePath}`,
+          // Text files append their path and chunk text in their processor.
+          label:
+            prompt.label &&
+            (path.extname(matchedPath) === '.txt'
+              ? prompt.label
+              : `${prompt.label}: ${relativePath}`),
         },
         basePath,
         maxRecursionDepth - 1,

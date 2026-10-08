@@ -697,7 +697,11 @@ async function prepareCombinedConfig(
     if (prompt.id) {
       return {
         ...prompt,
-        id: prompt.id.startsWith('file://') ? resolveConfigPath(basePath, prompt.id) : prompt.id,
+        // Resolve the file to read independently from its authored identity. Glob IDs
+        // are also used by provider/test prompt filters and must survive relocation.
+        ...(prompt.id.startsWith('file://') && {
+          raw: prompt.raw || resolveConfigPath(basePath, prompt.id),
+        }),
       };
     }
     if (PromptSchema.safeParse(prompt).success) {
