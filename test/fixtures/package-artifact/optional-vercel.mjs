@@ -21,7 +21,7 @@ if (state === 'installed') {
     }
     requests.push({ url: request.url, headers: request.headers, body: JSON.parse(body) });
     response.setHeader('Content-Type', 'application/json');
-    if (request.headers['ai-model-id'] === 'fixture/error') {
+    if (request.headers['ai-language-model-id'] === 'fixture/error') {
       response.writeHead(400);
       response.end(JSON.stringify({ error: { message: 'fixture gateway failure' } }));
     } else if (request.url === '/v1/ai/embedding-model') {
