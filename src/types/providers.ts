@@ -79,6 +79,9 @@ export interface ProviderOptions {
   inputs?: Inputs;
 }
 
+/** Read stored image bytes for grading without coupling matchers to persistence. */
+export type GradingBlobResolver = (hash: string) => Promise<{ data: Buffer; mimeType?: string }>;
+
 export interface CallApiContextParams {
   filters?: NunjucksFilterMap;
   getCache?: any;
@@ -112,6 +115,8 @@ export interface CallApiContextParams {
    */
   promptIdx?: number;
   repeatIndex?: number;
+  /** Storage adapter used by model-graded assertions for image outputs. */
+  resolveImageBlob?: GradingBlobResolver;
 }
 
 export interface CallApiOptionsParams {

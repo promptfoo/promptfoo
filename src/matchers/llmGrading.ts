@@ -21,10 +21,13 @@ import {
   shouldUseRemoteGrading,
 } from './providers';
 import {
+  type GradingImageData,
   LlmRubricProviderError,
   loadRubricPrompt,
   materializeImageOutputsForGrading,
+  normalizeBase64ImageData,
   renderLlmRubricPrompt,
+  resolveBlobBackedImageOutputs,
   runJsonGradingPrompt,
 } from './rubric';
 import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
@@ -32,6 +35,7 @@ import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 import type {
   Assertion,
   CallApiContextParams,
+  GradingBlobResolver,
   GradingConfig,
   GradingResult,
   ProviderResponse,
@@ -128,16 +132,12 @@ function parseLegacyFactualityResponse(responseText: string): { option: string; 
   };
 }
 
-function getDataUriPayload(data: string): string | undefined {
-  const [metadata, payload] = data.trim().split(',', 2);
-  if (!payload || !metadata.toLowerCase().startsWith('data:image/')) {
-    return undefined;
-  }
-  return payload;
-}
-
-function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResponse['images']) {
-  if (!imageOutputs?.length) {
+function getGradingOutputForImages(
+  llmOutput: string,
+  imageOutputs: ProviderResponse['images'],
+  imageData: GradingImageData[],
+) {
+  if (!imageData.length) {
     return llmOutput;
   }
 
@@ -146,18 +146,44 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
     return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
   }
 
-  if (/^data:image\/[^;,]+;base64,/i.test(trimmedOutput)) {
-    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
+  const imageValues = new Set<string>();
+  for (const image of imageOutputs ?? []) {
+    if (image.data) {
+      imageValues.add(image.data.trim());
+    }
+    if (image.blobRef) {
+      imageValues.add(image.blobRef.uri);
+    }
   }
-
-  if (
-    imageOutputs.some((image) => {
-      if (!image.data) {
+  const imagePayloads = new Set(imageData.map((image) => image.base64Data));
+  const isImageValue = (value: unknown): boolean => {
+    if (typeof value === 'string') {
+      if (imageValues.has(value.trim())) {
+        return true;
+      }
+      try {
+        return imagePayloads.has(normalizeBase64ImageData(value).base64Data);
+      } catch {
         return false;
       }
-      const imageData = image.data.trim();
-      return imageData === trimmedOutput || getDataUriPayload(imageData) === trimmedOutput;
-    })
+    }
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      Object.keys(value).length === 1 &&
+      'b64_json' in value &&
+      typeof value.b64_json === 'string' &&
+      isImageValue(value.b64_json)
+    );
+  };
+  const parsed: unknown = tryParse(trimmedOutput);
+  const imageList =
+    parsed && typeof parsed === 'object' && Object.keys(parsed).length === 1 && 'data' in parsed
+      ? parsed.data
+      : parsed;
+  if (
+    isImageValue(parsed) ||
+    (Array.isArray(imageList) && imageList.length > 0 && imageList.every(isImageValue))
   ) {
     return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
   }
@@ -188,6 +214,7 @@ export async function matchesLlmRubric(
     throwOnError?: boolean;
     preferRemote?: boolean;
     providerResponse?: ProviderResponse;
+    resolveImageBlob?: GradingBlobResolver;
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -203,11 +230,16 @@ export async function matchesLlmRubric(
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
-  const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
+  const resolvedImages = await resolveBlobBackedImageOutputs(
+    options?.providerResponse?.images,
+    options?.resolveImageBlob,
+  );
+  const { imageOutputs, imageData } = materializeImageOutputsForGrading(resolvedImages);
   const audio = options?.providerResponse?.audio;
   const gradingOutput = getGradingOutputForImages(
     getGradingOutputForAudio(llmOutput, audio),
-    imageOutputs,
+    options?.providerResponse?.images,
+    imageData,
   );
   if (
     !grading.rubricPrompt &&
@@ -245,7 +277,7 @@ export async function matchesLlmRubric(
       label: 'llm-rubric',
       providerCallContext,
       throwOnError: options?.throwOnError,
-      images: imageOutputs,
+      imageData,
       audio,
       vars: {
         ...(vars || {}),

@@ -33,6 +33,7 @@ import {
   type AssertionValue,
   type AtomicTestCase,
   type CallApiContextParams,
+  type GradingBlobResolver,
   type GradingResult,
   type TraceData,
   type VarValue,
@@ -417,6 +418,7 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
+  resolveImageBlob,
   claimStoredGradingUsage,
 }: {
   prompt?: string;
@@ -429,6 +431,7 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  resolveImageBlob?: GradingBlobResolver;
   claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
@@ -616,14 +619,16 @@ async function runAssertionInternal({
       ? activeTraceparent
       : generateTraceparent(traceId, generateSpanId())
     : undefined;
-  const providerCallContext: CallApiContextParams | undefined = provider
-    ? {
-        originalProvider: provider,
-        prompt: { raw: prompt || '', label: '' },
-        vars: resolvedVars,
-        ...(graderTraceparent && { traceparent: graderTraceparent }),
-      }
-    : undefined;
+  const providerCallContext: CallApiContextParams | undefined =
+    provider || resolveImageBlob
+      ? {
+          originalProvider: provider,
+          prompt: { raw: prompt || '', label: '' },
+          vars: resolvedVars,
+          ...(graderTraceparent && { traceparent: graderTraceparent }),
+          ...(resolveImageBlob && { resolveImageBlob }),
+        }
+      : undefined;
 
   const finalTest = getFinalTest(
     vars === undefined ? test : { ...test, vars: resolvedVars },
@@ -761,6 +766,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  resolveImageBlob,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -770,6 +776,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  resolveImageBlob?: GradingBlobResolver;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -864,6 +871,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      resolveImageBlob,
       claimStoredGradingUsage,
     });
 
