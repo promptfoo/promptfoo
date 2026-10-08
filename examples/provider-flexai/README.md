@@ -2,6 +2,8 @@
 
 Compare two FlexAI chat models and grade a similarity assertion with FlexAI's `bge-m3` embeddings, using promptfoo's OpenAI-compatible provider.
 
+## Usage
+
 ```bash
 npx promptfoo@latest init --example provider-flexai
 cd provider-flexai
