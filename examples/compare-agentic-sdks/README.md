@@ -6,6 +6,8 @@ Compare OpenAI Codex SDK, Claude Agent SDK, and OpenCode SDK on a security audit
 
 ```bash
 npx promptfoo@latest init --example compare-agentic-sdks
+cd compare-agentic-sdks
+npm install promptfoo @openai/codex-sdk@^0.156.1 @anthropic-ai/claude-agent-sdk@^0.3.273
 npx promptfoo eval
 npx promptfoo view
 ```
