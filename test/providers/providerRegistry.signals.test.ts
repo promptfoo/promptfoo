@@ -50,12 +50,12 @@ describe('provider registry signal cleanup', () => {
 
         expect(worker.exitCode).toBeNull();
         expect(provider.shutdown).toHaveBeenCalledOnce();
-        expect(debug).not.toHaveBeenCalledWith('Python provider shutdown complete');
+        expect(debug).not.toHaveBeenCalledWith('Provider shutdown complete');
 
         release();
         await stopping;
         await vi.waitFor(() => {
-          expect(debug).toHaveBeenCalledWith('Python provider shutdown complete');
+          expect(debug).toHaveBeenCalledWith('Provider shutdown complete');
         });
         expect(worker.exitCode).toBe(0);
       } finally {

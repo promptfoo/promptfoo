@@ -8,8 +8,7 @@ interface CleanupProvider {
 }
 
 /**
- * Global registry of Python providers for cleanup on process exit.
- * Ensures no zombie Python processes are left running.
+ * Tracks resource-owning providers for cleanup after evals and on process exit.
  */
 class ProviderRegistry {
   private providers: Set<CleanupProvider> = new Set();
@@ -54,6 +53,10 @@ class ProviderRegistry {
     this.shutdownHandlers = null;
   }
 
+  has(provider: unknown): boolean {
+    return this.providers.has(provider as CleanupProvider);
+  }
+
   private registerShutdownHandlers(): void {
     let shuttingDown = false;
 
@@ -63,11 +66,11 @@ class ProviderRegistry {
       }
       shuttingDown = true;
 
-      logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
+      logger.debug(`Received ${signal}, shutting down ${this.providers.size} providers...`);
 
       try {
         await this.shutdownAll(signal === 'beforeExit');
-        logger.debug('Python provider shutdown complete');
+        logger.debug('Provider shutdown complete');
       } finally {
         // A once handler has been consumed. New registrations during cleanup
         // must receive a fresh set without removing any host-owned listeners.
