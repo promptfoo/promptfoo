@@ -21,3 +21,5 @@ print(call, put)  # 17.25406661081081, 4.806702702077807
 ```
 
 The absolute tolerance of 0.005 allows rounding to cents. The incorrect option output keeps the call price correct but changes the put price, so every referenced field must be checked.
+
+`references.yaml` and `references.json` exercise the real config loader: an unquoted unsafe integer, its quoted exact counterpart, a quoted high-precision decimal, an excessive effective fractional scale, and an excessive effective magnitude. Keep the unquoted integer literal unchanged; serializing it through JavaScript would round away the regression input.

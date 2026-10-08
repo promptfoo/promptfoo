@@ -1,3 +1,5 @@
+import path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../../src/assertions/index';
 import { RedteamGradingConfigError } from '../../../src/redteam/grading/errors';
@@ -7,6 +9,7 @@ import {
 } from '../../../src/redteam/grading/storedResult';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { FinancialCalculationErrorPluginGrader } from '../../../src/redteam/plugins/financial/financialCalculationError';
+import { readConfig } from '../../../src/util/config/load';
 import cases from '../../fixtures/financial-calculation/cases.json';
 
 import type { Assertion, AssertionValue, AtomicTestCase } from '../../../src/types/index';
@@ -64,8 +67,11 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
     [0.0001, 0, 0, 0.5, false],
     [1.015, 1, 0.01, 0.01, false],
     [0.3, 0.1 + 0.2, 0, 0, false],
-    [1e308, -1e308, 1e308, 0, false],
-    [1e16 + 2, 1e16, 0.01, 0, false],
+    [1e308, '-1e308', 1e308, 0, false],
+    [1e16 + 2, '1e16', 0.01, 0, false],
+    [1e308, 42, 0, 1e308, true],
+    [-1e308, '1e308', 0, 2, true],
+    [-Number.MAX_VALUE, '1e308', 0, 2, false],
   ])(
     'compares %s with %s at tolerances %s/%s',
     async (actual, expected, absoluteTolerance, relativeTolerance, pass) => {
@@ -80,16 +86,19 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
   );
 
   it.each([
-    ['{"amount":9007199254740993}', 9007199254740992, 0, false],
-    ['{"amount":9007199254740992}', 9007199254740992, 0, true],
-    ['{"amount":10000000000000000.49}', 1e16, 0.01, false],
+    ['{"amount":9007199254740993}', '9007199254740992', 0, false],
+    ['{"amount":9007199254740992}', '9007199254740992', 0, true],
+    ['{"amount":10000000000000000.49}', '1e16', 0.01, false],
     ['{"amount":1e-999}', 0, 0, false],
     ['{"amount":0.110000000000000001}', 0.1, 0.01, false],
     ['{"amount":0.109999999999999999}', 0.1, 0.01, true],
     ['{"amount":1.1e-1}', 0.1, 0.01, true],
     ['{"amount":0.10}', 0.1, 0, true],
-    ['{"amount":1' + '0'.repeat(100) + '.005}', 1e100, 0.01, true],
-    ['{"amount":1' + '0'.repeat(100) + '.015}', 1e100, 0.01, false],
+    ['{"amount":1e-324}', '1e-324', 0, true],
+    ['{"amount":' + '1'.repeat(100) + 'e209}', '1'.repeat(100) + 'e209', 0, true],
+
+    ['{"amount":1' + '0'.repeat(100) + '.005}', '1e100', 0.01, true],
+    ['{"amount":1' + '0'.repeat(100) + '.015}', '1e100', 0.01, false],
     ['{"amount":-1}', 1e-100, 1, false],
     ['{"amount":1}', -1e-100, 1, false],
     ['{"amount":1e-9999999999999999}', 0, 0, false],
@@ -104,6 +113,55 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
     });
     expect(result.grade.pass).toBe(pass);
   });
+
+  it.each([
+    '',
+    '100 USD',
+    '1 + 2',
+    '0x10',
+    'Infinity',
+    'NaN',
+    ' 1',
+    '01',
+    '+1',
+    '1'.repeat(401),
+    '1'.repeat(101),
+    '1e309',
+    '1e-325',
+    '0.' + '0'.repeat(323) + '1e-324',
+    '1'.repeat(100) + 'e308',
+  ])('rejects unsupported exact reference %s as a configuration error', async (amount) => {
+    await expect(grade('not JSON', { type: 'numeric', expected: { amount } })).rejects.toThrow(
+      RedteamGradingConfigError,
+    );
+  });
+
+  it.each(['yaml', 'json'])(
+    'preserves reference precision through the %s config loader',
+    async (extension) => {
+      const config = await readConfig(
+        path.resolve(__dirname, '../../fixtures/financial-calculation', `references.${extension}`),
+      );
+      const loadedTests = config.tests as AtomicTestCase[];
+      const run = (index: number, output: string) =>
+        runAssertion({
+          prompt: 'Return the amount as JSON',
+          test: loadedTests[index],
+          assertion: loadedTests[index].assert![0] as Assertion,
+          providerResponse: { output },
+        });
+      await expect(run(0, '{"amount":9007199254740992}')).rejects.toThrow(
+        RedteamGradingConfigError,
+      );
+      expect((await run(1, '{"amount":9007199254740993}')).pass).toBe(true);
+      expect((await run(1, '{"amount":9007199254740992}')).pass).toBe(false);
+      expect((await run(2, '{"amount":0.100000000000000001}')).pass).toBe(true);
+      expect((await run(2, '{"amount":0.1}')).pass).toBe(false);
+      await expect(run(3, '{"amount":0}')).rejects.toThrow(/324 effective decimal places/);
+      await expect(run(4, '{"amount":0}')).rejects.toThrow(RedteamGradingConfigError);
+      expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
+    },
+  );
 
   it('reports unsupported decimal underflow as a numeric contract failure', async () => {
     const result = await grade('{"amount":1e-9999999999999999}', {
@@ -142,7 +200,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
     { type: 'numeric', expected: {} },
     { type: 'numeric', expected: null },
     { type: 'numeric', expected: [] },
-    { type: 'numeric', expected: { amount: '100' } },
+    { type: 'numeric', expected: { amount: '100 USD' } },
     { type: 'numeric', expected: { amount: NaN } },
     { type: 'numeric', expected: { amount: Infinity } },
     { type: 'numeric', expected: Object.create({ amount: 100 }) },
@@ -150,7 +208,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
       { type: 'numeric', expected: { amount: 100 }, absoluteTolerance: tolerance },
       { type: 'numeric', expected: { amount: 100 }, relativeTolerance: tolerance },
     ]),
-    { type: 'numeric', expected: { amount: 1e308 }, relativeTolerance: 2 },
+    { type: 'numeric', expected: { amount: 9007199254740992 } },
     { type: 'numeric', expected: { amount: 100 }, absoluteTolerence: 0.01 },
   ])('reports malformed references as configuration errors: %j', async (reference) => {
     await expect(grade('{"amount": 100}', reference)).rejects.toThrow(
@@ -269,7 +327,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
       test,
       assertion: {
         type: 'promptfoo:redteam:financial:calculation-error',
-        value: { type: 'numeric', expected: { amount: 9007199254740992 } },
+        value: { type: 'numeric', expected: { amount: '9007199254740992' } },
       },
       providerResponse: { output: '{"amount":9007199254740993}' },
     });

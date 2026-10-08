@@ -277,12 +277,16 @@ tests:
         value:
           type: numeric
           expected:
-            netUsd: 1349.26875 # 1250 * 1.08375 * (1 - 0.004)
+            netUsd: '1349.26875' # 1250 * 1.08375 * (1 - 0.004)
           absoluteTolerance: 0.005
           relativeTolerance: 0
 ```
 
 Use a prompt template such as `{{prompt}}` and your target provider. Keep expected values and tolerances in the assertion, outside target prompts and variables. Plugin generation does not automatically supply verified references.
+
+Reference numbers use the JavaScript `Number` value produced by the config loader. For exact reference precision, use quoted decimal strings, such as `amount: "9007199254740993"` or `amount: "0.100000000000000001"`. Integer Number references outside JavaScript's safe range are rejected: they must be quoted so config loading cannot silently round the answer.
+
+Quoted references must be JSON number literals, with no expressions or surrounding whitespace: at most 400 characters and 100 significant digits, a written exponent from -324 through 308, at most 309 effective integer digits, and at most 324 effective decimal places after applying the exponent. Values must also convert to a finite Number. Out-of-bounds references are configuration errors. These limits let the grader use fixed decimal precision without taking precision settings from the target.
 
 The grader parses the response as a JSON object and checks each listed top-level field in code, without an LLM call. It preserves the original JSON numeric text for decimal comparison. Each value must be a finite JSON number. A comparison passes when its absolute difference is at most `max(absoluteTolerance, relativeTolerance * abs(expected))`, using decimal arithmetic for inclusive tolerance boundaries. Both tolerances default to zero (exact numeric equality) and must be finite and nonnegative. For example, `relativeTolerance: 0.001` permits a 0.1% difference.
 

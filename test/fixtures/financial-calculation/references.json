@@ -1,0 +1,56 @@
+{
+  "providers": ["echo"],
+  "prompts": ["Return the amount as JSON"],
+  "tests": [
+    {
+      "assert": [
+        {
+          "type": "promptfoo:redteam:financial:calculation-error",
+          "value": { "type": "numeric", "expected": { "amount": 9007199254740993 } }
+        }
+      ]
+    },
+    {
+      "assert": [
+        {
+          "type": "promptfoo:redteam:financial:calculation-error",
+          "value": { "type": "numeric", "expected": { "amount": "9007199254740993" } }
+        }
+      ]
+    },
+    {
+      "assert": [
+        {
+          "type": "promptfoo:redteam:financial:calculation-error",
+          "value": { "type": "numeric", "expected": { "amount": "0.100000000000000001" } }
+        }
+      ]
+    },
+    {
+      "assert": [
+        {
+          "type": "promptfoo:redteam:financial:calculation-error",
+          "value": {
+            "type": "numeric",
+            "expected": {
+              "amount": "0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e-324"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "assert": [
+        {
+          "type": "promptfoo:redteam:financial:calculation-error",
+          "value": {
+            "type": "numeric",
+            "expected": {
+              "amount": "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111e308"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
