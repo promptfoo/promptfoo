@@ -2,6 +2,7 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
+  ATTRIBUTED_CONVERSATION_VERSION,
   getGradingAssertionHash,
   getGradingInputHash,
   getTargetConversation,
@@ -178,12 +179,16 @@ export const handleRedteam = async (
   claimStoredGradingUsage: () => boolean = () => true,
 ): Promise<GradingResult> => {
   const providerId = getConfiguredProviderId(test, provider);
-  const hasAttributedHistory =
+  const usesHydraHistory =
     providerId === 'promptfoo:redteam:hydra' ||
     providerId === 'promptfoo:redteam:goblin' ||
     ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
       test.metadata?.strategyId ?? '',
     );
+  const hasAttributedHistory =
+    usesHydraHistory &&
+    providerResponse.metadata?.redteamConversationHistoryVersion ===
+      ATTRIBUTED_CONVERSATION_VERSION;
   // Skip grading if stored result exists from strategy execution for this specific assertion
   const savedConversation = getTargetConversation(
     providerResponse.metadata?.messages,
@@ -210,6 +215,13 @@ export const handleRedteam = async (
       conversation = reportedConversation;
       gradingMessages = reportedConversation.lastUserPrompt ? providerResponse.prompt : undefined;
     }
+  }
+  if (usesHydraHistory && (!hasAttributedHistory || conversation !== savedConversation)) {
+    // Old Hydra/Goblin records contain raw attacks, including unsent variables.
+    // The marker also cannot transfer to a different reported-prompt source.
+    // Preserve current-turn-only grading and cache inputs in either case.
+    conversation = { lastUserPrompt: conversation.lastUserPrompt };
+    gradingMessages = undefined;
   }
   const { lastUserPrompt, conversationTranscript, currentTurnStart } = conversation;
   const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
@@ -269,7 +281,7 @@ export const handleRedteam = async (
     providerResponse,
     conversationTranscript,
   });
-  if (hasAttributedHistory) {
+  if (usesHydraHistory) {
     gradingContext.includeConversationTranscript = true;
   }
   const webPageUuid =

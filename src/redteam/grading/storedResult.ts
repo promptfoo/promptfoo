@@ -2,6 +2,9 @@ import { createHash } from 'crypto';
 
 import type { GradingResult } from '../../types/index';
 
+/** Histories built from attributable inputs and observed replies, not raw attacks. */
+export const ATTRIBUTED_CONVERSATION_VERSION = 1;
+
 /** Opaque runtime values cannot safely identify a reusable assertion configuration. */
 export function getGradingAssertionHash(assertion: unknown): string | undefined {
   if (!assertion) {

@@ -1441,6 +1441,7 @@ describe('HydraProvider', () => {
           { role: 'assistant', content: finalOutput },
         ]);
         expect(result.metadata.redteamCurrentTurnStart).toBe(2);
+        expect(result.metadata.redteamConversationHistoryVersion).toBe(1);
         expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
           getGradingInputHash(
             result.metadata.redteamFinalPrompt!,
@@ -1898,6 +1899,7 @@ describe('HydraProvider', () => {
       context.originalProvider = mockTargetProvider;
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
       const result = await provider.callApi('', context);
+      expect(result.metadata.redteamConversationHistoryVersion).toBe(1);
       expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
         { role: 'assistant', content: acknowledgment },
       ]);
@@ -2013,6 +2015,18 @@ describe('HydraProvider', () => {
         { role: 'user', content: followUp },
         { role: 'assistant', content: acknowledgment },
       ]);
+    });
+
+    it('marks an empty verified history when every generated request is rejected locally', async () => {
+      const context = gradingContext();
+      context.test!.metadata!.strategyConfig = { maxCharsPerMessage: 1 };
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+      const result = await provider.callApi('', context);
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+      expect(mockGrader.getResult).not.toHaveBeenCalled();
+      expect(result.error).toContain('did not execute any target probes');
+      expect(result.metadata.messages).toEqual([]);
+      expect(result.metadata.redteamConversationHistoryVersion).toBe(1);
     });
 
     it('excludes abandoned turns after backtracking', async () => {

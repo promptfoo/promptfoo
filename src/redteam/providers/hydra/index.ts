@@ -16,7 +16,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { getTargetConversation } from '../../grading/storedResult';
+import { ATTRIBUTED_CONVERSATION_VERSION, getTargetConversation } from '../../grading/storedResult';
 import { getTextInputVariables, materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -79,6 +79,7 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface HydraMetadata extends BaseRedteamMetadata {
+  redteamConversationHistoryVersion: typeof ATTRIBUTED_CONVERSATION_VERSION;
   /** Prior role/content record count when the current input is unattributed. */
   redteamCurrentTurnStart?: number;
   hydraRoundsCompleted?: number;
@@ -1148,6 +1149,7 @@ export class HydraProvider implements ApiProvider {
       metadata: {
         sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
         messages,
+        redteamConversationHistoryVersion: ATTRIBUTED_CONVERSATION_VERSION,
         ...strategyMetadata,
         stopReason,
         successfulAttacks,

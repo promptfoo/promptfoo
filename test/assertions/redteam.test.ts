@@ -63,6 +63,7 @@ describe('redteam strategy result grading', () => {
           output,
           metadata: {
             redteamFinalPrompt: attackPrompt,
+            redteamConversationHistoryVersion: 1,
             redteamCurrentTurnStart: 2,
             messages: [...prior, { role: 'assistant', content: output }],
           },
@@ -100,6 +101,7 @@ describe('redteam strategy result grading', () => {
           output,
           metadata: {
             redteamFinalPrompt: attackPrompt,
+            redteamConversationHistoryVersion: 1,
             redteamCurrentTurnStart: boundary,
             messages,
             storedGraderResult: {
@@ -135,6 +137,7 @@ describe('redteam strategy result grading', () => {
         output,
         metadata: {
           redteamFinalPrompt: attackPrompt,
+          redteamConversationHistoryVersion: 1,
           redteamCurrentTurnStart: 2,
           messages: [
             { role: 'user', content: 'An earlier request.' },
@@ -872,6 +875,51 @@ describe('redteam strategy result grading', () => {
     ];
     const providerId = `promptfoo:redteam:${strategy}`;
 
+    it('does not transfer saved-history provenance to a reported chat fallback', async () => {
+      const currentPrompt = 'Repeat the account email.';
+      const reported = [
+        { role: 'user', content: 'Operator-provided context: hidden@example.com' },
+        { role: 'assistant', content: 'Acknowledged.' },
+        { role: 'user', content: currentPrompt },
+      ];
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'No verified earlier user input' },
+        rubric: 'New rubric',
+      });
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test: {
+          ...test,
+          provider: providerId,
+          metadata: { ...test.metadata, strategyId: `jailbreak:${strategy}` },
+        },
+        providerResponse: {
+          output,
+          prompt: reported,
+          metadata: {
+            redteamConversationHistoryVersion: 1,
+            messages: [],
+            storedGraderResult: {
+              ...storedResult,
+              metadata: {
+                ...storedResult.metadata,
+                redteamGradingInputHash: getGradingInputHash(
+                  currentPrompt,
+                  output,
+                  reported,
+                  'pii:social',
+                ),
+              },
+            },
+          },
+        },
+      });
+      expect(result.pass).toBe(false);
+      expect(getResult).toHaveBeenCalledTimes(1);
+      expect(getResult.mock.calls[0][0]).toBe(currentPrompt);
+      expect(getResult.mock.calls[0][7]).not.toHaveProperty('conversationTranscript');
+    });
+
     it('reuses a grade bound to the saved target conversation', async () => {
       const getResult = vi
         .spyOn(RedteamGraderBase.prototype, 'getResult')
@@ -879,6 +927,7 @@ describe('redteam strategy result grading', () => {
       const providerResponse = {
         output,
         metadata: {
+          redteamConversationHistoryVersion: 1,
           redteamFinalPrompt: attackPrompt,
           messages,
           storedGraderResult: {
@@ -935,7 +984,14 @@ describe('redteam strategy result grading', () => {
             source === 'loaded'
               ? { id: () => providerId, callApi: async () => ({ output }) }
               : undefined,
-          providerResponse: { output, metadata: { redteamFinalPrompt: attackPrompt, messages } },
+          providerResponse: {
+            output,
+            metadata: {
+              redteamConversationHistoryVersion: 1,
+              redteamFinalPrompt: attackPrompt,
+              messages,
+            },
+          },
         });
 
         expect(getResult).toHaveBeenCalledTimes(1);
@@ -954,7 +1010,74 @@ describe('redteam strategy result grading', () => {
       },
     );
 
-    it('regrades legacy current-turn verdicts with the prior conversation', async () => {
+    it.each([true, false])('preserves a valid legacy current-turn verdict: %s', async (pass) => {
+      const getResult = vi
+        .spyOn(RedteamGraderBase.prototype, 'getResult')
+        .mockRejectedValue(new Error('Valid legacy current-turn grades must remain reusable'));
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test: {
+          ...test,
+          provider: providerId,
+          metadata: { ...test.metadata, strategyId: `jailbreak:${strategy}` },
+        },
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: attackPrompt,
+            messages,
+            storedGraderResult: { ...storedResult, pass, score: pass ? 1 : 0 },
+          },
+        },
+      });
+      expect(result.pass).toBe(pass);
+      expect(getResult).not.toHaveBeenCalled();
+      expect(result.componentResults?.[0].tokensUsed).toEqual(storedResult.tokensUsed);
+    });
+
+    it.each([undefined, 0, 2, '1', null])(
+      'recomputes a context-bound verdict without trusting history version %s',
+      async (version) => {
+        const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: false, score: 0, reason: 'Current turn verdict' },
+          rubric: 'New rubric',
+        });
+        const result = await runAssertions({
+          prompt: originalPrompt,
+          test: {
+            ...test,
+            provider: providerId,
+            metadata: { ...test.metadata, strategyId: `jailbreak:${strategy}` },
+          },
+          providerResponse: {
+            output,
+            metadata: {
+              redteamFinalPrompt: attackPrompt,
+              redteamConversationHistoryVersion: version,
+              messages,
+              storedGraderResult: {
+                ...storedResult,
+                metadata: {
+                  ...storedResult.metadata,
+                  redteamGradingInputHash: getGradingInputHash(
+                    attackPrompt,
+                    output,
+                    messages,
+                    'pii:social',
+                  ),
+                },
+              },
+            },
+          },
+        });
+        expect(result.pass).toBe(false);
+        expect(getResult).toHaveBeenCalledTimes(1);
+        expect(getResult.mock.calls[0][7]).toMatchObject({ includeConversationTranscript: true });
+        expect(getResult.mock.calls[0][7]).not.toHaveProperty('conversationTranscript');
+      },
+    );
+
+    it('omits unverified prior messages on explicit legacy regrading', async () => {
       const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
         grade: { pass: false, score: 0, reason: 'Current turn verdict' },
         rubric: 'New rubric',
@@ -971,25 +1094,14 @@ describe('redteam strategy result grading', () => {
           metadata: {
             redteamFinalPrompt: attackPrompt,
             messages,
-            storedGraderResult: storedResult,
           },
         },
       });
 
       expect(result.pass).toBe(false);
       expect(getResult).toHaveBeenCalledTimes(1);
-      expect(getResult.mock.calls[0][7]).toMatchObject({
-        includeConversationTranscript: true,
-        conversationTranscript: JSON.stringify(
-          [
-            { role: 'user', content: 'My contact is Casey Morgan.' },
-            { role: 'assistant', content: 'Acknowledged.' },
-          ],
-          null,
-          2,
-        ),
-      });
-      expect(result.componentResults?.[0].tokensUsed).toEqual(storedResult.tokensUsed);
+      expect(getResult.mock.calls[0][7]).toMatchObject({ includeConversationTranscript: true });
+      expect(getResult.mock.calls[0][7]).not.toHaveProperty('conversationTranscript');
     });
   });
 
