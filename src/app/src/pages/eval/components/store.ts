@@ -560,8 +560,12 @@ export const useTableStore = create<TableState>()(
      * are not updated.
      */
     setTable: (table: EvaluateTable | null) => {
+      if (table === null) {
+        evalDataRequestId += 1;
+      }
       set((prevState) => ({
         table,
+        isFetching: table === null ? false : prevState.isFetching,
         tableError: false,
         tableSource: table ? prevState.tableSource : null,
         highlightedResultsCount: computeHighlightCount(table),

@@ -182,6 +182,8 @@ export default function Eval({ fetchId }: EvalOptions) {
       }
     },
     [
+      apiBaseUrl,
+      fetchId,
       fetchEvalData,
       setFailed,
       setEvalId,
@@ -191,6 +193,10 @@ export default function Eval({ fetchId }: EvalOptions) {
       setInComparisonMode,
     ],
   );
+
+  // Loader identity includes route/API context to invalidate socket lookups after navigation.
+  const loadEvalByIdRef = useRef(loadEvalById);
+  loadEvalByIdRef.current = loadEvalById;
 
   const clearEvalState = useCallback(() => {
     loadRequestIdRef.current += 1;
@@ -239,6 +245,9 @@ export default function Eval({ fetchId }: EvalOptions) {
         fetchRecentFileEvals({ reportFailure: false }),
         reloadInBackground(fetchId),
       ]);
+      if (loadEvalById !== loadEvalByIdRef.current) {
+        return;
+      }
       if (recents && recents.length > 0) {
         setDefaultEvalId(recents[0].evalId);
       }
@@ -246,6 +255,10 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
+    // Navigation can replace this handler's comparison/filter selection while the lookup waits.
+    if (loadEvalById !== loadEvalByIdRef.current) {
+      return;
+    }
     if (!newRecentEvals) {
       // Recents are unavailable. If the socket told us the pinned eval was deleted, don't strand
       // the user on a now-gone /eval/:id — fall back to the root route, which reconciles on load.

@@ -673,6 +673,109 @@ describe('evaluation comparison URLs', () => {
     expect(screen.queryByText('Unable to load results')).not.toBeInTheDocument();
   });
 
+  it.each([
+    { route: '/eval', change: 'comparison' },
+    { route: '/eval/eval-a', change: 'comparison' },
+    { route: '/eval', change: 'filter' },
+    { route: '/eval/eval-a', change: 'filter' },
+  ])('ignores a socket lookup superseded by $change on $route', async ({ route, change }) => {
+    tableFixture.realTable = true;
+    tableFixture.rowCount = 120;
+    const user = userEvent.setup();
+    renderPage(route);
+    await screen.findByText('eval-a row-0');
+    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+    let finishRecents!: (response: Response) => void;
+    let deferred = false;
+    vi.mocked(callApi).mockImplementation((path, options) => {
+      if (path === '/results' && !deferred) {
+        deferred = true;
+        return new Promise((resolve) => {
+          finishRecents = resolve;
+        });
+      }
+      return defaultApi(path, options);
+    });
+    let refresh!: Promise<void>;
+    await act(async () => {
+      refresh = socketHandlers.get('update')!({});
+    });
+    if (change === 'comparison') {
+      await user.click(screen.getByRole('button', { name: /Eval actions/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Compare with another eval' }));
+      await user.click(screen.getByRole('button', { name: 'Select comparison B' }));
+      await screen.findByText('eval-b row-0');
+    } else {
+      await user.click(screen.getByRole('button', { name: 'Passes' }));
+      await waitFor(() =>
+        expect(tableRequests()[tableRequests().length - 1].searchParams.get('filterMode')).toBe(
+          'passes',
+        ),
+      );
+    }
+    const requestsBeforeRelease = tableRequests().length;
+    await act(async () => {
+      finishRecents(await defaultApi('/results'));
+      await refresh;
+    });
+    expect(tableRequests()).toHaveLength(requestsBeforeRelease);
+    if (change === 'comparison') {
+      expect(screen.getByText('eval-b row-0')).toBeInTheDocument();
+      expect(useResultsViewSettingsStore.getState().comparisonEvalIds).toEqual(['eval-b']);
+      expect(new URLSearchParams(window.location.search).getAll('comparisonEvalIds')).toEqual([
+        'eval-b',
+      ]);
+    } else {
+      expect(tableRequests()[tableRequests().length - 1].searchParams.get('filterMode')).toBe(
+        'passes',
+      );
+    }
+  });
+
+  it.each([200, 500, 'network'] as const)(
+    'does not restore cleared results or errors after a delayed table response (%s)',
+    async (outcome) => {
+      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      let finishTable!: (response: Response) => void;
+      let failTable!: (reason: Error) => void;
+      vi.mocked(callApi).mockImplementation((path, options) => {
+        if (String(path).startsWith('/eval/eval-a/table')) {
+          return new Promise((resolve, reject) => {
+            finishTable = resolve;
+            failTable = reject;
+          });
+        }
+        return defaultApi(path, options);
+      });
+      renderPage('/eval');
+      await waitFor(() => expect(finishTable).toEqual(expect.any(Function)));
+      await act(async () => {
+        await socketHandlers.get('update')!(null);
+      });
+      const loadingAfterClear = useTableStore.getState().isFetching;
+      await act(async () => {
+        if (outcome === 'network') {
+          failTable(new Error('Network unavailable'));
+        } else {
+          finishTable(
+            outcome === 200
+              ? await defaultApi('/eval/eval-a/table')
+              : new Response(null, { status: outcome }),
+          );
+        }
+      });
+      expect(useTableStore.getState()).toMatchObject({
+        table: null,
+        tableSource: null,
+        config: null,
+        evalId: '',
+        tableError: false,
+        isFetching: false,
+      });
+      expect(loadingAfterClear).toBe(false);
+    },
+  );
+
   it.each([200, 404])(
     'keeps the current comparison when an earlier navigation resolves late with %s',
     async (status) => {
