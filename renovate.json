@@ -16,12 +16,7 @@
       "before 3am on the 15th day of the month"
     ]
   },
-  "ignorePaths": [
-    "examples/**/requirements.txt",
-    "examples/**/pyproject.toml",
-    "examples/**/go.mod",
-    "test/**/go.mod"
-  ],
+  "ignorePaths": ["examples/**/go.mod", "test/**/go.mod"],
   "packageRules": [
     {
       "description": "Disable major Node.js version updates",
@@ -135,6 +130,11 @@
         "peerDependencies"
       ],
       "groupName": "IBM packages"
+    },
+    {
+      "description": "Hold ibm-cloud-sdk-core below 5.6.3 until upstream fixes JSON secret redaction with escaped quotes; 5.6.3 can expose secret suffixes in debug logs (#11472).",
+      "matchPackageNames": ["ibm-cloud-sdk-core"],
+      "allowedVersions": "<5.6.3"
     },
     {
       "description": "Group MUI packages together",
@@ -318,7 +318,6 @@
       "matchDatasources": ["npm"],
       "minimumReleaseAge": "10 days"
     },
-
     {
       "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
       "matchPackageNames": ["@opencode-ai/sdk"],
@@ -402,6 +401,23 @@
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
       "minimumReleaseAge": "10 days"
+    },
+    {
+      "description": "Update Python dependencies monthly in separate branches for each example",
+      "matchManagers": ["pip_requirements", "pep621"],
+      "matchFileNames": ["examples/**/requirements*.txt", "examples/**/pyproject.toml"],
+      "additionalBranchPrefix": "{{packageFileDir}}-",
+      "groupName": null,
+      "rangeStrategy": "bump",
+      "schedule": ["before 6am on the first day of the month"],
+      "minimumReleaseAge": "10 days"
+    },
+    {
+      "description": "Review Python support floor changes separately from dependency updates",
+      "matchManagers": ["pep621"],
+      "matchFileNames": ["examples/**/pyproject.toml"],
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
     }
   ]
 }
