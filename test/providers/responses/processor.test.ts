@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponsesProcessor } from '../../../src/providers/responses/processor';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
-// Mock dependencies
 vi.mock('../../../src/providers/functionCallbackUtils');
 
 const mockFunctionCallbackHandler = {
@@ -14,7 +14,7 @@ describe('ResponsesProcessor', () => {
   let processor: ResponsesProcessor;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockCostCalculator.mockReturnValue(0.001);
 
     processor = new ResponsesProcessor({
       modelName: 'gpt-4.1',
@@ -22,6 +22,10 @@ describe('ResponsesProcessor', () => {
       functionCallbackHandler: mockFunctionCallbackHandler,
       costCalculator: mockCostCalculator,
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('processResponseOutput', () => {
@@ -95,7 +99,10 @@ describe('ResponsesProcessor', () => {
     });
 
     it('should process function calls', async () => {
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Function executed successfully');
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'Function executed successfully',
+        mcpErrors: [],
+      });
 
       const mockData = {
         output: [
@@ -116,6 +123,51 @@ describe('ResponsesProcessor', () => {
         mockData.output[0],
         undefined,
       );
+    });
+
+    it('surfaces MCP errors from a function_call item on ProviderResponse.error', async () => {
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'MCP Tool Error (read_file): denied',
+        mcpErrors: ['MCP Tool Error (read_file): denied'],
+      });
+
+      const mockData = {
+        output: [
+          {
+            type: 'function_call',
+            name: 'read_file',
+            arguments: '{"path": "x"}',
+            status: 'completed',
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 8 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.error).toBe('MCP Tool Error (read_file): denied');
+    });
+
+    it('surfaces MCP errors from a function_call inside a message on ProviderResponse.error', async () => {
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'MCP Tool Error (read_file): denied',
+        mcpErrors: ['MCP Tool Error (read_file): denied'],
+      });
+
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'function_call', name: 'read_file', arguments: '{}' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 8 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.error).toBe('MCP Tool Error (read_file): denied');
     });
 
     it('should handle empty function arguments correctly', async () => {
@@ -247,6 +299,79 @@ describe('ResponsesProcessor', () => {
 
       expect(result.output).toContain('MCP Tools from test_server');
       expect(result.output).toContain('MCP Tool Result (test_tool): Tool result');
+      expect(result.error).toBeUndefined();
+    });
+
+    it.each([false, true])('retains a hosted MCP error with refusal=%s', async (refusal) => {
+      const mockData = {
+        output: [
+          ...(refusal
+            ? [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'refusal', refusal: 'Cannot complete the lookup' }],
+                },
+              ]
+            : []),
+          {
+            type: 'mcp_call',
+            name: 'read_file',
+            server_label: 'test_server',
+            error: '429 rate limit',
+            status: 'failed',
+          },
+        ],
+        usage: { input_tokens: 8, output_tokens: 6 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.output).toContain(
+        refusal ? 'Cannot complete the lookup' : 'MCP Tool Error (read_file): 429 rate limit',
+      );
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.error).toBe('MCP Tool Error (read_file): 429 rate limit');
+    });
+
+    it.each(['failed', 'incomplete', 'calling', 'in_progress'])(
+      'surfaces a final hosted MCP call with status %s even when error is null',
+      async (status) => {
+        const mockData = {
+          id: 'resp_unfinished_tool',
+          output: [
+            {
+              type: 'mcp_call',
+              name: 'read_file',
+              server_label: 'test_server',
+              error: null,
+              output: 'partial output',
+              status,
+            },
+          ],
+          usage: { input_tokens: 8, output_tokens: 6 },
+        };
+
+        const result = await processor.processResponseOutput(mockData, {}, false);
+
+        const message = `MCP Tool Error (read_file): tool call ${status}`;
+        expect(result.error).toBe(message);
+        expect(result.output).toBe(message);
+        expect(result.raw).toBe(mockData);
+        expect(result.tokenUsage).toMatchObject({ prompt: 8, completion: 6, total: 14 });
+        expect(result.cost).toBe(0.001);
+        expect(result.metadata?.responseId).toBe('resp_unfinished_tool');
+      },
+    );
+
+    it('preserves legacy hosted MCP output when no status is supplied', async () => {
+      const result = await processor.processResponseOutput(
+        { output: [{ type: 'mcp_call', name: 'test_tool', output: 'legacy result' }] },
+        {},
+        false,
+      );
+      expect(result.output).toBe('MCP Tool Result (test_tool): legacy result');
+      expect(result.error).toBeUndefined();
     });
 
     it('should handle refusals correctly', async () => {
@@ -279,7 +404,10 @@ describe('ResponsesProcessor', () => {
     });
 
     it('should handle mixed response types', async () => {
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Function result');
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'Function result',
+        mcpErrors: [],
+      });
 
       const mockData = {
         output: [

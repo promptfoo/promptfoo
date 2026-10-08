@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import logger from '../../../src/logger';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import { mockProcessEnv } from '../../util/utils';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
@@ -903,7 +904,7 @@ describe('AwsBedrockConverseProvider', () => {
 
     it('should return MCP tool errors', async () => {
       mcpMocks.mockCallTool.mockResolvedValueOnce({
-        content: 'MCP server failed',
+        content: '429 rate limit',
         isError: true,
       });
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
@@ -925,15 +926,13 @@ describe('AwsBedrockConverseProvider', () => {
 
       const result = await provider.callApi('List resources');
 
-      expect(result.output).toBe('MCP Tool Error (list_resources): MCP server failed');
-      // MCP server errors must propagate into ProviderResponse.error so downstream
-      // assertions and exit codes treat broken MCP calls as failures rather than
-      // greenlighting them on the strength of an embedded error string.
-      expect(result.error).toBe('MCP Tool Error (list_resources): MCP server failed');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.output).toBe('MCP Tool Error (list_resources): 429 rate limit');
+      expect(result.error).toBe('MCP Tool Error (list_resources): 429 rate limit');
     });
 
     it('should propagate thrown MCP errors into ProviderResponse.error', async () => {
-      mcpMocks.mockCallTool.mockRejectedValueOnce(new Error('connection refused'));
+      mcpMocks.mockCallTool.mockRejectedValueOnce({ message: 'connection refused' });
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
@@ -3944,7 +3943,7 @@ Third line`;
       mockSend.mockReset();
       mcpMocks.mockCallTool.mockResolvedValueOnce({
         content: '',
-        error: 'MCP server failed',
+        error: '429 rate limit',
       });
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
@@ -3974,8 +3973,9 @@ Third line`;
 
       const result = await provider.callApiStreaming('List resources');
 
-      expect(result.output).toBe('MCP Tool Error (list_resources): MCP server failed');
-      expect(result.error).toBe('MCP Tool Error (list_resources): MCP server failed');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.output).toBe('MCP Tool Error (list_resources): 429 rate limit');
+      expect(result.error).toBe('MCP Tool Error (list_resources): 429 rate limit');
     });
 
     it('should not invoke MCP from streaming when toolChoice is none', async () => {

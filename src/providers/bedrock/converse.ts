@@ -35,7 +35,14 @@ import {
   loadProviderCallbackFromFileUrl,
 } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
-import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
+import {
+  formatMcpToolError,
+  getMcpErrorMessage,
+  getThrownMcpErrorMessage,
+  isMcpErrorResult,
+  joinMcpErrors,
+  normalizeMcpToolContent,
+} from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
   isOpenAIToolArray,
@@ -300,10 +307,6 @@ function hasUsableMCPServer(mcp: MCPConfig | undefined): boolean {
   return Boolean(mcp.servers?.some(isMCPServerConfigured));
 }
 
-function joinMcpErrors(errors: string[]): string | undefined {
-  return errors.length > 0 ? errors.join('; ') : undefined;
-}
-
 function formatMcpToolResult(name: string, content: unknown): string {
   const normalizedContent = normalizeMcpToolContent(content, (part) => {
     logger.debug('[Bedrock Converse] Unknown MCP content shape, serializing as JSON', {
@@ -311,10 +314,6 @@ function formatMcpToolResult(name: string, content: unknown): string {
     });
   });
   return `MCP Tool Result (${name}): ${normalizedContent}`;
-}
-
-function formatMcpToolError(name: string, message: string): string {
-  return `MCP Tool Error (${name}): ${message}`;
 }
 
 interface StreamingToolUseBlock {
@@ -1318,10 +1317,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         const msg = formatMcpToolError(name, getMcpErrorMessage(mcpResult));
         return { output: msg, error: msg };
       }
-      return { output: formatMcpToolResult(name, mcpResult?.content) };
+      return { output: formatMcpToolResult(name, mcpResult.content) };
     } catch (err) {
       logger.error(`[Bedrock Converse] MCP tool execution failed for ${name}: ${err}`);
-      const msg = formatMcpToolError(name, errorMessage(err));
+      const msg = formatMcpToolError(name, getThrownMcpErrorMessage(err));
       return { output: msg, error: msg };
     }
   }
@@ -1602,12 +1601,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
           dispatchResults.unshift(progress);
         }
       }
-      // Surface MCP failures via the response `error` field so downstream
-      // consumers (assertions, exit codes, redteam grader) treat broken MCP
-      // calls as failures rather than greenlighting them on the strength of an
-      // embedded "MCP Tool Error: ..." string. Malformed-output stop reasons
-      // take precedence since they're a model-level (not tool-level) failure.
+      // Model output errors take precedence over tool failures.
       const error = malformedError ?? joinMcpErrors(mcpErrors);
+      if (mcpErrors.length > 0) {
+        metadata.rateLimitRetryable = false;
+      }
       return {
         output: dispatchResults.join('\n'),
         tokenUsage,
@@ -1816,10 +1814,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         getOneHourCacheWriteTokens(usage.cacheDetails),
       );
 
-      // Surface MCP failures via the response `error` field. If the model also
-      // produced a malformed-output stop reason, that takes precedence since it
-      // is a model-level failure rather than a tool-level one.
+      // Model output errors take precedence over tool failures.
       const error = malformedError ?? joinMcpErrors(mcpErrors);
+      if (mcpErrors.length > 0) {
+        metadata.rateLimitRetryable = false;
+      }
 
       return {
         output: finalOutput,

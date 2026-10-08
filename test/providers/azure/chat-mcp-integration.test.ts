@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 const mcpMocks = vi.hoisted(() => {
   const mockInitialize = vi.fn().mockResolvedValue(undefined);
@@ -58,6 +60,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     mcpMocks.mockCallTool.mockReset().mockResolvedValue({
       content: 'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
     });
+    vi.mocked(fetchWithCache).mockReset();
 
     // Create provider with MCP enabled
     provider = new AzureChatCompletionProvider('test-deployment', {
@@ -143,7 +146,74 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     expect(result).toEqual({
       output: 'MCP Tool Error (list_resources): MCP server connection failed',
       isError: true,
+      isMcpError: true,
     });
+  });
+
+  it('surfaces MCP tool errors on ProviderResponse.error via callApi', async () => {
+    await (provider as any).initializationPromise;
+
+    mcpMocks.mockCallTool.mockResolvedValue({
+      content: '429 rate limit',
+      isError: true,
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              tool_calls: [
+                { type: 'function', function: { name: 'list_resources', arguments: '{}' } },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await provider.callApi('List the resources');
+
+    expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+
+    expect(result.output).toBe('MCP Tool Error (list_resources): 429 rate limit');
+    expect(result.error).toBe('MCP Tool Error (list_resources): 429 rate limit');
+  });
+
+  it('does not set an error for a successful MCP tool call via callApi', async () => {
+    await (provider as any).initializationPromise;
+
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              tool_calls: [
+                { type: 'function', function: { name: 'list_resources', arguments: '{}' } },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await provider.callApi('List the resources');
+
+    expect(result.output).toContain('MCP Tool Result (list_resources)');
+    expect(result.error).toBeUndefined();
   });
 
   it('should work without MCP enabled (backwards compatibility)', () => {

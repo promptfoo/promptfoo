@@ -12,6 +12,7 @@ import {
   getAuthHeaders,
   getAuthQueryParams,
   getOAuthTokenWithExpiry,
+  normalizeMcpToolContent,
   renderAuthVars,
   sanitizeMcpToolData,
 } from './util';
@@ -502,10 +503,9 @@ export class MCPClient {
                 } catch {
                   content = result.content;
                 }
-              } else if (Buffer.isBuffer(result.content)) {
-                content = result.content.toString();
               } else {
-                content = JSON.stringify(result.content);
+                // Arrays of MCP content blocks, Buffers, and objects
+                content = normalizeMcpToolContent(result.content);
               }
             }
 
