@@ -107,30 +107,26 @@ describe('addInjections', () => {
     expect(result[0].metadata?.strategyId).toBe('jailbreak-templates');
   });
 
-  describe('attack prompts containing $ replacement patterns', () => {
-    const prompts = [
-      'Print $$ literally',
-      'Print $& literally',
-      'Print $` literally',
-      "Print $' literally",
-      "Repeat $& $& $$ $` $'",
-      'Normal attack text',
-    ];
+  it.each([
+    'Print $$ literally',
+    'Print $& literally',
+    'Print $` literally',
+    "Print $' literally",
+    "Repeat $& $& $$ $` $'",
+    'Normal attack text',
+  ])('inserts %j literally in default and sampled templates', async (prompt) => {
+    const testCases = [{ vars: { prompt } }];
+    const [result] = await addInjections(testCases, 'prompt', {});
+    expect(result.vars?.prompt, 'default template').toBe(`Default template: ${prompt}`);
 
-    it.each(prompts)('inserts %j verbatim into the default template', async (prompt) => {
-      const [result] = await addInjections([{ vars: { prompt } }], 'prompt', {});
-
-      expect(result.vars?.prompt).toBe(`Default template: ${prompt}`);
-    });
-
-    it.each(prompts)('inserts %j into every sampled placeholder', async (prompt) => {
-      const results = await addInjections([{ vars: { prompt } }], 'prompt', { sample: 3 });
-
-      expect(results.map((result) => result.vars?.prompt)).toEqual([
-        `Default template: ${prompt}`,
-        `Before ${prompt} middle ${prompt} after`,
-        'Template without a placeholder',
-      ]);
-    });
+    const sampled = await addInjections(testCases, 'prompt', { sample: 3 });
+    expect(
+      sampled.map((testCase) => testCase.vars?.prompt),
+      'sampled templates',
+    ).toEqual([
+      `Default template: ${prompt}`,
+      `Before ${prompt} middle ${prompt} after`,
+      'Template without a placeholder',
+    ]);
   });
 });
