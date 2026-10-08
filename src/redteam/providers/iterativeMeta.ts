@@ -37,7 +37,7 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, stripPromptBlockPrefix } from '../util';
 import {
   accumulateGraderResult,
   buildGraderResultAssertion,
@@ -298,6 +298,7 @@ export async function runMetaAgentRedteam({
     if (extractedPrompt) {
       attackPrompt = extractedPrompt;
     }
+    attackPrompt = stripPromptBlockPrefix(attackPrompt);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Apply per-turn layer transforms if configured (e.g., audio, base64)
