@@ -142,148 +142,182 @@ type Pipeline = {
   dispose?: () => Promise<void>;
 };
 
-// Pipeline cache - singleton instances keyed by task:model:device:dtype
-const pipelineCache = new Map<string, Pipeline>();
-const pendingPipelines = new Map<string, Promise<Pipeline>>();
+interface PipelineEntry {
+  key: string;
+  pipeline: Promise<Pipeline>;
+  owners: Set<Set<PipelineEntry>>;
+  value?: Pipeline;
+  disposal?: Promise<void>;
+}
 
-// Track if cleanup has been registered
-let cleanupRegistered = false;
+// Providers share pipelines until the last owner releases them.
+const pipelineCache = new Map<string, PipelineEntry>();
+
+function getPipelineCacheKey(
+  task: string,
+  model: string,
+  options: TransformersBaseOptions,
+): string {
+  const device = options.device || 'auto';
+  const dtype = options.dtype || 'auto';
+  return `${task}:${model}:${device}:${dtype}`;
+}
+
+async function initializePipeline(
+  task: string,
+  model: string,
+  options: TransformersBaseOptions,
+  cacheKey: string,
+): Promise<Pipeline> {
+  type PipelineFn = (
+    task: string,
+    model: string,
+    options?: Record<string, unknown>,
+  ) => Promise<Pipeline>;
+
+  // The shared loader validates the optional SDK before initializing its pipelines.
+  const transformers = (await loadTransformers()) as { pipeline: PipelineFn };
+  const pipelineFn = transformers.pipeline;
+
+  const pipelineOptions: Record<string, unknown> = {
+    progress_callback: (progress: {
+      status: string;
+      name?: string;
+      file?: string;
+      progress?: number;
+      loaded?: number;
+      total?: number;
+      task?: string;
+      model?: string;
+    }) => {
+      if (progress.status === 'progress' && progress.file) {
+        const percent = progress.progress?.toFixed(1) || '?';
+        logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
+      } else if (progress.status === 'ready') {
+        logger.debug(`[Transformers] Model ready: ${progress.model || model}`);
+      }
+    },
+  };
+
+  // Apply options
+  for (const [source, target] of [
+    ['device', 'device'],
+    ['dtype', 'dtype'],
+    ['cacheDir', 'cache_dir'],
+    ['localFilesOnly', 'local_files_only'],
+    ['revision', 'revision'],
+    ['sessionOptions', 'session_options'],
+  ] as const) {
+    if (options[source]) {
+      pipelineOptions[target] = source === 'localFilesOnly' ? true : options[source];
+    }
+  }
+
+  logger.debug(`[Transformers] Loading pipeline: ${task}:${model}`, {
+    device: pipelineOptions.device,
+    dtype: pipelineOptions.dtype,
+  });
+
+  const startTime = Date.now();
+  const pipe = await pipelineFn(task, model, pipelineOptions);
+  const loadTime = Date.now() - startTime;
+
+  logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
+
+  return pipe;
+}
 
 async function getOrCreatePipeline(
   task: string,
   model: string,
   options: TransformersBaseOptions,
+  owned: Set<PipelineEntry>,
 ): Promise<Pipeline> {
-  const device = options.device || 'auto';
-  const dtype = options.dtype || 'auto';
-  const cacheKey = `${task}:${model}:${device}:${dtype}`;
+  providerRegistry.register(pipelineCleanup);
+  const cacheKey = getPipelineCacheKey(task, model, options);
 
-  // Return cached pipeline
-  if (pipelineCache.has(cacheKey)) {
-    logger.debug(`[Transformers] Using cached pipeline: ${cacheKey}`);
-    return pipelineCache.get(cacheKey)!;
-  }
+  let entry = pipelineCache.get(cacheKey);
+  if (entry) {
+    logger.debug(`[Transformers] Using shared pipeline: ${cacheKey}`);
+  } else {
+    const initPromise = initializePipeline(task, model, options, cacheKey);
 
-  // Wait for pending initialization
-  if (pendingPipelines.has(cacheKey)) {
-    logger.debug(`[Transformers] Waiting for pending pipeline: ${cacheKey}`);
-    return pendingPipelines.get(cacheKey)!;
-  }
-
-  // Start new initialization
-  const initPromise = (async (): Promise<Pipeline> => {
-    type PipelineFn = (
-      task: string,
-      model: string,
-      options?: Record<string, unknown>,
-    ) => Promise<Pipeline>;
-
-    // The shared loader validates the optional SDK before initializing its pipelines.
-    const pipelineFn = ((await loadTransformers()) as { pipeline: PipelineFn }).pipeline;
-
-    const pipelineOptions: Record<string, unknown> = {
-      progress_callback: (progress: {
-        status: string;
-        name?: string;
-        file?: string;
-        progress?: number;
-        loaded?: number;
-        total?: number;
-        task?: string;
-        model?: string;
-      }) => {
-        if (progress.status === 'progress' && progress.file) {
-          const percent = progress.progress?.toFixed(1) || '?';
-          logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
-        } else if (progress.status === 'ready') {
-          logger.debug(`[Transformers] Model ready: ${progress.model || model}`);
-        }
-      },
+    const newEntry: PipelineEntry = {
+      key: cacheKey,
+      pipeline: initPromise,
+      owners: new Set(),
     };
-
-    // Apply options
-    for (const [source, target] of [
-      ['device', 'device'],
-      ['dtype', 'dtype'],
-      ['cacheDir', 'cache_dir'],
-      ['localFilesOnly', 'local_files_only'],
-      ['revision', 'revision'],
-      ['sessionOptions', 'session_options'],
-    ] as const) {
-      if (options[source]) {
-        pipelineOptions[target] = source === 'localFilesOnly' ? true : options[source];
-      }
-    }
-
-    logger.debug(`[Transformers] Loading pipeline: ${task}:${model}`, {
-      device: pipelineOptions.device,
-      dtype: pipelineOptions.dtype,
-    });
-
-    const startTime = Date.now();
-    const pipe = await pipelineFn(task, model, pipelineOptions);
-
-    logger.debug(`[Transformers] Pipeline loaded in ${Date.now() - startTime}ms: ${cacheKey}`);
-
-    pipelineCache.set(cacheKey, pipe);
-    pendingPipelines.delete(cacheKey);
-
-    return pipe;
-  })();
-
-  pendingPipelines.set(cacheKey, initPromise);
-
-  try {
-    return await initPromise;
-  } catch (err) {
-    pendingPipelines.delete(cacheKey);
-    throw err;
-  }
-}
-
-/**
- * Dispose all cached pipelines to release resources.
- */
-async function disposePipelines(): Promise<void> {
-  const disposePromises: Promise<void>[] = [];
-
-  for (const [key, pipe] of pipelineCache.entries()) {
-    disposePromises.push(
-      (async () => {
-        try {
-          if (pipe.dispose) {
-            await pipe.dispose();
-          }
-          logger.debug(`[Transformers] Disposed pipeline: ${key}`);
-        } catch (err) {
-          logger.warn(`[Transformers] Error disposing pipeline ${key}:`, { error: err });
+    pipelineCache.set(cacheKey, newEntry);
+    newEntry.pipeline = initPromise.then(
+      async (pipe) => {
+        newEntry.value = pipe;
+        if (newEntry.owners.size === 0) {
+          await disposePipeline(newEntry);
         }
-      })(),
+        return pipe;
+      },
+      (error) => {
+        forgetPipelineEntry(newEntry);
+        throw error;
+      },
     );
+    entry = newEntry;
   }
-
-  await Promise.all(disposePromises);
-  pipelineCache.clear();
-  pendingPipelines.clear();
+  owned.add(entry);
+  entry.owners.add(owned);
+  const pipe = await entry.pipeline;
+  if (!owned.has(entry)) {
+    throw new Error('Transformers pipeline was released during initialization');
+  }
+  return pipe;
 }
 
-/**
- * Ensure cleanup handler is registered with the provider registry.
- */
-function ensureCleanupRegistered(): void {
-  if (cleanupRegistered) {
-    return;
+function forgetPipelineEntry(entry: PipelineEntry): void {
+  if (pipelineCache.get(entry.key) === entry) {
+    pipelineCache.delete(entry.key);
   }
-  cleanupRegistered = true;
-
-  providerRegistry.register({
-    shutdown: async () => {
-      logger.debug('[Transformers] Shutting down all pipelines...');
-      await disposePipelines();
-      logger.debug('[Transformers] All pipelines disposed');
-    },
-  });
+  for (const owner of entry.owners) {
+    owner.delete(entry);
+  }
+  entry.owners.clear();
 }
+
+function disposePipeline(entry: PipelineEntry): Promise<void> {
+  forgetPipelineEntry(entry);
+  const pipe = entry.value;
+  if (!pipe) {
+    // Initialization disposes its result when it finishes without any owners.
+    return Promise.resolve();
+  }
+  entry.disposal ??= (async () => {
+    try {
+      await pipe.dispose?.();
+      logger.debug(`[Transformers] Disposed pipeline: ${entry.key}`);
+    } catch (err) {
+      logger.warn(`[Transformers] Error disposing pipeline ${entry.key}:`, { error: err });
+    }
+  })();
+  return entry.disposal;
+}
+
+async function releasePipelines(owned: Set<PipelineEntry>): Promise<void> {
+  const disposals: Promise<void>[] = [];
+  for (const entry of owned) {
+    entry.owners.delete(owned);
+    if (entry.owners.size === 0) {
+      disposals.push(disposePipeline(entry));
+    }
+  }
+  owned.clear();
+  await Promise.all(disposals);
+}
+
+/** Dispose all pipelines during process shutdown or explicit global cleanup. */
+async function disposePipelines(): Promise<void> {
+  await Promise.all([...pipelineCache.values()].map(disposePipeline));
+}
+
+const pipelineCleanup = { shutdown: disposePipelines };
 
 function handleTransformersError(
   error: Error,
@@ -320,6 +354,7 @@ function handleTransformersError(
 export class TransformersEmbeddingProvider implements ApiProvider {
   modelName: string;
   config: TransformersEmbeddingOptions;
+  private pipelines = new Set<PipelineEntry>();
 
   constructor(
     modelName: string,
@@ -329,8 +364,6 @@ export class TransformersEmbeddingProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
-
-    ensureCleanupRegistered();
   }
 
   id(): string {
@@ -339,6 +372,13 @@ export class TransformersEmbeddingProvider implements ApiProvider {
 
   toString(): string {
     return `[Transformers Embedding Provider ${this.modelName}]`;
+  }
+
+  cleanup(): Promise<void> {
+    const pipelines = this.pipelines;
+    // Reuse gets a fresh owner token so released pending calls stay canceled.
+    this.pipelines = new Set<PipelineEntry>();
+    return releasePipelines(pipelines);
   }
 
   async callApi(_prompt: string): Promise<ProviderResponse> {
@@ -354,6 +394,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
         'feature-extraction',
         this.modelName,
         this.config,
+        this.pipelines,
       );
 
       // Apply prefix if configured (critical for BGE, E5, Instructor models)
@@ -411,6 +452,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
 export class TransformersTextGenerationProvider implements ApiProvider {
   modelName: string;
   config: TransformersTextGenerationOptions;
+  private pipelines = new Set<PipelineEntry>();
 
   constructor(
     modelName: string,
@@ -420,8 +462,6 @@ export class TransformersTextGenerationProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
-
-    ensureCleanupRegistered();
   }
 
   id(): string {
@@ -432,9 +472,21 @@ export class TransformersTextGenerationProvider implements ApiProvider {
     return `[Transformers Text Generation Provider ${this.modelName}]`;
   }
 
+  cleanup(): Promise<void> {
+    const pipelines = this.pipelines;
+    // Reuse gets a fresh owner token so released pending calls stay canceled.
+    this.pipelines = new Set<PipelineEntry>();
+    return releasePipelines(pipelines);
+  }
+
   async callApi(prompt: string): Promise<ProviderResponse> {
     try {
-      const generator = await getOrCreatePipeline('text-generation', this.modelName, this.config);
+      const generator = await getOrCreatePipeline(
+        'text-generation',
+        this.modelName,
+        this.config,
+        this.pipelines,
+      );
 
       // Build generation options (convert camelCase to snake_case for library)
       const generationOptions: Record<string, unknown> = {
@@ -484,7 +536,8 @@ export class TransformersTextGenerationProvider implements ApiProvider {
         output = rawOutput;
       } else if (Array.isArray(rawOutput)) {
         // Get the last message content (the assistant's response)
-        output = rawOutput[rawOutput.length - 1]?.content || JSON.stringify(rawOutput);
+        const lastMessage = rawOutput[rawOutput.length - 1];
+        output = lastMessage?.content || JSON.stringify(rawOutput);
       } else {
         output = JSON.stringify(rawOutput);
       }

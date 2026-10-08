@@ -10,7 +10,11 @@ import type { Prompt } from '../../types/index';
  * @param prompt - The raw prompt data.
  * @returns Array of prompts extracted from the file.
  */
-export function processTxtFile(filePath: string, { label, config }: Partial<Prompt>): Prompt[] {
+export function processTxtFile(
+  filePath: string,
+  { label, config }: Partial<Prompt>,
+  labelPath: string = filePath,
+): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
 
   const lines = fileContent.split(/\r?\n/);
@@ -22,7 +26,7 @@ export function processTxtFile(filePath: string, { label, config }: Partial<Prom
     if (raw.length > 0) {
       prompts.push({
         raw,
-        label: label ? `${label}: ${filePath}: ${raw}` : `${filePath}: ${raw}`,
+        label: label ? `${label}: ${labelPath}: ${raw}` : `${labelPath}: ${raw}`,
         config,
       });
     }
@@ -51,12 +55,16 @@ export function processTxtFile(filePath: string, { label, config }: Partial<Prom
  * @param prompt - The raw prompt data.
  * @returns Array of one `Prompt` object.
  */
-export function processTemplateFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
+export function processTemplateFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+  labelPath: string = filePath,
+): Prompt[] {
   const content = fs.readFileSync(filePath, 'utf8');
   return [
     {
       raw: content,
-      label: prompt.label || `${filePath}: ${content.slice(0, 50)}...`,
+      label: prompt.label || `${labelPath}: ${content.slice(0, 50)}...`,
       config: prompt.config,
     },
   ];

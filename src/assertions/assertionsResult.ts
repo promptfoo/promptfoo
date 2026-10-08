@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { getEnvBool } from '../envars';
-import { isGradingResult } from '../types/index';
 import { addCompletionDetails } from '../util/tokenUsageUtils';
+import { asGradingResult } from './scriptResultNormalization';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
@@ -271,9 +271,11 @@ export class AssertionsResult {
       this.failedContentSafetyChecks = true;
     }
 
+    // Zero-weight assertions collect measurements without affecting the aggregate score.
+    const metricWeight = weight === 0 ? 1 : weight;
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;
     }
 
     if (result.namedScores) {
@@ -284,7 +286,7 @@ export class AssertionsResult {
             Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
               ? (result.namedScoreWeights[metricName] ?? 1)
               : 1;
-          const weightedIncomingWeight = incomingWeight * weight;
+          const weightedIncomingWeight = incomingWeight * metricWeight;
           this.namedScores[metricName] =
             (this.namedScores[metricName] ?? 0) + score * weightedIncomingWeight;
           this.namedScoreWeights[metricName] =
@@ -384,13 +386,15 @@ export class AssertionsResult {
 
     if (scoringFunction) {
       try {
-        const scoringResult = await scoringFunction(normalizedNamedScores, {
-          threshold: this.threshold,
-          parentAssertionSet: this._parentAssertionSet,
-          componentResults: flattenedComponentResults,
-          tokensUsed: this.tokensUsed,
-        });
-        if (!isGradingResult(scoringResult)) {
+        const scoringResult = asGradingResult(
+          await scoringFunction(normalizedNamedScores, {
+            threshold: this.threshold,
+            parentAssertionSet: this._parentAssertionSet,
+            componentResults: flattenedComponentResults,
+            tokensUsed: this.tokensUsed,
+          }),
+        );
+        if (!scoringResult) {
           throw new Error('assertion scoring function must return a GradingResult');
         }
         this.result = {

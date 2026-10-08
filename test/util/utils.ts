@@ -163,6 +163,32 @@ export function mockGlobal<T>(name: string, value: T): () => void {
 }
 
 /**
+ * Runs `sample` along each of the six equally likely random paths through the Fisher-Yates
+ * shuffle `sampleArray` uses on three items, and returns the results sorted. A sampler that picks
+ * two of `a`, `b` and `c` without bias returns every ordered pair exactly once.
+ */
+export async function sampleEachShufflePath(sample: () => Promise<string>): Promise<string[]> {
+  const random = vi.spyOn(Math, 'random');
+  const samples: string[] = [];
+  try {
+    // The shuffle draws floor(r * 3), then floor(r * 2); these pairs cover every combination.
+    for (const first of [1 / 6, 1 / 2, 5 / 6]) {
+      for (const second of [1 / 4, 3 / 4]) {
+        random
+          .mockReset()
+          .mockReturnValue(0.5)
+          .mockReturnValueOnce(first)
+          .mockReturnValueOnce(second);
+        samples.push(await sample());
+      }
+    }
+  } finally {
+    random.mockRestore();
+  }
+  return samples.sort();
+}
+
+/**
  * Creates a unique temporary directory in the operating system temp location.
  *
  * @param prefix - Optional directory name prefix. Defaults to `promptfoo-test-`.
@@ -219,4 +245,9 @@ export const createGoogleImageEnvCleanup = () => () => {
   mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
   mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
   mockProcessEnv({ GEMINI_API_KEY: undefined });
+  mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
+  mockProcessEnv({ VERTEX_API_KEY: undefined });
+  mockProcessEnv({ VERTEX_REGION: undefined });
+  mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
+  mockProcessEnv({ GOOGLE_LOCATION: undefined });
 };

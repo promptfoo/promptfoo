@@ -23,7 +23,7 @@ import {
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
-import { cleanupAndUnregister, resolveAgenticWorkingDir } from '../agentic-utils';
+import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
 import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
@@ -1022,7 +1022,7 @@ class CodexAppServerConnection {
     return this.closePromise;
   }
 
-  private handleLine(line: string): void {
+  private handleLine(line: string, retryBufferedMessage = true): void {
     const trimmed = line.trim();
     if (!trimmed && this.bufferedJsonRpcLines.length === 0) {
       return;
@@ -1030,7 +1030,7 @@ class CodexAppServerConnection {
 
     const candidateLines =
       this.bufferedJsonRpcLines.length > 0 ? [...this.bufferedJsonRpcLines, line] : [trimmed];
-    const candidate = candidateLines.join('\\n');
+    let candidate = candidateLines.join('\n');
     if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
       this.bufferedJsonRpcLines = [];
       this.handleProcessFailure(
@@ -1043,15 +1043,40 @@ class CodexAppServerConnection {
     }
     let message: JsonRpcMessage;
     try {
-      message = JSON.parse(candidate) as JsonRpcMessage;
+      try {
+        message = JSON.parse(candidate) as JsonRpcMessage;
+      } catch (error) {
+        if (
+          candidateLines.length <= 1 ||
+          !(error instanceof Error) ||
+          !/Bad control character/i.test(error.message)
+        ) {
+          throw error;
+        }
+        // Preserve compatibility with app-server output containing raw newlines inside strings.
+        candidate = this.escapeStringNewlines(candidate);
+        message = JSON.parse(candidate) as JsonRpcMessage;
+      }
     } catch (error) {
-      if (this.shouldBufferJsonRpcLine(error, trimmed)) {
+      if (this.shouldBufferJsonRpcLine(error, candidate)) {
         this.bufferedJsonRpcLines = candidateLines;
         return;
       }
 
       logger.warn('[CodexAppServer] Failed to parse JSON-RPC line', { error, line: candidate });
       this.bufferedJsonRpcLines = [];
+      if (retryBufferedMessage && candidateLines.length > 1) {
+        // A later object may begin a new record after an unfinished malformed message.
+        let restartIndex = candidateLines.length - 1;
+        for (let index = candidateLines.length - 1; index > 0; index--) {
+          if (candidateLines[index].trimStart().startsWith('{')) {
+            restartIndex = index;
+            break;
+          }
+        }
+        this.bufferedJsonRpcLines = candidateLines.slice(restartIndex, -1);
+        this.handleLine(line, false);
+      }
       return;
     }
 
@@ -1059,16 +1084,42 @@ class CodexAppServerConnection {
     this.handleMessage(message);
   }
 
-  private shouldBufferJsonRpcLine(error: unknown, trimmedLine: string): boolean {
-    if (this.bufferedJsonRpcLines.length > 0) {
-      return true;
+  private escapeStringNewlines(candidate: string): string {
+    const parts: string[] = [];
+    let inString = false;
+    let escaped = false;
+    let start = 0;
+
+    for (let index = 0; index < candidate.length; index++) {
+      const character = candidate[index];
+      if (inString && character === '\n' && !escaped) {
+        parts.push(candidate.slice(start, index), '\\n');
+        start = index + 1;
+      }
+      if (escaped) {
+        escaped = false;
+      } else if (inString && character === '\\') {
+        escaped = true;
+      } else if (character === '"') {
+        inString = !inString;
+      }
     }
-    if (!trimmedLine.startsWith('{')) {
+
+    parts.push(candidate.slice(start));
+    return parts.join('');
+  }
+
+  private shouldBufferJsonRpcLine(error: unknown, candidate: string): boolean {
+    if (!candidate.trimStart().startsWith('{')) {
       return false;
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    return /Unterminated string|Unexpected end of JSON input|Bad control character/i.test(message);
+    return (
+      /Unterminated string|Unexpected end of JSON input/i.test(message) ||
+      (message.startsWith('Expected ') &&
+        message.includes(` in JSON at position ${candidate.length} (line`))
+    );
   }
 
   private handleMessage(message: JsonRpcMessage): void {
@@ -1212,6 +1263,9 @@ class CodexAppServerConnection {
 }
 
 export class OpenAICodexAppServerProvider implements ApiProvider {
+  private readonly registerForCleanup: boolean;
+  private cleanupGeneration = 0;
+
   config: CodexAppServerConfig;
   env?: EnvOverrides;
   apiKey?: string;
@@ -1243,13 +1297,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       id?: string;
       config?: CodexAppServerConfig;
       env?: EnvOverrides;
+      registerForCleanup?: boolean;
     } = {},
   ) {
+    this.registerForCleanup = options.registerForCleanup ?? true;
     this.config = parseCodexAppServerConfig(options.config);
     this.env = options.env;
     this.apiKey = this.getApiKey();
     this.providerId = options.id ?? this.providerId;
-    providerRegistry.register(this);
+    if (this.registerForCleanup) {
+      providerRegistry.register(this);
+    }
   }
 
   id(): string {
@@ -1275,6 +1333,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    providerRegistry.unregister(this);
+    this.cleanupGeneration++;
     this.resolveActiveTurns(new Error('codex app-server provider cleanup interrupted active turn'));
     this.threads.clear();
     this.threadPromises.clear();
@@ -1301,8 +1361,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     );
   }
 
-  shutdown(): Promise<void> {
-    return cleanupAndUnregister(this);
+  async shutdown(): Promise<void> {
+    await this.cleanup();
   }
 
   async callApi(
@@ -1310,6 +1370,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     const mergedConfig = mergeCodexAppServerConfig(
       this.config,
       context?.prompt?.config as CodexAppServerConfig | undefined,
@@ -1324,7 +1385,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     return withGenAISpan(
       this.buildSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config),
+      () => this.callApiInternal(prompt, context, callOptions, config, cleanupGeneration),
       (response) => this.extractSpanResult(response, requestedModel),
     );
   }
@@ -1388,6 +1449,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: CodexAppServerConfig,
+    cleanupGeneration: number,
   ): Promise<ProviderResponse> {
     let config: CodexAppServerConfig;
     try {
@@ -1477,45 +1539,50 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
             ? undefined
             : this.getThreadRunQueueKey(resolvedConfig, threadHandle);
 
-          return await this.threadRunQueues.run(queueKey, callOptions?.abortSignal, async () => {
-            turnStarted = true;
-            const state = this.createTurnState(
-              connection,
-              connectionKey,
-              connection.instanceId,
-              threadHandle.threadId,
-              promptInput,
-              resolvedConfig,
-              env,
-            );
-            this.registerTurnState(state);
-            try {
-              const turnResponse = await connection.request(
-                'turn/start',
-                this.buildTurnStartParams(threadHandle.threadId, promptInput, resolvedConfig),
-                {
-                  abortSignal: callOptions?.abortSignal,
-                  timeoutMs: this.getRequestTimeoutMs(resolvedConfig),
-                  onResponse: (response) => {
-                    const turnId = (response as any)?.turn?.id;
-                    if (typeof turnId === 'string') {
-                      this.updateTurnStateId(state, turnId);
-                    }
-                  },
-                },
+          return await this.runSerializedThreadTurn(
+            queueKey,
+            callOptions?.abortSignal,
+            async () => {
+              turnStarted = true;
+              const state = this.createTurnState(
+                connection,
+                connectionKey,
+                connection.instanceId,
+                threadHandle.threadId,
+                promptInput,
+                resolvedConfig,
+                env,
               );
+              this.registerTurnState(state);
+              try {
+                const turnResponse = await connection.request(
+                  'turn/start',
+                  this.buildTurnStartParams(threadHandle.threadId, promptInput, resolvedConfig),
+                  {
+                    abortSignal: callOptions?.abortSignal,
+                    timeoutMs: this.getRequestTimeoutMs(resolvedConfig),
+                    onResponse: (response) => {
+                      const turnId = (response as any)?.turn?.id;
+                      if (typeof turnId === 'string') {
+                        this.updateTurnStateId(state, turnId);
+                      }
+                    },
+                  },
+                );
 
-              if (typeof turnResponse?.turn?.id === 'string') {
-                this.updateTurnStateId(state, turnResponse.turn.id);
+                if (typeof turnResponse?.turn?.id === 'string') {
+                  this.updateTurnStateId(state, turnResponse.turn.id);
+                }
+
+                await this.waitForTurnCompletion(connection, state, resolvedConfig, callOptions);
+                return this.buildProviderResponse(state, threadHandle, resolvedConfig);
+              } finally {
+                this.unregisterTurnState(state);
+                await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
               }
-
-              await this.waitForTurnCompletion(connection, state, resolvedConfig, callOptions);
-              return this.buildProviderResponse(state, threadHandle, resolvedConfig);
-            } finally {
-              this.unregisterTurnState(state);
-              await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
-            }
-          });
+            },
+            cleanupGeneration,
+          );
         } finally {
           this.unprotectThread(threadHandle.threadId);
           if (!turnStarted) {
@@ -1527,13 +1594,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }
       };
 
-      return explicitThreadQueueKey
-        ? await this.threadRunQueues.run(
-            explicitThreadQueueKey,
-            callOptions?.abortSignal,
-            runThreadTurn,
-          )
-        : await runThreadTurn();
+      return await this.runSerializedThreadTurn(
+        explicitThreadQueueKey,
+        callOptions?.abortSignal,
+        runThreadTurn,
+        cleanupGeneration,
+      );
     } catch (error: unknown) {
       const isAbort =
         (error instanceof Error && error.name === 'AbortError') ||
@@ -1750,6 +1816,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       onServerRequest: (message) => this.handleServerRequest(message, config),
       onClose: (error) => this.handleConnectionClose(connectionKey, connectionInstanceId, error),
     });
+
+    if (this.registerForCleanup) {
+      providerRegistry.register(this);
+    }
 
     this.initializingConnections.add(connection);
     try {
@@ -2353,7 +2423,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
       ...(config.base_url
-        ? { config: { ...(config.cli_config ?? {}), base_url: config.base_url } }
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
         : {}),
       ephemeral: config.ephemeral ?? true,
       experimentalRawEvents: config.experimental_raw_events ?? false,
@@ -2380,6 +2450,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ? { developerInstructions: config.developer_instructions }
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
+      ...(config.base_url
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
+        : {}),
       persistExtendedHistory: config.persist_extended_history ?? false,
     };
   }
@@ -3119,6 +3192,23 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return undefined;
   }
 
+  private async runSerializedThreadTurn<T>(
+    queueKey: string | undefined,
+    abortSignal: AbortSignal | undefined,
+    executeTurn: () => Promise<T>,
+    cleanupGeneration: number,
+  ): Promise<T> {
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('codex app-server provider cleanup interrupted queued turn');
+    }
+    return this.threadRunQueues.run(queueKey, abortSignal, async () => {
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('codex app-server provider cleanup interrupted queued turn');
+      }
+      return executeTurn();
+    });
+  }
+
   private buildProviderResponse(
     state: CodexAppServerTurnState,
     threadHandle: ThreadHandle,
@@ -3387,7 +3477,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       input,
       output,
       cached: usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0,
-      cacheWrite: usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens,
+      cacheWrite:
+        typeof (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens) === 'number'
+          ? (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens)
+          : undefined,
       reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0,
     };
   }

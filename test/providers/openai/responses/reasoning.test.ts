@@ -15,15 +15,56 @@ const createReasoningResponse = (text: string) => ({
   output: [createResponseMessage(text)],
   usage: { input_tokens: 100, output_tokens: 200 },
 });
+const CUSTOM_OPENAI_API_BASE_URL = 'https://gateway.example/v1';
 
 describe('OpenAiResponsesProvider reasoning models', () => {
+  it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
+    'preserves %s reasoning through provider and prompt model overrides',
+    async (model) => {
+      const direct = new OpenAiResponsesProvider(model, {
+        config: { apiKey: 'test-key', reasoning_effort: 'high' },
+      });
+      const { body: directBody } = await direct.getOpenAiBody('Test prompt');
+      expect(directBody.reasoning).toEqual({ effort: 'high' });
+      expect(directBody).not.toHaveProperty('temperature');
+      expect(directBody).not.toHaveProperty('max_output_tokens');
+
+      for (const perPrompt of [false, true]) {
+        const provider = new OpenAiResponsesProvider('gpt-4.1', {
+          config: {
+            apiKey: 'test-key',
+            reasoning_effort: 'high',
+            ...(!perPrompt && { passthrough: { model } }),
+          },
+        });
+        const { body } = await provider.getOpenAiBody(
+          'Test prompt',
+          perPrompt
+            ? {
+                vars: {},
+                prompt: {
+                  raw: 'Test prompt',
+                  label: 'override',
+                  config: { passthrough: { model } },
+                },
+              }
+            : undefined,
+        );
+        expect(body.model).toBe(model);
+        expect(body.reasoning).toEqual(directBody.reasoning);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('max_output_tokens');
+      }
+    },
+  );
+
   it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
     setOpenAiEnv({
       OPENAI_MAX_COMPLETION_TOKENS: '4096',
       OPENAI_MAX_TOKENS: '2048',
     });
 
-    const provider = new OpenAiResponsesProvider('o1-preview', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('o1', createApiKeyOptions());
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     expect(body.max_output_tokens).toBe(4096);
@@ -32,14 +73,14 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
     setOpenAiEnv({ OPENAI_MAX_TOKENS: '2048' });
 
-    const provider = new OpenAiResponsesProvider('o1-preview', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('o1', createApiKeyOptions());
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     expect(body.max_output_tokens).toBe(2048);
   });
 
   it('should not apply a hardcoded max_output_tokens default for reasoning models', async () => {
-    const provider = new OpenAiResponsesProvider('o1-preview', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('o1', createApiKeyOptions());
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     expect(body.max_output_tokens).toBeUndefined();
@@ -133,7 +174,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     { model: 'o3', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o3-pro', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o4-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
-    { model: 'codex-mini-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
+    { model: 'gpt-5-codex-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
   ] as const)(
     'should configure $model model correctly with reasoning parameters',
     async ({ model, reasoningEffort, maxOutputTokens }) => {
@@ -196,6 +237,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [{ type: 'code_interpreter' } as any],
         },
       });
@@ -219,6 +261,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [{ type: 'web_search_preview' } as any],
         },
       });
@@ -250,7 +293,11 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       });
 
       const result = await new OpenAiResponsesProvider('o3-deep-research', {
-        config: { apiKey: 'test-key', tools: tools as any },
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
+          tools: tools as any,
+        },
       }).callApi('Test prompt');
 
       expect(result.error).toBeUndefined();
@@ -265,7 +312,11 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       },
     ])('should not count file_search $label as a deep research data source', async ({ tools }) => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
-        config: { apiKey: 'test-key', tools: tools as any },
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
+          tools: tools as any,
+        },
       });
 
       const result = await provider.callApi('Test prompt');
@@ -280,6 +331,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [
             {
               type: 'mcp',
@@ -309,6 +361,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [{ type: 'web_search_preview' } as any],
         },
       });
@@ -443,6 +496,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [{ type: 'web_search_preview' } as any],
         },
       });

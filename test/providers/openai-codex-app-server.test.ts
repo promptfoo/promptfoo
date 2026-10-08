@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
+import { OpenInterpreterProvider } from '../../src/providers/openinterpreter';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
 import { waitForMessage } from './appServerTestUtils';
@@ -78,7 +79,11 @@ interface MockAppServer {
 }
 
 function createMockAppServer(
-  options: { configReadResult?: unknown; configReadError?: unknown } = {},
+  options: {
+    configReadResult?: unknown;
+    configReadError?: unknown;
+    autoCompleteThread?: string;
+  } = {},
 ): MockAppServer {
   const proc = new EventEmitter() as any;
   const stdout = new PassThrough();
@@ -111,6 +116,23 @@ function createMockAppServer(
               : { result: options.configReadResult ?? { config: {} } }),
           })}\n`,
         );
+      });
+    } else if (options.autoCompleteThread && message.id !== undefined) {
+      queueMicrotask(() => {
+        const threadId = options.autoCompleteThread;
+        const turn = { id: 'turn_mock', status: 'completed', items: [], error: null };
+        const result =
+          message.method === 'turn/start'
+            ? { turn: { ...turn, status: 'inProgress' } }
+            : ['thread/start', 'thread/resume'].includes(message.method)
+              ? { thread: { id: threadId } }
+              : {};
+        stdout.write(`${JSON.stringify({ id: message.id, result })}\n`);
+        if (message.method === 'turn/start') {
+          stdout.write(
+            `${JSON.stringify({ method: 'turn/completed', params: { threadId, turn } })}\n`,
+          );
+        }
       });
     }
     return true;
@@ -1368,7 +1390,12 @@ describe('OpenAICodexAppServerProvider', () => {
           threadId: 'thr_bedrock_noleak',
           turnId: 'turn_bedrock_noleak',
           tokenUsage: {
-            last: { inputTokens: 2_000, cachedInputTokens: 500, outputTokens: 1_000 },
+            last: {
+              inputTokens: 2_000,
+              cachedInputTokens: 500,
+              cacheWriteInputTokens: 0,
+              outputTokens: 1_000,
+            },
           },
         },
       });
@@ -4711,6 +4738,185 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'Recovered' });
   });
 
+  it.each(['opening brace', 'property name', 'property value'])(
+    'parses multiline JSON-RPC split after the %s',
+    async (splitAfter) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({ config: { thread_cleanup: 'none' } });
+      const sendMultiline = (message: unknown) => {
+        for (const line of JSON.stringify(message, null, 2).split('\n')) {
+          server.stdout.write(`${line}\n`);
+        }
+      };
+
+      const resultPromise = provider.callApi('Read multiline protocol messages');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      const initialResponse = JSON.stringify({ id: initialize.id, result: {} });
+      const splitIndex =
+        splitAfter === 'property name'
+          ? initialResponse.indexOf(':')
+          : splitAfter === 'property value'
+            ? initialResponse.indexOf(',')
+            : 1;
+      // A malformed complete line must not poison the next valid response.
+      server.stdout.write('{"id": }\n');
+      server.stdout.write(
+        `${initialResponse.slice(0, splitIndex)}\n${initialResponse.slice(splitIndex)}\n`,
+      );
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      sendMultiline({ id: threadStart.id, result: { thread: { id: 'thr_pretty' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      sendMultiline({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_pretty', status: 'inProgress' } },
+      });
+      server.stdout.write('\n');
+      sendMultiline({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_pretty',
+          turnId: 'turn_pretty',
+          itemId: 'msg_pretty',
+          delta: 'line one\nline two',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_pretty',
+          turn: { id: 'turn_pretty', status: 'completed', items: [], error: null },
+        },
+      });
+
+      await expect(resultPromise).resolves.toMatchObject({ output: 'line one\nline two' });
+    },
+  );
+
+  it.each(
+    [
+      { label: 'complete malformed line', malformed: '{"id": }\n' },
+      { label: 'complete malformed multiline object', malformed: '{\n  "id": 1,\n}\n' },
+      { label: 'unfinished object', malformed: '{"id": 1\n' },
+      { label: 'unfinished string', malformed: '{"result":"unfinished\n' },
+    ].flatMap((input) =>
+      ['compact', 'multiline', 'indented-multiline', 'raw-newline'].map((format) => ({
+        ...input,
+        format,
+      })),
+    ),
+  )('recovers from $label before a $format response', async ({ malformed, format }) => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({ config: { thread_cleanup: 'none' } });
+    const resultPromise = provider.callApi('Recover after malformed multiline protocol output');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.stdout.write(malformed);
+    const response = { id: initialize.id, result: { message: 'line one\nline two' } };
+    const serialized = JSON.stringify(response, null, format.endsWith('multiline') ? 2 : undefined);
+    if (format === 'indented-multiline') {
+      server.stdout.write('  ');
+    }
+    server.stdout.write(
+      `${format === 'raw-newline' ? serialized.replace(JSON.stringify(response.result.message), '"line one\nline two"') : serialized}\n`,
+    );
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_recovered' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_recovered', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_recovered',
+        turnId: 'turn_recovered',
+        itemId: 'msg_recovered',
+        delta: 'Recovered',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_recovered',
+        turn: { id: 'turn_recovered', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'Recovered' });
+  });
+
+  it('preserves structural whitespace when repairing raw newlines in JSON-RPC strings', async () => {
+    vi.useFakeTimers();
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none', turn_timeout_ms: 1_000 },
+    });
+    const resultPromise = provider.callApi('Read combined multiline protocol output');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_combined' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_combined', status: 'inProgress' } },
+    });
+    const delta = [
+      'quote "one" and path C:\\folder\\',
+      '',
+      'next \\"quoted\\" and literal \\n',
+      'last',
+    ].join('\n');
+    const params = {
+      threadId: 'thr_combined',
+      turnId: 'turn_combined',
+      itemId: 'msg_combined',
+      delta,
+    };
+    const notification = JSON.stringify({ method: 'item/agentMessage/delta', params }, null, 2);
+    const rawString = `"${delta
+      .split('\n')
+      .map((line) => JSON.stringify(line).slice(1, -1))
+      .join('\n')}"`;
+    server.stdout.write('{"id": }\n');
+    server.stdout.write(`${notification.replace(JSON.stringify(delta), rawString)}\n`);
+    server.send({ method: 'item/agentMessage/delta', params: { ...params, delta: ' tail' } });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_combined',
+        turn: { id: 'turn_combined', status: 'completed', items: [], error: null },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(resultPromise).resolves.toMatchObject({ output: `${delta} tail` });
+  });
+
   it('parses JSON-RPC notifications whose string payloads contain literal newlines', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -5165,13 +5371,14 @@ describe('OpenAICodexAppServerProvider', () => {
           last: {
             inputTokens: 100,
             cachedInputTokens: 25,
+            cacheWriteInputTokens: 10,
             outputTokens: 50,
             reasoningOutputTokens: 12,
-            cacheWriteInputTokens: 10,
           },
           total: {
             inputTokens: 200,
             cachedInputTokens: 25,
+            cacheWriteInputTokens: 10,
             outputTokens: 75,
             reasoningOutputTokens: 12,
           },
@@ -5934,6 +6141,199 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(server.proc.kill).toHaveBeenCalledWith('SIGKILL');
   });
 
+  it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
+    'registers reused resources after %s',
+    async (method) => {
+      const provider = new OpenAICodexAppServerProvider({
+        config: { thread_cleanup: 'none' },
+      });
+      expect(providerRegistry.has(provider)).toBe(true);
+      await provider.cleanup();
+      await provider.cleanup();
+      expect(providerRegistry.has(provider)).toBe(false);
+
+      for (const prompt of ['First reuse', 'Second reuse']) {
+        const server = createMockAppServer({ autoCompleteThread: 'thr_reuse' });
+        mocks.spawn.mockReturnValue(server.proc);
+        expect((await provider.callApi(prompt)).error).toBeUndefined();
+        expect(providerRegistry.has(provider)).toBe(true);
+        if (method === 'shutdownAll') {
+          await providerRegistry.shutdownAll();
+        } else {
+          await provider[method]();
+        }
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      }
+    },
+  );
+
+  it.each(
+    [
+      { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider },
+      { name: 'OpenInterpreter', Provider: OpenInterpreterProvider },
+    ].flatMap((provider) =>
+      (['cleanup', 'shutdown', 'shutdownAll'] as const).map((method) => ({ ...provider, method })),
+    ),
+  )(
+    'keeps fresh $name resources registered while an older $method finishes',
+    async ({ Provider, method }) => {
+      vi.useFakeTimers();
+      const originalServer = createMockAppServer({ autoCompleteThread: 'thr_cleanup_overlap' });
+      const replacementServer = createMockAppServer({ autoCompleteThread: 'thr_cleanup_overlap' });
+      originalServer.proc.stdin.end = vi.fn(() => originalServer.proc.stdin);
+      originalServer.proc.kill = vi.fn(() => {
+        originalServer.proc.killed = true;
+        return true;
+      });
+      mocks.spawn
+        .mockReturnValueOnce(originalServer.proc)
+        .mockReturnValueOnce(replacementServer.proc);
+      const provider = new Provider({
+        config: {
+          working_dir: process.cwd(),
+          skip_git_repo_check: true,
+          thread_id: 'thr_cleanup_overlap',
+          thread_cleanup: 'none',
+          reuse_server: true,
+        },
+      });
+      const delegate =
+        provider instanceof OpenInterpreterProvider ? (provider as any).delegate : provider;
+
+      try {
+        expect((await provider.callApi('Original call')).error).toBeUndefined();
+        const cleanup =
+          method === 'shutdownAll' ? providerRegistry.shutdownAll() : provider[method]();
+        expect(originalServer.proc.exitCode).toBeNull();
+        expect(providerRegistry.has(provider)).toBe(false);
+
+        expect((await provider.callApi('Fresh call during cleanup')).error).toBeUndefined();
+        expect(mocks.spawn).toHaveBeenCalledTimes(2);
+        const interpreterHome =
+          delegate === provider
+            ? undefined
+            : mocks.spawn.mock.calls.at(-1)?.[2].env.INTERPRETER_HOME;
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await cleanup;
+
+        expect.soft(providerRegistry.has(provider)).toBe(true);
+        expect(replacementServer.proc.exitCode).toBeNull();
+        if (interpreterHome) {
+          expect(fs.existsSync(interpreterHome)).toBe(true);
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+
+        await providerRegistry.shutdownAll();
+        expect(replacementServer.proc.exitCode).toBe(0);
+        expect(delegate.connections.size).toBe(0);
+        expect(providerRegistry.has(provider)).toBe(false);
+        if (interpreterHome) {
+          expect(fs.existsSync(interpreterHome)).toBe(false);
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+      } finally {
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await provider.shutdown();
+      }
+    },
+  );
+
+  it.each([
+    { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider, queued: true },
+    { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider, queued: false },
+    { name: 'OpenInterpreter', Provider: OpenInterpreterProvider, queued: true },
+    { name: 'OpenInterpreter', Provider: OpenInterpreterProvider, queued: false },
+  ])(
+    'interrupts an accepted $name turn during cleanup without reopening its process (queued=$queued)',
+    async ({ Provider, queued }) => {
+      vi.useFakeTimers();
+      const originalServer = createMockAppServer();
+      const replacementServer = createMockAppServer({ autoCompleteThread: 'thr_cleanup_queue' });
+      originalServer.proc.stdin.end = vi.fn(() => originalServer.proc.stdin);
+      originalServer.proc.kill = vi.fn(() => {
+        originalServer.proc.killed = true;
+        return true;
+      });
+      mocks.spawn
+        .mockReturnValueOnce(originalServer.proc)
+        .mockReturnValueOnce(replacementServer.proc);
+      const provider = new Provider({
+        config: {
+          working_dir: process.cwd(),
+          skip_git_repo_check: true,
+          thread_id: 'thr_cleanup_queue',
+          thread_cleanup: 'none',
+          reuse_server: true,
+        },
+      });
+      const delegate =
+        provider instanceof OpenInterpreterProvider ? (provider as any).delegate : provider;
+
+      try {
+        const firstResultPromise = provider.callApi('Active turn');
+        const initialize = await waitForMessageWithoutTimers(
+          originalServer,
+          (message) => message.method === 'initialize',
+        );
+        originalServer.send({ id: initialize.id, result: {} });
+        const resume = await waitForMessageWithoutTimers(
+          originalServer,
+          (message) => message.method === 'thread/resume',
+        );
+        originalServer.send({ id: resume.id, result: { thread: { id: 'thr_cleanup_queue' } } });
+        const firstTurn = await waitForMessageWithoutTimers(
+          originalServer,
+          (message) => message.method === 'turn/start',
+        );
+        originalServer.send({
+          id: firstTurn.id,
+          result: { turn: { id: 'turn_cleanup_queue_1', status: 'inProgress' } },
+        });
+        const firstQueue = delegate.threadRunQueues.get('thread_id:thr_cleanup_queue');
+        const secondResultPromise = provider.callApi('Already queued turn');
+        if (queued) {
+          await flushMicrotasks();
+          expect(delegate.threadRunQueues.get('thread_id:thr_cleanup_queue')).not.toBe(firstQueue);
+        } else {
+          expect(delegate.threadRunQueues.get('thread_id:thr_cleanup_queue')).toBe(firstQueue);
+        }
+        expect(mocks.spawn).toHaveBeenCalledTimes(1);
+
+        const cleanupPromise = provider.cleanup();
+        expect((await firstResultPromise).error).toContain('cleanup interrupted active turn');
+        expect((await secondResultPromise).error).toContain('cleanup interrupted queued turn');
+        expect(mocks.spawn).toHaveBeenCalledTimes(1);
+        expect(originalServer.proc.exitCode).toBeNull();
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await cleanupPromise;
+
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(delegate.connections.size).toBe(0);
+        if (delegate !== provider) {
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+
+        expect((await provider.callApi('Fresh turn after cleanup')).error).toBeUndefined();
+        expect(mocks.spawn).toHaveBeenCalledTimes(2);
+        expect(providerRegistry.has(provider)).toBe(true);
+        if (delegate !== provider) {
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(replacementServer.proc.exitCode).toBe(0);
+      } finally {
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await provider.shutdown();
+      }
+    },
+  );
+
   it('kills the app-server process during cleanup', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -6437,47 +6837,63 @@ describe('OpenAICodexAppServerProvider', () => {
     await resultPromise;
   });
 
-  it('propagates base_url to spawn environment', async () => {
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
+  it.each(['thread/start', 'thread/resume'])(
+    'routes base_url through the native config key for %s',
+    async (threadMethod) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        apiKey: 'test-key',
-        base_url: 'https://custom.example.com/v1',
-        thread_cleanup: 'none',
-      },
-    });
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          apiKey: 'test-key',
+          base_url: 'https://custom.example.com/v1',
+          cli_config: {
+            openai_base_url: 'https://raw.example.com/v1',
+            model_provider: 'openai',
+            model_reasoning_effort: 'low',
+          },
+          model_provider: 'tenant',
+          ...(threadMethod === 'thread/resume' ? { thread_id: 'thr_base' } : {}),
+          thread_cleanup: 'none',
+        },
+      });
 
-    const resultPromise = provider.callApi('Hello');
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
+      const resultPromise = provider.callApi('Hello');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
 
-    const spawnEnv = mocks.spawn.mock.calls[0][2].env;
-    expect(spawnEnv.OPENAI_BASE_URL).toBe('https://custom.example.com/v1');
-    expect(spawnEnv.OPENAI_API_BASE_URL).toBe('https://custom.example.com/v1');
+      const spawnEnv = mocks.spawn.mock.calls[0][2].env;
+      expect(spawnEnv.OPENAI_BASE_URL).toBe('https://custom.example.com/v1');
+      expect(spawnEnv.OPENAI_API_BASE_URL).toBe('https://custom.example.com/v1');
 
-    const loginStart = await waitForMessage(
-      server,
-      (message) => message.method === 'account/login/start',
-    );
-    expect(loginStart.params).toEqual({ type: 'apiKey', apiKey: 'test-key' });
-    server.send({ id: loginStart.id, result: { type: 'apiKey' } });
+      const loginStart = await waitForMessage(
+        server,
+        (message) => message.method === 'account/login/start',
+      );
+      expect(loginStart.params).toEqual({ type: 'apiKey', apiKey: 'test-key' });
+      server.send({ id: loginStart.id, result: { type: 'apiKey' } });
 
-    const threadStart = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/start',
-    );
-    server.send({ id: threadStart.id, result: { thread: { id: 'thr_base' } } });
-    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
-    server.send({
-      id: turnStart.id,
-      result: { turn: { id: 'turn_base', status: 'inProgress' } },
-    });
-    server.send({
-      method: 'turn/completed',
-      params: { threadId: 'thr_base', turnId: 'turn_base', turn: { id: 'turn_base' } },
-    });
-    await resultPromise;
-  });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === threadMethod,
+      );
+      expect(threadStart.params.modelProvider).toBe('tenant');
+      expect(threadStart.params.config).toEqual({
+        openai_base_url: 'https://custom.example.com/v1',
+        model_provider: 'openai',
+        model_reasoning_effort: 'low',
+      });
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_base' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_base', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: { threadId: 'thr_base', turnId: 'turn_base', turn: { id: 'turn_base' } },
+      });
+      await resultPromise;
+    },
+  );
 });

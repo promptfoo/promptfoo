@@ -10,6 +10,7 @@ import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
+  isOpenAiFirstPartyApiUrl,
   NON_CONVERSATIONAL_REALTIME_MODELS,
   OPENAI_REALTIME_MODELS,
   resolveMaxToolIterations,
@@ -486,10 +487,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (modelName.startsWith('gpt-live-')) {
-      assertOpenAiApiModel(modelName);
-    }
-    if (NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
+    super(modelName, options);
+    this.config = options.config || {};
+    const apiUrl = this.getApiUrl();
+    if (isOpenAiFirstPartyApiUrl(apiUrl) && NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
       throw new Error(
         `OpenAI ${modelName} is not a conversational Realtime model and cannot be used as ` +
           `openai:realtime:${modelName}. ` +
@@ -501,8 +502,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     if (!OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelName)) {
       logger.debug(`Using unknown OpenAI realtime model: ${modelName}`);
     }
-    super(modelName, options);
-    this.config = options.config || {};
+    assertOpenAiApiModel(modelName, apiUrl);
 
     // Enable maintainContext by default
     if (this.config.maintainContext === undefined) {
@@ -742,7 +742,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   generateEventId(): string {
-    return `event_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    return `event_${crypto.randomUUID()}`;
   }
 
   async webSocketRequest(

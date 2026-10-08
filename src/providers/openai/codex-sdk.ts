@@ -4,6 +4,7 @@ import path from 'path';
 
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
 import { getEnvString, getProcessEnv } from '../../envars';
 import {
@@ -25,8 +26,9 @@ import {
   isDefinitiveBillingCode,
   isHardQuotaCode,
 } from '../../util/fetch/errors';
+import { getPackageVersion } from '../../util/packageVersion';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
-import { cleanupAndUnregister, resolveAgenticWorkingDir } from '../agentic-utils';
+import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
 import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
@@ -108,7 +110,7 @@ function isValidTraceparent(traceparent: string | undefined): traceparent is str
  * OpenAI Codex SDK Provider
  *
  * This provider requires the @openai/codex-sdk package to be installed separately:
- *   npm install @openai/codex-sdk
+ *   npm install promptfoo @openai/codex-sdk@^0.156.1
  *
  * Key features:
  * - Supports API key auth or existing Codex/ChatGPT login state
@@ -144,14 +146,13 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
- * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
  * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
  *
  * Values:
- * - 'minimal': Minimal reasoning overhead
+ * - 'minimal': Legacy minimal reasoning setting accepted by some older models
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced reasoning; runtime defaults vary by model
  * - 'high': Thorough reasoning for complex tasks
@@ -588,11 +589,9 @@ function buildCodexRateLimitResponse(
   };
 }
 
-/**
- * Helper to load the OpenAI Codex SDK ESM module
- * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
- */
-async function loadCodexSDK(): Promise<any> {
+export const CODEX_SDK_VERSION_RANGE = '^0.156.1';
+
+export function resolveCodexSdkPackage(): string | null {
   const basePaths = [
     cliState.basePath ? path.resolve(cliState.basePath) : undefined,
     process.cwd(),
@@ -600,24 +599,34 @@ async function loadCodexSDK(): Promise<any> {
     path.resolve(getDirectory(), '../..'),
   ].filter((candidate): candidate is string => Boolean(candidate));
 
-  let codexPath: string | null = null;
   for (const basePath of new Set(basePaths)) {
-    codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
-    if (codexPath) {
-      break;
+    const entryPoint = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+    if (entryPoint) {
+      return entryPoint;
     }
   }
+  return null;
+}
 
+async function loadCodexSDK(): Promise<any> {
+  const codexPath = resolveCodexSdkPackage();
   if (!codexPath) {
     throw new Error(
       dedent`The @openai/codex-sdk package is required but not installed.
 
       To use the OpenAI Codex SDK provider, install it with:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
       Requires Node.js >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
+    );
+  }
+
+  const version = getPackageVersion('@openai/codex-sdk', codexPath);
+  if (!version || !semverSatisfies(version, CODEX_SDK_VERSION_RANGE)) {
+    throw new Error(
+      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}`,
     );
   }
 
@@ -636,7 +645,7 @@ async function loadCodexSDK(): Promise<any> {
       - Corrupted installation
 
       Try reinstalling:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -644,6 +653,8 @@ async function loadCodexSDK(): Promise<any> {
 }
 
 export class OpenAICodexSDKProvider implements ApiProvider {
+  private cleanupGeneration = 0;
+
   static OPENAI_MODELS = [
     'gpt-6-astra',
     'gpt-6-sol',
@@ -658,6 +669,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-pro',
+    'gpt-5.4-mini',
     // GPT-5.3 Codex models
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
@@ -743,23 +755,24 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    // Clean up threads
+    this.cleanupGeneration++;
+    providerRegistry.unregister(this);
+    const instances = [...this.codexInstances.values()];
+    this.codexInstances.clear();
     this.threads.clear();
     this.threadRunQueues.clear();
 
-    // Clean up Codex instances to release resources (child processes, file handles)
-    for (const instance of this.codexInstances.values()) {
+    for (const instance of instances) {
       try {
         await this.destroyInstance(instance);
       } catch (error) {
         logger.warn('[CodexSDK] Error during cleanup', { error });
       }
     }
-    this.codexInstances.clear();
   }
 
-  shutdown(): Promise<void> {
-    return cleanupAndUnregister(this);
+  async shutdown(): Promise<void> {
+    await this.cleanup();
   }
 
   private prepareEnvironment(
@@ -1960,6 +1973,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     // Merge configs (prompt config takes precedence)
     const mergedConfig: OpenAICodexSDKConfig = {
       ...this.config,
@@ -1979,7 +1993,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // withGenAISpan handles both exceptions and { error: ... } responses
     return withGenAISpan(
       this.buildCodexSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config, inIsolatedWorkspace),
+      () =>
+        this.callApiInternal(
+          prompt,
+          context,
+          callOptions,
+          config,
+          inIsolatedWorkspace,
+          cleanupGeneration,
+        ),
       (response) => this.extractCodexSpanResult(response, requestedModel),
     );
   }
@@ -2094,6 +2116,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: OpenAICodexSDKConfig,
     inIsolatedWorkspace: boolean,
+    cleanupGeneration: number,
   ): Promise<ProviderResponse> {
     let config: OpenAICodexSDKConfig;
     try {
@@ -2158,7 +2181,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig.skip_git_repo_check,
       );
 
-      const codexInstance = await this.getCodexInstanceForTurn(env, resolvedConfig, apiKey);
+      const codexInstance = await this.getCodexInstanceForTurn(
+        env,
+        resolvedConfig,
+        apiKey,
+        cleanupGeneration,
+      );
       const activeInstance = codexInstance.activeInstance;
       localInstance = codexInstance.localInstance;
       useLocalInstance = codexInstance.useLocalInstance;
@@ -2175,6 +2203,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         resolvedConfig,
         callOptions,
         skillRootPrefixes,
+        cleanupGeneration,
       );
 
       return this.buildCodexProviderResponse(turn, sessionId, skillRootPrefixes, resolvedConfig);
@@ -2215,6 +2244,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     env: Record<string, string>,
     resolvedConfig: OpenAICodexSDKConfig,
     apiKey: string | undefined,
+    cleanupGeneration: number,
   ): Promise<{
     activeInstance: any;
     instanceKey: string;
@@ -2224,6 +2254,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (!this.codexModule) {
       this.codexModule = await loadCodexSDK();
     }
+
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('Codex SDK call was interrupted by cleanup');
+    }
+    providerRegistry.register(this);
 
     const stableEnv = { ...env };
     delete stableEnv.TRACEPARENT;
@@ -2282,17 +2317,24 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     resolvedConfig: OpenAICodexSDKConfig,
     callOptions: CallApiOptionsParams | undefined,
     skillRootPrefixes: readonly string[],
+    cleanupGeneration: number,
   ): Promise<{ turn: any; sessionId: string }> {
     const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey);
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
     return this.threadRunQueues.run(queueKey, callOptions?.abortSignal, async () => {
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Codex SDK call was interrupted by cleanup');
+      }
       const thread = await this.getOrCreateThread(
         resolvedConfig,
         cacheKey,
         instanceKey,
         activeInstance,
       );
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Codex SDK call was interrupted by cleanup');
+      }
       const turn = resolvedConfig.enable_streaming
         ? await this.runStreaming(thread, promptInput, runOptions, callOptions, skillRootPrefixes)
         : await thread.run(promptInput, runOptions);
@@ -2317,7 +2359,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return {
       output,
       tokenUsage,
-      cost: this.calculateCodexResponseCost(tokenUsage, resolvedConfig.model),
+      cost: this.calculateCodexResponseCost(
+        tokenUsage,
+        this.getCodexBillingModelName(resolvedConfig),
+        Boolean(resolvedConfig.codex_path_override),
+      ),
       metadata: this.buildCodexResponseMetadata(turn.items, skillRootPrefixes),
       raw: JSON.stringify(turn),
       sessionId,
@@ -2341,21 +2387,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       return undefined;
     }
 
+    const reasoningTokens = turnUsage.reasoning_output_tokens;
+    const cacheWriteTokens = turnUsage.cache_write_input_tokens;
+    const hasCompletionDetails =
+      typeof reasoningTokens === 'number' || typeof cacheWriteTokens === 'number';
+
     return {
       // cached_input_tokens is already included in input_tokens by the Codex SDK.
       prompt: turnUsage.input_tokens,
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
-      ...(typeof turnUsage.reasoning_output_tokens === 'number' ||
-      typeof turnUsage.cache_write_input_tokens === 'number'
+      ...(hasCompletionDetails
         ? {
             completionDetails: {
-              ...(typeof turnUsage.reasoning_output_tokens === 'number'
-                ? { reasoning: turnUsage.reasoning_output_tokens }
-                : {}),
-              ...(typeof turnUsage.cache_write_input_tokens === 'number'
-                ? { cacheCreationInputTokens: turnUsage.cache_write_input_tokens }
+              ...(typeof reasoningTokens === 'number' ? { reasoning: reasoningTokens } : {}),
+              ...(typeof cacheWriteTokens === 'number'
+                ? { cacheCreationInputTokens: cacheWriteTokens }
                 : {}),
             },
           }
@@ -2366,8 +2414,40 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private calculateCodexResponseCost(
     tokenUsage: ProviderResponse['tokenUsage'],
     model: string | undefined,
+    usesCustomCodexBinary: boolean,
   ): number | undefined {
+    // SDK 0.146 fills an omitted cache-write field with zero. That is reliable for its bundled
+    // Codex binary, but a custom/older binary may omit the field (or have it normalized to zero)
+    // despite performing cache writes. A positive value reported by the binary is still usable.
+    const normalizedModel = model?.replace(/^bedrock:/, '');
+    if (usesCustomCodexBinary && normalizedModel?.startsWith('gpt-5.6')) {
+      const cacheWriteTokens = tokenUsage?.completionDetails?.cacheCreationInputTokens;
+      if (
+        typeof cacheWriteTokens !== 'number' ||
+        !Number.isFinite(cacheWriteTokens) ||
+        cacheWriteTokens <= 0
+      ) {
+        return undefined;
+      }
+    }
     return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
+  }
+
+  private getCodexBillingModelName(config: OpenAICodexSDKConfig): string | undefined {
+    const cliConfigProvider = config.cli_config?.model_provider;
+    const modelProvider =
+      config.model_provider ??
+      (typeof cliConfigProvider === 'string' ? cliConfigProvider : undefined);
+
+    if (
+      modelProvider?.trim().toLowerCase() === 'amazon-bedrock' &&
+      config.model !== undefined &&
+      /^openai\.gpt-5\.6(?:-|$)/.test(config.model)
+    ) {
+      return `bedrock:${config.model.slice('openai.'.length)}`;
+    }
+
+    return config.model;
   }
 
   private async cleanupCodexTurn(

@@ -230,6 +230,48 @@ describe('AzureResponsesProvider', () => {
       expect(body.temperature).toBe(0.7);
     });
 
+    it.each(['gpt-chat-latest', 'gpt-chat-latest-2026-06-24'])(
+      'uses reasoning request fields for Azure Responses alias %s',
+      async (deploymentName) => {
+        const provider = new AzureResponsesProvider(deploymentName, {
+          config: {
+            max_output_tokens: 2_000,
+            reasoning_effort: 'high',
+            temperature: 0.7,
+          } as any,
+        });
+
+        const body = await provider.getAzureResponsesBody('Hello world');
+
+        expect(body).toHaveProperty('max_output_tokens', 2_000);
+        expect(body).not.toHaveProperty('reasoning.effort');
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
+    it('preserves summaries while omitting fixed effort from prompt passthrough', async () => {
+      const direct = new AzureResponsesProvider('gpt-chat-latest');
+      const directBody = await direct.getAzureResponsesBody('hello');
+      expect(directBody).not.toHaveProperty('reasoning.effort');
+
+      const provider = new AzureResponsesProvider('opaque-deployment', {
+        config: { modelName: 'gpt-4.1' },
+      });
+      const passthrough = { reasoning: { effort: 'high', summary: 'auto' } };
+      const body = await provider.getAzureResponsesBody('hello', {
+        vars: {},
+        prompt: {
+          raw: 'hello',
+          label: 'override',
+          config: { modelName: 'gpt-chat-latest', passthrough },
+        },
+      });
+      expect(body.model).toBe('opaque-deployment');
+      expect(body.reasoning).toEqual({ summary: 'auto' });
+      expect(body).not.toHaveProperty('temperature');
+      expect(passthrough.reasoning).toEqual({ effort: 'high', summary: 'auto' });
+    });
+
     it('should correctly send temperature: 0 in the request body', async () => {
       // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
@@ -387,6 +429,47 @@ describe('AzureResponsesProvider', () => {
           authHeadersValue = value;
         }),
         configurable: true,
+      });
+    });
+
+    it('should preserve partial output and expose its incomplete finish reason', async () => {
+      const mockResponse = {
+        id: 'resp_azure_incomplete',
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            status: 'incomplete',
+            content: [{ type: 'output_text', text: 'Partial Azure answer' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+      };
+      mockFetchWithCache.mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Partial Azure answer');
+      expect(result.raw).toEqual(mockResponse);
+      expect(result.finishReason).toBe('length');
+      expect(result.metadata).toMatchObject({
+        responseStatus: 'incomplete',
+        incompleteReason: 'max_output_tokens',
+      });
+      expect(result.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
       });
     });
 

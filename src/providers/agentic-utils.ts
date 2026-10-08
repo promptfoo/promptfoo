@@ -14,7 +14,6 @@ import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { safeResolve } from '../util/pathUtils';
-import { providerRegistry } from './providerRegistry';
 
 import type { ApiProvider, ProviderResponse } from '../types/index';
 
@@ -299,16 +298,5 @@ export async function cacheResponse(
     logger.error(
       `Error caching response${debugContext ? ` for ${debugContext}` : ''}: ${String(error)}`,
     );
-  }
-}
-
-export async function cleanupAndUnregister(provider: {
-  cleanup(): Promise<void>;
-  shutdown(): Promise<void>;
-}): Promise<void> {
-  try {
-    await provider.cleanup();
-  } finally {
-    providerRegistry.unregister(provider);
   }
 }

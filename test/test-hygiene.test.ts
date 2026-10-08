@@ -216,7 +216,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/openai-codex-sdk.test.ts',
   'providers/pythonCompletion.cliState.test.ts',
   'providers/registry.test.ts',
-  'providers/responses/processor.test.ts',
   'providers/sagemaker.test.ts',
   'providers/simulatedUser.test.ts',
   'providers/watsonx.test.ts',
