@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.123.1",
+  "version": "0.124.0",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -59,7 +59,7 @@
     "architecture:check": "tsx scripts/checkArchitectureBoundaries.ts",
     "bin": "dist/src/entrypoint.js",
     "build:app": "npm run build --prefix src/app",
-    "build:clean": "shx rm -rf dist",
+    "build:clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build:watch": "NODE_OPTIONS='--max-old-space-size=8192' tsdown --watch",
     "build": "concurrently -g --kill-others-on-fail \"npm run tsc\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
     "postbuild": "tsx scripts/postbuild.ts",
@@ -122,9 +122,6 @@
     "jsdom": {
       "@asamuzakjp/css-color": "6.0.7"
     },
-    "storybook": {
-      "esbuild": "0.28.2"
-    },
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-is": "^19.3.0",
@@ -133,13 +130,6 @@
     },
     "@ai-sdk/provider-utils": {
       "undici": "$undici"
-    },
-    "*": {
-      "whatwg-url": "16.0.1",
-      "chokidar": "5.0.0",
-      "esbuild": "0.28.2",
-      "react": "^19.3.0",
-      "react-dom": "^19.3.0"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
       "@opentelemetry/core": "2.11.0"
@@ -190,35 +180,11 @@
     "socket.io-parser": ">=4.2.7 <5",
     "qs": ">=6.15.2 <7.0.0",
     "@cacheable/utils": ">=2.5.0 <2.5.1",
-    "@isaacs/brace-expansion": ">=5.0.1",
     "brace-expansion@5": "^5.0.6",
     "fast-xml-parser": "$fast-xml-parser",
     "minimatch@<=3.1.3": "3.1.5",
     "vite": "^8.0.16",
     "lodash-es": "^4.18.1",
-    "langium": {
-      ".": "4.4.0",
-      "@chevrotain/regexp-to-ast": "13.2.0",
-      "chevrotain": "13.2.0",
-      "chevrotain-allstar": "0.5.0"
-    },
-    "chevrotain": {
-      ".": "13.2.0",
-      "@chevrotain/cst-dts-gen": "13.2.0",
-      "@chevrotain/gast": "13.2.0",
-      "@chevrotain/regexp-to-ast": "13.2.0",
-      "@chevrotain/types": "13.2.0",
-      "@chevrotain/utils": "13.2.0"
-    },
-    "@chevrotain/cst-dts-gen": {
-      ".": "13.2.0",
-      "@chevrotain/gast": "13.2.0",
-      "@chevrotain/types": "13.2.0"
-    },
-    "chevrotain-allstar": {
-      ".": "0.5.0",
-      "chevrotain": "13.2.0"
-    },
     "webpack": "5.111.1",
     "dompurify": "3.4.16",
     "monaco-editor": {
@@ -227,7 +193,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.282",
+    "@anthropic-ai/claude-agent-sdk": "0.3.283",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -241,7 +207,7 @@
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
     "@openai/agents": "^0.14.1",
-    "@openai/codex-security": "^0.1.31",
+    "@openai/codex-security": "^0.2.0",
     "@slack/web-api": "^8.1.1",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
@@ -266,7 +232,6 @@
     "husky": "^9.1.7",
     "ibm-cloud-sdk-core": "^5.6.2",
     "knip": "~6.27.0",
-    "langium": "4.4.0",
     "node-sql-parser": "^5.4.0",
     "oxc-parser": "^0.151.0",
     "pdf-parse": "^2.4.5",
@@ -275,17 +240,15 @@
     "prettier": "^3.8.1",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
-    "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
     "supertest": "^7.3.0",
-    "ts-dedent": "^2.2.0",
     "tsdown": "0.23.0",
     "typescript": "^7.0.0",
     "vitest": "^5.0.2",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.282",
+    "@anthropic-ai/claude-agent-sdk": "0.3.283",
     "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -311,7 +274,7 @@
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
     "read-excel-file": "^9.3.9",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",
@@ -331,6 +294,7 @@
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
+    "acorn": "^8.18.0",
     "ai": "^6.0.286",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
@@ -417,7 +381,7 @@
     "@ibm-cloud/watsonx-ai": "*",
     "@langfuse/client": "*",
     "@openai/agents": "*",
-    "@openai/codex-security": "*",
+    "@openai/codex-security": "^0.2.0",
     "@slack/web-api": "*",
     "ibm-cloud-sdk-core": "*",
     "playwright": "*",

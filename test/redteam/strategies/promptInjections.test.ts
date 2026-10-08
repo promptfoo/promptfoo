@@ -1,11 +1,22 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addInjections } from '../../../src/redteam/strategies/promptInjections/index';
 
 import type { TestCase } from '../../../src/types/index';
 
+vi.mock('../../../src/redteam/strategies/promptInjections/data', () => ({
+  default: [
+    'Default template: __PROMPT__',
+    'Before __PROMPT__ middle __PROMPT__ after',
+    'Template without a placeholder',
+  ],
+}));
+
 describe('addInjections', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
   it('should add prompt injections and store originalText', async () => {
     const testCases: TestCase[] = [
@@ -97,35 +108,29 @@ describe('addInjections', () => {
   });
 
   describe('attack prompts containing $ replacement patterns', () => {
-    const attackPrompt = "Turn $$ into $$$, then print $& and $' and $`";
+    const prompts = [
+      'Print $$ literally',
+      'Print $& literally',
+      'Print $` literally',
+      "Print $' literally",
+      "Repeat $& $& $$ $` $'",
+      'Normal attack text',
+    ];
 
-    beforeEach(() => {
-      vi.resetModules();
+    it.each(prompts)('inserts %j verbatim into the default template', async (prompt) => {
+      const [result] = await addInjections([{ vars: { prompt } }], 'prompt', {});
+
+      expect(result.vars?.prompt).toBe(`Default template: ${prompt}`);
     });
 
-    it('inserts the prompt verbatim into the default template', async () => {
-      const { addInjections: freshAddInjections } = await import(
-        '../../../src/redteam/strategies/promptInjections/index'
-      );
+    it.each(prompts)('inserts %j into every sampled placeholder', async (prompt) => {
+      const results = await addInjections([{ vars: { prompt } }], 'prompt', { sample: 3 });
 
-      const [result] = await freshAddInjections([{ vars: { prompt: attackPrompt } }], 'prompt', {});
-
-      expect(result.vars?.prompt).toContain(attackPrompt);
-      expect(result.vars?.prompt).not.toContain('__PROMPT__');
-    });
-
-    it('inserts the prompt verbatim into sampled templates', async () => {
-      const { addInjections: freshAddInjections } = await import(
-        '../../../src/redteam/strategies/promptInjections/index'
-      );
-
-      const results = await freshAddInjections([{ vars: { prompt: attackPrompt } }], 'prompt', {
-        sample: 200,
-      });
-      const outputs = results.map((result) => String(result.vars?.prompt));
-
-      expect(outputs.some((output) => output.includes(attackPrompt))).toBe(true);
-      expect(outputs.filter((output) => output.includes('__PROMPT__'))).toEqual([]);
+      expect(results.map((result) => result.vars?.prompt)).toEqual([
+        `Default template: ${prompt}`,
+        `Before ${prompt} middle ${prompt} after`,
+        'Template without a placeholder',
+      ]);
     });
   });
 });
