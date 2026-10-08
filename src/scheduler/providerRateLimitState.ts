@@ -155,21 +155,25 @@ export class ProviderRateLimitState extends EventEmitter {
       // Acquire slot (may wait for rate limit window via queue)
       // Queue timeout failures are counted as failed requests
       try {
-        await this.slotQueue.acquire(`${requestId}-${attempt}`);
+        await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
       } catch (acquireError) {
         // Queue timeout or other acquire failures
         this.failedRequests++;
-        this.emit('queue:timeout', {
-          rateLimitKey: this.rateLimitKey,
-          requestId,
-          error: String(acquireError),
-        });
+        if (!options.abortSignal?.aborted) {
+          this.emit('queue:timeout', {
+            rateLimitKey: this.rateLimitKey,
+            requestId,
+            error: String(acquireError),
+          });
+        }
         throw acquireError;
       }
 
       const startTime = Date.now();
+      let retryDelay: number;
 
       try {
+        options.abortSignal?.throwIfAborted();
         const result = await callFn();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
@@ -203,23 +207,21 @@ export class ProviderRateLimitState extends EventEmitter {
               reason: 'ratelimit',
             });
 
-            await this.sleep(delay);
-            continue;
+            retryDelay = delay;
+          } else {
+            // The slot is already released; bypass error retry handling below.
+            this.failedRequests++;
+            throw new RateLimitExhaustedError(
+              `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
+              result,
+            );
           }
-
-          // Rate limited and no more retries - count as FAILED, throw sentinel error
-          // Using sentinel error to prevent catch block from double-releasing/double-counting
-          this.failedRequests++;
-          throw new RateLimitExhaustedError(
-            `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
-            result,
-          );
+        } else {
+          // Success
+          this.handleSuccess();
+          this.completedRequests++;
+          return result;
         }
-
-        // Success
-        this.handleSuccess();
-        this.completedRequests++;
-        return result;
       } catch (error) {
         // Re-throw sentinel error immediately to prevent double-release/double-count
         if (error instanceof RateLimitExhaustedError) {
@@ -261,13 +263,21 @@ export class ProviderRateLimitState extends EventEmitter {
             reason: isRateLimited ? 'ratelimit' : 'error',
           });
 
-          await this.sleep(delay);
-          continue;
+          retryDelay = delay;
+        } else {
+          // No more retries
+          this.failedRequests++;
+          throw lastError;
         }
+      }
 
-        // No more retries
+      // Both retry paths have released their slot. Cancellation here must not
+      // enter the provider-error handler and release another invocation's slot.
+      try {
+        await this.sleep(retryDelay, options.abortSignal);
+      } catch (error) {
         this.failedRequests++;
-        throw lastError;
+        throw error;
       }
     }
   }
@@ -377,8 +387,19 @@ export class ProviderRateLimitState extends EventEmitter {
     );
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private async sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(signal?.reason);
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   /**

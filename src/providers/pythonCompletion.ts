@@ -307,20 +307,17 @@ export class PythonProvider implements ApiProvider {
 
   async shutdown(): Promise<void> {
     this.cleanupGeneration++;
-    try {
-      await this.initializationPromise;
-    } catch {
-      // Failed initialization can still leave workers that need disposal.
+    if (this.initializationPromise) {
+      try {
+        await this.initializationPromise;
+      } catch {
+        // Failed initialization can still leave workers that need disposal.
+      }
     }
     const pool = this.pool;
-    if (pool) {
-      await pool.shutdown();
-      if (this.pool !== pool) {
-        return;
-      }
-      this.pool = null;
-    }
-    providerRegistry.unregister(this);
+    this.pool = null;
     this.isInitialized = false;
+    providerRegistry.unregister(this);
+    await pool?.shutdown();
   }
 }

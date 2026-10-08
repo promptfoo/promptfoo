@@ -163,6 +163,76 @@ function getPipelineCacheKey(
   return `${task}:${model}:${device}:${dtype}`;
 }
 
+async function initializePipeline(
+  task: string,
+  model: string,
+  options: TransformersBaseOptions,
+  cacheKey: string,
+): Promise<Pipeline> {
+  type PipelineFn = (
+    task: string,
+    model: string,
+    options?: Record<string, unknown>,
+  ) => Promise<Pipeline>;
+
+  // The shared loader validates the optional SDK before initializing its pipelines.
+  const transformers = (await loadTransformers()) as { pipeline: PipelineFn };
+  const pipelineFn = transformers.pipeline;
+
+  const pipelineOptions: Record<string, unknown> = {
+    progress_callback: (progress: {
+      status: string;
+      name?: string;
+      file?: string;
+      progress?: number;
+      loaded?: number;
+      total?: number;
+      task?: string;
+      model?: string;
+    }) => {
+      if (progress.status === 'progress' && progress.file) {
+        const percent = progress.progress?.toFixed(1) || '?';
+        logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
+      } else if (progress.status === 'ready') {
+        logger.debug(`[Transformers] Model ready: ${progress.model || model}`);
+      }
+    },
+  };
+
+  // Apply options
+  if (options.device) {
+    pipelineOptions.device = options.device;
+  }
+  if (options.dtype) {
+    pipelineOptions.dtype = options.dtype;
+  }
+  if (options.cacheDir) {
+    pipelineOptions.cache_dir = options.cacheDir;
+  }
+  if (options.localFilesOnly) {
+    pipelineOptions.local_files_only = true;
+  }
+  if (options.revision) {
+    pipelineOptions.revision = options.revision;
+  }
+  if (options.sessionOptions) {
+    pipelineOptions.session_options = options.sessionOptions;
+  }
+
+  logger.debug(`[Transformers] Loading pipeline: ${task}:${model}`, {
+    device: pipelineOptions.device,
+    dtype: pipelineOptions.dtype,
+  });
+
+  const startTime = Date.now();
+  const pipe = await pipelineFn(task, model, pipelineOptions);
+  const loadTime = Date.now() - startTime;
+
+  logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
+
+  return pipe;
+}
+
 async function getOrCreatePipeline(
   task: string,
   model: string,
@@ -176,71 +246,7 @@ async function getOrCreatePipeline(
   if (entry) {
     logger.debug(`[Transformers] Using shared pipeline: ${cacheKey}`);
   } else {
-    // Start new initialization
-    const initPromise = (async (): Promise<Pipeline> => {
-      type PipelineFn = (
-        task: string,
-        model: string,
-        options?: Record<string, unknown>,
-      ) => Promise<Pipeline>;
-
-      // The shared loader validates the optional SDK before initializing its pipelines.
-      const transformers = (await loadTransformers()) as { pipeline: PipelineFn };
-      const pipelineFn = transformers.pipeline;
-
-      const pipelineOptions: Record<string, unknown> = {
-        progress_callback: (progress: {
-          status: string;
-          name?: string;
-          file?: string;
-          progress?: number;
-          loaded?: number;
-          total?: number;
-          task?: string;
-          model?: string;
-        }) => {
-          if (progress.status === 'progress' && progress.file) {
-            const percent = progress.progress?.toFixed(1) || '?';
-            logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
-          } else if (progress.status === 'ready') {
-            logger.debug(`[Transformers] Model ready: ${progress.model || model}`);
-          }
-        },
-      };
-
-      // Apply options
-      if (options.device) {
-        pipelineOptions.device = options.device;
-      }
-      if (options.dtype) {
-        pipelineOptions.dtype = options.dtype;
-      }
-      if (options.cacheDir) {
-        pipelineOptions.cache_dir = options.cacheDir;
-      }
-      if (options.localFilesOnly) {
-        pipelineOptions.local_files_only = true;
-      }
-      if (options.revision) {
-        pipelineOptions.revision = options.revision;
-      }
-      if (options.sessionOptions) {
-        pipelineOptions.session_options = options.sessionOptions;
-      }
-
-      logger.debug(`[Transformers] Loading pipeline: ${task}:${model}`, {
-        device: pipelineOptions.device,
-        dtype: pipelineOptions.dtype,
-      });
-
-      const startTime = Date.now();
-      const pipe = await pipelineFn(task, model, pipelineOptions);
-      const loadTime = Date.now() - startTime;
-
-      logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
-
-      return pipe;
-    })();
+    const initPromise = initializePipeline(task, model, options, cacheKey);
 
     const newEntry: PipelineEntry = {
       key: cacheKey,

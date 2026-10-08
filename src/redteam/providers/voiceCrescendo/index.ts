@@ -512,6 +512,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let objectiveAchieved = false;
     let finalConfidence = 0;
     let lastResponse = '';
+    let lastTargetError: string | undefined;
     let lastPrompt = '';
     let stopReason = 'Max turns reached';
     const audioHistory: VoiceCrescendoMetadata['audioHistory'] = [];
@@ -551,6 +552,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           context,
         );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+        lastTargetError = targetResponse.error;
 
         if (targetResponse.conversationEnded) {
           logger.info('[VoiceCrescendo] Target ended conversation', {
@@ -682,6 +684,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
     return {
       output: lastResponse,
+      ...(lastTargetError ? { error: lastTargetError } : {}),
       prompt: lastPrompt,
       metadata,
       tokenUsage: totalTokenUsage,
