@@ -1,3 +1,5 @@
+import { addProviderTestCases } from './testCaseAdapters';
+
 import type { TestCase } from '../../types/index';
 
 export function addCustom(
@@ -10,28 +12,10 @@ export function addCustom(
   const variant = strategyId.includes(':') ? strategyId.split(':')[1] : '';
   const displayName = variant ? `Custom:${variant}` : 'Custom';
 
-  return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
-    return {
-      ...testCase,
-      provider: {
-        id:
-          strategyId === 'custom' ? 'promptfoo:redteam:custom' : `promptfoo:redteam:${strategyId}`,
-        config: {
-          injectVar,
-          variant,
-          ...config,
-        },
-      },
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: assertion.metric ? `${assertion.metric}/${displayName}` : assertion.metric,
-      })),
-      metadata: {
-        ...testCase.metadata,
-        strategyId,
-        originalText,
-      },
-    };
+  return addProviderTestCases(testCases, injectVar, config, {
+    providerName: `promptfoo:redteam:${strategyId}`,
+    defaults: { variant },
+    metricSuffix: displayName,
+    strategyId,
   });
 }
