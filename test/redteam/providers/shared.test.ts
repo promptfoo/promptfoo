@@ -1158,21 +1158,69 @@ describe('shared redteam provider utilities', () => {
         });
       });
 
-      it('handles null output correctly', async () => {
-        const mockProvider = createMockProvider({
-          response: {
-            output: null, // Null value
-            tokenUsage: { numRequests: 1 },
-          },
-        });
+      it.each([null, undefined])(
+        'rejects missing output %s before stringification',
+        async (output) => {
+          const mockProvider = createMockProvider({
+            response: { output, error: undefined, tokenUsage: { numRequests: 1 } },
+          });
 
-        const result = await getTargetResponse(mockProvider, 'test prompt');
+          await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
+            /Target returned malformed response/,
+          );
+        },
+      );
 
-        expect(result).toEqual({
-          output: 'null', // Should be stringified
+      it.each(['null', 'undefined'])('preserves literal response text %s', async (output) => {
+        const mockProvider = createMockProvider({ response: { output } });
+
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+          output,
           tokenUsage: { numRequests: 1 },
         });
       });
+
+      it.each([null, undefined])(
+        'preserves provider errors with missing output %s',
+        async (output) => {
+          const mockProvider = createMockProvider({
+            response: {
+              output,
+              error: 'Target request failed',
+              sessionId: 'error-session',
+              tokenUsage: { total: 12 },
+            },
+          });
+
+          await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
+            output: '',
+            error: 'Target request failed',
+            sessionId: 'error-session',
+            tokenUsage: { numRequests: 1, total: 12 },
+          });
+        },
+      );
+
+      it.each([null, undefined, 'Goodbye'])(
+        'preserves conversation termination with output %s',
+        async (output) => {
+          const mockProvider = createMockProvider({
+            response: {
+              output,
+              conversationEnded: true,
+              conversationEndReason: 'thread_closed',
+              tokenUsage: { total: 12 },
+            },
+          });
+
+          await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
+            output: output ?? '',
+            conversationEnded: true,
+            conversationEndReason: 'thread_closed',
+            tokenUsage: { numRequests: 1, total: 12 },
+          });
+        },
+      );
 
       it('still fails when output property is missing', async () => {
         const mockProvider = createMockProvider({

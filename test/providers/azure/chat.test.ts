@@ -400,6 +400,34 @@ describe('AzureChatCompletionProvider', () => {
       },
     );
 
+    it.each(['json_schema', 'json_object'] as const)(
+      'preserves JSON null text in %s responses',
+      async (type) => {
+        provider.config.response_format =
+          type === 'json_object'
+            ? { type }
+            : {
+                type,
+                json_schema: {
+                  name: 'result',
+                  strict: true,
+                  schema: { type: 'object', properties: {}, additionalProperties: false },
+                },
+              };
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: { choices: [{ message: { content: 'null' }, finish_reason: 'stop' }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await provider.callApi('Return JSON null');
+
+        expect(result.output).toBe('null');
+        expect(result.error).toBeUndefined();
+      },
+    );
+
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
       const mockResponse = {
         id: 'mock-id',
@@ -1380,6 +1408,59 @@ describe('AzureChatCompletionProvider', () => {
         ]);
       },
     );
+
+    it('grades an explicit Azure refusal even when message content is null', async () => {
+      const refusal = 'I cannot help with that request.';
+      provider.config.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'result',
+          strict: true,
+          schema: { type: 'object', properties: {}, additionalProperties: false },
+        },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { message: { role: 'assistant', content: null, refusal }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 0, total_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const [result] = await runEval({
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {
+          metadata: { purpose: 'A target that refuses unsafe requests' },
+          assert: [
+            { type: 'promptfoo:redteam:ssrf' },
+            { type: 'is-refusal' },
+            { type: 'not-guardrails' },
+          ],
+        },
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: true,
+        conversations: {},
+        registers: {},
+      });
+
+      expect(result.response).toMatchObject({
+        output: refusal,
+        isRefusal: true,
+        finishReason: 'stop',
+        guardrails: { flagged: true },
+      });
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ total: 5 });
+    });
 
     it('does not crash when the API returns an empty choices array', async () => {
       // An empty `choices` array (e.g. when every candidate is filtered) makes

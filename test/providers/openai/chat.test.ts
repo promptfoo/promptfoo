@@ -1815,6 +1815,39 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
+    it.each([
+      { content: 'null', expected: 'null' },
+      { content: 'false', expected: false },
+      { content: '0', expected: 0 },
+    ])(
+      'preserves structured response $content as present output',
+      async ({ content, expected }) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: { choices: [{ message: { content }, finish_reason: 'stop' }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'result',
+                strict: true,
+                schema: { type: 'object', properties: {}, additionalProperties: false },
+              },
+            },
+          },
+        });
+
+        const result = await provider.callApi('Return a JSON value');
+
+        expect(result.output).toBe(expected);
+        expect(result.error).toBeUndefined();
+      },
+    );
+
     it('should handle model refusals correctly', async () => {
       const mockResponse = {
         data: {
