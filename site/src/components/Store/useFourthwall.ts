@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type { FourthwallAttributeValue, FourthwallCart, FourthwallProduct } from './types';
+import type {
+  FourthwallAttributeValue,
+  FourthwallCart,
+  FourthwallProduct,
+  FourthwallStock,
+} from './types';
 
 // Public storefront token - this is INTENTIONALLY public and client-facing.
 // Fourthwall storefront tokens are designed to be exposed in frontend code.
@@ -308,15 +313,18 @@ export function stripHtml(html: string): string {
   return doc.body.textContent || '';
 }
 
-// Check if variant is in stock
-export function isInStock(stock: { type: string; quantity?: number }): boolean {
-  if (stock.type === 'UNLIMITED') {
-    return true;
-  }
-  if (stock.type === 'LIMITED' && typeof stock.quantity === 'number') {
-    return stock.quantity > 0;
-  }
-  return false;
+export function isInStock(stock: FourthwallStock): boolean {
+  return (
+    stock.type === 'UNLIMITED' ||
+    (stock.type === 'LIMITED' && Number.isFinite(stock.inStock) && stock.inStock > 0)
+  );
+}
+
+export function isProductSoldOut(product: FourthwallProduct): boolean {
+  return (
+    product.state.type !== 'AVAILABLE' ||
+    !product.variants.some((variant) => isInStock(variant.stock))
+  );
 }
 
 // Get display name from attribute value (handles both string and object formats)
