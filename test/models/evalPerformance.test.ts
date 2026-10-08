@@ -273,6 +273,7 @@ describe('evalPerformance', () => {
         expect(await getCachedResultsSummary(eval_.id)).toEqual({
           count: 1,
           savedReportPromptIndices: [],
+          onlySavedReportPromptIndices: [],
         });
         expect(select).toHaveBeenCalledTimes(1);
         expect(selectDistinct).toHaveBeenCalledTimes(1);
@@ -290,8 +291,9 @@ describe('evalPerformance', () => {
         expect(await getCachedResultsSummary(eval_.id)).toEqual({
           count: 2,
           savedReportPromptIndices: [1],
+          onlySavedReportPromptIndices: [1],
         });
-        expect(select).toHaveBeenCalledTimes(2);
+        expect(select).toHaveBeenCalledTimes(3);
         expect(selectDistinct).toHaveBeenCalledTimes(2);
 
         result.metadata = { codexSecurity: { version: 1, source: { kind: 'sdk' } } };
@@ -299,8 +301,9 @@ describe('evalPerformance', () => {
         expect(await getCachedResultsSummary(eval_.id)).toEqual({
           count: 2,
           savedReportPromptIndices: [],
+          onlySavedReportPromptIndices: [],
         });
-        expect(select).toHaveBeenCalledTimes(3);
+        expect(select).toHaveBeenCalledTimes(4);
         expect(selectDistinct).toHaveBeenCalledTimes(3);
       } finally {
         select.mockRestore();
@@ -323,7 +326,18 @@ describe('evalPerformance', () => {
       expect(await getCachedResultsSummary(eval_.id)).toEqual({
         count: 7,
         savedReportPromptIndices: [],
+        onlySavedReportPromptIndices: [],
       });
+    });
+
+    it('distinguishes mixed columns from entirely imported columns', async () => {
+      const { eval_ } = await createEvalWithResults(1, 1);
+      const metadata = { codexSecurity: { version: 1, source: { kind: 'saved-report' } } };
+      await eval_.addResult(createEvaluateResult({ testIdx: 1, promptIdx: 0, metadata }));
+      await eval_.addResult(createEvaluateResult({ testIdx: 1, promptIdx: 1, metadata }));
+      const summary = await getCachedResultsSummary(eval_.id);
+      expect(summary.savedReportPromptIndices).toEqual([0, 1]);
+      expect(summary.onlySavedReportPromptIndices).toEqual([1]);
     });
 
     it('indexes bulk-imported provenance by eval and deduplicates prompt columns', async () => {

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { OpenAICodexSecurityProvider } from '../../src/providers/openai/codex-security';
+import { sleep } from '../../src/util/time';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -51,6 +52,28 @@ describeEvaluator('Codex Security import accounting', () => {
     await fs.writeFile(reportFile, JSON.stringify(report));
     return new OpenAICodexSecurityProvider({ config: { report_file: reportFile } });
   }
+
+  it('does not apply fixed API delays to offline imports', async () => {
+    const provider = await savedProvider();
+    (provider as ApiProvider).delay = 1000;
+    try {
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Import')],
+        tests: [{}],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { delay: 1000, timeoutMs: 200 });
+      const summary = await record.toEvaluateSummary();
+      expect(sleep).not.toHaveBeenCalled();
+      expect(summary.results[0].success).toBe(true);
+      expect(summary.results[0].response?.metadata?.codexSecurity?.source.kind).toBe(
+        'saved-report',
+      );
+    } finally {
+      await provider.shutdown();
+    }
+  });
 
   it.each(['completed', 'failed'] as const)(
     'exports one logical invocation and zero incurred requests for a %s report',

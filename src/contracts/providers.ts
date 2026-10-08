@@ -18,6 +18,7 @@ export const EvalProviderProgressSchema = ProviderProgressSchema.extend({
   provider: z.string().max(200),
   testIdx: z.number().int().nonnegative(),
   promptIdx: z.number().int().nonnegative(),
+  repeatIndex: z.number().int().nonnegative().optional(),
 });
 
 export type EvalProviderProgress = z.infer<typeof EvalProviderProgressSchema>;

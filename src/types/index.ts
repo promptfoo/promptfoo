@@ -370,6 +370,8 @@ export const CompletedPromptSchema = PromptSchema.extend({
   metrics: PromptMetricsSchema.optional(),
   /** The full evaluation includes recorded saved-report imports in this column. */
   hasSavedReportImports: z.boolean().optional(),
+  /** Every recorded result in this column is an imported report. */
+  onlySavedReportImports: z.boolean().optional(),
 });
 
 export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;

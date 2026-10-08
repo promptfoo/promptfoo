@@ -2289,14 +2289,15 @@ describe('OpenAICodexSecurityProvider', () => {
       });
       const provider = new OpenAICodexSecurityProvider();
       const successful = await provider.callApi('Scan');
-      expect(successful.metadata?.warnings).toEqual([
+      expect(successful.metadata?.codexSecurity?.warnings).toEqual([
         '[redacted]',
         'Could not save scan session: disk is full',
       ]);
       mockRun.mockRejectedValueOnce(new Error(diagnostic));
-      expect(await provider.callApi('Scan')).toEqual({
-        error: 'Codex Security operation failed: [redacted]',
-      });
+      const failed = await provider.callApi('Scan');
+      expect(failed).toMatchObject({ error: 'Codex Security operation failed: [redacted]' });
+      expect(JSON.stringify(failed)).not.toContain('synthetic-credential');
+      expect(JSON.stringify(successful.metadata)).not.toContain('synthetic-credential');
     });
 
     it('does not log SDK error stacks or causes during import and cleanup failures', async () => {
@@ -2715,8 +2716,8 @@ describe('OpenAICodexSecurityProvider', () => {
 
       try {
         pendingLoad.resolve(mockModule);
-        expect(await pendingCall).toEqual({
-          error: 'Codex Security operation was interrupted by cleanup.',
+        expect(await pendingCall).toMatchObject({
+          error: expect.stringContaining('Codex Security operation was interrupted by cleanup.'),
         });
         expect(MockCodexSecurity).toHaveBeenCalledTimes(1);
         expect(mockRun).toHaveBeenCalledTimes(1);

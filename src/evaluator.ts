@@ -1137,6 +1137,7 @@ async function callActiveProvider({
     provider: sanitizeProviderIdForLog(activeProvider.label || activeProvider.id()),
     testIdx: testIndex,
     promptIdx,
+    repeatIndex,
     callback: evaluateOptions?.providerProgressCallback,
     silent: evaluateOptions?.silent,
   });
@@ -1727,6 +1728,7 @@ async function runEvalInternal({
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
+  let historicalReplay = false;
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1741,22 +1743,23 @@ async function runEvalInternal({
     setup = rendered.setup;
     if (!test.providerOutput) {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
-      const historicalReplay = activeProvider.isHistoricalReplay?.(
-        buildCallApiContext({
-          evalId,
-          filters,
-          originalProvider: provider,
-          promptForRender: {
-            ...state.promptForRender,
-            config: rendered.setup.prompt.config,
-          },
-          repeatIndex,
-          test,
-          testIndex,
-          traceContext: null,
-          vars: state.vars,
-        }),
-      );
+      historicalReplay =
+        activeProvider.isHistoricalReplay?.(
+          buildCallApiContext({
+            evalId,
+            filters,
+            originalProvider: provider,
+            promptForRender: {
+              ...state.promptForRender,
+              config: rendered.setup.prompt.config,
+            },
+            repeatIndex,
+            test,
+            testIndex,
+            traceContext: null,
+            vars: state.vars,
+          }),
+        ) ?? false;
       if (!historicalReplay) {
         workspace = await createAgentWorkspaceForConfig(
           { ...activeProvider.config, ...rendered.setup.prompt.config },
@@ -1830,7 +1833,9 @@ async function runEvalInternal({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response);
+          if (!historicalReplay) {
+            await applyProviderDelayIfNeeded(provider, response);
+          }
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -2623,12 +2628,26 @@ async function applyInputTransform(
 }
 
 async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort: () => void) {
+  let workloadGeneration = 0;
   for (const step of runEvalOptions) {
     checkAbort();
     // Hooks can create or replace files without changing provider configuration.
     // Check their resulting state for each row, inside its timeout boundary.
     const hasExtensions = Boolean(step.testSuite?.extensions?.length);
-    step.providerSetup = checkProviderSetup;
+    let timedOutSetup: ProviderResponse | undefined;
+    const checkedGeneration = workloadGeneration;
+    step.providerSetup = async (provider, context, options) => {
+      // Preserve a consumed deadline until another row is allowed to run. Earlier
+      // workloads can prepare files or other state required by this row's setup.
+      if (timedOutSetup && workloadGeneration === checkedGeneration) {
+        return structuredClone(timedOutSetup);
+      }
+      const failure = await checkProviderSetup(provider, context, options);
+      if (!failure) {
+        workloadGeneration++;
+      }
+      return failure;
+    };
     const activeProvider = isApiProvider(step.test.provider) ? step.test.provider : step.provider;
     if (hasExtensions || step.test.providerOutput || !activeProvider.checkSetupOnEval) {
       continue;
@@ -2660,8 +2679,7 @@ async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort
       },
     );
     if (setupFailure?.metadata?.providerSetup?.timedOut) {
-      // This row already consumed its setup deadline; preserve that outcome without retrying it.
-      step.providerSetup = async () => structuredClone(setupFailure);
+      timedOutSetup = setupFailure;
     }
   }
 }

@@ -40,6 +40,10 @@ describe('convertResultsToTable', () => {
       true,
     ]);
     expect(prompts.map((prompt) => prompt.hasSavedReportImports)).toEqual([true, undefined]);
+    expect(table.head.prompts.map((prompt) => prompt.onlySavedReportImports)).toEqual([
+      undefined,
+      false,
+    ]);
     expect(table.body).toHaveLength(2);
   });
 

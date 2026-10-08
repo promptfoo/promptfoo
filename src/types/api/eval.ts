@@ -241,6 +241,7 @@ export type AddResultsRequest = z.infer<typeof AddResultsRequestSchema>;
 export const ReplayRequestSchema = z.object({
   evaluationId: z.string().min(1),
   testIndex: z.number().int().nonnegative().optional(),
+  promptIndex: z.number().int().nonnegative().optional(),
   prompt: z.string().min(1),
   variables: z.record(z.string(), z.unknown()).optional(),
 });

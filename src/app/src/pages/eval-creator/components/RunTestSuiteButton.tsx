@@ -220,7 +220,10 @@ const RunTestSuiteButton = () => {
               className="max-h-64 space-y-2 overflow-auto"
             >
               {providerProgress.map((progress) => (
-                <li key={`${progress.testIdx}-${progress.promptIdx}`} className="break-words">
+                <li
+                  key={`${progress.testIdx}-${progress.promptIdx}-${progress.repeatIndex ?? 0}`}
+                  className="break-words"
+                >
                   <p className="font-medium text-foreground">
                     Case {progress.testIdx + 1} · {progress.provider}
                   </p>

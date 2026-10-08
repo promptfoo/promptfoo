@@ -221,7 +221,10 @@ export class EvalJobService {
         return;
       }
       const active = (job.providerProgress ?? []).filter(
-        (entry) => entry.testIdx !== progress.testIdx || entry.promptIdx !== progress.promptIdx,
+        (entry) =>
+          entry.testIdx !== progress.testIdx ||
+          entry.promptIdx !== progress.promptIdx ||
+          (entry.repeatIndex ?? 0) !== (progress.repeatIndex ?? 0),
       );
       if (!completed) {
         active.push(parsed.data);

@@ -119,6 +119,7 @@ function CodeDisplay({
 export interface ReplayEvaluationParams {
   evaluationId: string;
   testIndex?: number;
+  promptIndex?: number;
   prompt: string;
   variables?: Vars;
 }
@@ -295,6 +296,7 @@ export default function EvalOutputPromptDialog({
       const result = await onReplay({
         evaluationId,
         testIndex,
+        promptIndex,
         prompt: editedPrompt,
         variables,
       });

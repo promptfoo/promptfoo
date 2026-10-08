@@ -23,7 +23,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   );
   const results = eval_.results;
   const prompts: CompletedPrompt[] = eval_.prompts.map(
-    ({ hasSavedReportImports: _previous, ...prompt }) => ({ ...prompt }),
+    ({ hasSavedReportImports: _previous, onlySavedReportImports: _onlyPrevious, ...prompt }) => ({
+      ...prompt,
+    }),
   );
   // Guard against malformed payloads where `vars` is present but not an array
   // (corrupt store, schema skew across server versions). Warn so the bad
@@ -42,6 +44,14 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   const varsForHeader = new Set<string>(persistedVars);
   const varValuesForRow = new Map<number, Record<string, string>>();
 
+  const nativePromptIndices = new Set(
+    results.results
+      .filter((result) => {
+        const security = result.metadata?.codexSecurity;
+        return security?.version !== 1 || security.source?.kind !== 'saved-report';
+      })
+      .map((result) => result.promptIdx),
+  );
   const rowMap: Record<number, EvaluateTableRow> = {};
   for (const result of results.results) {
     const securityResult = result.metadata?.codexSecurity;
@@ -51,6 +61,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       prompts[result.promptIdx]
     ) {
       prompts[result.promptIdx].hasSavedReportImports = true;
+      prompts[result.promptIdx].onlySavedReportImports = !nativePromptIndices.has(result.promptIdx);
     }
     // vars
     for (const varName of Object.keys(result.vars || {})) {

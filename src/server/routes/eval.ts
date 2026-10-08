@@ -617,7 +617,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  const { evaluationId, testIndex, prompt, variables } = bodyResult.data;
+  const { evaluationId, promptIndex, prompt, variables } = bodyResult.data;
 
   try {
     // Load the evaluation to get the provider configuration
@@ -634,29 +634,25 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Handle different provider config formats
-    // biome-ignore lint/suspicious/noExplicitAny: FIXME
-    let providerConfig: any;
-    if (Array.isArray(providers)) {
-      if (providers.length === 0) {
-        res.status(400).json({ error: 'No providers found in evaluation' });
-        return;
-      }
-      // Use the first provider or the one at the specified test index
-      providerConfig = providers[(testIndex ?? 0) % providers.length];
-    } else if (typeof providers === 'string' || typeof providers === 'function') {
-      providerConfig = providers;
-    } else {
-      // providers might be a single provider object
-      providerConfig = providers;
-    }
-
     // A prompt-only replay cannot preserve security operation inputs or saved-report
     // overrides. Inspect config references without instantiating any provider, and
     // retain expanded file configs so evaluation cannot reread a different target.
     let replayProviders;
     try {
-      replayProviders = resolveProviderConfigs([providerConfig]);
+      const resolved = resolveProviderConfigs(providers, { basePath: eval_.config.basePath });
+      const candidates = Array.isArray(resolved) ? resolved : [resolved];
+      if (promptIndex === undefined) {
+        // Older callers are unambiguous only for a single configured provider.
+        replayProviders = candidates.length === 1 ? candidates : [];
+      } else {
+        const column = eval_.getPrompts()[promptIndex];
+        replayProviders = column
+          ? candidates.filter((candidate) => {
+              const reference = normalizeProviderRef(candidate);
+              return (reference.label || reference.id) === column.provider;
+            })
+          : [];
+      }
     } catch (error) {
       sendError(
         res,
@@ -666,7 +662,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       );
       return;
     }
-    if (!Array.isArray(replayProviders) || replayProviders.length === 0) {
+    if (!Array.isArray(replayProviders) || replayProviders.length !== 1) {
       res
         .status(400)
         .json({ error: 'Cannot resolve the replay provider. Rerun using the eval configuration.' });

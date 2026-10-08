@@ -8,16 +8,18 @@ export function createProviderProgressReporter({
   provider,
   testIdx,
   promptIdx,
+  repeatIndex = 0,
   callback,
   silent,
 }: {
   provider: string;
   testIdx: number;
   promptIdx: number;
+  repeatIndex?: number;
   callback?: (progress: EvalProviderProgress, completed: boolean) => void;
   silent?: boolean;
 }) {
-  const identity = { provider: provider.slice(0, 200), testIdx, promptIdx };
+  const identity = { provider: provider.slice(0, 200), testIdx, promptIdx, repeatIndex };
   let last: EvalProviderProgress | undefined;
   let emittedAt = -Infinity;
   let loggedAt = -Infinity;

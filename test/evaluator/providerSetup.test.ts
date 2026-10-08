@@ -150,6 +150,42 @@ describeEvaluator('provider batch preflight', () => {
     expect((await record.toEvaluateSummary()).stats.errors).toBe(0);
   });
 
+  it('rechecks an eager timeout after an earlier workload prepares the required state', async () => {
+    vi.useFakeTimers();
+    let ready = false;
+    const preparer: ApiProvider = {
+      id: () => 'preparer',
+      callApi: vi.fn(async () => {
+        ready = true;
+        return { output: 'ready' };
+      }),
+    };
+    const scanner: ApiProvider = {
+      id: () => 'scanner',
+      checkSetupOnEval: true,
+      checkSetup: vi.fn(async () =>
+        ready ? { success: true, message: 'ready' } : new Promise<never>(() => {}),
+      ),
+      callApi: vi.fn(async () => ({ output: 'scanned' })),
+    };
+    const suite: TestSuite = {
+      providers: [scanner],
+      prompts: [toPrompt('Review')],
+      tests: [{ provider: preparer }, {}],
+    };
+    const record = createInMemoryRecord();
+    const pending = evaluate(
+      suite,
+      record,
+      { silent: true, maxConcurrency: 1, timeoutMs: 100 },
+      inMemoryRuntime,
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    await pending;
+    expect(scanner.callApi).toHaveBeenCalledOnce();
+    expect(record.results.every((result) => result.success)).toBe(true);
+  });
+
   it.each([
     { cause: 'user cancellation', timeoutMs: 20_000 },
     { cause: 'evaluation deadline', timeoutMs: 20_000 },
@@ -786,6 +822,7 @@ describeEvaluator('provider batch preflight', () => {
       provider: 'local-scanner',
       testIdx: 0,
       promptIdx: 0,
+      repeatIndex: 0,
       phase: 'discovery',
       elapsedMs: 1200,
       estimatedCostUsd: 0.05,

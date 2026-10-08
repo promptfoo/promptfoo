@@ -1003,6 +1003,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
     expect(customReplay).toHaveBeenCalledWith({
       evaluationId: 'test-eval-id',
       testIndex: undefined,
+      promptIndex: undefined,
       prompt: 'Test prompt',
       variables: undefined,
     });

@@ -1239,7 +1239,7 @@ function PromptColumnHeader({
         idx,
         isRedteam,
         showStats,
-        hasReportImports: prompt.hasSavedReportImports === true,
+        hasReportImports: prompt.onlySavedReportImports ?? prompt.hasSavedReportImports === true,
         numAsserts,
         numGoodAsserts,
         testCounts,

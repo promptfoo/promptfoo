@@ -179,6 +179,27 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('$1.23')).toBeInTheDocument();
   });
 
+  it('retains execution metrics for a column mixing live calls and imports', () => {
+    const table = {
+      ...mockTable,
+      head: {
+        ...mockTable.head,
+        prompts: [
+          {
+            ...mockTable.head.prompts[0],
+            hasSavedReportImports: true,
+            onlySavedReportImports: false,
+          },
+        ],
+      },
+    };
+    const state = useTableStore();
+    vi.mocked(useTableStore).mockImplementation(() => ({ ...state, table }));
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
+  });
+
   it('hides empty import usage and ingestion timing while retaining live SDK statistics', () => {
     const table = {
       ...mockTable,

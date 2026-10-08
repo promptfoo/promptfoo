@@ -24,12 +24,16 @@ interface CountCacheEntry {
 interface ResultsSummary {
   count: number;
   savedReportPromptIndices: number[];
+  onlySavedReportPromptIndices: number[];
 }
 
 // Simple in-memory cache for counts with 5-minute TTL
 const distinctCountCache = new Map<string, CountCacheEntry>();
 const totalRowCountCache = new Map<string, CountCacheEntry>();
-const savedReportPromptCache = new Map<string, { indices: number[]; timestamp: number }>();
+const savedReportPromptCache = new Map<
+  string,
+  { indices: number[]; onlyIndices: number[]; timestamp: number }
+>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -74,22 +78,40 @@ export async function getCachedResultsSummary(evalId: string): Promise<ResultsSu
   const count = await getCachedResultsCount(evalId);
   const cached = savedReportPromptCache.get(evalId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return { count, savedReportPromptIndices: cached.indices };
+    return {
+      count,
+      savedReportPromptIndices: cached.indices,
+      onlySavedReportPromptIndices: cached.onlyIndices,
+    };
   }
 
   const db = await getDb();
   // Matching the index predicate lets SQLite read only indexed prompt positions, without
   // loading or parsing metadata from ordinary results (which can contain large histories).
   const rows = await db
-    .selectDistinct({ promptIdx: evalResultsTable.promptIdx })
+    .selectDistinct({ promptIdx: evalResultsTable.promptIdx, count: sql<number>`COUNT(*)` })
     .from(evalResultsTable)
     .where(sql`${evalResultsTable.evalId} = ${evalId} AND ${savedReportResultPredicate}`)
+    .groupBy(evalResultsTable.promptIdx)
     .all();
   const indices = rows
     .map((row) => row.promptIdx)
     .filter((index) => Number.isInteger(index) && index >= 0);
-  savedReportPromptCache.set(evalId, { indices, timestamp: Date.now() });
-  return { count, savedReportPromptIndices: indices };
+  // Count rows through the eval/prompt index; ordinary metadata need not be parsed.
+  const totals = rows.length
+    ? await db
+        .select({ promptIdx: evalResultsTable.promptIdx, count: sql<number>`COUNT(*)` })
+        .from(evalResultsTable)
+        .where(sql`${evalResultsTable.evalId} = ${evalId}`)
+        .groupBy(evalResultsTable.promptIdx)
+        .all()
+    : [];
+  const totalsByPrompt = new Map(totals.map((row) => [row.promptIdx, Number(row.count)]));
+  const onlyIndices = rows
+    .filter((row) => totalsByPrompt.get(row.promptIdx) === Number(row.count))
+    .map((row) => row.promptIdx);
+  savedReportPromptCache.set(evalId, { indices, onlyIndices, timestamp: Date.now() });
+  return { count, savedReportPromptIndices: indices, onlySavedReportPromptIndices: onlyIndices };
 }
 
 /**

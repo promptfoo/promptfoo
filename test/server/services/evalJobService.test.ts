@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { EvalJobService } from '../../../src/server/services/evalJobService';
 
 describe('EvalJobService', () => {
+  it('keeps concurrent repeat progress distinct through completion', () => {
+    const service = new EvalJobService();
+    service.create('repeats');
+    const base = { provider: 'scanner', phase: 'discovery', testIdx: 0, promptIdx: 0 };
+    service.setProviderProgress('repeats', { ...base, repeatIndex: 0 });
+    service.setProviderProgress('repeats', { ...base, repeatIndex: 1 });
+    expect(service.get('repeats')?.providerProgress).toHaveLength(2);
+    service.setProviderProgress('repeats', { ...base, repeatIndex: 0 }, true);
+    expect(service.get('repeats')?.providerProgress).toEqual([
+      expect.objectContaining({ repeatIndex: 1 }),
+    ]);
+  });
+
   it('keeps bounded independent active progress snapshots and clears them on termination', () => {
     const service = new EvalJobService();
     service.create('progress-job');

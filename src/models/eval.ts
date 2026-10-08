@@ -1269,12 +1269,27 @@ export default class Eval {
     id: string;
   }> {
     // Get total count of tests for this eval
-    const { count: totalCount, savedReportPromptIndices } = await getCachedResultsSummary(this.id);
+    const {
+      count: totalCount,
+      savedReportPromptIndices,
+      onlySavedReportPromptIndices,
+    } = await getCachedResultsSummary(this.id);
     const savedReportColumns = new Set(savedReportPromptIndices);
-    const prompts = this.prompts.map(({ hasSavedReportImports: _previous, ...prompt }, index) => ({
-      ...prompt,
-      ...(savedReportColumns.has(index) ? { hasSavedReportImports: true } : {}),
-    }));
+    const onlySavedReportColumns = new Set(onlySavedReportPromptIndices);
+    const prompts = this.prompts.map(
+      (
+        { hasSavedReportImports: _previous, onlySavedReportImports: _onlyPrevious, ...prompt },
+        index,
+      ) => ({
+        ...prompt,
+        ...(savedReportColumns.has(index)
+          ? {
+              hasSavedReportImports: true,
+              onlySavedReportImports: onlySavedReportColumns.has(index),
+            }
+          : {}),
+      }),
+    );
 
     // Determine test indices to use
     let testIndices: number[];
