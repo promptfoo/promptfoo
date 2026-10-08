@@ -43,6 +43,7 @@ import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
+import { useComparisonEvalIds } from './useComparisonEvalIds';
 import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
@@ -264,14 +265,11 @@ export default function ResultsView({
   const { filterMode, setFilterMode } = useFilterMode();
 
   const {
-    setInComparisonMode,
     columnStates,
     setColumnState,
     maxTextLength,
     wordBreak,
     showInferenceDetails,
-    comparisonEvalIds,
-    setComparisonEvalIds,
     hiddenVarNamesBySchema,
     setHiddenVarNamesForSchema,
   } = useResultsViewSettingsStore();
@@ -303,6 +301,12 @@ export default function ResultsView({
       { replace: true },
     );
   }, 300);
+
+  React.useEffect(() => {
+    debouncedUpdate.cancel();
+    setSearchInputValue(initialSearchText);
+    setDebouncedSearchText(initialSearchText);
+  }, [initialSearchText, debouncedUpdate]);
 
   const handleClearSearch = () => {
     setSearchInputValue('');
@@ -379,6 +383,7 @@ export default function ResultsView({
 
   const currentEvalId = evalId || defaultEvalId || 'default';
   const validEvalId = evalId || defaultEvalId;
+  const [comparisonEvalIds, setComparisonEvalIds] = useComparisonEvalIds(validEvalId);
   const currentDatasetId = recentEvals.find(
     (recentEval) => recentEval.evalId === currentEvalId,
   )?.datasetId;
@@ -427,7 +432,6 @@ export default function ResultsView({
       setCompareDialogOpen(false);
       return;
     }
-    setInComparisonMode(true);
     setComparisonEvalIds([...comparisonEvalIds, compareEvalId]);
     setCompareDialogOpen(false);
   };
@@ -790,6 +794,12 @@ export default function ResultsView({
         Edit and re-run
       </DropdownMenuItem>
       <CompareEvalMenuItem onClick={() => setCompareDialogOpen(true)} />
+      {comparisonEvalIds.length > 0 && (
+        <DropdownMenuItem onSelect={() => setComparisonEvalIds([])}>
+          <X className="size-4 mr-2" />
+          Clear comparison
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem onClick={() => setConfigModalOpen(true)}>
         <Eye className="size-4 mr-2" />
         View YAML

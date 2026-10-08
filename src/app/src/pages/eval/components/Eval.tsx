@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES } from '@app/constants/routes';
@@ -19,6 +20,7 @@ import './Eval.css';
 import { useToast } from '@app/hooks/useToast';
 import logger from '../../../../../logger';
 import { useFilterMode } from './FilterModeProvider';
+import { useComparisonEvalIds } from './useComparisonEvalIds';
 import {
   buildEvalUrlWithSearchParams,
   parseEvalOutputPromptHash,
@@ -79,6 +81,9 @@ export default function Eval({ fetchId }: EvalOptions) {
   const { filterMode } = useFilterMode();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
+  const [comparisonEvalIds, updateComparisonEvalIds] = useComparisonEvalIds(fetchId);
+  const searchRef = useRef(location.search);
+  searchRef.current = location.search;
 
   // ================================
   // State
@@ -90,6 +95,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
+  const loadRequestIdRef = useRef(0);
   currentEvalIdRef.current = evalId;
 
   // ================================
@@ -123,7 +129,12 @@ export default function Eval({ fetchId }: EvalOptions) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const loadEvalById = useCallback(
     async (id: string, isBackgroundUpdate = false) => {
+      const requestId = ++loadRequestIdRef.current;
       try {
+        setFailed(false);
+        const comparisons = comparisonEvalIds.filter((comparisonId) => comparisonId !== id);
+        setComparisonEvalIds(comparisons);
+        setInComparisonMode(comparisons.length > 0);
         setEvalId(id);
 
         const { filters } = useTableStore.getState();
@@ -132,13 +143,21 @@ export default function Eval({ fetchId }: EvalOptions) {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
           filterMode,
-          filters: Object.values(filters.values).filter((filter) =>
-            filter.type === 'metadata'
-              ? Boolean(filter.value && filter.field)
-              : Boolean(filter.value),
-          ),
+          searchText: new URLSearchParams(searchRef.current).get('search') || '',
+          filters: Object.values(filters.values).filter((filter) => {
+            if (filter.type === 'metadata') {
+              return Boolean(filter.field && (filter.operator === 'exists' || filter.value));
+            }
+            if (filter.type === 'metric') {
+              return Boolean(filter.field && (filter.operator === 'is_defined' || filter.value));
+            }
+            return Boolean(filter.value);
+          }),
         });
 
+        if (requestId !== loadRequestIdRef.current) {
+          return false;
+        }
         if (!data) {
           setFailed(true);
           return false;
@@ -146,11 +165,21 @@ export default function Eval({ fetchId }: EvalOptions) {
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
-        setFailed(true);
+        if (requestId === loadRequestIdRef.current) {
+          setFailed(true);
+        }
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId, filterMode],
+    [
+      fetchEvalData,
+      setFailed,
+      setEvalId,
+      filterMode,
+      comparisonEvalIds,
+      setComparisonEvalIds,
+      setInComparisonMode,
+    ],
   );
 
   const clearEvalState = useCallback(() => {
@@ -271,6 +300,7 @@ export default function Eval({ fetchId }: EvalOptions) {
           { pathname: EVAL_ROUTES.DETAIL(id), search: location.search, hash: '' },
           (params) => {
             params.delete('rowId');
+            params.delete('comparisonEvalIds');
           },
         ),
       );
@@ -402,17 +432,12 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
       run();
     }
-    logger.debug('[Eval] Resetting comparison mode', {});
-    setInComparisonMode(false);
-    setComparisonEvalIds([]);
   }, [
     apiBaseUrl,
     clearEvalState,
     fetchId,
     loadEvalById,
     setDefaultEvalId,
-    setInComparisonMode,
-    setComparisonEvalIds,
     // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
@@ -515,6 +540,14 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ================================
 
   if (failed) {
+    if (comparisonEvalIds.length > 0) {
+      return (
+        <div className="notice space-y-3">
+          <p>Unable to load comparison. All evaluations must exist and use the same dataset.</p>
+          <Button onClick={() => updateComparisonEvalIds([])}>Clear comparison</Button>
+        </div>
+      );
+    }
     return <div className="notice">404 Eval not found</div>;
   }
 

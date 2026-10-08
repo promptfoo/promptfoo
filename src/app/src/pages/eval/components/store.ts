@@ -531,6 +531,8 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
   return Boolean(filter.value);
 };
 
+let evalDataRequestId = 0;
+
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
@@ -632,6 +634,7 @@ export const useTableStore = create<TableState>()(
     shouldHighlightSearchText: false,
 
     fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
+      const requestId = ++evalDataRequestId;
       const {
         pageIndex = 0,
         pageSize = 50,
@@ -711,6 +714,11 @@ export const useTableStore = create<TableState>()(
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
+          // Navigation or comparison changes can finish out of order.
+          if (requestId !== evalDataRequestId) {
+            return data;
+          }
+
           set((prevState) => ({
             table: data.table,
             filteredResultsCount: data.filteredCount,
@@ -743,11 +751,14 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
-        if (!skipLoadingState) {
+        if (requestId === evalDataRequestId && !skipLoadingState) {
           set({ isFetching: false });
         }
         return null;
       } catch (error) {
+        if (requestId !== evalDataRequestId) {
+          return null;
+        }
         console.error('Error fetching eval data:', error);
         set({
           isFetching: skipLoadingState ? get().isFetching : false,

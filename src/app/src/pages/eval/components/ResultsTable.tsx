@@ -1674,7 +1674,7 @@ function ResultsTable({
     isFetching,
     filters,
   } = useTableStore();
-  const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { inComparisonMode } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
 
   const { showToast } = useToast();
@@ -2021,7 +2021,6 @@ function ResultsTable({
     pagination.pageIndex,
     pagination.pageSize,
     filterMode,
-    comparisonEvalIds,
     debouncedSearchText,
     fetchEvalData,
     appliedFiltersString, // Use the stable string representation instead of filters.values
