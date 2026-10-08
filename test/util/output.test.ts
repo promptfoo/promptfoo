@@ -174,7 +174,7 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
-  it('exports very large token-like config values with secret redaction intact', async () => {
+  it('preserves very large token-like config values in local exports', async () => {
     const eval_ = new Eval({
       tests: [{ vars: { media: 'A'.repeat(16_369_336), message: 'Public fixture text.' } }],
       providers: [{ id: 'echo', config: { apiKey: 'fixture-api-key', max_tokens: 37 } }],
@@ -186,18 +186,18 @@ describe('writeOutput', () => {
     const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(outputJson);
     expect(parsed.config.tests[0].vars).toEqual({
-      media: '[REDACTED]',
+      media: 'A'.repeat(16_369_336),
       message: 'Public fixture text.',
     });
     expect(parsed.config.providers[0].config).toEqual({
-      apiKey: '[REDACTED]',
+      apiKey: 'fixture-api-key',
       max_tokens: 37,
     });
-    expect(outputJson).not.toContain('fixture-api-key');
+    expect(outputJson).toContain('fixture-api-key');
   });
 
   it.each(['json', 'yaml', 'html', 'xml'])(
-    'redacts legacy prompt config in %s exports',
+    'preserves legacy prompt config in local %s exports',
     async (extension) => {
       const prompt = {
         raw: 'Summarize',
@@ -219,13 +219,13 @@ describe('writeOutput', () => {
       }
       await writeOutput(`output.${extension}`, eval_, null);
       const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      expect(output).not.toContain('legacy-header-7294');
-      expect(output).toContain('[REDACTED]');
+      expect(output).toContain('legacy-header-7294');
+      expect(output).not.toContain('[REDACTED]');
       expect(prompt.config.headers['X-Gateway-Auth']).toBe('legacy-header-7294');
     },
   );
 
-  it('redacts env and secret config fields in JSON output', async () => {
+  it('preserves local env and provider config while keeping trace credential handling', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
       description: 'Test config',
@@ -299,22 +299,22 @@ describe('writeOutput', () => {
       label: 'gateway',
       provider: 'openai:agents-api',
       config: {
-        apiBaseUrl: 'https://gateway.example/v1?tenant=%5BREDACTED%5D',
-        headers: { 'X-Gateway-Auth': '[REDACTED]' },
+        apiBaseUrl: 'https://gateway.example/v1?tenant=a;api-key=prompt-query-secret',
+        headers: { 'X-Gateway-Auth': 'prompt-header-secret' },
       },
     });
     expect(eval_.prompts[0].config?.headers?.['X-Gateway-Auth']).toBe('prompt-header-secret');
-    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
-    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-secret-token');
+    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('anthropic-secret-token');
     expect(parsed.config.env.REGION).toBe('us-east-1');
-    expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
+    expect(parsed.config.providers[0].config.apiKey).toBe('sk-secret-value');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.providers[1].config.headers).toEqual({
-      'X-Gateway-Auth': '[REDACTED]',
+      'X-Gateway-Auth': 'opaque-gateway-7294',
       Accept: 'application/json',
     });
     expect(parsed.config.providers[1].config.agent.tools[0].headers).toEqual({
-      'X-MCP-Custom': '[REDACTED]',
+      'X-MCP-Custom': 'opaque-value-7294',
     });
     for (const credential of [
       'host-credential',
@@ -325,10 +325,10 @@ describe('writeOutput', () => {
       'prompt-query-secret',
       'prompt-header-secret',
     ]) {
-      expect(outputJson).not.toContain(credential);
+      expect(outputJson).toContain(credential);
     }
     expect(parsed.config.description).toBe('Test config');
-    expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
+    expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=azure-secret');
     expect(outputJson).not.toContain('output-tempo-secret');
     expect(outputJson).not.toContain('output-honeycomb-secret');
     expect(outputJson).not.toContain('short-secret');
@@ -336,7 +336,7 @@ describe('writeOutput', () => {
     expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
 
-  it.each(['json', 'yaml'])('redacts gateway URL credentials in %s exports', async (extension) => {
+  it.each(['json', 'yaml'])('preserves gateway URLs in local %s exports', async (extension) => {
     const url = 'https://gateway-user:gateway-password@gateway.example/v1?token=short-secret';
     const eval_ = new Eval({
       env: { ENVOY_API_BASE_URL: url },
@@ -347,13 +347,11 @@ describe('writeOutput', () => {
 
     const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = yaml.load(written) as Record<string, any>;
-    expect(parsed.config.env.ENVOY_API_BASE_URL).toBe(
-      'https://***:***@gateway.example/v1?token=%5BREDACTED%5D',
-    );
+    expect(parsed.config.env.ENVOY_API_BASE_URL).toBe(url);
     expect(parsed.config.providers[0].config.apiBaseUrl).toBe(parsed.config.env.ENVOY_API_BASE_URL);
-    expect(written).not.toContain('gateway-user');
-    expect(written).not.toContain('gateway-password');
-    expect(written).not.toContain('short-secret');
+    expect(written).toContain('gateway-user');
+    expect(written).toContain('gateway-password');
+    expect(written).toContain('short-secret');
     expect(eval_.config.env).toEqual({ ENVOY_API_BASE_URL: url });
   });
 
@@ -756,7 +754,7 @@ describe('writeOutput', () => {
       'deep-public-value',
     );
     expect(parsed.config.defaultTest.options.deepConfig.l1.l2.l3.l4.l5.l6.apiKey).toBe(
-      '[REDACTED]',
+      'sk-secret-value',
     );
   });
 
@@ -790,7 +788,7 @@ describe('writeOutput', () => {
     },
   );
 
-  it('redacts env and secret config fields in YAML output', async () => {
+  it('preserves env and provider config in local YAML output', async () => {
     const outputPath = 'output.yaml';
     const eval_ = new Eval({
       env: {
@@ -811,10 +809,10 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
     const outputYaml = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = yaml.load(outputYaml) as Record<string, any>;
-    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
-    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-token');
+    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('anthropic-token');
     expect(parsed.config.env.AWS_REGION).toBe('us-east-1');
-    expect(parsed.config.defaultTest.options.apiKey).toBe('[REDACTED]');
+    expect(parsed.config.defaultTest.options.apiKey).toBe('another-secret');
     expect(parsed.config.defaultTest.options.temperature).toBe(0.1);
   });
 

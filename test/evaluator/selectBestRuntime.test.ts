@@ -13,7 +13,7 @@ import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger, { getLogLevel, setLogLevel } from '../../src/logger';
 import Eval from '../../src/models/eval';
-import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
+import EvalResult, { serializeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
 import { HttpProvider } from '../../src/providers/http';
 import telemetry from '../../src/telemetry';
@@ -739,7 +739,8 @@ describeEvaluator('select-best runtime grading configuration', () => {
       expect(savedProvider.provider).toMatchObject({
         env: { ...original, OPENAI_API_KEY: '[REDACTED]' },
       });
-      expect(JSON.stringify(savedProvider)).not.toContain(secret);
+      expect(JSON.stringify(savedProvider.provider)).not.toContain(secret);
+      expect(savedProvider.config?.apiKey).toBe(secret);
       runtimeGrader.env = { ...original, [key]: 'changed', OPENAI_API_KEY: 'rotated-key' };
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
@@ -1039,7 +1040,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(grader.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('redacts a raw grader key when updating an existing result', async () => {
+  it('preserves grader configuration when updating a local result', async () => {
     const { suite } = makeSuite();
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
     await evaluate(suite, record, { maxConcurrency: 1 });
@@ -1052,13 +1053,13 @@ describeEvaluator('select-best runtime grading configuration', () => {
     await result.save();
 
     const [persisted] = await record.fetchResultsByTestIdx(0);
-    expect(JSON.stringify(persisted.gradingResult)).not.toContain(secret);
+    expect(JSON.stringify(persisted.gradingResult)).toContain(secret);
     expect(persisted.gradingResult?.componentResults?.[0].assertion?.provider).toMatchObject({
-      config: { apiKey: '[REDACTED]' },
+      config: { apiKey: secret },
     });
   });
 
-  it('redacts grader keys at every JSONL assertion depth without mutating the result', () => {
+  it('preserves grader keys at every local JSONL assertion depth without mutation', () => {
     const raw = {
       gradingResult: {
         pass: true,
@@ -1083,13 +1084,13 @@ describeEvaluator('select-best runtime grading configuration', () => {
         ],
       },
     };
-    const artifact = sanitizeResultForJsonlArtifact(raw);
-    expect(JSON.stringify(artifact)).not.toContain(secret);
-    expect(artifact.gradingResult.assertion.provider.config.apiKey).toBe('[REDACTED]');
+    const artifact = serializeResultForJsonlArtifact(raw);
+    expect(JSON.stringify(artifact)).toContain(secret);
+    expect(artifact.gradingResult.assertion.provider.config.apiKey).toBe(secret);
     expect(
       artifact.gradingResult.componentResults[0].componentResults[0].assertion.provider.config
         .apiKey,
-    ).toBe('[REDACTED]');
+    ).toBe(secret);
     expect(raw.gradingResult.assertion.provider.config.apiKey).toBe(secret);
     expect(
       raw.gradingResult.componentResults[0].componentResults[0].assertion.provider.config.apiKey,

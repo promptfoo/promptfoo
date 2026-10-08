@@ -1,10 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, {
-  sanitizeProvider,
-  sanitizeResultForJsonlArtifact,
-} from '../../src/models/evalResult';
+import EvalResult, { serializeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -16,6 +13,7 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import { serializeEvalValue } from '../../src/util/evalSerialization';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -59,7 +57,7 @@ describe('EvalResult', () => {
     response: undefined,
   });
 
-  describe('sanitizeProvider', () => {
+  describe('serializeEvalValue', () => {
     it('should handle ApiProvider objects', () => {
       const apiProvider = createMockProvider({
         id: 'test-provider',
@@ -68,12 +66,12 @@ describe('EvalResult', () => {
         config: { apiKey: 'test-key' },
       });
 
-      const result = sanitizeProvider(apiProvider);
+      const result = serializeEvalValue(apiProvider);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
         config: {
-          apiKey: '[REDACTED]',
+          apiKey: 'test-key',
         },
       });
     });
@@ -87,36 +85,36 @@ describe('EvalResult', () => {
         },
       };
 
-      const result = sanitizeProvider(providerOptions);
+      const result = serializeEvalValue(providerOptions);
       expect(result).toEqual({
         id: 'test-provider',
-        label: 'Test Provider',
-        config: {
-          apiKey: '[REDACTED]',
-        },
-      });
-    });
-
-    it('should handle generic objects with id function', () => {
-      const provider = {
-        id: () => 'test-provider',
         label: 'Test Provider',
         config: {
           apiKey: 'test-key',
         },
-      } as ApiProvider;
+      });
+    });
 
-      const result = sanitizeProvider(provider);
+    it('preserves plain provider options', () => {
+      const provider = {
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+        },
+      } as ProviderOptions;
+
+      const result = serializeEvalValue(provider);
       expect(result).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
         config: {
-          apiKey: '[REDACTED]',
+          apiKey: 'test-key',
         },
       });
     });
 
-    it('should redact env-rendered credentials from templated WebSocket provider data', () => {
+    it('preserves templated WebSocket configuration separately from its display ID', () => {
       const provider = new WebSocketProvider('websocket', {
         config: {
           url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret',
@@ -124,11 +122,11 @@ describe('EvalResult', () => {
         },
       });
 
-      expect(sanitizeProvider(provider)).toEqual({
+      expect(serializeEvalValue(provider)).toEqual({
         id: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
         label: undefined,
         config: {
-          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret',
           messageTemplate: '{{ prompt }}',
         },
       });
@@ -136,6 +134,44 @@ describe('EvalResult', () => {
   });
 
   describe('createFromEvaluateResult', () => {
+    it.each([true, false])('preserves local test content with persist=%s', async (persist) => {
+      const raw = '{ "password": "test-only-canary",  "token": "fixture-token" }\n';
+      const vars = {
+        password: 'test-only-canary',
+        token: 'fixture-token',
+        secret: 'fixture secret',
+        session: 'fixture session',
+        hash: 'a'.repeat(128),
+        json: raw,
+        headers: { 'X-Fixture': 'keep', Authorization: 'fixture auth' },
+        nested: { a: { b: { c: { d: { e: { token: 'deep fixture' } } } } } },
+      };
+      const input = {
+        ...mockEvaluateResult,
+        prompt: { ...mockPrompt, raw },
+        promptId: hashPrompt({ ...mockPrompt, raw }),
+        testCase: { ...mockTestCase, vars, assert: [{ type: 'equals' as const, value: raw }] },
+      };
+      const original = structuredClone(input);
+      const result = await EvalResult.createFromEvaluateResult('local-fidelity', input, {
+        persist,
+      });
+      const rows = [result, serializeResultForJsonlArtifact(input)];
+      if (persist) {
+        rows.push((await EvalResult.findById(result.id))!);
+        rows.push(
+          ...(await EvalResult.createManyFromEvaluateResult([input], 'local-fidelity-bulk')),
+        );
+      }
+      for (const row of rows) {
+        expect(row.prompt.raw).toBe(raw);
+        expect(row.promptId).toBe(hashPrompt(input.prompt));
+        expect(row.testCase.vars).toEqual(vars);
+        expect(row.testCase.assert?.[0]).toEqual({ type: 'equals', value: raw });
+      }
+      expect(input).toEqual(original);
+    });
+
     it.each<Assertion>([
       {
         type: 'is-json',
@@ -146,7 +182,7 @@ describe('EvalResult', () => {
         },
       },
       { type: 'equals', value: '{ "token": "test input",  "number": 1 }' },
-    ])('preserves $type assertion values while redacting grader settings', async (assertion) => {
+    ])('preserves assertion values and grader settings locally', async (assertion) => {
       const credential = 'fixture-grader-credential';
       const gradingResult = {
         pass: true,
@@ -170,7 +206,7 @@ describe('EvalResult', () => {
         ],
       };
       const input = { ...mockEvaluateResult, gradingResult };
-      const artifact = sanitizeResultForJsonlArtifact(input);
+      const artifact = serializeResultForJsonlArtifact(input);
       const result = await EvalResult.createFromEvaluateResult(
         `assertion-values-${assertion.type}`,
         input,
@@ -182,7 +218,7 @@ describe('EvalResult', () => {
         expect(saved?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
           assertion.value,
         );
-        expect(JSON.stringify(saved?.gradingResult)).not.toContain(credential);
+        expect(JSON.stringify(saved?.gradingResult)).toContain(credential);
       }
 
       result.gradingResult = gradingResult;
@@ -192,11 +228,11 @@ describe('EvalResult', () => {
       expect(updated?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
         assertion.value,
       );
-      expect(JSON.stringify(updated?.gradingResult)).not.toContain(credential);
+      expect(JSON.stringify(updated?.gradingResult)).toContain(credential);
       expect(gradingResult.componentResults[0].assertion.provider.config.apiKey).toBe(credential);
     });
 
-    it('preserves URL test inputs while redacting provider URL credentials', async () => {
+    it('preserves URL test inputs and provider configuration', async () => {
       const url = 'https://cdn.example/image?X-Amz-Signature=short-secret&q=hello world';
       const vars = { image: url, imageUrl: url };
       const provider: ProviderOptions = { id: 'test-provider', config: { apiBaseUrl: url } };
@@ -207,7 +243,7 @@ describe('EvalResult', () => {
       });
       const saved = await EvalResult.findById(result.id);
       expect(saved?.testCase.vars).toEqual(vars);
-      expect(saved?.provider.config?.apiBaseUrl).not.toContain('short-secret');
+      expect(saved?.provider.config?.apiBaseUrl).toBe(url);
     });
 
     it('should create and persist an EvalResult', async () => {
@@ -430,12 +466,7 @@ describe('EvalResult', () => {
       expect(resultWithCircular.provider).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
-        config: {
-          circular: {
-            id: 'test-provider',
-            label: 'Test Provider',
-          },
-        },
+        config: {},
       });
 
       // Verify it can be persisted without errors
@@ -444,12 +475,7 @@ describe('EvalResult', () => {
       expect(retrieved?.provider).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
-        config: {
-          circular: {
-            id: 'test-provider',
-            label: 'Test Provider',
-          },
-        },
+        config: {},
       });
     });
 
@@ -487,7 +513,7 @@ describe('EvalResult', () => {
         const retrieved = await EvalResult.findById(result.id);
         expect(retrieved).not.toBeNull();
 
-        // The metadata should be sanitized (timer stripped or converted to empty object)
+        // The metadata should be serializable (circular timer references omitted)
         // Either approach is acceptable - the key is that it doesn't throw
         expect(retrieved?.metadata).toBeDefined();
       } finally {
@@ -527,8 +553,8 @@ describe('EvalResult', () => {
 
     // Regression context (PR #8688): provider credentials such as apiKey/token
     // were leaking into persisted eval results and API-visible response payloads.
-    describe('credential redaction (regression for PR #8688 review)', () => {
-      it('redacts apiKey in testCase.options.provider.config', async () => {
+    describe('local configuration and response fidelity', () => {
+      it('preserves apiKey in testCase.options.provider.config', async () => {
         const evalId = 'test-eval-redact-options-provider';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -548,17 +574,15 @@ describe('EvalResult', () => {
         );
 
         const serialized = JSON.stringify(result.testCase);
-        expect(serialized).not.toContain('sk-ant-api03-SHOULD-BE-REDACTED');
-        expect(serialized).toContain('[REDACTED]');
+        expect(serialized).toContain('sk-ant-api03-SHOULD-BE-REDACTED');
+        expect(serialized).not.toContain('[REDACTED]');
 
-        // Also verify the DB-persisted row is clean.
+        // Verify the same configuration survives the database round trip.
         const retrieved = await EvalResult.findById(result.id);
-        expect(JSON.stringify(retrieved?.testCase)).not.toContain(
-          'sk-ant-api03-SHOULD-BE-REDACTED',
-        );
+        expect(JSON.stringify(retrieved?.testCase)).toContain('sk-ant-api03-SHOULD-BE-REDACTED');
       });
 
-      it('redacts apiKey in prompt.config.provider.config', async () => {
+      it('preserves apiKey in prompt.config.provider.config', async () => {
         const evalId = 'test-eval-redact-prompt-provider';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -578,16 +602,16 @@ describe('EvalResult', () => {
         );
 
         const serialized = JSON.stringify(result.prompt);
-        expect(serialized).not.toContain('sk-ant-api03-PROMPT-SHOULD-BE-REDACTED');
-        expect(serialized).toContain('[REDACTED]');
+        expect(serialized).toContain('sk-ant-api03-PROMPT-SHOULD-BE-REDACTED');
+        expect(serialized).not.toContain('[REDACTED]');
 
         const retrieved = await EvalResult.findById(result.id);
-        expect(JSON.stringify(retrieved?.prompt)).not.toContain(
+        expect(JSON.stringify(retrieved?.prompt)).toContain(
           'sk-ant-api03-PROMPT-SHOULD-BE-REDACTED',
         );
       });
 
-      it('redacts sensitive provider response headers without changing output', async () => {
+      it('preserves provider response headers and output', async () => {
         const evalId = 'test-eval-redact-response-headers';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -598,7 +622,7 @@ describe('EvalResult', () => {
                 status: 200,
                 statusText: 'OK',
                 headers: {
-                  'openai-project': 'metadata_proj_should_not_persist',
+                  'openai-project': 'metadata_proj_fixture',
                   'set-cookie': 'metadata-session=secret',
                   'x-ratelimit-remaining-requests': '199',
                 },
@@ -618,7 +642,7 @@ describe('EvalResult', () => {
                       status: 200,
                       statusText: 'OK',
                       headers: {
-                        'openai-project': 'grading_proj_should_not_persist',
+                        'openai-project': 'grading_proj_fixture',
                         'set-cookie': 'grading-session=secret',
                         'x-ratelimit-remaining-requests': '2399',
                       },
@@ -637,10 +661,10 @@ describe('EvalResult', () => {
                   statusText: 'OK',
                   headers: {
                     'content-type': 'application/json',
-                    'openai-project': 'proj_should_not_persist',
+                    'openai-project': 'proj_fixture',
                     'set-cookie': 'session=secret',
                     'x-ratelimit-remaining-requests': '199',
-                    'x-request-id': 'req_should_not_persist',
+                    'x-request-id': 'req_fixture',
                   },
                   requestHeaders: {
                     authorization: 'Bearer sk-should-not-persist',
@@ -658,47 +682,39 @@ describe('EvalResult', () => {
         expect(result.response?.output).toEqual({ password: 'model output should stay intact' });
         expect(result.response?.metadata?.http?.headers).toEqual({
           'content-type': 'application/json',
-          'openai-project': '[REDACTED]',
-          'set-cookie': '[REDACTED]',
-          'x-ratelimit-remaining-requests': '[REDACTED]',
-          'x-request-id': '[REDACTED]',
+          'openai-project': 'proj_fixture',
+          'set-cookie': 'session=secret',
+          'x-ratelimit-remaining-requests': '199',
+          'x-request-id': 'req_fixture',
         });
         expect(result.response?.metadata?.http?.requestHeaders).toEqual({
-          authorization: '[REDACTED]',
-          'api-key': '[REDACTED]',
-          'X-API-Key': '[REDACTED]',
+          authorization: 'Bearer sk-should-not-persist',
+          'api-key': 'azure-api-key-should-not-persist',
+          'X-API-Key': 'custom-api-key-should-not-persist',
           'x-safe-debug': 'keep-me',
         });
         expect(result.metadata?.http?.headers).toEqual({
-          'openai-project': '[REDACTED]',
-          'set-cookie': '[REDACTED]',
-          'x-ratelimit-remaining-requests': '[REDACTED]',
+          'openai-project': 'metadata_proj_fixture',
+          'set-cookie': 'metadata-session=secret',
+          'x-ratelimit-remaining-requests': '199',
         });
         expect(result.gradingResult?.componentResults?.[0].metadata?.http?.headers).toEqual({
-          'openai-project': '[REDACTED]',
-          'set-cookie': '[REDACTED]',
-          'x-ratelimit-remaining-requests': '[REDACTED]',
+          'openai-project': 'grading_proj_fixture',
+          'set-cookie': 'grading-session=secret',
+          'x-ratelimit-remaining-requests': '2399',
         });
 
         const retrieved = await EvalResult.findById(result.id);
-        expect(JSON.stringify(retrieved?.response)).not.toContain('proj_should_not_persist');
-        expect(JSON.stringify(retrieved?.response)).not.toContain('session=secret');
-        expect(JSON.stringify(retrieved?.response)).not.toContain('req_should_not_persist');
-        expect(JSON.stringify(retrieved?.response)).not.toContain('sk-should-not-persist');
-        expect(JSON.stringify(retrieved?.response)).not.toContain(
-          'azure-api-key-should-not-persist',
-        );
-        expect(JSON.stringify(retrieved?.response)).not.toContain(
-          'custom-api-key-should-not-persist',
-        );
-        expect(JSON.stringify(retrieved?.metadata)).not.toContain(
-          'metadata_proj_should_not_persist',
-        );
-        expect(JSON.stringify(retrieved?.metadata)).not.toContain('metadata-session=secret');
-        expect(JSON.stringify(retrieved?.gradingResult)).not.toContain(
-          'grading_proj_should_not_persist',
-        );
-        expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
+        expect(JSON.stringify(retrieved?.response)).toContain('proj_fixture');
+        expect(JSON.stringify(retrieved?.response)).toContain('session=secret');
+        expect(JSON.stringify(retrieved?.response)).toContain('req_fixture');
+        expect(JSON.stringify(retrieved?.response)).toContain('sk-should-not-persist');
+        expect(JSON.stringify(retrieved?.response)).toContain('azure-api-key-should-not-persist');
+        expect(JSON.stringify(retrieved?.response)).toContain('custom-api-key-should-not-persist');
+        expect(JSON.stringify(retrieved?.metadata)).toContain('metadata_proj_fixture');
+        expect(JSON.stringify(retrieved?.metadata)).toContain('metadata-session=secret');
+        expect(JSON.stringify(retrieved?.gradingResult)).toContain('grading_proj_fixture');
+        expect(JSON.stringify(retrieved?.gradingResult)).toContain('grading-session=secret');
       });
 
       it('preserves arbitrary legacy headers in grading metadata', async () => {
@@ -837,7 +853,7 @@ describe('EvalResult', () => {
         expect(serialized).toContain('cf-ray was: abc-123');
       });
 
-      it('redacts headers added in this PR (proxy-authorization, x-amzn-requestid, x-trace-id, etc.)', async () => {
+      it('preserves transport diagnostics including request IDs and rate limits', async () => {
         const evalId = 'test-eval-redact-extended-headers';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -874,22 +890,22 @@ describe('EvalResult', () => {
 
         expect(result.response?.metadata?.http?.headers).toEqual({
           'content-type': 'application/json',
-          'proxy-authorization': '[REDACTED]',
-          'x-amzn-requestid': '[REDACTED]',
-          'x-amzn-trace-id': '[REDACTED]',
-          'x-amz-security-token': '[REDACTED]',
-          'x-amz-cf-id': '[REDACTED]',
-          'x-azure-ref': '[REDACTED]',
-          'x-correlation-id': '[REDACTED]',
-          'x-trace-id': '[REDACTED]',
-          'cf-cache-status': '[REDACTED]',
-          'openai-version': '[REDACTED]',
-          via: '[REDACTED]',
+          'proxy-authorization': 'Basic proxy-secret',
+          'x-amzn-requestid': 'req_amzn_should_redact',
+          'x-amzn-trace-id': 'Root=trace-id',
+          'x-amz-security-token': 'amz-token-secret',
+          'x-amz-cf-id': 'cf-id-secret',
+          'x-azure-ref': 'azure-ref-secret',
+          'x-correlation-id': 'corr-secret',
+          'x-trace-id': 'trace-secret',
+          'cf-cache-status': 'HIT',
+          'openai-version': '2024-01-01',
+          via: '1.1 proxy.example',
           'x-safe-debug': 'keep-me',
         });
       });
 
-      it('redacts response headers regardless of header-name casing', async () => {
+      it('preserves response headers regardless of header-name casing', async () => {
         const evalId = 'test-eval-redact-casing';
         const result = await EvalResult.createFromEvaluateResult(
           evalId,
@@ -916,20 +932,19 @@ describe('EvalResult', () => {
         );
 
         expect(result.response?.metadata?.http?.headers).toEqual({
-          Authorization: '[REDACTED]',
-          'Set-Cookie': '[REDACTED]',
-          'CF-RAY': '[REDACTED]',
-          'X-Request-Id': '[REDACTED]',
-          'X-RateLimit-Remaining': '[REDACTED]',
+          Authorization: 'Bearer mixed-case-secret',
+          'Set-Cookie': 'session=mixed',
+          'CF-RAY': 'cf-mixed',
+          'X-Request-Id': 'req-mixed',
+          'X-RateLimit-Remaining': '99',
         });
       });
 
-      it('redacts credentials from an instantiated provider object embedded in testCase.options.provider', async () => {
+      it('serializes nested provider configuration without its live SDK client', async () => {
         // Mimic the real Anthropic / Bedrock shape: the resolved judge provider is an
         // ApiProvider instance whose internal SDK client carries `apiKey`, `_options`,
-        // `authToken`, and circular `_client` back-references. Before the fix, all of
-        // these survived sanitizeForDb (which only strips circular refs) and persisted
-        // through the eval results API.
+        // `authToken`, and circular `_client` back-references. Only the declared configuration belongs in the saved result; live clients
+        // and credentials acquired by the SDK must stay out of the result API.
         const sdkClientA: { _client?: unknown; apiKey: string; _options: { apiKey: string } } = {
           apiKey: 'sk-ant-api03-INSTANCE-KEY',
           _options: { apiKey: 'sk-ant-api03-INSTANCE-KEY' },
@@ -961,12 +976,12 @@ describe('EvalResult', () => {
 
         const serialized = JSON.stringify(result.testCase);
         expect(serialized).not.toContain('sk-ant-api03-INSTANCE-KEY');
-        expect(serialized).not.toContain('sk-ant-api03-CONFIG-KEY');
+        expect(serialized).toContain('sk-ant-api03-CONFIG-KEY');
         expect(serialized).not.toContain('sk-ant-api03-TOPLEVEL-KEY');
-        expect(serialized).toContain('[REDACTED]');
+        expect(serialized).not.toContain('[REDACTED]');
       });
 
-      it('does not crash when redacting a provider with a live circular SDK client', async () => {
+      it('handles circular references in user-supplied provider configuration', async () => {
         const sdkClient: { _client?: unknown; apiKey: string } = { apiKey: 'sk-live-leak' };
         sdkClient._client = sdkClient;
         const cyclicProvider = {
@@ -988,11 +1003,11 @@ describe('EvalResult', () => {
         );
 
         expect(result.persisted).toBe(true);
-        expect(JSON.stringify(result.testCase)).not.toContain('sk-live-leak');
+        expect(JSON.stringify(result.testCase)).toContain('sk-live-leak');
       });
     });
 
-    it('should redact apiKey while preserving non-circular nested provider properties', async () => {
+    it('preserves non-circular nested provider properties', async () => {
       const evalId = 'test-eval-id';
 
       const providerWithNestedData: ProviderOptions = {
@@ -1017,17 +1032,17 @@ describe('EvalResult', () => {
         { persist: true },
       );
 
-      // Verify secrets are redacted while nested non-secret properties are preserved
-      expect(result.provider?.config?.apiKey).toBe('[REDACTED]');
+      // Local serialization preserves the configured values.
+      expect(result.provider?.config?.apiKey).toBe('secret-key');
       expect(result.provider?.config?.options).toEqual({
         temperature: 0.7,
         maxTokens: 100,
       });
 
-      // Verify it can be persisted and retrieved with redaction and nested properties intact
+      // Verify the nested properties survive the database round trip.
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved).not.toBeNull();
-      expect(retrieved?.provider?.config?.apiKey).toBe('[REDACTED]');
+      expect(retrieved?.provider?.config?.apiKey).toBe('secret-key');
       expect(retrieved?.provider?.config?.options).toEqual({
         temperature: 0.7,
         maxTokens: 100,

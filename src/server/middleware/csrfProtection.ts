@@ -50,6 +50,15 @@ function isAllowedCrossSite(origin: string, host: string): boolean {
   return getAllowedOrigins().has(origin);
 }
 
+/** Browser origins trusted to read local viewer data. Host comes from the request, not a proxy header. */
+export function isAllowedOrigin(origin: string, host: string): boolean {
+  try {
+    return new URL(origin).hostname === stripPort(host) || isAllowedCrossSite(origin, host);
+  } catch {
+    return false;
+  }
+}
+
 export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
   if (SAFE_METHODS.has(req.method)) {
     return next();
@@ -88,17 +97,8 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
 
   // Path 2: No Sec-Fetch-Site but Origin present (older browser)
   if (origin) {
-    try {
-      const originHostname = new URL(origin).hostname;
-      const targetHostname = stripPort(host);
-      if (originHostname === targetHostname) {
-        return next();
-      }
-      if (isAllowedCrossSite(origin, host)) {
-        return next();
-      }
-    } catch {
-      // Malformed Origin header — fall through to block
+    if (isAllowedOrigin(origin, host)) {
+      return next();
     }
     logger.warn('[CSRF] Blocked cross-origin request', {
       method: req.method,

@@ -17,7 +17,7 @@ import {
   getResultIndexKey,
   getStripFlags,
   projectTracesForOutput,
-  sanitizeResultForJsonlArtifact,
+  serializeResultForJsonlArtifact,
 } from '../models/evalResult';
 import {
   type CsvRow,
@@ -26,10 +26,11 @@ import {
   ResultFailureReason,
 } from '../types';
 import { streamEvalCsv } from './eval/evalTableUtils';
+import { projectConfigForOutput } from './evalSerialization';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import { sanitizeConfigForOutput, sanitizeRuntimeOptions } from './sanitizer';
+import { sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
@@ -102,7 +103,7 @@ async function appendJsonlResultBatch(
 
   const text =
     results
-      .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result, stripFlags)))
+      .map((result) => JSON.stringify(serializeResultForJsonlArtifact(result, stripFlags)))
       .join(os.EOL) + os.EOL;
   await fsPromises.appendFile(outputPath, text);
 }
@@ -350,7 +351,7 @@ async function createOutputSummary(
   const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
     (prompt) =>
       prompt.config
-        ? { ...prompt, config: sanitizeConfigForOutput(prompt.config, stripFlags) }
+        ? { ...prompt, config: projectConfigForOutput(prompt.config, stripFlags) }
         : prompt,
   );
   return 'prompts' in summary
@@ -416,7 +417,7 @@ export async function createOutputData(
 ): Promise<OutputFile> {
   const stripFlags = getStripFlags(evalRecord.config.env);
   const summary = await createOutputSummary(evalRecord, stripFlags);
-  const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
+  const projectedConfig = projectConfigForOutput(evalRecord.config, stripFlags);
   let traces;
   try {
     // TraceStore redacts sensitive attribute keys on reads by default.
@@ -431,7 +432,7 @@ export async function createOutputData(
   const output: OutputFile = {
     evalId: evalRecord.id,
     results: summary,
-    config: redactedConfig,
+    config: projectedConfig,
     shareableUrl,
     metadata: createOutputMetadata(evalRecord),
     ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
@@ -594,7 +595,7 @@ export async function writeOutput(
     invariant(table, 'Table is required');
     const stripFlags = getStripFlags(evalRecord.config.env);
     const summary = await createOutputSummary(evalRecord, stripFlags);
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
+    const projectedConfig = projectConfigForOutput(evalRecord.config, stripFlags);
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
@@ -629,7 +630,7 @@ export async function writeOutput(
     const failures = totalResults - successes - errors;
     const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
     const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: redactedConfig,
+      config: projectedConfig,
       table: htmlTable,
       results: summary,
       metadata,
@@ -709,7 +710,7 @@ export async function writeOutput(
   } else if (outputExtension === 'xml') {
     const stripFlags = getStripFlags(evalRecord.config.env);
     const summary = await createOutputSummary(evalRecord, stripFlags);
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
+    const projectedConfig = projectConfigForOutput(evalRecord.config, stripFlags);
 
     // Sanitize data for XML builder to prevent textValue.replace errors
     const sanitizeForXml = (obj: any): any => {
@@ -745,7 +746,7 @@ export async function writeOutput(
       promptfoo: {
         evalId: evalRecord.id,
         results: sanitizeForXml(summary),
-        config: sanitizeForXml(redactedConfig),
+        config: sanitizeForXml(projectedConfig),
         shareableUrl: shareableUrl || '',
       },
     });

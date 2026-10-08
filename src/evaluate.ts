@@ -7,12 +7,12 @@ import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
+import { serializeEvalValue } from './util/evalSerialization';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
@@ -62,7 +62,7 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
 
 function toSerializableProviderRef(provider: unknown): unknown {
   if (isApiProvider(provider)) {
-    return sanitizeProvider(provider);
+    return serializeEvalValue(provider);
   }
   if (Array.isArray(provider)) {
     return provider.map(toSerializableProviderRef);
@@ -80,7 +80,7 @@ function withSerializableProvider<T extends Record<string, unknown>>(record: T):
   }
   return {
     ...record,
-    provider: sanitizeProvider(record.provider),
+    provider: serializeEvalValue(record.provider),
   };
 }
 
