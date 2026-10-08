@@ -1127,7 +1127,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
           model: this.modelName,
           cacheKey,
         });
-        return { ...parsedCachedResponse, cached: true };
+        return {
+          ...parsedCachedResponse,
+          output: parsedCachedResponse.output ?? undefined,
+          cached: true,
+        };
       }
     }
 
@@ -1166,7 +1170,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           error: `No valid predictions returned from API: ${JSON.stringify(data)}`,
         };
       }
-      const output = prediction.candidates[0].content;
+      const output = prediction.candidates[0].content ?? undefined;
 
       const response = {
         output,
