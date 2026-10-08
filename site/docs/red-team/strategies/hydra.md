@@ -60,9 +60,11 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 4. **Outcome grading** – Responses are graded with the configured plugin assertions and recorded attack contributions and observed target responses. Rendered system or template content is not attributed to the user. Backtracked and locally rejected turns are excluded. Text-only layers that replace the replay payload provide prior context only in target-managed session mode.
 5. **Adaptive branching** – On refusals, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`.
 
-Grading history records attack contributions and observed replies. Stateful input attribution supports direct or trimmed interpolation in static prompt templates. Forwarding is established for built-in OpenAI chat, Responses, and completion requests without replacement `passthrough` inputs, or static HTTP POST/PUT/PATCH/DELETE bodies that directly interpolate the prompt or generated text variables. Custom providers can report the exact sent prompt using `ProviderResponse.prompt`.
+Grading history records attack contributions and observed replies. Stateful input attribution supports direct or trimmed interpolation in static prompt templates. Forwarding is established for built-in OpenAI chat, Responses, and completion requests without replacement `passthrough` inputs, or static HTTP POST/PUT/PATCH/DELETE body values consisting of a complete direct or trimmed interpolation, such as `{{prompt}}` or `{{user_context | trim}}`. Custom providers can report the exact sent prompt using `ProviderResponse.prompt`.
 
-Inputs with uncertain forwarding remain unattributed: arbitrary prompt functions, conditional templates, HTTP request transforms, raw or multipart HTTP requests, and provider wrappers without sent-prompt evidence. Unused variables, operator variables, and materialized media are excluded. This conservative history is not a normalized copy of the full provider conversation.
+Generated inputs remain literal during prompt rendering. JSON-valued contributions retain only members that survive JSON parsing; their contents never redefine message roles.
+
+Inputs with uncertain forwarding remain unattributed: arbitrary prompt functions, conditional templates, text templates that construct JSON structures, embedded JSON body templates, HTTP request transforms, raw or multipart HTTP requests, and provider wrappers without sent-prompt evidence. Unused variables, operator variables, and materialized media are excluded. This conservative history is not a normalized copy of the full provider conversation.
 
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
 

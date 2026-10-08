@@ -604,6 +604,7 @@ export function isDirectTemplateReference(
   template: string,
   variableName: string,
   filters?: NunjucksFilterMap,
+  wholeValueOnly = false,
 ): boolean {
   if (!variableName || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return false;
@@ -616,28 +617,36 @@ export function isDirectTemplateReference(
   ) {
     return false;
   }
-  return parsed.ast.children.some(
-    (output) =>
-      Array.isArray(output.children) &&
-      output.children.some((node: unknown) => {
-        if (getSymbolName(node) === variableName) {
-          return true;
-        }
-        if (
-          !isNunjucksAstNode(node) ||
-          node.typename !== 'Filter' ||
-          getSymbolName(node.name) !== 'trim' ||
-          filters?.trim ||
-          !isNunjucksAstNode(node.args) ||
-          !Array.isArray(node.args.children)
-        ) {
-          return false;
-        }
-        return (
-          node.args.children.length === 1 && getSymbolName(node.args.children[0]) === variableName
-        );
-      }),
+  const isReference = (node: unknown): boolean => {
+    if (getSymbolName(node) === variableName) {
+      return true;
+    }
+    if (
+      !isNunjucksAstNode(node) ||
+      node.typename !== 'Filter' ||
+      getSymbolName(node.name) !== 'trim' ||
+      filters?.trim ||
+      !isNunjucksAstNode(node.args) ||
+      !Array.isArray(node.args.children)
+    ) {
+      return false;
+    }
+    return node.args.children.length === 1 && getSymbolName(node.args.children[0]) === variableName;
+  };
+  const nodes: unknown[] = parsed.ast.children.flatMap((output) =>
+    Array.isArray(output.children) ? output.children : [],
   );
+  return wholeValueOnly
+    ? nodes.filter(isReference).length === 1 &&
+        nodes.every(
+          (node) =>
+            isReference(node) ||
+            (isNunjucksAstNode(node) &&
+              node.typename === 'TemplateData' &&
+              typeof node.value === 'string' &&
+              !node.value.trim()),
+        )
+    : nodes.some(isReference);
 }
 
 /**

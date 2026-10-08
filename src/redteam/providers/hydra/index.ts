@@ -560,7 +560,7 @@ export class HydraProvider implements ApiProvider {
           updatedVars,
           filters,
           targetProvider,
-          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+          [this.injectVar, ...Object.keys(currentRenderInputVars ?? {})], // Keep generated input literal
         );
       } else {
         // Stateless: send full conversation history as JSON
@@ -710,6 +710,7 @@ export class HydraProvider implements ApiProvider {
         // additionally require proof through the configured prompt template.
         this.stateful && !lastTransformResult ? prompt : undefined,
         filters,
+        finalTargetPrompt,
       );
       // Text layers replace the replay payload; media layers include its text
       // history. A provider that drops the payload cannot establish that history.
@@ -721,7 +722,7 @@ export class HydraProvider implements ApiProvider {
       const currentGradingContent = replaysHistory
         ? processedMessage
         : lastTransformResult && forwardsPrompt
-          ? lastTransformResult.prompt
+          ? getTextInputVariables({ input: lastTransformResult.prompt }).input
           : currentRenderInputVars
             ? Object.keys(deliveredInputVars).length > 0
               ? JSON.stringify(deliveredInputVars)

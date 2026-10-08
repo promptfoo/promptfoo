@@ -41,15 +41,23 @@ export function getRenderedInputVariables(
   request: { forwardsPrompt: boolean; body?: unknown; reservedVariables?: string[] },
   prompt?: Prompt,
   filters?: NunjucksFilterMap,
+  renderedPrompt?: string,
 ): { vars: Record<string, string>; forwardsPrompt: boolean } {
-  const bodyReferences = (body: unknown, name: string): boolean => {
+  const referencesInput = (
+    body: unknown,
+    name: string,
+    templateFilters?: NunjucksFilterMap,
+    wholeValueOnly = false,
+  ): boolean => {
     if (typeof body === 'string') {
-      return isDirectTemplateReference(body, name);
+      return isDirectTemplateReference(body, name, templateFilters, wholeValueOnly);
     }
     return (
       body !== null &&
       typeof body === 'object' &&
-      Object.values(body).some((value) => bodyReferences(value, name))
+      Object.values(body).some((value) =>
+        referencesInput(value, name, templateFilters, wholeValueOnly),
+      )
     );
   };
   // HTTP parses JSON string bodies before rendering their values; keys are not
@@ -62,11 +70,30 @@ export function getRenderedInputVariables(
       // A non-JSON body is a text template.
     }
   }
+  let promptTemplate: unknown = prompt?.raw;
+  let parsedPromptTemplate = false;
+  if (prompt && !getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+    try {
+      promptTemplate = JSON.parse(prompt.raw);
+      parsedPromptTemplate = true;
+    } catch {
+      // Non-JSON prompts render as text.
+    }
+  }
+  let renderedJson = renderedPrompt === undefined;
+  if (renderedPrompt !== undefined) {
+    try {
+      JSON.parse(renderedPrompt);
+      renderedJson = true;
+    } catch {
+      // Plain text cannot lose members through JSON parsing.
+    }
+  }
   const reserved = request.reservedVariables ?? [];
   const forwardsPrompt =
     request.forwardsPrompt ||
-    bodyReferences(body, 'prompt') ||
-    (!reserved.includes(injectVar) && bodyReferences(body, injectVar));
+    referencesInput(body, 'prompt', undefined, true) ||
+    (!reserved.includes(injectVar) && referencesInput(body, injectVar, undefined, true));
   const vars = Object.fromEntries(
     Object.entries(inputVars).filter(([name]) => {
       const throughPrompt =
@@ -74,9 +101,16 @@ export function getRenderedInputVariables(
         (!prompt ||
           (!prompt.function &&
             !/^(?:portkey|langfuse|helicone):\/\//.test(prompt.raw) &&
-            isDirectTemplateReference(prompt.raw, name, filters)));
+            referencesInput(promptTemplate, name, filters) &&
+            // A text template can construct JSON that discards interpolated
+            // members. Only a complete value has a conservative JSON projection.
+            (!renderedJson ||
+              parsedPromptTemplate ||
+              isDirectTemplateReference(prompt.raw, name, filters, true))));
       const throughBody =
-        name !== injectVar && !reserved.includes(name) && bodyReferences(body, name);
+        name !== injectVar &&
+        !reserved.includes(name) &&
+        referencesInput(body, name, undefined, true);
       return throughPrompt || throughBody;
     }),
   );

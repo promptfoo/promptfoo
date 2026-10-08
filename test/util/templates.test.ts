@@ -530,3 +530,16 @@ describe('getNunjucksEngine', () => {
     });
   });
 });
+
+describe('whole-value template references', () => {
+  it.each([
+    ['{{input}}', true],
+    ['  {{ input | trim }}  ', true],
+    ['Prefix {{input}}', false],
+    ['{{input}}{{input}}', false],
+    ['{"email":"{{input}}","email":"fixed"}', false],
+    ['{{prefix}}{{input}}', false],
+  ])('requires one complete placeholder: %s', (template, expected) => {
+    expect(isDirectTemplateReference(template, 'input', undefined, true)).toBe(expected);
+  });
+});

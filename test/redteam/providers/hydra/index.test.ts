@@ -1481,6 +1481,117 @@ describe('HydraProvider', () => {
       },
     );
 
+    it('does not attribute references that occur only in JSON prompt keys', async () => {
+      const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+        '../../../../src/evaluatorHelpers',
+      );
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+      const context = gradingContext();
+      context.prompt.raw = '{"{{input}}":"Hello."}';
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+      const result = await provider.callApi('', context);
+      expect(JSON.parse(mockTargetProvider.callApi.mock.calls[0][0])).toEqual({
+        '{{input}}': 'Hello.',
+      });
+      expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
+      expect(result.metadata.messages).toEqual([{ role: 'assistant', content: finalOutput }]);
+    });
+
+    it.each([
+      ['question', 'Hello. {# My email is supplied@example.com. #}'],
+      ['user_context', '{% if false %}supplied@example.com{% endif %}'],
+      ['user_context', '{{env.HYDRA_CONTEXT_CANARY}}'],
+      ['user_context', "{{ constructor.constructor('return 1')() }}"],
+    ])('keeps generated %s input literal through the target request', async (field, payload) => {
+      const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+        '../../../../src/evaluatorHelpers',
+      );
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+      mockAgentProvider.callApi.mockReset();
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            question: 'Hello.',
+            user_context: 'Context.',
+            [field]: payload,
+          }),
+          materializationHandled: true,
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ question: followUp, user_context: followUp }),
+          materializationHandled: true,
+        });
+      const context = gradingContext();
+      context.prompt.raw = '{{' + field + '}}';
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+        stateful: true,
+        inputs: { question: 'Question', user_context: 'Context' },
+      });
+      await provider.callApi('', context);
+      expect(mockTargetProvider.callApi.mock.calls[0][0]).toBe(payload);
+      const history = JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript);
+      expect(JSON.parse(history[0].content)).toEqual({ [field]: payload });
+    });
+
+    it('does not credit duplicate JSON members removed from a delivered HTTP side input', async () => {
+      const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+        '../../../../src/evaluatorHelpers',
+      );
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+      mockAgentProvider.callApi.mockReset();
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            question: 'Hello.',
+            user_context: '{"email":"discarded@example.com","email":"retained@example.com"}',
+          }),
+          materializationHandled: true,
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ question: followUp, user_context: 'Earlier context.' }),
+          materializationHandled: true,
+        });
+      const context = gradingContext();
+      context.prompt.raw = '{{question}}';
+      const body = { question: '{{prompt}}', context: '{{user_context}}' };
+      const target = new HttpProvider('https://example.com/chat', {
+        config: { method: 'POST', body },
+      });
+      const sentBodies: unknown[] = [];
+      vi.spyOn(target, 'callApi').mockImplementation(async (prompt, targetContext) => {
+        sentBodies.push(determineRequestBody(true, prompt, body, targetContext!.vars));
+        return mockTargetProvider.callApi(prompt, targetContext);
+      });
+      context.originalProvider = target;
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+        stateful: true,
+        inputs: { question: 'Question', user_context: 'Context' },
+      });
+      const result = await provider.callApi('', context);
+      expect(sentBodies[0]).toEqual({
+        question: 'Hello.',
+        context: { email: 'retained@example.com' },
+      });
+      const history = JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript);
+      expect(JSON.parse(history[0].content)).toEqual({
+        question: 'Hello.',
+        user_context: '{"email":"retained@example.com"}',
+      });
+      expect(JSON.stringify(result.metadata.messages)).not.toContain('discarded@example.com');
+      expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+        getGradingInputHash(
+          result.metadata.redteamFinalPrompt!,
+          result.output,
+          result.metadata.messages,
+          'pii',
+        ),
+      );
+    });
+
     it('omits opaque requests without provider-reported forwarding evidence', async () => {
       const context = gradingContext();
       context.originalProvider = mockTargetProvider;

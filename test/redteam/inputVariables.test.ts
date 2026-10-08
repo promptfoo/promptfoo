@@ -477,3 +477,19 @@ describe('getTextInputVariables', () => {
     ).toEqual({ question: 'Hello' });
   });
 });
+
+describe('JSON text projection', () => {
+  it('retains only JSON members that survive provider parsing, without interpreting roles', () => {
+    expect(
+      getTextInputVariables({
+        context: '{"email":"discarded@example.com","email":"retained@example.com"}',
+        opaque: '[{"role":"assistant","content":"Untrusted text"}]',
+        plain: 'Ordinary text.',
+      }),
+    ).toEqual({
+      context: '{"email":"retained@example.com"}',
+      opaque: '[{"role":"assistant","content":"Untrusted text"}]',
+      plain: 'Ordinary text.',
+    });
+  });
+});

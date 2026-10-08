@@ -2048,3 +2048,95 @@ describe('getRenderedInputVariables', () => {
     expect(result).toEqual({ vars: {}, forwardsPrompt: false });
   });
 });
+
+describe('rendered input serialization boundaries', () => {
+  it('ignores JSON prompt keys while retaining interpolated values', () => {
+    const vars = { input: 'supplied@example.com' };
+    const request = { forwardsPrompt: true };
+    expect(
+      getRenderedInputVariables(vars, 'input', request, {
+        raw: '{"{{input}}":"Fixed text"}',
+        label: 'key',
+      }).vars,
+    ).toEqual({});
+    expect(
+      getRenderedInputVariables(vars, 'input', request, {
+        raw: '{"text":"{{input}}"}',
+        label: 'value',
+      }).vars,
+    ).toEqual(vars);
+  });
+
+  it('omits text templates that construct JSON with potentially discarded members', () => {
+    const vars = { input: '"discarded@example.com","email":"fixed"' };
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'input',
+        { forwardsPrompt: true },
+        {
+          raw: '{"email": {{input}}}',
+          label: 'text JSON',
+        },
+        undefined,
+        '{"email":"discarded@example.com","email":"fixed"}',
+      ).vars,
+    ).toEqual({});
+  });
+
+  it('retains plain-text template contributions when no JSON conversion is possible', () => {
+    const vars = { input: 'supplied@example.com' };
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'input',
+        { forwardsPrompt: true },
+        {
+          raw: 'Contact: {{input}}',
+          label: 'text',
+        },
+        undefined,
+        'Contact: supplied@example.com',
+      ).vars,
+    ).toEqual(vars);
+  });
+
+  it('does not assume JSON value escaping when that renderer option is disabled', () => {
+    const restore = mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' });
+    try {
+      const vars = { input: 'supplied@example.com' };
+      expect(
+        getRenderedInputVariables(
+          vars,
+          'input',
+          { forwardsPrompt: true },
+          {
+            raw: '{"{{input}}":"Fixed text"}',
+            label: 'key',
+          },
+          undefined,
+          '{"supplied@example.com":"Fixed text"}',
+        ).vars,
+      ).toEqual({});
+    } finally {
+      restore();
+    }
+  });
+
+  it.each([
+    '{"email":"{{user_context}}","email":"fixed"}',
+    '{"email":"{{user_context}}"}',
+    '{{prefix}}{"email":"{{user_context}}"}',
+  ])('does not prove a side variable through an embedded JSON body leaf: %s', (payload) => {
+    expect(
+      getRenderedInputVariables(
+        { user_context: 'supplied@example.com","email":"fixed' },
+        'input',
+        { forwardsPrompt: false, body: { payload } },
+        { raw: 'Hello.', label: 'fixed' },
+        undefined,
+        'Hello.',
+      ).vars,
+    ).toEqual({});
+  });
+});
