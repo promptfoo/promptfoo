@@ -1277,14 +1277,28 @@ describe('fetchWithTimeout', () => {
 });
 
 describe('isRateLimited', () => {
-  it('should detect standard rate limit headers', () => {
+  it.each([
+    'X-RateLimit-Remaining',
+    'x-ratelimit-remaining-requests',
+    'x-ratelimit-remaining-tokens',
+  ])('still recognizes non-429 errors with exhausted %s', (header) => {
+    expect(isRateLimited(new Response(null, { status: 403, headers: { [header]: '0' } }))).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    'X-RateLimit-Remaining',
+    'x-ratelimit-remaining-requests',
+    'x-ratelimit-remaining-tokens',
+  ])('does not reject a successful response with exhausted %s', (header) => {
     const response = createMockResponse({
       headers: new Headers({
-        'X-RateLimit-Remaining': '0',
+        [header]: '0',
       }),
       status: 200,
     });
-    expect(isRateLimited(response)).toBe(true);
+    expect(isRateLimited(response)).toBe(false);
   });
 
   it('should detect 429 status code', () => {
@@ -1292,22 +1306,6 @@ describe('isRateLimited', () => {
       status: 429,
     });
     expect(isRateLimited(response)).toBe(true);
-  });
-
-  it('should detect OpenAI specific rate limits', () => {
-    const response = createMockResponse({
-      headers: new Headers({
-        'x-ratelimit-remaining-requests': '0',
-      }),
-    });
-    expect(isRateLimited(response)).toBe(true);
-
-    const tokenResponse = createMockResponse({
-      headers: new Headers({
-        'x-ratelimit-remaining-tokens': '0',
-      }),
-    });
-    expect(isRateLimited(tokenResponse)).toBe(true);
   });
 
   it('should return false when not rate limited', () => {
@@ -1530,6 +1528,79 @@ describe('fetchWithRetries', () => {
     vi.mocked(sleep).mockClear();
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.clearAllMocks();
+  });
+
+  describe.each([0, 1, 3])('successful exhausted-quota responses with %i retries', (maxRetries) => {
+    it.each([
+      'X-RateLimit-Remaining',
+      'x-ratelimit-remaining-requests',
+      'x-ratelimit-remaining-tokens',
+    ])('returns the body and headers without replaying the POST for %s', async (header) => {
+      const successResponse = new Response('{"output":"accepted"}', {
+        status: 200,
+        headers: { [header]: '0', 'Retry-After': '60', 'Content-Type': 'application/json' },
+      });
+      vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+
+      const response = await fetchWithRetries(
+        'https://example.com',
+        { method: 'POST', body: '{"prompt":"hello"}' },
+        1000,
+        maxRetries,
+      );
+
+      expect(response).toBe(successResponse);
+      expect(response.headers.get(header)).toBe('0');
+      expect(response.headers.get('Retry-After')).toBe('60');
+      expect(response.bodyUsed).toBe(false);
+      expect(await response.json()).toEqual({ output: 'accepted' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+  });
+
+  describe.each([
+    'X-RateLimit-Remaining',
+    'x-ratelimit-remaining-requests',
+    'x-ratelimit-remaining-tokens',
+  ])('non-429 throttling with %s', (header) => {
+    it('retries a 403 and returns the successful response without classifying its body', async () => {
+      const throttled = new Response('{"error":{"code":"insufficient_quota"}}', {
+        status: 403,
+        statusText: 'Forbidden',
+        headers: { [header]: '0', 'Retry-After': '5' },
+      });
+      const clone = vi.spyOn(throttled, 'clone');
+      const success = new Response('accepted', { headers: { [header]: '0' } });
+      vi.mocked(global.fetch).mockResolvedValueOnce(throttled).mockResolvedValueOnce(success);
+
+      const response = await fetchWithRetries('https://example.com', {}, 1000, 1);
+
+      expect(response).toBe(success);
+      expect(await response.text()).toBe('accepted');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(sleep).mock.calls[0][0]).toBeGreaterThanOrEqual(5000);
+      expect(vi.mocked(sleep).mock.calls[0][0]).toBeLessThan(6000);
+      expect(clone).not.toHaveBeenCalled();
+      expect(throttled.bodyUsed).toBe(false);
+    });
+
+    it.each([0, 2])('preserves retry exhaustion with %i retries', async (maxRetries) => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response('exhausted', {
+          status: 403,
+          statusText: 'Forbidden',
+          headers: { [header]: '0', 'Retry-After': '0' },
+        }),
+      );
+
+      await expect(fetchWithRetries('https://example.com', {}, 1000, maxRetries)).rejects.toThrow(
+        `Request failed after ${maxRetries} retries: Error: Rate limited: 403 Forbidden after ${maxRetries + 1} attempts`,
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(maxRetries + 1);
+      expect(sleep).toHaveBeenCalledTimes(maxRetries);
+    });
   });
 
   it('should make exactly one attempt when retries is 0', async () => {
