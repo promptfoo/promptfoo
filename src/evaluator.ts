@@ -1359,6 +1359,15 @@ async function applyRunEvalResponseOutcome({
     return;
   }
 
+  if (
+    response.output == null &&
+    response.images?.some((image) => image.data || image.blobRef) &&
+    test.assert?.some(hasImageDatasetAssertion)
+  ) {
+    // An image-only response is valid output for image dataset grading.
+    response = { ...response, output: '' };
+  }
+
   if (response.output === null || response.output === undefined) {
     // An absent provider result is an integration error, including in redteam
     // scans. An intentional empty string still proceeds to the assertions.
@@ -1388,6 +1397,17 @@ async function applyRunEvalResponseOutcome({
     traceContext,
     vars,
   });
+}
+
+function hasImageDatasetAssertion(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(hasImageDatasetAssertion);
+  }
+  return (
+    assertion.type === 'promptfoo:redteam:unsafebench' ||
+    assertion.type === 'promptfoo:redteam:vlsu' ||
+    assertion.type === 'promptfoo:redteam:vlguard'
+  );
 }
 
 async function gradeRunEvalResponse({

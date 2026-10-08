@@ -2,21 +2,21 @@ import cliProgress from 'cli-progress';
 import dedent from 'dedent';
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
-import { getEnvString, isCI } from '../envars';
+import { isCI } from '../envars';
 import logger from '../logger';
+import { getHuggingFaceHeaders } from './huggingfaceAuth';
 
 import type { TestCase, Vars } from '../types/index';
 
 /**
- * Safely casts HuggingFace row data to Vars type
+ * Converts HuggingFace row data to a test case without expanding variables.
  * HuggingFace typically returns string/number/boolean values which are compatible with Vars
  */
-function castRowToVars(row: Record<string, unknown>): Vars {
-  return row as Record<
-    string,
-    // biome-ignore lint/suspicious/noExplicitAny: FIXME
-    string | number | boolean | any[] | Record<string, any> | (string | number | boolean)[]
-  >;
+function rowToTestCase(row: Record<string, unknown>): TestCase {
+  return {
+    vars: row as Vars,
+    options: { disableVarExpansion: true },
+  };
 }
 
 // Constants for performance optimization thresholds
@@ -40,13 +40,9 @@ const PROGRESS_LOG_FREQUENCY_PAGES = 5;
  */
 class DatasetProgressBar {
   private progressBar: cliProgress.SingleBar | undefined;
-  private isWebUI: boolean;
+  private isWebUI = Boolean(cliState.webUI);
   private totalRows: number = 0;
   private fetchedRows: number = 0;
-
-  constructor() {
-    this.isWebUI = Boolean(cliState.webUI);
-  }
 
   /**
    * Initialize progress bar for dataset fetching
@@ -133,7 +129,7 @@ export function parseDatasetPath(path: string): {
   const [owner, repo] = pathPart.split('/');
 
   // Start with default parameters
-  const defaultParams = new URLSearchParams({
+  const queryParams = new URLSearchParams({
     split: 'test',
     config: 'default',
   });
@@ -142,10 +138,6 @@ export function parseDatasetPath(path: string): {
   const userParams = new URLSearchParams(queryPart || '');
 
   // Merge user params into defaults (user params override defaults)
-  const queryParams = new URLSearchParams();
-  for (const [key, value] of defaultParams) {
-    queryParams.set(key, value);
-  }
   for (const [key, value] of userParams) {
     queryParams.set(key, value);
   }
@@ -193,14 +185,7 @@ export async function fetchHuggingFaceDataset(
     const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
 
     // Set up headers for authentication
-    const hfToken =
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN') ||
-      getEnvString('HUGGING_FACE_HUB_TOKEN');
-    const headers: Record<string, string> = {};
-    if (hfToken) {
-      headers.Authorization = `Bearer ${hfToken}`;
-    }
+    const headers = getHuggingFaceHeaders();
 
     const response = await fetchWithCache(url, { headers });
 
@@ -220,19 +205,12 @@ export async function fetchHuggingFaceDataset(
     );
 
     // Convert HuggingFace rows to test cases
-    const singleRequestTests: TestCase[] = [];
     for (const { row } of data.rows) {
-      const test: TestCase = {
-        vars: castRowToVars(row),
-        options: {
-          disableVarExpansion: true,
-        },
-      };
-      singleRequestTests.push(test);
+      tests.push(rowToTestCase(row));
     }
 
-    logger.debug(`[HF Dataset] Successfully loaded ${singleRequestTests.length} test cases`);
-    return singleRequestTests;
+    logger.debug(`[HF Dataset] Successfully loaded ${tests.length} test cases`);
+    return tests;
   }
 
   // Initialize progress bar for multi-page datasets
@@ -267,14 +245,9 @@ export async function fetchHuggingFaceDataset(
       const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
       logger.debug(`[HF Dataset] Fetching page from ${url}`);
 
-      const hfToken =
-        getEnvString('HF_TOKEN') ||
-        getEnvString('HF_API_TOKEN') ||
-        getEnvString('HUGGING_FACE_HUB_TOKEN');
-      const headers: Record<string, string> = {};
-      if (hfToken) {
+      const headers = getHuggingFaceHeaders();
+      if (headers.Authorization) {
         logger.debug('[HF Dataset] Using token for authentication');
-        headers.Authorization = `Bearer ${hfToken}`;
       }
 
       // Use fetchWithCache defaults (30s timeout, json format, 4 retries)
@@ -371,14 +344,7 @@ export async function fetchHuggingFaceDataset(
 
       // Convert HuggingFace rows to test cases
       for (const { row } of data.rows) {
-        const test: TestCase = {
-          vars: castRowToVars(row),
-          options: {
-            disableVarExpansion: true,
-          },
-        };
-
-        tests.push(test);
+        tests.push(rowToTestCase(row));
       }
 
       // Check if we've reached user's limit or end of dataset
@@ -405,10 +371,9 @@ export async function fetchHuggingFaceDataset(
         tests.length < totalNeeded * CONCURRENT_FETCH_PROGRESS_THRESHOLD
       ) {
         // Still have significant work left
-        const maxConcurrent = Math.min(MAX_CONCURRENT_REQUESTS, pagesRemaining);
         const concurrentPromises: Promise<ConcurrentFetchResult>[] = [];
 
-        for (let i = 0; i < maxConcurrent - 1; i++) {
+        for (let i = 0; i < MAX_CONCURRENT_REQUESTS - 1; i++) {
           // Start from the next page and prefetch additional pages
           const futureOffset = offset + i * pageSize;
           const futureParams = new URLSearchParams(queryParams);
@@ -432,69 +397,61 @@ export async function fetchHuggingFaceDataset(
           concurrentPromises.push(p);
         }
 
-        if (concurrentPromises.length > 0) {
-          logger.debug(`[HF Dataset] Fetching ${concurrentPromises.length} pages concurrently`);
-          const concurrentResults = await Promise.allSettled(concurrentPromises);
+        logger.debug(`[HF Dataset] Fetching ${concurrentPromises.length} pages concurrently`);
+        const concurrentResults = await Promise.allSettled(concurrentPromises);
 
-          // Process concurrent results in order
-          let concurrentRowCount = 0;
-          for (const result of concurrentResults) {
-            if (result.status === 'rejected') {
-              logger.warn(`[HF Dataset] Concurrent fetch promise rejected`, {
-                reason: result.reason,
-              });
-              continue;
-            }
-
-            // `offset` advances by the rows taken here, so a page is usable only if it starts
-            // where those rows end. After a page that failed or came back short, taking this
-            // one would drop the rows in between and fetch it again on the next iteration.
-            // Stop instead: the main loop refetches the gap with its usual error handling.
-            if (result.value.offset !== offset + concurrentRowCount) {
-              break;
-            }
-
-            if (!result.value.success) {
-              const errorInfo = result.value.error
-                ? String(result.value.error)
-                : `HTTP ${result.value.response?.status ?? 'unknown'}`;
-              logger.warn(
-                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} failed: ${errorInfo}`,
-              );
-              continue;
-            }
-
-            const concurrentData = result.value.response?.data;
-            if (!concurrentData) {
-              logger.warn(
-                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} returned success but no data`,
-              );
-              continue;
-            }
-            if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
-              totalRows = concurrentData.num_rows_total;
-            }
-            for (const { row } of concurrentData.rows) {
-              if (tests.length >= totalNeeded) {
-                break;
-              }
-              tests.push({
-                vars: castRowToVars(row),
-                options: { disableVarExpansion: true },
-              });
-              concurrentRowCount++;
-            }
+        // Process concurrent results in order
+        let concurrentRowCount = 0;
+        for (const result of concurrentResults) {
+          if (result.status === 'rejected') {
+            logger.warn(`[HF Dataset] Concurrent fetch promise rejected`, {
+              reason: result.reason,
+            });
+            continue;
           }
 
-          // Update progress with concurrent results
-          progressBar.update(concurrentRowCount);
+          // Consume only contiguous pages; retry a failed or short-page gap in the main loop.
+          if (result.value.offset !== offset + concurrentRowCount) {
+            break;
+          }
 
-          // Skip ahead by the actual number of rows fetched concurrently
-          offset += concurrentRowCount;
-          logger.debug(
-            `[HF Dataset] Processed ${concurrentPromises.length} concurrent pages, now at offset ${offset}`,
-          );
+          if (!result.value.success) {
+            const errorInfo = result.value.error
+              ? String(result.value.error)
+              : `HTTP ${result.value.response?.status ?? 'unknown'}`;
+            logger.warn(
+              `[HF Dataset] Concurrent fetch at offset ${result.value.offset} failed: ${errorInfo}`,
+            );
+            continue;
+          }
+
+          const concurrentData = result.value.response?.data;
+          if (!concurrentData) {
+            logger.warn(
+              `[HF Dataset] Concurrent fetch at offset ${result.value.offset} returned success but no data`,
+            );
+            continue;
+          }
+          if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
+            totalRows = concurrentData.num_rows_total;
+          }
+          for (const { row } of concurrentData.rows) {
+            if (tests.length >= totalNeeded) {
+              break;
+            }
+            tests.push(rowToTestCase(row));
+            concurrentRowCount++;
+          }
         }
+
+        // Update progress with concurrent results
+        progressBar.update(concurrentRowCount);
+
+        // Skip ahead by the actual number of rows fetched concurrently
+        offset += concurrentRowCount;
+        logger.debug(
+          `[HF Dataset] Processed ${concurrentPromises.length} concurrent pages, now at offset ${offset}`,
+        );
       }
 
       // Progress logging for large datasets (every PROGRESS_LOG_FREQUENCY_PAGES pages)

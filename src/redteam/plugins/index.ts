@@ -4,7 +4,6 @@ import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
@@ -407,7 +406,6 @@ async function fetchRemoteTestCases(
         headers: getRemoteGenerationHeaders(),
         body,
       },
-      getRequestTimeoutMs(),
     );
     if (provider) {
       recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
