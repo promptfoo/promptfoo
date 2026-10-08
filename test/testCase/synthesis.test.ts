@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
 import {
   extractPersonas,
@@ -16,6 +16,10 @@ vi.mock('../../src/providers', () => ({
 }));
 
 describe('synthesize', () => {
+  afterEach(() => {
+    vi.mocked(loadApiProvider).mockReset();
+  });
+
   it('should generate test cases based on prompts and personas', async () => {
     let i = 0;
     const mockProvider = createMockProvider({
@@ -39,6 +43,40 @@ describe('synthesize', () => {
 
     expect(result).toHaveLength(2);
     expect(result).toEqual([{ var1: 'value1' }, { var2: 'value2' }]);
+  });
+
+  it.each([
+    { output: '{"error": "rate limited", "status": 429}' },
+    { output: '{"vars": [null]}' },
+    { output: '{"vars": ["not variables"]}' },
+    { error: 'provider unavailable' },
+  ])('rejects malformed generated test variables: %j', async (response) => {
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValueOnce({ output: '{"personas": ["A customer"]}' })
+        .mockResolvedValue(response),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: ['Answer {{question}}'],
+        tests: [],
+        numPersonas: 1,
+        numTestCasesPerPersona: 1,
+      }),
+    ).rejects.toThrow(/vars/);
+  });
+
+  it('rejects a non-list personas property before generating cases', async () => {
+    const mockProvider = createMockProvider({ response: { output: '{"personas": "Persona 1"}' } });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    await expect(
+      synthesize({ provider: 'mock-provider', prompts: ['Test prompt'], tests: [] }),
+    ).rejects.toThrow('Expected at least one user persona in the response');
+    expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
   it('should handle persona responses formatted as an array of objects', async () => {
@@ -115,7 +153,7 @@ describe('synthesize', () => {
         numPersonas: 2,
         numTestCasesPerPersona: 1,
       }),
-    ).rejects.toThrow(/Expected at least one user persona in the response for personas/);
+    ).rejects.toThrow(/Expected at least one user persona in the response/);
   });
 });
 

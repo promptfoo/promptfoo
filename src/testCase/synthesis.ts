@@ -217,7 +217,7 @@ export async function synthesize({
   const personas = extractPersonas(output);
   invariant(
     Array.isArray(personas) && personas.length > 0,
-    `Expected at least one user persona in the response for personas, got: ${output}`,
+    'Expected at least one user persona in the response. Check the provider response format.',
   );
   logger.debug(
     `Generated ${personas.length} persona${personas.length === 1 ? '' : 's'}:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
@@ -265,23 +265,25 @@ export async function synthesize({
     const personaResponse = await providerModel.callApi(personaPrompt);
     logger.debug(`Received persona response:\n${personaResponse.output}`);
 
+    invariant(
+      personaResponse.output !== undefined && personaResponse.output !== null,
+      'Expected the test case response to contain a "vars" array of objects.',
+    );
     const personaOutput =
       typeof personaResponse.output === 'string'
         ? personaResponse.output
         : JSON.stringify(personaResponse.output);
     const personaResponseObjects = extractJsonObjects(personaOutput);
 
-    let vars: VarMapping[] = [];
-    if (personaResponseObjects.length >= 1) {
-      const parsed = personaResponseObjects[0] as { vars?: VarMapping[] };
-      if (Array.isArray(parsed?.vars)) {
-        vars = parsed.vars;
-      } else {
-        vars = personaResponseObjects.filter(
-          (obj): obj is VarMapping => typeof obj === 'object' && obj !== null && !('vars' in obj),
-        );
-      }
-    }
+    const wrapper = personaResponseObjects.find((obj): obj is { vars: VarMapping[] } => {
+      const vars = (obj as { vars?: unknown }).vars;
+      return (
+        Array.isArray(vars) &&
+        vars.every((value) => value !== null && typeof value === 'object' && !Array.isArray(value))
+      );
+    });
+    invariant(wrapper, 'Expected the test case response to contain a "vars" array of objects.');
+    const vars = wrapper.vars;
     logger.debug(`Received ${vars.length} test cases`);
     if (progressBar) {
       progressBar.increment(vars.length);
