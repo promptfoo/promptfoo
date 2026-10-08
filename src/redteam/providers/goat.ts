@@ -54,6 +54,7 @@ import {
   getLastMessageContent,
   resolveStoredGraderResult,
   runRedteamGrader,
+  snapshotTargetMetadata,
   tryUnblocking,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -87,6 +88,7 @@ const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
  */
 interface GoatMetadata extends BaseRedteamMetadata {
   redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: ProviderResponse['metadata'] | null;
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached' | 'Target ended conversation';
   successfulAttacks?: Array<{
@@ -252,6 +254,7 @@ export default class GoatProvider implements ApiProvider {
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
     let lastOutputIsText: boolean | undefined;
+    let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
 
     // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
     let lastTransformDisplayVars: Record<string, string> | undefined;
@@ -348,6 +351,7 @@ export default class GoatProvider implements ApiProvider {
               options,
             );
 
+            const unblockingTargetMetadata = snapshotTargetMetadata(unblockingResponse, test);
             if (!unblockingResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
               logger.debug(`Sleeping for ${targetProvider.delay}ms`);
               await sleep(targetProvider.delay);
@@ -362,6 +366,7 @@ export default class GoatProvider implements ApiProvider {
 
             if (unblockingOutput) {
               lastOutputIsText = typeof unblockingResponse.output === 'string';
+              lastTargetMetadata = unblockingTargetMetadata;
               messages.push({ role: 'assistant', content: unblockingOutput });
             }
 
@@ -613,16 +618,22 @@ export default class GoatProvider implements ApiProvider {
               },
             }
           : context;
-        const targetResponse = (await callTargetProvider(
+        const rawTargetResponse = (await callTargetProvider(
           targetProvider,
           targetPrompt,
           targetContext,
           options,
         )) as GoatProviderResponse;
+        const targetMetadata = snapshotTargetMetadata(rawTargetResponse, test);
+        const targetResponse =
+          targetMetadata === undefined
+            ? rawTargetResponse
+            : { ...rawTargetResponse, metadata: targetMetadata ?? undefined };
         const outputIsText = typeof targetResponse.output === 'string';
         messages.push(pendingMessage);
         if (pendingMessage.role === 'assistant') {
           lastOutputIsText = undefined;
+          lastTargetMetadata = undefined;
         }
         lastFinalAttackPrompt = lastTransformResult?.prompt || latestMessageContent;
 
@@ -683,6 +694,7 @@ export default class GoatProvider implements ApiProvider {
 
           if (endedOutput) {
             lastOutputIsText = outputIsText;
+            lastTargetMetadata = targetMetadata;
             messages.push({
               role: 'assistant',
               content: endedOutput,
@@ -729,6 +741,7 @@ export default class GoatProvider implements ApiProvider {
         }
 
         lastOutputIsText = outputIsText;
+        lastTargetMetadata = targetMetadata;
         messages.push({
           role: 'assistant',
           content: finalOutput,
@@ -828,6 +841,7 @@ export default class GoatProvider implements ApiProvider {
               attackerMessage.content,
             output: finalOutput,
             outputIsText,
+            targetMetadata,
             messages,
             guardrails: finalResponse.guardrails,
             transformDisplayVars: lastTransformDisplayVars,
@@ -902,6 +916,7 @@ export default class GoatProvider implements ApiProvider {
     const reported = flaggedTurn ?? {
       output: getLastMessageContent(messages, 'assistant') || '',
       outputIsText: lastOutputIsText,
+      targetMetadata: lastTargetMetadata,
       prompt: finalPrompt,
       messages,
       guardrails: lastTargetResponse?.guardrails,
@@ -912,6 +927,7 @@ export default class GoatProvider implements ApiProvider {
       prompt: reported.prompt,
       metadata: {
         redteamOutputIsText: reported.outputIsText,
+        redteamTargetMetadata: reported.targetMetadata,
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: flaggedTurn ? flaggedTurn.prompt : lastFinalAttackPrompt || finalPrompt,
         messages: reported.messages as Record<string, any>[],

@@ -575,6 +575,14 @@ export async function getTargetResponse(
       },
     };
   }
+  // Detach numeric metadata before pacing or any later target call can mutate it.
+  const metadataSnapshot = snapshotTargetMetadata(
+    targetRespRaw,
+    context?.test as AtomicTestCase | undefined,
+  );
+  if (metadataSnapshot !== undefined) {
+    targetRespRaw = { ...targetRespRaw, metadata: metadataSnapshot ?? undefined };
+  }
   if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
     await sleep(targetProvider.delay);
@@ -633,15 +641,133 @@ export async function getTargetResponse(
   };
 }
 
+interface RedteamGraderInput {
+  assertion?: AssertionOrSet;
+  targetProvider?: ApiProvider;
+  prompt?: CallApiContextParams['prompt'];
+  context?: CallApiContextParams;
+  preparedNumeric?: PreparedNumericGrading;
+}
+
+type PreparedNumericGrading =
+  | { numeric: false }
+  | {
+      numeric: true;
+      output: string;
+      value: Assertion['value'];
+      gradingContext: NonNullable<Parameters<RedteamGraderBase['getResult']>[7]>;
+    };
+
+function isNumericReferenceValue(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.prototype.hasOwnProperty.call(value, 'type') &&
+    'type' in value &&
+    value.type === 'numeric'
+  );
+}
+
+/** Resolve once before optional refusal shortcuts without invoking a legacy LLM grader. */
+export async function prepareNumericGrading(
+  input: Omit<RedteamGraderInput, 'preparedNumeric'>,
+  prompt: string,
+  output: string,
+  test: AtomicTestCase,
+  value: Assertion['value'],
+  gradingContext?: Parameters<RedteamGraderBase['getResult']>[7],
+): Promise<PreparedNumericGrading> {
+  const assertion = input.assertion;
+  if (
+    !isSingleAssertion(assertion) ||
+    assertion.type !== 'promptfoo:redteam:financial:calculation-error' ||
+    (!isNumericReferenceValue(value) && !isExternalAssertionValue(value))
+  ) {
+    return { numeric: false };
+  }
+  try {
+    const assertionPrompt = input.context?.originalAssertionInput?.prompt ?? prompt;
+    const vars = input.context?.originalAssertionInput?.getVars() ?? test.vars ?? {};
+    const assertionTest = (input.context?.test as AtomicTestCase | undefined) ?? test;
+    const rawProviderResponse = gradingContext?.providerResponse ?? { output };
+    const targetMetadata = snapshotTargetMetadata(rawProviderResponse, { assert: [assertion] });
+    const providerResponse = { ...rawProviderResponse, metadata: targetMetadata ?? undefined };
+    const transformPrompt = input.prompt ?? { raw: prompt, label: prompt };
+    let preparedOutput: ProviderResponse['output'] = output;
+    let outputIsText = gradingContext?.outputIsText === true;
+    if (input.targetProvider?.transform) {
+      preparedOutput = await transform(input.targetProvider.transform, preparedOutput, {
+        vars,
+        prompt: transformPrompt,
+      });
+    }
+    outputIsText &&= typeof preparedOutput === 'string';
+    const providerTransformedOutput = preparedOutput;
+    const testTransform = assertionTest.options?.transform || assertionTest.options?.postprocess;
+    if (testTransform) {
+      preparedOutput = await transform(testTransform, preparedOutput, {
+        vars,
+        prompt: transformPrompt,
+        ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
+      });
+    }
+    outputIsText &&= typeof preparedOutput === 'string';
+    const assertionProviderResponse = {
+      ...providerResponse,
+      output: preparedOutput,
+      providerTransformedOutput,
+    };
+    if (assertion.transform) {
+      preparedOutput = await transform(assertion.transform, preparedOutput, {
+        vars,
+        prompt: { label: assertionPrompt },
+        ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
+      });
+    }
+    outputIsText &&= typeof preparedOutput === 'string';
+    const resolved = await resolveExternalAssertionValue(
+      assertion,
+      preparedOutput,
+      {
+        prompt: assertionPrompt,
+        vars,
+        test: assertionTest,
+        logProbs: providerResponse.logProbs,
+        provider: input.targetProvider,
+        providerResponse: assertionProviderResponse,
+        ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
+        ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
+        ...(gradingContext?.traceData && { trace: gradingContext.traceData }),
+      },
+      assertion.type,
+    );
+    if (resolved.errorResult) {
+      throw new RedteamGradingConfigError(resolved.errorResult.reason);
+    }
+    if (!isNumericReferenceValue(resolved.renderedValue)) {
+      return { numeric: false };
+    }
+    return {
+      numeric: true,
+      output: typeof preparedOutput === 'string' ? preparedOutput : JSON.stringify(preparedOutput),
+      value: resolved.renderedValue,
+      gradingContext: { ...gradingContext, outputIsText },
+    };
+  } catch (error) {
+    if (
+      error instanceof RedteamGradingConfigError ||
+      (error instanceof Error && error.name === 'AbortError')
+    ) {
+      throw error;
+    }
+    throw new RedteamGradingConfigError(error instanceof Error ? error.message : String(error));
+  }
+}
+
 /** Trace every strategy grader and prepare opt-in numeric inputs at the shared boundary. */
 export function runRedteamGrader(
   grader: Pick<RedteamGraderBase, 'id' | 'getResult'>,
-  input: {
-    assertion?: AssertionOrSet;
-    targetProvider?: ApiProvider;
-    prompt?: CallApiContextParams['prompt'];
-    context?: CallApiContextParams;
-  },
+  input: RedteamGraderInput,
   ...args: Parameters<RedteamGraderBase['getResult']>
 ): ReturnType<RedteamGraderBase['getResult']> {
   const [
@@ -655,109 +781,30 @@ export function runRedteamGrader(
     gradingContext,
   ] = args;
   const invoke = async (): ReturnType<RedteamGraderBase['getResult']> => {
-    // Legacy rubric grading keeps its existing inputs. Only explicit numeric
-    // checks (including external references) need deterministic input parity.
-    const assertion = input.assertion;
-    const isNumeric = (candidate: unknown) =>
-      typeof candidate === 'object' &&
-      candidate !== null &&
-      Object.prototype.hasOwnProperty.call(candidate, 'type') &&
-      'type' in candidate &&
-      candidate.type === 'numeric';
-    if (
-      grader.id !== 'promptfoo:redteam:financial:calculation-error' ||
-      !isSingleAssertion(assertion) ||
-      (!isNumeric(value) && !isExternalAssertionValue(value))
-    ) {
+    if (grader.id !== 'promptfoo:redteam:financial:calculation-error') {
       return grader.getResult(...args);
     }
-
-    const assertionPrompt = input.context?.originalAssertionInput?.prompt ?? prompt;
-    const vars = input.context?.originalAssertionInput?.getVars() ?? test.vars ?? {};
-    const assertionTest = (input.context?.test as AtomicTestCase | undefined) ?? test;
-    const providerResponse = gradingContext?.providerResponse ?? { output };
-    const transformPrompt = input.prompt ?? { raw: prompt, label: prompt };
-    let preparedOutput: ProviderResponse['output'] = output;
-    let outputIsText = gradingContext?.outputIsText === true;
-    let resolved: Awaited<ReturnType<typeof resolveExternalAssertionValue>>;
-    try {
-      if (input.targetProvider?.transform) {
-        preparedOutput = await transform(input.targetProvider.transform, preparedOutput, {
-          vars,
-          prompt: transformPrompt,
-        });
-      }
-      outputIsText &&= typeof preparedOutput === 'string';
-      const providerTransformedOutput = preparedOutput;
-      const testTransform = assertionTest.options?.transform || assertionTest.options?.postprocess;
-      if (testTransform) {
-        preparedOutput = await transform(testTransform, preparedOutput, {
-          vars,
-          prompt: transformPrompt,
-          ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
-        });
-      }
-      outputIsText &&= typeof preparedOutput === 'string';
-      const assertionProviderResponse = {
-        ...providerResponse,
-        output: preparedOutput,
-        providerTransformedOutput,
-      };
-      if (assertion.transform) {
-        preparedOutput = await transform(assertion.transform, preparedOutput, {
-          vars,
-          prompt: { label: assertionPrompt },
-          ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
-        });
-      }
-      outputIsText &&= typeof preparedOutput === 'string';
-      resolved = await resolveExternalAssertionValue(
-        assertion,
-        preparedOutput,
-        {
-          prompt: assertionPrompt,
-          vars,
-          test: assertionTest,
-          logProbs: providerResponse.logProbs,
-          provider: input.targetProvider,
-          providerResponse: assertionProviderResponse,
-          ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
-          ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
-          ...(gradingContext?.traceData && { trace: gradingContext.traceData }),
-        },
-        assertion.type,
-      );
-    } catch (error) {
-      if (
-        error instanceof RedteamGradingConfigError ||
-        (error instanceof Error && error.name === 'AbortError')
-      ) {
-        throw error;
-      }
-      throw new RedteamGradingConfigError(error instanceof Error ? error.message : String(error));
-    }
-    if (resolved.errorResult) {
-      return { grade: resolved.errorResult, rubric: typeof value === 'string' ? value : '' };
-    }
-    if (!isNumeric(resolved.renderedValue)) {
+    const prepared =
+      input.preparedNumeric ??
+      (await prepareNumericGrading(input, prompt, output, test, value, gradingContext));
+    if (!prepared.numeric) {
       return grader.getResult(...args);
     }
     return grader.getResult(
       prompt,
-      typeof preparedOutput === 'string' ? preparedOutput : JSON.stringify(preparedOutput),
+      prepared.output,
       test,
       provider,
-      resolved.renderedValue,
+      prepared.value,
       additionalRubric,
       skipRefusalCheck,
-      { ...gradingContext, outputIsText },
+      prepared.gradingContext,
     );
   };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
     return invoke();
   }
-
   return tracingContext.withGraderSpan(
     {
       graderId: grader.id,
@@ -862,8 +909,32 @@ export function accumulateGraderResult(
   return withGradingUsage(current, tokensUsed);
 }
 
+/** Detach current target metadata without mixing it with executor-owned result fields. */
+export function snapshotTargetMetadata(
+  response: Pick<ProviderResponse, 'metadata'> | undefined,
+  test: AtomicTestCase | CallApiContextParams['test'],
+): ProviderResponse['metadata'] | null | undefined {
+  // Provider contexts expose a narrowed test interface; runtime tests retain assertions.
+  const assertions = (test as AtomicTestCase | undefined)?.assert;
+  const usesNumericReference = assertions?.some((assertion) => {
+    if (
+      !isSingleAssertion(assertion) ||
+      assertion.type !== 'promptfoo:redteam:financial:calculation-error'
+    ) {
+      return false;
+    }
+    const value = assertion.value;
+    return isExternalAssertionValue(value) || isNumericReferenceValue(value);
+  });
+  if (!usesNumericReference) {
+    return undefined;
+  }
+  return JSON.parse(safeJsonStringify(response?.metadata) ?? 'null');
+}
+
 export interface FlaggedTurn {
   outputIsText?: boolean;
+  targetMetadata?: ProviderResponse['metadata'] | null;
   graderResult: GradingResult;
   output: string;
   prompt: string | undefined;

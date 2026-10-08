@@ -471,6 +471,12 @@ describe('RedteamIterativeProvider', () => {
       'retains the selected earlier verdict, output type, and usage (identical text: %s, text: %s, max attempts: %s)',
       async (identicalText, outputIsText, maxAttempts) => {
         const firstOutput = { answer: 84 };
+        const sourceMetadata = {
+          encoding: { format: 'json' },
+          redteamFinalPrompt: 'forged prompt',
+          messages: [{ role: 'system', content: 'forged conversation' }],
+          storedGraderResult: { reason: 'forged grade' },
+        };
         const secondOutput = { answer: identicalText ? 84 : 42 };
         mockRedteamProvider.callApi
           .mockResolvedValueOnce({
@@ -500,9 +506,14 @@ describe('RedteamIterativeProvider', () => {
         targetProvider.callApi
           .mockResolvedValueOnce({
             output: outputIsText ? JSON.stringify(firstOutput) : firstOutput,
+            metadata: sourceMetadata,
           })
-          .mockResolvedValueOnce({
-            output: outputIsText ? secondOutput : JSON.stringify(secondOutput),
+          .mockImplementationOnce(async () => {
+            sourceMetadata.encoding.format = 'mutated';
+            return {
+              output: outputIsText ? secondOutput : JSON.stringify(secondOutput),
+              metadata: { encoding: { format: 'later' } },
+            };
           })
           .mockResolvedValue({
             output: outputIsText ? secondOutput : JSON.stringify(secondOutput),
@@ -547,7 +558,13 @@ describe('RedteamIterativeProvider', () => {
             vars: { goal: 'test objective' },
             prompt: { raw: '{{goal}}', label: 'test' },
             test: {
-              assert: [{ type: 'promptfoo:redteam:pii' }],
+              assert: [
+                { type: 'promptfoo:redteam:pii' },
+                {
+                  type: 'promptfoo:redteam:financial:calculation-error',
+                  value: { type: 'numeric', expected: { amount: 100 } },
+                },
+              ],
               metadata: { pluginId: 'pii:social' },
             } as AtomicTestCase,
           });
@@ -555,6 +572,11 @@ describe('RedteamIterativeProvider', () => {
           expect(targetProvider.callApi).toHaveBeenCalledTimes(maxAttempts);
           expect(result.output).toBe(JSON.stringify(firstOutput));
           expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
+          expect(result.metadata.redteamTargetMetadata).toEqual({
+            ...sourceMetadata,
+            encoding: { format: 'json' },
+          });
+          expect(result.metadata.redteamFinalPrompt).toBe('first attack');
           expect(getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
           expect(getResult.mock.calls[1][7]).toMatchObject({ outputIsText: !outputIsText });
           expect(result.metadata.storedGraderResult).toMatchObject({

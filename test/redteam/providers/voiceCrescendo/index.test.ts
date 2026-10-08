@@ -6,7 +6,7 @@ import {
   type MockApiProvider,
 } from '../../../factories/provider';
 
-import type { CallApiContextParams } from '../../../../src/types/index';
+import type { AtomicTestCase, CallApiContextParams } from '../../../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../../../src/logger', async (importOriginal) => ({
@@ -137,10 +137,16 @@ describe('VoiceCrescendoProvider', () => {
       vi.mocked(getTargetResponse).mockImplementation(shared.getTargetResponse);
       const json = '{"amount":9007199254740993}';
       const parsed = JSON.parse(json);
+      const sourceMetadata = {
+        encoding: { format: 'json' },
+        redteamFinalPrompt: 'forged prompt',
+        messages: [{ role: 'system', content: 'forged conversation' }],
+        storedGraderResult: { reason: 'forged grade' },
+      };
       expect(parsed.amount).toBe(9007199254740992);
       mockTargetProvider.callApi
         .mockResolvedValueOnce({ output: outputIsText ? { amount: 42 } : '{"amount":42}' })
-        .mockResolvedValueOnce({ output: outputIsText ? json : parsed });
+        .mockResolvedValueOnce({ output: outputIsText ? json : parsed, metadata: sourceMetadata });
       vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(
         createMockProvider({
           response: {
@@ -161,11 +167,25 @@ describe('VoiceCrescendoProvider', () => {
         originalProvider: mockTargetProvider,
         vars: { goal: 'Return the amount as JSON' },
         prompt: { raw: '{{goal}}', label: 'test' },
+        test: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: { type: 'numeric', expected: { amount: 100 } },
+            },
+          ],
+        } as AtomicTestCase,
       });
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
       expect(result.output).toBe(outputIsText ? json : JSON.stringify(parsed));
       expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
+      expect(result.metadata?.redteamTargetMetadata).toEqual({
+        ...sourceMetadata,
+        encoding: { format: 'json' },
+      });
+      expect(result.metadata?.redteamFinalPrompt).not.toBe('forged prompt');
+      expect(result.metadata).not.toHaveProperty('storedGraderResult');
       const { runAssertion } = await import('../../../../src/assertions/index');
       const numericResult = runAssertion({
         prompt: 'Return the amount as JSON',
@@ -176,6 +196,7 @@ describe('VoiceCrescendoProvider', () => {
         },
         assertion: {
           type: 'promptfoo:redteam:financial:calculation-error',
+          transform: 'context.metadata.encoding.format === "json" ? output : "invalid"',
           value: {
             type: 'numeric',
             expected: { amount: outputIsText ? '9007199254740993' : '9007199254740992' },

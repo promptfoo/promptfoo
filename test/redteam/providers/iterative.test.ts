@@ -900,9 +900,9 @@ describe('RedteamIterativeProvider', () => {
         return getResult;
       };
 
-      const runConversation = (numIterations: number) =>
+      const runConversation = (numIterations: number, conversationTest: AtomicTestCase = test) =>
         runRedteamConversation({
-          context: { prompt: { raw: '', label: '' }, vars: {}, test },
+          context: { prompt: { raw: '', label: '' }, vars: {}, test: conversationTest },
           filters: undefined,
           injectVar: 'test',
           numIterations,
@@ -911,7 +911,7 @@ describe('RedteamIterativeProvider', () => {
           redteamProvider: mockRedteamProvider,
           gradingProvider: mockRedteamProvider,
           targetProvider: mockTargetProvider,
-          test,
+          test: conversationTest,
           vars: { test: 'goal' },
           excludeTargetOutputFromAgenticAttackGeneration: false,
         });
@@ -1068,9 +1068,21 @@ describe('RedteamIterativeProvider', () => {
           >('../../../src/redteam/providers/shared');
           mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
           const firstOutput = outputIsText ? '84' : { answer: 84 };
+          const sourceMetadata = {
+            encoding: { format: 'json' },
+            redteamFinalPrompt: 'forged prompt',
+            messages: [{ role: 'system', content: 'forged conversation' }],
+            storedGraderResult: { reason: 'forged grade' },
+          };
           mockTargetProvider.callApi
-            .mockResolvedValueOnce({ output: firstOutput })
-            .mockResolvedValueOnce({ output: outputIsText ? { answer: 42 } : '42' });
+            .mockResolvedValueOnce({ output: firstOutput, metadata: sourceMetadata })
+            .mockImplementationOnce(async () => {
+              sourceMetadata.encoding.format = 'mutated';
+              return {
+                output: outputIsText ? { answer: 42 } : '42',
+                metadata: { encoding: { format: 'later' } },
+              };
+            });
           const getResult = grades(
             { pass: true, score: 1, reason: 'First verdict' },
             { pass: true, score: 1, reason: 'Second verdict' },
@@ -1081,10 +1093,25 @@ describe('RedteamIterativeProvider', () => {
             .mockImplementationOnce(attackerTurn('second attack'))
             .mockImplementationOnce(judgeRating(3));
 
-          const result = await runConversation(2);
+          const result = await runConversation(2, {
+            ...test,
+            assert: [
+              ...test.assert!,
+              {
+                type: 'promptfoo:redteam:financial:calculation-error',
+                value: { type: 'numeric', expected: { amount: 100 } },
+              },
+            ],
+          });
 
           expect(result.output).toBe(outputIsText ? firstOutput : JSON.stringify(firstOutput));
           expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
+          expect(result.metadata.redteamTargetMetadata).toEqual({
+            ...sourceMetadata,
+            encoding: { format: 'json' },
+          });
+          expect(result.metadata.redteamFinalPrompt).toBe('first attack');
+          expect(result.metadata.storedGraderResult?.reason).toBe('First verdict');
           expect(getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
           expect(getResult.mock.calls[1][7]).toMatchObject({ outputIsText: !outputIsText });
           expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(

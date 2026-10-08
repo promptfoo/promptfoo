@@ -37,6 +37,7 @@ import type {
   ApiProvider,
   Assertion,
   AssertionSet,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
   Prompt,
@@ -1053,6 +1054,42 @@ describe('shared redteam provider utilities', () => {
         tokenUsage: { numRequests: 1 },
       });
     });
+
+    it.each([true, false])(
+      'detaches numeric=%s metadata before provider pacing',
+      async (numeric) => {
+        const metadata = { nested: { encoding: 'original' } };
+        const provider = createMockProvider({
+          delay: 100,
+          response: { output: '{"amount":100}', metadata },
+        });
+        const test: AtomicTestCase = {
+          vars: {},
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: numeric
+                ? { type: 'numeric', expected: { amount: 100 } }
+                : 'Legacy arithmetic rubric',
+            },
+          ],
+        };
+        mockedSleep.mockImplementationOnce(async () => {
+          metadata.nested.encoding = 'mutated';
+        });
+        const result = await getTargetResponse(provider, 'Return amount', {
+          prompt: { raw: 'Return amount', label: 'numeric' },
+          vars: {},
+          test,
+        });
+        expect(result.metadata?.nested.encoding).toBe(numeric ? 'original' : 'mutated');
+        if (numeric) {
+          expect(result.metadata).not.toBe(metadata);
+        } else {
+          expect(result.metadata).toBe(metadata);
+        }
+      },
+    );
 
     it('respects provider delay for non-cached responses', async () => {
       const mockProvider = createMockProvider({

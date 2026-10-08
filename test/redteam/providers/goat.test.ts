@@ -12,6 +12,7 @@ import { createMockProvider } from '../../factories/provider';
 
 import type {
   ApiProvider,
+  Assertion,
   AtomicTestCase,
   CallApiContextParams,
   Prompt,
@@ -585,15 +586,37 @@ describe('RedteamGoatProvider', () => {
       });
       const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 3 });
       const output = { answer: 84 };
+      const sourceMetadata = { encoding: { format: 'json' } };
       const targetProvider = createMockTargetProvider();
       targetProvider.callApi
-        .mockResolvedValueOnce({ output: outputIsText ? JSON.stringify(output) : output })
-        .mockResolvedValueOnce({ output: '', conversationEnded: true });
+        .mockResolvedValueOnce({
+          output: outputIsText ? JSON.stringify(output) : output,
+          metadata: sourceMetadata,
+        })
+        .mockImplementationOnce(async () => {
+          sourceMetadata.encoding.format = 'mutated';
+          return {
+            output: '',
+            conversationEnded: true,
+            metadata: { encoding: { format: 'later' } },
+          };
+        });
 
-      const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+      const result = await provider.callApi(
+        'test prompt',
+        createMockContext(targetProvider, undefined, {
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: { type: 'numeric', expected: { amount: 100 } },
+            },
+          ],
+        }),
+      );
 
       expect(result.output).toBe(JSON.stringify(output));
       expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
+      expect(result.metadata?.redteamTargetMetadata).toEqual({ encoding: { format: 'json' } });
       expect(result.metadata?.stopReason).toBe('Target ended conversation');
       expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
     },
@@ -613,16 +636,38 @@ describe('RedteamGoatProvider', () => {
       try {
         const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
         const output = { answer: 84 };
+        const sourceMetadata = { encoding: { format: 'json' } };
         const targetProvider = createMockTargetProvider();
         targetProvider.callApi
           .mockResolvedValueOnce({ output: outputIsText ? { answer: 42 } : '42' })
-          .mockResolvedValueOnce({ output: outputIsText ? JSON.stringify(output) : output })
-          .mockResolvedValueOnce({ output: '', conversationEnded: true });
+          .mockResolvedValueOnce({
+            output: outputIsText ? JSON.stringify(output) : output,
+            metadata: sourceMetadata,
+          })
+          .mockImplementationOnce(async () => {
+            sourceMetadata.encoding.format = 'mutated';
+            return {
+              output: '',
+              conversationEnded: true,
+              metadata: { encoding: { format: 'later' } },
+            };
+          });
 
-        const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+        const result = await provider.callApi(
+          'test prompt',
+          createMockContext(targetProvider, undefined, {
+            assert: [
+              {
+                type: 'promptfoo:redteam:financial:calculation-error',
+                value: { type: 'numeric', expected: { amount: 100 } },
+              },
+            ],
+          }),
+        );
 
         expect(result.output).toBe(JSON.stringify(output));
         expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
+        expect(result.metadata?.redteamTargetMetadata).toEqual({ encoding: { format: 'json' } });
         expect(targetProvider.callApi).toHaveBeenCalledTimes(3);
       } finally {
         unblocking.mockRestore();
@@ -1325,10 +1370,82 @@ describe('RedteamGoatProvider', () => {
     expect(result.metadata?.storedGraderResult?.score).toBe(0);
   });
 
+  it('keeps the observed target metadata through pacing and final numeric grading', async () => {
+    const sourceMetadata = { encoding: { format: 'json' } };
+    const pacing = vi
+      .spyOn(await import('../../../src/util/time'), 'sleep')
+      .mockImplementation(async () => {
+        sourceMetadata.encoding.format = 'mutated';
+      });
+    const graders = await vi.importActual<typeof import('../../../src/redteam/graders')>(
+      '../../../src/redteam/graders',
+    );
+    const assertion: Assertion = {
+      type: 'promptfoo:redteam:financial:calculation-error',
+      value: { type: 'numeric', expected: { amount: 100 } },
+      transform: 'context.metadata.encoding.format === "json" ? output : "invalid"',
+    };
+    const grader = graders.getGraderById(assertion.type)!;
+    const grade = vi.spyOn(grader, 'getResult');
+    mockGetGraderById.mockImplementation(graders.getGraderById);
+    const targetProvider = createMockProvider({
+      delay: 1,
+      response: { output: '{"amount":100}', metadata: sourceMetadata },
+    });
+    const test: AtomicTestCase = {
+      assert: [assertion],
+      metadata: {
+        pluginId: 'financial:calculation-error',
+        strategyId: 'goat',
+        purpose: 'A financial calculator',
+      },
+    };
+    const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+
+    try {
+      const result = await provider.callApi(
+        'Return the amount as JSON',
+        createMockContext(targetProvider, undefined, test),
+      );
+
+      expect(pacing).toHaveBeenCalledWith(1);
+      expect(sourceMetadata.encoding.format).toBe('mutated');
+      expect(grade).toHaveBeenCalledTimes(1);
+      expect(grade.mock.calls[0][7]?.providerResponse?.metadata).toMatchObject({
+        encoding: { format: 'json' },
+      });
+      expect(result.metadata?.storedGraderResult).toMatchObject({ pass: true, score: 1 });
+      expect(result.metadata?.redteamTargetMetadata).toEqual({ encoding: { format: 'json' } });
+      const { runAssertion } = await import('../../../src/assertions/index');
+      await expect(
+        runAssertion({
+          prompt: 'Return the amount as JSON',
+          provider,
+          providerResponse: result,
+          test,
+          assertion,
+        }),
+      ).resolves.toMatchObject({ pass: true, score: 1 });
+      expect(grade).toHaveBeenCalledTimes(2);
+      expect(grade.mock.calls[1][7]?.providerResponse?.metadata).toMatchObject({
+        redteamTargetMetadata: { encoding: { format: 'json' } },
+      });
+    } finally {
+      pacing.mockRestore();
+      grade.mockRestore();
+    }
+  });
+
   it.each([true, false])(
     'preserves the flagged output type after continuing (text: %s)',
     async (outputIsText) => {
       const firstOutput = { answer: 84 };
+      const sourceMetadata = {
+        encoding: { format: 'json' },
+        redteamFinalPrompt: 'forged prompt',
+        messages: [{ role: 'system', content: 'forged conversation' }],
+        storedGraderResult: { reason: 'forged grade' },
+      };
       const secondOutput = { answer: 42 };
       const provider = new RedteamGoatProvider({
         injectVar: 'goal',
@@ -1338,10 +1455,17 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider = createMockTargetProvider();
       targetProvider.callApi
-        .mockResolvedValueOnce({ output: outputIsText ? JSON.stringify(firstOutput) : firstOutput })
         .mockResolvedValueOnce({
-          output: outputIsText ? secondOutput : JSON.stringify(secondOutput),
-          guardrails: { flagged: true },
+          output: outputIsText ? JSON.stringify(firstOutput) : firstOutput,
+          metadata: sourceMetadata,
+        })
+        .mockImplementationOnce(async () => {
+          sourceMetadata.encoding.format = 'mutated';
+          return {
+            output: outputIsText ? secondOutput : JSON.stringify(secondOutput),
+            guardrails: { flagged: true },
+            metadata: { encoding: { format: 'later' } },
+          };
         });
 
       const firstGraderResult = {
@@ -1383,6 +1507,10 @@ describe('RedteamGoatProvider', () => {
             type: 'contains',
             value: 'expected content',
           },
+          {
+            type: 'promptfoo:redteam:financial:calculation-error',
+            value: { type: 'numeric', expected: { amount: 100 } },
+          },
         ],
         metadata: { pluginId: 'contains' },
       } as AtomicTestCase;
@@ -1393,6 +1521,11 @@ describe('RedteamGoatProvider', () => {
 
       expect(result.output).toBe(JSON.stringify(firstOutput));
       expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
+      expect(result.metadata?.redteamTargetMetadata).toEqual({
+        ...sourceMetadata,
+        encoding: { format: 'json' },
+      });
+      expect(result.metadata?.redteamFinalPrompt).not.toBe('forged prompt');
       expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
       expect(mockGrader.getResult.mock.calls[1][7]).toMatchObject({ outputIsText: !outputIsText });
       expect(result.metadata?.storedGraderResult).toMatchObject(firstGraderResult);

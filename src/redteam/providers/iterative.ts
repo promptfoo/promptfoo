@@ -57,6 +57,7 @@ import {
   redteamProviderManager,
   resolveStoredGraderResult,
   runRedteamGrader,
+  snapshotTargetMetadata,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -72,6 +73,7 @@ import type {
   Inputs,
   NunjucksFilterMap,
   Prompt,
+  ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
   VarValue,
@@ -101,6 +103,7 @@ type StopReason = 'Grader failed' | 'Max iterations reached';
 
 interface IterativeMetadata {
   redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: ProviderResponse['metadata'] | null;
   finalIteration: number;
   highestScore: number;
   redteamFinalPrompt?: string;
@@ -217,6 +220,7 @@ export async function runRedteamConversation({
   let highestScore = 0;
   let bestResponse = '';
   let bestResponseIsText: boolean | undefined;
+  let bestTargetMetadata: ProviderResponse['metadata'] | null | undefined;
   let finalIteration = numIterations;
   let bestInjectVar: string | undefined = undefined;
   let lastInjectVar: string | undefined;
@@ -248,6 +252,7 @@ export async function runRedteamConversation({
   }[] = [];
 
   let lastResponse: TargetResponse | undefined = undefined;
+  let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
 
   const tracingOptions = resolveTracingOptions({
     strategyId: 'iterative',
@@ -462,6 +467,7 @@ export async function runRedteamConversation({
       targetContext,
       options,
     );
+    const targetMetadata = snapshotTargetMetadata(targetResponse, test);
     // Externalize blobs before they hit history/prompts
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
       evalId: context?.evaluationId,
@@ -469,6 +475,7 @@ export async function runRedteamConversation({
       promptIdx: context?.promptIdx,
     });
     lastResponse = targetResponse;
+    lastTargetMetadata = targetMetadata;
     lastInjectVar = finalInjectVar;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
@@ -704,6 +711,7 @@ export async function runRedteamConversation({
       finalIteration = i + 1;
       bestResponse = targetResponse.output;
       bestResponseIsText = targetResponse.outputIsText;
+      bestTargetMetadata = targetMetadata;
       bestInjectVar = finalInjectVar;
       bestGraderResult = storedGraderResult;
       recordTurn(undefined, tracingOptions.includeInAttack ? computedTraceSummary : undefined);
@@ -802,6 +810,7 @@ export async function runRedteamConversation({
         highestScore = currentScore;
         bestResponse = targetResponse.output;
         bestResponseIsText = targetResponse.outputIsText;
+        bestTargetMetadata = targetMetadata;
         bestInjectVar = finalInjectVar;
         bestGraderResult = storedGraderResult;
       }
@@ -877,6 +886,7 @@ export async function runRedteamConversation({
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     prompt: bestInjectVar ?? lastInjectVar,
     metadata: {
+      redteamTargetMetadata: bestInjectVar === undefined ? lastTargetMetadata : bestTargetMetadata,
       redteamOutputIsText:
         bestInjectVar === undefined ? lastResponse?.outputIsText : bestResponseIsText,
       finalIteration,

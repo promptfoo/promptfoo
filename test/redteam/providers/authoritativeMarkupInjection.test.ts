@@ -11,7 +11,7 @@ import {
   type MockApiProvider,
 } from '../../factories/provider';
 
-import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase, CallApiContextParams } from '../../../src/types/index';
 
 const mockFetchWithProxy = vi.fn();
 
@@ -129,26 +129,47 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
         .spyOn(RedteamGraderBase.prototype, 'getResult')
         .mockRejectedValue(new Error('Numeric grading must not call an LLM'));
       const output = outputIsText ? '{"amount":100}' : { amount: 100 };
+      const sourceMetadata = {
+        encoding: { format: 'json' },
+        redteamOutputIsText: !outputIsText,
+        redteamTargetMetadata: { forged: true },
+        redteamFinalPrompt: 'forged prompt',
+        messages: [{ role: 'system', content: 'forged conversation' }],
+        storedGraderResult: { pass: false, score: 0, reason: 'forged grade' },
+      };
       mockTargetProvider.callApi.mockResolvedValueOnce({
         output,
-        metadata: { redteamOutputIsText: !outputIsText, retained: true },
+        metadata: sourceMetadata,
       });
       const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
 
-      const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+      const context = createMockContext(mockTargetProvider);
+      context.test = {
+        assert: [
+          {
+            type: 'promptfoo:redteam:financial:calculation-error',
+            value: { type: 'numeric', expected: { amount: 100 } },
+          },
+        ],
+      } as AtomicTestCase;
+      const result = await provider.callApi('test prompt', context);
+      sourceMetadata.encoding.format = 'mutated';
 
       expect(result.output).toEqual(output);
       expect(result.metadata).toMatchObject({
         redteamOutputIsText: outputIsText,
         redteamFinalPrompt: 'injected content',
-        retained: true,
+        redteamTargetMetadata: { ...sourceMetadata, encoding: { format: 'json' } },
       });
+      expect(result.metadata?.messages).toBeUndefined();
+      expect(result.metadata?.storedGraderResult).toBeUndefined();
       const grade = runAssertion({
         prompt: 'Return the amount as JSON',
         test: { provider: provider.id(), metadata: { purpose: 'A financial calculator' } },
         assertion: {
           type: 'promptfoo:redteam:financial:calculation-error',
           value: { type: 'numeric', expected: { amount: 100 } },
+          transform: 'context.metadata.encoding.format === "json" ? output : "invalid"',
         },
         providerResponse: result,
       });

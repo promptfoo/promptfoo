@@ -61,10 +61,12 @@ import {
   isConversationEndedResponse,
   isValidChatMessageArray,
   messagesToRedteamHistory,
+  prepareNumericGrading,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   resolveStoredGraderResult,
   runRedteamGrader,
+  snapshotTargetMetadata,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -102,6 +104,7 @@ const DEFAULT_MAX_BACKTRACKS = 10;
  */
 interface CrescendoMetadata extends BaseRedteamMetadata {
   redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: TargetResponse['metadata'] | null;
   crescendoRoundsCompleted: number;
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
@@ -609,12 +612,22 @@ export class CrescendoProvider implements ApiProvider {
           continue;
         }
 
-        const [isRefusal, refusalRationale] = await this.getRefusalScore(
-          attackPrompt,
-          lastResponse.output,
-          totalTokenUsage,
-          options,
-        );
+        const preparedNumeric =
+          test && assertToUse
+            ? await prepareNumericGrading(
+                { assertion: assertToUse, targetProvider: provider, prompt, context },
+                lastFinalAttackPrompt ||
+                  getLastMessageContent(lastResponseMessages, 'user') ||
+                  attackPrompt,
+                lastResponse.output,
+                test,
+                getGraderAssertionValue(assertToUse),
+                { providerResponse: lastResponse, outputIsText: lastResponse.outputIsText },
+              )
+            : undefined;
+        const [isRefusal, refusalRationale] = preparedNumeric?.numeric
+          ? [false, 'Explicit numeric reference grading']
+          : await this.getRefusalScore(attackPrompt, lastResponse.output, totalTokenUsage, options);
         logger.debug(
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
         );
@@ -734,13 +747,20 @@ export class CrescendoProvider implements ApiProvider {
                 attackPrompt,
               output: lastResponse.output,
               outputIsText: lastResponse.outputIsText,
+              targetMetadata: snapshotTargetMetadata(lastResponse, test),
               messages: lastResponseMessages,
               guardrails: lastResponse.guardrails,
               transformDisplayVars: lastTransformDisplayVars,
             };
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              { assertion: assertToUse, targetProvider: provider, prompt, context },
+              {
+                assertion: assertToUse,
+                targetProvider: provider,
+                prompt,
+                context,
+                preparedNumeric,
+              },
               gradedTurn.prompt,
               gradedTurn.output,
               test,
@@ -862,6 +882,7 @@ export class CrescendoProvider implements ApiProvider {
     const reported = flaggedRound ?? {
       output: lastResponse.output,
       outputIsText: lastResponse.outputIsText,
+      targetMetadata: snapshotTargetMetadata(lastResponse, test),
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
@@ -877,6 +898,7 @@ export class CrescendoProvider implements ApiProvider {
       prompt: finalPrompt,
       metadata: {
         redteamOutputIsText: reported.outputIsText,
+        redteamTargetMetadata: reported.targetMetadata,
         sessionId: getSessionId(lastResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: reported.prompt,

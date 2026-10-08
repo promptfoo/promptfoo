@@ -35,6 +35,7 @@ import {
   externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
+  snapshotTargetMetadata,
   type TargetResponse,
 } from '../shared';
 
@@ -125,6 +126,7 @@ const EVAL_SYSTEM_PROMPT = dedent`
  */
 interface VoiceCrescendoMetadata extends BaseRedteamMetadata {
   redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: ProviderResponse['metadata'] | null;
   voiceCrescendoTurnsCompleted: number;
   voiceCrescendoBacktrackCount: number;
   voiceCrescendoResult: boolean;
@@ -504,6 +506,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let finalConfidence = 0;
     let lastResponse = '';
     let lastResponseIsText: boolean | undefined;
+    let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
     let lastTargetError: string | undefined;
     let lastPrompt = '';
     let stopReason = 'Max turns reached';
@@ -543,6 +546,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           targetProvider,
           context,
         );
+        const targetMetadata = snapshotTargetMetadata(targetResponse, context?.test);
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
         lastTargetError = targetResponse.error;
 
@@ -553,6 +557,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           });
           lastResponse = targetResponse.output || '';
           lastResponseIsText = targetResponse.outputIsText;
+          lastTargetMetadata = targetMetadata;
           stopReason = 'Target ended conversation';
           break;
         }
@@ -575,6 +580,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
         const responseText = targetResponse.output;
         lastResponse = responseText;
         lastResponseIsText = targetResponse.outputIsText;
+        lastTargetMetadata = targetMetadata;
 
         // Add to memory
         this.memory.addMessage(
@@ -656,6 +662,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
     const metadata: VoiceCrescendoMetadata = {
       redteamOutputIsText: lastResponseIsText,
+      redteamTargetMetadata: lastTargetMetadata,
       redteamFinalPrompt: lastPrompt,
       messages: this.memory.getConversation(this.conversationId).map((m) => ({
         role: m.role,

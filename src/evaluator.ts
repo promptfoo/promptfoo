@@ -8,6 +8,7 @@ import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
+  getNumericPreparationMetadata,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
@@ -1546,11 +1547,12 @@ async function transformRunEvalResponse({
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
+  const transformMetadata = getNumericPreparationMetadata(test.assert, test, provider, response);
   if (testTransform) {
     processedResponse.output = await transform(testTransform, processedResponse.output, {
       vars,
       prompt,
-      ...(response && response.metadata && { metadata: response.metadata }),
+      ...(transformMetadata && { metadata: transformMetadata }),
     });
   }
 

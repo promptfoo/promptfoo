@@ -47,6 +47,7 @@ import {
   getTargetResponse,
   redteamProviderManager,
   runRedteamGrader,
+  snapshotTargetMetadata,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -62,6 +63,7 @@ import type {
   Inputs,
   NunjucksFilterMap,
   Prompt,
+  ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
   VarValue,
@@ -72,6 +74,7 @@ import type { RedteamGradingContext } from '../grading/types';
 
 interface IterativeMetaMetadata {
   redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: ProviderResponse['metadata'] | null;
   finalIteration: number;
   vulnerabilityAchieved: boolean;
   redteamFinalPrompt?: string;
@@ -183,6 +186,7 @@ export async function runMetaAgentRedteam({
   let storedGraderResult: GradingResult | undefined = undefined;
   let stopReason: IterativeMetaMetadata['stopReason'] = 'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
+  let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
   let failClosedError: string | undefined;
   let agentRequestError: string | undefined;
 
@@ -460,6 +464,7 @@ export async function runMetaAgentRedteam({
       targetContext,
       options,
     );
+    lastTargetMetadata = snapshotTargetMetadata(initialTargetResponse, test);
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
       initialTargetResponse,
       {
@@ -698,6 +703,7 @@ export async function runMetaAgentRedteam({
     ...(error ? { error } : {}),
     metadata: {
       redteamOutputIsText: lastResponse?.outputIsText,
+      redteamTargetMetadata: lastTargetMetadata,
       finalIteration,
       vulnerabilityAchieved,
       // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)

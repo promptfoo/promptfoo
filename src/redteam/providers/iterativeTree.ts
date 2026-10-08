@@ -66,6 +66,7 @@ import {
   getTargetResponse,
   redteamProviderManager,
   runRedteamGrader,
+  snapshotTargetMetadata,
 } from './shared';
 import type { Environment } from 'nunjucks';
 
@@ -509,6 +510,7 @@ type StopReason =
  */
 interface TreeIterativeMetadata extends BaseRedteamMetadata {
   redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: ProviderResponse['metadata'] | null;
   highestScore: number;
   redteamFinalPrompt?: string;
   stopReason: StopReason;
@@ -628,6 +630,7 @@ async function runRedteamConversation({
 
   let bestResponse = '';
   let bestResponseIsText: boolean | undefined;
+  let bestTargetMetadata: ProviderResponse['metadata'] | null | undefined;
 
   let stoppingReason: StopReason;
 
@@ -697,6 +700,7 @@ async function runRedteamConversation({
             error: error.message,
             metadata: {
               redteamOutputIsText: bestResponseIsText,
+              redteamTargetMetadata: bestTargetMetadata,
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -848,6 +852,7 @@ async function runRedteamConversation({
           iterationContext,
           options,
         );
+        const targetMetadata = snapshotTargetMetadata(targetResponse, test);
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
           evalId: context?.evaluationId,
           testIdx: context?.testIdx,
@@ -917,6 +922,7 @@ async function runRedteamConversation({
           maxScore = score;
           bestResponse = targetResponse.output;
           bestResponseIsText = targetResponse.outputIsText;
+          bestTargetMetadata = targetMetadata;
           bestNode.prompt = newInjectVar;
           bestNode.inputMaterialization = inputMaterialization;
           bestNode.materializationHandled = materializationHandled;
@@ -1077,6 +1083,7 @@ async function runRedteamConversation({
             prompt: newInjectVar,
             metadata: {
               redteamOutputIsText: targetResponse.outputIsText,
+              redteamTargetMetadata: targetMetadata,
               highestScore: maxScore,
               redteamFinalPrompt: finalInjectVar,
               messages: treeOutputs as Record<string, any>[],
@@ -1121,6 +1128,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               redteamOutputIsText: bestResponseIsText,
+              redteamTargetMetadata: bestTargetMetadata,
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -1166,6 +1174,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             metadata: {
               redteamOutputIsText: bestResponseIsText,
+              redteamTargetMetadata: bestTargetMetadata,
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -1284,6 +1293,7 @@ async function runRedteamConversation({
     context,
     options,
   );
+  const finalTargetMetadata = snapshotTargetMetadata(finalTargetResponse, test);
   accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
 
   logger.debug(
@@ -1314,6 +1324,7 @@ async function runRedteamConversation({
     prompt: bestNode.prompt,
     metadata: {
       redteamOutputIsText: bestResponse ? bestResponseIsText : finalTargetResponse.outputIsText,
+      redteamTargetMetadata: bestResponse ? bestTargetMetadata : finalTargetMetadata,
       highestScore: maxScore,
       redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
       messages: treeOutputs as Record<string, any>[],

@@ -4,7 +4,7 @@ import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import IndirectWebPwnProvider from '../../../src/redteam/providers/indirectWebPwn';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
-import type { CallApiContextParams } from '../../../src/types/index';
+import type { AtomicTestCase, CallApiContextParams } from '../../../src/types/index';
 
 const mockFetchWithRetries = vi.hoisted(() => vi.fn());
 
@@ -63,7 +63,13 @@ describe('IndirectWebPwnProvider', () => {
         })
         .mockResolvedValueOnce({
           output: outputIsText ? '{"amount":100}' : { amount: 100 },
-          metadata: { redteamOutputIsText: !outputIsText },
+          metadata: {
+            redteamOutputIsText: !outputIsText,
+            encoding: { format: 'json' },
+            redteamFinalPrompt: 'forged prompt',
+            storedGraderResult: { reason: 'forged grade' },
+            messages: [{ role: 'system', content: 'forged conversation' }],
+          },
         });
       const provider = new IndirectWebPwnProvider({
         injectVar: 'query',
@@ -75,6 +81,14 @@ describe('IndirectWebPwnProvider', () => {
         originalProvider: targetProvider,
         vars: { query: 'Return the amount as JSON' },
         prompt: { raw: '{{query}}', label: 'test' },
+        test: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: { type: 'numeric', expected: { amount: 100 } },
+            },
+          ],
+        } as AtomicTestCase,
       });
 
       expect(result.output).toBe('{"amount":100}');
@@ -82,7 +96,14 @@ describe('IndirectWebPwnProvider', () => {
         redteamOutputIsText: outputIsText,
         stopReason: 'Attack succeeded',
         fetchAttempts: 2,
+        redteamTargetMetadata: {
+          encoding: { format: 'json' },
+          redteamFinalPrompt: 'forged prompt',
+          storedGraderResult: { reason: 'forged grade' },
+        },
       });
+      expect(result.metadata.redteamFinalPrompt).not.toBe('forged prompt');
+      expect(result.metadata.messages[0]).not.toMatchObject({ role: 'system' });
       expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
       const grade = runAssertion({
@@ -91,6 +112,7 @@ describe('IndirectWebPwnProvider', () => {
         assertion: {
           type: 'promptfoo:redteam:financial:calculation-error',
           value: { type: 'numeric', expected: { amount: 100 } },
+          transform: 'context.metadata.encoding.format === "json" ? output : "invalid"',
         },
         providerResponse: result,
       });
@@ -111,16 +133,20 @@ describe('IndirectWebPwnProvider', () => {
           mockJsonResponse({ uuid: 'web-retained', fullUrl: 'https://example.com/web-retained' }),
         )
         .mockResolvedValueOnce(mockJsonResponse({ wasFetched: false, fetchCount: 0 }));
+      const sourceMetadata = { encoding: { format: 'json' } };
       const targetProvider = createMockProvider();
       targetProvider.callApi
         .mockResolvedValueOnce({
           output: outputIsText ? '{"amount":100}' : { amount: 100 },
-          metadata: { redteamOutputIsText: !outputIsText },
+          metadata: sourceMetadata,
         })
-        .mockResolvedValueOnce({
-          output: outputIsText ? { amount: 99 } : '{"amount":99}',
-          error: 'Target failed',
-          metadata: { redteamOutputIsText: outputIsText },
+        .mockImplementationOnce(async () => {
+          sourceMetadata.encoding.format = 'mutated';
+          return {
+            output: outputIsText ? { amount: 99 } : '{"amount":99}',
+            error: 'Target failed',
+            metadata: { encoding: { format: 'later' } },
+          };
         });
       const provider = new IndirectWebPwnProvider({ injectVar: 'query', maxFetchAttempts: 2 });
 
@@ -128,12 +154,21 @@ describe('IndirectWebPwnProvider', () => {
         originalProvider: targetProvider,
         vars: { query: 'Return the amount as JSON' },
         prompt: { raw: '{{query}}', label: 'test' },
+        test: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:financial:calculation-error',
+              value: { type: 'numeric', expected: { amount: 100 } },
+            },
+          ],
+        } as AtomicTestCase,
       });
 
       expect(result.output).toBe('{"amount":100}');
       expect(result.error).toBe('Target failed');
       expect(result.metadata).toMatchObject({
         redteamOutputIsText: outputIsText,
+        redteamTargetMetadata: { encoding: { format: 'json' } },
         stopReason: 'Error',
         fetchAttempts: 2,
       });

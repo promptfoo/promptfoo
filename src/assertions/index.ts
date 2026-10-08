@@ -73,7 +73,7 @@ import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
-import { handleRedteam } from './redteam';
+import { getRecordedTargetMetadata, handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
@@ -367,6 +367,32 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
+/** Numeric preparation reads target data separately from trusted strategy bookkeeping. */
+export function getNumericPreparationMetadata(
+  assertions: AssertionOrSet[] | undefined,
+  test: AtomicTestCase,
+  provider: ApiProvider | undefined,
+  response: ProviderResponse,
+): ProviderResponse['metadata'] {
+  const usesNumericReference = assertions?.some((assertion) => {
+    if (assertion.type !== 'promptfoo:redteam:financial:calculation-error') {
+      return false;
+    }
+    const value = assertion.value;
+    return (
+      isExternalAssertionValue(value) ||
+      (typeof value === 'object' &&
+        value !== null &&
+        Object.prototype.hasOwnProperty.call(value, 'type') &&
+        'type' in value &&
+        value.type === 'numeric')
+    );
+  });
+  return usesNumericReference
+    ? getRecordedTargetMetadata(test, provider, response)
+    : response.metadata;
+}
+
 /**
  * Execute a single assertion against provider output.
  *
@@ -436,6 +462,16 @@ async function runAssertionInternal({
 
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
+  const assertionMetadata = getNumericPreparationMetadata(
+    [assertion],
+    test,
+    provider,
+    providerResponse,
+  );
+  const valueProviderResponse =
+    assertionMetadata === providerResponse.metadata
+      ? providerResponse
+      : { ...providerResponse, metadata: assertionMetadata };
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
@@ -443,7 +479,7 @@ async function runAssertionInternal({
     output = await transform(assertion.transform, output, {
       vars: resolvedVars,
       prompt: { label: prompt },
-      ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
+      ...(assertionMetadata && { metadata: assertionMetadata }),
     });
   }
 
@@ -453,9 +489,9 @@ async function runAssertionInternal({
     test,
     logProbs,
     provider,
-    providerResponse,
+    providerResponse: valueProviderResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
-    ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
+    ...(assertionMetadata && { metadata: assertionMetadata }),
   };
 
   // Add trace data if traceId is available
@@ -487,6 +523,9 @@ async function runAssertionInternal({
       getAssertionBaseType(assertion),
     );
     if (resolved.errorResult) {
+      if (assertion.type === 'promptfoo:redteam:financial:calculation-error') {
+        throw new Error(resolved.errorResult.reason);
+      }
       return resolved.errorResult;
     }
     ({ renderedValue, valueFromScript } = resolved);

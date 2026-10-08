@@ -78,6 +78,25 @@ function getConfiguredProviderId(
         : undefined;
 }
 
+/** Read executor-captured target metadata without exposing it as trusted strategy state. */
+export function getRecordedTargetMetadata(
+  test: AtomicTestCase,
+  provider: ApiProvider | undefined,
+  response: ProviderResponse,
+): ProviderResponse['metadata'] {
+  const providerId = getConfiguredProviderId(test, provider);
+  if (
+    providerId &&
+    (TEXT_PROVENANCE_PROVIDERS.has(providerId) ||
+      providerId.startsWith('promptfoo:redteam:custom:')) &&
+    response.metadata &&
+    Object.prototype.hasOwnProperty.call(response.metadata, 'redteamTargetMetadata')
+  ) {
+    return response.metadata.redteamTargetMetadata ?? undefined;
+  }
+  return response.metadata;
+}
+
 function matchesStoredGraderResult(
   assertion: Assertion,
   storedResult: GradingResult,

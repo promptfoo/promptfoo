@@ -51,7 +51,9 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
+  prepareNumericGrading,
   runRedteamGrader,
+  snapshotTargetMetadata,
   type TargetResponse,
   type TurnBacktrackingStopReason,
 } from '../shared';
@@ -79,6 +81,7 @@ const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface HydraMetadata extends BaseRedteamMetadata {
   redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: TargetResponse['metadata'] | null;
   hydraRoundsCompleted?: number;
   hydraBacktrackCount?: number;
   hydraResult?: boolean;
@@ -820,8 +823,19 @@ export class HydraProvider implements ApiProvider {
       });
       lastResponseMessages = [...this.conversationHistory];
 
-      // Check for refusal and backtrack if in stateless mode and backtracking enabled
-      const isRefusal = isBasicRefusal(targetResponse.output);
+      const preparedNumeric =
+        test && assertToUse
+          ? await prepareNumericGrading(
+              { assertion: assertToUse, targetProvider, prompt, context },
+              lastFinalAttackPrompt || nextMessage,
+              targetResponse.output,
+              test,
+              getGraderAssertionValue(assertToUse),
+              { providerResponse: targetResponse, outputIsText: targetResponse.outputIsText },
+            )
+          : undefined;
+      // Explicit numeric contracts take precedence over refusal heuristics.
+      const isRefusal = !preparedNumeric?.numeric && isBasicRefusal(targetResponse.output);
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
         logger.debug(`${this.logPrefix} Response rejected (basic refusal), backtracking...`, {
@@ -939,7 +953,7 @@ export class HydraProvider implements ApiProvider {
 
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            { assertion: assertToUse, targetProvider, prompt, context },
+            { assertion: assertToUse, targetProvider, prompt, context, preparedNumeric },
             lastFinalAttackPrompt || nextMessage,
             targetResponse.output,
             test,
@@ -1075,6 +1089,7 @@ export class HydraProvider implements ApiProvider {
           : {}),
       metadata: {
         redteamOutputIsText: lastTargetResponse?.outputIsText,
+        redteamTargetMetadata: snapshotTargetMetadata(lastTargetResponse, test),
         sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
         messages,
         ...strategyMetadata,

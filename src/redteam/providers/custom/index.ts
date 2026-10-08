@@ -39,10 +39,12 @@ import {
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
+  prepareNumericGrading,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   resolveStoredGraderResult,
   runRedteamGrader,
+  snapshotTargetMetadata,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -121,6 +123,7 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
  */
 export interface CustomMetadata extends BaseRedteamMetadata {
   redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: TargetResponse['metadata'] | null;
   customRoundsCompleted: number;
   customBacktrackCount: number;
   customResult: boolean;
@@ -555,12 +558,20 @@ export class CustomProvider implements ApiProvider {
           }
         }
 
-        const [isRefusal, refusalRationale] = await this.getRefusalScore(
-          attackPrompt,
-          lastResponse.output,
-          totalTokenUsage,
-          options,
-        );
+        const preparedNumeric =
+          test && assertToUse
+            ? await prepareNumericGrading(
+                { assertion: assertToUse, targetProvider: provider, prompt, context },
+                lastFinalAttackPrompt,
+                lastResponse.output,
+                test,
+                getGraderAssertionValue(assertToUse),
+                { providerResponse: lastResponse, outputIsText: lastResponse.outputIsText },
+              )
+            : undefined;
+        const [isRefusal, refusalRationale] = preparedNumeric?.numeric
+          ? [false, 'Explicit numeric reference grading']
+          : await this.getRefusalScore(attackPrompt, lastResponse.output, totalTokenUsage, options);
         logger.debug(
           `[Custom] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
         );
@@ -609,12 +620,19 @@ export class CustomProvider implements ApiProvider {
               prompt: lastFinalAttackPrompt,
               output: lastResponse.output,
               outputIsText: lastResponse.outputIsText,
+              targetMetadata: snapshotTargetMetadata(lastResponse, test),
               messages: lastResponseMessages,
               guardrails: lastResponse.guardrails,
             };
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              { assertion: assertToUse, targetProvider: provider, prompt, context },
+              {
+                assertion: assertToUse,
+                targetProvider: provider,
+                prompt,
+                context,
+                preparedNumeric,
+              },
               gradedTurn.prompt,
               gradedTurn.output,
               test,
@@ -749,6 +767,7 @@ export class CustomProvider implements ApiProvider {
     const reported = flaggedRound ?? {
       output: lastResponse.output,
       outputIsText: lastResponse.outputIsText,
+      targetMetadata: snapshotTargetMetadata(lastResponse, test),
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
@@ -763,6 +782,7 @@ export class CustomProvider implements ApiProvider {
       prompt: reported.prompt,
       metadata: {
         redteamOutputIsText: reported.outputIsText,
+        redteamTargetMetadata: reported.targetMetadata,
         redteamFinalPrompt: reported.prompt,
         messages: reported.messages as Record<string, any>[],
         customRoundsCompleted: roundNum,

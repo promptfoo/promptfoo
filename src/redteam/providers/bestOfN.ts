@@ -17,7 +17,7 @@ import {
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
-import { callTargetProvider } from './shared';
+import { callTargetProvider, snapshotTargetMetadata } from './shared';
 
 import type {
   ApiProvider,
@@ -170,13 +170,21 @@ export default class BestOfNProvider implements ApiProvider {
             // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
             // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
             throwIfTargetPromptExceedsMaxChars(renderedPrompt);
-            const response = await callTargetProvider(
+            const targetResponse = await callTargetProvider(
               targetProvider,
               renderedPrompt,
               context,
               options,
             );
-            const sessionId = getSessionId(response, context);
+            const targetMetadata = snapshotTargetMetadata(targetResponse, context.test);
+            const response: ProviderResponse = {
+              ...targetResponse,
+              metadata: {
+                ...(targetMetadata === undefined ? targetResponse.metadata : {}),
+                redteamTargetMetadata: targetMetadata,
+              },
+            };
+            const sessionId = getSessionId(targetResponse, context);
             if (sessionId) {
               sessionIds.push(sessionId);
             }

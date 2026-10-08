@@ -22,6 +22,7 @@ import {
   externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
+  snapshotTargetMetadata,
   type TargetResponse,
 } from './shared';
 
@@ -58,6 +59,7 @@ interface ImageGenerationOutput {
 }
 
 interface BestResponse extends TargetResponse {
+  targetMetadata?: ProviderResponse['metadata'] | null;
   imageUrl?: string;
   imageDescription?: string;
   score: number;
@@ -285,6 +287,7 @@ async function runRedteamConversation({
   let highestScore = 0;
   let bestResponse: BestResponse | null = null;
   let lastResponse: TargetResponse | undefined = undefined;
+  let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
   const previousOutputs: ImageGenerationOutput[] = [];
   let finalIteration = 0;
 
@@ -388,12 +391,14 @@ async function runRedteamConversation({
         targetContext,
         options,
       );
+      const targetMetadata = snapshotTargetMetadata(targetResponse, test);
       targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
         evalId: context?.evaluationId,
         testIdx: context?.testIdx,
         promptIdx: context?.promptIdx,
       });
       lastResponse = targetResponse;
+      lastTargetMetadata = targetMetadata;
       // Count the target request even when the target returns an error.
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
       if (targetResponse.error) {
@@ -539,6 +544,7 @@ async function runRedteamConversation({
           highestScore = score;
           bestResponse = {
             ...targetResponse,
+            targetMetadata,
             imageUrl: url[0],
             imageDescription,
             score,
@@ -588,6 +594,9 @@ async function runRedteamConversation({
       (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
     prompt: targetPrompt || undefined,
     metadata: {
+      redteamTargetMetadata: bestResponse?.output
+        ? bestResponse.targetMetadata
+        : lastTargetMetadata,
       redteamOutputIsText: bestResponse?.output
         ? bestResponse.outputIsText
         : lastResponse?.outputIsText,

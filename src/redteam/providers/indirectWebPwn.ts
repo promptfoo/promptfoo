@@ -11,7 +11,7 @@ import {
 } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { getTargetResponse } from './shared';
+import { getTargetResponse, snapshotTargetMetadata } from './shared';
 
 import type {
   ApiProvider,
@@ -45,6 +45,7 @@ interface IndirectWebPwnConfig {
  */
 interface IndirectWebPwnMetadata extends BaseRedteamMetadata {
   redteamOutputIsText?: boolean;
+  redteamTargetMetadata?: ProviderResponse['metadata'] | null;
   redteamFinalPrompt?: string;
   stopReason: 'Attack succeeded' | 'Max fetch attempts reached' | 'Error';
   webPageUuid?: string;
@@ -260,6 +261,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
 
     let lastOutput = '';
     let lastOutputIsText: boolean | undefined;
+    let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
     let targetError: string | undefined;
     let stopReason: IndirectWebPwnMetadata['stopReason'] = 'Max fetch attempts reached';
     let webPageUuid: string | undefined;
@@ -338,6 +340,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         redteamHistory.push({ prompt: fetchPrompt, output: responseOutput });
         lastOutput = responseOutput;
         lastOutputIsText = targetResponse.outputIsText;
+        lastTargetMetadata = snapshotTargetMetadata(targetResponse, context.test);
 
         // 3. Check if page was fetched
         const tracking = await this.checkPageFetched(webPage.uuid, evalId);
@@ -385,6 +388,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       ...(targetError ? { error: targetError } : {}),
       metadata: {
         redteamOutputIsText: lastOutputIsText,
+        redteamTargetMetadata: lastTargetMetadata,
         redteamFinalPrompt: messages[messages.length - 2]?.content || '',
         messages: messages as unknown as Record<string, unknown>[],
         stopReason,
