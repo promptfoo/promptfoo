@@ -599,6 +599,47 @@ export function analyzeTemplateReference(
   };
 }
 
+/** Only unconditional, value-preserving interpolation establishes input provenance. */
+export function isDirectTemplateReference(
+  template: string,
+  variableName: string,
+  filters?: NunjucksFilterMap,
+): boolean {
+  if (!variableName || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return false;
+  }
+  const parsed = parseNunjucksTemplate(template);
+  if (
+    !parsed.ok ||
+    !Array.isArray(parsed.ast.children) ||
+    !parsed.ast.children.every((node) => isNunjucksAstNode(node) && node.typename === 'Output')
+  ) {
+    return false;
+  }
+  return parsed.ast.children.some(
+    (output) =>
+      Array.isArray(output.children) &&
+      output.children.some((node: unknown) => {
+        if (getSymbolName(node) === variableName) {
+          return true;
+        }
+        if (
+          !isNunjucksAstNode(node) ||
+          node.typename !== 'Filter' ||
+          getSymbolName(node.name) !== 'trim' ||
+          filters?.trim ||
+          !isNunjucksAstNode(node.args) ||
+          !Array.isArray(node.args.children)
+        ) {
+          return false;
+        }
+        return (
+          node.args.children.length === 1 && getSymbolName(node.args.children[0]) === variableName
+        );
+      }),
+  );
+}
+
 /**
  * Check whether a Nunjucks template references a variable as a real expression
  * symbol (not a string literal, comment, object key, filter/test name, property

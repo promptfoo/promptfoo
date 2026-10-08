@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPromptInputDescriptions,
+  getTextInputVariables,
   materializeInputValue,
   materializeInputVariablesWithMetadata,
 } from '../../src/redteam/inputVariables';
@@ -453,5 +454,26 @@ describe('inputVariables', () => {
 
     expect(value).toMatch(/^data:image\/svg\+xml;base64,/);
     expect(Buffer.from(value.split(',')[1], 'base64').toString('utf-8')).toContain('<svg');
+  });
+});
+
+describe('getTextInputVariables', () => {
+  it('keeps textual contributions while dropping every typed media input', () => {
+    expect(
+      getTextInputVariables(
+        {
+          question: 'Hello',
+          document: 'data:application/pdf;base64,AAAA',
+          image: 'image bytes',
+          docx: 'docx bytes',
+        },
+        {
+          question: 'Question',
+          document: { type: 'pdf', description: 'PDF' },
+          image: { type: 'image', description: 'Image' },
+          docx: { type: 'docx', description: 'Document' },
+        },
+      ),
+    ).toEqual({ question: 'Hello' });
   });
 });

@@ -19,10 +19,14 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
+import { HttpProvider } from './http';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiResponsesProvider } from './openai/responses';
 import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
-import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
+import type { CallApiContextParams, LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type {
   ApiProvider,
   ProviderConfig,
@@ -30,6 +34,59 @@ import type {
   ProviderOptions,
   ProvidersConfig,
 } from '../types/providers';
+
+/** Static request paths whose forwarding behavior is owned by these implementations. */
+export function getProviderRequestTemplates(
+  provider: ApiProvider,
+  context?: CallApiContextParams,
+): { forwardsPrompt: boolean; body?: unknown; reservedVariables?: string[] } {
+  // IDs and URL-shaped config are not implementation evidence. Custom providers
+  // and subclasses can replace the request, so they need response.prompt evidence.
+  const prototype = Object.getPrototypeOf(provider);
+  const config = provider.config ?? {};
+  if (prototype === HttpProvider.prototype) {
+    if (
+      !['POST', 'PUT', 'PATCH', 'DELETE'].includes(config.method) ||
+      config.body === undefined ||
+      config.request ||
+      config.multipart ||
+      config.transformRequest
+    ) {
+      return { forwardsPrompt: false };
+    }
+    return {
+      forwardsPrompt: false,
+      body: config.body,
+      // HTTP can overwrite these aliases after merging context.vars. Omit them
+      // conservatively rather than reproducing auth/session/tool resolution.
+      reservedVariables: [
+        'prompt',
+        'evaluationId',
+        'tools',
+        'tool_choice',
+        'token',
+        'expiration',
+        'signature',
+        'signatureTimestamp',
+        'sessionId',
+      ],
+    };
+  }
+  const override =
+    prototype === OpenAiChatCompletionProvider.prototype
+      ? 'messages'
+      : prototype === OpenAiResponsesProvider.prototype
+        ? 'input'
+        : prototype === OpenAiCompletionProvider.prototype
+          ? 'prompt'
+          : undefined;
+  const effectiveConfig = { ...config, ...context?.prompt?.config };
+  return {
+    forwardsPrompt:
+      override !== undefined &&
+      !Object.prototype.hasOwnProperty.call(effectiveConfig.passthrough ?? {}, override),
+  };
+}
 
 type ProviderFunctionWithMetadata = ProviderFunction &
   Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;

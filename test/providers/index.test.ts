@@ -18,6 +18,7 @@ import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index'
 import { AIStudioEmbeddingProvider } from '../../src/providers/google/ai.studio';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import { GoogleVideoProvider } from '../../src/providers/google/video';
+import { HttpProvider } from '../../src/providers/http';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
@@ -25,6 +26,7 @@ import {
 } from '../../src/providers/huggingface';
 import {
   getProviderIds,
+  getProviderRequestTemplates,
   loadApiProvider,
   loadApiProviders,
   resolveProviderConfigs,
@@ -2505,5 +2507,74 @@ prompts:
 
     expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.json'), 'utf8');
     expect(result).toEqual([{ id: 'openai:gpt-4', prompts: ['gpt_prompt'] }]);
+  });
+});
+
+describe('getProviderRequestTemplates', () => {
+  it.each([
+    ['chat', OpenAiChatCompletionProvider, 'messages'],
+    ['responses', OpenAiResponsesProvider, 'input'],
+    ['completion', OpenAiCompletionProvider, 'prompt'],
+  ] as const)(
+    'respects %s passthrough overrides and per-prompt config',
+    (_name, Provider, field) => {
+      const provider = new Provider('test-model', { config: {} });
+      expect(getProviderRequestTemplates(provider).forwardsPrompt).toBe(true);
+      for (const value of [undefined, null, []]) {
+        provider.config.passthrough = { [field]: value };
+        expect(getProviderRequestTemplates(provider).forwardsPrompt).toBe(false);
+        expect(
+          getProviderRequestTemplates(provider, {
+            vars: {},
+            prompt: { raw: '{{input}}', label: 'test', config: { passthrough: {} } },
+          }).forwardsPrompt,
+        ).toBe(true);
+      }
+      provider.config.passthrough = {};
+      expect(
+        getProviderRequestTemplates(provider, {
+          vars: {},
+          prompt: { raw: '{{input}}', label: 'test', config: { passthrough: { [field]: [] } } },
+        }).forwardsPrompt,
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    {},
+    { method: 'GET' },
+    { method: 'HEAD' },
+    { method: '{{verb}}' },
+    { method: 'POST', transformRequest: '"fixed"' },
+    {
+      method: 'POST',
+      body: undefined,
+      multipart: { parts: [{ kind: 'field', name: 'input', value: '{{prompt}}' }] },
+    },
+    { method: 'POST', request: 'POST / HTTP/1.1\nHost: example.com\n\nfixed' },
+  ])('does not infer forwarding for unsupported HTTP requests: %j', (config) => {
+    const provider = new HttpProvider('https://example.com/chat', {
+      config: { body: { input: '{{prompt}}' }, ...config },
+    });
+    expect(getProviderRequestTemplates(provider)).toEqual({ forwardsPrompt: false });
+  });
+
+  it('recognizes only the built-in implementation, not URL or model-shaped IDs', () => {
+    for (const id of ['https://example.com/chat', 'openai:chat:test']) {
+      const provider = createMockProvider({ id, config: { method: 'POST', body: '{{prompt}}' } });
+      expect(getProviderRequestTemplates(provider)).toEqual({ forwardsPrompt: false });
+    }
+  });
+
+  it('exposes only static sent body templates and reserved HTTP aliases', () => {
+    const body = { input: '{{prompt}}', context: '{{user_context}}' };
+    const provider = new HttpProvider('https://example.com/chat', {
+      config: { method: 'POST', body },
+    });
+    const result = getProviderRequestTemplates(provider);
+    expect(result.body).toEqual(body);
+    expect(result.reservedVariables).toEqual(
+      expect.arrayContaining(['token', 'tools', 'sessionId']),
+    );
   });
 });

@@ -7,6 +7,7 @@ import {
   collectFileMetadata,
   extractTextFromPDF,
   getExtensionHookName,
+  getRenderedInputVariables,
   renderPrompt,
   resolveVariables,
   runExtensionHook,
@@ -1984,5 +1985,66 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toContain(httpUrl);
       expect(fs.readFileSync).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('getRenderedInputVariables', () => {
+  const vars = {
+    question: 'User question',
+    user_context: 'supplied@example.com',
+    unused: 'unused@example.com',
+  };
+  const prompt = { raw: '{{question | trim}}', label: 'question' };
+
+  it('requires both prompt construction and body forwarding for injected text', () => {
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'question',
+        { forwardsPrompt: false, body: { fixed: 'Hello' } },
+        prompt,
+      ),
+    ).toEqual({ vars: {}, forwardsPrompt: false });
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'question',
+        { forwardsPrompt: false, body: { question: '{{prompt}}', context: '{{user_context}}' } },
+        prompt,
+      ),
+    ).toEqual({
+      vars: { question: vars.question, user_context: vars.user_context },
+      forwardsPrompt: true,
+    });
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'question',
+        { forwardsPrompt: false, body: { question: '{{question}}' } },
+        { raw: 'Fixed text.', label: 'fixed' },
+      ),
+    ).toEqual({ vars: {}, forwardsPrompt: true });
+  });
+
+  it('does not infer interpolation from object keys or conditional body output', () => {
+    for (const body of [
+      { '{{user_context}}': 'fixed' },
+      JSON.stringify({ '{{user_context}}': 'fixed' }),
+      '{% if false %}{{user_context}}{% endif %}',
+    ]) {
+      expect(
+        getRenderedInputVariables(vars, 'question', { forwardsPrompt: false, body }, prompt).vars,
+      ).toEqual({});
+    }
+  });
+
+  it('does not credit HTTP reserved aliases or overwritten inject variables as side inputs', () => {
+    const result = getRenderedInputVariables(
+      { question: vars.question, token: 'not-the-auth-token' },
+      'token',
+      { forwardsPrompt: false, body: { input: '{{token}}' }, reservedVariables: ['token'] },
+      prompt,
+    );
+    expect(result).toEqual({ vars: {}, forwardsPrompt: false });
   });
 });

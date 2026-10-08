@@ -97,8 +97,10 @@ export type RedteamProviderLoader = (
   providers: LoadableRedteamProvider[],
 ) => Promise<ApiProvider[]>;
 
+const loadProviderModule = () => import('../../providers');
+
 const defaultRedteamProviderLoader: RedteamProviderLoader = async (providers) => {
-  const { loadApiProviders } = await import('../../providers');
+  const { loadApiProviders } = await loadProviderModule();
   return loadApiProviders(providers);
 };
 
@@ -537,6 +539,22 @@ export function callGradingProvider(
     },
     () => tracingContext.withProviderSpan({ provider, callContext, role: 'grader' }, invoke),
   );
+}
+
+/** Combine static provider ownership with an explicitly reported actual prompt. */
+export async function getTargetRequestTemplates(
+  provider: ApiProvider,
+  prompt: string,
+  response: ProviderResponse,
+  context?: CallApiContextParams,
+) {
+  const { getProviderRequestTemplates } = await loadProviderModule();
+  const templates = getProviderRequestTemplates(provider, context);
+  return {
+    ...templates,
+    // Exact string equality avoids guessing how an opaque adapter parses chat.
+    forwardsPrompt: templates.forwardsPrompt || response.prompt === prompt,
+  };
 }
 
 /**

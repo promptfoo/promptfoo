@@ -1,6 +1,6 @@
 import { isBlobStorageEnabled } from '../../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
-import { renderPrompt } from '../../../evaluatorHelpers';
+import { getRenderedInputVariables, renderPrompt } from '../../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -17,7 +17,7 @@ import {
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
 import { getTargetConversation } from '../../grading/storedResult';
-import { materializeInputVariablesWithMetadata } from '../../inputVariables';
+import { getTextInputVariables, materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
   getRemoteGenerationExplicitlyDisabledError,
@@ -48,6 +48,7 @@ import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
+  getTargetRequestTemplates,
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
@@ -669,42 +670,6 @@ export class HydraProvider implements ApiProvider {
         getTargetConversation(this.conversationHistory).lastUserPrompt ||
         nextMessage;
 
-      // Grade only context the target received. Text-only transforms replace the
-      // replay payload; media transforms include the prior conversation as text.
-      const replaysHistory =
-        lastTransformResult?.audio ||
-        lastTransformResult?.image ||
-        (!this.stateful && !lastTransformResult);
-      // Attribute only injected attack data, never template/system content.
-      // Prompt functions may omit or replace inputs, so keep only values present
-      // in the delivered request (including their JSON-escaped form).
-      const deliveredInputVars = Object.fromEntries(
-        Object.entries(injectedInputVars).filter(
-          ([, value]) =>
-            value.trim() &&
-            (finalTargetPrompt.includes(value) ||
-              finalTargetPrompt.includes(JSON.stringify(value).slice(1, -1))),
-        ),
-      );
-      const currentGradingContent = replaysHistory
-        ? processedMessage
-        : (lastTransformResult?.prompt ??
-          (currentRenderInputVars
-            ? Object.keys(deliveredInputVars).length > 0
-              ? JSON.stringify(deliveredInputVars)
-              : undefined
-            : deliveredInputVars[this.injectVar]));
-      const currentGradingMessages: Message[] =
-        currentGradingContent === undefined
-          ? []
-          : [{ role: 'user', content: currentGradingContent }];
-      const gradingMessages: Message[] = replaysHistory
-        ? [...this.conversationHistory]
-        : this.stateful && currentGradingMessages.length > 0
-          ? [...statefulGradingHistory, ...currentGradingMessages]
-          : currentGradingMessages;
-      const { conversationTranscript } = getTargetConversation(gradingMessages);
-
       // Get target response
       const iterationStart = Date.now();
       const targetContext = context
@@ -731,6 +696,47 @@ export class HydraProvider implements ApiProvider {
         this.conversationHistory.pop();
         continue;
       }
+      const requestTemplates = await getTargetRequestTemplates(
+        targetProvider,
+        finalTargetPrompt,
+        targetResponse,
+        targetContext,
+      );
+      const { vars: deliveredInputVars, forwardsPrompt } = getRenderedInputVariables(
+        getTextInputVariables(injectedInputVars, this.config.inputs),
+        this.injectVar,
+        requestTemplates,
+        // Hydra constructs replay/layer payloads directly. Stateful requests
+        // additionally require proof through the configured prompt template.
+        this.stateful && !lastTransformResult ? prompt : undefined,
+        filters,
+      );
+      // Text layers replace the replay payload; media layers include its text
+      // history. A provider that drops the payload cannot establish that history.
+      const replaysHistory =
+        forwardsPrompt &&
+        (lastTransformResult?.audio ||
+          lastTransformResult?.image ||
+          (!this.stateful && !lastTransformResult));
+      const currentGradingContent = replaysHistory
+        ? processedMessage
+        : lastTransformResult && forwardsPrompt
+          ? lastTransformResult.prompt
+          : currentRenderInputVars
+            ? Object.keys(deliveredInputVars).length > 0
+              ? JSON.stringify(deliveredInputVars)
+              : undefined
+            : deliveredInputVars[this.injectVar];
+      const currentGradingMessages: Message[] =
+        currentGradingContent === undefined
+          ? []
+          : [{ role: 'user', content: currentGradingContent }];
+      const gradingMessages: Message[] = replaysHistory
+        ? [...this.conversationHistory]
+        : this.stateful && currentGradingMessages.length > 0
+          ? [...statefulGradingHistory, ...currentGradingMessages]
+          : currentGradingMessages;
+      const { conversationTranscript } = getTargetConversation(gradingMessages);
       lastResponseMessages = [
         ...gradingMessages,
         { role: 'assistant', content: targetResponse.output || '' },

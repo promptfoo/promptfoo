@@ -26,9 +26,62 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import {
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+  isDirectTemplateReference,
+} from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
+
+/** Select generated values with a direct static path into the target request. */
+export function getRenderedInputVariables(
+  inputVars: Record<string, string>,
+  injectVar: string,
+  request: { forwardsPrompt: boolean; body?: unknown; reservedVariables?: string[] },
+  prompt?: Prompt,
+  filters?: NunjucksFilterMap,
+): { vars: Record<string, string>; forwardsPrompt: boolean } {
+  const bodyReferences = (body: unknown, name: string): boolean => {
+    if (typeof body === 'string') {
+      return isDirectTemplateReference(body, name);
+    }
+    return (
+      body !== null &&
+      typeof body === 'object' &&
+      Object.values(body).some((value) => bodyReferences(value, name))
+    );
+  };
+  // HTTP parses JSON string bodies before rendering their values; keys are not
+  // interpolated. Inspect the same values without executing a second render.
+  let body = request.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      // A non-JSON body is a text template.
+    }
+  }
+  const reserved = request.reservedVariables ?? [];
+  const forwardsPrompt =
+    request.forwardsPrompt ||
+    bodyReferences(body, 'prompt') ||
+    (!reserved.includes(injectVar) && bodyReferences(body, injectVar));
+  const vars = Object.fromEntries(
+    Object.entries(inputVars).filter(([name]) => {
+      const throughPrompt =
+        forwardsPrompt &&
+        (!prompt ||
+          (!prompt.function &&
+            !/^(?:portkey|langfuse|helicone):\/\//.test(prompt.raw) &&
+            isDirectTemplateReference(prompt.raw, name, filters)));
+      const throughBody =
+        name !== injectVar && !reserved.includes(name) && bodyReferences(body, name);
+      return throughPrompt || throughBody;
+    }),
+  );
+  return { vars, forwardsPrompt };
+}
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 

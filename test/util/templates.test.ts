@@ -6,6 +6,7 @@ import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
+  isDirectTemplateReference,
   templateReferencesVariable,
 } from '../../src/util/templates';
 import { mockProcessEnv } from './utils';
@@ -300,6 +301,40 @@ describe('analyzeTemplateReference', () => {
       referenced: false,
       parsed: true,
     });
+  });
+});
+
+describe('isDirectTemplateReference', () => {
+  it.each([
+    ['{{ input }}', true],
+    ['System context. User: {{ input }}', true],
+    ['{{ input | trim }}', true],
+    ['{# An unrelated comment #}{{ input }}', true],
+    ['{{ "{{ input }}" }}', false],
+    ['{# {{ input }} #}', false],
+    ['{% if false %}{{ input }}{% endif %}', false],
+    ['{% set input = "replacement" %}{{ input }}', false],
+    ['{{ input | replace("a", "b") }}', false],
+    ['{{ input | trim("x") }}', false],
+    ['{{ other }}', false],
+    ['{{ input', false],
+  ])('classifies only unconditional value-preserving interpolation: %s', (template, expected) => {
+    expect(isDirectTemplateReference(template, 'input')).toBe(expected);
+  });
+
+  it('does not trust a custom replacement for the trim filter', () => {
+    expect(
+      isDirectTemplateReference('{{ input | trim }}', 'input', { trim: () => 'replacement' }),
+    ).toBe(false);
+  });
+
+  it('does not claim interpolation when target templating is disabled', () => {
+    const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+    try {
+      expect(isDirectTemplateReference('{{ input }}', 'input')).toBe(false);
+    } finally {
+      restore();
+    }
   });
 });
 
