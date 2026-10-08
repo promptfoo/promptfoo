@@ -106,6 +106,7 @@ interface FilteredBasicMetricsRow {
   pass_count: number;
   fail_count: number;
   error_count: number;
+  cache_hit_count: number;
   total_score: number;
   total_latency: number;
   total_cost: number;
@@ -347,6 +348,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as pass_count,
       SUM(CASE WHEN success = 0 AND failure_reason != ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as fail_count,
       SUM(CASE WHEN failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,
+      SUM(CASE WHEN json_extract(${response}, ${responseCachePath}) = 1 THEN 1 ELSE 0 END) as cache_hit_count,
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
@@ -437,6 +439,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       testPassCount: row.pass_count || 0,
       testFailCount: row.fail_count || 0,
       testErrorCount: row.error_count || 0,
+      testCacheHitCount: row.cache_hit_count || 0,
       totalLatencyMs: row.total_latency || 0,
       cost: row.total_cost || 0,
       tokenUsage: getFilteredTokenUsage(row),
@@ -617,6 +620,7 @@ function createEmptyMetricsArray(numPrompts: number): PromptMetrics[] {
     testPassCount: 0,
     testFailCount: 0,
     testErrorCount: 0,
+    testCacheHitCount: 0,
     assertPassCount: 0,
     assertFailCount: 0,
     totalLatencyMs: 0,

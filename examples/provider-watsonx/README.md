@@ -11,6 +11,12 @@ cd provider-watsonx
 
 ## Setup
 
+Install the optional WatsonX SDKs alongside promptfoo in this example directory:
+
+```sh
+npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2
+```
+
 Set up authentication and project ID:
 
 **IAM Authentication (Recommended)**
@@ -32,7 +38,7 @@ Follow the instructions in [watsonx.md](../../site/docs/providers/watsonx.md) to
 ## Running the Example
 
 ```sh
-promptfoo eval
+npx promptfoo eval
 ```
 
 Or with the local build:
@@ -44,7 +50,7 @@ npm run local -- eval --config examples/provider-watsonx/promptfooconfig.yaml
 Afterwards, view the results:
 
 ```sh
-promptfoo view
+npx promptfoo view
 ```
 
 ## Models Tested

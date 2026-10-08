@@ -59,6 +59,18 @@ describe('ConfigModal', () => {
     expect(textarea.value).toBe(expectedYaml);
   });
 
+  it('leaves the saved base path out of the displayed config', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      config: { ...sampleConfig, basePath: '/home/user/project' },
+    } as ReturnType<typeof useTableStore>);
+
+    renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(textarea.value).toBe(yaml.dump(sampleConfig));
+    expect(textarea.value).not.toContain('basePath');
+  });
+
   it('textarea is read-only', () => {
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 

@@ -188,6 +188,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       testPassCount: number;
       testFailCount: number;
       testErrorCount: number;
+      testCacheHitCount: number;
       assertPassCount: number;
       assertFailCount: number;
       totalLatencyMs: number;
@@ -207,6 +208,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       testPassCount: 0,
       testFailCount: 0,
       testErrorCount: 0,
+      testCacheHitCount: 0,
       assertPassCount: 0,
       assertFailCount: 0,
       totalLatencyMs: 0,
@@ -243,6 +245,10 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           metrics.testErrorCount++;
         } else {
           metrics.testFailCount++;
+        }
+
+        if (result.response?.cached) {
+          metrics.testCacheHitCount++;
         }
 
         // Update scores and other metrics
