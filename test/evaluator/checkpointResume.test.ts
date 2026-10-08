@@ -42,6 +42,7 @@ describeEvaluator('resumable checkpoint preparation', () => {
       const target: ApiProvider = {
         id: () => 'synthetic-metrics-rebuild',
         callApi: vi.fn(async (_prompt, context, options) => {
+          expect(cliState.safeMode).toBe(true);
           if (context?.vars.case === 'completed') {
             return { output: 'ok', tokenUsage: { total: 5, numRequests: 1 }, cost: 0.05 };
           }
@@ -98,11 +99,13 @@ describeEvaluator('resumable checkpoint preparation', () => {
       };
       vi.useFakeTimers();
       try {
-        const interrupted = evaluate(suite, record, {
-          maxConcurrency: 1,
-          timeoutMs: 1000,
-          abortSignal: controller.signal,
-        });
+        const interrupted = cliState.withSafeMode(true, () =>
+          evaluate(suite, record, {
+            maxConcurrency: 1,
+            timeoutMs: 1000,
+            abortSignal: controller.signal,
+          }),
+        );
         await started.promise;
         await vi.advanceTimersByTimeAsync(25);
         controller.abort();
@@ -127,7 +130,10 @@ describeEvaluator('resumable checkpoint preparation', () => {
         resumedRecord = (await Eval.findById(record.id))!;
         phase = 'resume';
         cliState.resume = true;
-        await evaluate(suite, resumedRecord, { maxConcurrency: 1, timeoutMs: 1000 });
+        await cliState.withSafeMode(true, () =>
+          evaluate(suite, resumedRecord!, { maxConcurrency: 1, timeoutMs: 1000 }),
+        );
+        expect(cliState.safeMode).not.toBe(true);
         expect(resumedRecord.getStats()).toMatchObject({
           successes: 2,
           failures: 0,
@@ -235,9 +241,89 @@ describeEvaluator('resumable checkpoint preparation', () => {
     }
   });
 
-  it.each([false, true])(
-    'preserves queued checkpoints across a global timeout and retry cleanup=%s',
-    async (retry) => {
+  it('keeps a single interruption row when global cancellation cannot write JSONL', async () => {
+    const outputDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-global-writer-error-'));
+    // Opening a directory as a JSONL destination produces a real asynchronous stream error.
+    const writer = new JsonlFileWriter(outputDir);
+    const write = vi.spyOn(writer, 'write');
+    const started = deferred();
+    let phase: 'timed' | 'resume' = 'timed';
+    const target: ApiProvider = {
+      id: () => 'global-writer-error',
+      callApi: vi.fn(async (_prompt, _context, options) => {
+        if (phase === 'resume') {
+          return { output: 'Completed', tokenUsage: { total: 7, numRequests: 1 } };
+        }
+        options?.onProgress?.({
+          output: 'Saved evidence',
+          tokenUsage: { total: 11, numRequests: 1 },
+        });
+        started.resolve();
+        return new Promise<never>(() => {});
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('Probe {{index}}')],
+      tests: [0, 1].map((index) => ({ vars: { index } })),
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    vi.useFakeTimers();
+    try {
+      const timed = evaluate(
+        suite,
+        record,
+        { maxConcurrency: 1, timeoutMs: 1000, maxEvalTimeMs: 25 },
+        { ...nodeEvaluatorRuntime, createResultWriters: () => [writer] },
+      );
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(25);
+      await timed;
+      expect(write).toHaveBeenCalledOnce();
+      await expect(write.mock.results[0].value).rejects.toThrow('Failed to write JSONL output');
+      await expect(writer.close()).rejects.toThrow('Failed to close JSONL output');
+      const saved = (await Eval.findById(record.id))!;
+      expect(await saved.fetchResultsByTestIdx(0)).toHaveLength(1);
+      expect((await saved.fetchResultsByTestIdx(0))[0]).toMatchObject({
+        response: { output: 'Saved evidence' },
+        metadata: { __promptfoo: { resumable: true } },
+      });
+      expect(await saved.fetchResultsByTestIdx(1)).toHaveLength(1);
+      expect(saved.prompts[0].metrics).toMatchObject({
+        testPassCount: 0,
+        testFailCount: 0,
+        testErrorCount: 2,
+        totalLatencyMs: 50,
+        tokenUsage: { total: 11, numRequests: 1 },
+      });
+      phase = 'resume';
+      cliState.resume = true;
+      await evaluate(suite, saved, { maxConcurrency: 1, timeoutMs: 1000 });
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(await saved.fetchResultsByTestIdx(0)).toHaveLength(1);
+      expect(saved.prompts[0].metrics).toMatchObject({
+        testPassCount: 1,
+        testFailCount: 0,
+        testErrorCount: 1,
+        totalLatencyMs: 25,
+        tokenUsage: { total: 7, numRequests: 1 },
+      });
+      expect((await Eval.findById(record.id))!.prompts).toEqual(saved.prompts);
+    } finally {
+      vi.useRealTimers();
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    { retry: false, strip: false },
+    { retry: true, strip: false },
+    { retry: false, strip: true },
+    { retry: true, strip: true },
+  ])(
+    'preserves queued checkpoints across a global timeout (retry=$retry, strip=$strip)',
+    async ({ retry, strip }) => {
+      const outputDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-queued-checkpoint-'));
       const firstStarted = deferred();
       const resumedStarted = deferred();
       const controller = new AbortController();
@@ -293,6 +379,13 @@ describeEvaluator('resumable checkpoint preparation', () => {
         if (retry) {
           cliState._retryErrorResultIds = oldCheckpoints.map((row) => row.id);
         }
+        if (strip) {
+          vi.stubEnv('PROMPTFOO_STRIP_RESPONSE_OUTPUT', 'true');
+          vi.stubEnv('PROMPTFOO_STRIP_METADATA', 'true');
+          vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', 'true');
+          vi.stubEnv('PROMPTFOO_STRIP_PROMPT_TEXT', 'true');
+          vi.stubEnv('PROMPTFOO_STRIP_GRADING_RESULT', 'true');
+        }
         phase = 'timed';
         const timed = evaluate(suite, record, {
           maxConcurrency: 1,
@@ -323,6 +416,29 @@ describeEvaluator('resumable checkpoint preparation', () => {
             redteamHistory: [{ prompt: 'Probe 1', output: 'Evidence initial 1' }],
           },
         });
+        expect(queued.testCase.vars).toEqual({ index: 1 });
+        expect(queued.prompt.raw).toBe('Probe 1');
+        const outputPath = path.join(outputDir, 'results.jsonl');
+        await writeMultipleOutputs([outputPath], record, null);
+        const exported = (await readFile(outputPath, 'utf8'))
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line))
+          .find((row) => row.testIdx === 1);
+        expect(exported).toMatchObject(
+          strip
+            ? {
+                response: { output: '[output stripped]' },
+                metadata: {},
+                vars: {},
+                prompt: { raw: '[prompt stripped]' },
+                gradingResult: null,
+              }
+            : { response: { output: 'Evidence initial 1' }, vars: { index: 1 } },
+        );
+        expect((await record.fetchResultsByTestIdx(1))[0].response?.output).toBe(
+          'Evidence initial 1',
+        );
         const untouched = rows.find((row) => row.testIdx === 2)!;
         expect(untouched.metadata?.__promptfoo?.resumable).toBeUndefined();
         expect(untouched.error).toContain('exceeded max duration');
@@ -347,7 +463,9 @@ describeEvaluator('resumable checkpoint preparation', () => {
       } finally {
         delete cliState._retryErrorResultIds;
         cliState.retryMode = false;
+        vi.unstubAllEnvs();
         vi.useRealTimers();
+        await rm(outputDir, { recursive: true, force: true });
       }
     },
   );

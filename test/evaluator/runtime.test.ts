@@ -68,6 +68,59 @@ function createInMemoryEvaluation(overrides: Partial<InMemoryEvaluation> = {}): 
 }
 
 describeEvaluator('evaluator runtime ports', () => {
+  it('preserves captured runtime vars when a checkpoint stays queued on resumed global timeout', async () => {
+    const state = createInMemoryEvaluation({ persisted: true });
+    const store = new InMemoryEvaluationStore(state);
+    const runtime = createInMemoryRuntime(store);
+    const controller = new AbortController();
+    let phase = 'initial';
+    const target: ApiProvider = {
+      id: () => 'queued-runtime-vars',
+      callApi: vi.fn(async (_prompt, context, options) => {
+        context!.vars.observed = `Captured ${context!.vars.index}`;
+        options?.onProgress?.({
+          output: `Evidence ${phase} ${context!.vars.index}`,
+          tokenUsage: { total: 11, numRequests: 1 },
+        });
+        return new Promise<never>(() => {});
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('Probe {{index}}')],
+      tests: [0, 1].map((index) => ({ vars: { index } })),
+    };
+    vi.useFakeTimers();
+    try {
+      const initial = evaluate(
+        suite,
+        state,
+        { maxConcurrency: 2, timeoutMs: 1000, abortSignal: controller.signal },
+        runtime,
+      );
+      await vi.waitFor(() => expect(target.callApi).toHaveBeenCalledTimes(2));
+      controller.abort();
+      await initial;
+      const before = structuredClone(state.results.find((row) => row.testIdx === 1)!);
+      expect(before.vars).toEqual({ index: 1, observed: 'Captured 1' });
+      expect(before.testCase.vars).toEqual({ index: 1 });
+      cliState.resume = true;
+      phase = 'timed';
+      const resumed = evaluate(
+        suite,
+        state,
+        { maxConcurrency: 1, timeoutMs: 1000, maxEvalTimeMs: 25 },
+        runtime,
+      );
+      await vi.waitFor(() => expect(target.callApi).toHaveBeenCalledTimes(3));
+      await vi.advanceTimersByTimeAsync(25);
+      await resumed;
+      const after = state.results.find((row) => row.testIdx === 1)!;
+      expect(after.vars).toEqual(before.vars);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('replaces a cancellation checkpoint when resuming an in-memory evaluation', async () => {
     const state = createInMemoryEvaluation({ persisted: true });
     const store = new InMemoryEvaluationStore(state);

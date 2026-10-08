@@ -5348,15 +5348,29 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     startTime: number;
   }) {
     for (let i = 0; i < runEvalOptions.length; i++) {
-      if (processedIndices.has(i)) {
+      const evalStep = runEvalOptions[i];
+      // Persistence/recovery already owns this outcome even if a later JSONL write failed.
+      if (processedIndices.has(i) || this.currentResultKeys.has(getResultIndexKey(evalStep))) {
         continue;
       }
-      const evalStep = runEvalOptions[i];
       const checkpoint = await this.findResumableCheckpoint(evalStep);
       // Queued work has no new target response. Retain its prior evidence and resumability;
       // replacing the row also protects it from retry cleanup that names the old ERROR ID.
       const timeoutResult = checkpoint
-        ? this.store.toEvaluateResult(checkpoint)
+        ? {
+            ...this.store.toEvaluateResult(checkpoint),
+            // Copy internal fields: export projections must not overwrite saved evidence.
+            provider: checkpoint.provider,
+            prompt: checkpoint.prompt,
+            response: checkpoint.response,
+            testCase: checkpoint.testCase,
+            vars:
+              'vars' in checkpoint
+                ? (checkpoint.vars as EvaluateResult['vars'])
+                : checkpoint.testCase.vars || {},
+            gradingResult: checkpoint.gradingResult,
+            metadata: checkpoint.metadata,
+          }
         : createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       this.trackFinalJsonlResult(timeoutResult);
       const previousRow = await this.persistEvalRow(timeoutResult, {
