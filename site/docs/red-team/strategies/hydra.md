@@ -62,7 +62,7 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
 
-If a test case times out or is cancelled, its error result retains completed target responses and known probe/token usage. The partial history can include responses that were not yet graded; it does not establish that the target is safe. Work still in flight when cancellation occurs is not counted as completed evidence.
+If a test case times out or is cancelled, its error result retains completed target responses and known probe/token usage. The partial history can include responses that were not yet graded; it does not establish that the target is safe. Work still in flight when cancellation occurs is not counted as completed evidence. Resume a paused evaluation with `promptfoo eval --resume <evalId>` to rerun interrupted cases; the saved checkpoint is replaced when the new outcome is recorded. Per-test timeouts remain eligible for `--retry-errors`.
 
 ## Hydra vs Other Agentic Strategies
 

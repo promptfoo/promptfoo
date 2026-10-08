@@ -42,7 +42,7 @@ The meta-agent maintains memory across iterations to systematically explore diff
 
 This provides broader coverage of potential vulnerabilities at the cost of more API calls. Standard jailbreak refines a single approach repeatedly, while meta-agent explores multiple distinct approaches to find weaknesses.
 
-If a test case times out or is cancelled, its error result retains completed target responses and known probe/token usage. The partial history can include responses that were not yet graded; it does not establish that the target is safe. Work still in flight when cancellation occurs is not counted as completed evidence.
+If a test case times out or is cancelled, its error result retains completed target responses and known probe/token usage. The partial history can include responses that were not yet graded; it does not establish that the target is safe. Work still in flight when cancellation occurs is not counted as completed evidence. Resume a paused evaluation with `promptfoo eval --resume <evalId>` to rerun interrupted cases; the saved checkpoint is replaced when the new outcome is recorded. Per-test timeouts remain eligible for `--retry-errors`.
 
 ## Meta-Agent vs Standard Jailbreak
 
