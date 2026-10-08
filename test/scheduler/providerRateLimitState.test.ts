@@ -261,6 +261,37 @@ describe('ProviderRateLimitState', () => {
       expect(metrics.rateLimitHits).toBeGreaterThan(0);
     });
 
+    it.each(['returned', 'thrown'])(
+      'does not retry or throttle on a %s token-count error containing 429',
+      async (mode) => {
+        const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
+        const response = { error: 'HTTP 400: prompt is too long: 204291 tokens' };
+        const cause = new Error(response.error);
+        const call = vi.fn(async () => {
+          if (mode === 'thrown') {
+            throw cause;
+          }
+          return response;
+        });
+        const pending = state
+          .executeWithRetry('token-count', call, { isRateLimited: isProviderResponseRateLimited })
+          .then(
+            (value) => value,
+            (error) => error,
+          );
+
+        await vi.runAllTimersAsync();
+
+        expect(await pending).toBe(mode === 'thrown' ? cause : response);
+        expect(call).toHaveBeenCalledTimes(1);
+        expect(state.getMetrics()).toMatchObject({
+          rateLimitHits: 0,
+          retriedRequests: 0,
+          maxConcurrency: 5,
+        });
+      },
+    );
+
     it('result-path: kind=quota in result.metadata short-circuits retry', async () => {
       // The PR's transport-layer fail-fast is undermined when a provider
       // catches HttpRateLimitError and folds it into ProviderResponse.error

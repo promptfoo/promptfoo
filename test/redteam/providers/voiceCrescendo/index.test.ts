@@ -394,7 +394,61 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
     expect(result.metadata?.voiceCrescendoBacktrackCount).toBe(0);
     expect(vi.mocked(getTargetResponse)).toHaveBeenCalledTimes(1);
+    expect(result.error).toBe('Target provider error');
+    expect(redteamProviderManager.getGradingProvider).not.toHaveBeenCalled();
   });
+
+  it.each([true, false])(
+    'preserves target errors unless a later call recovers: %s',
+    async (recovers) => {
+      const targetError = {
+        output: '',
+        error: 'Target provider error',
+        tokenUsage: { prompt: 5, completion: 0, total: 5, numRequests: 1 },
+      };
+      const targetSuccess = {
+        output: 'I cannot help with that request.',
+        tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+      };
+      vi.mocked(getTargetResponse)
+        .mockResolvedValueOnce(recovers ? targetError : targetSuccess)
+        .mockResolvedValueOnce(recovers ? targetSuccess : targetError);
+      const grader = createMockProvider({
+        response: createProviderResponse({
+          output: JSON.stringify({
+            objectiveAchieved: false,
+            confidence: 0,
+            reason: 'The target refused',
+            partialSuccess: false,
+          }),
+        }),
+      });
+      vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(grader);
+      const provider = new VoiceCrescendoProvider({
+        injectVar: 'goal',
+        maxTurns: recovers ? 1 : 2,
+        maxBacktracks: recovers ? 1 : 0,
+        delayBetweenTurns: 0,
+      });
+
+      const result = await provider.callApi('Test objective', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(result.error).toBe(recovers ? undefined : targetError.error);
+      expect(result.output).toBe(targetSuccess.output);
+      expect(result.tokenUsage).toMatchObject({
+        numRequests: 2,
+        total: 35,
+        prompt: 25,
+        completion: 10,
+      });
+      expect(getTargetResponse).toHaveBeenCalledTimes(2);
+      expect(grader.callApi).toHaveBeenCalledOnce();
+    },
+  );
 
   it('should stop when target ends conversation', async () => {
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
@@ -422,6 +476,7 @@ describe('VoiceCrescendoProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Target ended conversation');
     expect(result.metadata?.voiceCrescendoTurnsCompleted).toBe(1);
+    expect(result.error).toBeUndefined();
   });
 
   it('should respect maxTurns configuration', async () => {
