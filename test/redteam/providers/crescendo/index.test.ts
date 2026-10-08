@@ -1311,6 +1311,59 @@ describe('CrescendoProvider', () => {
     expect(result.error).toBe('HTTP 504');
   });
 
+  it.each([false, true])(
+    'keeps a missing target response out of graders with unblocking=%s',
+    async (unblocking) => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'attack',
+          rationaleBehindJailbreak: 'rationale',
+          lastResponseSummary: 'summary',
+        }),
+      });
+      if (unblocking) {
+        mockTargetProvider.callApi.mockResolvedValueOnce({
+          output: 'Please confirm the request',
+          tokenUsage: { total: 8, prompt: 6, completion: 2, numRequests: 1 },
+        });
+        vi.mocked(tryUnblocking).mockResolvedValueOnce({
+          success: true,
+          unblockingPrompt: 'Confirmed',
+        });
+      }
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, numRequests: 1 },
+      });
+      const test: AtomicTestCase = {
+        metadata: { pluginId: 'ssrf' },
+        assert: [{ type: 'promptfoo:redteam:ssrf' }],
+      };
+
+      const result = await provider.callApi('Test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Test objective' },
+        prompt: { raw: 'Test prompt', label: 'test' },
+        test,
+      });
+
+      expect(result.error).toContain('Target returned malformed response');
+      expect(result.tokenUsage).toMatchObject({
+        total: unblocking ? 13 : 5,
+        numRequests: unblocking ? 2 : 1,
+      });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(unblocking ? 2 : 1);
+      expect(tryUnblocking).toHaveBeenCalledTimes(unblocking ? 1 : 0);
+      expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+      expect(mockGetGraderById).not.toHaveBeenCalled();
+    },
+  );
+
   it('should handle purpose from test metadata', async () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',

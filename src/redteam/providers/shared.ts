@@ -615,13 +615,13 @@ export async function getTargetResponse(
     };
   }
 
-  throw new Error(
-    `
-    Target returned malformed response: expected either \`output\` or \`error\` property to be set.
-
-    Note: Empty strings are valid output values; null and undefined are not.
-    `,
-  );
+  return {
+    ...(targetRespRaw as ProviderResponse),
+    output: '',
+    error:
+      'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
+    tokenUsage,
+  };
 }
 
 interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {

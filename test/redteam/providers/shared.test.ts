@@ -1068,12 +1068,14 @@ describe('shared redteam provider utilities', () => {
       expect(mockedSleep).not.toHaveBeenCalled();
     });
 
-    it('throws error when neither output nor error is set', async () => {
+    it('returns an error when neither output nor error is set', async () => {
       const mockProvider = createMockProvider({ response: {} });
 
-      await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-        /Target returned malformed response: expected either `output` or `error` property to be set/,
-      );
+      await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+        output: '',
+        error: expect.stringContaining('Target returned malformed response'),
+        tokenUsage: { numRequests: 1 },
+      });
     });
 
     it('uses default tokenUsage when not provided', async () => {
@@ -1165,9 +1167,11 @@ describe('shared redteam provider utilities', () => {
             response: { output, error: undefined, tokenUsage: { numRequests: 1 } },
           });
 
-          await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-            /Target returned malformed response/,
-          );
+          await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+            output: '',
+            error: expect.stringContaining('Target returned malformed response'),
+            tokenUsage: { numRequests: 1 },
+          });
         },
       );
 
@@ -1175,6 +1179,10 @@ describe('shared redteam provider utilities', () => {
         const mockProvider = createMockProvider({
           response: {
             output: undefined,
+            cost: 0.1,
+            cached: true,
+            sessionId: 'retained-session',
+            tokenUsage: { total: 17, numRequests: 2 },
             metadata: {
               http: {
                 status: 200,
@@ -1189,13 +1197,20 @@ describe('shared redteam provider utilities', () => {
           },
         });
 
-        const error = await getTargetResponse(mockProvider, 'test prompt').catch((err) => err);
+        const response = await getTargetResponse(mockProvider, 'test prompt');
 
-        expect(error).toBeInstanceOf(Error);
-        expect(error.message).toContain('expected either `output` or `error` property to be set');
-        expect(error.message).toContain('null and undefined are not');
-        expect(error.message).not.toContain('CANARY');
-        expect(error.message).not.toContain('metadata');
+        expect(response.error).toContain('expected either `output` or `error` property to be set');
+        expect(response.error).toContain('null and undefined are not');
+        expect(response.error).not.toContain('CANARY');
+        expect(response.error).not.toContain('metadata');
+        expect(response).toMatchObject({
+          output: '',
+          cost: 0.1,
+          cached: true,
+          sessionId: 'retained-session',
+          tokenUsage: { total: 17, numRequests: 2 },
+          metadata: { http: { status: 200 } },
+        });
       });
 
       it.each(['null', 'undefined'])('preserves literal response text %s', async (output) => {
@@ -1254,9 +1269,11 @@ describe('shared redteam provider utilities', () => {
           },
         });
 
-        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-          /Target returned malformed response: expected either `output` or `error` property to be set/,
-        );
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+          output: '',
+          error: expect.stringContaining('Target returned malformed response'),
+          tokenUsage: { numRequests: 1 },
+        });
       });
 
       it('still fails when both output and error are missing', async () => {
@@ -1266,9 +1283,11 @@ describe('shared redteam provider utilities', () => {
           } as any,
         });
 
-        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-          /Target returned malformed response/,
-        );
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+          output: '',
+          error: expect.stringContaining('Target returned malformed response'),
+          tokenUsage: { numRequests: 1 },
+        });
       });
     });
   });

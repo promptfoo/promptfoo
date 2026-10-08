@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runEval } from '../../../src/evaluator';
 import RedteamIterativeMetaProvider, {
   runMetaAgentRedteam,
 } from '../../../src/redteam/providers/iterativeMeta';
@@ -669,6 +670,76 @@ describe('RedteamIterativeMetaProvider', () => {
   });
 
   describe('Token Usage Tracking', () => {
+    it.each([{}, { output: null }, { output: undefined }])(
+      'retains prior and missing target usage through the real helper and evaluator: %j',
+      async (missingResponse) => {
+        const { getTargetResponse } = await vi.importActual<
+          typeof import('../../../src/redteam/providers/shared')
+        >('../../../src/redteam/providers/shared');
+        mockGetTargetResponse.mockImplementation(() =>
+          getTargetResponse(mockTargetProvider, 'Test prompt'),
+        );
+        mockAgentProvider.callApi.mockResolvedValue({
+          output: { result: 'Attack' },
+          tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
+        });
+        mockTargetProvider.callApi
+          .mockResolvedValueOnce({
+            output: 'A real response',
+            tokenUsage: { total: 8, prompt: 6, completion: 2, numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            ...missingResponse,
+            tokenUsage: { total: 5, prompt: 5, completion: 0, numRequests: 1 },
+          });
+        const grade = vi.fn().mockResolvedValue({ grade: { pass: true, score: 1 } });
+        mockGetGraderById.mockReturnValue({ getResult: grade });
+        const prompt = { raw: 'Test prompt', label: 'test' };
+        const provider = {
+          id: () => 'meta-accounting-fixture',
+          callApi: () =>
+            runMetaAgentRedteam({
+              filters: undefined,
+              prompt,
+              vars: { query: 'goal' },
+              injectVar: 'query',
+              numIterations: 2,
+              agentProvider: mockAgentProvider,
+              gradingProvider: mockGradingProvider,
+              targetProvider: mockTargetProvider,
+              context: { prompt, vars: { query: 'goal' } },
+              test: {
+                metadata: { pluginId: 'ssrf' },
+                assert: [{ type: 'promptfoo:redteam:ssrf' }],
+              },
+            }),
+        };
+
+        const [result] = await runEval({
+          provider,
+          prompt,
+          test: { assert: [{ type: 'javascript', value: 'true' }] },
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: true,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Target returned malformed response');
+        expect(result.tokenUsage).toMatchObject({
+          total: 13,
+          prompt: 11,
+          completion: 2,
+          numRequests: 2,
+          attacker: { total: 40, numRequests: 2 },
+        });
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(grade).toHaveBeenCalledOnce();
+      },
+    );
+
     it('should accumulate token usage from agent provider calls', async () => {
       // Set up agent to return token usage
       mockAgentProvider.callApi = vi
