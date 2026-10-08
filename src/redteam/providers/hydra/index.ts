@@ -4,7 +4,6 @@ import { renderPrompt } from '../../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import { parseChatPrompt } from '../../../providers/shared';
 import {
   extractTraceIdFromTraceparent,
   fetchTraceContext,
@@ -51,7 +50,6 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   isConversationEndedResponse,
-  isValidChatMessageArray,
   type Message,
   runRedteamGrader,
   type TargetResponse,
@@ -536,6 +534,7 @@ export class HydraProvider implements ApiProvider {
 
       // Send to target (different based on stateful/stateless)
       let targetPrompt: string;
+      let injectedInputVars = { [this.injectVar]: processedMessage };
 
       if (this.stateful) {
         // Stateful: send only the new message with sessionId
@@ -554,6 +553,7 @@ export class HydraProvider implements ApiProvider {
           ...(currentRenderInputVars || {}),
         };
 
+        injectedInputVars = currentRenderInputVars ?? { [this.injectVar]: escapedMessage };
         targetPrompt = await renderPrompt(
           prompt,
           updatedVars,
@@ -675,30 +675,32 @@ export class HydraProvider implements ApiProvider {
         lastTransformResult?.audio ||
         lastTransformResult?.image ||
         (!this.stateful && !lastTransformResult);
-      let currentGradingMessages: Message[] = [
-        { role: 'user', content: replaysHistory ? processedMessage : finalTargetPrompt },
-      ];
-      if (this.stateful && !lastTransformResult) {
-        try {
-          // Only a configured chat template establishes roles. Attacker text or
-          // transformed payloads that happen to contain JSON stay user content.
-          const templateMessages = parseChatPrompt<unknown>(prompt.raw, undefined);
-          const renderedMessages = parseChatPrompt<unknown>(finalTargetPrompt, undefined);
-          if (
-            isValidChatMessageArray(templateMessages) &&
-            isValidChatMessageArray(renderedMessages)
-          ) {
-            currentGradingMessages = renderedMessages.filter(
-              ({ role }) => role === 'user' || role === 'assistant',
-            );
-          }
-        } catch {
-          // Opaque requests may be valid for non-chat targets.
-        }
-      }
+      // Attribute only injected attack data, never template/system content.
+      // Prompt functions may omit or replace inputs, so keep only values present
+      // in the delivered request (including their JSON-escaped form).
+      const deliveredInputVars = Object.fromEntries(
+        Object.entries(injectedInputVars).filter(
+          ([, value]) =>
+            value.trim() &&
+            (finalTargetPrompt.includes(value) ||
+              finalTargetPrompt.includes(JSON.stringify(value).slice(1, -1))),
+        ),
+      );
+      const currentGradingContent = replaysHistory
+        ? processedMessage
+        : (lastTransformResult?.prompt ??
+          (currentRenderInputVars
+            ? Object.keys(deliveredInputVars).length > 0
+              ? JSON.stringify(deliveredInputVars)
+              : undefined
+            : deliveredInputVars[this.injectVar]));
+      const currentGradingMessages: Message[] =
+        currentGradingContent === undefined
+          ? []
+          : [{ role: 'user', content: currentGradingContent }];
       const gradingMessages: Message[] = replaysHistory
         ? [...this.conversationHistory]
-        : this.stateful
+        : this.stateful && currentGradingMessages.length > 0
           ? [...statefulGradingHistory, ...currentGradingMessages]
           : currentGradingMessages;
       const { conversationTranscript } = getTargetConversation(gradingMessages);
@@ -929,6 +931,7 @@ export class HydraProvider implements ApiProvider {
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
             conversationTranscript,
+            includeConversationTranscript: true,
             ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }

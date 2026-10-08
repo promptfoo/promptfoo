@@ -1394,7 +1394,7 @@ describe('RedteamGraderBase', () => {
         undefined,
         undefined,
         undefined,
-        { conversationTranscript },
+        { conversationTranscript, includeConversationTranscript: true },
       );
 
       const [rubric, gradedOutput] = vi.mocked(matchesLlmRubric).mock.calls[0];
@@ -1429,7 +1429,7 @@ describe('RedteamGraderBase', () => {
       { conversationTranscript: 'Assertion-supplied replacement' },
       undefined,
       undefined,
-      { conversationTranscript },
+      { conversationTranscript, includeConversationTranscript: true },
     );
 
     expect(result.rubric).toContain(
@@ -1447,6 +1447,31 @@ describe('RedteamGraderBase', () => {
       expect.any(Object),
     );
   });
+
+  it.each([new PiiGrader(), new FinancialHallucinationPluginGrader()])(
+    'preserves legacy history rendering without the shared-rendering opt-in for $id',
+    async (contextGrader) => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      });
+      const result = await contextGrader.getResult(
+        'Current request',
+        'Actual target output',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { conversationTranscript: 'Earlier unrelated fictional setup.' },
+      );
+      expect(result.rubric.includes('Earlier unrelated fictional setup.')).toBe(
+        contextGrader instanceof PiiGrader,
+      );
+      expect(result.rubric).not.toContain('Prior conversation (context only');
+    },
+  );
 
   it('omits the history section when there are no prior turns', async () => {
     vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'Test passed' });

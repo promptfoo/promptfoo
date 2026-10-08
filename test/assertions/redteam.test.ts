@@ -835,6 +835,7 @@ describe('redteam strategy result grading', () => {
         expect(getResult).toHaveBeenCalledTimes(1);
         expect(getResult.mock.calls[0][0]).toBe(attackPrompt);
         expect(getResult.mock.calls[0][7]).toMatchObject({
+          includeConversationTranscript: true,
           conversationTranscript: JSON.stringify(
             [
               { role: 'user', content: 'My contact is Casey Morgan.' },
@@ -872,6 +873,7 @@ describe('redteam strategy result grading', () => {
       expect(result.pass).toBe(false);
       expect(getResult).toHaveBeenCalledTimes(1);
       expect(getResult.mock.calls[0][7]).toMatchObject({
+        includeConversationTranscript: true,
         conversationTranscript: JSON.stringify(
           [
             { role: 'user', content: 'My contact is Casey Morgan.' },

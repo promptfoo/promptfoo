@@ -1271,6 +1271,7 @@ describe('HydraProvider', () => {
         await provider.callApi('', gradingContext());
 
         expect(mockGrader.getResult.mock.calls[0][7].conversationTranscript).toBe('');
+        expect(mockGrader.getResult.mock.calls[1][7].includeConversationTranscript).toBe(true);
         expect(mockGrader.getResult.mock.calls[1][0]).toBe(followUp);
         expect(mockGrader.getResult.mock.calls[1][1]).toBe(finalOutput);
         expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBe(
@@ -1286,40 +1287,74 @@ describe('HydraProvider', () => {
       },
     );
 
-    it('preserves chat roles instead of treating system or assistant text as user input', async () => {
-      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (_prompt, vars) =>
-        JSON.stringify([
+    it.each(['text', 'multipart', 'function'])(
+      'attributes only delivered attack input for %s prompt templates',
+      async (format) => {
+        const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+          '../../../../src/evaluatorHelpers',
+        );
+        vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+        const template = [
           { role: 'system', content: 'Private system contact: system@example.com.' },
           { role: 'developer', content: 'Private developer contact: developer@example.com.' },
           { role: 'assistant', content: 'Template assistant example.' },
-          { role: 'user', content: String(vars.input) },
-        ]),
-      );
-      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
-      const context = gradingContext();
-      context.prompt.raw = JSON.stringify([
-        { role: 'system', content: 'Private system contact: system@example.com.' },
-        { role: 'developer', content: 'Private developer contact: developer@example.com.' },
-        { role: 'assistant', content: 'Template assistant example.' },
-        { role: 'user', content: '{{input}}' },
-      ]);
-      const result = await provider.callApi('', context);
-      const expectedHistory = [
-        { role: 'assistant', content: 'Template assistant example.' },
-        { role: 'user', content: opening },
-        { role: 'assistant', content: acknowledgment },
-        { role: 'assistant', content: 'Template assistant example.' },
-      ];
+          {
+            role: 'user',
+            content: format === 'multipart' ? [{ type: 'text', text: '{{input}}' }] : '{{input}}',
+          },
+        ];
+        const context = gradingContext();
+        context.prompt.raw = format === 'function' ? 'prompt function' : JSON.stringify(template);
+        if (format === 'function') {
+          context.prompt.function = async () => template;
+        }
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+        const result = await provider.callApi('', context);
+        const expectedHistory = [
+          { role: 'user', content: opening },
+          { role: 'assistant', content: acknowledgment },
+        ];
 
-      expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual(
-        expectedHistory,
-      );
-      expect(result.metadata.messages).toEqual([
-        ...expectedHistory,
-        { role: 'user', content: followUp },
-        { role: 'assistant', content: finalOutput },
-      ]);
-    });
+        expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual(
+          expectedHistory,
+        );
+        expect(result.metadata.messages).toEqual([
+          ...expectedHistory,
+          { role: 'user', content: followUp },
+          { role: 'assistant', content: finalOutput },
+        ]);
+      },
+    );
+
+    it.each(['omit', 'replace'])(
+      'excludes input that a prompt function chooses to %s',
+      async (mode) => {
+        const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+          '../../../../src/evaluatorHelpers',
+        );
+        vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+        const context = gradingContext();
+        context.prompt.raw = 'prompt function';
+        context.prompt.function = async ({ vars }) => [
+          { role: 'system', content: 'Private system contact: system@example.com.' },
+          ...(vars.input === opening
+            ? mode === 'omit'
+              ? []
+              : [{ role: 'user', content: 'Fixed template request.' }]
+            : [{ role: 'user', content: vars.input }]),
+        ];
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+        const result = await provider.callApi('', context);
+        expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
+          { role: 'assistant', content: acknowledgment },
+        ]);
+        expect(result.metadata.messages).toEqual([
+          { role: 'assistant', content: acknowledgment },
+          { role: 'user', content: followUp },
+          { role: 'assistant', content: finalOutput },
+        ]);
+      },
+    );
 
     it.each([false, true])(
       'keeps attacker JSON as user text for opaque requests (text layer=%s)',
@@ -1356,10 +1391,7 @@ describe('HydraProvider', () => {
       vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue(context.prompt.raw);
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
       const result = await provider.callApi('', context);
-      expect(result.metadata.messages).toEqual([
-        { role: 'assistant', content: acknowledgment },
-        { role: 'assistant', content: finalOutput },
-      ]);
+      expect(result.metadata.messages).toEqual([{ role: 'assistant', content: finalOutput }]);
       expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
     });
 
@@ -2487,10 +2519,7 @@ describe('HydraProvider', () => {
           stopReason: 'Max turns reached',
           successfulAttacks: [],
           totalSuccessfulAttacks: 0,
-          messages: expect.arrayContaining([
-            { role: 'user', content: 'rendered prompt' },
-            { role: 'assistant', content: 'Target response' },
-          ]),
+          messages: expect.arrayContaining([{ role: 'assistant', content: 'Target response' }]),
           redteamHistory: expect.arrayContaining([
             expect.objectContaining({
               prompt: 'Attack message',

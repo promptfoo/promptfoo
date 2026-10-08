@@ -250,6 +250,16 @@ export const handleRedteam = async (
     providerResponse,
     conversationTranscript,
   });
+  const providerId = getConfiguredProviderId(test, provider);
+  if (
+    providerId === 'promptfoo:redteam:hydra' ||
+    providerId === 'promptfoo:redteam:goblin' ||
+    ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
+      test.metadata?.strategyId ?? '',
+    )
+  ) {
+    gradingContext.includeConversationTranscript = true;
+  }
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);
