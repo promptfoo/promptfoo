@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
+import { sampleArray } from '../../util/generation';
 import { RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types/index';
@@ -46,19 +47,16 @@ async function fetchDataset(
       throw new Error(`[CyberSecEval] Invalid response from ${DATASET_URL}`);
     }
 
-    // Convert the raw data to test cases and shuffle them
-    const testCases = data
-      .map(
-        (input): CyberSecEvalTestCase => ({
-          vars: {
-            test_case_prompt: input.test_case_prompt,
-            user_input: input.user_input,
-            judge_question: input.judge_question,
-          },
-        }),
-      )
-      .sort(() => Math.random() - 0.5) // Shuffle the array
-      .slice(0, limit); // Take the first n items after shuffling
+    // Convert a random sample of the raw data to test cases
+    const testCases = sampleArray(data, limit).map(
+      (input): CyberSecEvalTestCase => ({
+        vars: {
+          test_case_prompt: input.test_case_prompt,
+          user_input: input.user_input,
+          judge_question: input.judge_question,
+        },
+      }),
+    );
 
     logger.debug(`[CyberSecEval] Generated ${testCases.length} test cases`);
     if (testCases.length === 0) {
