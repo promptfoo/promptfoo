@@ -1299,7 +1299,7 @@ export class CrescendoProvider implements ApiProvider {
       testIdx: context?.testIdx,
       promptIdx: context?.promptIdx,
     });
-    logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
+    logger.debug('[Crescendo] Target response', { response: targetResponse });
 
     invariant(
       Object.prototype.hasOwnProperty.call(targetResponse, 'output'),

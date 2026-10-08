@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../../../src/assertions/index';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
+import logger from '../../../../src/logger';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
@@ -1339,6 +1340,13 @@ describe('CrescendoProvider', () => {
       mockTargetProvider.callApi.mockResolvedValue({
         output: null,
         tokenUsage: { total: 5, prompt: 5, completion: 0, numRequests: 1 },
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: { authorization: 'Bearer CRESCENDO_SECRET_CANARY' },
+          },
+        },
       });
       const test: AtomicTestCase = {
         metadata: { pluginId: 'ssrf' },
@@ -1361,6 +1369,14 @@ describe('CrescendoProvider', () => {
       expect(tryUnblocking).toHaveBeenCalledTimes(unblocking ? 1 : 0);
       expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
       expect(mockGetGraderById).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith('[Crescendo] Target response', {
+        response: expect.objectContaining({ metadata: expect.any(Object) }),
+      });
+      expect(
+        vi
+          .mocked(logger.debug)
+          .mock.calls.some(([message]) => String(message).includes('CRESCENDO_SECRET_CANARY')),
+      ).toBe(false);
     },
   );
 
