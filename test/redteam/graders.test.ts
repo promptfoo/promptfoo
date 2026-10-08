@@ -15,6 +15,7 @@ import {
   MisinformationDisinformationGrader,
 } from '../../src/redteam/plugins/harmful/graders';
 import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
+import { MCPToolResponsePoisoningGrader } from '../../src/redteam/plugins/mcpToolResponsePoisoning';
 import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
@@ -67,6 +68,10 @@ describe('getGraderById', () => {
 
     const mcpGrader = getGraderById('promptfoo:redteam:mcp');
     expect(mcpGrader).toBeInstanceOf(MCPPluginGrader);
+
+    // The colon-containing id must not resolve to the `mcp` grader above.
+    const mcpPoisoningGrader = getGraderById('promptfoo:redteam:mcp:tool-response-poisoning');
+    expect(mcpPoisoningGrader).toBeInstanceOf(MCPToolResponsePoisoningGrader);
 
     const medicalAnchoringBiasGrader = getGraderById('promptfoo:redteam:medical:anchoring-bias');
     expect(medicalAnchoringBiasGrader).toBeInstanceOf(MedicalAnchoringBiasPluginGrader);
