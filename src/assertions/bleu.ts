@@ -62,7 +62,7 @@ function countNGrams(ngrams: string[]): Map<string, number> {
  * @returns BLEU score between 0 and 1 (0 for an empty or whitespace-only candidate,
  *   or when every reference is blank)
  * @throws When the candidate is null/undefined, references is empty, weights are
- *   negative, or weights don't sum to 1
+ *   not four finite numbers, are negative, or don't sum to 1
  */
 export function calculateBleuScore(
   candidate: string,
@@ -72,12 +72,8 @@ export function calculateBleuScore(
   if (candidate == null || references.length === 0 || weights.length !== 4) {
     throw new Error('Invalid inputs');
   }
-  // An empty or whitespace-only candidate (a refusal or truncated generation) has
-  // zero n-gram overlap with any reference, so its BLEU score is 0. Return early to
-  // avoid throwing — which would crash the eval — or letting `tokenize('   ')` (which
-  // yields `['']`) smooth to a misleadingly tiny nonzero score.
-  if (candidate.trim() === '') {
-    return 0;
+  if (Array.from(weights).some((weight) => !Number.isFinite(weight))) {
+    throw new Error('Weights must be finite numbers');
   }
   // BLEU weights are non-negative by definition. Rejecting negatives keeps the
   // score within the documented [0, 1] range (a negative weight on a smoothed
@@ -89,6 +85,13 @@ export function calculateBleuScore(
   }
   if (Math.abs(weights.reduce((a, b) => a + b) - 1) > 1e-4) {
     throw new Error('Weights must sum to 1');
+  }
+  // An empty or whitespace-only candidate (a refusal or truncated generation) has
+  // zero n-gram overlap with any reference, so its BLEU score is 0. Return before
+  // `tokenize('   ')` (which yields `['']`) can smooth it to a misleadingly tiny
+  // nonzero score.
+  if (candidate.trim() === '') {
+    return 0;
   }
 
   const candidateWords = tokenize(candidate);

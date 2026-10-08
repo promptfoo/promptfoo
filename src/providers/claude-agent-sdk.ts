@@ -5,9 +5,10 @@ import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from '../cliState';
 import { getEnvString, getProcessEnv } from '../envars';
-import { importModule, resolvePackageEntryPoint } from '../esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
   addActiveSpanRoleAttribute,
@@ -20,6 +21,7 @@ import {
   sanitizeBody,
   withGenAISpan,
 } from '../tracing/genaiTracer';
+import { getPackageVersion } from '../util/packageVersion';
 import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
@@ -27,6 +29,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode, validateMCPConfigForClaudeCode } from './mcp/transform';
 import {
@@ -335,7 +338,7 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
  * Claude Agent SDK Provider
  *
  * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
- *   npm install @anthropic-ai/claude-agent-sdk
+ *   npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
  *
  * Two default configurations:
  * - No working_dir: Runs in temp directory with no tools - behaves like plain chat API
@@ -367,6 +370,9 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
   'opusplan[1m]',
 ];
 
+// Accept compatible 0.3.x updates without requiring a Promptfoo release for each SDK patch.
+const CLAUDE_AGENT_SDK_RANGE = '^0.3.273';
+
 /**
  * Helper to load the Claude Agent SDK ESM module
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
@@ -375,20 +381,39 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
   const basePath =
     cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
 
-  const claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+  const basePaths = new Set([
+    basePath,
+    process.cwd(),
+    path.resolve(getDirectory(), '..'),
+    path.resolve(getDirectory(), '../..'),
+  ]);
+  let claudeCodePath: string | null = null;
+  for (const candidate of basePaths) {
+    claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', candidate);
+    if (claudeCodePath) {
+      break;
+    }
+  }
 
   if (!claudeCodePath) {
     throw new Error(
       dedent`The @anthropic-ai/claude-agent-sdk package could not be resolved from ${basePath}.
 
       To use the Claude Agent SDK provider, install it with:
-        npm install @anthropic-ai/claude-agent-sdk
+        npm install promptfoo @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE}
 
       If the package is already installed elsewhere, run promptfoo from the
       project root (or point the config at that root) so node_modules is on
       the resolution path.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
+    );
+  }
+
+  const version = getPackageVersion('@anthropic-ai/claude-agent-sdk', claudeCodePath);
+  if (!version || !semverSatisfies(version, CLAUDE_AGENT_SDK_RANGE)) {
+    throw new Error(
+      `The Claude Agent SDK provider requires @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE}`,
     );
   }
 
@@ -407,7 +432,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       - Corrupted installation
 
       Try reinstalling:
-        npm install @anthropic-ai/claude-agent-sdk
+        npm install promptfoo @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
     );
@@ -423,6 +448,12 @@ export interface ClaudeCodeOptions {
    * If not supplied, we'll use an empty temp dir for isolation
    */
   working_dir?: string;
+
+  /**
+   * Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. `true` clones
+   * a clean git repository and copies anything else; `'git'` or `'copy'` forces one method.
+   */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * 'model' and 'fallback_model' are optional
@@ -1435,6 +1466,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    // A fresh workspace must not be served from, or written to, the response cache.
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
 
     if (config.ask_user_question !== undefined) {
       validateAskUserQuestionConfig(config.ask_user_question);
@@ -1470,6 +1503,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           env[key] = value;
         }
       }
+    }
+
+    if (inIsolatedWorkspace) {
+      clearRepositoryEnv(env);
     }
 
     if (config.deep_tracing) {
@@ -1792,6 +1829,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
     const cacheResult =
+      inIsolatedWorkspace ||
       runtimeCallbackBypassesCache ||
       sensitiveMcpBypassesCache ||
       settingsConfigurationBypassesCache ||
@@ -2028,6 +2066,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             this.claudeCodeModule = await loadClaudeCodeSDK();
           }
 
+          // All supported SDK versions honor the custom prompt object and snapshot flag.
           const res = await this.claudeCodeModule.query(queryParams);
           query = res;
 

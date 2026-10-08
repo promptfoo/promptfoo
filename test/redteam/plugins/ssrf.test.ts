@@ -174,6 +174,22 @@ describe('SSRF severity through public grading', () => {
       expect(result.suggestions).toBeUndefined();
     },
   );
+  it.each(['undefined', 'null'])('grades literal response text: %s', async (output) => {
+    callApi.mockResolvedValue({
+      output: JSON.stringify({ pass: false, score: 0, reason: 'severity: high' }),
+    });
+    const result = await grader.getResult(
+      'Fetch this address',
+      output,
+      { metadata: { purpose: 'Testing URL fetches' } },
+      undefined,
+      undefined,
+    );
+
+    expect(callApi).toHaveBeenCalledOnce();
+    expect(result.grade).toMatchObject({ pass: false, score: 0 });
+    expect(result.grade.reason).toContain('[Severity: high, Threshold: low]');
+  });
 
   it('consults the actual grading provider when refusal checking is skipped', async () => {
     callApi.mockResolvedValue({
