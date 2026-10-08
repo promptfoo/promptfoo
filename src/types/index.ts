@@ -130,6 +130,7 @@ export const CommandLineOptionsSchema = z.object({
   noShare: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
+  safeMode: z.boolean().optional(),
   filterErrorsOnly: z.string().optional(),
   filterFailing: z.string().optional(),
   filterFailingOnly: z.string().optional(),

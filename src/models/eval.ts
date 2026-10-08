@@ -332,6 +332,11 @@ export default class Eval {
   runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
+  /**
+   * The first non-transient HTTP status among the rows added in this run. It stands in for
+   * the database when that cannot be queried afterwards.
+   */
+  private observedTargetErrorStatus?: number;
   private failedResults = new Map<string, EvaluateResult>();
   // Reconstructed EvalResults for rows that failed to persist, cached so comparison
   // assertions reuse the SAME instance across passes (select-best then max-score).
@@ -756,6 +761,14 @@ export default class Eval {
   }
 
   async addResult(result: EvaluateResult) {
+    const httpStatus = result.response?.metadata?.http?.status;
+    if (
+      this.observedTargetErrorStatus === undefined &&
+      typeof httpStatus === 'number' &&
+      isNonTransientHttpStatus(httpStatus)
+    ) {
+      this.observedTargetErrorStatus = httpStatus;
+    }
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
     });
@@ -846,13 +859,14 @@ export default class Eval {
    * Find a non-transient HTTP error status from evaluation results.
    * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
    *
-   * For persisted evals: Uses efficient O(1) database query with LIMIT 1.
+   * For persisted evals: Uses efficient O(1) database query with LIMIT 1, and also scans
+   * the rows that could not be saved, which the database does not have.
    * For non-persisted evals: Falls back to scanning in-memory results.
    */
   async findTargetErrorStatus(): Promise<number | undefined> {
-    // Helper to scan in-memory results
-    const scanInMemory = (): number | undefined => {
-      for (const result of this.results) {
+    // Helper to scan results held in memory
+    const scan = (results: Iterable<Pick<EvaluateResult, 'response'>>): number | undefined => {
+      for (const result of results) {
         const status = result.response?.metadata?.http?.status;
         if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
           return status;
@@ -860,11 +874,16 @@ export default class Eval {
       }
       return undefined;
     };
+    const scanInMemory = () => scan(this.results);
 
     // For non-persisted evals, scan in-memory results
     if (!this.persisted) {
       return scanInMemory();
     }
+
+    // A row that could not be saved is kept in memory instead. The row that stopped the eval
+    // can be one of them, and the query below would not find it.
+    const unsavedStatus = scan(this.failedResults.values());
 
     // For persisted evals, use efficient database query
     try {
@@ -889,11 +908,11 @@ export default class Eval {
         .limit(1)
         .get();
 
-      return result?.httpStatus ?? undefined;
+      return result?.httpStatus ?? unsavedStatus;
     } catch {
-      // Fall back to in-memory scan if database query fails
-      // This handles edge cases like mocked databases in tests
-      return scanInMemory();
+      // Fall back to what is held in memory if the database query fails: loaded results,
+      // rows that could not be saved, and what the rows added in this run showed.
+      return scanInMemory() ?? unsavedStatus ?? this.observedTargetErrorStatus;
     }
   }
 

@@ -7,7 +7,7 @@ Compare Luna and Terra at medium reasoning effort on the same pinned OWASP Juice
 ```bash
 npx promptfoo@latest init --example openai-codex-security
 cd openai-codex-security
-npm install promptfoo @openai/codex-security@^0.1.31
+npm install promptfoo @openai/codex-security@^0.2.0
 ```
 
 Native operations require supported Node.js, Python 3.10+, and Codex Security account/model access. The example uses a saved Codex login (`auth: chatgpt`); change both providers to `auth: api-key` to use process-environment API credentials. See [installation and authentication](https://www.promptfoo.dev/docs/providers/openai-codex-security/#installation-and-authentication).

@@ -290,7 +290,7 @@ async function loadProvidersForTesting(
 
     // Cloud target
     if (isUuid(target)) {
-      const providerOptions = await getProviderFromCloud(target);
+      const providerOptions = await getProviderFromCloud(target, {});
       const patchedOptions = isHttpProvider(providerOptions)
         ? patchHttpConfigForValidation(providerOptions)
         : providerOptions;
@@ -540,11 +540,13 @@ export async function doValidateTarget(
   if (opts.config) {
     logger.info(chalk.dim(`Configuration: ${opts.config}`));
     try {
-      const { config } = await resolveConfigs(
+      const { config, testSuite } = await resolveConfigs(
         { config: [opts.config], envPath: opts.envPath },
         defaultConfig,
       );
-      await runProviderTests(undefined, config as UnifiedConfig);
+      // The providers are loaded again for testing. They get the suite's env, whose values
+      // are strings, instead of the authored one, which can hold numbers and booleans.
+      await runProviderTests(undefined, { ...config, env: testSuite.env } as UnifiedConfig);
     } catch (err) {
       if (err instanceof ConfigResolutionError) {
         logConfigResolutionError(err, LOAD_FAILURE_PREFIX);
