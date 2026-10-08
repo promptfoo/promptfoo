@@ -6,8 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { normalizePath, readLayerConfig } from './architectureUtils';
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(scriptDir, '..');
+const repoRoot = path.resolve(import.meta.dirname, '..');
 const rootOwnedPrefixes = ['src/', 'test/', 'scripts/', 'packages/'];
 const externalProjectPrefixes = ['src/app/', 'test/code-scan-action/'];
 
@@ -17,12 +16,7 @@ interface ProjectConfig {
 }
 
 function isTypeScriptFile(filePath: string): boolean {
-  return (
-    filePath.endsWith('.ts') ||
-    filePath.endsWith('.tsx') ||
-    filePath.endsWith('.mts') ||
-    filePath.endsWith('.cts')
-  );
+  return /\.(?:[cm]?ts|tsx)$/.test(filePath);
 }
 
 function hasPrefix(filePath: string, prefixes: string[]): boolean {

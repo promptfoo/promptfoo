@@ -219,9 +219,12 @@ export function assertionFromString(expected: string): Assertion {
         threshold: threshold ?? defaultThreshold,
       };
     } else {
+      // Keep an explicit `type(threshold):value` threshold (e.g. llm-rubric, bleu,
+      // javascript) so the handler doesn't silently fall back to its default.
       return {
         type: fullType as AssertionType,
         value: value?.trim?.(),
+        ...(threshold === undefined ? {} : { threshold }),
       };
     }
   }
