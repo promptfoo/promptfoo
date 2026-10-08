@@ -1,3 +1,4 @@
+import { parse as parseBrowserCsv } from 'csv-parse/browser/esm/sync';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseCommaSeparatedValues } from '../src/assertions/contains';
@@ -12,6 +13,36 @@ vi.mock('../src/logger', () => ({
 }));
 
 import type { Assertion, CsvRow, TestCase } from '../src/types/index';
+
+describe.each([
+  ['Node.js', parseCsv],
+  ['browser', parseBrowserCsv],
+] as const)('%s CSV parsing', (_name, parse) => {
+  it('preserves special column names as own properties', () => {
+    const [record] = parse<Record<string, string>>(
+      '__proto__,constructor,toString\nproto-value,constructor-value,toString-value',
+      { columns: true },
+    );
+
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.hasOwn(record, '__proto__')).toBe(true);
+    expect(record.__proto__).toBe('proto-value');
+    expect(record.constructor).toBe('constructor-value');
+    expect(record.toString).toBe('toString-value');
+  });
+
+  it('groups duplicate __proto__ headers without replacing the record prototype', () => {
+    const [record] = parse<Record<string, string[]>>(
+      '__proto__,__proto__,value,value\nfirst,second,one,two',
+      { columns: true, group_columns_by_name: true },
+    );
+
+    expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+    expect(Object.hasOwn(record, '__proto__')).toBe(true);
+    expect(record.__proto__).toEqual(['first', 'second']);
+    expect(record.value).toEqual(['one', 'two']);
+  });
+});
 
 describe('testCaseFromCsvRow', () => {
   const INVALID_THRESHOLD_VALUES = [
@@ -918,6 +949,42 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('similar');
     expect(result.value).toBe('Expected output');
     expect(result.threshold).toBe(0.9);
+  });
+
+  it('should keep an explicit threshold for types without a CSV default threshold', () => {
+    for (const type of [
+      'bleu',
+      'gleu',
+      'meteor',
+      'tool-call-f1',
+      'g-eval',
+      'llm-rubric',
+      'factuality',
+      'javascript',
+    ]) {
+      const result: Assertion = assertionFromString(`${type}(0.3):Expected output`);
+      expect(result).toEqual({ type, value: 'Expected output', threshold: 0.3 });
+    }
+    expect(assertionFromString('not-bleu(0.9):Expected output')).toEqual({
+      type: 'not-bleu',
+      value: 'Expected output',
+      threshold: 0.9,
+    });
+  });
+
+  it('should not add a threshold for types without a CSV default when none is specified', () => {
+    expect(assertionFromString('bleu:Expected output')).toStrictEqual({
+      type: 'bleu',
+      value: 'Expected output',
+    });
+  });
+
+  it('should preserve an explicit zero threshold for types without a CSV default', () => {
+    expect(assertionFromString('bleu(0):Expected output')).toEqual({
+      type: 'bleu',
+      value: 'Expected output',
+      threshold: 0,
+    });
   });
 
   it('should preserve zero threshold when explicitly specified', () => {
