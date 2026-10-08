@@ -10,6 +10,7 @@ import webpack from 'webpack';
 export async function withWebpackBundle<T>(
   source: URL,
   check: (exports: T) => Promise<void>,
+  unavailablePackages: string[] = [],
 ): Promise<void> {
   const root = fileURLToPath(new URL('../../', import.meta.url));
   // Keep the fixture below node_modules so runtime optional peers resolve from this install.
@@ -17,7 +18,7 @@ export async function withWebpackBundle<T>(
   try {
     const library = await Rolldown.rolldown({
       input: fileURLToPath(source),
-      external: (id) => /^[a-z@]/i.test(id),
+      external: (id) => !path.isAbsolute(id) && /^[a-z@]/i.test(id),
     });
     const entry = path.join(directory, 'library.mjs');
     try {
@@ -31,7 +32,17 @@ export async function withWebpackBundle<T>(
       context: directory,
       entry,
       target: 'node',
-      externals: /^[a-z@]/i,
+      externals: [
+        ({ request }, callback) => {
+          if (request && unavailablePackages.includes(request)) {
+            callback(new Error(`${request} is not installed in this consumer`));
+          } else if (request && !path.isAbsolute(request) && /^[a-z@]/i.test(request)) {
+            callback(null, `commonjs ${request}`);
+          } else {
+            callback();
+          }
+        },
+      ],
       devtool: false,
       output: { path: directory, filename: 'consumer.cjs', library: { type: 'commonjs2' } },
     });
