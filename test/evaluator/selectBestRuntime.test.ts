@@ -139,6 +139,74 @@ describeEvaluator('select-best runtime grading configuration', () => {
     },
   );
 
+  it('compares a failed checkpoint replacement instead of its stale saved evidence', async () => {
+    const { grader, suite, target } = makeSuite();
+    const controller = new AbortController();
+    suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };
+    suite.tests![0].assert!.push({ type: 'contains', value: 'Completed' });
+    vi.mocked(target.callApi).mockImplementation((_prompt, _context, options) => {
+      options?.onProgress?.({
+        output: 'Stale partial evidence',
+        tokenUsage: { total: 11, numRequests: 1 },
+      });
+      return new Promise<never>(() => {});
+    });
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    const firstRun = evaluate(suite, record, {
+      maxConcurrency: 1,
+      abortSignal: controller.signal,
+    });
+    await vi.waitFor(() => expect(target.callApi).toHaveBeenCalledOnce());
+    controller.abort();
+    await firstRun;
+    const [checkpoint] = await record.fetchResultsByTestIdx(0);
+    const append = record.addResult.bind(record);
+    const appendSpy = vi.spyOn(record, 'addResult').mockImplementation((row, options) => {
+      if (options?.replaceId === checkpoint.id) {
+        return Promise.reject(new Error('SQLITE_BUSY'));
+      }
+      return append(row, options);
+    });
+    try {
+      cliState.resume = true;
+      vi.mocked(target.callApi).mockImplementation(async (prompt) => ({
+        output: `Completed ${prompt}`,
+        tokenUsage: { total: 7, numRequests: 1 },
+      }));
+      await evaluate(suite, record, { maxConcurrency: 1 });
+
+      expect(grader.callApi).toHaveBeenCalledOnce();
+      expect(JSON.parse(vi.mocked(grader.callApi).mock.calls[0][0])).toEqual([
+        'Completed first',
+        'Completed second',
+      ]);
+      const [recovered] = await record.getFailedResultsByTestIdx(0);
+      expect(recovered).toMatchObject({ success: true, score: 1 });
+      expect(recovered.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ assertion: expect.objectContaining({ type: 'select-best' }) }),
+        ]),
+      );
+      expect(record.prompts[0].metrics).toMatchObject({
+        score: 0,
+        testPassCount: 0,
+        testFailCount: 0,
+        testErrorCount: 1,
+        totalLatencyMs: checkpoint.latencyMs,
+        tokenUsage: { total: 11, numRequests: 1 },
+      });
+      const savedRows = await record.fetchResultsByTestIdx(0);
+      expect(savedRows).toHaveLength(2);
+      expect(savedRows.find((row) => row.promptIdx === 0)?.id).toBe(checkpoint.id);
+      expect(savedRows.find((row) => row.promptIdx === 1)).toMatchObject({
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+    } finally {
+      appendSpy.mockRestore();
+    }
+  });
+
   it('recovers comparison errors without clearing assertion or target failures', async () => {
     const { grader, suite, target } = makeSuite();
     suite.prompts = ['Rejected candidate', 'Target error', 'Accepted candidate'].map(toPrompt);

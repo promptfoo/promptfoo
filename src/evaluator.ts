@@ -3698,6 +3698,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   rateLimitRegistry: RateLimitRegistry | undefined;
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
   private readonly currentResultKeys = new Set<string>();
+  // Failed resume writes (including checkpoint lookup) must not change durable metrics.
+  // Completed responses remain available to recovery/comparison until a later resume saves them.
+  private readonly failedResumeWrites = new Set<string>();
   private readonly retryErrorResultIds = new Set(
     cliState.retryMode ? cliState._retryErrorResultIds : [],
   );
@@ -3915,6 +3918,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         await this.store.appendResult(row);
       }
     } catch (error) {
+      if (cliState.resume && this.store.persisted) {
+        this.failedResumeWrites.add(getResultIndexKey(row));
+      }
       this.store.recordResultPersistenceFailure(row);
       const resultSummary = summarizeEvaluateResultForLogging(row);
       logger.error('[Evaluator] Error saving result', {
@@ -3948,6 +3954,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     previousRow?: EvaluateResult;
     row: EvaluateResult;
   }): void {
+    if (this.failedResumeWrites.has(getResultIndexKey(row))) {
+      return;
+    }
     if (previousRow) {
       metrics.testErrorCount = Math.max(0, metrics.testErrorCount - 1);
       metrics.totalLatencyMs -= previousRow.latencyMs || 0;
@@ -4128,7 +4137,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         evalStep,
         mathjsModule: context.mathjsModule,
         metrics,
-        promptEvalCount: reservePromptEvalCount(context, row.promptIdx, Boolean(previousRow)),
+        promptEvalCount: reservePromptEvalCount(
+          context,
+          row.promptIdx,
+          Boolean(previousRow) || this.failedResumeWrites.has(getResultIndexKey(row)),
+        ),
         previousRow,
         row,
       });
@@ -4320,7 +4333,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         evalStep,
         mathjsModule: context.mathjsModule,
         metrics,
-        promptEvalCount: reservePromptEvalCount(context, evalStep.promptIdx, Boolean(previousRow)),
+        promptEvalCount: reservePromptEvalCount(
+          context,
+          evalStep.promptIdx,
+          Boolean(previousRow) || this.failedResumeWrites.has(getResultIndexKey(timeoutResult)),
+        ),
         previousRow,
         row: timeoutResult,
       });
@@ -4841,7 +4858,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             weight: assertion.weight,
           },
         },
-        metrics: prompts[result.promptIdx]?.metrics,
+        metrics: this.getComparisonMetrics(result, prompts),
         result,
       });
       return;
@@ -4921,7 +4938,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         result.failureReason = ResultFailureReason.ERROR;
         result.success = false;
         result.score = 0;
-        this.updateComparisonResultCounts(result, previous, prompts[result.promptIdx]?.metrics);
+        this.updateComparisonResultCounts(
+          result,
+          previous,
+          this.getComparisonMetrics(result, prompts),
+        );
         this.trackFinalJsonlResult(result);
         if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
           await this.store.saveResult(result);
@@ -4932,7 +4953,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     for (let index = 0; index < gradingResults.length; index++) {
       await this.applySelectBestGradingResult({
         gradingResult: gradingResults[index],
-        metrics: prompts[comparableResults[index].promptIdx]?.metrics,
+        metrics: this.getComparisonMetrics(comparableResults[index], prompts),
         result: comparableResults[index],
       });
     }
@@ -5037,10 +5058,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           ...maxScoreGradingResults[index],
           assertion: maxScoreAssertion,
         },
-        metrics: prompts[resultsToCompare[index].promptIdx]?.metrics,
+        metrics: this.getComparisonMetrics(resultsToCompare[index], prompts),
         result: resultsToCompare[index],
       });
     }
+  }
+
+  private getComparisonMetrics(result: TResult, prompts: CompletedPrompt[]) {
+    return this.failedResumeWrites.has(getResultIndexKey(result))
+      ? undefined
+      : prompts[result.promptIdx]?.metrics;
   }
 
   private async getResultsToCompare(testIdx: number): Promise<TResult[]> {
@@ -5061,17 +5088,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!this.store.resultPersistenceFailed) {
       return base;
     }
-    // A row that failed to persist is absent from the database (and from `results`), so it
-    // would otherwise be excluded from the comparison — skewing the winner for its siblings
-    // and leaving the failed row with stale, pre-comparison grading. Merge it back in.
+    // Recovery rows are authoritative even when a failed checkpoint replacement leaves
+    // stale evidence in the database. Compare the completed replacement, not that checkpoint.
     const failed = await this.store.readFailedResultsByTestIdx(testIdx);
     if (failed.length === 0) {
       return base;
     }
-    const seen = new Set(base.map(getResultIndexKey));
-    return [...base, ...failed.filter((r) => !seen.has(getResultIndexKey(r)))].sort(
-      (a, b) => a.promptIdx - b.promptIdx,
-    );
+    const merged = new Map(base.map((result) => [getResultIndexKey(result), result]));
+    for (const result of failed) {
+      merged.set(getResultIndexKey(result), result);
+    }
+    return [...merged.values()].sort((a, b) => a.promptIdx - b.promptIdx);
   }
 
   private getComparisonCallApiContext(

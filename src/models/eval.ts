@@ -772,6 +772,12 @@ export default class Eval {
       persist: this.persisted,
       ...(options?.replaceId && { replaceId: options.replaceId }),
     });
+    // A later resume can reuse this Eval instance after a persistence failure. This saved
+    // row supersedes all recovery copies, including checkpoints buffered after another failure.
+    const key = getResultIndexKey(result);
+    this.failedResults.delete(key);
+    this.failedEvalResults.delete(key);
+    this.finalJsonlResults.delete(key);
     if (!this.persisted) {
       // We're only going to keep results in memory if the eval isn't persisted in the database
       // This is to avoid memory issues when running large evaluations

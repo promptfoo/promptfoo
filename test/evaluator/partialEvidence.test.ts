@@ -79,6 +79,8 @@ describeEvaluator('partial provider evidence', () => {
         metadata: { incomplete: true, __promptfoo: { resumable: true } },
       });
       expect(await EvalResult.getCompletedIndexPairs(record.id)).toEqual(new Set());
+      // A failure in another case can buffer this successfully saved checkpoint for JSONL.
+      record.recordFinalJsonlResult((await record.toEvaluateSummary()).results[0]);
       finishProvider();
       await vi.advanceTimersByTimeAsync(0);
       expect((await record.fetchResultsByTestIdx(0)).map((row) => row.id)).toEqual([checkpoint.id]);
@@ -112,6 +114,7 @@ describeEvaluator('partial provider evidence', () => {
       });
       expect(replacement[0].metadata?.__promptfoo?.resumable).toBeUndefined();
       expect(replacement[0].metadata?.incomplete).toBeUndefined();
+      expect(record.getFinalJsonlResults()).toEqual([]);
       expect(provider.callApi).toHaveBeenCalledTimes(2);
       expect(record.getStats()).toMatchObject({
         successes: 1,
@@ -127,51 +130,147 @@ describeEvaluator('partial provider evidence', () => {
     }
   });
 
-  it('keeps the previous checkpoint if atomic replacement fails', async () => {
-    const controller = new AbortController();
-    const provider: ApiProvider = {
-      id: () => 'replacement-rollback',
-      callApi: vi.fn((_prompt, _context, options) => {
-        options?.onProgress?.({
-          output: 'Saved evidence',
+  it.each([
+    { freshSession: false, failure: 'write' },
+    { freshSession: true, failure: 'write' },
+    { freshSession: false, failure: 'read' },
+    { freshSession: true, failure: 'read' },
+  ])(
+    'keeps checkpoint metrics after a failed replacement and recovers: %j',
+    async ({ freshSession, failure }) => {
+      const controller = new AbortController();
+      const provider: ApiProvider = {
+        id: () => 'replacement-rollback',
+        callApi: vi.fn((_prompt, _context, options) => {
+          options?.onProgress?.({
+            output: 'Saved evidence',
+            tokenUsage: { total: 11, numRequests: 1 },
+          });
+          return new Promise<never>((_resolve, reject) => {
+            options?.abortSignal?.addEventListener(
+              'abort',
+              () => reject(options.abortSignal?.reason),
+              { once: true },
+            );
+          });
+        }),
+      };
+      const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
+      const record = await Eval.create({}, suite.prompts);
+      const firstRun = evaluate(suite, record, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledOnce());
+      controller.abort();
+      await firstRun;
+      const [checkpoint] = await record.fetchResultsByTestIdx(0);
+      const db = await getDb();
+      await db.run(sql`CREATE TEMP TRIGGER prevent_checkpoint_delete BEFORE DELETE ON eval_results
+      BEGIN SELECT RAISE(ABORT, 'Synthetic checkpoint replacement failure'); END`);
+      const lookup =
+        failure === 'read'
+          ? vi
+              .spyOn(record, 'fetchResultsByTestIdx')
+              .mockRejectedValueOnce(new Error('SQLITE_BUSY'))
+          : undefined;
+      try {
+        cliState.resume = true;
+        vi.mocked(provider.callApi).mockResolvedValue({
+          output: 'Replacement response',
+          tokenUsage: { total: 7, numRequests: 1 },
+        });
+        await evaluate(suite, record, { timeoutMs: 0 });
+
+        expect(record.resultPersistenceFailed).toBe(true);
+        const saved = await record.fetchResultsByTestIdx(0);
+        expect(saved).toHaveLength(1);
+        expect(saved[0]).toMatchObject({
+          id: checkpoint.id,
+          response: { output: 'Saved evidence' },
+          metadata: { __promptfoo: { resumable: true } },
+        });
+        expect(await record.getFailedResultsByTestIdx(0)).toHaveLength(1);
+        expect(record.prompts[0].metrics).toMatchObject({
+          score: 0,
+          testPassCount: 0,
+          testFailCount: 0,
+          testErrorCount: 1,
+          totalLatencyMs: checkpoint.latencyMs,
           tokenUsage: { total: 11, numRequests: 1 },
         });
-        return new Promise<never>((_resolve, reject) => {
-          options?.abortSignal?.addEventListener(
-            'abort',
-            () => reject(options.abortSignal?.reason),
-            { once: true },
-          );
-        });
-      }),
+        const savedRecord = await Eval.findById(record.id);
+        expect(savedRecord!.prompts[0].metrics).toEqual(record.prompts[0].metrics);
+      } finally {
+        lookup?.mockRestore();
+        await db.run(sql`DROP TRIGGER prevent_checkpoint_delete`);
+      }
+
+      const resumed = freshSession ? (await Eval.findById(record.id))! : record;
+      vi.mocked(provider.callApi).mockResolvedValue({
+        output: 'Final response',
+        tokenUsage: { total: 5, numRequests: 1 },
+      });
+      await evaluate(suite, resumed, { timeoutMs: 0 });
+      const finalRows = await resumed.fetchResultsByTestIdx(0);
+      expect(finalRows).toHaveLength(1);
+      expect(finalRows[0]).toMatchObject({
+        success: true,
+        response: { output: 'Final response' },
+        failureReason: ResultFailureReason.NONE,
+      });
+      expect(await resumed.getFailedResultsByTestIdx(0)).toEqual([]);
+      expect(resumed.prompts[0].metrics).toMatchObject({
+        score: 1,
+        testPassCount: 1,
+        testFailCount: 0,
+        testErrorCount: 0,
+        totalLatencyMs: finalRows[0].latencyMs,
+        tokenUsage: { total: 5, numRequests: 1 },
+      });
+      expect((await Eval.findById(record.id))!.prompts[0].metrics).toEqual(
+        resumed.prompts[0].metrics,
+      );
+    },
+  );
+
+  it('clears stale recovery copies when a queued resume row is finally saved', async () => {
+    const provider: ApiProvider = {
+      id: () => 'queued-resume-recovery',
+      callApi: vi.fn(async () => ({
+        output: 'Unsaved completed response',
+        tokenUsage: { total: 7, numRequests: 1 },
+      })),
     };
     const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
     const record = await Eval.create({}, suite.prompts);
-    const firstRun = evaluate(suite, record, { abortSignal: controller.signal });
-    await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledOnce());
-    controller.abort();
-    await firstRun;
-    const [checkpoint] = await record.fetchResultsByTestIdx(0);
-    const db = await getDb();
-    await db.run(sql`CREATE TEMP TRIGGER prevent_checkpoint_delete BEFORE DELETE ON eval_results
-      BEGIN SELECT RAISE(ABORT, 'Synthetic checkpoint replacement failure'); END`);
-    try {
-      cliState.resume = true;
-      vi.mocked(provider.callApi).mockResolvedValue({ output: 'Replacement response' });
-      await evaluate(suite, record, { timeoutMs: 0 });
+    cliState.resume = true;
+    const append = vi.spyOn(record, 'addResult').mockRejectedValueOnce(new Error('SQLITE_BUSY'));
+    await evaluate(suite, record, { timeoutMs: 0 });
+    append.mockRestore();
+    expect(await record.fetchResultsByTestIdx(0)).toEqual([]);
+    expect(await record.getFailedResultsByTestIdx(0)).toHaveLength(1);
+    expect(record.prompts[0].metrics).toMatchObject({
+      testPassCount: 0,
+      testFailCount: 0,
+      testErrorCount: 0,
+      totalLatencyMs: 0,
+      tokenUsage: { total: 0, numRequests: 0 },
+    });
 
-      expect(record.resultPersistenceFailed).toBe(true);
-      const saved = await record.fetchResultsByTestIdx(0);
-      expect(saved).toHaveLength(1);
-      expect(saved[0]).toMatchObject({
-        id: checkpoint.id,
-        response: { output: 'Saved evidence' },
-        metadata: { __promptfoo: { resumable: true } },
-      });
-      expect(await record.getFailedResultsByTestIdx(0)).toHaveLength(1);
-    } finally {
-      await db.run(sql`DROP TRIGGER prevent_checkpoint_delete`);
-    }
+    vi.mocked(provider.callApi).mockResolvedValue({
+      output: 'Final saved response',
+      tokenUsage: { total: 5, numRequests: 1 },
+    });
+    await evaluate(suite, record, { timeoutMs: 0 });
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].response?.output).toBe('Final saved response');
+    expect(await record.getFailedResultsByTestIdx(0)).toEqual([]);
+    expect(record.prompts[0].metrics).toMatchObject({
+      testPassCount: 1,
+      testFailCount: 0,
+      testErrorCount: 0,
+      totalLatencyMs: rows[0].latencyMs,
+      tokenUsage: { total: 5, numRequests: 1 },
+    });
   });
 
   it('ordinary resume leaves provider errors and per-case timeouts completed', async () => {
