@@ -12,7 +12,7 @@ on:
         required: false
         type: string
 
-permissions:
+permissions: &read-only-permissions
   contents: read
 
 concurrency:
@@ -69,13 +69,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: release-please
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
+        with: &no-persisted-credentials
           persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - &actions-setup-node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -94,25 +94,21 @@ jobs:
     needs: [build, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-    outputs:
+    permissions: *read-only-permissions
+    outputs: &npm-package-outputs
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
       sha512: ${{ steps.package-artifact.outputs.sha512 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+        with: *no-persisted-credentials
+      - *actions-setup-node
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
       - run: npm ci --registry=https://registry.npmjs.org/
       # Publishing a tarball does not run prepublishOnly. Run its clean build and
       # required telemetry-key guard here, before packing and validating the bytes.
-      - name: Build npm package
+      - &build-npm-package
+        name: Build npm package
         run: npm run prepublishOnly
         env:
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
@@ -122,7 +118,8 @@ jobs:
           tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/promptfoo-package")"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           echo "sha512=$(sha512sum "$tarball" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-      - name: Upload npm package
+      - &upload-npm-package
+        name: Upload npm package
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -153,7 +150,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - name: Download verified npm package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
+        with: &npm-package-download
           artifact-ids: ${{ needs.build-npm.outputs.artifact-id || needs.build-npm-backfill.outputs.artifact-id }}
           path: ${{ runner.temp }}/promptfoo-package
       - name: Publish verified npm package
@@ -193,11 +190,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.tag_name != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-    outputs:
-      artifact-id: ${{ steps.upload.outputs.artifact-id }}
-      sha512: ${{ steps.package-artifact.outputs.sha512 }}
+    permissions: *read-only-permissions
+    outputs: *npm-package-outputs
     env:
       TAG_NAME: ${{ inputs.tag_name }}
     steps:
@@ -211,10 +205,7 @@ jobs:
         with:
           ref: refs/tags/${{ inputs.tag_name }}
           persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *actions-setup-node
       - name: Verify package version matches tag
         run: |
           package_version="$(node -p "require('./package.json').version")"
@@ -224,10 +215,7 @@ jobs:
           fi
       - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
       - run: npm ci --registry=https://registry.npmjs.org/
-      - name: Build npm package
-        run: npm run prepublishOnly
-        env:
-          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+      - *build-npm-package
       - name: Pack npm package
         id: package-artifact
         # Preserve inventory checks on capable tags; older tags pack prebuilt output directly.
@@ -243,14 +231,7 @@ jobs:
           fi
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           echo "sha512=$(sha512sum "$tarball" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-      - name: Upload npm package
-        id: upload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: promptfoo-npm-package
-          path: ${{ steps.package-artifact.outputs.tarball }}
-          if-no-files-found: error
-          retention-days: 7
+      - *upload-npm-package
 
   validate-npm:
     # Consumer dependencies can modify this runner, but not the builder's uploaded bytes.
@@ -262,8 +243,7 @@ jobs:
     needs: [build-npm, build-npm-backfill]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -277,9 +257,7 @@ jobs:
       - run: npm ci --registry=https://registry.npmjs.org/
       - name: Download npm package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          artifact-ids: ${{ needs.build-npm.outputs.artifact-id || needs.build-npm-backfill.outputs.artifact-id }}
-          path: ${{ runner.temp }}/promptfoo-package
+        with: *npm-package-download
       - name: Validate npm package
         env:
           PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
@@ -376,8 +354,7 @@ jobs:
     # `publish-npm` is in `needs` for ordering only, not gating — see the
     # npm-availability check below for the rationale.
     needs: [release-please, build, publish-npm]
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     env:
       # Plain release-artifact files mirrored into promptfoo/code-scan-action.
       # `dist/` (a directory) and `.release-source.json` (generated below, not
@@ -391,10 +368,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+      - *actions-setup-node
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/

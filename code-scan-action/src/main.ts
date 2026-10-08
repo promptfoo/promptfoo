@@ -559,13 +559,14 @@ async function installPromptfooCli(promptfooVersion: string, installDir: string)
 
 async function runPromptfooScan(
   cliArgs: string[],
-  oidcToken: string | undefined,
   promptfooVersion: string,
 ): Promise<ScanResponse> {
   const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
   const installDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-install-'));
   try {
     const promptfooEntrypoint = await installPromptfooCli(promptfooVersion, installDir);
+    // OIDC tokens are short-lived; installation must not consume their authentication window.
+    const oidcToken = await authenticateWithOidc();
 
     core.info('🚀 Running promptfoo code-scans run...');
 
@@ -613,15 +614,11 @@ async function runPromptfooScan(
   }
 }
 
-function getScanResponse(
-  cliArgs: string[],
-  oidcToken: string | undefined,
-  promptfooVersion: string,
-): Promise<ScanResponse> {
+function getScanResponse(cliArgs: string[], promptfooVersion: string): Promise<ScanResponse> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
-  return runPromptfooScan(cliArgs, oidcToken, promptfooVersion);
+  return runPromptfooScan(cliArgs, promptfooVersion);
 }
 
 function buildCommentBody(comment: Comment): string {
@@ -993,8 +990,6 @@ async function runCodeScan(): Promise<void> {
 
   core.info('✅ Not a setup PR - proceeding with security scan');
 
-  const oidcToken = await authenticateWithOidc();
-
   const finalConfigPath = resolveConfigPath(inputs.configPath, inputs.minimumSeverity, guidance);
 
   try {
@@ -1002,7 +997,7 @@ async function runCodeScan(): Promise<void> {
     await fetchBaseBranch(baseBranch);
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
-    const scanResponse = await getScanResponse(cliArgs, oidcToken, inputs.promptfooVersion);
+    const scanResponse = await getScanResponse(cliArgs, inputs.promptfooVersion);
 
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);
