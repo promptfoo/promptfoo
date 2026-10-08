@@ -20,7 +20,7 @@
  * ```
  */
 
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { LocalFileSystemProvider } from './localFileSystemProvider';
 
@@ -93,6 +93,5 @@ export async function mediaExists(key: string): Promise<boolean> {
  * Set PROMPTFOO_INLINE_MEDIA=true to disable and use legacy inline base64.
  */
 export function isMediaStorageEnabled(): boolean {
-  const inline = getEnvString('PROMPTFOO_INLINE_MEDIA');
-  return inline !== 'true' && inline !== '1';
+  return !getEnvBool('PROMPTFOO_INLINE_MEDIA', false);
 }
