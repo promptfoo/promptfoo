@@ -9,7 +9,7 @@ import {
   type TraceContextData,
 } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
-import { sleep } from '../../util/time';
+import { sleep, sleepWithAbort } from '../../util/time';
 import {
   accumulateAttackerTokenUsage,
   accumulateResponseTokenUsage,
@@ -196,7 +196,26 @@ export async function runMetaAgentRedteam({
   // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
   let lastFinalAttackPrompt: string | undefined;
 
+  const completedTargetHistory: IterativeMetaMetadata['redteamHistory'] = [];
+  const callOptions = options ? { ...options, onProgress: undefined } : undefined;
+  const publishProgress = () => {
+    options?.abortSignal?.throwIfAborted();
+    options?.onProgress?.({
+      output: lastResponse?.output,
+      error: lastResponse?.error,
+      tokenUsage: totalTokenUsage,
+      metadata: {
+        redteamHistory: completedTargetHistory,
+        sessionIds,
+        traceSnapshots: traceSnapshots.map((trace) => formatTraceForMetadata(trace)),
+        redteamFinalPrompt: lastFinalAttackPrompt,
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+      },
+    });
+  };
+
   for (let i = 0; i < numIterations; i++) {
+    options?.abortSignal?.throwIfAborted();
     logger.debug(`[IterativeMeta] Starting iteration ${i + 1}/${numIterations}`, {
       iteration: i + 1,
       testRunId,
@@ -260,17 +279,21 @@ export async function runMetaAgentRedteam({
             })
           : {},
       },
-      options,
+      callOptions,
     );
 
     // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
     // Only accumulate tokens for this test's total
     // Agent coordination calls are internal and should not count as target probes.
+    options?.abortSignal?.throwIfAborted();
     accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
+    publishProgress();
 
     if (agentProvider.delay) {
       logger.debug(`[IterativeMeta] Sleeping for ${agentProvider.delay}ms`);
-      await sleep(agentProvider.delay);
+      await (options?.abortSignal
+        ? sleepWithAbort(agentProvider.delay, options.abortSignal)
+        : sleep(agentProvider.delay));
     }
 
     if (agentResp.error) {
@@ -453,12 +476,28 @@ export async function runMetaAgentRedteam({
           vars: updatedVars,
         }
       : iterationContext;
+    options?.abortSignal?.throwIfAborted();
     const initialTargetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       targetContext,
-      options,
+      callOptions,
     );
+    options?.abortSignal?.throwIfAborted();
+    lastResponse = initialTargetResponse;
+    accumulateResponseTokenUsage(totalTokenUsage, initialTargetResponse);
+    const completedTurn: IterativeMetaMetadata['redteamHistory'][number] = {
+      prompt: attackPrompt,
+      promptAudio: lastTransformResult?.audio,
+      promptImage: lastTransformResult?.image,
+      output: initialTargetResponse.output,
+      graderPassed: undefined,
+      guardrails: initialTargetResponse.guardrails,
+      score: 0,
+      inputVars: currentRenderInputVars,
+    };
+    completedTargetHistory.push(completedTurn);
+    publishProgress();
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
       initialTargetResponse,
       {
@@ -468,7 +507,8 @@ export async function runMetaAgentRedteam({
       },
     );
     lastResponse = targetResponse;
-    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+    completedTurn.output = targetResponse.output;
+    publishProgress();
 
     // Fetch trace context if tracing is enabled
     let traceContext: TraceContextData | null = null;
@@ -530,6 +570,10 @@ export async function runMetaAgentRedteam({
     if (sessionId) {
       sessionIds.push(sessionId);
     }
+
+    completedTurn.trace = traceContext ? formatTraceForMetadata(traceContext) : undefined;
+    completedTurn.traceSummary = computedTraceSummary;
+    publishProgress();
 
     // Grade the response
     let graderResult: GradingResult | undefined = undefined;
@@ -671,6 +715,9 @@ export async function runMetaAgentRedteam({
       inputVars: currentRenderInputVars,
     });
 
+    completedTurn.graderPassed = graderResult?.pass;
+    publishProgress();
+
     // Check if vulnerability was achieved
     if (graderResult?.pass === false) {
       vulnerabilityAchieved = true;
@@ -687,6 +734,7 @@ export async function runMetaAgentRedteam({
     }
   }
 
+  options?.abortSignal?.throwIfAborted();
   const error = agentRequestError || failClosedError || lastResponse?.error;
   return {
     output: bestResponse || lastResponse?.output || '',

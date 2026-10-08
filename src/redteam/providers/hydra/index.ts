@@ -10,7 +10,7 @@ import {
   type TraceContextData,
 } from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
-import { sleep } from '../../../util/time';
+import { sleep, sleepWithAbort } from '../../../util/time';
 import {
   accumulateAttackerTokenUsage,
   accumulateResponseTokenUsage,
@@ -376,6 +376,33 @@ export class HydraProvider implements ApiProvider {
     // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
     let lastFinalAttackPrompt: string | undefined;
 
+    // Include every completed probe in checkpoints, even responses that are
+    // backtracked or still awaiting grading. Keep normal grading history intact.
+    const completedTargetHistory: HydraMetadata['redteamHistory'] = [];
+    const callOptions = options ? { ...options, onProgress: undefined } : undefined;
+    const publishProgress = () => {
+      options?.abortSignal?.throwIfAborted();
+      options?.onProgress?.({
+        output: lastTargetResponse ? scrubOutputForHistory(lastTargetResponse.output) : undefined,
+        error: lastTargetResponse?.error,
+        tokenUsage: totalTokenUsage,
+        guardrails: lastTargetResponse?.guardrails,
+        metadata: {
+          redteamHistory: completedTargetHistory,
+          sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+          messages: lastResponseMessages,
+          sessionIds,
+          [`${this.providerOptions.metadataPrefix}RoundsCompleted`]: lastResponseMessages.filter(
+            (message) => message.role === 'user',
+          ).length,
+          [`${this.providerOptions.metadataPrefix}BacktrackCount`]: backtrackCount,
+          traceSnapshots: traceSnapshots.map((trace) => formatTraceForMetadata(trace)),
+          redteamFinalPrompt: lastFinalAttackPrompt,
+          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        },
+      });
+    };
+
     // Find the grader
     const { getGraderById } = await import('../../graders');
     let assertToUse = test?.assert?.find(
@@ -389,6 +416,7 @@ export class HydraProvider implements ApiProvider {
     let previousTraceSummary: string | undefined;
 
     for (let turn = 1; turn <= this.maxTurns; turn++) {
+      options?.abortSignal?.throwIfAborted();
       logger.debug(`${this.logPrefix} Turn ${turn}/${this.maxTurns}`);
 
       // Build request for cloud agent
@@ -438,14 +466,18 @@ export class HydraProvider implements ApiProvider {
           },
           vars: {},
         },
-        options,
+        callOptions,
       );
 
       // Agent coordination calls are internal and should not count as target probes.
+      options?.abortSignal?.throwIfAborted();
       accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
+      publishProgress();
 
       if (this.agentProvider.delay) {
-        await sleep(this.agentProvider.delay);
+        await (options?.abortSignal
+          ? sleepWithAbort(this.agentProvider.delay, options.abortSignal)
+          : sleep(this.agentProvider.delay));
       }
 
       if (agentResp.error) {
@@ -679,18 +711,29 @@ export class HydraProvider implements ApiProvider {
             },
           }
         : context;
+      options?.abortSignal?.throwIfAborted();
       let targetResponse = await getTargetResponse(
         targetProvider,
         finalTargetPrompt,
         targetContext,
-        options,
+        callOptions,
       );
+      options?.abortSignal?.throwIfAborted();
       lastTargetResponse = targetResponse;
       lastResponseMessages = [
         ...this.conversationHistory,
         { role: 'assistant', content: targetResponse.output || '' },
       ];
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+      const completedTurn: HydraMetadata['redteamHistory'][number] = {
+        prompt: nextMessage,
+        promptAudio: lastTransformResult?.audio,
+        promptImage: lastTransformResult?.image,
+        output: scrubOutputForHistory(targetResponse.output),
+        graderPassed: undefined,
+      };
+      completedTargetHistory.push(completedTurn);
+      publishProgress();
 
       // Fetch trace context if tracing is enabled
       let traceContext: TraceContextData | null = null;
@@ -818,6 +861,11 @@ export class HydraProvider implements ApiProvider {
         content: historyOutput,
       });
       lastResponseMessages = [...this.conversationHistory];
+
+      completedTurn.output = historyOutput;
+      completedTurn.trace = traceContext ? formatTraceForMetadata(traceContext) : undefined;
+      completedTurn.traceSummary = computedTraceSummary;
+      publishProgress();
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
       const isRefusal = isBasicRefusal(targetResponse.output);
@@ -985,6 +1033,9 @@ export class HydraProvider implements ApiProvider {
         inputVars: currentRenderInputVars,
       });
 
+      completedTurn.graderPassed = graderResult?.pass;
+      publishProgress();
+
       // Check if vulnerability was achieved
       if (graderResult?.pass === false) {
         vulnerabilityAchieved = true;
@@ -1001,6 +1052,7 @@ export class HydraProvider implements ApiProvider {
       }
     }
 
+    options?.abortSignal?.throwIfAborted();
     // Update scan learnings
     if (scanId) {
       try {
@@ -1025,10 +1077,12 @@ export class HydraProvider implements ApiProvider {
             },
             vars: {},
           },
-          options,
+          callOptions,
         );
         // Learning update is an internal cloud call, not a target probe.
+        options?.abortSignal?.throwIfAborted();
         accumulateAttackerTokenUsage(totalTokenUsage, learningResponse);
+        publishProgress();
 
         logger.debug(`${this.logPrefix} Scan learnings updated`, { scanId, testRunId });
       } catch (error) {
@@ -1037,6 +1091,7 @@ export class HydraProvider implements ApiProvider {
       }
     }
 
+    options?.abortSignal?.throwIfAborted();
     const messages = lastResponseMessages.map((msg) => ({
       role: msg.role,
       content: msg.content,

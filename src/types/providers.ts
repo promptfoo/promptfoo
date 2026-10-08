@@ -120,6 +120,12 @@ export interface CallApiOptionsParams {
    * Signal that can be used to abort the request
    */
   abortSignal?: AbortSignal;
+  /**
+   * Checkpoint cumulative completed work while a call is still running. This is
+   * evidence for an interrupted call, not a final response or grading result.
+   * Consumers must copy snapshots synchronously; providers may reuse objects.
+   */
+  onProgress?: (response: ProviderResponse) => void;
 }
 
 export interface ApiProvider extends MinimalApiProvider {

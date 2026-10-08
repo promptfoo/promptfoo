@@ -148,6 +148,55 @@ describe('RedteamIterativeMetaProvider', () => {
     vi.resetAllMocks();
   });
 
+  it('checkpoints a completed probe while its grader is still running', async () => {
+    const controller = new AbortController();
+    const snapshots: ProviderResponse[] = [];
+    mockGetTargetResponse.mockResolvedValue({
+      output: 'Completed synthetic response',
+      tokenUsage: { numRequests: 1, total: 13 },
+    });
+    let finishGrading!: () => void;
+    const grader = {
+      getResult: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finishGrading = () => resolve({ grade: { pass: true, score: 1 } });
+          }),
+      ),
+    };
+    mockGetGraderById.mockReturnValue(grader);
+    const attack = runMetaAgentRedteam({
+      filters: undefined,
+      injectVar: 'query',
+      numIterations: 3,
+      options: {
+        abortSignal: controller.signal,
+        onProgress: (response) => snapshots.push(JSON.parse(JSON.stringify(response))),
+      },
+      prompt: { raw: '{{query}}', label: 'test' },
+      agentProvider: mockAgentProvider,
+      gradingProvider: mockGradingProvider,
+      targetProvider: mockTargetProvider,
+      test: { assert: [{ type: 'promptfoo:redteam:pii' }], metadata: { pluginId: 'pii' } },
+      vars: { query: 'Synthetic objective' },
+    });
+    await vi.waitFor(() => expect(grader.getResult).toHaveBeenCalledOnce());
+    expect(snapshots.at(-1)).toMatchObject({
+      output: 'Completed synthetic response',
+      tokenUsage: { numRequests: 1, total: 13, attacker: { numRequests: 1, total: 100 } },
+      metadata: { redteamHistory: [{ output: 'Completed synthetic response' }] },
+    });
+    expect(snapshots.at(-1)?.metadata?.redteamHistory[0].graderPassed).toBeUndefined();
+    const checkpointCount = snapshots.length;
+    controller.abort();
+    const rejected = expect(attack).rejects.toThrow();
+    finishGrading();
+    await rejected;
+    expect(snapshots).toHaveLength(checkpointCount);
+    expect(mockGetTargetResponse).toHaveBeenCalledOnce();
+    expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
+  });
+
   describe('constructor', () => {
     it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
       mockShouldGenerateRemote.mockReturnValue(false);

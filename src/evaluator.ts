@@ -81,7 +81,7 @@ import {
   type TestSuite,
   TestSuiteConfigSchema,
 } from './types/index';
-import { type ApiProvider, isApiProvider } from './types/providers';
+import { type ApiProvider, type CallApiOptionsParams, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
@@ -896,6 +896,7 @@ function tryParseJson(value: string): unknown {
 
 async function callProviderForRunEval({
   abortSignal,
+  onProgress,
   evalId,
   filters,
   promptForRender,
@@ -919,6 +920,7 @@ async function callProviderForRunEval({
   | 'test'
   | 'testSuite'
 > & {
+  onProgress?: CallApiOptionsParams['onProgress'];
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
   renderedPrompt: string;
@@ -942,6 +944,7 @@ async function callProviderForRunEval({
     } else {
       response = await callActiveProvider({
         abortSignal,
+        onProgress,
         evalId,
         filters,
         onProviderInvoked: () => {
@@ -1054,6 +1057,7 @@ async function collectExternalTraceAfterProviderCall({
 
 async function callActiveProvider({
   abortSignal,
+  onProgress,
   evalId,
   filters,
   onProviderInvoked,
@@ -1071,6 +1075,7 @@ async function callActiveProvider({
   RunEvalOptions,
   'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
 > & {
+  onProgress?: CallApiOptionsParams['onProgress'];
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
   promptForRender: Prompt;
@@ -1097,9 +1102,10 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
-  const callApiOptions = abortSignal ? { abortSignal } : undefined;
+  const callApiOptions = abortSignal || onProgress ? { abortSignal, onProgress } : undefined;
 
   const callApi = () => {
+    abortSignal?.throwIfAborted();
     onProviderInvoked();
     const invoke = () =>
       traceContext?.traceparent
@@ -1615,6 +1621,10 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
+interface RunEvalInternalOptions extends RunEvalOptions {
+  onProviderProgress?: (result: EvaluateResult) => void;
+}
+
 async function runEvalInternal({
   provider,
   prompt, // raw prompt
@@ -1635,7 +1645,8 @@ async function runEvalInternal({
   evalId,
   providerCallQueue,
   rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+  onProviderProgress,
+}: RunEvalInternalOptions): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1663,6 +1674,8 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  let partialResult: EvaluateResult | undefined;
+  let acceptingProgress = true;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
@@ -1703,12 +1716,42 @@ async function runEvalInternal({
           },
         );
     const executionTraceContext = traceContext;
+    const checkpoint: NonNullable<CallApiOptionsParams['onProgress']> = (response) => {
+      if ((!onProviderProgress && !abortSignal) || !acceptingProgress || abortSignal?.aborted) {
+        return;
+      }
+      // Strategies reuse history/usage objects. Detach the checkpoint so a late
+      // completion or mutation cannot change the authoritative interrupted row.
+      const serialized = safeJsonStringify(response);
+      if (!serialized) {
+        return;
+      }
+      const snapshot = normalizeCachedTargetResponse(JSON.parse(serialized));
+      partialResult = createEvaluateResult({
+        fileMetadata: state.fileMetadata,
+        latencyMs: 0,
+        prompt,
+        promptIdx: promptIndex,
+        rendered,
+        response: snapshot,
+        setup,
+        test,
+        testIdx: testIndex,
+        traceContext: executionTraceContext,
+        evalId,
+        vars: omitEvalRuntimeVars(state.vars),
+      });
+      accumulateResponseTokenUsage(partialResult.tokenUsage!, snapshot);
+      onProviderProgress?.(partialResult);
+    };
+    checkpoint({ tokenUsage: createEmptyTokenUsage() });
     const runExecution = () =>
       withTestCaseSpan(
         executionTraceContext?.rootSpan,
         async () => {
           const providerCall = await callProviderForRunEval({
             abortSignal,
+            onProgress: onProviderProgress || abortSignal ? checkpoint : undefined,
             evalId,
             filters,
             promptForRender: {
@@ -1727,6 +1770,8 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: state.vars,
           });
+          abortSignal?.throwIfAborted();
+          checkpoint(providerCall.response);
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
@@ -1749,6 +1794,7 @@ async function runEvalInternal({
           );
 
           await applyProviderDelayIfNeeded(provider, response);
+          abortSignal?.throwIfAborted();
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -1794,6 +1840,7 @@ async function runEvalInternal({
             vars: persistedVars,
           });
 
+          abortSignal?.throwIfAborted();
           // Update token usage stats
           if (response.tokenUsage) {
             accumulateResponseTokenUsage(ret.tokenUsage, response);
@@ -1844,6 +1891,7 @@ async function runEvalInternal({
     return [
       {
         ...setup,
+        ...partialResult,
         // Exclude the __eval* runtime vars from the persisted error result.
         vars: omitEvalRuntimeVars(setup.vars),
         error: errorWithStack,
@@ -1856,11 +1904,16 @@ async function runEvalInternal({
         testIdx: testIndex,
         testCase: test,
         promptId: prompt.id || '',
-        metadata,
+        metadata: {
+          ...partialResult?.metadata,
+          ...metadata,
+          ...(partialResult && { incomplete: true }),
+        },
         ...getTraceLinkage(traceContext, evalId),
       },
     ];
   } finally {
+    acceptingProgress = false;
     await workspace?.remove();
   }
 }
@@ -3390,11 +3443,13 @@ function reservePromptEvalCount(context: EvalProcessingContext, promptIdx: numbe
   return context.promptEvalCounts[promptIdx];
 }
 
-function createEvalStepTimeoutResult(
+function createEvalStepInterruptedResult(
   evalStep: RunEvalOptions,
   sanitizedTestCase: AtomicTestCase,
-  timeoutMs: number,
+  latencyMs: number,
   error: unknown,
+  didTimeout: boolean,
+  partialResult?: EvaluateResult,
 ): EvaluateResult {
   return {
     provider: {
@@ -3407,13 +3462,17 @@ function createEvalStepTimeoutResult(
       label: evalStep.prompt.label,
       config: evalStep.prompt.config,
     },
-    vars: evalStep.test.vars || {},
-    error: `Evaluation timed out after ${timeoutMs}ms: ${String(error)}`,
+    ...partialResult,
+    vars: omitEvalRuntimeVars(partialResult?.vars ?? evalStep.test.vars ?? {}),
+    metadata: { ...evalStep.test.metadata, ...partialResult?.metadata, incomplete: true },
+    error: didTimeout
+      ? `Evaluation timed out after ${latencyMs}ms: ${String(error)}`
+      : `Evaluation aborted: ${String(error)}`,
     success: false,
     failureReason: ResultFailureReason.ERROR,
     score: 0,
     namedScores: {},
-    latencyMs: timeoutMs,
+    latencyMs,
     promptIdx: evalStep.promptIdx,
     testIdx: evalStep.testIdx,
     testCase: sanitizedTestCase,
@@ -3830,7 +3889,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async processEvalStep(
-    evalStep: RunEvalOptions,
+    evalStep: RunEvalInternalOptions,
     index: number,
     {
       deferGrading = false,
@@ -3862,7 +3921,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async runEvalStepAfterBeforeEach(
-    evalStep: RunEvalOptions,
+    evalStep: RunEvalInternalOptions,
     {
       deferGrading,
       onRowsReady,
@@ -4022,7 +4081,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const { deferGrading = false, providerCallQueue } = processOptions;
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
 
-    if (timeoutMs <= 0) {
+    if (timeoutMs <= 0 && !evalStep.abortSignal) {
       return await this.processEvalStep(
         evalStep,
         index,
@@ -4032,16 +4091,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     const abortController = new AbortController();
-    const evalStepWithSignal = {
+    let partialResult: EvaluateResult | undefined;
+    const evalStepWithSignal: RunEvalInternalOptions = {
       ...evalStep,
+      onProviderProgress: (result) => {
+        partialResult = result;
+      },
       abortSignal: evalStep.abortSignal
         ? AbortSignal.any([evalStep.abortSignal, abortController.signal])
         : abortController.signal,
     };
 
+    const startedAt = Date.now();
     let timeoutId: NodeJS.Timeout | undefined;
+    let interrupted = false;
+    let onAbort: (() => void) | undefined;
     let didTimeout = false;
     const clearEvalStepTimeout = () => {
+      if (onAbort) {
+        evalStepWithSignal.abortSignal?.removeEventListener('abort', onAbort);
+        onAbort = undefined;
+      }
       if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutId = undefined;
@@ -4049,7 +4119,25 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
 
     try {
+      const interruption = new Promise<never>((_, reject) => {
+        onAbort = () => {
+          interrupted = true;
+          reject(evalStepWithSignal.abortSignal?.reason ?? new Error('Evaluation aborted'));
+        };
+        if (evalStepWithSignal.abortSignal?.aborted) {
+          onAbort();
+        } else {
+          evalStepWithSignal.abortSignal?.addEventListener('abort', onAbort, { once: true });
+        }
+        if (timeoutMs > 0) {
+          timeoutId = setTimeout(() => {
+            didTimeout = true;
+            abortController.abort(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }
+      });
       return await Promise.race([
+        interruption,
         this.processEvalStep(
           evalStepWithSignal,
           index,
@@ -4057,53 +4145,64 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
             providerCallQueue,
-            shouldSkipStaleRows: () => didTimeout,
+            shouldSkipStaleRows: () => interrupted,
           },
           context,
         ),
-        new Promise<void>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            didTimeout = true;
-            abortController.abort();
-            reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-          }, timeoutMs);
-        }),
       ]);
     } catch (error) {
-      if (!didTimeout) {
+      if (!interrupted) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      await this.addEvalStepInterruptedResult(
+        evalStepWithSignal,
+        index,
+        didTimeout ? timeoutMs : Date.now() - startedAt,
+        error,
+        context,
+        didTimeout,
+        partialResult,
+      );
     } finally {
       evalStep.test = evalStepWithSignal.test;
       clearEvalStepTimeout();
     }
   }
 
-  private async addEvalStepTimeoutResult(
+  private async addEvalStepInterruptedResult(
     evalStep: RunEvalOptions,
     index: number,
-    timeoutMs: number,
+    latencyMs: number,
     error: unknown,
     context: EvalProcessingContext,
+    didTimeout: boolean,
+    partialResult?: EvaluateResult,
   ) {
     const sanitizedTestCase = { ...evalStep.test };
     delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
 
-    const timeoutResult = createEvalStepTimeoutResult(
+    const timeoutResult = createEvalStepInterruptedResult(
       evalStep,
       sanitizedTestCase,
-      timeoutMs,
+      latencyMs,
       error,
+      didTimeout,
+      partialResult,
     );
     this.trackFinalJsonlResult(timeoutResult);
     await this.store.appendResult(timeoutResult);
-    this.stats.errors++;
+    this.trackRowStats(timeoutResult);
 
     const { metrics } = context.prompts[evalStep.promptIdx];
     if (metrics) {
-      metrics.testErrorCount += 1;
-      metrics.totalLatencyMs += timeoutMs;
+      this.updatePromptMetricsForRow({
+        derivedMetrics: context.testSuite.derivedMetrics,
+        evalStep,
+        mathjsModule: context.mathjsModule,
+        metrics,
+        promptEvalCount: reservePromptEvalCount(context, evalStep.promptIdx),
+        row: timeoutResult,
+      });
     }
 
     context.numComplete++;
@@ -4112,7 +4211,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       context.runEvalOptionsLength,
       index,
       evalStep,
-      metrics || createTimeoutMetrics(timeoutMs),
+      metrics || createTimeoutMetrics(latencyMs),
     );
   }
 

@@ -17,7 +17,11 @@ import {
   type MockApiProvider,
 } from '../../../factories/provider';
 
-import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
+import type {
+  AtomicTestCase,
+  CallApiContextParams,
+  GradingResult,
+} from '../../../../src/types/index';
 
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
@@ -186,6 +190,61 @@ describe('HydraProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('checkpoints completed probes before grading and stops on cancellation', async () => {
+    const controller = new AbortController();
+    const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
+    mockAgentProvider.callApi.mockResolvedValue({
+      output: 'Synthetic probe',
+      tokenUsage: { total: 7, numRequests: 1 },
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'Completed synthetic response',
+      tokenUsage: { total: 13, numRequests: 1 },
+    });
+    let finishGrading!: () => void;
+    mockGrader.getResult.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishGrading = () => resolve({ grade: { pass: true, score: 1 } });
+        }),
+    );
+    const test: AtomicTestCase = {
+      assert: [{ type: 'promptfoo:redteam:pii' }],
+      metadata: { pluginId: 'pii' },
+    };
+    const provider = new HydraProvider({ injectVar: 'input', maxTurns: 3 });
+    const attack = provider.callApi(
+      '',
+      {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Synthetic objective' },
+        prompt: { raw: '{{input}}', label: 'test' },
+        test,
+      },
+      {
+        abortSignal: controller.signal,
+        onProgress: (response) => snapshots.push(JSON.parse(JSON.stringify(response))),
+      },
+    );
+    await vi.waitFor(() => expect(mockGrader.getResult).toHaveBeenCalledOnce());
+    expect(snapshots.at(-1)).toMatchObject({
+      output: 'Completed synthetic response',
+      tokenUsage: { numRequests: 1, total: 13, attacker: { numRequests: 1, total: 7 } },
+      metadata: {
+        redteamHistory: [{ prompt: 'Synthetic probe', output: 'Completed synthetic response' }],
+      },
+    });
+    expect(snapshots.at(-1)?.metadata?.redteamHistory[0].graderPassed).toBeUndefined();
+    const checkpointCount = snapshots.length;
+    controller.abort();
+    const rejected = expect(attack).rejects.toThrow();
+    finishGrading();
+    await rejected;
+    expect(snapshots).toHaveLength(checkpointCount);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+    expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
   });
 
   describe('constructor', () => {
