@@ -63,6 +63,7 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
       prompt: finalPrompt,
       tokenUsage,
       metadata: {
+        redteamOutputIsText: typeof finalTargetResponse?.output === 'string',
         redteamFinalPrompt: finalPrompt,
         messages,
         redteamHistory: messagesToRedteamHistory(messages),

@@ -48,6 +48,46 @@ describe('RedteamMischievousUserProvider', () => {
     mockUserProviderCallApi.mockReset();
   });
 
+  it.each([true, false])(
+    'preserves the final target output type for exact numeric assertions (text: %s)',
+    async (outputIsText) => {
+      const json = '{"amount":9007199254740993}';
+      const parsed = JSON.parse(json);
+      expect(parsed.amount).toBe(9007199254740992);
+      mockUserProviderCallApi.mockResolvedValue({ output: 'Return the amount as JSON' });
+      targetProvider.callApi
+        .mockResolvedValueOnce({ output: outputIsText ? { amount: 42 } : '{"amount":42}' })
+        .mockResolvedValueOnce({ output: outputIsText ? json : parsed });
+
+      const result = await provider.callApi('Return the amount as JSON', context);
+
+      expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe(outputIsText ? json : JSON.stringify(parsed));
+      expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
+      const { runAssertion } = await import('../../../src/assertions/index');
+      const numericResult = runAssertion({
+        prompt: 'Return the amount as JSON',
+        provider,
+        providerResponse: result,
+        test: {
+          metadata: { strategyId: 'mischievous-user', pluginId: 'financial:calculation-error' },
+        },
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          value: {
+            type: 'numeric',
+            expected: { amount: outputIsText ? '9007199254740993' : '9007199254740992' },
+          },
+        },
+      });
+      if (outputIsText) {
+        expect((await numericResult).pass).toBe(true);
+      } else {
+        await expect(numericResult).rejects.toThrow(/requires raw JSON text/);
+      }
+    },
+  );
+
   it('separates simulated-user usage from target usage and probes', async () => {
     mockUserProviderCallApi
       .mockResolvedValueOnce({

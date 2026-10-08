@@ -24,6 +24,21 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
+// Only these built-in wrappers record the selected target output's original type.
+const TEXT_PROVENANCE_PROVIDERS = new Set([
+  'promptfoo:redteam:iterative',
+  'promptfoo:redteam:iterative:meta',
+  'promptfoo:redteam:iterative:tree',
+  'promptfoo:redteam:iterative:image',
+  'promptfoo:redteam:hydra',
+  'promptfoo:redteam:goblin',
+  'promptfoo:redteam:crescendo',
+  'promptfoo:redteam:voice-crescendo',
+  'promptfoo:redteam:goat',
+  'promptfoo:redteam:custom',
+  'promptfoo:redteam:mischievous-user',
+]);
+
 /**
  * Analyzes grader errors in the redteam history.
  * Returns whether some (but not all) turns have grader errors.
@@ -171,6 +186,7 @@ export const handleRedteam = async (
     prompt,
     outputString,
     output,
+    outputIsText: evaluatorOutputIsText,
     provider,
     renderedValue,
     providerResponse,
@@ -213,14 +229,18 @@ export const handleRedteam = async (
       test.metadata?.strategyId ?? '',
     );
 
+  const isRedteamProvider = providerId?.startsWith('promptfoo:redteam:') === true;
   const strategyOutputIsText =
-    providerId && isAttackProvider(providerId)
+    providerId &&
+    (TEXT_PROVENANCE_PROVIDERS.has(providerId) ||
+      providerId.startsWith('promptfoo:redteam:custom:'))
       ? providerResponse.metadata?.redteamOutputIsText
       : undefined;
   const outputIsText =
+    evaluatorOutputIsText !== false &&
     typeof output === 'string' &&
     typeof providerResponse.output === 'string' &&
-    (!(providerId && isAttackProvider(providerId)) || strategyOutputIsText === true);
+    (!isRedteamProvider || strategyOutputIsText === true);
   const grader = getGraderById(assertion.type);
   // Numeric checks require source text even when a matching stored grade exists.
   grader?.validateOutput?.(renderedValue, { providerResponse, outputIsText });
@@ -232,7 +252,17 @@ export const handleRedteam = async (
     hasStrategyGrade && storedResult.tokensUsed && claimStoredGradingUsage()
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
+  // Resolved file/function values can differ behind the same assertion identity.
+  // Numeric comparisons are cheap; recompute them instead of trusting a saved verdict.
+  const requiresFreshNumericGrade =
+    grader?.id === 'promptfoo:redteam:financial:calculation-error' &&
+    typeof renderedValue === 'object' &&
+    renderedValue !== null &&
+    Object.prototype.hasOwnProperty.call(renderedValue, 'type') &&
+    'type' in renderedValue &&
+    renderedValue.type === 'numeric';
   if (
+    !requiresFreshNumericGrade &&
     hasStrategyGrade &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&

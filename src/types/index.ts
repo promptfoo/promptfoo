@@ -827,6 +827,8 @@ export interface AssertionParams {
   latencyMs?: number;
   output: string | object;
   outputString: string;
+  /** Evaluator-observed text provenance before and after provider/test transforms. */
+  outputIsText?: boolean;
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;

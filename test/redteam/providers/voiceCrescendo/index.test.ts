@@ -9,7 +9,8 @@ import {
 import type { CallApiContextParams } from '../../../../src/types/index';
 
 // Mock dependencies
-vi.mock('../../../../src/logger', () => ({
+vi.mock('../../../../src/logger', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/logger')>()),
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -18,7 +19,8 @@ vi.mock('../../../../src/logger', () => ({
   },
 }));
 
-vi.mock('../../../../src/redteam/providers/shared', () => ({
+vi.mock('../../../../src/redteam/providers/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/redteam/providers/shared')>()),
   callGradingProvider: vi.fn((provider, prompt, context, options) =>
     options === undefined
       ? provider.callApi(prompt, context)
@@ -32,7 +34,8 @@ vi.mock('../../../../src/redteam/providers/shared', () => ({
   externalizeResponseForRedteamHistory: vi.fn(async (response: unknown) => response),
 }));
 
-vi.mock('../../../../src/redteam/remoteGeneration', () => ({
+vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/redteam/remoteGeneration')>()),
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
@@ -40,11 +43,13 @@ vi.mock('../../../../src/redteam/strategies/simpleAudio', () => ({
   textToAudio: vi.fn().mockResolvedValue('base64-audio-data'),
 }));
 
-vi.mock('../../../../src/util/time', () => ({
+vi.mock('../../../../src/util/time', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/util/time')>()),
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../../../src/redteam/util', () => ({
+vi.mock('../../../../src/redteam/util', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/redteam/util')>()),
   isBasicRefusal: vi.fn().mockReturnValue(false),
 }));
 
@@ -122,6 +127,68 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.error).toBe('No target provider configured for Voice Crescendo');
     expect(result.metadata?.stopReason).toBe('No target provider');
   });
+
+  it.each([true, false])(
+    'preserves the final target output type for exact numeric assertions (text: %s)',
+    async (outputIsText) => {
+      const shared = await vi.importActual<
+        typeof import('../../../../src/redteam/providers/shared')
+      >('../../../../src/redteam/providers/shared');
+      vi.mocked(getTargetResponse).mockImplementation(shared.getTargetResponse);
+      const json = '{"amount":9007199254740993}';
+      const parsed = JSON.parse(json);
+      expect(parsed.amount).toBe(9007199254740992);
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: outputIsText ? { amount: 42 } : '{"amount":42}' })
+        .mockResolvedValueOnce({ output: outputIsText ? json : parsed });
+      vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(
+        createMockProvider({
+          response: {
+            output: JSON.stringify({
+              objectiveAchieved: false,
+              confidence: 0,
+              partialSuccess: false,
+            }),
+          },
+        }),
+      );
+      const provider = new VoiceCrescendoProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+        delayBetweenTurns: 0,
+      });
+      const result = await provider.callApi('Return the amount as JSON', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Return the amount as JSON' },
+        prompt: { raw: '{{goal}}', label: 'test' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe(outputIsText ? json : JSON.stringify(parsed));
+      expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
+      const { runAssertion } = await import('../../../../src/assertions/index');
+      const numericResult = runAssertion({
+        prompt: 'Return the amount as JSON',
+        provider,
+        providerResponse: result,
+        test: {
+          metadata: { strategyId: 'voice-crescendo', pluginId: 'financial:calculation-error' },
+        },
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          value: {
+            type: 'numeric',
+            expected: { amount: outputIsText ? '9007199254740993' : '9007199254740992' },
+          },
+        },
+      });
+      if (outputIsText) {
+        expect((await numericResult).pass).toBe(true);
+      } else {
+        await expect(numericResult).rejects.toThrow(/requires raw JSON text/);
+      }
+    },
+  );
 
   it('should accumulate token usage from all provider calls', async () => {
     // Setup for multiple turns with successful objective

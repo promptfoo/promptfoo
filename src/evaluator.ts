@@ -1427,16 +1427,17 @@ async function gradeRunEvalResponse({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
-  const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
-    evalId,
-    prompt,
-    promptIdx,
-    provider,
-    response,
-    test,
-    testIdx,
-    vars,
-  });
+  const { processedResponse, providerTransformedOutput, outputIsText } =
+    await transformRunEvalResponse({
+      evalId,
+      prompt,
+      promptIdx,
+      provider,
+      response,
+      test,
+      testIdx,
+      vars,
+    });
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
@@ -1464,6 +1465,7 @@ async function gradeRunEvalResponse({
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
+          outputIsText,
           test,
           vars,
           latencyMs: response.latencyMs ?? latencyMs,
@@ -1484,6 +1486,7 @@ async function gradeRunEvalResponse({
         prompt: renderedPrompt,
         provider,
         providerResponse: assertionProviderResponse,
+        outputIsText,
         test,
         vars,
         latencyMs: response.latencyMs ?? latencyMs,
@@ -1516,7 +1519,9 @@ async function transformRunEvalResponse({
 }): Promise<{
   processedResponse: ProviderResponse;
   providerTransformedOutput: ProviderResponse['output'];
+  outputIsText: boolean;
 }> {
+  let outputIsText = typeof response.output === 'string';
   const processedResponse = { ...response };
   if (provider.transform) {
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
@@ -1524,6 +1529,7 @@ async function transformRunEvalResponse({
       prompt,
     });
   }
+  outputIsText &&= typeof processedResponse.output === 'string';
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
@@ -1535,6 +1541,8 @@ async function transformRunEvalResponse({
     });
   }
 
+  // Once an observed stage is non-text, later stringification cannot recover numeric tokens.
+  outputIsText &&= typeof processedResponse.output === 'string';
   invariant(processedResponse.output != null, 'Response output should not be null');
   const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
     evalId,
@@ -1545,6 +1553,7 @@ async function transformRunEvalResponse({
   return {
     processedResponse: blobbedResponse || processedResponse,
     providerTransformedOutput,
+    outputIsText,
   };
 }
 

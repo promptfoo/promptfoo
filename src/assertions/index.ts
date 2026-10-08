@@ -415,6 +415,7 @@ async function runAssertionInternal({
   vars,
   latencyMs,
   providerResponse,
+  outputIsText,
   traceId,
   traceData,
   claimStoredGradingUsage,
@@ -425,6 +426,7 @@ async function runAssertionInternal({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   providerResponse: ProviderResponse;
+  outputIsText?: boolean;
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
@@ -640,6 +642,7 @@ async function runAssertionInternal({
     latencyMs,
     logProbs,
     output,
+    outputIsText,
     outputString: coerceString(output),
     prompt,
     provider,
@@ -758,6 +761,7 @@ export async function runAssertions({
   prompt,
   provider,
   providerResponse,
+  outputIsText,
   test,
   vars,
   traceId,
@@ -767,6 +771,7 @@ export async function runAssertions({
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
+  outputIsText?: boolean;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
@@ -857,6 +862,7 @@ export async function runAssertions({
       prompt,
       provider,
       providerResponse,
+      outputIsText,
       assertion,
       test,
       vars,

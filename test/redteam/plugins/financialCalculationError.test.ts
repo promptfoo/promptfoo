@@ -1,3 +1,5 @@
+import fs from 'fs/promises';
+import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -469,12 +471,120 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
         },
       });
       if (outputIsText === true) {
-        expect(await result).toMatchObject({ pass: true, reason: 'Stored exact numeric grade' });
+        expect(await result).toMatchObject({
+          pass: true,
+          reason: 'All referenced numeric fields are within the configured tolerances',
+        });
       } else {
         await expect(result).rejects.toThrow(/requires raw JSON text/);
       }
     },
   );
+
+  it.each(['json', 'cjs'])(
+    'recomputes %s references behind the same URI while retaining stored usage',
+    async (extension) => {
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'numeric-reference-'));
+      const referencePath = path.join(directory, `reference.${extension}`);
+      const prompt = 'Return an amount';
+      const output = '{"amount":101}';
+      const pluginId = 'financial:calculation-error';
+      const assertion: Assertion = {
+        type: 'promptfoo:redteam:financial:calculation-error',
+        value: `file://${referencePath}`,
+      };
+      if (extension === 'cjs') {
+        await fs.writeFile(
+          referencePath,
+          'module.exports = (_output, context) => ({type: "numeric", expected: {amount: context.vars.amount}});',
+        );
+      }
+      try {
+        for (const amount of [100, 101, 102]) {
+          if (extension === 'json') {
+            await fs.writeFile(
+              referencePath,
+              JSON.stringify({ type: 'numeric', expected: { amount } }),
+            );
+          }
+          const result = await runAssertion({
+            prompt,
+            assertion,
+            test: {
+              ...test,
+              provider: 'promptfoo:redteam:iterative:meta',
+              vars: { amount },
+              assert: [assertion],
+              metadata: { ...test.metadata, pluginId, strategyId: 'jailbreak:meta' },
+            },
+            providerResponse: {
+              output,
+              metadata: {
+                redteamFinalPrompt: prompt,
+                redteamOutputIsText: true,
+                storedGraderResult: {
+                  pass: true,
+                  score: 1,
+                  reason: 'Legacy strategy grade',
+                  assertion,
+                  tokensUsed: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+                  metadata: {
+                    redteamGradingAssertionHash: getGradingAssertionHash(assertion),
+                    redteamGradingInputHash: getGradingInputHash(
+                      prompt,
+                      output,
+                      undefined,
+                      pluginId,
+                      true,
+                    ),
+                  },
+                },
+              },
+            },
+          });
+          expect(result.pass).toBe(amount === 101);
+          expect(result.reason).not.toBe('Legacy strategy grade');
+          expect(result.tokensUsed).toMatchObject({ total: 5, numRequests: 1 });
+        }
+        expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
+      } finally {
+        await fs.rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([undefined, true, false])(
+    'rejects unknown redteam wrappers even with a claimed text marker (%s)',
+    async (marker) => {
+      await expect(
+        runAssertion({
+          prompt: 'Return an amount',
+          test: { ...test, provider: 'promptfoo:redteam:unknown-wrapper' },
+          assertion: {
+            type: 'promptfoo:redteam:financial:calculation-error',
+            value: { type: 'numeric', expected: { amount: 100 } },
+          },
+          providerResponse: { output: '{"amount":100}', metadata: { redteamOutputIsText: marker } },
+        }),
+      ).rejects.toThrow(/requires raw JSON text/);
+    },
+  );
+
+  it('uses the original output type for direct model providers regardless of target metadata', async () => {
+    const result = await runAssertion({
+      prompt: 'Return an amount',
+      test: { ...test, provider: 'openai:chat:synthetic-model' },
+      assertion: {
+        type: 'promptfoo:redteam:financial:calculation-error',
+        value: { type: 'numeric', expected: { amount: '9007199254740993' } },
+      },
+      providerResponse: {
+        output: '{"amount":9007199254740993}',
+        metadata: { redteamOutputIsText: false },
+      },
+    });
+    expect(result.pass).toBe(true);
+  });
 
   it('regrades when a saved grade was bound to a different source type', async () => {
     const prompt = 'Return the amount as JSON';

@@ -124,6 +124,7 @@ const EVAL_SYSTEM_PROMPT = dedent`
  * Metadata for Voice Crescendo conversations
  */
 interface VoiceCrescendoMetadata extends BaseRedteamMetadata {
+  redteamOutputIsText?: boolean;
   voiceCrescendoTurnsCompleted: number;
   voiceCrescendoBacktrackCount: number;
   voiceCrescendoResult: boolean;
@@ -502,6 +503,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let objectiveAchieved = false;
     let finalConfidence = 0;
     let lastResponse = '';
+    let lastResponseIsText: boolean | undefined;
     let lastTargetError: string | undefined;
     let lastPrompt = '';
     let stopReason = 'Max turns reached';
@@ -550,6 +552,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
             reason: targetResponse.conversationEndReason,
           });
           lastResponse = targetResponse.output || '';
+          lastResponseIsText = targetResponse.outputIsText;
           stopReason = 'Target ended conversation';
           break;
         }
@@ -571,6 +574,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
         // Extract response text (output is always a string from TargetResponse)
         const responseText = targetResponse.output;
         lastResponse = responseText;
+        lastResponseIsText = targetResponse.outputIsText;
 
         // Add to memory
         this.memory.addMessage(
@@ -651,6 +655,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     }
 
     const metadata: VoiceCrescendoMetadata = {
+      redteamOutputIsText: lastResponseIsText,
       redteamFinalPrompt: lastPrompt,
       messages: this.memory.getConversation(this.conversationId).map((m) => ({
         role: m.role,
