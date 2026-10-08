@@ -194,6 +194,38 @@ describe('eval routes', () => {
       expect(findByIdSpy).toHaveBeenCalledWith('result-1');
     });
 
+    it.each([
+      { label: 'an object', componentResults: {} },
+      { label: 'a string', componentResults: 'invalid' },
+      { label: 'a null entry', componentResults: [null] },
+      { label: 'an entry without pass', componentResults: [{}] },
+      { label: 'an entry with a non-boolean pass', componentResults: [{ pass: 'true' }] },
+    ])(
+      'rejects componentResults containing $label without persisting changes',
+      async ({ componentResults }) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const result = (await eval_.getResults())[0];
+        invariant(result.id, 'Result ID is required');
+        const originalMetrics = eval_.prompts[result.promptIdx].metrics;
+
+        const res = await api.post(`/api/eval/${eval_.id}/results/${result.id}/rating`).send({
+          pass: false,
+          score: 0,
+          componentResults,
+        });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('componentResults');
+        const updatedResult = await EvalResult.findById(result.id);
+        expect(updatedResult?.gradingResult).toEqual(result.gradingResult);
+        expect(updatedResult?.success).toBe(result.success);
+        expect(updatedResult?.score).toBe(result.score);
+        const updatedEval = await Eval.findById(eval_.id);
+        expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual(originalMetrics);
+      },
+    );
+
     it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -300,6 +332,7 @@ describe('eval routes', () => {
 
         for (const [gradingResult, assertPassCount] of [
           [{ ...result.gradingResult, comment: '!highlight Note' }, 0],
+          [{ ...result.gradingResult, componentResults: null, comment: 'Note' }, 0],
           [createManualRatingPayload(result, true), 1],
           [result.gradingResult, 0],
         ] as const) {
