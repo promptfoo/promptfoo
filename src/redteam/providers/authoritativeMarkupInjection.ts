@@ -147,6 +147,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
             http: metadataSnapshot?.http,
             headers: metadataSnapshot?.headers,
             rateLimitKind: metadataSnapshot?.rateLimitKind,
+            rateLimitRetryable: metadataSnapshot?.rateLimitRetryable,
           }),
       redteamTargetMetadata: metadataSnapshot,
       redteamOutputIsText: typeof targetResponse.output === 'string',

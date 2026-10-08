@@ -66,6 +66,7 @@ function projectOutputMetadata<T>(
   stripOutput: boolean,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
+  projectCapturedTarget = true,
 ): T {
   if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
     return metadata;
@@ -77,6 +78,16 @@ function projectOutputMetadata<T>(
         (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
       ) {
         return [[key, value]];
+      }
+      if (key === 'redteamTargetMetadata' && projectCapturedTarget) {
+        const targetMetadata = asRecord(value);
+        if (targetMetadata) {
+          // Apply the provider metadata projection at this one captured boundary.
+          // Other nested model metadata keeps the existing media-reference rules.
+          return [
+            [key, projectOutputMetadata(targetMetadata, true, targetMetadata, undefined, false)],
+          ];
+        }
       }
       return key === 'audio' || key === 'blobUris'
         ? []

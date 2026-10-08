@@ -4,10 +4,12 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { evaluate } from '../../../src/evaluator';
+import { evaluate, runEval } from '../../../src/evaluator';
 import Eval from '../../../src/models/eval';
 import AuthoritativeMarkupInjectionProvider from '../../../src/redteam/providers/authoritativeMarkupInjection';
 import BestOfNProvider from '../../../src/redteam/providers/bestOfN';
+import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import {
   getProviderResponseHeaders,
   isProviderResponseRateLimited,
@@ -57,6 +59,32 @@ function createTest(provider: ApiProvider, numeric: boolean, query: string): Ato
   };
 }
 
+function rateLimitResponse(
+  retryable: boolean | undefined,
+  legacyHeaders = false,
+): ProviderResponse {
+  const headers = {
+    'Retry-After': '120',
+    'x-ratelimit-limit-requests': '1',
+    'x-ratelimit-remaining-requests': '0',
+    'x-ratelimit-reset-requests': '120s',
+  };
+  return {
+    error: 'Rate limit exceeded: synthetic 429',
+    metadata: {
+      rateLimitKind: 'rate_limit',
+      rateLimitRetryable: retryable,
+      http: {
+        status: 429,
+        statusText: 'Too Many Requests',
+        ...(legacyHeaders ? {} : { headers }),
+      },
+      ...(legacyHeaders ? { headers } : {}),
+      redteamTargetMetadata: { rateLimitRetryable: true },
+    },
+  };
+}
+
 async function evaluateRows(strategy: Strategy, numeric: boolean, response: ProviderResponse) {
   const wrapper = createStrategy(strategy);
   const target: ApiProvider = {
@@ -100,6 +128,7 @@ describe('numeric wrappers preserve operational transport metadata', () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -126,6 +155,121 @@ describe('numeric wrappers preserve operational transport metadata', () => {
       expect(summary.results).toHaveLength(1);
       expect(summary.results[0].error).toContain(String(status));
       expect(summary.results[0].response?.metadata?.http?.status).toBe(status);
+    },
+  );
+
+  it.each(
+    strategies.flatMap((strategy) =>
+      [false, true].flatMap((numeric) =>
+        [false, true].flatMap((legacyHeaders) =>
+          [false, true, undefined].map((retryable) => ({
+            strategy,
+            numeric,
+            legacyHeaders,
+            retryable,
+          })),
+        ),
+      ),
+    ),
+  )(
+    '$strategy honors retryable=$retryable over rate_limit and retry headers (numeric: $numeric, legacy headers: $legacyHeaders)',
+    async ({ strategy, numeric, legacyHeaders, retryable }) => {
+      const response = rateLimitResponse(retryable, legacyHeaders);
+      const wrapper = createStrategy(strategy);
+      const target: ApiProvider = {
+        id: () => 'synthetic-retry-policy-target',
+        callApi: vi.fn(async () => response),
+      };
+      const result = await wrapper.callApi('Return an amount', {
+        originalProvider: target,
+        vars: { query: 'Return an amount' },
+        prompt,
+        test: createTest(wrapper, numeric, 'Return an amount'),
+      });
+      const options = createProviderRateLimitOptions();
+
+      expect(result.metadata?.rateLimitRetryable).toBe(retryable);
+      expect(options.isRateLimited?.(result, undefined)).toBe(retryable !== false);
+      expect(options.getHeaders?.(result)).toEqual(
+        retryable === false ? undefined : getProviderResponseHeaders(response),
+      );
+      expect(options.getRetryAfter?.(result, undefined)).toBe(
+        retryable === false ? undefined : 120000,
+      );
+      if (numeric) {
+        response.metadata!.rateLimitRetryable = retryable !== true;
+        expect(result.metadata?.rateLimitRetryable).toBe(retryable);
+        expect(result.metadata?.redteamTargetMetadata.rateLimitRetryable).toBe(retryable);
+      }
+    },
+  );
+
+  it.each(
+    strategies.flatMap((strategy) =>
+      [false, true, undefined].map((retryable) => ({ strategy, retryable })),
+    ),
+  )(
+    '$strategy evaluates through the real scheduler with retryable=$retryable',
+    async ({ strategy, retryable }) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      const startTime = Date.now();
+      const callTimes: number[] = [];
+      const wrapper: ApiProvider = createStrategy(strategy);
+      wrapper.config = { ...wrapper.config, maxRetries: 1 };
+      const target: ApiProvider = {
+        id: () => 'synthetic-scheduled-target',
+        callApi: vi.fn(async () => {
+          callTimes.push(Date.now());
+          return callTimes.length === 1
+            ? rateLimitResponse(retryable)
+            : { output: '{"amount":100}', metadata: { http: { status: 200, statusText: 'OK' } } };
+        }),
+      };
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const retry = vi.fn();
+      registry.on('request:retrying', retry);
+      const runRow = (testIdx: number) =>
+        runEval({
+          provider: target,
+          prompt,
+          test: createTest(wrapper, true, `row ${testIdx}`),
+          testIdx,
+          promptIdx: 0,
+          delay: 0,
+          repeatIndex: 0,
+          evaluateOptions: {},
+          conversations: {},
+          registers: {},
+          isRedteam: true,
+          rateLimitRegistry: registry,
+        });
+
+      try {
+        const pending = (async () => [...(await runRow(0)), ...(await runRow(1))])();
+        await vi.runAllTimersAsync();
+        const rows = await pending;
+
+        expect(rows).toHaveLength(2);
+        expect(rows[1].success).toBe(true);
+        if (retryable === false) {
+          expect(target.callApi).toHaveBeenCalledTimes(2);
+          expect(retry).not.toHaveBeenCalled();
+          expect(callTimes).toEqual([startTime, startTime]);
+          expect(Date.now()).toBe(startTime);
+          expect(rows[0].success).toBe(false);
+          expect(rows[0].response?.metadata?.rateLimitRetryable).toBe(false);
+        } else {
+          expect(target.callApi).toHaveBeenCalledTimes(3);
+          expect(retry).toHaveBeenCalledTimes(1);
+          expect(callTimes[1]).toBeGreaterThanOrEqual(startTime + 120000);
+          expect(callTimes[2]).toBe(callTimes[1]);
+          expect(rows[0].success).toBe(true);
+        }
+      } finally {
+        registry.dispose();
+        vi.useRealTimers();
+      }
     },
   );
 

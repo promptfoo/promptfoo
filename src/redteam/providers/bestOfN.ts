@@ -186,6 +186,7 @@ export default class BestOfNProvider implements ApiProvider {
                       http: targetMetadata?.http,
                       headers: targetMetadata?.headers,
                       rateLimitKind: targetMetadata?.rateLimitKind,
+                      rateLimitRetryable: targetMetadata?.rateLimitRetryable,
                     }),
                 redteamTargetMetadata: targetMetadata,
               },
