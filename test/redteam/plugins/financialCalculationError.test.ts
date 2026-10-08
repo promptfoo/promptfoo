@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../../src/assertions/index';
-import { AssertValidationError } from '../../../src/assertions/validateAssertions';
+import { RedteamGradingConfigError } from '../../../src/redteam/grading/errors';
 import {
   getGradingAssertionHash,
   getGradingInputHash,
@@ -191,6 +191,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
         rubric: 'Legacy rubric',
       };
       vi.mocked(RedteamGraderBase.prototype.getResult).mockResolvedValueOnce(fallback);
+      const gradingContext = { conversationTranscript: 'Earlier context' };
       const result = await grader.getResult(
         'Prompt',
         'Output',
@@ -199,6 +200,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
         value,
         'Guidance',
         true,
+        gradingContext,
       );
       expect(result).toBe(fallback);
       expect(RedteamGraderBase.prototype.getResult).toHaveBeenCalledWith(
@@ -209,7 +211,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
         value,
         'Guidance',
         true,
-        undefined,
+        gradingContext,
       );
     },
   );
@@ -257,7 +259,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
           },
         },
       }),
-    ).rejects.toThrow(AssertValidationError);
+    ).rejects.toThrow(RedteamGradingConfigError);
     expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
   });
 

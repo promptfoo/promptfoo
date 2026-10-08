@@ -13,7 +13,6 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
-import { AssertValidationError } from './validateAssertions';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
 import type {
@@ -348,7 +347,7 @@ export const handleRedteam = async (
     };
   } catch (error) {
     // Invalid assertion configuration cannot recover through a successful prior turn.
-    if (error instanceof AssertValidationError) {
+    if (error instanceof Error && error.name === 'RedteamGradingConfigError') {
       throw error;
     }
     // For iterative strategies, check if only SOME turns had grader errors (not all).

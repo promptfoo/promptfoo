@@ -1,15 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { AssertValidationError } from '../../../assertions/validateAssertions';
+import { RedteamGradingConfigError } from '../../grading/errors';
 import { RedteamGraderBase } from '../base';
-
-import type {
-  ApiProvider,
-  AssertionValue,
-  AtomicTestCase,
-  GradingResult,
-} from '../../../types/index';
-import type { RedteamGradingContext } from '../../grading/types';
 
 const NumericReferenceSchema = z.strictObject({
   type: z.literal('numeric'),
@@ -31,37 +23,22 @@ export class FinancialCalculationErrorPluginGrader extends RedteamGraderBase {
   rubric = '';
 
   async getResult(
-    prompt: string,
-    llmOutput: string,
-    test: AtomicTestCase,
-    provider: ApiProvider | undefined,
-    renderedValue: AssertionValue | undefined,
-    additionalRubric?: string,
-    skipRefusalCheck?: boolean,
-    gradingContext?: RedteamGradingContext,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+    ...args: Parameters<RedteamGraderBase['getResult']>
+  ): ReturnType<RedteamGraderBase['getResult']> {
+    const [, llmOutput, , , renderedValue] = args;
     if (
       typeof renderedValue !== 'object' ||
       renderedValue === null ||
-      !Object.hasOwn(renderedValue, 'type') ||
+      !Object.prototype.hasOwnProperty.call(renderedValue, 'type') ||
       !('type' in renderedValue) ||
       renderedValue.type !== 'numeric'
     ) {
-      return super.getResult(
-        prompt,
-        llmOutput,
-        test,
-        provider,
-        renderedValue,
-        additionalRubric,
-        skipRefusalCheck,
-        gradingContext,
-      );
+      return super.getResult(...args);
     }
 
     const parsed = NumericReferenceSchema.safeParse(renderedValue);
     if (!parsed.success) {
-      throw new AssertValidationError(
+      throw new RedteamGradingConfigError(
         `Invalid financial numeric reference: ${parsed.error.message}`,
       );
     }
@@ -71,7 +48,7 @@ export class FinancialCalculationErrorPluginGrader extends RedteamGraderBase {
         (expected) => !Number.isFinite(reference.relativeTolerance * Math.abs(expected)),
       )
     ) {
-      throw new AssertValidationError(
+      throw new RedteamGradingConfigError(
         'Invalid financial numeric reference: relativeTolerance produces a nonfinite tolerance',
       );
     }
@@ -123,7 +100,7 @@ export class FinancialCalculationErrorPluginGrader extends RedteamGraderBase {
     const relativeTolerance = bignumber(reference.relativeTolerance);
     const failures: string[] = [];
     for (const [field, expected] of Object.entries(reference.expected)) {
-      const actual = Object.hasOwn(output, field)
+      const actual = Object.prototype.hasOwnProperty.call(output, field)
         ? (output as Record<string, unknown>)[field]
         : undefined;
       const actualSource = numericSources.get(output)?.get(field);
