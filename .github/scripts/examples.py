@@ -38,6 +38,11 @@ EXAMPLES = {
         node=True,
         docker_images=("python:3.9-alpine",),
     ),
+    "e2b": Example(
+        "examples/integration-e2b",
+        ("3.10", "3.14"),
+        ((".", "*_test.py"),),
+    ),
     "python-provider-upgrade": Example(
         "examples/provider-python",
         ("3.10",),
