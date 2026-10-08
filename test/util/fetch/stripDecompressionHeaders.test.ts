@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stripDecompressionHeaders } from '../../../src/util/fetch/stripDecompressionHeaders';
+import { stripDecompressionHeaders } from '../../../src/util/fetch/decompress';
 import type { Dispatcher } from 'undici';
 
 type RawHeaderPairs = [string, string][];
@@ -91,24 +91,30 @@ function dispatchResponseStart({
 }
 
 describe('stripDecompressionHeaders', () => {
-  it('strips content-encoding and content-length from rawHeaders when decompress decoded the body', () => {
-    // decompress removed both headers from the parsed headers => body is decoded.
-    const { controller, events } = dispatchResponseStart({
-      rawHeaders: makeRawHeaders([
-        ['content-type', 'application/json'],
-        ['content-encoding', 'gzip'],
-        ['content-length', '123'],
-        ['x-request-id', 'abc'],
-      ]),
-      parsedHeaders: { 'content-type': 'application/json', 'x-request-id': 'abc' },
-    });
+  it.each(['start', 'both'] as const)(
+    'strips decoded response headers with callback mode %s',
+    (callbackMode) => {
+      // decompress removed both headers from the parsed headers => body is decoded.
+      const { controller, events } = dispatchResponseStart({
+        rawHeaders: makeRawHeaders([
+          ['content-type', 'application/json'],
+          ['content-encoding', 'gzip'],
+          ['content-length', '123'],
+          ['x-request-id', 'abc'],
+        ]),
+        parsedHeaders: { 'content-type': 'application/json', 'x-request-id': 'abc' },
+        callbackMode,
+      });
 
-    expect(rawHeadersToPairs(controller.rawHeaders as Buffer[])).toEqual([
-      ['content-type', 'application/json'],
-      ['x-request-id', 'abc'],
-    ]);
-    expect(events.map((e) => e.method)).toEqual(['onResponseStarted', 'onResponseStart']);
-  });
+      expect(rawHeadersToPairs(controller.rawHeaders as Buffer[])).toEqual([
+        ['content-type', 'application/json'],
+        ['x-request-id', 'abc'],
+      ]);
+      expect(events.map((e) => e.method)).toEqual(
+        callbackMode === 'start' ? ['onResponseStart'] : ['onResponseStarted', 'onResponseStart'],
+      );
+    },
+  );
 
   it('strips mixed-case and repeated content-encoding entries', () => {
     // Defensive: undici's parseHeaders merges repeated names into one array
