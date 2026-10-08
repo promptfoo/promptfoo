@@ -1065,7 +1065,7 @@ async function runOptionalWatsonXChecks(
         '--no-fund',
         '--no-package-lock',
         '@ibm-cloud/watsonx-ai@^1.7.16',
-        'ibm-cloud-sdk-core@^5.6.2',
+        'ibm-cloud-sdk-core@5.6.2',
       ],
       consumerDir,
       npmEnv,

@@ -137,6 +137,11 @@
       "groupName": "IBM packages"
     },
     {
+      "description": "Hold ibm-cloud-sdk-core below 5.6.3 until upstream fixes JSON secret redaction with escaped quotes; 5.6.3 can expose secret suffixes in debug logs (#11472).",
+      "matchPackageNames": ["ibm-cloud-sdk-core"],
+      "allowedVersions": "<5.6.3"
+    },
+    {
       "description": "Group MUI packages together",
       "matchPackagePatterns": ["^@mui/", "^@emotion/"],
       "groupName": "MUI packages"

@@ -78,10 +78,12 @@ The WatsonX SDKs are optional peers and are not installed with promptfoo by defa
 1. Install promptfoo and the supported SDK versions together in your project:
 
    ```sh
-   npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2
+   npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2
    ```
 
    For a global installation, add `-g` to the same command so both SDKs are installed alongside promptfoo. Missing or incompatible SDKs are reported when the WatsonX provider is used.
+
+   The core SDK is temporarily restricted to `5.6.2` to avoid the debug-log redaction regression introduced in `5.6.3`. Version `5.6.2` also has known redaction gaps, so avoid IBM SDK HTTP debug logging with credentials or sensitive data (`DEBUG=ibm-cloud-sdk-core:*` or `NODE_DEBUG=axios`). Promptfoo checks the core version resolved by the WatsonX SDK too, including nested installations.
 
 2. Set up the necessary environment variables:
 
