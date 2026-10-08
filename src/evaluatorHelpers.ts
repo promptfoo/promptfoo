@@ -25,7 +25,8 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { renderVarsInObject } from './util/index';
+import { importPackage } from './util/importPackage';
+import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { isMissingPackageImportError } from './util/packageImportErrors';
@@ -48,7 +49,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
         `pdf-parse ${version ?? '(unknown version)'} is not supported. ${installHelp}`,
       );
     }
-    const { PDFParse } = await import('pdf-parse');
+    const { PDFParse } = (await importPackage('pdf-parse')) as typeof import('pdf-parse');
     const dataBuffer = await fs.readFile(pdfPath);
     const parser = new PDFParse({ data: dataBuffer });
     const result = await parser.getText();
@@ -259,6 +260,7 @@ export async function renderPrompt(
   skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
+  const loadedMimeTypes = setLoadedFileMimeTypes(vars);
 
   let basePrompt = prompt.raw;
 
@@ -360,17 +362,17 @@ export async function renderPrompt(
             }
 
             vars[varName] = `data:${mimeType};base64,${base64Data}`;
-          } else if (fileType === 'audio' && fileExtension?.toLowerCase() === 'm4a' && provider) {
-            // Generic ISO-BMFF brands such as `isom` and `mp42` do not reveal
-            // whether a file contains audio or video. Preserve the known M4A
-            // provenance so providers receive the correct modality.
-            vars[varName] =
-              provider.getAudioInputFormat?.() === 'google'
-                ? `data:audio/mp4;base64,${base64Data}`
-                : base64Data;
           } else {
             // Keep existing behavior for video/audio files (raw base64)
             vars[varName] = base64Data;
+            if (
+              fileType === 'audio' &&
+              fileExtension?.toLowerCase() === 'm4a' &&
+              provider?.getAudioInputFormat?.() === 'google'
+            ) {
+              loadedMimeTypes.set(base64Data, 'audio/mp4');
+              setLoadedFileMimeTypes(vars, loadedMimeTypes);
+            }
           }
         } catch (error) {
           throw new Error(

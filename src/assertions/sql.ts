@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 
 import { type Option as sqlParserOption } from 'node-sql-parser';
 import semverSatisfies from 'semver/functions/satisfies.js';
+import { importPackage } from '../util/importPackage';
 import { isMissingPackageImportError } from '../util/packageImportErrors';
 import { getPackageVersion } from '../util/packageVersion';
 import { coerceString } from './utils';
@@ -134,7 +135,7 @@ async function createSqlParser() {
         `node-sql-parser ${version ?? '(unknown version)'} is not supported. ${installHelp}`,
       );
     }
-    sqlParserModule = await import('node-sql-parser');
+    sqlParserModule = (await importPackage('node-sql-parser')) as SqlParserModule;
   } catch (error) {
     if (isMissingPackageImportError(error, 'node-sql-parser')) {
       throw new Error(installMessage);
