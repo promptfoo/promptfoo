@@ -880,3 +880,10 @@ describe('AZURE_MODELS cost coverage', () => {
     expect(calculateAzureCost(id, {}, 0, 1_000_000)).toBeCloseTo(outputPerM as number, 9);
   });
 });
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = AZURE_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
+  const longContextCosts = costs.flatMap(({ longContext }) => (longContext ? [longContext] : []));
+  expect(new Set(longContextCosts).size).toBe(longContextCosts.length);
+});
