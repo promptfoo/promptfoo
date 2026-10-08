@@ -285,24 +285,7 @@ const REFUSAL_SUBSTRING_PATTERNS = [
 ].map((s) => new RegExp(`\\b${escapeRegExp(s.toLowerCase())}\\b`));
 
 export function isEmptyResponse(response: string): boolean {
-  return (
-    !response ||
-    response.trim() === '' ||
-    response.trim() === '{}' ||
-    response.trim().toLowerCase() === 'undefined' ||
-    response.trim().toLowerCase() === 'null'
-  );
-}
-
-/**
- * Whether the output is a stringified missing-value marker ('undefined' or
- * 'null'). Provider adapters emit these when the response field went missing
- * and got coerced to a string; no model actually says them, so unlike a
- * genuinely empty reply they must never be read as a refusal.
- */
-export function isMissingOutputMarker(response: string): boolean {
-  const trimmed = response?.trim().toLowerCase();
-  return trimmed === 'undefined' || trimmed === 'null';
+  return !response || response.trim() === '' || response.trim() === '{}';
 }
 
 export function isBasicRefusal(response: string): boolean {

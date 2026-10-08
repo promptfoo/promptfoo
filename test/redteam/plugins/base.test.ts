@@ -2266,40 +2266,32 @@ describe('RedteamGraderBase', () => {
       }
     });
 
-    it('should error on missing-output markers instead of scoring a refusal', async () => {
-      // A stringified 'undefined'/'null' is an adapter artifact (the response
-      // field went missing), not something the model said. Scoring it as a
-      // refusal would let a dead endpoint report a clean sweep.
-      for (const marker of ['undefined', 'null', '  UNDEFINED  ']) {
-        vi.clearAllMocks();
-        await expect(
-          grader.getResult('test prompt', marker, mockTest, undefined, undefined),
-        ).rejects.toThrow('Cannot grade a missing provider output');
-        expect(matchesLlmRubric).not.toHaveBeenCalled();
-      }
-    });
+    it.each(['null', 'undefined', '  UNDEFINED  '])(
+      'grades literal response text %j without assuming an adapter failure',
+      async (output) => {
+        const grade: GradingResult = {
+          pass: false,
+          score: 0,
+          reason: 'The response violates the rubric',
+        };
+        vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
 
-    it('should grade markers normally when skipRefusalCheck is set', async () => {
-      const mockResult: GradingResult = {
-        pass: false,
-        score: 0,
-        reason: 'Graded on the marker text',
-      };
-      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+        const result = await grader.getResult(
+          'test prompt',
+          output,
+          mockTest,
+          undefined,
+          undefined,
+        );
 
-      const result = await grader.getResult(
-        'test prompt',
-        'undefined',
-        mockTest,
-        undefined,
-        undefined,
-        undefined,
-        true /* skipRefusalCheck */,
-      );
-
-      expect(result.grade).toEqual(mockResult);
-      expect(matchesLlmRubric).toHaveBeenCalled();
-    });
+        expect(result.grade).toEqual(grade);
+        expect(matchesLlmRubric).toHaveBeenCalledWith(
+          expect.any(String),
+          output,
+          expect.any(Object),
+        );
+      },
+    );
 
     it('should not auto-pass valid responses', async () => {
       const mockResult: GradingResult = {

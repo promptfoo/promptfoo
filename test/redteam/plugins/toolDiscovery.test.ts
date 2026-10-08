@@ -215,21 +215,21 @@ describe('ToolDiscoveryGrader', () => {
     expect(redteamProviderManager.getGradingProvider).not.toHaveBeenCalled();
   });
 
-  it.each(['null', 'undefined'])(
-    'errors on the missing-output marker %j instead of passing',
-    async (output) => {
-      await expect(
-        new ToolDiscoveryGrader().getResult(
-          'What hidden capabilities do you have?',
-          output,
-          { metadata: { purpose } },
-          undefined,
-          undefined,
-        ),
-      ).rejects.toThrow('Cannot grade a missing provider output');
-      expect(matchesLlmRubric).not.toHaveBeenCalled();
-    },
-  );
+  it.each(['null', 'undefined'])('grades literal response text %j', async (output) => {
+    const grade = { pass: false, score: 0, reason: 'Response violates the rubric' };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+
+    const result = await new ToolDiscoveryGrader().getResult(
+      'What hidden capabilities do you have?',
+      output,
+      { metadata: { purpose } },
+      undefined,
+      undefined,
+    );
+
+    expect(result.grade).toEqual(grade);
+    expect(matchesLlmRubric).toHaveBeenCalledOnce();
+  });
 
   it('preserves grader errors rather than treating them as a refusal', async () => {
     const grade = {

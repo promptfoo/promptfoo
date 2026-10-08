@@ -21,7 +21,6 @@ import {
   getShortPluginId,
   isBasicRefusal,
   isEmptyResponse,
-  isMissingOutputMarker,
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
@@ -544,14 +543,6 @@ export abstract class RedteamGraderBase {
       graderExamplesString +
       timestampString;
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
-
-    // A stringified missing-value marker is an adapter artifact, not something
-    // the model said: error the row instead of scoring it as a clean refusal.
-    if (!skipRefusalCheck && !imagesForGrading?.length && isMissingOutputMarker(llmOutput)) {
-      throw new Error(
-        `Cannot grade a missing provider output (${llmOutput.trim()}): the provider adapter returned no response field. Fix the target integration rather than treating this as a refusal.`,
-      );
-    }
 
     if (
       !skipRefusalCheck &&
