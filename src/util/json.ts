@@ -212,6 +212,30 @@ export function convertSlashCommentsToHash(str: string): string {
     .join('\n');
 }
 
+function findJsonStringEnd(str: string, start: number): number {
+  for (let index = start; index < str.length; index++) {
+    const char = str[index];
+    if (char === '"') {
+      return index + 1;
+    }
+    if (char === '\\') {
+      index++;
+      const escape = str[index];
+      if (escape === 'u') {
+        if (!/^[\da-fA-F]{4}$/.test(str.slice(index + 1, index + 5))) {
+          return -1;
+        }
+        index += 4;
+      } else if (!'"\\/bfnrt'.includes(escape)) {
+        return -1;
+      }
+    } else if (char.charCodeAt(0) < 0x20) {
+      return -1;
+    }
+  }
+  return -1;
+}
+
 type JsonContainer = {
   start: number;
   close: '}' | ']';
@@ -227,7 +251,7 @@ function findJsonObjectEnd(str: string, start: number, objectEnds: Map<number, n
   }
 
   const tokens =
-    /[ \t\r\n]*("(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[\da-fA-F]{4}))*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\],:])/y;
+    /[ \t\r\n]*("|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\],:])/y;
   const stack: JsonContainer[] = [{ start, close: '}', state: 'keyOrEnd' }];
   let index = start + 1;
 
@@ -239,6 +263,12 @@ function findJsonObjectEnd(str: string, start: number, objectEnds: Map<number, n
     }
     const token = match[1];
     index = tokens.lastIndex;
+    if (token === '"') {
+      index = findJsonStringEnd(str, index);
+      if (index === -1) {
+        break;
+      }
+    }
     const container = stack[stack.length - 1];
 
     if (

@@ -271,6 +271,17 @@ describe('json utilities', () => {
       expect(extractJsonObjects(`Result: ${JSON.stringify(parent)}`)).toEqual([child]);
     });
 
+    it.each([
+      ['value', '{"value":"', 'x', '"}'],
+      ['key', '{"', 'x', '":1}'],
+      ['unfinished value', '{"value":"', 'x', ''],
+      ['escaped value', '{"value":"', '\\n', '"}'],
+    ])('recovers later JSON after an oversized string %s', (_name, prefix, chunk, suffix) => {
+      const oversized = chunk.repeat(10_000_000 / chunk.length);
+      const input = `Result: ${prefix}${oversized}${suffix} {"keep":true}`;
+      expect(extractJsonObjects(input)).toEqual([{ keep: true }]);
+    });
+
     it('extracts nested JSON arrays without recursion', () => {
       const depth = 16_000;
       const input = `Result: {"value":${'['.repeat(depth)}"}"${']'.repeat(depth)}}`;
