@@ -17,6 +17,7 @@ import { evaluate } from '../../../src/node/evaluate';
 import { nodeEvaluatorRuntime } from '../../../src/node/evaluatorRuntime';
 import { loadApiProvider, loadApiProviders, resolveProvider } from '../../../src/providers/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { TestSuiteSchema } from '../../../src/types/index';
 import { isApiProvider } from '../../../src/types/providers';
 import { readAzureBlobText } from '../../../src/util/azureBlob';
 import {
@@ -122,6 +123,57 @@ describe('suite environment loading', () => {
     );
     return configPath;
   }
+
+  it('accepts numeric and boolean env values from config files', async () => {
+    const configPath = writeConfig('env-value-types', {
+      env: {
+        PROMPTFOO_EVAL_TIMEOUT_MS: 10000,
+        PROMPTFOO_INSECURE_SSL: true,
+        CUSTOM_RATIO: 0.5,
+        CUSTOM_NAME: 'plain',
+      } as unknown as UnifiedConfig['env'],
+    });
+
+    const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+
+    expect(testSuite.env).toEqual({
+      PROMPTFOO_EVAL_TIMEOUT_MS: '10000',
+      PROMPTFOO_INSECURE_SSL: 'true',
+      CUSTOM_RATIO: '0.5',
+      CUSTOM_NAME: 'plain',
+    });
+    // The saved config keeps the values as authored.
+    expect(config.env).toMatchObject({
+      PROMPTFOO_EVAL_TIMEOUT_MS: 10000,
+      PROMPTFOO_INSECURE_SSL: true,
+    });
+    // `promptfoo validate` and `eval` report these issues to the user.
+    expect(TestSuiteSchema.safeParse(testSuite).error?.issues ?? []).toEqual([]);
+  });
+
+  it('gives providers and tests string env values before they are loaded', async () => {
+    // Providers that read their own env, as OpenClaw does for its gateway port, call string
+    // methods on these values while the config is still being resolved.
+    const configPath = writeConfig('env-value-types-providers', {
+      env: { OPENCLAW_GATEWAY_PORT: 18789, FEATURE_FLAG: true } as unknown as UnifiedConfig['env'],
+      providers: ['openclaw:main', 'echo'],
+      tests: [{ vars: { input: 'first' } }],
+    });
+
+    const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+
+    expect(testSuite.providers.map((provider) => provider.id())).toEqual([
+      expect.stringContaining('openclaw'),
+      'echo',
+    ]);
+    for (const provider of testSuite.providers) {
+      expect((provider as { env?: unknown }).env ?? testSuite.env).toEqual({
+        OPENCLAW_GATEWAY_PORT: '18789',
+        FEATURE_FLAG: 'true',
+      });
+    }
+    expect(config.env).toEqual({ OPENCLAW_GATEWAY_PORT: 18789, FEATURE_FLAG: true });
+  });
 
   it('applies published tracing defaults to executable and saved file configurations', async () => {
     const input = { enabled: true, otlp: { http: {}, grpc: {} }, storage: {} };
@@ -1199,13 +1251,16 @@ describe('suite environment loading', () => {
     },
   );
 
-  it.each(['tests', 'vars'] as const)(
-    'resolves an explicit CLI %s path from the working directory',
-    async (flag) => {
+  it.each([
+    { flag: 'tests', expected: 'working-directory' },
+    { flag: 'vars', expected: 'config-directory' },
+  ] as const)(
+    'preserves the released relative path base for CLI --$flag',
+    async ({ flag, expected }) => {
       const configPath = writeConfig('cli-path', {});
       for (const [directory, source] of [
         [tempDir, 'working-directory'],
-        [path.dirname(configPath), 'wrong-config-shadow'],
+        [path.dirname(configPath), 'config-directory'],
       ]) {
         fs.mkdirSync(path.join(directory, 'tests'));
         fs.writeFileSync(path.join(directory, 'tests/cases.yaml'), `- vars: { source: ${source} }`);
@@ -1216,12 +1271,24 @@ describe('suite environment loading', () => {
           { config: [configPath], [flag]: 'tests/cases.yaml' },
           {},
         );
-        expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['working-directory']);
+        expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual([expected]);
       } finally {
         cwd.mockRestore();
       }
     },
   );
+
+  it('loads --vars CSV from the config directory when the working directory has no copy', async () => {
+    const configPath = writeConfig('cli-vars-csv', {});
+    fs.writeFileSync(path.join(path.dirname(configPath), 'cases.csv'), 'name\nAda\n');
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    try {
+      const { testSuite } = await resolveConfigs({ config: [configPath], vars: 'cases.csv' }, {});
+      expect(testSuite.tests?.map((test) => test.vars)).toEqual([{ name: 'Ada' }]);
+    } finally {
+      cwd.mockRestore();
+    }
+  });
 
   it('uses config-relative references inside a nested defaultTest file', async () => {
     const configPath = writeConfig('default-root', { defaultTest: 'file://defaults/default.yaml' });

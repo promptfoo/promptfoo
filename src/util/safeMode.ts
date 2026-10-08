@@ -12,7 +12,8 @@ export class SafeModeError extends Error {
 /**
  * Checks whether safe mode is active.
  *
- * Safe mode disables dynamic inline JavaScript execution (`new Function(...)`).
+ * This guard disables string-based JavaScript assertions and shared transforms.
+ * It is not a sandbox: file callbacks and other execution surfaces remain enabled.
  *
  * Precedence / Security Contract:
  * 1. CLI flag `--safe-mode` (`cliState.safeMode`) - Highest precedence.

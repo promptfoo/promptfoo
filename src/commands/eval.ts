@@ -137,7 +137,7 @@ export function evalCommand(
     )
     .option(
       '--filter-metadata <key=value>',
-      'Only run tests whose metadata matches key=value. Comma-separated values use OR; repeated flags use AND, even for the same key (e.g. --filter-metadata type=unit,integration --filter-metadata env=prod)',
+      'Only run tests whose metadata matches key=value. Comma-separated values use OR, and \\, is a literal comma; repeated flags use AND, even for the same key (e.g. --filter-metadata type=unit,integration --filter-metadata env=prod)',
       (value: string, previous: string[] | undefined) => {
         return previous ? [...previous, value] : [value];
       },
@@ -229,10 +229,6 @@ export function evalCommand(
 
       if (validatedOpts.remote) {
         cliState.remote = true;
-      }
-
-      if (validatedOpts.safeMode) {
-        cliState.safeMode = true;
       }
 
       for (const maybeFilePath of validatedOpts.output ?? []) {

@@ -8,6 +8,7 @@ import {
 } from '../../../src/redteam/plugins/harmbench';
 import * as fetchModule from '../../../src/util/fetch/index';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
+import { sampleEachShufflePath } from '../../util/utils';
 
 import type { AtomicTestCase } from '../../../src/types/index';
 
@@ -85,6 +86,20 @@ describe('HarmbenchPlugin', () => {
     expect(tests[0]?.metadata?.harmbenchFunctionalCategory).toBeDefined();
     expect(tests[0]?.metadata?.harmbenchBehaviorId).toBeDefined();
     expect(tests[0]?.metadata?.category).toBeDefined();
+  });
+
+  it('samples every ordered pair of records equally', async () => {
+    const csv = `Behavior,FunctionalCategory,SemanticCategory,ContextString,BehaviorID
+a,standard,illegal,,id-a
+b,standard,illegal,,id-b
+c,standard,illegal,,id-c`;
+    vi.mocked(fetchModule.fetchWithTimeout).mockImplementation(async () => new Response(csv));
+
+    const samples = await sampleEachShufflePath(async () =>
+      (await plugin.generateTests(2, 0)).map((test) => test.metadata?.harmbenchBehavior).join(''),
+    );
+
+    expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
   });
 
   it('should filter by semantic categories when configured', async () => {

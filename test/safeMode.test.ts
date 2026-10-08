@@ -62,12 +62,14 @@ describe('Safe Mode', () => {
     });
 
     it('returns true when PROMPTFOO_SAFE_MODE is set in process.env', () => {
+      restoreEnv?.();
       restoreEnv = mockProcessEnv({ PROMPTFOO_SAFE_MODE: 'true' });
       expect(isSafeMode()).toBe(true);
     });
 
     it('handles truthy string variants for PROMPTFOO_SAFE_MODE', () => {
       for (const val of ['1', 'true', 'yes', 'yup', 'yeppers']) {
+        restoreEnv?.();
         restoreEnv = mockProcessEnv({ PROMPTFOO_SAFE_MODE: val });
         expect(isSafeMode()).toBe(true);
       }
@@ -75,6 +77,7 @@ describe('Safe Mode', () => {
 
     it('returns false when PROMPTFOO_SAFE_MODE is explicitly falsy', () => {
       for (const val of ['0', 'false', 'no']) {
+        restoreEnv?.();
         restoreEnv = mockProcessEnv({ PROMPTFOO_SAFE_MODE: val });
         expect(isSafeMode()).toBe(false);
       }
@@ -87,6 +90,7 @@ describe('Safe Mode', () => {
     });
 
     it('enforces anti-tamper precedence: config.env cannot disable safe mode if enabled via process.env', () => {
+      restoreEnv?.();
       restoreEnv = mockProcessEnv({ PROMPTFOO_SAFE_MODE: 'true' });
       // Malicious or untrusted config attempting to disable safe mode
       cliState.withEnv({ PROMPTFOO_SAFE_MODE: 'false' }, () => {
@@ -101,6 +105,27 @@ describe('Safe Mode', () => {
         expect(isSafeMode()).toBe(true);
       });
     });
+  });
+
+  it('isolates overlapping async scopes and preserves an enabled outer scope', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const enabled = cliState.withSafeMode(true, async () => {
+      await gate;
+      expect(isSafeMode()).toBe(true);
+      await cliState.withSafeMode(false, async () => {
+        expect(isSafeMode()).toBe(true);
+      });
+    });
+    await cliState.withSafeMode(false, async () => {
+      expect(isSafeMode()).toBe(false);
+      release();
+      await enabled;
+      expect(isSafeMode()).toBe(false);
+    });
+    expect(isSafeMode()).toBe(false);
   });
 
   describe('transform function under safe mode', () => {
