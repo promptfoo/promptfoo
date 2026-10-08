@@ -188,6 +188,8 @@ Clicking into a specific test case to view logs will display the raw inputs and 
 
 ![llm red team evals](/img/docs/redteam-results.png)
 
+The report's CSV download uses display prompts. Its JSON download keeps the original saved variables, even when the report displays a provider-reported final prompt or session information. Opening or exporting a report does not change the stored results.
+
 ### Understanding the report view
 
 The red teaming results provide insights into various aspects of your LLM application's behavior:

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
-import { createCompletedPrompt } from '../factories/eval';
+import { convertEvalResultToTableCell } from '../../src/util/exportToFile/index';
+import { createCompletedPrompt, createEvaluateSummaryV2 } from '../factories/eval';
 
-import type { EvaluateTable, ResultsFile } from '../../src/types/index';
+import type { EvaluateResult, EvaluateTable, ResultsFile } from '../../src/types/index';
 
 describe('convertResultsToTable', () => {
   it('should convert results to table format', () => {
@@ -1520,5 +1521,116 @@ describe('convertResultsToTable', () => {
     const result = convertResultsToTable(resultsFile);
     expect(result.head.vars).toEqual(['prompt', 'foo']);
     expect(result.body[0].vars).toEqual(['p', 'f']);
+  });
+});
+
+describe('pure table projection', () => {
+  function fixture(overrides: Partial<EvaluateResult> = {}): ResultsFile {
+    const vars = { name: 'Ada' };
+    return {
+      version: 4,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      author: null,
+      config: {},
+      prompts: [createCompletedPrompt('Hello {{name}}', { id: 'prompt1' })],
+      results: createEvaluateSummaryV2({
+        results: [
+          {
+            id: 'result1',
+            testIdx: 0,
+            promptIdx: 0,
+            promptId: 'prompt1',
+            prompt: { raw: 'Hello {{name}}', label: 'hello' },
+            provider: { id: 'echo' },
+            vars,
+            testCase: { vars },
+            response: { output: 'ok' },
+            success: true,
+            score: 1,
+            failureReason: 0,
+            latencyMs: 0,
+            namedScores: {},
+            ...overrides,
+          },
+        ],
+      }),
+    };
+  }
+
+  function freeze(value: unknown): void {
+    if (value !== null && typeof value === 'object') {
+      Object.values(value).forEach(freeze);
+      Object.freeze(value);
+    }
+  }
+
+  it.each([
+    { response: { output: 'ok', prompt: 'Hello Ada' } },
+    { metadata: { sessionIds: ['one', null, 'two'] } },
+    { vars: undefined, metadata: { sessionId: 'one' } },
+    { response: { output: 'ok', metadata: { transformDisplayVars: { injected: 'display' } } } },
+  ])('projects frozen caller data without writes (%j)', (overrides) => {
+    const input = fixture(overrides);
+    const before = structuredClone(input);
+    freeze(input);
+    const first = convertResultsToTable(input);
+    expect(convertResultsToTable(input)).toEqual(first);
+    expect(input).toEqual(before);
+  });
+
+  it('keeps display substitutions separate from aliased test vars', () => {
+    const input = fixture({
+      response: {
+        output: 'ok',
+        prompt: 'Hello Ada',
+        metadata: {
+          transformDisplayVars: { embedded: 'injected display' },
+        },
+      },
+      metadata: { sessionIds: ['one', 'two'] },
+    });
+    const original = structuredClone(input);
+    const table = convertResultsToTable(input);
+    expect(table.head.vars).toEqual(['embedded', 'name', 'sessionId']);
+    expect(table.body[0].vars).toEqual(['injected display', 'Hello Ada', 'one\ntwo']);
+    expect(table.body[0].test.vars).toEqual({ name: 'Ada' });
+    expect(input).toEqual(original);
+  });
+
+  it.each([undefined, null, '', 0, false, 'output', { nested: ['value'] }])(
+    'uses the same output projection for table and export (%j)',
+    (output) => {
+      const input = fixture({
+        response: { output },
+        error: 'failure',
+        success: false,
+        testCase: { assert: [{ type: 'equals', value: 'expected' }] },
+      });
+      const result = input.results.results[0];
+      expect(convertResultsToTable(input).body[0].outputs[0]).toEqual(
+        convertEvalResultToTableCell(result),
+      );
+    },
+  );
+
+  it('preserves fallback IDs and media fields through both entry points', () => {
+    const input = fixture({
+      id: undefined,
+      response: {
+        output: 'ok',
+        audio: { data: 'audio', format: 'wav', sampleRate: 24000, channels: 1, duration: 2 },
+        video: { url: 'https://example.com/video.mp4', format: 'mp4', thumbnail: 'thumb' },
+        images: [{ data: 'image', mimeType: 'image/png' }],
+      },
+      gradingResult: { pass: true, score: 1, reason: 'accepted' },
+    });
+    freeze(input);
+    const cell = convertResultsToTable(input).body[0].outputs[0];
+    expect(cell.id).toBe('0-0');
+    expect(cell).toEqual(convertEvalResultToTableCell(input.results.results[0]));
+    expect(cell.audio?.sampleRate).toBe(24000);
+    expect(cell.video?.thumbnail).toBe('thumb');
+    expect(cell.images).toEqual([{ data: 'image', mimeType: 'image/png' }]);
+    expect(cell.gradingResult?.reason).toBe('accepted');
   });
 });

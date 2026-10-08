@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockCallApiResponse } from '@app/tests/apiMocks';
 import { mockWindowLocation } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types';
@@ -57,7 +58,13 @@ vi.mock('./Overview', () => ({
 }));
 vi.mock('@app/components/EnterpriseBanner', () => ({ default: () => null }));
 vi.mock('./StrategyStats', () => ({ default: () => null }));
-vi.mock('./RiskCategories', () => ({ default: () => null }));
+const reportGroupings = vi.hoisted(() => vi.fn());
+vi.mock('./RiskCategories', () => ({
+  default: (props: unknown) => {
+    reportGroupings(props);
+    return null;
+  },
+}));
 vi.mock('./TestSuites', () => ({ default: () => null }));
 vi.mock('./FrameworkCompliance', () => ({ default: () => null }));
 vi.mock('./ReportDownloadButton', () => ({ default: () => null }));
@@ -1015,5 +1022,291 @@ describe('Filter panel regression tests', () => {
 
     // If we got here without errors, the fix is working
     expect(screen.getByText('Filters')).toBeInTheDocument();
+  });
+});
+
+describe('Report attack prompt groupings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockWindowLocation({ search: '?evalId=test-eval-id' });
+  });
+
+  const cases = [
+    {
+      name: 'provider string',
+      response: { prompt: 'actual string' },
+      metadata: { redteamFinalPrompt: 'older result' },
+      expected: 'actual string',
+    },
+    {
+      name: 'provider chat',
+      response: { prompt: [{ role: 'user', content: 'actual chat' }] },
+      expected: '[{"role":"user","content":"actual chat"}]',
+    },
+    {
+      name: 'response legacy',
+      response: { metadata: { redteamFinalPrompt: 'response legacy' } },
+      expected: 'response legacy',
+    },
+    {
+      name: 'result legacy',
+      response: {},
+      metadata: { redteamFinalPrompt: 'result legacy' },
+      expected: 'result legacy',
+    },
+    {
+      name: 'empty provider fallback',
+      response: { prompt: '' },
+      metadata: { redteamFinalPrompt: 'result fallback' },
+      expected: 'result fallback',
+    },
+    { name: 'seed fallback', response: {}, expected: 'seed prompt' },
+    {
+      name: 'result structured legacy 0',
+      response: {},
+      metadata: { redteamFinalPrompt: { query: 'historic' } },
+      expected: '[object Object]',
+    },
+    {
+      name: 'result structured legacy 1',
+      response: {},
+      metadata: { redteamFinalPrompt: ['historic', 'array'] },
+      expected: 'historic,array',
+    },
+    {
+      name: 'result structured legacy 2',
+      response: {},
+      metadata: { redteamFinalPrompt: 37 },
+      expected: '37',
+    },
+    {
+      name: 'result structured legacy 3',
+      response: {},
+      metadata: { redteamFinalPrompt: true },
+      expected: 'true',
+    },
+    {
+      name: 'result structured legacy 4',
+      response: {},
+      metadata: { redteamFinalPrompt: 0 },
+      expected: 'seed prompt',
+    },
+    {
+      name: 'result structured legacy 5',
+      response: {},
+      metadata: { redteamFinalPrompt: false },
+      expected: 'seed prompt',
+    },
+    {
+      name: 'result structured legacy 6',
+      response: {},
+      metadata: { redteamFinalPrompt: [] },
+      expected: 'test',
+    },
+    {
+      name: 'result structured legacy 7',
+      response: {},
+      metadata: { redteamFinalPrompt: null },
+      expected: 'seed prompt',
+    },
+    {
+      name: 'response structured legacy 0',
+      response: { metadata: { redteamFinalPrompt: { query: 'historic' } } },
+      expected: '[object Object]',
+    },
+    {
+      name: 'response structured legacy 1',
+      response: { metadata: { redteamFinalPrompt: ['historic', 'array'] } },
+      expected: 'historic,array',
+    },
+    {
+      name: 'response structured legacy 2',
+      response: { metadata: { redteamFinalPrompt: 37 } },
+      expected: '37',
+    },
+    {
+      name: 'response structured legacy 3',
+      response: { metadata: { redteamFinalPrompt: true } },
+      expected: 'true',
+    },
+    {
+      name: 'response structured legacy 4',
+      response: { metadata: { redteamFinalPrompt: 0 } },
+      expected: 'seed prompt',
+    },
+    {
+      name: 'response structured legacy 5',
+      response: { metadata: { redteamFinalPrompt: false } },
+      expected: 'seed prompt',
+    },
+    {
+      name: 'response structured legacy 6',
+      response: { metadata: { redteamFinalPrompt: [] } },
+      expected: 'test',
+    },
+    {
+      name: 'response structured legacy 7',
+      response: { metadata: { redteamFinalPrompt: null } },
+      expected: 'seed prompt',
+    },
+  ];
+
+  it.each(cases)(
+    'uses $name in both groupings without mutating input',
+    async ({ response, metadata, expected }) => {
+      const results = [false, true].map((pass, testIdx) => ({
+        ...createComponentMockResult(0, 'plugin1', pass),
+        testIdx,
+        vars: Object.freeze({ prompt: 'seed prompt' }),
+        response: { output: 'safe output', ...response },
+        metadata: { pluginId: 'plugin1', ...metadata },
+      })) as EvaluateResult[];
+      const evalData = createComponentMockEvalData(1, results);
+      mockCallApiResponse({ data: evalData });
+      renderWithProviders(<App />);
+      await screen.findByTestId('overview-total');
+      const groups = reportGroupings.mock.lastCall![0];
+      expect(groups.failuresByPlugin.plugin1[0].prompt).toBe(expected);
+      expect(groups.passesByPlugin.plugin1[0].prompt).toBe(expected);
+      expect(results.map((result) => result.vars)).toEqual([
+        { prompt: 'seed prompt' },
+        { prompt: 'seed prompt' },
+      ]);
+    },
+  );
+
+  it('preserves custom injectVar, query and raw prompt fallbacks', async () => {
+    const resultInputs: EvaluateResult[] = [
+      {
+        ...createComponentMockResult(0, 'custom', false),
+        vars: { attack: 'custom injection', query: 'old query' },
+      },
+      {
+        ...createComponentMockResult(0, 'query', true),
+        vars: { query: 'old query', prompt: 'old prompt' },
+      },
+      {
+        ...createComponentMockResult(0, 'raw', false),
+        vars: {},
+        prompt: { raw: 'raw fallback', label: 'raw' },
+      },
+    ];
+    const results = resultInputs.map((result, testIdx) => ({
+      ...result,
+      testIdx,
+      vars: Object.freeze(result.vars),
+    }));
+    const evalData = createComponentMockEvalData(1, results);
+    evalData.config.redteam!.injectVar = 'attack';
+    mockCallApiResponse({ data: evalData });
+    renderWithProviders(<App />);
+    await screen.findByTestId('overview-total');
+    const groups = reportGroupings.mock.lastCall![0];
+    expect(groups.failuresByPlugin.custom[0].prompt).toBe('custom injection');
+    expect(groups.passesByPlugin.query[0].prompt).toBe('old query');
+    expect(groups.failuresByPlugin.raw[0].prompt).toBe('raw fallback');
+  });
+
+  it.each([
+    { vars: {}, response: { prompt: 'stripped secret' }, expected: '[prompt stripped]' },
+    {
+      vars: {},
+      response: { metadata: { redteamFinalPrompt: 'stripped secret' } },
+      expected: '[prompt stripped]',
+    },
+    {
+      vars: {},
+      metadata: { redteamFinalPrompt: 'stripped secret' },
+      expected: '[prompt stripped]',
+    },
+    {
+      vars: { harmCategory: 'harm' },
+      response: { prompt: 'unselected actual' },
+      expected: '[prompt stripped]',
+    },
+    {
+      vars: { custom: 'custom seed', other: 'other' },
+      response: { prompt: 'unselected actual' },
+      expected: '[prompt stripped]',
+    },
+    {
+      vars: { query: '', prompt: '' },
+      response: { prompt: 'unselected actual' },
+      expected: '[prompt stripped]',
+    },
+  ])(
+    'retains prompt display eligibility for $vars',
+    async ({ vars, response, metadata, expected }) => {
+      const results = [false, true].map((pass, testIdx) => ({
+        ...createComponentMockResult(0, 'plugin1', pass),
+        testIdx,
+        vars: Object.freeze(vars as EvaluateResult['vars']),
+        response: { output: 'safe output', ...response },
+        prompt: { raw: '[prompt stripped]', label: 'stripped' },
+        metadata: { pluginId: 'plugin1', ...metadata },
+      })) as EvaluateResult[];
+      mockCallApiResponse({ data: createComponentMockEvalData(1, results) });
+      renderWithProviders(<App />);
+      await screen.findByTestId('overview-total');
+      const groups = reportGroupings.mock.lastCall![0];
+      expect(groups.failuresByPlugin.plugin1[0].prompt).toBe(expected);
+      expect(groups.passesByPlugin.plugin1[0].prompt).toBe(expected);
+      expect(results.map((result) => result.vars)).toEqual([vars, vars]);
+    },
+  );
+
+  it('uses runtime transform display variables without changing saved variables', async () => {
+    const results = [false, true].map((pass, testIdx) => ({
+      ...createComponentMockResult(0, 'plugin1', pass),
+      testIdx,
+      vars: Object.freeze({}),
+      response: {
+        output: 'safe output',
+        metadata: { transformDisplayVars: { prompt: 'runtime injection' } },
+      },
+    }));
+    mockCallApiResponse({ data: createComponentMockEvalData(1, results) });
+    renderWithProviders(<App />);
+    await screen.findByTestId('overview-total');
+    const groups = reportGroupings.mock.lastCall![0];
+    expect(groups.failuresByPlugin.plugin1[0].prompt).toBe('runtime injection');
+    expect(groups.passesByPlugin.plugin1[0].prompt).toBe('runtime injection');
+    expect(results.map((result) => result.vars)).toEqual([{}, {}]);
+  });
+
+  it('searches actual attacks after switching targets and returning', async () => {
+    const user = userEvent.setup();
+    const results = [0, 1].flatMap((promptIdx) =>
+      [false, true].map((pass, testIdx) => ({
+        ...createComponentMockResult(promptIdx, 'plugin1', pass),
+        testIdx,
+        vars: Object.freeze({ prompt: `seed ${promptIdx}` }),
+        response: { prompt: `attack target ${promptIdx}`, output: 'safe output' },
+      })),
+    );
+    const evalData = createComponentMockEvalData(2, results);
+    mockCallApiResponse({ data: evalData });
+    renderWithProviders(<App />);
+    const selector = await screen.findByRole('combobox');
+    await user.click(selector);
+    await user.click(await screen.findByRole('option', { name: 'Provider 1' }));
+    await user.click(screen.getAllByLabelText('filter results')[0]);
+    const search = screen.getByPlaceholderText('Search prompts & outputs');
+    await user.type(search, 'attack target 1');
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('2');
+    expect(reportGroupings.mock.lastCall![0].failuresByPlugin.plugin1[0].prompt).toBe(
+      'attack target 1',
+    );
+    expect(reportGroupings.mock.lastCall![0].passesByPlugin.plugin1[0].prompt).toBe(
+      'attack target 1',
+    );
+    await user.clear(search);
+    await user.type(search, 'seed 1');
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('0');
+    await user.clear(search);
+    await user.click(selector);
+    await user.click(await screen.findByRole('option', { name: 'Provider 0' }));
+    await user.type(search, 'attack target 0');
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('2');
   });
 });

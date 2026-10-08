@@ -1,5 +1,6 @@
 import { mockBrowserProperty, mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
+import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { screen } from '@testing-library/dom';
 import { waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -358,6 +359,74 @@ describe('DownloadMenu', () => {
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
   });
+
+  it.each(['prompt', 'customInput'])(
+    'exports the projected %s attack to Burp without changing its stored seed',
+    async (injectVar) => {
+      const attack = 'final, "quoted"\nattack / 日本語';
+      const resultsFile = {
+        version: 4,
+        prompts: mockTable.head.prompts,
+        vars: ['sessionId', injectVar],
+        results: {
+          results: [0, 1].map((testIdx) => ({
+            testIdx,
+            promptIdx: 0,
+            promptId: 'prompt1',
+            vars: { [injectVar]: 'original seed' },
+            testCase: { vars: { [injectVar]: 'original seed' } },
+            prompt: { raw: 'rendered seed' },
+            response: { output: 'answer', prompt: attack },
+            success: true,
+          })),
+        },
+      } as unknown as Parameters<typeof convertResultsToTable>[0];
+      const original = structuredClone(resultsFile);
+      vi.mocked(useResultsViewStore).mockReturnValue({
+        table: convertResultsToTable(resultsFile),
+        config: { redteam: { injectVar } },
+        evalId: mockEvalId,
+      });
+
+      renderDownloadDialog();
+      await userEvent.click(screen.getByText('Burp Payloads'));
+      const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(blob);
+      });
+      expect(content).toBe(encodeURIComponent(JSON.stringify(attack).slice(1, -1)));
+      expect(resultsFile).toEqual(original);
+    },
+  );
+
+  it.each([
+    { headers: [], values: [], expected: 'legacy%20seed' },
+    { headers: ['prompt'], values: [''], expected: '' },
+  ])(
+    'preserves legacy and empty projected Burp variables: $headers',
+    async ({ headers, values, expected }) => {
+      vi.mocked(useResultsViewStore).mockReturnValue({
+        table: {
+          head: { prompts: mockTable.head.prompts, vars: headers },
+          body: [{ test: { vars: { prompt: 'legacy seed' } }, vars: values, outputs: [] }],
+        },
+        config: { redteam: {} },
+        evalId: mockEvalId,
+      });
+      renderDownloadDialog();
+      await userEvent.click(screen.getByText('Burp Payloads'));
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(downloadBlobMock.mock.calls[0][0]);
+      });
+      expect(content).toBe(expected);
+    },
+  );
 
   it('properly categorizes download options into sections', async () => {
     renderDownloadDialog();
