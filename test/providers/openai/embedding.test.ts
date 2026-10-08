@@ -69,13 +69,13 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo(expectedCost, 12);
     });
 
-    it('should pass through embedding request fields', async () => {
+    it.each(['float', 'base64'])('accepts %s with numeric embeddings', async (format) => {
       const passthroughProvider = new OpenAiEmbeddingProvider('text-embedding-3-small', {
         config: {
           apiKey: 'test-key',
           passthrough: {
             dimensions: 8,
-            encoding_format: 'float',
+            encoding_format: format,
           },
         },
       });
@@ -96,7 +96,9 @@ describe('OpenAI Provider', () => {
         statusText: 'OK',
       });
 
-      await passthroughProvider.callEmbeddingApi('test text');
+      const result = await passthroughProvider.callEmbeddingApi('test text');
+      expect(result.error).toBeUndefined();
+      expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),
@@ -108,7 +110,7 @@ describe('OpenAI Provider', () => {
             input: 'test text',
             model: 'text-embedding-3-small',
             dimensions: 8,
-            encoding_format: 'float',
+            encoding_format: format,
           }),
         }),
         expect.any(Number),
@@ -130,39 +132,21 @@ describe('OpenAI Provider', () => {
         [0, -0, 1.401298464324817e-45, 3.4028234663852886e38],
       ],
     ])('should decode base64 embeddings with %s', async (_description, embedding, expected) => {
-      const base64Provider = new OpenAiEmbeddingProvider('text-embedding-3-small', {
-        config: {
-          apiKey: 'test-key',
-          passthrough: { encoding_format: 'base64' },
-        },
-      });
       const mockResponse = {
         data: [{ embedding }],
-        usage: { total_tokens: 10, prompt_tokens: 10 },
       };
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
-        latencyMs: 15,
       });
 
-      const result = await base64Provider.callEmbeddingApi('test text');
+      const result = await provider.callEmbeddingApi('test text');
 
       expect(result.error).toBeUndefined();
       expect(result.embedding).toEqual(expected);
-      expect(result.latencyMs).toBe(15);
-      expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 10, numRequests: 1 });
-      expect(result.cost).toBeCloseTo(10 * (0.02 / 1e6), 12);
       expect(mockResponse.data[0].embedding).toBe(embedding);
-      expect(vi.mocked(fetchWithCache).mock.calls[0][1]).toMatchObject({
-        body: JSON.stringify({
-          input: 'test text',
-          model: 'text-embedding-3-small',
-          encoding_format: 'base64',
-        }),
-      });
     });
 
     it.each([false, true])('should decode base64 responses when cached is %s', async (cached) => {
@@ -174,34 +158,19 @@ describe('OpenAI Provider', () => {
         cached,
         status: 200,
         statusText: 'OK',
+        latencyMs: 15,
       });
 
       const result = await provider.callEmbeddingApi('test text');
 
       expect(result.embedding).toEqual([0.25, -0.5, 1]);
+      expect(result.latencyMs).toBe(15);
       expect(result.cost).toBeCloseTo(cached ? 0 : 10 * configuredEmbeddingCostPerToken, 12);
       expect(result.tokenUsage).toEqual(
         cached
           ? { total: 10, cached: 10 }
           : { total: 10, prompt: 10, completion: 0, numRequests: 1 },
       );
-    });
-
-    it('should accept numeric embeddings when base64 encoding is requested', async () => {
-      const base64Provider = new OpenAiEmbeddingProvider('text-embedding-3-small', {
-        config: { apiKey: 'test-key', passthrough: { encoding_format: 'base64' } },
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { data: [{ embedding: [0.25, -0.5, 1] }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await base64Provider.callEmbeddingApi('test text');
-
-      expect(result.error).toBeUndefined();
-      expect(result.embedding).toEqual([0.25, -0.5, 1]);
     });
 
     it.each([undefined, null, ''])('should handle a missing embedding (%s)', async (embedding) => {
@@ -230,7 +199,10 @@ describe('OpenAI Provider', () => {
     ])('should reject base64 embeddings with %s', async (_description, embedding) => {
       const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { data: [{ embedding }] },
+        data: {
+          data: [{ embedding }],
+          metadata: { authorization: 'Bearer response-secret-canary' },
+        },
         cached: true,
         status: 200,
         statusText: 'OK',
@@ -239,28 +211,11 @@ describe('OpenAI Provider', () => {
 
       const result = await provider.callEmbeddingApi('test text');
 
-      expect(result.error).toContain('Invalid base64 embedding in OpenAI embeddings API response');
-      expect(result.embedding).toBeUndefined();
-      expect(deleteFromCache).toHaveBeenCalledOnce();
-    });
-
-    it('should not expose the raw response when rejecting a base64 embedding', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
-          data: [{ embedding: 'not base64' }],
-          metadata: { authorization: 'Bearer response-secret-canary' },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await provider.callEmbeddingApi('test text');
-
-      expect(result.embedding).toBeUndefined();
       expect(result.error).toBe(
         'API error: Error: Invalid base64 embedding in OpenAI embeddings API response',
       );
+      expect(result.embedding).toBeUndefined();
+      expect(deleteFromCache).toHaveBeenCalledOnce();
     });
 
     it('should bill a qualified passthrough embedding model through a custom gateway', async () => {
