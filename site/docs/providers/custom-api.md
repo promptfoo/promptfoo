@@ -101,6 +101,8 @@ module.exports = class OpenAIProvider {
 }
 ```
 
+Return an `error` for failed requests. Omitting `output` or returning `output: undefined` also produces an error. An explicit `output: null` is valid JSON data, not a missing response. Direct evals preserve it in saved responses and hook context; text-based graders receive its JSON representation, `null`.
+
 ### Looking up text-token prices
 
 Custom providers can import `getModelPricing` from `promptfoo` to look up the installed version's OpenAI or Anthropic catalog rates. Pass the provider name (`openai` or `anthropic`) and an exact model ID; unknown providers, unknown models, and models without catalog prices return `undefined`.
