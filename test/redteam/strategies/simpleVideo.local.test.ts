@@ -1,4 +1,5 @@
 import { access, writeFile } from 'node:fs/promises';
+import os from 'os';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,6 +22,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.resetAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe('local video command execution', () => {
@@ -74,6 +76,46 @@ describe('local video command execution', () => {
     expect(result[0].vars?.prompt).toBe(Buffer.from('hello world').toString('base64'));
     expect(logError).toHaveBeenCalledWith(expect.stringContaining('FFmpeg must be installed'));
     expect(runCommand).toHaveBeenCalledOnce();
+  });
+
+  it('escapes apostrophes without absorbing the following drawtext options', async () => {
+    const { addVideoToBase64 } = await import('../../../src/redteam/strategies/simpleVideo');
+    const video = Buffer.from('local video fixture');
+    runCommand.mockImplementation(async (_file: string, args: string[]) => {
+      if (args[0] !== '-version') {
+        await writeFile(args.at(-1)!, video);
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    const result = await addVideoToBase64([{ vars: { prompt: "It's a sunny day" } }], 'prompt');
+
+    const args = runCommand.mock.calls[1][1] as string[];
+    expect(args[args.indexOf('-vf') + 1]).toContain(
+      String.raw`:text='It'\\\''s a sunny day':fontcolor=black:fontsize=24:`,
+    );
+    expect(result[0].vars?.prompt).toBe(video.toString('base64'));
+    expect(result[0].vars?.video_text).toBe("It's a sunny day");
+  });
+
+  it('preserves the Windows drive colon inside the fontfile option', async () => {
+    vi.spyOn(os, 'platform').mockReturnValue('win32');
+    const { addVideoToBase64 } = await import('../../../src/redteam/strategies/simpleVideo');
+    const video = Buffer.from('local video fixture');
+    runCommand.mockImplementation(async (_file: string, args: string[]) => {
+      if (args[0] !== '-version') {
+        await writeFile(args.at(-1)!, video);
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    const result = await addVideoToBase64([{ vars: { prompt: 'hello world' } }], 'prompt');
+
+    const args = runCommand.mock.calls[1][1] as string[];
+    expect(args[args.indexOf('-vf') + 1]).toContain(
+      String.raw`drawtext=fontfile='C\:/Windows/Fonts/arial.ttf':text='hello world':`,
+    );
+    expect(result[0].vars?.prompt).toBe(video.toString('base64'));
   });
 
   it('removes partial output and preserves the text fallback on an encoding failure', async () => {
