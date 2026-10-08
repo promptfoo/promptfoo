@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { formatOpenAiError, getOpenAICompletionTokenDetails } from '../openai/util';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
@@ -14,7 +15,7 @@ import type {
  * Extract user-facing metadata from response data.
  * Only includes fields that are useful for users viewing eval results.
  */
-function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<string, any> {
+function extractMetadata(data: any, processedOutput?: ProcessedOutput): Record<string, any> {
   const metadata: Record<string, any> = {};
 
   // Response ID - for linking to OpenAI dashboard
@@ -27,9 +28,17 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
     metadata.model = data.model;
   }
 
+  if (typeof data.status === 'string' && data.status) {
+    metadata.responseStatus = data.status;
+  }
+  if (typeof data.incomplete_details?.reason === 'string' && data.incomplete_details.reason) {
+    metadata.incompleteReason = data.incomplete_details.reason;
+  }
+
   // Deep research annotations (citations)
-  if (Array.isArray(processedOutput.annotations) && processedOutput.annotations.length > 0) {
-    metadata.annotations = processedOutput.annotations;
+  const annotations = processedOutput?.annotations;
+  if (Array.isArray(annotations) && annotations.length > 0) {
+    metadata.annotations = annotations;
   }
 
   return metadata;
@@ -89,6 +98,12 @@ export class ResponsesProcessor {
       };
     }
 
+    // Keep usable partial output while exposing why generation stopped.
+    const finishReason =
+      data.status === 'incomplete'
+        ? normalizeFinishReason(data.incomplete_details?.reason)
+        : undefined;
+
     try {
       const context: ProcessorContext = {
         config: requestConfig,
@@ -114,6 +129,7 @@ export class ResponsesProcessor {
           ...(cost === undefined ? {} : { cost }),
           raw: data,
           metadata: extractMetadata(data, processedOutput),
+          ...(finishReason && { finishReason }),
         };
       }
 
@@ -138,6 +154,7 @@ export class ResponsesProcessor {
         ...(cost === undefined ? {} : { cost }),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
+        ...(finishReason && { finishReason }),
       };
 
       // Add annotations if present (for deep research citations)
@@ -150,6 +167,13 @@ export class ResponsesProcessor {
     } catch (err) {
       return {
         error: `Error parsing response: ${String(err)}\nResponse: ${JSON.stringify(data)}`,
+        ...(data.status === 'incomplete' && {
+          tokenUsage: getResponsesTokenUsage(data, cached),
+          cached,
+          raw: data,
+          metadata: extractMetadata(data),
+          ...(finishReason && { finishReason }),
+        }),
       };
     }
   }

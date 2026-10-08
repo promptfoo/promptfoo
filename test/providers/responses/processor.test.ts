@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponsesProcessor } from '../../../src/providers/responses/processor';
 
 // Mock dependencies
@@ -14,7 +14,8 @@ describe('ResponsesProcessor', () => {
   let processor: ResponsesProcessor;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockCostCalculator.mockReturnValue(0.001);
 
     processor = new ResponsesProcessor({
       modelName: 'gpt-4.1',
@@ -24,7 +25,117 @@ describe('ResponsesProcessor', () => {
     });
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   describe('processResponseOutput', () => {
+    it.each([
+      { reason: 'max_output_tokens', finishReason: 'length' },
+      { reason: 'content_filter', finishReason: 'content_filter' },
+      { reason: 'max_messages', finishReason: 'max_messages' },
+      { reason: undefined, finishReason: undefined },
+    ])(
+      'should expose incomplete reason $reason without changing partial text',
+      async ({ reason, finishReason }) => {
+        const mockData = {
+          status: 'incomplete',
+          incomplete_details: { reason },
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              status: 'incomplete',
+              content: [{ type: 'output_text', text: 'Partial text' }],
+            },
+          ],
+        };
+
+        const result = await processor.processResponseOutput(mockData, {}, false);
+
+        expect(result.output).toBe('Partial text');
+        expect(result.error).toBeUndefined();
+        expect(result.isRefusal).toBeUndefined();
+        expect(result.finishReason).toBe(finishReason);
+        expect(result.metadata?.responseStatus).toBe('incomplete');
+        expect(result.metadata?.incompleteReason).toBe(reason);
+        expect(result.raw).toBe(mockData);
+      },
+    );
+
+    it('should expose token exhaustion when reasoning produced no visible text', async () => {
+      const mockData = {
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [{ type: 'reasoning', id: 'rs_incomplete', summary: [] }],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 20,
+          total_tokens: 30,
+          output_tokens_details: { reasoning_tokens: 20 },
+        },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.output).toBe('');
+      expect(result.error).toBeUndefined();
+      expect(result.finishReason).toBe('length');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        completionDetails: { reasoning: 20 },
+      });
+      expect(result.raw).toBe(mockData);
+    });
+
+    it.each([false, true])(
+      'should retain incomplete diagnostics for empty output (cached: %s)',
+      async (cached) => {
+        const mockData = {
+          id: 'resp_empty',
+          status: 'incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+          output: [],
+          usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+        };
+
+        const result = await processor.processResponseOutput(mockData, {}, cached);
+
+        expect(result.error).toContain('Invalid response format: Missing output array');
+        expect(result.output).toBeUndefined();
+        expect(result.finishReason).toBe('length');
+        expect(result.metadata).toEqual({
+          responseId: 'resp_empty',
+          responseStatus: 'incomplete',
+          incompleteReason: 'max_output_tokens',
+        });
+        expect(result.tokenUsage).toEqual(
+          cached
+            ? { cached: 30, total: 30, numRequests: 1 }
+            : { prompt: 10, completion: 20, total: 30, numRequests: 1 },
+        );
+        expect(result.cached).toBe(cached);
+        expect(result.raw).toBe(mockData);
+      },
+    );
+
+    it('should preserve parsing errors for malformed completed responses', async () => {
+      const mockData = {
+        status: 'completed',
+        incomplete_details: null,
+        output: [],
+        usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result).toEqual({
+        error: `Error parsing response: Error: Invalid response format: Missing output array\nResponse: ${JSON.stringify(mockData)}`,
+      });
+    });
+
     it('should process simple text output', async () => {
       const mockData = {
         id: 'resp_test123',
@@ -253,6 +364,8 @@ describe('ResponsesProcessor', () => {
       const mockData = {
         id: 'resp_refusal456',
         model: 'gpt-4.1',
+        status: 'incomplete',
+        incomplete_details: { reason: 'content_filter' },
         output: [
           {
             type: 'message',
@@ -272,9 +385,12 @@ describe('ResponsesProcessor', () => {
 
       expect(result.output).toBe('I cannot help with that request.');
       expect(result.isRefusal).toBe(true);
+      expect(result.finishReason).toBe('content_filter');
       expect(result.metadata).toEqual({
         responseId: 'resp_refusal456',
         model: 'gpt-4.1',
+        responseStatus: 'incomplete',
+        incompleteReason: 'content_filter',
       });
     });
 
