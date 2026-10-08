@@ -40,7 +40,7 @@ export interface EvaluationStore<
   readonly results: TResult[];
   readonly resultPersistenceFailed: boolean;
 
-  appendResult(result: EvaluateResult): Promise<void>;
+  appendResult(result: EvaluateResult, options?: { replace?: TResult }): Promise<void>;
   appendPrompts(prompts: CompletedPrompt[]): Promise<void>;
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): boolean;
   readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>>;

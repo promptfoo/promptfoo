@@ -122,6 +122,7 @@ import {
   accumulateGradingRequest,
   accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
+  accumulateTokenUsage,
   cloneTokenUsageBreakdown,
   createEmptyAssertions,
   createEmptyTokenUsage,
@@ -1326,6 +1327,7 @@ async function applyRunEvalResponseOutcome({
   deferGrading,
   evalId,
   latencyMs,
+  onResponseProcessed,
   prompt,
   promptIdx,
   provider,
@@ -1344,6 +1346,7 @@ async function applyRunEvalResponseOutcome({
   deferGrading?: boolean;
   evalId?: string;
   latencyMs: number;
+  onResponseProcessed?: (response: ProviderResponse) => void;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1380,6 +1383,7 @@ async function applyRunEvalResponseOutcome({
     deferGrading,
     evalId,
     latencyMs,
+    onResponseProcessed,
     prompt,
     promptIdx,
     provider,
@@ -1401,6 +1405,7 @@ async function gradeRunEvalResponse({
   deferGrading,
   evalId,
   latencyMs,
+  onResponseProcessed,
   prompt,
   promptIdx,
   provider,
@@ -1419,6 +1424,7 @@ async function gradeRunEvalResponse({
   deferGrading?: boolean;
   evalId?: string;
   latencyMs: number;
+  onResponseProcessed?: (response: ProviderResponse) => void;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1443,6 +1449,7 @@ async function gradeRunEvalResponse({
     testIdx,
     vars,
   });
+  onResponseProcessed?.(processedResponse);
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
@@ -1676,7 +1683,7 @@ async function runEvalInternal({
   let latencyMs = 0;
   let partialResult: EvaluateResult | undefined;
   let providerProgress: ProviderResponse | undefined;
-  let acceptingProgress = true;
+  let acceptingProviderProgress = true;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
@@ -1718,7 +1725,7 @@ async function runEvalInternal({
         );
     const executionTraceContext = traceContext;
     const checkpoint = (response: ProviderResponse, completed = false) => {
-      if ((!onProviderProgress && !abortSignal) || !acceptingProgress || abortSignal?.aborted) {
+      if ((!onProviderProgress && !abortSignal) || abortSignal?.aborted) {
         return;
       }
       // Strategies reuse history/usage objects. Detach the checkpoint so a late
@@ -1792,6 +1799,9 @@ async function runEvalInternal({
             onProgress:
               onProviderProgress || abortSignal
                 ? (response) => {
+                    if (!acceptingProviderProgress) {
+                      return;
+                    }
                     const progress = checkpoint(response);
                     if (progress) {
                       providerProgress = progress.response;
@@ -1818,7 +1828,7 @@ async function runEvalInternal({
           });
           abortSignal?.throwIfAborted();
           checkpoint(providerCall.response, true);
-          acceptingProgress = false;
+          acceptingProviderProgress = false;
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
@@ -1870,6 +1880,7 @@ async function runEvalInternal({
           await applyRunEvalResponseOutcome({
             abortSignal,
             deferGrading,
+            onResponseProcessed: (processedResponse) => checkpoint(processedResponse, true),
             evalId,
             latencyMs,
             prompt,
@@ -1960,7 +1971,7 @@ async function runEvalInternal({
       },
     ];
   } finally {
-    acceptingProgress = false;
+    acceptingProviderProgress = false;
     await workspace?.remove();
   }
 }
@@ -3485,8 +3496,13 @@ function createPromptEvalCounts(prompts: CompletedPrompt[]) {
   });
 }
 
-function reservePromptEvalCount(context: EvalProcessingContext, promptIdx: number) {
-  context.promptEvalCounts[promptIdx] = (context.promptEvalCounts[promptIdx] ?? 0) + 1;
+function reservePromptEvalCount(
+  context: EvalProcessingContext,
+  promptIdx: number,
+  replaced = false,
+) {
+  context.promptEvalCounts[promptIdx] =
+    (context.promptEvalCounts[promptIdx] ?? 0) + (replaced ? 0 : 1);
   return context.promptEvalCounts[promptIdx];
 }
 
@@ -3839,9 +3855,26 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private async persistEvalRow(row: EvaluateResult, stream = true): Promise<void> {
+  private async persistEvalRow(
+    row: EvaluateResult,
+    { stream = true, resumable = false }: { stream?: boolean; resumable?: boolean } = {},
+  ): Promise<EvaluateResult | undefined> {
     this.currentResultKeys.add(getResultIndexKey(row));
     setComparisonError(row);
+    // This lifecycle marker belongs to the evaluator, never to a provider or hook.
+    const metadata = row.metadata?.[PROMPTFOO_METADATA_KEY];
+    if (resumable || metadata?.resumable !== undefined) {
+      const internal =
+        metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? { ...metadata } : {};
+      delete internal.resumable;
+      if (resumable) {
+        internal.resumable = true;
+      }
+      row.metadata = { ...row.metadata, [PROMPTFOO_METADATA_KEY]: internal };
+      if (Object.keys(internal).length === 0) {
+        delete row.metadata[PROMPTFOO_METADATA_KEY];
+      }
+    }
     if (row.testCase.assert?.some((assertion) => assertion.type === 'select-best')) {
       // Capture grader references before a later hook can replace shared nested test fields.
       this.comparisonProviders.set(
@@ -3866,8 +3899,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         ),
       };
     }
+    let previous: TResult | undefined;
     try {
-      await this.store.appendResult(row);
+      if (cliState.resume && this.store.persisted) {
+        previous = (await this.store.readResultsByTestIdx(row.testIdx)).find(
+          (candidate) =>
+            candidate.promptIdx === row.promptIdx &&
+            candidate.failureReason === ResultFailureReason.ERROR &&
+            candidate.metadata?.[PROMPTFOO_METADATA_KEY]?.resumable === true,
+        );
+      }
+      if (previous) {
+        await this.store.appendResult(row, { replace: previous });
+      } else {
+        await this.store.appendResult(row);
+      }
     } catch (error) {
       this.store.recordResultPersistenceFailure(row);
       const resultSummary = summarizeEvaluateResultForLogging(row);
@@ -3882,6 +3928,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         await writer.write(sanitizeResultForJsonlArtifact(row));
       }
     }
+    return previous ? this.store.toEvaluateResult(previous) : undefined;
   }
 
   private updatePromptMetricsForRow({
@@ -3890,6 +3937,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     mathjsModule,
     metrics,
     promptEvalCount,
+    previousRow,
     row,
   }: {
     derivedMetrics: TestSuite['derivedMetrics'];
@@ -3897,8 +3945,24 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     mathjsModule: typeof import('mathjs') | null;
     metrics: PromptMetrics;
     promptEvalCount: number;
+    previousRow?: EvaluateResult;
     row: EvaluateResult;
   }): void {
+    if (previousRow) {
+      metrics.testErrorCount = Math.max(0, metrics.testErrorCount - 1);
+      metrics.totalLatencyMs -= previousRow.latencyMs || 0;
+      metrics.cost -= previousRow.cost || 0;
+      if (metrics.incurredCost !== undefined) {
+        metrics.incurredCost -= previousRow.incurredCost ?? previousRow.cost ?? 0;
+      }
+      // Token usage is a numeric tree; negate its breakdowns for the existing accumulator.
+      const removedUsage: TokenUsage = JSON.parse(
+        JSON.stringify(previousRow.tokenUsage || createEmptyTokenUsage(), (_key, value) =>
+          typeof value === 'number' ? -value : value,
+        ),
+      );
+      accumulateTokenUsage(metrics.tokenUsage, removedUsage);
+    }
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -4055,7 +4119,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
-      await this.persistEvalRow(row);
+      const previousRow = await this.persistEvalRow(row);
 
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
@@ -4064,7 +4128,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         evalStep,
         mathjsModule: context.mathjsModule,
         metrics,
-        promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
+        promptEvalCount: reservePromptEvalCount(context, row.promptIdx, Boolean(previousRow)),
+        previousRow,
         row,
       });
 
@@ -4242,7 +4307,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     );
     this.trackFinalJsonlResult(timeoutResult);
     // Paused CLI runs return before final export; stream their authoritative cancellation row.
-    await this.persistEvalRow(timeoutResult, !didTimeout);
+    const previousRow = await this.persistEvalRow(timeoutResult, {
+      stream: !didTimeout,
+      resumable: !didTimeout,
+    });
     this.trackCompletedRow(evalStep, timeoutResult, context);
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -4252,7 +4320,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         evalStep,
         mathjsModule: context.mathjsModule,
         metrics,
-        promptEvalCount: reservePromptEvalCount(context, evalStep.promptIdx),
+        promptEvalCount: reservePromptEvalCount(context, evalStep.promptIdx, Boolean(previousRow)),
+        previousRow,
         row: timeoutResult,
       });
     }

@@ -63,6 +63,65 @@ function createInMemoryEvaluation(overrides: Partial<InMemoryEvaluation> = {}): 
 }
 
 describeEvaluator('evaluator runtime ports', () => {
+  it('replaces a cancellation checkpoint when resuming an in-memory evaluation', async () => {
+    const state = createInMemoryEvaluation({ persisted: true });
+    const store = new InMemoryEvaluationStore(state);
+    const runtime = createInMemoryRuntime(store);
+    const controller = new AbortController();
+    let finishProvider!: () => void;
+    const provider: ApiProvider = {
+      id: () => 'in-memory-checkpoint',
+      callApi: vi.fn<ApiProvider['callApi']>((_prompt, _context, options) => {
+        options?.onProgress?.({
+          output: 'Completed probe',
+          tokenUsage: { total: 11, numRequests: 1 },
+        });
+        return new Promise((resolve) => {
+          finishProvider = () => resolve({ output: 'Late response' });
+        });
+      }),
+    };
+    const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
+    vi.useFakeTimers();
+    try {
+      const firstRun = evaluate(
+        suite,
+        state,
+        { abortSignal: controller.signal, timeoutMs: 0 },
+        runtime,
+      );
+      await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledOnce());
+      controller.abort();
+      await firstRun;
+      expect(state.results).toHaveLength(1);
+      expect(state.results[0].metadata?.__promptfoo?.resumable).toBe(true);
+      expect(await store.readCompletedIndexPairs()).toEqual(new Set());
+      cliState.resume = true;
+      vi.mocked(provider.callApi).mockResolvedValue({
+        output: 'Resumed response',
+        tokenUsage: { total: 7, numRequests: 1 },
+      });
+
+      await evaluate(suite, state, { timeoutMs: 0 }, runtime);
+      finishProvider();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(provider.callApi).toHaveBeenCalledTimes(2);
+      expect(state.results).toHaveLength(1);
+      expect(state.results[0]).toMatchObject({
+        success: true,
+        response: { output: 'Resumed response' },
+      });
+      expect(state.prompts[0].metrics).toMatchObject({
+        testPassCount: 1,
+        testErrorCount: 0,
+        tokenUsage: { total: 7, numRequests: 1 },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('evaluates with an in-memory store and preserves evaluation identity', async () => {
     const evaluation = createInMemoryEvaluation();
     const store = new InMemoryEvaluationStore(evaluation);

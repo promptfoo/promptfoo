@@ -71,8 +71,16 @@ export class InMemoryEvaluationStore
     return this.evaluation.resultPersistenceFailed;
   }
 
-  async appendResult(result: EvaluateResult): Promise<void> {
-    this.evaluation.results.push(result);
+  async appendResult(
+    result: EvaluateResult,
+    options?: { replace?: EvaluateResult },
+  ): Promise<void> {
+    const index = options?.replace ? this.evaluation.results.indexOf(options.replace) : -1;
+    if (index >= 0) {
+      this.evaluation.results[index] = result;
+    } else {
+      this.evaluation.results.push(result);
+    }
   }
 
   async appendPrompts(prompts: CompletedPrompt[]): Promise<void> {
@@ -86,7 +94,10 @@ export class InMemoryEvaluationStore
   async readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>> {
     const completedPairs = new Set<string>();
     for (const result of this.evaluation.results) {
-      if (options?.excludeErrors && result.failureReason === ERROR_FAILURE_REASON) {
+      if (
+        result.failureReason === ERROR_FAILURE_REASON &&
+        (options?.excludeErrors || result.metadata?.__promptfoo?.resumable === true)
+      ) {
         continue;
       }
       completedPairs.add(getResultIndexKey(result));

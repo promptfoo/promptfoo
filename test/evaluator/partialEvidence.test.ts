@@ -1,13 +1,19 @@
 import './setup';
 
+import { sql } from 'drizzle-orm';
 import { afterEach, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
+import { getDb } from '../../src/database';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
+import { deleteErrorResults, recalculatePromptMetrics } from '../../src/node/retry';
 import { getTargetResponse } from '../../src/redteam/providers/shared';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { ResultFailureReason } from '../../src/types/index';
 import { sleep } from '../../src/util/time';
+import { transform } from '../../src/util/transform';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -24,6 +30,294 @@ afterEach(() => {
 });
 
 describeEvaluator('partial provider evidence', () => {
+  it.each([
+    { cooperative: true, completed: 0, retry: false },
+    { cooperative: true, completed: 1, retry: false },
+    { cooperative: false, completed: 0, retry: false },
+    { cooperative: false, completed: 1, retry: false },
+    { cooperative: true, completed: 1, retry: true },
+    { cooperative: false, completed: 1, retry: true },
+  ])('replaces cancelled checkpoints on resume: %j', async ({ cooperative, completed, retry }) => {
+    const controller = new AbortController();
+    let finishProvider!: () => void;
+    const provider: ApiProvider = {
+      id: () => 'resumable-provider',
+      callApi: vi.fn((_prompt, _context, options) => {
+        if (completed) {
+          options?.onProgress?.({
+            output: 'Completed partial response',
+            tokenUsage: { total: 11, numRequests: 1, attacker: { total: 3, numRequests: 1 } },
+          });
+        }
+        return new Promise<ProviderResponse>((resolve, reject) => {
+          finishProvider = () => resolve({ output: 'Late completion' });
+          if (cooperative) {
+            options?.abortSignal?.addEventListener(
+              'abort',
+              () => reject(options.abortSignal?.reason),
+              {
+                once: true,
+              },
+            );
+          }
+        });
+      }),
+    };
+    const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
+    const record = await Eval.create({}, suite.prompts);
+    vi.useFakeTimers();
+    try {
+      const firstRun = evaluate(suite, record, { abortSignal: controller.signal, timeoutMs: 0 });
+      await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledOnce());
+      controller.abort();
+      await firstRun;
+      const [checkpoint] = await record.fetchResultsByTestIdx(0);
+      expect(checkpoint).toMatchObject({
+        failureReason: ResultFailureReason.ERROR,
+        success: false,
+        score: 0,
+        metadata: { incomplete: true, __promptfoo: { resumable: true } },
+      });
+      expect(await EvalResult.getCompletedIndexPairs(record.id)).toEqual(new Set());
+      finishProvider();
+      await vi.advanceTimersByTimeAsync(0);
+      expect((await record.fetchResultsByTestIdx(0)).map((row) => row.id)).toEqual([checkpoint.id]);
+
+      cliState.resume = true;
+      cliState.retryMode = retry;
+      if (retry) {
+        cliState._retryErrorResultIds = [checkpoint.id];
+      }
+      vi.mocked(provider.callApi).mockImplementation(async () => {
+        // Starting a replacement must not delete the only saved evidence.
+        expect((await record.fetchResultsByTestIdx(0)).map((row) => row.id)).toEqual([
+          checkpoint.id,
+        ]);
+        return { output: 'Replacement response', tokenUsage: { total: 7, numRequests: 1 } };
+      });
+      await evaluate(suite, record, { timeoutMs: 0 });
+      if (retry) {
+        // Existing CLI retry cleanup still names the old ERROR ID.
+        await deleteErrorResults([checkpoint.id]);
+        await recalculatePromptMetrics(record);
+      }
+
+      const replacement = await record.fetchResultsByTestIdx(0);
+      expect(replacement).toHaveLength(1);
+      expect(replacement[0].id).not.toBe(checkpoint.id);
+      expect(replacement[0]).toMatchObject({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        response: { output: 'Replacement response' },
+      });
+      expect(replacement[0].metadata?.__promptfoo?.resumable).toBeUndefined();
+      expect(replacement[0].metadata?.incomplete).toBeUndefined();
+      expect(provider.callApi).toHaveBeenCalledTimes(2);
+      expect(record.getStats()).toMatchObject({
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        tokenUsage: { total: 7, numRequests: 1 },
+      });
+      expect(record.prompts[0].metrics?.testErrorCount).toBe(0);
+      expect(record.prompts[0].metrics?.tokenUsage.attacker?.total ?? 0).toBe(0);
+    } finally {
+      delete cliState._retryErrorResultIds;
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the previous checkpoint if atomic replacement fails', async () => {
+    const controller = new AbortController();
+    const provider: ApiProvider = {
+      id: () => 'replacement-rollback',
+      callApi: vi.fn((_prompt, _context, options) => {
+        options?.onProgress?.({
+          output: 'Saved evidence',
+          tokenUsage: { total: 11, numRequests: 1 },
+        });
+        return new Promise<never>((_resolve, reject) => {
+          options?.abortSignal?.addEventListener(
+            'abort',
+            () => reject(options.abortSignal?.reason),
+            { once: true },
+          );
+        });
+      }),
+    };
+    const suite: TestSuite = { providers: [provider], prompts: [toPrompt('Probe')], tests: [{}] };
+    const record = await Eval.create({}, suite.prompts);
+    const firstRun = evaluate(suite, record, { abortSignal: controller.signal });
+    await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledOnce());
+    controller.abort();
+    await firstRun;
+    const [checkpoint] = await record.fetchResultsByTestIdx(0);
+    const db = await getDb();
+    await db.run(sql`CREATE TEMP TRIGGER prevent_checkpoint_delete BEFORE DELETE ON eval_results
+      BEGIN SELECT RAISE(ABORT, 'Synthetic checkpoint replacement failure'); END`);
+    try {
+      cliState.resume = true;
+      vi.mocked(provider.callApi).mockResolvedValue({ output: 'Replacement response' });
+      await evaluate(suite, record, { timeoutMs: 0 });
+
+      expect(record.resultPersistenceFailed).toBe(true);
+      const saved = await record.fetchResultsByTestIdx(0);
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({
+        id: checkpoint.id,
+        response: { output: 'Saved evidence' },
+        metadata: { __promptfoo: { resumable: true } },
+      });
+      expect(await record.getFailedResultsByTestIdx(0)).toHaveLength(1);
+    } finally {
+      await db.run(sql`DROP TRIGGER prevent_checkpoint_delete`);
+    }
+  });
+
+  it('ordinary resume leaves provider errors and per-case timeouts completed', async () => {
+    const controller = new AbortController();
+    const provider: ApiProvider = {
+      id: () => 'mixed-resume-provider',
+      callApi: vi.fn((prompt, _context, options) => {
+        if (prompt === 'Provider error') {
+          return Promise.resolve({
+            error: 'Synthetic provider error',
+            metadata: { __promptfoo: { resumable: true } },
+          });
+        }
+        options?.onProgress?.({
+          output: 'Partial response',
+          tokenUsage: { total: 5, numRequests: 1 },
+        });
+        if (prompt === 'Cancelled') {
+          queueMicrotask(() => controller.abort());
+        }
+        return new Promise<never>((_resolve, reject) => {
+          options?.abortSignal?.addEventListener(
+            'abort',
+            () => reject(options.abortSignal?.reason),
+            { once: true },
+          );
+        });
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: ['Provider error', 'Timed out', 'Cancelled'].map(toPrompt),
+      tests: [{}],
+    };
+    const record = await Eval.create({}, suite.prompts);
+    vi.useFakeTimers();
+    try {
+      const firstRun = evaluate(suite, record, {
+        abortSignal: controller.signal,
+        timeoutMs: 50,
+        maxConcurrency: 1,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledTimes(3));
+      controller.abort();
+      await firstRun;
+      expect(await EvalResult.getCompletedIndexPairs(record.id)).toEqual(new Set(['0:0', '0:1']));
+      const previous = await record.fetchResultsByTestIdx(0);
+      cliState.resume = true;
+      vi.mocked(provider.callApi).mockResolvedValue({
+        output: 'Resumed cancellation',
+        tokenUsage: { total: 7, numRequests: 1 },
+      });
+
+      await evaluate(suite, record, { timeoutMs: 0, maxConcurrency: 1 });
+
+      expect(provider.callApi).toHaveBeenCalledTimes(4);
+      expect(vi.mocked(provider.callApi).mock.calls[3][0]).toBe('Cancelled');
+      const rows = await record.fetchResultsByTestIdx(0);
+      expect(rows).toHaveLength(3);
+      for (const promptIdx of [0, 1]) {
+        expect(rows.find((row) => row.promptIdx === promptIdx)?.id).toBe(
+          previous.find((row) => row.promptIdx === promptIdx)?.id,
+        );
+      }
+      expect(record.getStats()).toMatchObject({ successes: 1, failures: 0, errors: 2 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(['timeout', 'abort'])(
+    'retains completed output transforms during %s without accepting late provider callbacks',
+    async (interruption) => {
+      const actualTransform = await vi.importActual<typeof import('../../src/util/transform')>(
+        '../../src/util/transform',
+      );
+      vi.mocked(transform)
+        .mockImplementationOnce(actualTransform.transform)
+        .mockImplementationOnce(actualTransform.transform);
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      let options: CallApiOptionsParams | undefined;
+      let finishAssertion!: () => void;
+      const response = {
+        output: { message: 'answer', discarded: 'removed-by-transform' },
+        tokenUsage: { total: 23, numRequests: 1 },
+      };
+      const provider: ApiProvider = {
+        id: () => 'transformed-provider',
+        transform: 'output.message',
+        callApi: vi.fn(async (_prompt, _context, callOptions) => {
+          options = callOptions;
+          return response;
+        }),
+      };
+      const assertion = vi.fn(
+        (_output: string) =>
+          new Promise<boolean>((resolve) => {
+            finishAssertion = () => resolve(true);
+          }),
+      );
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Probe')],
+        tests: [
+          {
+            options: { transform: 'output + " transformed"' },
+            assert: [{ type: 'javascript', value: assertion }],
+          },
+        ],
+      };
+      const record = new Eval({});
+      const evaluation = evaluate(suite, record, {
+        abortSignal: controller.signal,
+        timeoutMs: interruption === 'timeout' ? 1000 : 0,
+      });
+      await vi.waitFor(() => expect(assertion).toHaveBeenCalledOnce());
+      expect(assertion.mock.calls[0][0]).toBe('answer transformed');
+      options?.onProgress?.({ output: 'Late provider checkpoint' });
+      if (interruption === 'timeout') {
+        await vi.advanceTimersByTimeAsync(1000);
+      } else {
+        controller.abort();
+      }
+      await evaluation;
+
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toMatchObject({
+        failureReason: ResultFailureReason.ERROR,
+        success: false,
+        score: 0,
+        response: { output: 'answer transformed' },
+        metadata: { incomplete: true },
+        tokenUsage: { total: 23, numRequests: 1 },
+      });
+      expect(JSON.stringify(summary.results[0])).not.toContain('removed-by-transform');
+      expect(response.output).toEqual({ message: 'answer', discarded: 'removed-by-transform' });
+
+      finishAssertion();
+      await vi.advanceTimersByTimeAsync(0);
+      expect((await record.toEvaluateSummary()).results).toEqual(summary.results);
+    },
+  );
+
   it.each([1, 2])('retains %i completed probes without accepting late evidence', async (count) => {
     const traceId = '1234567890abcdef1234567890abcdef';
     vi.spyOn(evaluatorTracing, 'generateTraceContextIfNeeded').mockResolvedValue({

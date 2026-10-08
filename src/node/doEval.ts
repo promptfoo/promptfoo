@@ -53,6 +53,7 @@ import {
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
 } from '../util/index';
+import { getOutputFileFormat } from '../util/outputFormats';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
@@ -979,8 +980,26 @@ async function doEvalWithEnv(
     // Clear resume flag after run completes
     cliState.resume = false;
 
+    const { outputPath } = config;
+
+    // JSONL rows are streamed (already redacted) during evaluation, then the file is
+    // rewritten from the completed eval so rows that were never streamed — timeout rows
+    // and deferred max-score/select-best grading — are reflected on disk.
+    const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    );
+
     // If paused, print minimal guidance and skip the rest of the reporting
     if (paused && cmdObj.write !== false) {
+      if (resumeEval) {
+        // A resumed run can replace a previously streamed cancellation checkpoint.
+        // Finalize JSONL after the writers close, including if the resumed run is paused again.
+        const jsonlPaths = paths.filter((output) => getOutputFileFormat(output) === 'jsonl');
+        if (jsonlPaths.length > 0) {
+          warnOnDegradedJsonlRecovery(ret, jsonlPaths);
+          await writeMultipleOutputs(jsonlPaths, ret, null);
+        }
+      }
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
       logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
@@ -1067,15 +1086,6 @@ async function doEvalWithEnv(
     if (totalTests >= 500) {
       logger.info('Skipping table output because there are more than 500 tests.');
     }
-
-    const { outputPath } = config;
-
-    // JSONL rows are streamed (already redacted) during evaluation, then the file is
-    // rewritten from the completed eval so rows that were never streamed — timeout rows
-    // and deferred max-score/select-best grading — are reflected on disk.
-    const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
-      (p): p is string => typeof p === 'string' && p.length > 0,
-    );
 
     const isRedteam = Boolean(config.redteam);
     const duration = Math.round((Date.now() - startTime) / 1000);

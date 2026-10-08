@@ -31,8 +31,10 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.resultPersistenceFailed;
   }
 
-  appendResult(result: EvaluateResult): Promise<void> {
-    return this.evaluation.addResult(result);
+  appendResult(result: EvaluateResult, options?: { replace?: EvalResult }): Promise<void> {
+    return options?.replace
+      ? this.evaluation.addResult(result, { replaceId: options.replace.id })
+      : this.evaluation.addResult(result);
   }
 
   appendPrompts(prompts: CompletedPrompt[]): Promise<void> {

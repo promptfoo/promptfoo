@@ -759,7 +759,7 @@ export default class Eval {
     return convertResultsToTable(await this.toResultsFile());
   }
 
-  async addResult(result: EvaluateResult) {
+  async addResult(result: EvaluateResult, options?: { replaceId?: string }) {
     const httpStatus = result.response?.metadata?.http?.status;
     if (
       this.observedTargetErrorStatus === undefined &&
@@ -770,11 +770,19 @@ export default class Eval {
     }
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
+      ...(options?.replaceId && { replaceId: options.replaceId }),
     });
     if (!this.persisted) {
       // We're only going to keep results in memory if the eval isn't persisted in the database
       // This is to avoid memory issues when running large evaluations
-      this.results.push(newResult);
+      const index = options?.replaceId
+        ? this.results.findIndex((row) => row.id === options.replaceId)
+        : -1;
+      if (index >= 0) {
+        this.results[index] = newResult;
+      } else {
+        this.results.push(newResult);
+      }
     }
     if (this.persisted) {
       // Notify watchers that new results are available, passing the eval ID

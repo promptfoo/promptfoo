@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -785,7 +785,7 @@ export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
     result: EvaluateResult,
-    opts?: { persist: boolean },
+    opts?: { persist: boolean; replaceId?: string },
   ) {
     const persist = opts?.persist == null ? true : opts.persist;
     const {
@@ -861,7 +861,25 @@ export default class EvalResult {
       args.response = redacted.response;
       args.gradingResult = redacted.gradingResult;
       args.metadata = redacted.metadata;
-      const dbResult = await db.insert(evalResultsTable).values(args).returning();
+      const dbResult = opts?.replaceId
+        ? await db.transaction(async (tx) => {
+            const previous = await tx
+              .select({ id: evalResultsTable.id })
+              .from(evalResultsTable)
+              .where(
+                and(eq(evalResultsTable.evalId, evalId), eq(evalResultsTable.id, opts.replaceId!)),
+              )
+              .get();
+            if (!previous) {
+              throw new Error('Interrupted result was already replaced');
+            }
+            const inserted = await tx.insert(evalResultsTable).values(args).returning();
+            // Keep the checkpoint until its replacement is safely recorded. A new ID also
+            // keeps retry cleanup from deleting the replacement with the old ERROR IDs.
+            await tx.delete(evalResultsTable).where(eq(evalResultsTable.id, previous.id)).run();
+            return inserted;
+          })
+        : await db.insert(evalResultsTable).values(args).returning();
       clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });
     }
@@ -970,14 +988,19 @@ export default class EvalResult {
     opts?: { excludeErrors?: boolean },
   ): Promise<Set<string>> {
     const db = await getDb();
-    const whereClause = opts?.excludeErrors
-      ? and(
-          eq(evalResultsTable.evalId, evalId),
-          // Exclude ERROR results so they can be retried
-          // This prevents resume mode from skipping ERROR results during retry
-          ne(evalResultsTable.failureReason, ResultFailureReason.ERROR),
-        )
-      : eq(evalResultsTable.evalId, evalId);
+    const whereClause = and(
+      eq(evalResultsTable.evalId, evalId),
+      // Cancellation checkpoints are unfinished cases, unlike ordinary provider errors
+      // and per-case timeouts. They remain eligible for ordinary resume.
+      sql`NOT (${evalResultsTable.failureReason} = ${ResultFailureReason.ERROR} AND
+        COALESCE(json_extract(
+          CASE WHEN json_valid(${evalResultsTable.metadata}) THEN ${evalResultsTable.metadata} ELSE '{}' END,
+          '$.__promptfoo.resumable'
+        ), 0) = 1)`,
+      opts?.excludeErrors
+        ? ne(evalResultsTable.failureReason, ResultFailureReason.ERROR)
+        : undefined,
+    );
 
     const rows = await db
       .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
