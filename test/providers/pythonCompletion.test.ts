@@ -1006,7 +1006,7 @@ describe('PythonProvider', () => {
 
   describe.each(['cleanup', 'shutdown'] as const)('%s', (method) => {
     it.each([false, true])(
-      'retains a replacement pool while disposing the old pool (initialized=%s)',
+      'starts a replacement only after disposing the old pool (initialized=%s)',
       async (initialized) => {
         await providerRegistry.shutdownAll();
         const initialization = createDeferred<void>();
@@ -1045,11 +1045,13 @@ describe('PythonProvider', () => {
           }
           await vi.waitFor(() => expect(oldPool.shutdown).toHaveBeenCalledTimes(1));
 
-          await expect(provider.callApi('fresh')).resolves.toMatchObject({ output: 'replacement' });
-          expect(providerRegistry.has(provider)).toBe(true);
+          const freshCall = provider.callApi('fresh');
+          await Promise.resolve();
+          expect(replacementPool.initialize).not.toHaveBeenCalled();
           disposal.resolve();
           await cleanup;
-          expect.soft(providerRegistry.has(provider)).toBe(true);
+          await expect(freshCall).resolves.toMatchObject({ output: 'replacement' });
+          expect(providerRegistry.has(provider)).toBe(true);
           expect(replacementPool.shutdown).not.toHaveBeenCalled();
 
           await providerRegistry.shutdownAll();
@@ -1103,15 +1105,19 @@ describe('PythonProvider', () => {
           } else {
             initialization.resolve();
           }
-          await expect(call).resolves.toEqual(
-            new Error(
-              rejectInitialization
-                ? 'pool init failed'
-                : 'Python provider initialization interrupted by cleanup',
-            ),
-          );
+          if (stage === 'configuration' && !rejectInitialization) {
+            await expect(call).resolves.toMatchObject({ name: 'AbortError' });
+          } else {
+            await expect(call).resolves.toEqual(
+              new Error(
+                rejectInitialization
+                  ? 'pool init failed'
+                  : 'Python provider initialization interrupted by cleanup',
+              ),
+            );
+          }
           await cleanup;
-          const disposals = stage === 'configuration' && rejectInitialization ? 0 : 1;
+          const disposals = stage === 'configuration' ? 0 : 1;
           expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(disposals);
           expect(mockPoolInstance.execute).not.toHaveBeenCalled();
           expect(providerRegistry.has(provider)).toBe(false);

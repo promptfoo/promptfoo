@@ -60,11 +60,13 @@ export class PythonProvider implements ApiProvider {
 
   private scriptPath: string;
   private functionName: string | null;
-  private isInitialized: boolean = false;
-  private initializationPromise: Promise<void> | null = null;
   private cleanupGeneration = 0;
+  private configResolved = false;
+  private configAbortController: AbortController | null = null;
+  private poolPromise: Promise<PythonWorkerPool> | null = null;
+  private ownedPool: PythonWorkerPool | null = null;
+  private shutdownPromise: Promise<void> | null = null;
   public label: string | undefined;
-  private pool: PythonWorkerPool | null = null;
 
   constructor(
     runPath: string,
@@ -91,55 +93,74 @@ export class PythonProvider implements ApiProvider {
    * @returns A promise that resolves when all file references have been processed
    */
   public async initialize(): Promise<void> {
-    // If already initialized, return immediately
-    if (this.isInitialized) {
-      return;
+    await this.getPool();
+  }
+
+  private async getPool(): Promise<PythonWorkerPool> {
+    while (this.shutdownPromise) {
+      await this.shutdownPromise;
+    }
+    if (this.poolPromise) {
+      return this.poolPromise;
+    }
+    // A failed startup may still own workers if its cleanup rejected. Dispose
+    // those workers before retrying; a partial pool is never ready for calls.
+    if (this.ownedPool) {
+      await this.shutdown();
+      return this.getPool();
     }
 
-    // If initialization is in progress, return the existing promise
-    if (this.initializationPromise != null) {
-      return this.initializationPromise;
-    }
-
+    // Register before startup so shutdownAll also owns an initializing provider.
+    providerRegistry.register(this);
     const cleanupGeneration = this.cleanupGeneration;
-    // Start initialization and store the promise
-    this.initializationPromise = (async () => {
-      try {
-        this.config = await processConfigFileReferences(
-          this.config,
-          this.options?.config.basePath || '',
-        );
-
-        // Initialize worker pool
-        const workerCount = this.getWorkerCount();
-        const absPath = path.resolve(
-          path.join(this.options?.config.basePath || '', this.scriptPath),
-        );
-
-        this.pool = new PythonWorkerPool(
-          absPath,
-          this.functionName || 'call_api',
-          workerCount,
-          getConfiguredPythonPath(this.config.pythonExecutable),
-          this.config.timeout,
-        );
-
-        await this.pool.initialize();
-        if (cleanupGeneration !== this.cleanupGeneration) {
-          throw new Error('Python provider initialization interrupted by cleanup');
+    this.poolPromise = (async () => {
+      if (!this.configResolved) {
+        this.configAbortController = new AbortController();
+        try {
+          const config = await processConfigFileReferences(
+            this.config,
+            this.options?.config.basePath || '',
+            this.configAbortController.signal,
+          );
+          this.configAbortController.signal.throwIfAborted();
+          this.config = config;
+          this.configResolved = true;
+        } finally {
+          this.configAbortController = null;
         }
-
-        // Register for cleanup
-        providerRegistry.register(this);
-
-        this.isInitialized = true;
-        logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
-      } finally {
-        this.initializationPromise = null;
       }
-    })();
 
-    return this.initializationPromise;
+      // Initialize worker pool
+      const workerCount = this.getWorkerCount();
+      const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+
+      const pool = new PythonWorkerPool(
+        absPath,
+        this.functionName || 'call_api',
+        workerCount,
+        getConfiguredPythonPath(this.config.pythonExecutable),
+        this.config.timeout,
+      );
+      this.ownedPool = pool;
+      await pool.initialize();
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Python provider initialization interrupted by cleanup');
+      }
+      logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
+      return pool;
+    })().catch(async (error) => {
+      this.poolPromise = null;
+      // An explicit shutdown already owns cleanup and joins this readiness
+      // promise. Awaiting it here would make the two promises wait on each other.
+      if (!this.shutdownPromise) {
+        await this.shutdown().catch((cleanupError) => {
+          logger.warn('Failed to clean up Python provider startup', { error: cleanupError });
+        });
+      }
+      throw error;
+    });
+
+    return this.poolPromise;
   }
 
   /**
@@ -205,9 +226,7 @@ export class PythonProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: ScriptApiType,
   ): Promise<any> {
-    if (!this.isInitialized || !this.pool) {
-      await this.initialize();
-    }
+    const pool = await this.getPool();
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
@@ -259,7 +278,7 @@ export class PythonProvider implements ApiProvider {
 
       const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython
-      const result = await this.pool!.execute(functionName, args);
+      const result = await pool.execute(functionName, args);
 
       validateScriptResult(apiType, functionName, result, 'Python');
 
@@ -281,23 +300,14 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, context, 'call_api');
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_embedding_api');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
@@ -306,18 +316,30 @@ export class PythonProvider implements ApiProvider {
   }
 
   async shutdown(): Promise<void> {
-    this.cleanupGeneration++;
-    if (this.initializationPromise) {
-      try {
-        await this.initializationPromise;
-      } catch {
-        // Failed initialization can still leave workers that need disposal.
-      }
+    if (!this.shutdownPromise) {
+      this.cleanupGeneration++;
+      this.configAbortController?.abort();
+      const initializing = this.poolPromise;
+      this.poolPromise = null;
+      this.shutdownPromise = Promise.resolve().then(async () => {
+        try {
+          // Stop owned workers before joining startup, which may be waiting for
+          // their READY message. Keep ownership if stopping the workers fails.
+          await this.ownedPool?.shutdown();
+          this.ownedPool = null;
+          await initializing?.catch(() => null);
+          this.poolPromise = null;
+          providerRegistry.unregister(this);
+        } catch (error) {
+          // Global cleanup releases its snapshot before awaiting providers. A pool
+          // that could not stop still needs ownership and a later cleanup attempt.
+          providerRegistry.register(this);
+          throw error;
+        } finally {
+          this.shutdownPromise = null;
+        }
+      });
     }
-    const pool = this.pool;
-    this.pool = null;
-    this.isInitialized = false;
-    providerRegistry.unregister(this);
-    await pool?.shutdown();
+    return this.shutdownPromise;
   }
 }
