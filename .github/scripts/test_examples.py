@@ -26,12 +26,14 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 22)
+        self.assertEqual(len(rows), 24)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
                 ("docker-sandbox", "3.10"),
                 ("docker-sandbox", "3.14"),
+                ("e2b", "3.10"),
+                ("e2b", "3.14"),
                 ("python-provider-upgrade", "3.10"),
                 ("python-provider-minimums", "3.14"),
                 ("redteam-langchain", "3.10"),
@@ -53,6 +55,25 @@ class SelectionTests(unittest.TestCase):
                 ("google-adk-minimums", "3.10"),
                 ("google-adk-litellm", "3.12"),
             ],
+        )
+
+    def test_e2b_changes_select_its_offline_sdk_tests(self):
+        for filename in (
+            "validate_and_run_code_e2b.py",
+            "validate_and_run_code_e2b_test.py",
+            "requirements.txt",
+        ):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/integration-e2b/{filename}"]),
+                    [
+                        {"example": "e2b", "python": "3.10", "node": False},
+                        {"example": "e2b", "python": "3.14", "node": False},
+                    ],
+                )
+        self.assertEqual(EXAMPLES["e2b"].suites, ((".", "*_test.py"),))
+        self.assertEqual(
+            select_examples(["examples/integration-e2b-other/file.py"]), []
         )
 
     def test_example_changes_select_only_its_profiles(self):

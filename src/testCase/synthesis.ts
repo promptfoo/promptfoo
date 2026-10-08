@@ -143,7 +143,17 @@ export async function synthesize({
     respObjects.length >= 1,
     `Expected at least one JSON object in the response for personas, got ${respObjects.length}`,
   );
-  const personas = (respObjects[0] as { personas: string[] }).personas;
+  const personasObject = respObjects.find((obj): obj is { personas: string[] } => {
+    const personas = (obj as { personas?: unknown }).personas;
+    return Array.isArray(personas) && personas.every((persona) => typeof persona === 'string');
+  });
+  invariant(
+    personasObject,
+    () =>
+      `Expected a JSON object of the form {personas: string[]} in the personas response, but the provider returned a different shape. ` +
+      `Check the provider's transformResponse and that it returns the model's text content.`,
+  );
+  const personas = personasObject.personas;
   logger.debug(
     `Generated ${personas.length} persona${personas.length === 1 ? '' : 's'}:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
   );
