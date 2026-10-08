@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { sampleArray } from '../../util/generation';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, PluginConfig, TestCase } from '../../types/index';
@@ -237,12 +238,10 @@ async function getFilteredRecords(
       const categoryRecords = recordsByCategory[normalizedCategory] || [];
 
       // Shuffle and take up to perCategory records
-      const shuffled = categoryRecords.sort(() => Math.random() - 0.5);
-      result.push(...shuffled.slice(0, perCategory));
+      const selected = sampleArray(categoryRecords, perCategory);
+      result.push(...selected);
 
-      logger.debug(
-        `[unsafebench] Selected ${Math.min(perCategory, shuffled.length)} records for category ${category}`,
-      );
+      logger.debug(`[unsafebench] Selected ${selected.length} records for category ${category}`);
     }
 
     // Return the results, limiting to the requested total
@@ -250,7 +249,7 @@ async function getFilteredRecords(
   }
 
   // If no categories specified, just shuffle and return the requested number
-  const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5).slice(0, limit);
+  const shuffledRecords = sampleArray(filteredRecords, limit);
   logger.debug(`[unsafebench] Selected ${shuffledRecords.length} random unsafe records`);
 
   return shuffledRecords;

@@ -1,20 +1,25 @@
 import './setup';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'fs/promises';
+
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as assertionUtils from '../../src/assertions/utils';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
 import * as llmGrading from '../../src/matchers/llmGrading';
+import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
 import * as packageParser from '../../src/providers/packageParser';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import {
   type ApiProvider,
   type Assertion,
+  type CallApiContextParams,
   type Prompt,
   type ProviderResponse,
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import * as fileExtensions from '../../src/util/fileExtensions';
 import { transform as transformOutput } from '../../src/util/transform';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
@@ -27,6 +32,11 @@ describe('runEval', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     await clearCache();
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
   });
 
   const mockProvider: ApiProvider = {
@@ -146,6 +156,78 @@ describe('runEval', () => {
     // none of the reserved __eval* runtime vars.
     expect(results[0].gradingResult?.pass).toBe(true);
     expect(results[0].success).toBe(true);
+  });
+
+  it.each([
+    ['isom', 'm4a', 'audio/mp4'],
+    ['mp42', 'm4a', 'audio/mp4'],
+    ['isom', 'mp4', 'video/mp4'],
+  ])('preserves loaded %s .%s media through rubric grading', async (brand, extension, mimeType) => {
+    const actualFileExtensions = await vi.importActual<typeof fileExtensions>(
+      '../../src/util/fileExtensions',
+    );
+    vi.spyOn(fileExtensions, 'isAudioFile').mockImplementation(actualFileExtensions.isAudioFile);
+    const bytes = Buffer.from(`....ftyp${brand}........`);
+    const audio = bytes.toString('base64');
+    vi.spyOn(fs, 'readFile').mockResolvedValueOnce(bytes);
+    let targetContext: CallApiContextParams | undefined;
+    let graderContext: CallApiContextParams | undefined;
+    let gradingPrompt = '';
+    const target: ApiProvider = {
+      id: () => 'media-target',
+      getAudioInputFormat: () => 'google',
+      callApi: vi.fn(async (_prompt, context) => {
+        targetContext = context;
+        return { output: 'PONG' };
+      }),
+    };
+    const grader: ApiProvider = {
+      id: () => 'media-grader',
+      getAudioInputFormat: () => 'google',
+      callApi: vi.fn(async (prompt, context) => {
+        gradingPrompt = prompt;
+        graderContext = context;
+        return { output: '{"pass":true,"score":1,"reason":"Checked media."}' };
+      }),
+    };
+    const testVars = { audio: `file://fixture.${extension}`, topic: 'ordinary media' };
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'media-grading-eval',
+      provider: target,
+      prompt: { raw: '{{audio}}', label: 'media' },
+      test: {
+        vars: testVars,
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Check the media.',
+            rubricPrompt: '{{audio}}',
+            provider: grader,
+          },
+        ],
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(target.callApi).toHaveBeenCalledTimes(1);
+    expect(grader.callApi).toHaveBeenCalledTimes(1);
+    expect(targetContext?.vars).toMatchObject({ audio, __evalId: 'media-grading-eval' });
+    for (const key of ['__evalId', '__evalStepId', '__repeatIndex']) {
+      expect(graderContext?.vars).not.toHaveProperty(key);
+      expect(results[0].vars).not.toHaveProperty(key);
+      expect(targetContext?.vars).toHaveProperty(key);
+    }
+    expect(JSON.parse(JSON.stringify(results[0].vars))).toEqual({ audio, topic: 'ordinary media' });
+    expect(testVars).toEqual({ audio: `file://fixture.${extension}`, topic: 'ordinary media' });
+    expect(gradingPrompt).toBe(audio);
+    expect(graderContext?.vars.audio).toBe(audio);
+    expect(
+      geminiFormatAndSystemInstructions(gradingPrompt, graderContext?.vars).contents[0].parts,
+    ).toEqual([{ inlineData: { mimeType, data: audio } }]);
+    expect(results[0].success).toBe(true);
+    expect(results[0].gradingResult?.score).toBe(1);
   });
 
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
@@ -671,42 +753,60 @@ describe('runEval', () => {
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
   });
 
-  it('should handle null output differently for red team tests', async () => {
-    const nullOutputProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('null-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: null,
-        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
-      }),
+  it.each([false, true])(
+    'errors on missing provider outputs with isRedteam=%s',
+    async (isRedteam) => {
+      for (const response of [{}, { output: undefined }, { output: null }]) {
+        const provider: ApiProvider = {
+          id: () => 'missing-output-provider',
+          callApi: vi.fn().mockResolvedValue(response),
+        };
+        const assertion = vi.fn(() => true);
+        const [result] = await runEval({
+          ...defaultOptions,
+          provider,
+          prompt: { raw: 'Test prompt', label: 'test-label' },
+          test: { assert: [{ type: 'javascript', value: assertion }] },
+          conversations: {},
+          registers: {},
+          isRedteam,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.error).toBe('No output');
+        expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(assertion).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each([
+    { output: '' },
+    { output: 'null' },
+    { output: 'undefined' },
+    { output: '', images: [{ data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' }] },
+    { output: [{ type: 'function', function: { name: 'lookup', arguments: '{}' } }] },
+  ])('grades present output instead of treating it as missing: %j', async (response) => {
+    const provider: ApiProvider = {
+      id: () => 'present-output-provider',
+      callApi: vi.fn().mockResolvedValue(response),
     };
-
-    // Regular test
-    const regularResults = await runEval({
+    const assertion = vi.fn(() => false);
+    const [result] = await runEval({
       ...defaultOptions,
-      provider: nullOutputProvider,
+      provider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: false,
-    });
-
-    expect(regularResults[0].success).toBe(false);
-    expect(regularResults[0].error).toBe('No output');
-
-    // Red team test
-    const redTeamResults = await runEval({
-      ...defaultOptions,
-      provider: nullOutputProvider,
-      prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
+      test: { assert: [{ type: 'javascript', value: assertion }] },
       conversations: {},
       registers: {},
       isRedteam: true,
     });
 
-    expect(redTeamResults[0].success).toBe(true);
-    expect(redTeamResults[0].error).toBeUndefined();
+    expect(assertion).toHaveBeenCalledOnce();
+    expect(result.success).toBe(false);
+    expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(result.error).not.toContain('No output');
   });
 
   describe.each(['vlsu', 'vlguard', 'unsafebench'] as const)('%s image controls', (plugin) => {
@@ -715,21 +815,21 @@ describe('runEval', () => {
       { name: 'omitted', response: {}, metadataGrade: 'safe', shouldGrade: true },
       {
         name: 'assertion override',
-        response: { output: null },
+        response: { output: '' },
         metadataGrade: 'unsafe',
         value: { combinedGrade: 'safe' },
         shouldGrade: true,
       },
       {
         name: 'unsafe assertion override',
-        response: { output: null },
+        response: { output: '' },
         metadataGrade: 'safe',
         value: { combinedGrade: 'unsafe' },
         shouldGrade: false,
       },
       {
         name: 'legacy safety alias override',
-        response: {},
+        response: { output: '' },
         metadataGrade: 'unsafe',
         value: { combinedGrade: 'safe' },
         aliasOnly: true,
@@ -737,7 +837,7 @@ describe('runEval', () => {
       },
       {
         name: 'unsafe legacy safety alias override',
-        response: {},
+        response: { output: '' },
         metadataGrade: 'safe',
         value: { combinedGrade: 'unsafe' },
         aliasOnly: true,
@@ -771,14 +871,14 @@ describe('runEval', () => {
       },
       {
         name: 'dynamic safe file override',
-        response: {},
+        response: { output: '' },
         metadataGrade: 'unsafe',
         value: 'file://control.json',
         shouldGrade: true,
       },
       {
         name: 'dynamic safe package override',
-        response: {},
+        response: { output: '' },
         metadataGrade: 'unsafe',
         value: 'package:fixture:control',
         shouldGrade: true,
@@ -801,7 +901,7 @@ describe('runEval', () => {
       },
       {
         name: 'safe string value',
-        response: {},
+        response: { output: '' },
         metadataGrade: 'safe',
         value: 'C4',
         shouldGrade: true,
@@ -830,7 +930,7 @@ describe('runEval', () => {
       },
       {
         name: 'nested assertion',
-        response: { output: null },
+        response: { output: '' },
         metadataGrade: 'unsafe',
         value: { combinedGrade: 'safe' },
         nested: true,
@@ -964,12 +1064,23 @@ describe('runEval', () => {
           conversations: {},
           registers: {},
         });
-        // An ungraded empty redteam response retains the evaluator's initial score.
-        expect(result).toMatchObject({ success: !shouldGrade, score: 0 });
-        if (!shouldGrade) {
-          expect(result.error).toBeUndefined();
+        const missingOutput =
+          response.output == null &&
+          !providerResponse.images?.some((image) => image.data || image.blobRef);
+        if (missingOutput) {
+          // Missing output is an integration error, even for safe or unsafe controls.
+          expect(result).toMatchObject({
+            success: false,
+            score: 0,
+            error: 'No output',
+            failureReason: ResultFailureReason.ERROR,
+          });
+          expect(grade).not.toHaveBeenCalled();
           expect(transformOutput).not.toHaveBeenCalled();
+          expect(providerResponse).toEqual(response);
+          return;
         }
+        expect(result).toMatchObject({ success: !shouldGrade, score: shouldGrade ? 0 : 1 });
         expect(grade).toHaveBeenCalledTimes(Number(shouldGrade));
         if (shouldGrade) {
           expect(grade.mock.calls[0][1]).toBe('');
@@ -1013,7 +1124,7 @@ describe('runEval', () => {
       const [result] = await runEval({
         ...defaultOptions,
         isRedteam: true,
-        provider: { id: () => 'alias-fixture', callApi: vi.fn().mockResolvedValue({}) },
+        provider: { id: () => 'alias-fixture', callApi: vi.fn().mockResolvedValue({ output: '' }) },
         prompt: { raw: 'Describe the image', label: 'alias fixture' },
         test: {
           vars: { image: 'data:image/png;base64,aW1hZ2U=' },

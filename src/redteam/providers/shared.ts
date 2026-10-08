@@ -568,12 +568,12 @@ export async function getTargetResponse(
     await sleep(targetProvider.delay);
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
-  const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
-  const hasError =
-    (targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error')) ||
-    (!hasOutput && targetRespRaw?.error);
+  const hasOutput =
+    targetRespRaw &&
+    Object.prototype.hasOwnProperty.call(targetRespRaw, 'output') &&
+    targetRespRaw.output != null;
 
-  if (hasError || hasOutput || targetRespRaw?.conversationEnded) {
+  if (targetRespRaw?.error) {
     const output = hasOutput
       ? ((typeof targetRespRaw.output === 'string'
           ? targetRespRaw.output
@@ -582,20 +582,39 @@ export async function getTargetResponse(
     return {
       ...(targetRespRaw as ProviderResponse),
       output,
-      ...(hasError ? { error: targetRespRaw.error } : {}),
+      error: targetRespRaw.error,
       tokenUsage,
     };
   }
 
-  throw new Error(
-    `
-    Target returned malformed response: expected either \`output\` or \`error\` property to be set.
+  if (hasOutput) {
+    const output = (
+      typeof targetRespRaw.output === 'string'
+        ? targetRespRaw.output
+        : safeJsonStringify(targetRespRaw.output)
+    ) as string;
+    return {
+      ...(targetRespRaw as ProviderResponse),
+      output,
+      tokenUsage,
+    };
+  }
 
-    Instead got: ${safeJsonStringify(targetRespRaw)}
+  if (targetRespRaw?.conversationEnded) {
+    return {
+      ...(targetRespRaw as ProviderResponse),
+      output: '',
+      tokenUsage,
+    };
+  }
 
-    Note: Empty strings are valid output values.
-    `,
-  );
+  return {
+    ...(targetRespRaw as ProviderResponse),
+    output: '',
+    error:
+      'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
+    tokenUsage,
+  };
 }
 
 interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {

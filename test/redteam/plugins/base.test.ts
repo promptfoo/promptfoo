@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import * as esm from '../../../src/esm';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
@@ -10,6 +11,7 @@ import {
 } from '../../../src/redteam/plugins/multiInputFormat';
 import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/redteam/plugins/realestate/accessibilityDiscrimination';
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
+import * as packageVersion from '../../../src/util/packageVersion';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/types/index';
@@ -2045,6 +2047,33 @@ describe('RedteamGraderBase', () => {
       );
     });
 
+    it.each(['missing', 'incompatible'])(
+      'explains a %s Agents SDK before loading redteam tools',
+      async (status) => {
+        const agentsProvider = createMockProvider({
+          id: 'openai:agents:support-agent',
+          config: { tools: 'file://./tools/support-tools.ts' },
+        });
+        const spy =
+          status === 'missing'
+            ? vi.spyOn(esm, 'getDirectory').mockImplementation(() => {
+                throw Object.assign(new Error("Cannot find package '@openai/agents'"), {
+                  code: 'MODULE_NOT_FOUND',
+                });
+              })
+            : vi.spyOn(packageVersion, 'getPackageVersion').mockReturnValue('0.18.0');
+        mockLoadTools.mockClear();
+        try {
+          await expect(
+            new ToolGrader().getResult('test prompt', 'test output', mockTest, agentsProvider),
+          ).rejects.toThrow('npm install promptfoo @openai/agents@^0.14.1');
+          expect(mockLoadTools).not.toHaveBeenCalled();
+        } finally {
+          spy.mockRestore();
+        }
+      },
+    );
+
     it('should handle when no tools are provided', async () => {
       const mockResult: GradingResult = {
         pass: true,
@@ -2217,6 +2246,33 @@ describe('RedteamGraderBase', () => {
         expect(matchesLlmRubric).not.toHaveBeenCalled();
       }
     });
+
+    it.each(['null', 'undefined', '  UNDEFINED  '])(
+      'grades literal response text %j without assuming an adapter failure',
+      async (output) => {
+        const grade: GradingResult = {
+          pass: false,
+          score: 0,
+          reason: 'The response violates the rubric',
+        };
+        vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+
+        const result = await grader.getResult(
+          'test prompt',
+          output,
+          mockTest,
+          undefined,
+          undefined,
+        );
+
+        expect(result.grade).toEqual(grade);
+        expect(matchesLlmRubric).toHaveBeenCalledWith(
+          expect.any(String),
+          output,
+          expect.any(Object),
+        );
+      },
+    );
 
     it('should not auto-pass valid responses', async () => {
       const mockResult: GradingResult = {
