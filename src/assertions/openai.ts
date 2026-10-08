@@ -1,6 +1,6 @@
 import { validateFunctionCall } from '../providers/openai/util';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { toolCallVerdict } from './functionToolCall';
+import { toolCallErrorVerdict, toolCallVerdict } from './functionToolCall';
 
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -87,6 +87,6 @@ export const handleIsValidOpenAiToolsCall = async ({
     });
     return verdict(true, 'Assertion passed');
   } catch (err) {
-    return verdict(false, (err as Error).message);
+    return toolCallErrorVerdict(assertion, inverse, err, 'OpenAI tools call');
   }
 };

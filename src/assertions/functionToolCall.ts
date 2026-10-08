@@ -23,6 +23,20 @@ export function toolCallVerdict(
   };
 }
 
+/** Verdict for a validator error. A tool schema error fails under `not-` too. */
+export function toolCallErrorVerdict(
+  assertion: Assertion,
+  inverse: boolean,
+  err: unknown,
+  label: string,
+): GradingResult {
+  // Thrown by the provider validators when a tool schema does not compile.
+  if (err instanceof Error && err.name === 'InvalidToolSchemaError') {
+    return { pass: false, score: 0, reason: err.message, assertion };
+  }
+  return toolCallVerdict(assertion, inverse, false, (err as Error).message, label);
+}
+
 export const handleIsValidFunctionCall = ({
   assertion,
   inverse,
@@ -43,6 +57,6 @@ export const handleIsValidFunctionCall = ({
     provider.validateFunctionToolCall(output, test.vars);
     return toolCallVerdict(assertion, inverse, true, 'Assertion passed', 'function call');
   } catch (err) {
-    return toolCallVerdict(assertion, inverse, false, (err as Error).message, 'function call');
+    return toolCallErrorVerdict(assertion, inverse, err, 'function call');
   }
 };

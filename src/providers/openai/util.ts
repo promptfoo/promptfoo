@@ -3,6 +3,7 @@ import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { calculateCost } from '../shared';
+import { InvalidToolSchemaError } from '../toolSchemaError';
 
 import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
@@ -1090,7 +1091,12 @@ export function validateFunctionCall(
   if (!functionSchema) {
     throw new Error(`Called "${functionName}", but there is no function with that name`);
   }
-  const validate = ajv.compile(functionSchema);
+  let validate;
+  try {
+    validate = ajv.compile(functionSchema);
+  } catch (err) {
+    throw new InvalidToolSchemaError((err as Error).message);
+  }
   if (!validate(functionArgs)) {
     throw new Error(
       `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,

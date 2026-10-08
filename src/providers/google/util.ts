@@ -17,6 +17,7 @@ import {
   parseChatPrompt,
   transformToolChoice,
 } from '../shared';
+import { InvalidToolSchemaError } from '../toolSchemaError';
 import { loadCredentials } from './auth';
 import { GEMINI_FLASH_MODELS, GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
@@ -1843,7 +1844,7 @@ export function validateFunctionCall(
       try {
         validate = ajv.compile(parameterSchema as AnySchema);
       } catch (err) {
-        throw new Error(
+        throw new InvalidToolSchemaError(
           `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
         );
       }

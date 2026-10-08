@@ -1505,6 +1505,29 @@ describe('OpenAI assertions', () => {
       });
     });
 
+    it('keeps a tool schema that does not compile as a failure under not-', async () => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'getCurrentTemperature',
+                parameters: { type: 'object', properties: { location: { type: 'not-a-type' } } },
+              },
+            },
+          ],
+        },
+      });
+      const result = await run(
+        'not-is-valid-openai-tools-call',
+        [{ type: 'function', function: toolCall }],
+        provider,
+      );
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('schema is invalid');
+    });
+
     it('keeps a provider without a validator as a failure under not-', async () => {
       await expect(
         run('not-is-valid-function-call', toolCall, createMockProvider()),
