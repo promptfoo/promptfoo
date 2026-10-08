@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { type AnyColumn, and, eq, getTableColumns, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -943,8 +943,26 @@ export default class EvalResult {
     }
 
     const db = await getDb();
+    // A search can match a valid artifact on a row with another malformed artifact.
+    const validJson = <T extends AnyColumn>(column: T, fallback = 'null') => {
+      // Required artifacts must be objects; JSON null, arrays, and scalars are also invalid.
+      const valid =
+        fallback === 'null'
+          ? sql`json_valid(${column})`
+          : sql`CASE WHEN json_valid(${column}) THEN json_type(${column}) = 'object' ELSE 0 END`;
+      return sql`CASE WHEN ${valid} THEN ${column} ELSE ${fallback} END`.mapWith(column);
+    };
     const results = await db
-      .select()
+      .select({
+        ...getTableColumns(evalResultsTable),
+        testCase: validJson(evalResultsTable.testCase, '{}'),
+        prompt: validJson(evalResultsTable.prompt, '{"raw":"","label":""}'),
+        provider: validJson(evalResultsTable.provider, '{"id":""}'),
+        response: validJson(evalResultsTable.response),
+        gradingResult: validJson(evalResultsTable.gradingResult),
+        namedScores: validJson(evalResultsTable.namedScores),
+        metadata: validJson(evalResultsTable.metadata),
+      })
       .from(evalResultsTable)
       .where(
         and(

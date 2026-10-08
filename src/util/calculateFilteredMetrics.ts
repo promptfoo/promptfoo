@@ -1,25 +1,6 @@
 /**
- * Calculate metrics for filtered evaluation results.
- *
- * This module implements optimized SQL aggregation to calculate metrics for
- * filtered evaluation datasets. It uses a single GROUP BY query to aggregate
- * ALL prompts at once, achieving significant performance improvements over
- * the naive approach of querying each prompt separately.
- *
- * SECURITY: This module uses Drizzle's sql template strings for parameterized queries
- * to prevent SQL injection. The whereSql parameter is a SQL fragment, not a string,
- * ensuring all user-provided values are properly escaped.
- *
- * Performance targets:
- * - Simple eval (2 prompts, 100 results): <50ms
- * - Complex eval (10 prompts, 1000 results): <150ms
- * - Large eval (10 prompts, 10000 results): <500ms
- *
- * Critical design decisions:
- * 1. Single GROUP BY query for all basic metrics + token usage
- * 2. SQL JSON aggregation for named scores (avoids memory issues)
- * 3. SQL JSON aggregation for assertions (complex nested JSON)
- * 4. OOM protection with MAX_RESULTS_FOR_METRICS limit
+ * Aggregate filtered evaluation metrics in SQL, grouped by prompt.
+ * Queries accept the same parameterized predicate as table pagination.
  */
 
 import { type SQL, sql } from 'drizzle-orm';
@@ -279,11 +260,7 @@ export async function calculateFilteredMetrics(
   }
 }
 
-/**
- * Get count of filtered results (for OOM protection)
- *
- * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
- */
+/** Count matching results before enforcing the aggregation limit. */
 async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
   const db = await getDb();
   const query = sql`
@@ -296,20 +273,15 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
   return result?.count || 0;
 }
 
-/**
- * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
- * This is the key performance improvement from the audit.
- *
- * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
- */
+/** Aggregate basic metrics and token usage for all prompts in one query. */
 async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
   const db = await getDb();
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
-  const response = sql`response`;
-  const gradingResult = sql`grading_result`;
+  const response = sql`CASE WHEN json_valid(response) THEN response END`;
+  const gradingResult = sql`CASE WHEN json_valid(grading_result) THEN grading_result END`;
   const targetPath = '$.tokenUsage';
   const incurredTargetPath = '$.tokenUsage.incurredTokenUsage';
   const attackerPath = '$.tokenUsage.attacker';
@@ -383,10 +355,10 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       ) as grading_num_requests,
       SUM(
         CASE
-          WHEN json_extract(response, ${incurredTargetPath}) IS NOT NULL
-            OR json_extract(grading_result, ${incurredGradingPath}) IS NOT NULL
-            OR COALESCE(json_extract(response, ${responseCachePath}), 0) = 1
-            OR COALESCE(json_extract(grading_result, ${gradingCachePath}), 0) = 1
+          WHEN json_extract(${response}, ${incurredTargetPath}) IS NOT NULL
+            OR json_extract(${gradingResult}, ${incurredGradingPath}) IS NOT NULL
+            OR COALESCE(json_extract(${response}, ${responseCachePath}), 0) = 1
+            OR COALESCE(json_extract(${gradingResult}, ${gradingCachePath}), 0) = 1
           THEN 1
           ELSE 0
         END

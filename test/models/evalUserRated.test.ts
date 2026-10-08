@@ -2,7 +2,6 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { HUMAN_ASSERTION_TYPE } from '../../src/constants';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
-import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 import EvalFactory from '../factories/evalFactory';
 
@@ -342,50 +341,7 @@ describe('User-Rated Filter Feature', () => {
     });
   });
 
-  describe('evalPerformance.queryTestIndicesOptimized user-rated filter', () => {
-    it('should return only user-rated results with optimized query', async () => {
-      const eval_ = await EvalFactory.create({ numResults: 0 });
-
-      // Add test data
-      const results = [
-        { testIdx: 0, hasHumanRating: true },
-        { testIdx: 1, hasHumanRating: false },
-        { testIdx: 2, hasHumanRating: true },
-      ];
-
-      for (const result of results) {
-        await eval_.addResult({
-          description: `test-${result.testIdx}`,
-          promptIdx: 0,
-          testIdx: result.testIdx,
-          testCase: { vars: { test: `value${result.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${result.testIdx}` },
-          response: { output: `Response ${result.testIdx}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: result.hasHumanRating
-            ? createHumanRatedGradingResult(true, 1, 'User rated')
-            : createRegularGradingResult(true, 1),
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
-      }
-
-      const { testIndices, filteredCount } = await queryTestIndicesOptimized(eval_.id, {
-        filterMode: 'user-rated',
-      });
-
-      expect(filteredCount).toBe(2);
-      expect(testIndices).toEqual([0, 2]);
-    });
-
+  describe('Eval.getTablePage user-rated filter', () => {
     it('should handle large datasets efficiently', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 
@@ -417,7 +373,7 @@ describe('User-Rated Filter Feature', () => {
       }
 
       const startTime = Date.now();
-      const { testIndices, filteredCount } = await queryTestIndicesOptimized(eval_.id, {
+      const { body, filteredCount } = await eval_.getTablePage({
         filterMode: 'user-rated',
         limit: 10,
       });
@@ -425,7 +381,7 @@ describe('User-Rated Filter Feature', () => {
 
       // Should have 20 user-rated items (0, 5, 10, 15, ...)
       expect(filteredCount).toBe(20);
-      expect(testIndices).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
+      expect(body.map((row) => row.testIdx)).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
 
       // Query should be fast (typically under 100ms for 100 items)
       expect(duration).toBeLessThan(500);
@@ -608,7 +564,7 @@ describe('User-Rated Filter Feature', () => {
 
       // Try SQL injection in search query
       const maliciousSearch = "'; DROP TABLE eval_results; --";
-      const { filteredCount } = await queryTestIndicesOptimized(eval_.id, {
+      const { filteredCount } = await eval_.getTablePage({
         filterMode: 'user-rated',
         searchQuery: maliciousSearch,
       });
@@ -617,11 +573,11 @@ describe('User-Rated Filter Feature', () => {
       expect(filteredCount).toBe(0);
 
       // Test that user-rated filter still works after attempted injection
-      const justUserRated = await queryTestIndicesOptimized(eval_.id, {
+      const justUserRated = await eval_.getTablePage({
         filterMode: 'user-rated',
       });
       expect(justUserRated.filteredCount).toBe(1);
-      expect(justUserRated.testIndices).toEqual([0]);
+      expect(justUserRated.body.map((row) => row.testIdx)).toEqual([0]);
     });
   });
 });
