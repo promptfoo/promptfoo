@@ -9,6 +9,7 @@ import {
   getNamedMetricTotals,
   hasHumanRating,
   hashVarSchema,
+  mergeFilteredNamedMetrics,
   parseEvalOutputPromptHash,
   setEvalDetailsHash,
   useEvalDetailsHash,
@@ -508,8 +509,46 @@ describe('named metric helpers', () => {
     expect(getNamedMetricTotal(baseMetrics, 'safety')).toBe(1);
   });
 
-  it('returns 0 for missing metrics', () => {
-    expect(getNamedMetricTotal(baseMetrics, 'missing')).toBe(0);
+  it('returns undefined for missing metrics', () => {
+    expect(getNamedMetricTotal(baseMetrics, 'missing')).toBeUndefined();
+  });
+
+  it('preserves an own zero denominator and ignores inherited values', () => {
+    const namedScoreWeights = Object.create({ inherited: 99 }) as Record<string, number>;
+    Object.defineProperty(namedScoreWeights, 'zero', {
+      enumerable: true,
+      value: 0,
+    });
+
+    expect(
+      getNamedMetricTotal(
+        {
+          namedScoresCount: Object.create({ inherited: 50 }) as Record<string, number>,
+          namedScoreWeights,
+        },
+        'zero',
+      ),
+    ).toBe(0);
+    expect(
+      getNamedMetricTotal(
+        {
+          namedScoresCount: Object.create({ inherited: 50 }) as Record<string, number>,
+          namedScoreWeights,
+        },
+        'inherited',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('falls back from invalid weights to finite assertion counts', () => {
+    const metrics = {
+      namedScoresCount: { accuracy: 2, malformed: Number.NaN },
+      namedScoreWeights: { accuracy: Number.POSITIVE_INFINITY },
+    } as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>;
+
+    expect(getNamedMetricTotal(metrics, 'accuracy')).toBe(2);
+    expect(getNamedMetricTotal(metrics, 'malformed')).toBeUndefined();
+    expect(getNamedMetricTotals(metrics)).toEqual({ accuracy: 2 });
   });
 
   it('merges sparse namedScoreWeights over namedScoresCount', () => {
@@ -528,6 +567,52 @@ describe('named metric helpers', () => {
     expect(
       getNamedMetricTotals({} as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>),
     ).toBeUndefined();
+  });
+
+  it('keeps declared derived totals while omitting other unfiltered named metrics', () => {
+    const total = {
+      namedScores: { accuracy: 8, f1: 0.75, omitted: 3 },
+    } as unknown as PromptMetrics;
+    const filtered = {
+      namedScores: { accuracy: 4 },
+      namedScoresCount: { accuracy: 5 },
+    } as unknown as PromptMetrics;
+
+    expect(mergeFilteredNamedMetrics(total, filtered, ['f1'])?.namedScores).toEqual({
+      accuracy: 4,
+      f1: 0.75,
+    });
+  });
+
+  it.each([true, false])('keeps derived collisions raw with filtered=%s', (useFiltered) => {
+    const total = {
+      namedScores: { accuracy: 8, f1: 0.75 },
+      namedScoresCount: { accuracy: 10, f1: 10 },
+      namedScoreWeights: { accuracy: 20, f1: 20 },
+    } as unknown as PromptMetrics;
+    const filtered = {
+      namedScores: { accuracy: 4, f1: 3 },
+      namedScoresCount: { accuracy: 5, f1: 5 },
+      namedScoreWeights: { accuracy: 10, f1: 10 },
+    } as unknown as PromptMetrics;
+    const before = structuredClone({ total, filtered });
+    const result = mergeFilteredNamedMetrics(total, useFiltered ? filtered : null, ['f1']);
+    expect(result?.namedScores).toEqual({ accuracy: useFiltered ? 4 : 8, f1: 0.75 });
+    expect(result?.namedScoresCount).toEqual({ accuracy: useFiltered ? 5 : 10 });
+    expect(result?.namedScoreWeights).toEqual({ accuracy: useFiltered ? 10 : 20 });
+    expect({ total, filtered }).toEqual(before);
+  });
+
+  it('does not substitute an assertion total for an unavailable derived value', () => {
+    const total = { namedScores: {} } as unknown as PromptMetrics;
+    const filtered = {
+      namedScores: { f1: 3 },
+      namedScoresCount: { f1: 5 },
+      namedScoreWeights: { f1: 10 },
+    } as unknown as PromptMetrics;
+    const result = mergeFilteredNamedMetrics(total, filtered, ['f1']);
+    expect(result?.namedScores).toEqual({});
+    expect(getNamedMetricTotals(result)).toBeUndefined();
   });
 });
 

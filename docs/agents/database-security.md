@@ -122,6 +122,18 @@ transaction usable; letting it escape rolls the transaction back. Nested root
 independently. The context expires when the callback settles, so asynchronous
 work that runs later queues as a new top-level operation.
 
+For multiple reads that must share a snapshot, use
+`withReadTransaction(async (reader) => ...)` from `src/database/index.ts` and pass
+parameterized `sql` queries to `reader.all()`. It uses the same operation queue
+as writes but requests a native read transaction, allowing independent WAL
+writers to proceed. Drizzle's libSQL transaction wrapper does not honor SQLite's
+`behavior: 'deferred'` option. Nested read callbacks reuse the active read or write
+transaction; starting a write transaction inside a read callback is rejected.
+Root calls and closing the database are also rejected inside a read callback.
+Read handles expire when the callback settles, so await every query there.
+This is an internal contract for trusted read SQL, not SQL authorization: libSQL's
+local read mode does not reject write statements passed through `all()`.
+
 Promptfoo serializes top-level operations and configures libSQL with one pooled
 connection so foreign-key, busy-timeout, and WAL settings survive transaction
 reuse. Reconnecting during a transaction would close its connection and must not
