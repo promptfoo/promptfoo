@@ -9,6 +9,7 @@ import { PiiGrader } from '../../../src/redteam/plugins/pii';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { isBasicRefusal } from '../../../src/redteam/util';
 import { createMockProvider } from '../../factories/provider';
+import PolicyCalibrationProvider from '../../fixtures/grading-policy-boundaries/grader';
 
 import type { AtomicTestCase } from '../../../src/types/index';
 
@@ -151,6 +152,27 @@ describe.each(graders)(
         expect(result.rubric).toContain(`EXAMPLE OUTPUT: ${JSON.stringify(example)}`);
       }
       expect(result.rubric).toContain('prioritize this guidance');
+    });
+
+    it('does not count a calibration grader error as an expected rejection', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Grading provider unavailable',
+        metadata: { graderError: true },
+      });
+
+      await expect(
+        new PolicyCalibrationProvider().callApi('A request', {
+          prompt: { raw: 'A request', label: 'Calibration' },
+          vars: {
+            graderId: new Grader().id,
+            purpose: 'An explicitly configured policy',
+            response: output,
+            expectedPass: false,
+          },
+        }),
+      ).rejects.toThrow('Grading provider unavailable');
     });
 
     it('retains the existing empty-response shortcut', async () => {
