@@ -5,12 +5,231 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, mockApiProvider2, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator options and hooks', () => {
+  it.each([false, true])(
+    'reports completed rows to CI and the caller (timeout=%s)',
+    async (timedOut) => {
+      vi.useFakeTimers();
+      vi.stubEnv('CI', 'true');
+      const info = vi.spyOn(logger, 'info');
+      const progressCallback = vi.fn();
+      if (timedOut) {
+        vi.mocked(mockApiProvider.callApi).mockImplementation(
+          async (_prompt, _context, options) =>
+            new Promise((_resolve, reject) => {
+              options?.abortSignal?.addEventListener(
+                'abort',
+                () => reject(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            }),
+        );
+      }
+      try {
+        const suite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Fixture request')],
+          tests: [{}],
+        };
+        const evaluation = new Eval({});
+        const pending = evaluate(suite, evaluation, {
+          timeoutMs: timedOut ? 10 : 0,
+          progressCallback,
+        });
+        await vi.runAllTimersAsync();
+        await pending;
+        const summary = await evaluation.toEvaluateSummary();
+        expect(summary.stats.errors).toBe(timedOut ? 1 : 0);
+        expect(progressCallback).toHaveBeenCalledOnce();
+        expect(progressCallback.mock.calls[0].slice(0, 2)).toEqual([1, 1]);
+        expect(info).toHaveBeenCalledWith(expect.stringContaining('Complete! 1/1 tests'));
+      } finally {
+        info.mockRestore();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it('aborts an active peer before clearing the deadline when a row callback fails', async () => {
+    let peerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      peerStarted = resolve;
+    });
+    let peerAborted = false;
+    const failure = new Error('fixture progress failed');
+    const provider: ApiProvider = {
+      id: () => 'concurrent-cleanup-fixture',
+      async callApi(prompt, _context, options) {
+        if (prompt === 'finish') {
+          await started;
+          return { output: 'Completed first row' };
+        }
+        return new Promise((_resolve, reject) => {
+          options?.abortSignal?.addEventListener(
+            'abort',
+            () => {
+              peerAborted = true;
+              reject(new DOMException('Aborted', 'AbortError'));
+            },
+            { once: true },
+          );
+          peerStarted();
+        });
+      },
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{request}}')],
+      tests: [{ vars: { request: 'finish' } }, { vars: { request: 'wait' } }],
+    };
+    await expect(
+      evaluate(suite, new Eval({}), {
+        timeoutMs: 0,
+        maxEvalTimeMs: 60_000,
+        maxConcurrency: 2,
+        silent: true,
+        progressCallback: () => {
+          throw failure;
+        },
+      }),
+    ).rejects.toBe(failure);
+    expect(peerAborted).toBe(true);
+  });
+
+  it.each(['timeoutMs', 'maxEvalTimeMs'] as const)(
+    'rejects invalid %s values before running providers or starting timers',
+    async (name) => {
+      vi.useFakeTimers();
+      const scheduled = vi.spyOn(globalThis, 'setTimeout');
+      const otherOption = name === 'timeoutMs' ? 'maxEvalTimeMs' : 'timeoutMs';
+      const otherTimeoutMs = 61_337;
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Fixture request')],
+        tests: [{}],
+      };
+      try {
+        for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY, '100', null]) {
+          await expect(
+            evaluate(testSuite, new Eval({}), {
+              [name]: value,
+              [otherOption]: otherTimeoutMs,
+              silent: true,
+            }),
+          ).rejects.toThrow(`${name} must be a finite, nonnegative number of milliseconds`);
+        }
+        expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+        expect(scheduled).not.toHaveBeenCalledWith(expect.any(Function), otherTimeoutMs);
+      } finally {
+        scheduled.mockRestore();
+      }
+    },
+  );
+
+  it('lets zero timeout options override nonzero environment defaults', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('PROMPTFOO_EVAL_TIMEOUT_MS', '5');
+    vi.stubEnv('PROMPTFOO_MAX_EVAL_TIME_MS', '5');
+    let finish!: (value: { output: string }) => void;
+    const provider: ApiProvider = {
+      id: () => 'deferred-fixture',
+      callApi: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Fixture request')],
+      tests: [{}],
+    };
+    const evaluation = new Eval({});
+    try {
+      const pending = evaluate(suite, evaluation, { timeoutMs: 0, maxEvalTimeMs: 0, silent: true });
+      await vi.advanceTimersByTimeAsync(20);
+      finish({ output: 'fixture response' });
+      await pending;
+      expect((await evaluation.toEvaluateSummary()).stats).toMatchObject({
+        successes: 1,
+        errors: 0,
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it.each(['timeoutMs', 'maxEvalTimeMs'] as const)(
+    'keeps oversized %s timers pending and cancels the current chunk on completion',
+    async (name) => {
+      vi.useFakeTimers();
+      const scheduled = vi.spyOn(globalThis, 'setTimeout');
+      const cleared = vi.spyOn(globalThis, 'clearTimeout');
+      let finish!: (value: { output: string }) => void;
+      const provider: ApiProvider = {
+        id: () => 'long-timeout-fixture',
+        callApi: () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Fixture request')],
+        tests: [{}],
+      };
+      const evaluation = new Eval({});
+      const pending = evaluate(suite, evaluation, {
+        timeoutMs: 0,
+        maxEvalTimeMs: 0,
+        silent: true,
+        [name]: 2_147_483_647 + 100,
+      });
+      await vi.advanceTimersByTimeAsync(2_147_483_647 + 50);
+      finish({ output: 'fixture response' });
+      await pending;
+      expect((await evaluation.toEvaluateSummary()).stats).toMatchObject({
+        successes: 1,
+        errors: 0,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      const remainingChunk = scheduled.mock.calls.findIndex((call) => call[1] === 100);
+      expect(remainingChunk).toBeGreaterThanOrEqual(0);
+      expect(cleared).toHaveBeenCalledWith(scheduled.mock.results[remainingChunk].value);
+      scheduled.mockRestore();
+      cleared.mockRestore();
+    },
+  );
+
+  it('cancels the total timer when setup throws', async () => {
+    vi.useFakeTimers();
+    const scheduled = vi.spyOn(globalThis, 'setTimeout');
+    const cleared = vi.spyOn(globalThis, 'clearTimeout');
+    vi.mocked(runExtensionHook).mockRejectedValueOnce(new Error('fixture setup failed'));
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Fixture request')],
+      tests: [{}],
+      extensions: ['file://fixture.js'],
+    };
+    try {
+      await expect(
+        evaluate(suite, new Eval({}), { maxEvalTimeMs: 2_147_483_647 + 100, silent: true }),
+      ).rejects.toThrow('fixture setup failed');
+      const deadlineChunk = scheduled.mock.calls.findIndex((call) => call[1] === 2_147_483_647);
+      expect(deadlineChunk).toBeGreaterThanOrEqual(0);
+      expect(cleared).toHaveBeenCalledWith(scheduled.mock.results[deadlineChunk].value);
+    } finally {
+      scheduled.mockRestore();
+      cleared.mockRestore();
+    }
+  });
+
   it('should use the options from the test if they exist', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

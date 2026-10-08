@@ -161,6 +161,33 @@ export class PromptSuggestionsRejectedError extends Error {
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
 const PROMPTS_FLUSH_INTERVAL_MS = 1000;
+
+function validateEvaluationTimeout(value: unknown, name: string): void {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${name} must be a finite, nonnegative number of milliseconds`);
+  }
+}
+
+function scheduleEvaluationTimeout(callback: () => void, timeoutMs: number): () => void {
+  const deadline = performance.now() + timeoutMs;
+  let timer: NodeJS.Timeout;
+  const schedule = () => {
+    const remaining = deadline - performance.now();
+    timer = setTimeout(
+      () => {
+        if (performance.now() < deadline) {
+          schedule();
+        } else {
+          callback();
+        }
+      },
+      Math.min(remaining, 2_147_483_647),
+    );
+  };
+  schedule();
+  return () => clearTimeout(timer);
+}
+
 const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
@@ -3576,6 +3603,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   rateLimitRegistry: RateLimitRegistry | undefined;
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
   private readonly currentResultKeys = new Set<string>();
+  private cancelEvalTimeout?: () => void;
+  private evaluationAbortController?: AbortController;
   private readonly retryErrorResultIds = new Set(
     cliState.retryMode ? cliState._retryErrorResultIds : [],
   );
@@ -4020,7 +4049,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
-    const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const timeoutMs = context.options.timeoutMs ?? getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
@@ -4039,13 +4068,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         : abortController.signal,
     };
 
-    let timeoutId: NodeJS.Timeout | undefined;
+    let cancelTimeout: (() => void) | undefined;
     let didTimeout = false;
     const clearEvalStepTimeout = () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = undefined;
-      }
+      cancelTimeout?.();
+      cancelTimeout = undefined;
     };
 
     try {
@@ -4062,7 +4089,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           context,
         ),
         new Promise<void>((_, reject) => {
-          timeoutId = setTimeout(() => {
+          cancelTimeout = scheduleEvaluationTimeout(() => {
             didTimeout = true;
             abortController.abort();
             reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
@@ -4122,7 +4149,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     combinedAbortSignal,
     concurrentRunEvalOptions,
     evalStepIndexMap,
-    globalTimeout,
     groupedRunEvalOptions,
     isEvalTimedOut,
     isWebUI,
@@ -4139,7 +4165,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     combinedAbortSignal: AbortSignal;
     concurrentRunEvalOptions: RunEvalOptions[];
     evalStepIndexMap: Map<RunEvalOptions, number>;
-    globalTimeout?: NodeJS.Timeout;
     groupedRunEvalOptions: RunEvalOptions[];
     isEvalTimedOut: () => boolean;
     isWebUI: boolean;
@@ -4192,7 +4217,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       } else if (!processingContext.targetUnavailable) {
         return this.saveInterruptedEval({
           ciProgressReporter,
-          globalTimeout,
           processingContext,
           progressBarManager,
           prompts,
@@ -4202,7 +4226,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     return this.saveTargetUnavailableEvalIfNeeded({
       ciProgressReporter,
-      globalTimeout,
       processingContext,
       progressBarManager,
       prompts,
@@ -4418,21 +4441,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private async saveInterruptedEval({
     ciProgressReporter,
-    globalTimeout,
     processingContext,
     progressBarManager,
     prompts,
   }: {
     ciProgressReporter: CIProgressReporter | null;
-    globalTimeout?: NodeJS.Timeout;
     processingContext: EvalProcessingContext;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
   }) {
     logger.info('Evaluation interrupted, saving progress...');
-    if (globalTimeout) {
-      clearTimeout(globalTimeout);
-    }
+    this.cancelEvalTimeout?.();
     progressBarManager?.removeLogInterceptor();
     progressBarManager?.stop();
     ciProgressReporter?.finish();
@@ -4443,13 +4462,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private async saveTargetUnavailableEvalIfNeeded({
     ciProgressReporter,
-    globalTimeout,
     processingContext,
     progressBarManager,
     prompts,
   }: {
     ciProgressReporter: CIProgressReporter | null;
-    globalTimeout?: NodeJS.Timeout;
     processingContext: EvalProcessingContext;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
@@ -4457,9 +4474,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!processingContext.targetUnavailable) {
       return undefined;
     }
-    if (globalTimeout) {
-      clearTimeout(globalTimeout);
-    }
+    this.cancelEvalTimeout?.();
     progressBarManager?.stop();
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.store.setVars(Array.from(processingContext.vars));
@@ -4959,7 +4974,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ciProgressReporter,
     concurrency,
     evalTimedOut,
-    globalTimeout,
     maxEvalTimeMs,
     options,
     processedIndices,
@@ -4977,7 +4991,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ciProgressReporter: CIProgressReporter | null;
     concurrency: number;
     evalTimedOut: boolean;
-    globalTimeout?: NodeJS.Timeout;
     maxEvalTimeMs: number;
     options: InternalEvaluateOptions;
     processedIndices: Set<number>;
@@ -4994,9 +5007,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.store.appendPrompts(prompts);
     cleanupProgressReporters(progressBarManager, ciProgressReporter);
 
-    if (globalTimeout) {
-      clearTimeout(globalTimeout);
-    }
+    this.cancelEvalTimeout?.();
     if (evalTimedOut) {
       await this.addMaxDurationTimeoutResults({
         maxEvalTimeMs,
@@ -5152,9 +5163,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let { testSuite } = this;
 
     const startTime = Date.now();
-    const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+    const { timeoutMs = getEvalTimeoutMs(), maxEvalTimeMs = getMaxEvalTimeMs() } = options;
+    validateEvaluationTimeout(timeoutMs, 'timeoutMs');
+    validateEvaluationTimeout(maxEvalTimeMs, 'maxEvalTimeMs');
     let evalTimedOut = false;
-    let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
@@ -5176,13 +5188,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();
+      this.evaluationAbortController = globalAbortController;
       // Providers need timeout signal to cancel long-running requests
       providerAbortSignal = providerAbortSignal
         ? AbortSignal.any([providerAbortSignal, globalAbortController.signal])
         : globalAbortController.signal;
       // Internal signal includes all abort sources
       combinedAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
-      globalTimeout = setTimeout(() => {
+      this.cancelEvalTimeout = scheduleEvaluationTimeout(() => {
         evalTimedOut = true;
         globalAbortController?.abort();
       }, maxEvalTimeMs);
@@ -5272,7 +5285,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       concurrency,
       mathjsModule,
       numComplete: 0,
-      options,
+      options: { ...options, timeoutMs },
       promptEvalCounts: createPromptEvalCounts(prompts),
       prompts,
       rowsWithMaxScoreAssertion,
@@ -5303,7 +5316,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       progressBarManager = new ProgressBarManager(isWebUI);
     }
 
-    this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
+    processingContext.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep, metrics);
       }
@@ -5343,7 +5356,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const hasEvalStepTimeout = timeoutMs > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
@@ -5379,7 +5392,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       combinedAbortSignal,
       concurrentRunEvalOptions,
       evalStepIndexMap,
-      globalTimeout,
       groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
       isEvalTimedOut: () => evalTimedOut,
       isWebUI,
@@ -5412,7 +5424,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       ciProgressReporter,
       concurrency,
       evalTimedOut,
-      globalTimeout,
       maxEvalTimeMs,
       options,
       processedIndices,
@@ -5454,8 +5465,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return await this._runEvaluation();
     } catch (error) {
       evaluationError = error;
+      this.evaluationAbortController?.abort();
       throw error;
     } finally {
+      this.cancelEvalTimeout?.();
+      this.cancelEvalTimeout = undefined;
+      this.evaluationAbortController = undefined;
       // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
       // teardown below, so the streamed file is fully flushed before the post-run rewrite
       // reads it back and the file handle is released promptly. allSettled so one writer's
