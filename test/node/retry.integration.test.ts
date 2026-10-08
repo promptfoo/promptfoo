@@ -522,11 +522,21 @@ describe('retry command', () => {
           '      name: World',
         ].join('\n'),
       );
-      vi.spyOn(Eval.prototype, 'addResult').mockRejectedValueOnce(
-        new Error('simulated result persistence failure'),
-      );
-      vi.spyOn(Eval.prototype, 'fetchResultsBatched').mockImplementationOnce(async function* () {
-        throw new Error('simulated artifact restore failure');
+      let resultWriteFailed = false;
+      vi.spyOn(Eval.prototype, 'addResult').mockImplementationOnce(async () => {
+        resultWriteFailed = true;
+        throw new Error('simulated result persistence failure');
+      });
+      const fetchResultsBatched = Eval.prototype.fetchResultsBatched;
+      vi.spyOn(Eval.prototype, 'fetchResultsBatched').mockImplementation(async function* (
+        this: Eval,
+        ...args
+      ) {
+        // Startup reconciliation must succeed; fail the artifact restore after its write fails.
+        if (resultWriteFailed) {
+          throw new Error('simulated artifact restore failure');
+        }
+        yield* fetchResultsBatched.call(this, ...args);
       });
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 

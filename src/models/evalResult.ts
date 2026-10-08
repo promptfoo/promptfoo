@@ -90,10 +90,27 @@ function projectOutputMetadata<T>(
               if (!turn || typeof turn !== 'object' || Array.isArray(turn)) {
                 return turn;
               }
-              // Known target-image fields can contain bare base64 as well as URLs/refs.
-              const { images: _images, outputImage: _outputImage, ...history } = turn;
-              return history;
+              // Use the target's media type hint; ordinary history text remains intact.
+              const {
+                images: _images,
+                outputImage: _outputImage,
+                outputAudio: _outputAudio,
+                ...history
+              } = turn;
+              return turn.isBase64 === true ? { ...history, output: '[output stripped]' } : history;
             }),
+          ],
+        ];
+      }
+      if (key === 'messages' && Array.isArray(projected)) {
+        return [
+          [
+            key,
+            projected.map((message) =>
+              message?.role === 'assistant' && message.isBase64 === true
+                ? { ...message, content: '[output stripped]' }
+                : message,
+            ),
           ],
         ];
       }
@@ -1001,12 +1018,12 @@ export default class EvalResult {
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
-  static async hasResumableCheckpoints(evalId: string): Promise<boolean> {
+  static async hasSavedResults(evalId: string): Promise<boolean> {
     const db = await getDb();
     const row = await db
       .select({ id: evalResultsTable.id })
       .from(evalResultsTable)
-      .where(and(eq(evalResultsTable.evalId, evalId), resumableCheckpointFilter()))
+      .where(eq(evalResultsTable.evalId, evalId))
       .limit(1)
       .get();
     return Boolean(row);

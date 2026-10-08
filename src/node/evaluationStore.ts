@@ -41,13 +41,9 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
   }
 
   async appendPrompts(prompts: CompletedPrompt[]): Promise<void> {
-    if (
-      !this.promptsPrepared &&
-      this.persisted &&
-      (await EvalResult.hasResumableCheckpoints(this.id))
-    ) {
-      // A checkpoint row can commit before its aggregate metrics. Rebuild once before
-      // resumed work subtracts any checkpoint contribution, using the saved rows.
+    if (!this.promptsPrepared && this.persisted && (await EvalResult.hasSavedResults(this.id))) {
+      // Result commits can outlive an aggregate flush, including the last checkpoint
+      // replacement. Reconcile an existing eval once from its durable rows.
       this.evaluation.prompts = prompts;
       await recalculatePromptMetrics(this.evaluation, { preserveDerivedMetrics: true });
     } else {

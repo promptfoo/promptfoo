@@ -5597,6 +5597,26 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
+    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
+    if (cliState.resume && this.store.persisted && mathjsModule) {
+      const expressions = testSuite.derivedMetrics!.filter(
+        (metric) => typeof metric.value === 'string',
+      );
+      if (expressions.length > 0) {
+        // Reuse the ordered expression evaluator after row-based recovery, including when
+        // no work remains. Function metrics keep their saved state and are not replayed.
+        const stepsByPrompt = new Map(runEvalOptions.map((step) => [step.promptIdx, step]));
+        for (const [promptIdx, step] of stepsByPrompt) {
+          const metrics = prompts[promptIdx].metrics;
+          if (metrics) {
+            const count = metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount;
+            if (count > 0) {
+              updateDerivedMetrics(metrics, expressions, step, count, mathjsModule);
+            }
+          }
+        }
+      }
+    }
     await filterCompletedResumeSteps(runEvalOptions, this.store);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
@@ -5607,10 +5627,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
-
-    // Awaiting after accumulating scores lets other rows change the total
-    // before derived metrics use this row's __count.
-    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
 
     const processingContext: EvalProcessingContext = {
       assertionTypes,

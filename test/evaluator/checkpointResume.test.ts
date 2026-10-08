@@ -159,7 +159,7 @@ describeEvaluator('resumable checkpoint preparation', () => {
             });
             if (includeDerived) {
               expect(resumedRecord!.prompts[0].metrics!.namedScores).toMatchObject({
-                Average: 1,
+                Average: 0.5,
                 Peak: 42,
               });
             } else {
@@ -261,21 +261,165 @@ describeEvaluator('resumable checkpoint preparation', () => {
     }
   });
 
-  it('leaves saved metric semantics unchanged when resume has no checkpoints', async () => {
+  it('rebuilds an ordinary completed eval without replaying function metrics', async () => {
+    const functionMetric = vi.fn(() => 777);
     const target: ApiProvider = {
       id: () => 'ordinary-resume-control',
       callApi: vi.fn(async () => ({ output: 'ok' })),
     };
-    const suite: TestSuite = { providers: [target], prompts: [toPrompt('Probe')], tests: [{}] };
+    const suite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('Probe')],
+      tests: [{ assert: [{ type: 'equals', value: 'ok', metric: 'Quality', weight: 2 }] }],
+      derivedMetrics: [
+        { name: 'HistoricalValue', value: functionMetric },
+        { name: 'Average', value: 'Quality / (2 * __count)' },
+      ],
+    };
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
     await evaluate(suite, record, {});
-    record.prompts[0].metrics!.namedScores.HistoricalValue = 777;
+    record.prompts[0].metrics!.namedScores.Quality = 999;
+    record.prompts[0].metrics!.namedScores.Average = 999;
     await record.addPrompts(record.prompts);
     vi.mocked(target.callApi).mockClear();
     cliState.resume = true;
     await evaluate(suite, record, {});
     expect(target.callApi).not.toHaveBeenCalled();
-    expect(record.prompts[0].metrics!.namedScores.HistoricalValue).toBe(777);
+    expect(functionMetric).toHaveBeenCalledOnce();
+    expect(record.prompts[0].metrics).toMatchObject({
+      testPassCount: 1,
+      testFailCount: 0,
+      testErrorCount: 0,
+      namedScores: { Quality: 2, Average: 1, HistoricalValue: 777 },
+      namedScoresCount: { Quality: 1 },
+      namedScoreWeights: { Quality: 2 },
+      tokenUsage: { numRequests: 1 },
+    });
+    expect((await Eval.findById(record.id))!.prompts).toEqual(record.prompts);
+  });
+
+  it('repairs metrics and expressions after the last replacement commits but its aggregate flush fails', async () => {
+    const controller = new AbortController();
+    const started = deferred();
+    let phase: 'pause' | 'complete' = 'pause';
+    const functionMetric = vi.fn((scores: Record<string, number>) => 42 + (scores.Quality || 0));
+    const target: ApiProvider = {
+      id: () => 'last-checkpoint-flush',
+      callApi: vi.fn(async (_prompt, _context, options) => {
+        if (phase === 'complete') {
+          return {
+            output: 'Completed',
+            cost: 0.07,
+            tokenUsage: {
+              total: 7,
+              numRequests: 1,
+              attacker: { total: 13, numRequests: 1 },
+              assertions: { total: 17, numRequests: 1 },
+            },
+          };
+        }
+        options?.onProgress?.({
+          output: 'Checkpoint',
+          cost: 0.11,
+          tokenUsage: {
+            total: 11,
+            numRequests: 1,
+            attacker: { total: 19, numRequests: 1 },
+            assertions: { total: 23, numRequests: 1 },
+          },
+        });
+        started.resolve();
+        return new Promise<never>(() => {});
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('Probe')],
+      tests: [
+        {
+          assert: [
+            { type: 'equals', value: 'Completed', metric: 'Quality', weight: 2 },
+            { type: 'contains', value: 'Completed', metric: 'Correctness' },
+          ],
+        },
+      ],
+      derivedMetrics: [
+        { name: 'Average', value: 'Quality / (2 * __count)' },
+        { name: 'FunctionValue', value: functionMetric },
+      ],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    vi.useFakeTimers();
+    try {
+      const paused = evaluate(suite, record, {
+        maxConcurrency: 1,
+        timeoutMs: 1000,
+        abortSignal: controller.signal,
+      });
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      controller.abort();
+      await paused;
+      expect(functionMetric).toHaveBeenCalledOnce();
+      const append = record.addResult.bind(record);
+      const flush = record.addPrompts.bind(record);
+      let replaced = false;
+      const appendSpy = vi.spyOn(record, 'addResult').mockImplementation(async (row, options) => {
+        await append(row, options);
+        replaced = row.success;
+      });
+      const flushSpy = vi.spyOn(record, 'addPrompts').mockImplementation((prompts) => {
+        if (replaced) {
+          throw new Error('Aggregate flush unavailable');
+        }
+        return flush(prompts);
+      });
+      phase = 'complete';
+      cliState.resume = true;
+      try {
+        await expect(
+          evaluate(suite, record, { maxConcurrency: 1, timeoutMs: 1000 }),
+        ).rejects.toThrow('Aggregate flush unavailable');
+      } finally {
+        appendSpy.mockRestore();
+        flushSpy.mockRestore();
+      }
+      const fresh = (await Eval.findById(record.id))!;
+      expect(await fresh.fetchResultsByTestIdx(0)).toHaveLength(1);
+      expect((await fresh.fetchResultsByTestIdx(0))[0].success).toBe(true);
+      expect(fresh.prompts[0].metrics).toMatchObject({
+        testPassCount: 0,
+        testErrorCount: 1,
+        tokenUsage: { total: 11 },
+        namedScores: { Average: 0, FunctionValue: 42 },
+      });
+      expect(functionMetric).toHaveBeenCalledTimes(2);
+      await evaluate(suite, fresh, { maxConcurrency: 1, timeoutMs: 1000 });
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(functionMetric).toHaveBeenCalledTimes(2);
+      expect(fresh.prompts[0].metrics).toMatchObject({
+        testPassCount: 1,
+        testFailCount: 0,
+        testErrorCount: 0,
+        score: 1,
+        assertPassCount: 2,
+        assertFailCount: 0,
+        totalLatencyMs: 0,
+        cost: 0.07,
+        tokenUsage: {
+          total: 7,
+          numRequests: 1,
+          attacker: { total: 13, numRequests: 1 },
+          assertions: { total: 17, numRequests: 1 },
+        },
+        namedScores: { Quality: 2, Correctness: 1, Average: 1, FunctionValue: 42 },
+        namedScoresCount: { Quality: 1, Correctness: 1 },
+        namedScoreWeights: { Quality: 2, Correctness: 1 },
+      });
+      expect((await Eval.findById(record.id))!.prompts).toEqual(fresh.prompts);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('accounts for a saved checkpoint before a closed stream fails and resumes with correct metrics', async () => {

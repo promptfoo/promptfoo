@@ -1277,6 +1277,73 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
+    it.each(['audio', 'base64', 'base64-json', 'text'] as const)(
+      'projects known %s checkpoint media without redacting ordinary history text',
+      async (kind) => {
+        const bytes = 'c3ludGhldGljLW1lZGlh';
+        const isBase64 = kind === 'base64' || kind === 'base64-json';
+        const output = {
+          audio: 'Audio transcript',
+          base64: bytes,
+          'base64-json': JSON.stringify({ data: [{ b64_json: bytes }] }),
+          text: 'Ordinary answer',
+        }[kind];
+        const history = {
+          prompt: 'Probe',
+          output,
+          isBase64,
+          ...(kind === 'audio' && { outputAudio: { data: bytes, format: 'wav' } }),
+        };
+        const metadata = {
+          redteamHistory: [history],
+          messages: [
+            { role: 'user', content: 'Keep the prompt' },
+            { role: 'assistant', content: output, isBase64 },
+          ],
+          opaque: 'A'.repeat(2400),
+        };
+        const input = createEvaluateResult({
+          ...mockEvaluateResult,
+          gradingResult: null,
+          response: {
+            output,
+            metadata,
+            ...(kind === 'audio' && { audio: { data: bytes, format: 'wav' } }),
+          },
+          metadata,
+        });
+        const saved = await EvalResult.createFromEvaluateResult(`checkpoint-media-${kind}`, input, {
+          persist: true,
+        });
+        const before = structuredClone(saved.response);
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        try {
+          for (const projected of [
+            saved.toEvaluateResult(),
+            sanitizeResultForJsonlArtifact(input),
+          ]) {
+            expect(projected.response?.output).toBe('[output stripped]');
+            if (kind !== 'text') {
+              expect(JSON.stringify(projected)).not.toContain(bytes);
+            }
+            for (const values of [projected.metadata, projected.response?.metadata]) {
+              expect(values?.opaque).toBe(metadata.opaque);
+              expect(values?.messages[0].content).toBe('Keep the prompt');
+              expect(values?.messages[1].content).toBe(isBase64 ? '[output stripped]' : output);
+              expect(values?.redteamHistory[0].output).toBe(
+                isBase64 ? '[output stripped]' : output,
+              );
+              expect(values?.redteamHistory[0]).not.toHaveProperty('outputAudio');
+            }
+          }
+        } finally {
+          restoreEnv();
+        }
+        expect(saved.response).toEqual(before);
+        expect((await EvalResult.findById(saved.id))?.response).toEqual(before);
+      },
+    );
+
     it.each([
       {
         name: 'bare base64',

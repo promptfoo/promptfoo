@@ -303,10 +303,12 @@ describe('HydraProvider', () => {
           }),
       );
     const mediaResponse: shared.TargetResponse = {
-      output: 'Completed response',
+      output: JSON.stringify({ data: [{ b64_json: 'Yg==' }] }),
       tokenUsage: { numRequests: 1, total: 11 },
       audio: { data: 'YQ==', format: 'wav' },
       image: { data: 'Yg==', format: 'png' },
+      isBase64: true,
+      format: 'json',
       images: [{ data: 'Yg==', mimeType: 'image/png' }],
     };
     mockTargetProvider.callApi.mockResolvedValue(mediaResponse);
@@ -338,6 +340,7 @@ describe('HydraProvider', () => {
       metadata: {
         redteamHistory: [
           {
+            isBase64: true,
             graderPassed: true,
             outputAudio: { data: 'YQ==', format: 'wav' },
             outputImage: { data: 'Yg==', format: 'png' },
@@ -345,6 +348,14 @@ describe('HydraProvider', () => {
         ],
       },
     });
+    expect(
+      snapshots.some((snapshot) =>
+        snapshot.metadata?.messages?.some(
+          (message: { isBase64?: boolean; content: string }) =>
+            message.isBase64 === true && message.content === mediaResponse.output,
+        ),
+      ),
+    ).toBe(true);
     controller.abort();
     const stopped = expect(attack).rejects.toThrow();
     finishNextAttack();

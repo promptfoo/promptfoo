@@ -260,10 +260,12 @@ describe('RedteamIterativeMetaProvider', () => {
           }),
       );
     mockGetTargetResponse.mockResolvedValue({
-      output: 'Completed response',
+      output: JSON.stringify({ data: [{ b64_json: 'Yg==' }] }),
       tokenUsage: { numRequests: 1, total: 11 },
       audio: { data: 'YQ==', format: 'wav' },
       image: { data: 'Yg==', format: 'png' },
+      isBase64: true,
+      format: 'json',
       images: [{ data: 'Yg==', mimeType: 'image/png' }],
     });
     mockGetGraderById.mockReturnValue({
@@ -293,6 +295,7 @@ describe('RedteamIterativeMetaProvider', () => {
       metadata: {
         redteamHistory: [
           {
+            isBase64: true,
             graderPassed: true,
             outputAudio: { data: 'YQ==', format: 'wav' },
             outputImage: { data: 'Yg==', format: 'png' },

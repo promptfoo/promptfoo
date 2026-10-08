@@ -353,7 +353,7 @@ export class HydraProvider implements ApiProvider {
     let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
-    let lastResponseMessages: Message[] = [];
+    let lastResponseMessages: Array<Message & Pick<TargetResponse, 'isBase64'>> = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
@@ -380,7 +380,7 @@ export class HydraProvider implements ApiProvider {
     // Include every completed probe in checkpoints, even responses that are
     // backtracked or still awaiting grading. Keep normal grading history intact.
     const completedTargetHistory: Array<
-      (typeof redteamHistory)[number] & Pick<TargetResponse, 'images'>
+      (typeof redteamHistory)[number] & Pick<TargetResponse, 'images' | 'isBase64'>
     > = [];
     const callOptions = options ? { ...options, onProgress: undefined } : undefined;
     const publishProgress = () => {
@@ -734,7 +734,7 @@ export class HydraProvider implements ApiProvider {
         if (!(response.error && response.tokenUsage?.numRequests === 0)) {
           lastResponseMessages = [
             ...this.conversationHistory,
-            { role: 'assistant', content: response.output || '' },
+            { role: 'assistant', content: response.output || '', isBase64: response.isBase64 },
           ];
         }
         accumulateResponseTokenUsage(totalTokenUsage, response);
@@ -743,6 +743,7 @@ export class HydraProvider implements ApiProvider {
           promptAudio: lastTransformResult?.audio,
           promptImage: lastTransformResult?.image,
           output: scrubOutputForHistory(response.output),
+          isBase64: response.isBase64,
           images: response.images,
           outputAudio: response.audio
             ? { ...response.audio, format: response.audio.format || 'wav' }

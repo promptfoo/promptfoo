@@ -198,7 +198,7 @@ export async function runMetaAgentRedteam({
   let lastFinalAttackPrompt: string | undefined;
 
   const completedTargetHistory: Array<
-    IterativeMetaMetadata['redteamHistory'][number] & Pick<TargetResponse, 'images'>
+    IterativeMetaMetadata['redteamHistory'][number] & Pick<TargetResponse, 'images' | 'isBase64'>
   > = [];
   const callOptions = options ? { ...options, onProgress: undefined } : undefined;
   const publishProgress = () => {
@@ -502,6 +502,7 @@ export async function runMetaAgentRedteam({
         promptAudio: lastTransformResult?.audio,
         promptImage: lastTransformResult?.image,
         output: response.output,
+        isBase64: response.isBase64,
         images: response.images,
         outputAudio: response.audio
           ? { ...response.audio, format: response.audio.format || 'wav' }
