@@ -2,8 +2,9 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import chokidar from 'chokidar';
 import * as yaml from 'js-yaml';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
@@ -12,6 +13,8 @@ import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
+
+vi.mock('chokidar', () => ({ default: { watch: vi.fn() } }));
 
 vi.mock('../../../src/evaluator', async (importOriginal) => {
   return {
@@ -126,6 +129,10 @@ describe('evaluateOptions behavior', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.mocked(chokidar.watch).mockReset();
   });
 
   afterAll(() => {
@@ -261,6 +268,49 @@ describe('evaluateOptions behavior', () => {
 
       expect(options.timeoutMs).toBe(9999);
     });
+
+    it('preserves an explicit caller timeout over the config timeout', async () => {
+      await doEval({ config: [configPath], table: false, write: false }, {}, undefined, {
+        timeoutMs: 7500,
+        eventSource: 'mcp',
+      });
+
+      expect(evaluateMock.mock.calls.at(-1)?.[2].timeoutMs).toBe(7500);
+    });
+
+    it.each([undefined, 7500])(
+      'reloads the config timeout while preserving caller timeout %s',
+      async (callerTimeoutMs) => {
+        const watcher = { on: vi.fn().mockReturnThis() };
+        vi.mocked(chokidar.watch).mockReturnValueOnce(
+          watcher as unknown as ReturnType<typeof chokidar.watch>,
+        );
+        const watchConfig = {
+          providers: ['echo'],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          evaluateOptions: { timeoutMs: 1000 },
+        };
+        const watchConfigPath = writeTempConfig(tmpDir, 'watch-timeout.yaml', watchConfig);
+
+        await doEval(
+          { config: [watchConfigPath], table: false, write: false, watch: true },
+          {},
+          undefined,
+          { timeoutMs: callerTimeoutMs, eventSource: 'mcp' },
+        );
+        expect(evaluateMock.mock.calls.at(-1)?.[2].timeoutMs).toBe(callerTimeoutMs ?? 1000);
+
+        watchConfig.evaluateOptions.timeoutMs = 60000;
+        fs.writeFileSync(watchConfigPath, yaml.dump(watchConfig));
+        const onChange = watcher.on.mock.calls.find(([event]) => event === 'change')?.[1];
+        expect(onChange).toBeTypeOf('function');
+        await onChange(watchConfigPath);
+
+        expect(evaluateMock).toHaveBeenCalledTimes(2);
+        expect(evaluateMock.mock.calls.at(-1)?.[2].timeoutMs).toBe(callerTimeoutMs ?? 60000);
+      },
+    );
 
     it('should read evaluateOptions.maxEvalTimeMs', async () => {
       const options = await runEvalAndGetOptions({
