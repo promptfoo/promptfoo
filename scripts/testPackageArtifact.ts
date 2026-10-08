@@ -1458,6 +1458,15 @@ async function main(): Promise<void> {
         );
       }
     }
+    await timeAsyncPhase('check optional Vercel SDK', () =>
+      runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
+        name: 'Vercel AI',
+        package: 'ai',
+        version: '^6.0.264',
+        script: 'optional-vercel.mjs',
+        env: { PROMPTFOO_CACHE_ENABLED: 'false' },
+      }),
+    );
     await timeAsyncPhase('check optional OpenAI Agents SDK', () =>
       runOptionalOpenAiAgentsChecks(consumerDir, configDir),
     );

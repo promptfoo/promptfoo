@@ -32,6 +32,10 @@ each SDK incompatible, in ESM and CommonJS. The default profile installs both SD
 and exercises real text/chat requests against a local bearer-token server, plus
 IAM authenticator construction without external token requests.
 
+Both profiles check Vercel AI SDK absence and compatibility in ESM and CommonJS.
+The default profile installs the real SDK and checks text, streaming, structured
+output, embeddings, and preserved gateway errors against a loopback HTTP server.
+
 The default profile checks both CLI aliases and evaluates compressed HTTP responses
 from a local server. It also checks the Transformers provider with an offline model
 fixture when the optional SDK is absent, incompatible, and installed.
