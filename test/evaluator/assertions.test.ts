@@ -15,6 +15,26 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it('rejects a dangling default fallback before calling the target', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Fixture')],
+      defaultTest: { assert: [{ type: 'equals', value: 'fixture', fallback: 'next' }] },
+      tests: [{ assert: [{ type: 'equals', value: 'fixture' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    vi.useFakeTimers();
+    const setTimer = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
+    await expect(
+      evaluate(testSuite, evalRecord, { maxConcurrency: 1, maxEvalTimeMs: 60_000 }),
+    ).rejects.toThrow('defaultTest.assert[0]');
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    const timeoutCall = setTimer.mock.calls.findIndex(([, delay]) => delay === 60_000);
+    expect(timeoutCall).toBeGreaterThanOrEqual(0);
+    expect(clearTimer).toHaveBeenCalledWith(setTimer.mock.results[timeoutCall].value);
+  });
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

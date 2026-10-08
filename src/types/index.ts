@@ -553,6 +553,8 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // Earlier deterministic mismatches are diagnostics, not scored components.
+    fallbackFailures?: { type: AssertionType; reason: string }[];
     // True when the complete grading response was reused without running a new task.
     cachedResponse?: boolean;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
@@ -754,6 +756,9 @@ export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 export const AssertionSchema = z.object({
   // Type of assertion
   type: AssertionTypeSchema,
+
+  // Run the next assertion only if this deterministic check fails.
+  fallback: z.literal('next').optional(),
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),

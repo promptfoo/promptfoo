@@ -59,6 +59,7 @@ tests:
 | transform        | string \| Function | No       | Process the output before running the assertion. Accepts a string expression, `file://` reference, or a [function](/docs/usage/node-package#transform-functions) when using the Node.js package. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                             |
 | metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                                                                                   |
 | contextTransform | string \| Function | No       | Javascript expression or [function](/docs/usage/node-package#transform-functions) to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
+| fallback         | `next`             | No       | Run the next assertion if this deterministic check fails. See [fallback assertions](#fallback-assertions).                                                                                                                                                                                                                                         |
 
 ## Grouping assertions via Assertion Sets
 
@@ -201,6 +202,25 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [pi](/docs/configuration/expected-outputs/model-graded/pi)                                           | Alternative scoring approach that uses a dedicated model for evaluating criteria |
 | [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)                | Compare multiple outputs for a test case and pick the best one                   |
 | [max-score](/docs/configuration/expected-outputs/model-graded/max-score)                             | Select output with highest aggregate score from other assertions                 |
+
+## Fallback assertions
+
+Use `fallback: next` to try a cheap check before a model grader:
+
+```yaml
+assert:
+  - type: equals
+    value: 'Paris'
+    fallback: next
+  - type: llm-rubric
+    value: Correctly identifies Paris as the capital of France.
+```
+
+If the exact match passes, the model grader does not run. Otherwise, the grader decides the result. Only the last reached assertion contributes its score, weight, named metric, and token usage. Earlier mismatches are retained in that result's `metadata.fallbackFailures`; they are not separate failures or scored components.
+
+A chain can have several checks marked `fallback: next`. Each source must be `equals`, `contains`, `icontains`, or `starts-with`, including their `not-` variants. Sources accept literal string or number values (`starts-with` requires a string), ordinary variable templates, and positive weights. They cannot use function values, file or package references, or assertion transforms. Source execution errors stop grading instead of advancing the chain.
+
+The final assertion can use a normal deterministic or model-graded check. Assertion sets, comparisons (`select-best` and `max-score`), guardrails, and custom redteam checks cannot be fallback targets. A chain must stay within one configured assertion list: it cannot join `defaultTest`, a test, or scenario lists. Chains inside an assertion set are supported. Independent assertions outside the chain keep running normally.
 
 ## Weighted assertions
 

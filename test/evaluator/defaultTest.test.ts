@@ -287,9 +287,8 @@ describe('Evaluator with external defaultTest', () => {
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    // Should throw or handle gracefully
     await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
-      'defaultTest.assert is not an array in test case #1',
+      'defaultTest.assert must be an array',
     );
   });
 

@@ -13,6 +13,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { validateAssertions } from './assertions/validateAssertions';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -5211,6 +5212,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       suite: testSuite,
     });
     testSuite = beforeAllOut.suite;
+    try {
+      validateAssertions(testSuite.tests || [], getDefaultTest(testSuite), testSuite.scenarios);
+    } catch (error) {
+      clearTimeout(globalTimeout);
+      throw error;
+    }
 
     if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
       return this.store.evaluation;
