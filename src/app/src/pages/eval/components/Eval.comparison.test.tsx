@@ -776,6 +776,85 @@ describe('evaluation comparison URLs', () => {
     },
   );
 
+  it.each(['filter', 'comparison'])(
+    'reconciles deletion of the current evaluation after a pending $0 change',
+    async (change) => {
+      tableFixture.realTable = true;
+      tableFixture.rowCount = 120;
+      const user = userEvent.setup();
+      renderPage('/eval/eval-a');
+      await screen.findByText('eval-a row-0');
+      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      let finishRecents!: (response: Response) => void;
+      let deferred = false;
+      vi.mocked(callApi).mockImplementation((path, options) => {
+        if (path === '/results' && !deferred) {
+          deferred = true;
+          return new Promise((resolve) => {
+            finishRecents = resolve;
+          });
+        }
+        if (String(path).startsWith('/eval/eval-a/table')) {
+          return Promise.resolve(new Response(null, { status: 404 }));
+        }
+        return defaultApi(path, options);
+      });
+      let refresh!: Promise<void>;
+      await act(async () => {
+        refresh = socketHandlers.get('update')!({ deletedEvalIds: ['eval-a'] });
+      });
+      if (change === 'filter') {
+        await user.click(screen.getByRole('button', { name: 'Passes' }));
+      } else {
+        await user.click(screen.getByRole('button', { name: /Eval actions/ }));
+        await user.click(screen.getByRole('menuitem', { name: 'Compare with another eval' }));
+        await user.click(screen.getByRole('button', { name: 'Select comparison B' }));
+      }
+      await waitFor(() => expect(useTableStore.getState().tableError).toBe(true));
+      await act(async () => {
+        finishRecents(new Response(JSON.stringify({ data: [{ evalId: 'eval-c' }] })));
+        await refresh;
+      });
+      await screen.findByText('eval-c row-0');
+      expect(window.location.pathname).toBe('/eval/eval-c');
+      expect(window.location.search).toBe('');
+    },
+  );
+
+  it('does not redirect a different evaluation when an older deletion lookup resolves', async () => {
+    const user = userEvent.setup();
+    renderPage('/eval/eval-a');
+    await screen.findByTestId('comparison-columns');
+    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+    let finishRecents!: (response: Response) => void;
+    let deferred = false;
+    vi.mocked(callApi).mockImplementation((path, options) => {
+      if (path === '/results' && !deferred) {
+        deferred = true;
+        return new Promise((resolve) => {
+          finishRecents = resolve;
+        });
+      }
+      return defaultApi(path, options);
+    });
+    let refresh!: Promise<void>;
+    await act(async () => {
+      refresh = socketHandlers.get('update')!({ deletedEvalIds: ['eval-a'] });
+    });
+    await user.click(screen.getByRole('button', { name: 'Other eval' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-c$/),
+    );
+    await act(async () => {
+      finishRecents(
+        new Response(JSON.stringify({ data: [{ evalId: 'eval-d' }, { evalId: 'eval-c' }] })),
+      );
+      await refresh;
+    });
+    expect(window.location.pathname).toBe('/eval/eval-c');
+    expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-c$/);
+  });
+
   it.each([200, 404])(
     'keeps the current comparison when an earlier navigation resolves late with %s',
     async (status) => {

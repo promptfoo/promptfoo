@@ -98,6 +98,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
+  const routeContextRef = useRef({ apiBaseUrl, fetchId });
+  routeContextRef.current = { apiBaseUrl, fetchId };
   const loadRequestIdRef = useRef(0);
   const tablePaginationRef = useRef<PaginationState | null>(null);
   const handlePaginationChange = useCallback((pagination: PaginationState | null) => {
@@ -231,7 +233,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     const reloadInBackground = async (id: string) => {
       setIsStreaming(true);
       try {
-        await loadEvalById(id, true);
+        const reload = deletedEvalIds === undefined ? loadEvalById : loadEvalByIdRef.current;
+        await reload(id, true);
       } finally {
         setIsStreaming(false);
       }
@@ -255,18 +258,23 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const newRecentEvals = await fetchRecentFileEvals({ reportFailure: false });
-    // Navigation can replace this handler's comparison/filter selection while the lookup waits.
-    if (loadEvalById !== loadEvalByIdRef.current) {
+    const activeRoute = routeContextRef.current;
+    if (apiBaseUrl !== activeRoute.apiBaseUrl) {
+      return;
+    }
+    const activeFetchId = deletedEvalIds === undefined ? fetchId : activeRoute.fetchId;
+    if (deletedEvalIds !== undefined) {
+      // A deletion still applies after in-page changes, but not to a different selected record.
+      if (!displayedEvalWasDeleted(activeFetchId ?? currentEvalIdRef.current, deletedEvalIds)) {
+        return;
+      }
+    } else if (loadEvalById !== loadEvalByIdRef.current) {
       return;
     }
     if (!newRecentEvals) {
       // Recents are unavailable. If the socket told us the pinned eval was deleted, don't strand
       // the user on a now-gone /eval/:id — fall back to the root route, which reconciles on load.
-      if (
-        fetchId &&
-        deletedEvalIds !== undefined &&
-        displayedEvalWasDeleted(fetchId, deletedEvalIds)
-      ) {
+      if (activeFetchId && deletedEvalIds !== undefined) {
         clearEvalState();
         navigate(EVAL_ROUTES.ROOT, { replace: true });
       }
@@ -274,23 +282,20 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
     if (newRecentEvals.length === 0) {
       clearEvalState();
-      if (fetchId) {
+      if (activeFetchId) {
         navigate(EVAL_ROUTES.ROOT, { replace: true });
       }
       return;
     }
 
     const latestEvalId = newRecentEvals[0].evalId;
-    const displayedEvalId = fetchId ?? currentEvalIdRef.current;
     setDefaultEvalId(latestEvalId);
 
-    if (deletedEvalIds) {
-      if (displayedEvalWasDeleted(displayedEvalId, deletedEvalIds)) {
-        if (fetchId) {
-          navigate(EVAL_ROUTES.DETAIL(latestEvalId), { replace: true });
-        } else {
-          await reloadInBackground(latestEvalId);
-        }
+    if (deletedEvalIds !== undefined) {
+      if (activeFetchId) {
+        navigate(EVAL_ROUTES.DETAIL(latestEvalId), { replace: true });
+      } else {
+        await reloadInBackground(latestEvalId);
       }
       return;
     }
