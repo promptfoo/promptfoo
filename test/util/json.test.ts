@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResultFailureReason } from '../../src/types/index';
 import {
   convertSlashCommentsToHash,
@@ -190,6 +190,10 @@ describe('json utilities', () => {
   });
 
   describe('extractJsonObjects', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should extract a single JSON object from a string', () => {
       const input = '{"key": "value"}';
       const expectedOutput = [{ key: 'value' }];
@@ -223,6 +227,76 @@ describe('json utilities', () => {
       const input = `First: ${JSON.stringify(first)} Second: ${JSON.stringify(second)}`;
       expect(extractJsonObjects(input)).toEqual([first, second]);
     });
+
+    it.each([
+      [`{a: '{"}"'} `, { a: '{"}"' }],
+      [`{"a": '{"}"'} `, { a: '{"}"' }],
+      [String.raw`{a: '\"'}`, { a: '\\"' }],
+    ])('preserves repeated YAML records and a following JSON object: %s', (record, expected) => {
+      const later = { keep: '}' };
+      const input = record.repeat(256) + JSON.stringify(later);
+      expect(extractJsonObjects(input)).toEqual([
+        ...Array.from({ length: 256 }, () => expected),
+        later,
+      ]);
+    });
+
+    it.each([
+      [' {"}"'.repeat(256)],
+      [' {"a":"}","b":'.repeat(256)],
+      [' {"a":"}","b":'.repeat(256) + 'invalid' + '}'.repeat(256)],
+    ])('recovers later JSON after repeated malformed prefixes', (prefix) => {
+      expect(extractJsonObjects(prefix + ' Result: {"keep":"}"}')).toEqual([{ keep: '}' }]);
+    });
+
+    it('does not repeatedly parse overlapping invalid objects', () => {
+      const parse = vi.spyOn(JSON, 'parse');
+      const input = ' {"a":"}","b":'.repeat(256) + 'invalid' + '}'.repeat(256) + ' {"keep":"}"}';
+      const objects = extractJsonObjects(input);
+      const parsedCharacters = parse.mock.calls.reduce((total, [text]) => total + text.length, 0);
+
+      expect(objects).toEqual([{ keep: '}' }]);
+      expect(parsedCharacters).toBeLessThanOrEqual(2 * input.length);
+    });
+
+    it('preserves a valid child when its enclosing object is invalid', () => {
+      const input = 'Result: {"child":{"keep":"}"},"invalid":false true} {"later":"{"}';
+      expect(extractJsonObjects(input)).toEqual([{ keep: '}' }, { later: '{' }]);
+    });
+
+    it.each(['early', 'late'])('extracts an %s child from an oversized object', (position) => {
+      const child = { keep: '}' };
+      const padding = 'x'.repeat(100_001);
+      const parent = position === 'early' ? { child, padding } : { padding, child };
+      expect(extractJsonObjects(`Result: ${JSON.stringify(parent)}`)).toEqual([child]);
+    });
+
+    it('extracts nested JSON arrays without recursion', () => {
+      const depth = 16_000;
+      const input = `Result: {"value":${'['.repeat(depth)}"}"${']'.repeat(depth)}}`;
+      const objects = extractJsonObjects(input);
+      expect(objects).toHaveLength(1);
+      let value = (objects[0] as { value: unknown }).value;
+      for (let i = 0; i < depth; i++) {
+        value = (value as unknown[])[0];
+      }
+      expect(value).toBe('}');
+    });
+
+    it('preserves JSON literals, number forms, empty containers, and escapes', () => {
+      const input = String.raw`Result: {"values":[null,true,false,-0,0.5,-2.3e+5,1E-8,{},[]],"\u0061":"\u0000\/\b\f"}`;
+      expect(extractJsonObjects(input)).toEqual([
+        { values: [null, true, false, -0, 0.5, -230000, 1e-8, {}, []], a: '\u0000/\b\f' },
+      ]);
+    });
+
+    it.each(['01', '+1', 'truefalse', '[1,]', String.raw`"bad\q"`, '"line\nbreak"'])(
+      'recovers later JSON after an invalid value: %s',
+      (invalid) => {
+        const input = `Result: {"reason":"}","value":${invalid}} {"keep":"}"}`;
+        expect(extractJsonObjects(input)).toEqual([{ keep: '}' }]);
+      },
+    );
 
     it('preserves exact string contents with JSON whitespace around the object', () => {
       const expected = { value: '  }\n{\r\t\u0000😀\\u005c  ' };

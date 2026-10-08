@@ -212,45 +212,96 @@ export function convertSlashCommentsToHash(str: string): string {
     .join('\n');
 }
 
-// Locate strict JSON before falling back to the existing tolerant YAML scanner.
-// Keeping these paths separate preserves YAML plain scalars, tags, and comments.
-function extractStrictJsonObject(
-  str: string,
-  start: number,
-  maxLength: number,
-): { object: object; end: number } | undefined {
-  let depth = 0;
-  let inString = false;
+type JsonContainer = {
+  start: number;
+  close: '}' | ']';
+  state: 'keyOrEnd' | 'key' | 'colon' | 'valueOrEnd' | 'value' | 'separator';
+};
 
-  for (let index = start; index < Math.min(start + maxLength, str.length); index++) {
-    const char = str[index];
-    if (inString) {
-      if (char === '\\') {
-        index++;
-      } else if (char === '"') {
-        inString = false;
+// Cache syntax outcomes, independently of candidate size, so malformed prefixes
+// cannot repeatedly scan nested objects or hide a later valid object.
+function findJsonObjectEnd(str: string, start: number, objectEnds: Map<number, number>): number {
+  const cachedEnd = objectEnds.get(start);
+  if (cachedEnd !== undefined) {
+    return cachedEnd;
+  }
+
+  const tokens =
+    /[ \t\r\n]*("(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[\da-fA-F]{4}))*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\],:])/y;
+  const stack: JsonContainer[] = [{ start, close: '}', state: 'keyOrEnd' }];
+  let index = start + 1;
+
+  while (stack.length > 0) {
+    tokens.lastIndex = index;
+    const match = tokens.exec(str);
+    if (!match) {
+      break;
+    }
+    const token = match[1];
+    index = tokens.lastIndex;
+    const container = stack[stack.length - 1];
+
+    if (
+      token === container.close &&
+      (container.state === 'keyOrEnd' ||
+        container.state === 'valueOrEnd' ||
+        container.state === 'separator')
+    ) {
+      if (container.close === '}') {
+        objectEnds.set(container.start, index);
       }
-    } else if (char === '"') {
-      inString = true;
-    } else if (char === '{') {
-      depth++;
-    } else if (char === '}') {
-      depth--;
-      if (depth === 0) {
-        try {
-          return { object: JSON.parse(str.slice(start, index + 1)), end: index + 1 };
-        } catch {
-          return undefined;
+      stack.pop();
+      if (stack.length === 0) {
+        return index;
+      }
+    } else if (container.state === 'keyOrEnd' || container.state === 'key') {
+      if (!token.startsWith('"')) {
+        break;
+      }
+      container.state = 'colon';
+    } else if (container.state === 'colon') {
+      if (token !== ':') {
+        break;
+      }
+      container.state = 'value';
+    } else if (container.state === 'separator') {
+      if (token !== ',') {
+        break;
+      }
+      container.state = container.close === '}' ? 'key' : 'value';
+    } else {
+      if (token === ':' || token === ',' || token === '}' || token === ']') {
+        break;
+      }
+      container.state = 'separator';
+      if (token === '{') {
+        const nestedStart = index - 1;
+        const nestedEnd = objectEnds.get(nestedStart);
+        if (nestedEnd === -1) {
+          break;
         }
+        if (nestedEnd === undefined) {
+          stack.push({ start: nestedStart, close: '}', state: 'keyOrEnd' });
+        } else {
+          index = nestedEnd;
+        }
+      } else if (token === '[') {
+        stack.push({ start: index - 1, close: ']', state: 'valueOrEnd' });
       }
     }
   }
-  return undefined;
+
+  for (const container of stack) {
+    if (container.close === '}') {
+      objectEnds.set(container.start, -1);
+    }
+  }
+  return -1;
 }
 
 export function extractJsonObjects(str: string): object[] {
   const jsonObjects: object[] = [];
-  const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
+  const maxJsonLength = 100000; // Limit the size of parsed candidates
 
   if (str.length <= maxJsonLength) {
     try {
@@ -263,13 +314,18 @@ export function extractJsonObjects(str: string): object[] {
     }
   }
 
+  const objectEnds = new Map<number, number>();
   for (let i = 0; i < str.length; i++) {
     if (str[i] === '{') {
-      const strictJson = extractStrictJsonObject(str, i, maxJsonLength);
-      if (strictJson) {
-        jsonObjects.push(strictJson.object);
-        i = strictJson.end - 1;
-        continue;
+      const end = findJsonObjectEnd(str, i, objectEnds);
+      if (end > i && end - i <= maxJsonLength) {
+        try {
+          jsonObjects.push(JSON.parse(str.slice(i, end)));
+          i = end - 1;
+          continue;
+        } catch {
+          // Preserve tolerant extraction if parsing fails.
+        }
       }
 
       let openBraces = 1;
