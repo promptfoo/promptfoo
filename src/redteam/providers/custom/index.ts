@@ -37,6 +37,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
+  getRedteamAssertion,
   getTargetResponse,
   isConversationEndedResponse,
   prepareNumericGrading,
@@ -357,14 +358,7 @@ export class CustomProvider implements ApiProvider {
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
-    let assertToUse = test?.assert?.find(
-      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
-    );
-
-    // Fallback: if no assertion matches the pluginId, use the first assertion with a type
-    if (!assertToUse) {
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    }
+    const assertToUse = getRedteamAssertion(test);
 
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
@@ -486,14 +480,27 @@ export class CustomProvider implements ApiProvider {
           context.vars['sessionId'] = lastResponse.sessionId;
         }
 
+        const preparedNumeric =
+          test && assertToUse
+            ? await prepareNumericGrading(
+                { assertion: assertToUse, targetProvider: provider, prompt, context },
+                lastFinalAttackPrompt,
+                lastResponse.output,
+                test,
+                getGraderAssertionValue(assertToUse),
+                { providerResponse: lastResponse, outputIsText: lastResponse.outputIsText },
+              )
+            : undefined;
         // Check if the target is asking a blocking question that needs an answer to proceed
-        const unblockingResult = await tryUnblocking({
-          messages: this.memory.getConversation(this.targetConversationId),
-          lastResponse: lastResponse.output,
-          goal: this.userGoal,
-          purpose: context?.test?.metadata?.purpose,
-          targetId: this.config.targetId,
-        });
+        const unblockingResult = preparedNumeric?.numeric
+          ? { success: false }
+          : await tryUnblocking({
+              messages: this.memory.getConversation(this.targetConversationId),
+              lastResponse: lastResponse.output,
+              goal: this.userGoal,
+              purpose: context?.test?.metadata?.purpose,
+              targetId: this.config.targetId,
+            });
         accumulateUnblockingTokenUsage(totalTokenUsage, unblockingResult);
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
@@ -558,17 +565,6 @@ export class CustomProvider implements ApiProvider {
           }
         }
 
-        const preparedNumeric =
-          test && assertToUse
-            ? await prepareNumericGrading(
-                { assertion: assertToUse, targetProvider: provider, prompt, context },
-                lastFinalAttackPrompt,
-                lastResponse.output,
-                test,
-                getGraderAssertionValue(assertToUse),
-                { providerResponse: lastResponse, outputIsText: lastResponse.outputIsText },
-              )
-            : undefined;
         const [isRefusal, refusalRationale] = preparedNumeric?.numeric
           ? [false, 'Explicit numeric reference grading']
           : await this.getRefusalScore(attackPrompt, lastResponse.output, totalTokenUsage, options);

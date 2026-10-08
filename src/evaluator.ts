@@ -9,7 +9,9 @@ import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
   getNumericPreparationMetadata,
+  hasNumericFinancialAssertions,
   hasTraceAwareAssertions,
+  loadTraceData,
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
   runCompareAssertion,
@@ -900,6 +902,7 @@ async function callProviderForRunEval({
   evalId,
   filters,
   promptForRender,
+  transformPrompt,
   provider,
   rateLimitRegistry,
   renderedPrompt,
@@ -922,6 +925,7 @@ async function callProviderForRunEval({
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
+  transformPrompt: Prompt;
   renderedPrompt: string;
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -949,6 +953,7 @@ async function callProviderForRunEval({
           providerInvoked = true;
         },
         promptForRender,
+        transformPrompt,
         provider,
         rateLimitRegistry,
         renderedPrompt,
@@ -1059,6 +1064,7 @@ async function callActiveProvider({
   filters,
   onProviderInvoked,
   promptForRender,
+  transformPrompt,
   provider,
   rateLimitRegistry,
   renderedPrompt,
@@ -1075,6 +1081,7 @@ async function callActiveProvider({
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
   promptForRender: Prompt;
+  transformPrompt: Prompt;
   renderedPrompt: string;
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -1092,6 +1099,7 @@ async function callActiveProvider({
     filters,
     originalProvider,
     promptForRender,
+    transformPrompt,
     renderedPrompt,
     repeatIndex,
     test,
@@ -1134,6 +1142,7 @@ function buildCallApiContext({
   filters,
   originalProvider,
   promptForRender,
+  transformPrompt,
   renderedPrompt,
   repeatIndex,
   test,
@@ -1145,6 +1154,7 @@ function buildCallApiContext({
   filters: RunEvalOptions['nunjucksFilters'];
   originalProvider: ApiProvider;
   promptForRender: Prompt;
+  transformPrompt: Prompt;
   renderedPrompt: string;
   repeatIndex: number;
   test: AtomicTestCase;
@@ -1157,13 +1167,34 @@ function buildCallApiContext({
     prompt: promptForRender,
     filters,
     originalProvider,
-    ...(test.assert?.some(
-      (assertion) => assertion.type === 'promptfoo:redteam:financial:calculation-error',
-    )
+    ...(hasNumericFinancialAssertions(test.assert)
       ? {
           originalAssertionInput: {
             prompt: renderedPrompt,
+            transformPrompt,
             getVars: () => omitEvalRuntimeVars(vars),
+            getTraceData: async () => {
+              const traceId = getTraceId(traceContext);
+              if (!traceId) {
+                return null;
+              }
+              await flushOtel();
+              try {
+                const trace = await loadTraceData(traceId);
+                return (
+                  trace && {
+                    traceId: trace.traceId,
+                    evaluationId: trace.evaluationId,
+                    testCaseId: trace.testCaseId,
+                    metadata: trace.metadata,
+                    spans: trace.spans || [],
+                  }
+                );
+              } catch (error) {
+                logger.debug(`Failed to fetch trace data for numeric reference: ${error}`);
+                return null;
+              }
+            },
           },
         }
       : {}),
@@ -1732,6 +1763,7 @@ async function runEvalInternal({
         executionTraceContext?.rootSpan,
         async () => {
           const providerCall = await callProviderForRunEval({
+            transformPrompt: prompt,
             abortSignal,
             evalId,
             filters,

@@ -52,6 +52,8 @@ import {
   captureFlaggedTurn,
   getGraderAssertionValue,
   getLastMessageContent,
+  getRedteamAssertion,
+  prepareNumericGrading,
   resolveStoredGraderResult,
   runRedteamGrader,
   snapshotTargetMetadata,
@@ -60,14 +62,7 @@ import {
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
-import type {
-  Assertion,
-  AssertionSet,
-  AtomicTestCase,
-  GradingResult,
-  Inputs,
-  VarValue,
-} from '../../types/index';
+import type { AtomicTestCase, GradingResult, Inputs, VarValue } from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -262,27 +257,16 @@ export default class GoatProvider implements ApiProvider {
     // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
     let lastFinalAttackPrompt: string | undefined;
 
-    let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
     let flaggedTurn: FlaggedTurn | undefined;
     const { getGraderById } = await import('../graders');
-    let test: AtomicTestCase | undefined;
-
-    if (context?.test) {
-      test = context?.test;
-      assertToUse = test?.assert?.find(
-        (a: { type: string }) => a.type && a.type.includes(test?.metadata?.pluginId),
-      );
-
-      // Fallback: if no assertion matches the pluginId, use the first assertion with a type
-      if (!assertToUse) {
-        assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-      }
-    }
+    const test = context?.test as AtomicTestCase | undefined;
+    const assertToUse = getRedteamAssertion(test);
 
     let previousAttackerMessage = '';
     let previousTargetOutput = '';
+    let previousOutputIsNumeric = false;
     let previousTraceSummary: string | undefined;
 
     // Generate goal-specific evaluation rubric
@@ -293,7 +277,7 @@ export default class GoatProvider implements ApiProvider {
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {
         // Handle unblocking logic BEFORE attack (skip on first turn)
-        if (turn > 0 && previousTargetOutput) {
+        if (turn > 0 && previousTargetOutput && !previousOutputIsNumeric) {
           const unblockingResult = await tryUnblocking({
             messages,
             lastResponse: previousTargetOutput,
@@ -719,21 +703,34 @@ export default class GoatProvider implements ApiProvider {
         if (targetResponse.error) {
           throw new Error(`[GOAT] Target returned an error: ${targetResponse.error}`);
         }
-        const hasTargetImages = Boolean(targetResponse.images?.length);
-        invariant(
-          targetResponse.output || hasTargetImages,
-          `[GOAT] Expected target response output or images to be set, but got: ${safeJsonStringify(targetResponse)}`,
-        );
-
         const stringifiedOutput =
           typeof targetResponse.output === 'string'
             ? targetResponse.output
             : safeJsonStringify(targetResponse.output);
-        const finalOutput =
-          stringifiedOutput || (hasTargetImages ? ATTACHED_IMAGE_OUTPUT_PLACEHOLDER : '');
+        const preparedNumeric =
+          test && assertToUse
+            ? await prepareNumericGrading(
+                { assertion: assertToUse, targetProvider, prompt: context.prompt, context },
+                lastFinalAttackPrompt || attackerMessage.content,
+                stringifiedOutput ?? '',
+                test,
+                getGraderAssertionValue(assertToUse),
+                { providerResponse: targetResponse, outputIsText },
+              )
+            : undefined;
+        previousOutputIsNumeric = preparedNumeric?.numeric === true;
+        const hasTargetImages = Boolean(targetResponse.images?.length);
+        invariant(
+          preparedNumeric?.numeric || targetResponse.output || hasTargetImages,
+          `[GOAT] Expected target response output or images to be set, but got: ${safeJsonStringify(targetResponse)}`,
+        );
+
+        const finalOutput = preparedNumeric?.numeric
+          ? (stringifiedOutput ?? '')
+          : stringifiedOutput || (hasTargetImages ? ATTACHED_IMAGE_OUTPUT_PLACEHOLDER : '');
         const finalResponse = targetResponse;
 
-        if (!stringifiedOutput && !hasTargetImages) {
+        if (!preparedNumeric?.numeric && !stringifiedOutput && !hasTargetImages) {
           logger.debug('[GOAT] Target response output is not a string or JSON', {
             response: targetResponse,
           });
@@ -776,7 +773,7 @@ export default class GoatProvider implements ApiProvider {
         lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
-        if (test && assertToUse && grader && finalOutput) {
+        if (test && assertToUse && grader && (finalOutput || preparedNumeric?.numeric)) {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
@@ -848,7 +845,13 @@ export default class GoatProvider implements ApiProvider {
           };
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            { assertion: assertToUse, targetProvider, prompt: context.prompt, context },
+            {
+              assertion: assertToUse,
+              targetProvider,
+              prompt: context.prompt,
+              context,
+              preparedNumeric,
+            },
             gradedTurn.prompt,
             gradedTurn.output,
             test,

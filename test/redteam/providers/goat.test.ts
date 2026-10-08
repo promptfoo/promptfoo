@@ -653,21 +653,10 @@ describe('RedteamGoatProvider', () => {
             };
           });
 
-        const result = await provider.callApi(
-          'test prompt',
-          createMockContext(targetProvider, undefined, {
-            assert: [
-              {
-                type: 'promptfoo:redteam:financial:calculation-error',
-                value: { type: 'numeric', expected: { amount: 100 } },
-              },
-            ],
-          }),
-        );
+        const result = await provider.callApi('test prompt', createMockContext(targetProvider));
 
         expect(result.output).toBe(JSON.stringify(output));
         expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
-        expect(result.metadata?.redteamTargetMetadata).toEqual({ encoding: { format: 'json' } });
         expect(targetProvider.callApi).toHaveBeenCalledTimes(3);
       } finally {
         unblocking.mockRestore();

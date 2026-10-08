@@ -48,6 +48,7 @@ import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
+  getRedteamAssertion,
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
@@ -382,12 +383,7 @@ export class HydraProvider implements ApiProvider {
 
     // Find the grader
     const { getGraderById } = await import('../../graders');
-    let assertToUse = test?.assert?.find(
-      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
-    );
-    if (!assertToUse) {
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    }
+    const assertToUse = getRedteamAssertion(test);
 
     // Track the previous turn's trace summary for attack generation
     let previousTraceSummary: string | undefined;

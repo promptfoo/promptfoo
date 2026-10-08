@@ -30,11 +30,13 @@ describe('selected target metadata in numeric preparation', () => {
 
   it.each(
     ['test', 'assertion', 'script'].flatMap((stage) =>
-      [true, false].map((correct) => ({ stage, correct })),
+      [true, false].flatMap((correct) =>
+        [true, false].map((grouped) => ({ stage, correct, grouped })),
+      ),
     ),
   )(
-    'keeps $stage preparation consistent for a correct=$correct response',
-    async ({ stage, correct }) => {
+    'keeps $stage preparation consistent for a correct=$correct grouped=$grouped response',
+    async ({ stage, correct, grouped }) => {
       const amount = correct ? 100 : 101;
       const metadata = {
         encoding: stage === 'script' ? 'plain' : 'wrapped',
@@ -85,11 +87,14 @@ describe('selected target metadata in numeric preparation', () => {
           'module.exports = (_output, context) => ({type: "numeric", expected: {amount: context.metadata?.encoding === "plain" && context.providerResponse.metadata?.encoding === "plain" ? 100 : 999}});',
         );
         assertion.value = 'file://reference.cjs';
+        assertion.config = { numeric: true };
       }
       const test: AtomicTestCase = {
         provider: strategy,
         vars: { query: 'Return an amount as JSON' },
-        assert: [assertion],
+        assert: grouped
+          ? [{ type: 'assert-set', config: { numeric: false }, assert: [assertion] }]
+          : [assertion],
         ...(stage === 'test' ? { options: { transform: extract } } : {}),
         metadata: {
           purpose: 'A financial calculator',

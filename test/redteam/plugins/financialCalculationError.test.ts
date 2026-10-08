@@ -495,6 +495,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
       const assertion: Assertion = {
         type: 'promptfoo:redteam:financial:calculation-error',
         value: `file://reference.${extension}`,
+        config: { numeric: true },
       };
       if (extension === 'cjs') {
         await fs.writeFile(

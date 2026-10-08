@@ -109,7 +109,7 @@ describe('financial numeric strategy grading', () => {
             ? 'type: numeric\nexpected:\n  amount: 100\n'
             : JSON.stringify(reference),
       );
-      const assertion: Assertion = { type: grader.id, value };
+      const assertion: Assertion = { type: grader.id, value, config: { numeric: true } };
       const { response, test, target, callApi } = await runStrategy(assertion, [
         '{"amount":101}',
         '{"amount":100}',
@@ -204,7 +204,7 @@ describe('financial numeric strategy grading', () => {
         type: grader.id,
         value: 'file://reference.cjs',
         transform: extractAnswer,
-        config: { amount: 100 },
+        config: { amount: 100, numeric: true },
       },
       ['{"answer":"{\\"amount\\":100}"}'],
     );
@@ -218,6 +218,7 @@ describe('financial numeric strategy grading', () => {
       await fs.writeFile(path.join(directory, 'invalid.cjs'), 'module.exports = () => true;');
       const assertion: Assertion = {
         type: grader.id,
+        config: { numeric: true },
         value:
           scenario === 'missing file'
             ? 'file://missing.json'
@@ -272,7 +273,7 @@ describe('financial numeric strategy grading', () => {
       const assertion: Assertion = {
         type: grader.id,
         value: reference,
-        config: { expectedAmount: 100 },
+        config: { expectedAmount: 100, numeric: true },
       };
       if (mode === 'transform') {
         assertion.transform = (output, context) => {

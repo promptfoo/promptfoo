@@ -44,6 +44,7 @@ import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
+  getRedteamAssertion,
   getTargetResponse,
   redteamProviderManager,
   runRedteamGrader,
@@ -547,13 +548,7 @@ export async function runMetaAgentRedteam({
     // Update previous trace summary for next iteration's attack generation
     previousTraceSummary = attackTraceSummary;
 
-    let assertToUse = test?.assert?.find(
-      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
-    );
-
-    if (!assertToUse) {
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    }
+    const assertToUse = getRedteamAssertion(test);
 
     const { getGraderById } = await import('../graders');
 

@@ -1,6 +1,12 @@
 import { randomUUID } from 'crypto';
 
-import { isExternalAssertionValue, resolveExternalAssertionValue } from '../../assertions/utils';
+import {
+  getAssertionLeaves,
+  isExternalAssertionValue,
+  isNumericFinancialAssertion,
+  resolveExternalAssertionValue,
+  validateNumericReferenceMode,
+} from '../../assertions/utils';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
@@ -658,14 +664,15 @@ type PreparedNumericGrading =
       gradingContext: NonNullable<Parameters<RedteamGraderBase['getResult']>[7]>;
     };
 
-function isNumericReferenceValue(value: unknown): boolean {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    Object.prototype.hasOwnProperty.call(value, 'type') &&
-    'type' in value &&
-    value.type === 'numeric'
+/** Keep existing top-level selection, with support for grouped explicit numeric checks. */
+export function getRedteamAssertion(test: AtomicTestCase | undefined): AssertionOrSet | undefined {
+  const matching = test?.assert?.find(
+    (assertion) => assertion.type && assertion.type.includes(test.metadata?.pluginId),
   );
+  const selected = matching ?? test?.assert?.find((assertion) => assertion.type);
+  return selected?.type === 'assert-set'
+    ? (getAssertionLeaves([selected]).find(isNumericFinancialAssertion) ?? selected)
+    : selected;
 }
 
 /** Resolve once before optional refusal shortcuts without invoking a legacy LLM grader. */
@@ -674,25 +681,26 @@ export async function prepareNumericGrading(
   prompt: string,
   output: string,
   test: AtomicTestCase,
-  value: Assertion['value'],
+  _value: Assertion['value'],
   gradingContext?: Parameters<RedteamGraderBase['getResult']>[7],
 ): Promise<PreparedNumericGrading> {
   const assertion = input.assertion;
-  if (
-    !isSingleAssertion(assertion) ||
-    assertion.type !== 'promptfoo:redteam:financial:calculation-error' ||
-    (!isNumericReferenceValue(value) && !isExternalAssertionValue(value))
-  ) {
+  if (!isSingleAssertion(assertion)) {
     return { numeric: false };
   }
   try {
+    validateNumericReferenceMode(assertion);
+    if (!isNumericFinancialAssertion(assertion)) {
+      return { numeric: false };
+    }
     const assertionPrompt = input.context?.originalAssertionInput?.prompt ?? prompt;
     const vars = input.context?.originalAssertionInput?.getVars() ?? test.vars ?? {};
     const assertionTest = (input.context?.test as AtomicTestCase | undefined) ?? test;
     const rawProviderResponse = gradingContext?.providerResponse ?? { output };
     const targetMetadata = snapshotTargetMetadata(rawProviderResponse, { assert: [assertion] });
     const providerResponse = { ...rawProviderResponse, metadata: targetMetadata ?? undefined };
-    const transformPrompt = input.prompt ?? { raw: prompt, label: prompt };
+    const transformPrompt = input.context?.originalAssertionInput?.transformPrompt ??
+      input.prompt ?? { raw: prompt, label: prompt };
     let preparedOutput: ProviderResponse['output'] = output;
     let outputIsText = gradingContext?.outputIsText === true;
     if (input.targetProvider?.transform) {
@@ -725,6 +733,10 @@ export async function prepareNumericGrading(
       });
     }
     outputIsText &&= typeof preparedOutput === 'string';
+    const traceData = isExternalAssertionValue(assertion.value)
+      ? ((await input.context?.originalAssertionInput?.getTraceData?.()) ??
+        gradingContext?.traceData)
+      : undefined;
     const resolved = await resolveExternalAssertionValue(
       assertion,
       preparedOutput,
@@ -737,15 +749,12 @@ export async function prepareNumericGrading(
         providerResponse: assertionProviderResponse,
         ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
         ...(providerResponse.metadata && { metadata: providerResponse.metadata }),
-        ...(gradingContext?.traceData && { trace: gradingContext.traceData }),
+        ...(traceData && { trace: traceData }),
       },
       assertion.type,
     );
     if (resolved.errorResult) {
       throw new RedteamGradingConfigError(resolved.errorResult.reason);
-    }
-    if (!isNumericReferenceValue(resolved.renderedValue)) {
-      return { numeric: false };
     }
     return {
       numeric: true,
@@ -915,17 +924,9 @@ export function snapshotTargetMetadata(
   test: AtomicTestCase | CallApiContextParams['test'],
 ): ProviderResponse['metadata'] | null | undefined {
   // Provider contexts expose a narrowed test interface; runtime tests retain assertions.
-  const assertions = (test as AtomicTestCase | undefined)?.assert;
-  const usesNumericReference = assertions?.some((assertion) => {
-    if (
-      !isSingleAssertion(assertion) ||
-      assertion.type !== 'promptfoo:redteam:financial:calculation-error'
-    ) {
-      return false;
-    }
-    const value = assertion.value;
-    return isExternalAssertionValue(value) || isNumericReferenceValue(value);
-  });
+  const usesNumericReference = getAssertionLeaves(
+    (test as AtomicTestCase | undefined)?.assert,
+  ).some(isNumericFinancialAssertion);
   if (!usesNumericReference) {
     return undefined;
   }

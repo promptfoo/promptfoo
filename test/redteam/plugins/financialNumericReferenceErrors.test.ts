@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../../src/assertions/index';
 import { runEval } from '../../../src/evaluator';
 import { runPython } from '../../../src/python/pythonUtils';
@@ -52,6 +52,7 @@ it.each(['py', 'rb'])(
     const assertion = {
       type: 'promptfoo:redteam:financial:calculation-error' as const,
       value: `file://reference.${extension}`,
+      config: { numeric: true },
     };
     const test: AtomicTestCase = {
       provider: strategy,

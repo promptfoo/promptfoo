@@ -12,6 +12,7 @@ import { loadYaml } from '../util/yamlLoad';
 
 import type {
   Assertion,
+  AssertionOrSet,
   AssertionParams,
   AssertionValue,
   AssertionValueFunctionContext,
@@ -103,6 +104,45 @@ export function coerceString(value: string | object): string {
     return value;
   }
   return JSON.stringify(value);
+}
+
+/** Assertion sets contain one level of independently prepared child assertions. */
+export function getAssertionLeaves(assertions: AssertionOrSet[] | undefined): Assertion[] {
+  return (
+    assertions?.flatMap((assertion) =>
+      assertion.type === 'assert-set' ? assertion.assert : [assertion],
+    ) ?? []
+  );
+}
+
+function isNumericReferenceValue(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.prototype.hasOwnProperty.call(value, 'type') &&
+    'type' in value &&
+    value.type === 'numeric'
+  );
+}
+
+/** External references declare their mode before any output-dependent code runs. */
+export function isNumericFinancialAssertion(assertion: Assertion): boolean {
+  return (
+    assertion.type === 'promptfoo:redteam:financial:calculation-error' &&
+    (isNumericReferenceValue(assertion.value) ||
+      (isExternalAssertionValue(assertion.value) && assertion.config?.numeric === true))
+  );
+}
+
+export function validateNumericReferenceMode(assertion: Assertion): void {
+  if (
+    assertion.type === 'promptfoo:redteam:financial:calculation-error' &&
+    isExternalAssertionValue(assertion.value) &&
+    assertion.config?.numeric !== undefined &&
+    typeof assertion.config.numeric !== 'boolean'
+  ) {
+    throw new Error('Financial reference config.numeric must be a boolean');
+  }
 }
 
 /** File and package assertion values can execute code that needs assertion context. */
@@ -241,5 +281,10 @@ export async function resolveExternalAssertionValue(
     renderedValue = valueFromScript as AssertionValue;
   }
 
+  if (isNumericFinancialAssertion(assertion) && !isNumericReferenceValue(renderedValue)) {
+    throw new Error(
+      'Financial reference with config.numeric: true must resolve to value.type: numeric',
+    );
+  }
   return { renderedValue, valueFromScript };
 }

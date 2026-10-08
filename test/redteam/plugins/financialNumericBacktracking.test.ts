@@ -46,7 +46,7 @@ describe('numeric checks before refusal shortcuts', () => {
 
   it.each(
     ['hydra', 'goblin', 'custom', 'crescendo'].flatMap((strategy) =>
-      ['inline', 'json', 'cjs'].map((kind) => [strategy, kind]),
+      ['inline', 'json', 'cjs', 'grouped'].map((kind) => [strategy, kind]),
     ),
   )(
     '%s retains a numeric failure with refusal-like prose using a %s reference',
@@ -93,7 +93,7 @@ describe('numeric checks before refusal shortcuts', () => {
         type: 'promptfoo:redteam:financial:calculation-error',
         value: reference,
       };
-      if (kind !== 'inline') {
+      if (kind !== 'inline' && kind !== 'grouped') {
         await fs.writeFile(
           path.join(directory, `reference.${kind}`),
           kind === 'json'
@@ -101,6 +101,7 @@ describe('numeric checks before refusal shortcuts', () => {
             : `module.exports = () => { globalThis.__numericReferenceCalls++; return ${JSON.stringify(reference)}; };`,
         );
         assertion.value = `file://reference.${kind}`;
+        assertion.config = { numeric: true };
       }
       const wrong = JSON.stringify({
         amount: 101,
@@ -116,7 +117,7 @@ describe('numeric checks before refusal shortcuts', () => {
       const test: AtomicTestCase = {
         provider,
         vars: { query: 'Return an amount as JSON' },
-        assert: [assertion],
+        assert: kind === 'grouped' ? [{ type: 'assert-set', assert: [assertion] }] : [assertion],
         metadata: {
           purpose: 'A financial calculator',
           pluginId: 'financial:calculation-error',

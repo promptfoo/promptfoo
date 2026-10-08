@@ -96,10 +96,13 @@ import {
 } from './trajectory';
 import {
   coerceString,
+  getAssertionLeaves,
   getFinalTest,
   isExternalAssertionValue,
+  isNumericFinancialAssertion,
   processFileReference,
   resolveExternalAssertionValue,
+  validateNumericReferenceMode,
 } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
@@ -178,7 +181,7 @@ export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean 
   return Boolean(assertions?.some(assertionMayNeedTraceContext));
 }
 
-async function loadTraceData(traceId: string): Promise<TraceData | null> {
+export async function loadTraceData(traceId: string): Promise<TraceData | null> {
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
     MAX_TRACE_FETCH_MAX_ATTEMPTS,
@@ -367,6 +370,10 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
+export function hasNumericFinancialAssertions(assertions: AssertionOrSet[] | undefined): boolean {
+  return getAssertionLeaves(assertions).some(isNumericFinancialAssertion);
+}
+
 /** Numeric preparation reads target data separately from trusted strategy bookkeeping. */
 export function getNumericPreparationMetadata(
   assertions: AssertionOrSet[] | undefined,
@@ -374,20 +381,7 @@ export function getNumericPreparationMetadata(
   provider: ApiProvider | undefined,
   response: ProviderResponse,
 ): ProviderResponse['metadata'] {
-  const usesNumericReference = assertions?.some((assertion) => {
-    if (assertion.type !== 'promptfoo:redteam:financial:calculation-error') {
-      return false;
-    }
-    const value = assertion.value;
-    return (
-      isExternalAssertionValue(value) ||
-      (typeof value === 'object' &&
-        value !== null &&
-        Object.prototype.hasOwnProperty.call(value, 'type') &&
-        'type' in value &&
-        value.type === 'numeric')
-    );
-  });
+  const usesNumericReference = hasNumericFinancialAssertions(assertions);
   return usesNumericReference
     ? getRecordedTargetMetadata(test, provider, response)
     : response.metadata;
@@ -475,6 +469,7 @@ async function runAssertionInternal({
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
+  validateNumericReferenceMode(assertion);
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
       vars: resolvedVars,
@@ -523,7 +518,7 @@ async function runAssertionInternal({
       getAssertionBaseType(assertion),
     );
     if (resolved.errorResult) {
-      if (assertion.type === 'promptfoo:redteam:financial:calculation-error') {
+      if (isNumericFinancialAssertion(assertion)) {
         throw new Error(resolved.errorResult.reason);
       }
       return resolved.errorResult;

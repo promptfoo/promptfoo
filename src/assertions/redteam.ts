@@ -13,6 +13,7 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
+import { isExternalAssertionValue } from './utils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
 import type {
@@ -33,7 +34,6 @@ const TEXT_PROVENANCE_PROVIDERS = new Set([
   'promptfoo:redteam:hydra',
   'promptfoo:redteam:goblin',
   'promptfoo:redteam:crescendo',
-  'promptfoo:redteam:voice-crescendo',
   'promptfoo:redteam:goat',
   'promptfoo:redteam:custom',
   'promptfoo:redteam:mischievous-user',
@@ -283,6 +283,16 @@ export const handleRedteam = async (
     Object.prototype.hasOwnProperty.call(renderedValue, 'type') &&
     'type' in renderedValue &&
     renderedValue.type === 'numeric';
+  if (
+    requiresFreshNumericGrade &&
+    isRedteamProvider &&
+    isExternalAssertionValue(assertion.value) &&
+    assertion.config?.numeric !== true
+  ) {
+    throw new Error(
+      'Numeric external references used with redteam strategies require config.numeric: true on the assertion',
+    );
+  }
   if (
     !requiresFreshNumericGrade &&
     hasStrategyGrade &&
