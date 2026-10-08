@@ -671,6 +671,35 @@ describe('json utilities', () => {
       expect(Object.keys(result)).toEqual(['a', 'b', 'd', 'c']);
     });
 
+    it('preserves own keys that shadow Object.prototype properties', () => {
+      const obj = { toString: 'text', constructor: 'type', hasOwnProperty: false, a: 1 };
+      const result = orderKeys(obj, ['a']);
+
+      expect(Object.keys(result)).toEqual(['a', 'toString', 'constructor', 'hasOwnProperty']);
+      expect(result).toEqual(obj);
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    });
+
+    it.each([{ order: [] }, { order: ['__proto__'] }])(
+      'preserves __proto__ as an own data key with order $order',
+      ({ order }) => {
+        const obj = JSON.parse('{"a":1,"__proto__":{"injected":true},"b":2}');
+        const result = orderKeys(obj, order);
+
+        expect(Object.getOwnPropertyDescriptor(result, '__proto__')).toEqual({
+          value: { injected: true },
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+        expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+        expect(result.injected).toBeUndefined();
+        expect(Object.keys(result)).toEqual(
+          order.length ? ['__proto__', 'a', 'b'] : ['a', '__proto__', 'b'],
+        );
+      },
+    );
+
     it('ignores specified keys that do not exist in the object', () => {
       const obj = { a: 1, c: 3 };
       const order = ['a', 'b', 'c', 'd'] as (keyof typeof obj)[];
