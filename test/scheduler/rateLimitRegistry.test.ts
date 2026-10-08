@@ -84,9 +84,7 @@ vi.mock('../../src/logger', () => ({
 }));
 
 // Import after mocks are set up
-const { RateLimitRegistry, createRateLimitRegistry } = await import(
-  '../../src/scheduler/rateLimitRegistry'
-);
+const { RateLimitRegistry } = await import('../../src/scheduler/rateLimitRegistry');
 
 describe('RateLimitRegistry', () => {
   let mockProvider: ApiProvider;
@@ -146,18 +144,6 @@ describe('RateLimitRegistry', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
-  });
-
-  describe('createRateLimitRegistry - factory function', () => {
-    it('should create a new RateLimitRegistry instance', () => {
-      const registry = createRateLimitRegistry({ maxConcurrency: 10 });
-      expect(registry).toBeInstanceOf(RateLimitRegistry);
-    });
-
-    it('should pass options to constructor', () => {
-      const registry = createRateLimitRegistry({ maxConcurrency: 20, minConcurrency: 2 });
-      expect(registry).toBeInstanceOf(RateLimitRegistry);
-    });
   });
 
   describe('Constructor - options handling', () => {
