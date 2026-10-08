@@ -560,10 +560,6 @@ const sidebars = {
     },
     {
       type: 'doc',
-      id: 'write-for-promptfoo',
-    },
-    {
-      type: 'doc',
       id: 'faq',
     },
     {
