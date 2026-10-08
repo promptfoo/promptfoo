@@ -4,15 +4,16 @@
  * Provides real-time voice conversations with Grok models via WebSocket.
  * WebSocket Endpoint: wss://api.x.ai/v1/realtime
  *
- * Pricing: $0.05/minute of connection time
+ * Pricing: $0.08/minute of audio plus $0.004 per text input
  *
- * @see https://docs.x.ai/docs/guides/voice
+ * @see https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech
  */
 
 import WebSocket from 'ws';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { convertG711ToPcm16, convertPcm16ToWav } from '../openai/audio';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -28,18 +29,21 @@ import type {
 
 export const XAI_VOICE_DEFAULT_API_URL = 'https://api.x.ai/v1';
 export const XAI_VOICE_DEFAULT_WS_URL = 'wss://api.x.ai/v1/realtime';
-export const XAI_VOICE_COST_PER_MINUTE = 0.05;
-export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-1.0';
+export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-2.0';
 
 export const XAI_VOICE_DEFAULTS = {
-  voice: 'Ara' as const,
+  voice: 'ara' as const,
   sampleRate: 24000,
   audioFormat: 'audio/pcm' as const,
   websocketTimeout: 30000,
 };
 
+// Preserve the original public tuple for existing TypeScript consumers. xAI's current
+// request examples use lowercase IDs, so normalize these legacy spellings before dispatch.
 export const XAI_VOICES = ['Ara', 'Rex', 'Sal', 'Eve', 'Leo'] as const;
-export type XAIVoice = (typeof XAI_VOICES)[number];
+export const XAI_CURRENT_VOICES = ['ara', 'rex', 'sal', 'eve', 'leo'] as const;
+/** Built-in voice names and opaque custom voice IDs are accepted by the API. */
+export type XAIVoice = string;
 
 export const XAI_AUDIO_FORMATS = ['audio/pcm', 'audio/pcmu', 'audio/pcma'] as const;
 export type XAIAudioFormatType = (typeof XAI_AUDIO_FORMATS)[number];
@@ -104,7 +108,8 @@ export interface XAIVoiceOptions {
   websocketUrl?: string; // Complete WebSocket URL override (used exactly as-is, no transformation)
 
   // Voice configuration
-  voice?: XAIVoice;
+  voice?: string;
+  reasoning?: { effort: 'high' | 'none' };
 
   // System instructions
   instructions?: string;
@@ -165,67 +170,16 @@ export interface XAIFunctionCallOutput {
 // Utility Functions
 // ============================================================================
 
-/**
- * Convert PCM16 audio data to WAV format for browser playback
- */
-function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24000): Buffer {
-  const numChannels = 1;
-  const bitsPerSample = 16;
-  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
-  const blockAlign = (numChannels * bitsPerSample) / 8;
-  const dataSize = pcmData.length;
-  const fileSize = 36 + dataSize;
-
-  const wavHeader = Buffer.alloc(44);
-  let offset = 0;
-
-  // RIFF header
-  wavHeader.write('RIFF', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(fileSize, offset);
-  offset += 4;
-  wavHeader.write('WAVE', offset);
-  offset += 4;
-
-  // fmt chunk
-  wavHeader.write('fmt ', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(16, offset);
-  offset += 4;
-  wavHeader.writeUInt16LE(1, offset);
-  offset += 2;
-  wavHeader.writeUInt16LE(numChannels, offset);
-  offset += 2;
-  wavHeader.writeUInt32LE(sampleRate, offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(byteRate, offset);
-  offset += 4;
-  wavHeader.writeUInt16LE(blockAlign, offset);
-  offset += 2;
-  wavHeader.writeUInt16LE(bitsPerSample, offset);
-  offset += 2;
-
-  // data chunk
-  wavHeader.write('data', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(dataSize, offset);
-
-  return Buffer.concat([wavHeader, pcmData]);
-}
-
-/**
- * Calculate xAI Voice API cost based on connection duration
- */
-export function calculateXAIVoiceCost(durationMs: number): number {
-  const durationMinutes = durationMs / 60000;
-  return XAI_VOICE_COST_PER_MINUTE * durationMinutes;
-}
-
-/**
- * Generate a unique event ID
- */
 function generateEventId(): string {
-  return `evt_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+  return `evt_${crypto.randomUUID()}`;
+}
+
+function normalizeXAIVoice(voice: XAIVoice | undefined): XAIVoice | undefined {
+  if (!voice) {
+    return undefined;
+  }
+  const builtin = XAI_CURRENT_VOICES.find((name) => name === voice.toLowerCase());
+  return builtin ?? voice;
 }
 
 // ============================================================================
@@ -238,7 +192,7 @@ function generateEventId(): string {
  * Provides real-time voice conversations with Grok models.
  *
  * Usage:
- *   xai:voice:grok-voice-think-fast-1.0
+ *   xai:voice:grok-voice-think-fast-2.0
  */
 export class XAIVoiceProvider implements ApiProvider {
   modelName: string;
@@ -250,7 +204,12 @@ export class XAIVoiceProvider implements ApiProvider {
     options: { config?: XAIVoiceOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     this.modelName = modelName;
-    this.config = options.config || {};
+    this.config = options.config
+      ? {
+          ...options.config,
+          voice: normalizeXAIVoice(options.config.voice),
+        }
+      : {};
     this.env = options.env;
   }
 
@@ -305,7 +264,7 @@ export class XAIVoiceProvider implements ApiProvider {
       return this.config.websocketUrl;
     }
     // xAI's realtime WS expects the model in the URL query string
-    // (see https://docs.x.ai/docs/guides/voice).
+    // (see https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech).
     const url = new URL(`${this.getWebSocketBase()}/realtime`);
     url.searchParams.set('model', this.modelName || XAI_VOICE_DEFAULT_MODEL);
     return url.toString();
@@ -325,9 +284,15 @@ export class XAIVoiceProvider implements ApiProvider {
     };
 
     const session: Record<string, unknown> = {
-      voice: this.config.voice || XAI_VOICE_DEFAULTS.voice,
+      voice: XAI_VOICES.some((voice) => voice === this.config.voice)
+        ? this.config.voice!.toLowerCase()
+        : this.config.voice || XAI_VOICE_DEFAULTS.voice,
       instructions: this.config.instructions || 'You are a helpful assistant.',
-      turn_detection: this.config.turn_detection ?? { type: 'server_vad' },
+      turn_detection:
+        this.config.turn_detection === undefined
+          ? { type: 'server_vad' }
+          : this.config.turn_detection,
+      ...(this.config.reasoning && { reasoning: this.config.reasoning }),
       audio: {
         input: { format: inputFormat },
         output: { format: outputFormat },
@@ -401,7 +366,7 @@ export class XAIVoiceProvider implements ApiProvider {
    */
   private async webSocketRequest(prompt: string): Promise<{
     output: string;
-    cost: number;
+    cost?: number;
     metadata: Record<string, unknown>;
     functionCalls?: XAIFunctionCallOutput[];
     audio?: {
@@ -495,15 +460,18 @@ export class XAIVoiceProvider implements ApiProvider {
               break;
 
             // Transcript streaming
+            case 'response.audio_transcript.delta':
             case 'response.output_audio_transcript.delta':
               responseTranscript += message.delta as string;
               break;
 
+            case 'response.audio_transcript.done':
             case 'response.output_audio_transcript.done':
               logger.debug('[xAI Voice] Transcript complete');
               break;
 
             // Audio streaming (xAI uses response.output_audio.delta)
+            case 'response.audio.delta':
             case 'response.output_audio.delta': {
               const audioData = message.delta as string;
               if (audioData && audioData.length > 0) {
@@ -518,6 +486,7 @@ export class XAIVoiceProvider implements ApiProvider {
               break;
             }
 
+            case 'response.audio.done':
             case 'response.output_audio.done':
               logger.debug('[xAI Voice] Audio complete', {
                 chunks: audioChunks.length,
@@ -611,20 +580,30 @@ export class XAIVoiceProvider implements ApiProvider {
                 }
               }
 
-              // Calculate cost and resolve
+              // Keep elapsed connection time for diagnostics. The WebSocket response
+              // does not establish billed audio duration or a complete monetary total.
               clearTimeout(timeout);
               const durationMs = Date.now() - connectionStartTime;
-              const cost = calculateXAIVoiceCost(durationMs);
+
+              const outputFormat = this.config.audio?.output?.format;
+              const outputRate =
+                outputFormat?.type === 'audio/pcm'
+                  ? (outputFormat.rate ?? XAI_VOICE_DEFAULTS.sampleRate)
+                  : outputFormat
+                    ? 8000
+                    : XAI_VOICE_DEFAULTS.sampleRate;
 
               // Prepare audio data
               let finalAudioData: string | null = null;
-              const sampleRate =
-                this.config.audio?.output?.format?.rate || XAI_VOICE_DEFAULTS.sampleRate;
 
               if (hasAudioContent && audioChunks.length > 0) {
                 try {
-                  const rawPcmData = Buffer.concat(audioChunks);
-                  const wavData = convertPcm16ToWav(rawPcmData, sampleRate);
+                  const rawAudio = Buffer.concat(audioChunks);
+                  const rawPcmData =
+                    outputFormat && outputFormat.type !== 'audio/pcm'
+                      ? convertG711ToPcm16(rawAudio, outputFormat.type)
+                      : rawAudio;
+                  const wavData = convertPcm16ToWav(rawPcmData, outputRate);
                   finalAudioData = wavData.toString('base64');
                   logger.debug('[xAI Voice] Audio converted', {
                     pcmBytes: rawPcmData.length,
@@ -646,7 +625,6 @@ export class XAIVoiceProvider implements ApiProvider {
 
               resolve({
                 output: responseTranscript,
-                cost,
                 metadata: {
                   voice: this.config.voice || XAI_VOICE_DEFAULTS.voice,
                   durationMs,
