@@ -50,6 +50,7 @@ import {
   assertOpenAiApiModel,
   classifyOpenAiGatewayStreamError,
   formatOpenAiError,
+  getOpenAiEffectiveServiceTier,
   getOpenAiGatewayErrorType,
   getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
@@ -57,6 +58,10 @@ import {
   hasSensitiveOpenAiCacheString,
   isAzureOpenAiEndpoint,
   isCustomOpenAiEndpoint,
+  normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
+  OPENAI_BILLING_MODELS,
+  RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -765,6 +770,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-6-astra',
     'gpt-6-sol',
     'gpt-6-luna',
+    'gpt-6.1-sol',
     // GPT-5.6 models
     'gpt-5.6',
     'gpt-5.6-sol',
@@ -800,7 +806,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3-mini',
     'o3-mini-2025-01-31',
     'gpt-5-codex-mini',
-  ];
+  ].filter((model) => !RETIRED_OPENAI_MODEL_IDS.has(model));
 
   config: OpenAiCompletionOptions;
 
@@ -822,6 +828,33 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   protected isReasoningModel(modelName = this.getCapabilityModelName()): boolean {
     return modelName === 'codex-mini-latest' || super.isReasoningModel(modelName);
+  }
+
+  protected isReasoningCapabilityModel(modelName: string): boolean {
+    const configuredModelName = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+    if (modelName === configuredModelName) {
+      return this.isReasoningModel();
+    }
+
+    return modelName === 'codex-mini-latest' || super.isReasoningModel(modelName);
+  }
+
+  protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    const configuredModelName = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+    return modelName === configuredModelName
+      ? this.supportsTemperature()
+      : !this.isReasoningCapabilityModel(modelName);
+  }
+
+  private getEffectiveModelName(config: OpenAiCompletionOptions): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof passthroughModel === 'string'
+      ? this.normalizeCapabilityModelName(passthroughModel)
+      : this.getCapabilityModelName();
+  }
+
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    return this.getEffectiveModelName(config);
   }
 
   private usesGatewayErrorFormat(): boolean {
@@ -854,12 +887,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const serviceTier =
       (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const modelName =
-      typeof passthroughModel === 'string' && passthroughModel !== this.modelName
-        ? passthroughModel
-        : this.getBillingModelName(config);
-    const unprefixedModelName = modelName.split('/').pop() ?? modelName;
+    const modelName = this.getBillingModelName(config);
+    const unprefixedModelName = normalizeOpenAiBillingModelName(modelName);
     const bedrockEndpoint = this.getBedrockEndpoint();
     const isBedrock = this.getGenAISystem() === 'bedrock' || bedrockEndpoint !== undefined;
     const runtimeProfile =
@@ -875,8 +904,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       bedrockEndpoint === 'runtime'
         ? Boolean(runtimeProfile && runtimeProfile[1] !== 'global')
         : isBedrock || this.modelName.startsWith('openai.');
+    const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
     const responseCost = calculateOpenAIUsageCost(
-      billingModelName,
+      billingLookupModel,
       config,
       this.getBillingUsage(data, config),
       {
@@ -890,7 +920,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
     const variant = getGpt6Variant(billingModelName);
     if (
-      (variant === 'sol' || variant === 'luna') &&
+      (variant === 'sol' || variant === 'luna' || variant === '6.1-sol') &&
       usesAzureOpenAiBilling(config, this.getApiUrl(), this.getGenAISystem())
     ) {
       const { cost: _existingCost, ...unbilled } = result;
@@ -900,7 +930,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const observableToolCost = cached
       ? 0
-      : calculateObservableOpenAIToolCost(data, billingModelName, config);
+      : calculateObservableOpenAIToolCost(data, billingLookupModel, config);
 
     return {
       ...result,
@@ -971,13 +1001,28 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
+    const effectiveModelName = this.getEffectiveModelName(config);
+    const capabilityModelName = effectiveModelName.replace(/(^|\/)ft:/, '$1');
+    const isEffectiveGpt5Model =
+      capabilityModelName.startsWith('gpt-5') || capabilityModelName.includes('/gpt-5');
+    const isEffectiveReasoningModel = this.isReasoningCapabilityModel(capabilityModelName);
+    const supportsTemperature = this.supportsTemperatureForCapabilityModel(capabilityModelName);
+    // Azure model ids can be opaque deployment names. Preserve explicit capability hints
+    // for those overrides; known OpenAI models supply their own capabilities instead.
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const capabilityModelName =
-      typeof passthroughModel === 'string' ? passthroughModel : this.getCapabilityModelName();
-    const isGPT6Model = isGpt6Model(capabilityModelName);
+    const normalizedModelName = normalizeOpenAiBillingModelName(effectiveModelName);
+    const modelLookupName = normalizedModelName.startsWith('ft:')
+      ? normalizedModelName.split(':')[1]
+      : normalizedModelName;
+    const isKnownModelOverride =
+      typeof passthroughModel === 'string' &&
+      OPENAI_BILLING_MODELS.some(({ id }) => id === modelLookupName);
     const hasAzureCustomDeploymentHost =
-      typeof passthroughModel !== 'string' &&
-      [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(isAzureOpenAiEndpoint);
+      !isKnownModelOverride &&
+      [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
+        isAzureOpenAiEndpoint(endpoint),
+      );
+    const isGPT6Model = isGpt6Model(capabilityModelName);
     const isAzureResponsesDeploymentWithReasoningConfig =
       hasAzureCustomDeploymentHost &&
       (config.reasoning !== undefined || config.reasoning_effort !== undefined);
@@ -987,21 +1032,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
-      this.isReasoningModel(capabilityModelName) ||
-      isGPT6Model ||
-      isAzureResponsesDeploymentWithReasoningConfig;
+      isGPT6Model || isEffectiveReasoningModel || isAzureResponsesDeploymentWithReasoningConfig;
     const supportsVerbosity =
-      this.isGPT5Model(capabilityModelName) ||
-      isGPT6Model ||
-      isAzureResponsesDeploymentWithVerbosityConfig;
+      isGPT6Model || isEffectiveGpt5Model || isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
       isGPT6Model,
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
       supportsVerbosity,
-      // GPT-6 request rules remove sampling unless the final reasoning effort permits it.
-      supportsTemperature: isGPT6Model || this.supportsTemperature(capabilityModelName),
+      supportsTemperature: isGPT6Model || supportsTemperature,
     };
   }
 
@@ -1010,10 +1050,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ) {
+    const promptConfig = context?.prompt?.config;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     };
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     // Chat-format content parts are translated to their Responses equivalents so multimodal
     // prompts authored for the chat API work here too (the Responses API rejects
@@ -1171,6 +1213,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.background ? { background: config.background } : {}),
       ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
       ...(config.user ? { user: config.user } : {}),
+      ...(config.safety_identifier === undefined
+        ? {}
+        : { safety_identifier: config.safety_identifier }),
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       ...(config.prompt_cache_key === undefined
         ? {}
@@ -1182,7 +1227,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
+      ...(effectiveServiceTier === undefined || effectiveServiceTier === null
+        ? {}
+        : {
+            service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
+          }),
     };
+    // A nullable prompt tier clears an inherited provider tier. Preserve an
+    // explicitly nullable passthrough field, but never leave a stale string on
+    // the wire while the effective billing tier is null.
+    if (effectiveServiceTier === null && config.passthrough?.service_tier !== null) {
+      delete body.service_tier;
+    }
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
     // Handle reasoning parameters for reasoning models
@@ -1219,7 +1275,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body,
       config: {
         ...config,
-        service_tier: body.service_tier,
+        service_tier: effectiveServiceTier,
         tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation.
         response_format: responseFormat,
       },
@@ -1255,7 +1311,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const spanContext = buildChatSpanContext({
       system: this.getGenAISystem(),
-      model: this.modelName,
+      model: String(effectiveBody.model),
       providerId: this.id(),
       prompt,
       context,
@@ -1288,11 +1344,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     apiKey: string | undefined,
   ): Promise<ProviderResponse> {
     const { body, config, abortSignal } = prepared;
+    const effectiveModelName = this.getEffectiveModelName(config);
 
     // Validate deep research models have required tools. Use the capability model name so
     // detection stays consistent with the other capability checks (isGPT5Model, isReasoningModel,
     // the gpt-5-pro timeout regex) for subclasses that strip a vendor prefix.
-    const isDeepResearchModel = this.getCapabilityModelName().includes('deep-research');
+    const isDeepResearchModel = effectiveModelName.includes('deep-research');
     if (isDeepResearchModel) {
       const hasDataSource = config.tools?.some(
         (tool: any) =>
@@ -1305,7 +1362,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       );
       if (!hasDataSource) {
         return {
-          error: `Deep research model ${this.modelName} requires at least one data source. Configure web_search, web_search_preview, file_search with vector_store_ids, or an MCP tool.`,
+          error: `Deep research model ${effectiveModelName} requires at least one data source. Configure web_search, web_search_preview, file_search with vector_store_ids, or an MCP tool.`,
         };
       }
 
@@ -1314,7 +1371,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       for (const mcpTool of mcpTools) {
         if (mcpTool.require_approval !== 'never') {
           return {
-            error: `Deep research model ${this.modelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
+            error: `Deep research model ${effectiveModelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
           };
         }
       }
@@ -1322,12 +1379,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Calculate timeout for long-running models and background responses.
     let timeout = getRequestTimeoutMs();
-    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.getCapabilityModelName());
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(effectiveModelName);
     const isLongRunningModel = isDeepResearchModel || isGpt5ProModel || body.background === true;
     if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
-      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
+      logger.debug(`Using timeout of ${timeout}ms for long-running model ${effectiveModelName}`);
     }
 
     let data: OpenAIResponsesResponse;

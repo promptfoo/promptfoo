@@ -31,8 +31,8 @@ describe('OpenAiTtsProvider', () => {
 
   it.each([
     'gpt-4o-mini-tts',
-    'gpt-4o-mini-tts-2025-12-15',
     'gpt-4o-mini-tts-2025-03-20',
+    'gpt-4o-mini-tts-2025-12-15',
     'tts-1',
     'tts-1-1106',
     'tts-1-hd',

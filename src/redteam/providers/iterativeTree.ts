@@ -831,6 +831,11 @@ async function runRedteamConversation({
           }
         }
 
+        // Extracted input fields must not replace a configured per-turn transform.
+        if (perTurnLayers.length > 0) {
+          updatedVars[injectVar] = finalInjectVar;
+        }
+
         const targetPrompt = await renderPrompt(
           prompt,
           updatedVars,
@@ -1260,6 +1265,10 @@ async function runRedteamConversation({
     }
   }
 
+  if (perTurnLayers.length > 0) {
+    finalUpdatedVars[injectVar] = bestFinalAttackPrompt || lastFinalAttackPrompt || bestPrompt;
+  }
+
   const finalTargetPrompt = await renderPrompt(
     prompt,
     finalUpdatedVars,
@@ -1453,6 +1462,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       attackerUsesRemoteProvider,
       targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
       treeParams: this.treeParams,
+      perTurnLayers: (this.config._perTurnLayers as LayerConfig[]) ?? [],
     });
   }
 }

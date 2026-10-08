@@ -28,12 +28,13 @@ async function attack(
   step: string,
   mode: 'none' | 'metadata' | 'explicit',
   kind: 'parse' | 'equality' | 'encoding' | 'template',
+  overlap = false,
 ) {
   const injectVar = 'query';
   const initial = JSON.stringify({ text: 'Initial trusted {{ 7 * 7 }}', number: 3 });
   const generated = JSON.stringify({ text: 'Generated {{ 7 * 7 }}', number: 4 });
-  const fields = { document: generated };
-  const inputs = { document: 'Untrusted text' };
+  const fields = { [overlap ? injectVar : 'document']: generated };
+  const inputs = { [overlap ? injectVar : 'document']: 'Untrusted text' };
   const expected = mode === 'explicit' ? generated : initial;
   const observed: unknown[] = [];
   if (['hydra', 'goblin', 'goat'].includes(step)) {
@@ -124,6 +125,7 @@ async function attack(
             maxAttempts: 5,
           },
         },
+        ...(overlap ? ['base64'] : []),
       ],
     },
     Strategies,
@@ -148,14 +150,14 @@ async function attack(
     },
   };
   const context = {
-    prompt,
+    prompt: overlap ? { raw: '{{query}}', label: 'Injection overlap' } : prompt,
     vars: test.vars!,
     test,
     originalProvider: target,
   } as CallApiContextParams;
   if (step === 'jailbreak:meta') {
     await runMetaAgentRedteam({
-      prompt,
+      prompt: context.prompt,
       filters: undefined,
       vars: test.vars!,
       test,
@@ -178,6 +180,13 @@ async function attack(
     await provider.callApi('Synthetic initial prompt', context);
   }
   expect(targetCalls.length).toBeGreaterThan(0);
+  if (overlap) {
+    const encoded = Buffer.from(JSON.stringify(fields)).toString('base64');
+    for (const call of targetCalls) {
+      expect(call.prompt).toContain(encoded);
+    }
+    return;
+  }
   expect(observed.length).toBeGreaterThan(0);
   expect(observed).toEqual(observed.map(() => expected));
   const renderedText = JSON.parse(expected).text.replace('{{ 7 * 7 }}', '49');
@@ -212,3 +221,10 @@ describe.each([
     );
   });
 });
+
+it.each(['jailbreak', 'jailbreak:meta', 'jailbreak:tree'])(
+  'retains per-turn encoding when %s inputs overlap the injection variable',
+  async (step) => {
+    await attack(step, 'explicit', 'encoding', true);
+  },
+);
