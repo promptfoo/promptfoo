@@ -675,9 +675,18 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ result: 'success' });
     });
 
-    it('should keep $ sequences from the prompt in a raw GET request URL', async () => {
+    it.each([
+      ['ordinary text', 'ordinary%20text'],
+      ['$$', '$$'],
+      ['$&', '$&'],
+      ['$`', '$`'],
+      ["$'", '$%27'],
+      ['$1', '$1'],
+      ['$99', '$99'],
+      ['$<name>', '$%3Cname%3E'],
+    ])('should keep %s in repeated raw GET request placeholders', async (prompt, encodedPrompt) => {
       const rawRequest = dedent`
-        GET /api/data?q={{prompt}} HTTP/1.1
+        GET /api/data?q={{prompt}}&repeat={{prompt}} HTTP/1.1
         Host: example.com
       `;
       const provider = new HttpProvider('http', {
@@ -694,10 +703,10 @@ describe('HttpProvider', () => {
         statusText: 'OK',
       });
 
-      await provider.callApi('turn $$ into $&');
+      await provider.callApi(prompt);
 
       expect(fetchWithCache).toHaveBeenCalledWith(
-        'http://example.com/api/data?q=turn%20$$%20into%20$&',
+        `http://example.com/api/data?q=${encodedPrompt}&repeat=${encodedPrompt}`,
         expect.objectContaining({ method: 'GET' }),
         expect.any(Number),
         'text',
@@ -2817,11 +2826,16 @@ describe('urlEncodeRawRequestPath', () => {
     expect(result).toBe('GET /api/data?query=already%20encoded HTTP/1.1');
   });
 
-  it('should keep $ replacement patterns in the URL unchanged', () => {
-    const rawRequest = "GET /api/data?query=turn $$ into $& or $` or $' HTTP/1.1";
-    const result = urlEncodeRawRequestPath(rawRequest);
-    expect(result).toBe('GET /api/data?query=turn%20$$%20into%20$&%20or%20$`%20or%20$%27 HTTP/1.1');
-  });
+  it.each(['\n', '\r\n'])(
+    'should keep dollar patterns and the rest of the request unchanged with %j line endings',
+    (lineEnding) => {
+      const rest = `${lineEnding}X-Literal: $$ $& $\` $'${lineEnding}${lineEnding}body $$ $& $\` $'`;
+      const rawRequest = "POST /api/data?query=turn $$ into $& or $` or $' HTTP/1.1" + rest;
+      expect(urlEncodeRawRequestPath(rawRequest)).toBe(
+        'POST /api/data?query=turn%20$$%20into%20$&%20or%20$`%20or%20$%27 HTTP/1.1' + rest,
+      );
+    },
+  );
 
   it('should not leak sensitive query values when logging URL encoding', () => {
     const debugSpy = vi.spyOn(logger, 'debug');
