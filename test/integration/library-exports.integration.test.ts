@@ -14,6 +14,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -142,6 +143,27 @@ describeIfBuildExists('Library Exports', () => {
       }).not.toThrow();
     });
   });
+
+  it.each(['esm', 'cjs'])(
+    'exports trace assertion validators through %s contracts',
+    async (format) => {
+      const contractsModule =
+        format === 'esm'
+          ? await import(pathToFileURL(path.join(distDir, 'contracts.js')).href)
+          : require(path.join(distDir, 'contracts.cjs'));
+
+      expect(contractsModule.traceSpanCountBoundsError({ min: 0, max: 0 })).toBeUndefined();
+      expect(contractsModule.traceSpanCountBoundsError({ min: 2, max: 1 })).toContain(
+        'greater than or equal to min',
+      );
+      expect(contractsModule.traceSpanDurationConfigError({ max: 0 })).toBeUndefined();
+      expect(contractsModule.traceSpanDurationConfigError({ max: -1 })).toContain('non-negative');
+      expect(contractsModule.traceErrorSpansConfigError({ max_count: 0 })).toBeUndefined();
+      expect(contractsModule.traceErrorSpansConfigError({ max_percentage: 101 })).toContain(
+        'between 0 and 100',
+      );
+    },
+  );
 
   describe('CJS contracts import', () => {
     it('should export portable contract schemas', () => {

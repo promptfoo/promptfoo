@@ -1145,6 +1145,8 @@ Common patterns:
 - `api.*` - Matches spans starting with "api."
 - `*.error` - Matches spans ending with ".error"
 
+Provide at least one of `min` or `max`. Count bounds must be finite non-negative integers, and `max` must be greater than or equal to `min`.
+
 ### Trace-Span-Duration
 
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
@@ -1179,8 +1181,10 @@ assert:
 Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
-- `max`: Maximum allowed duration in milliseconds
-- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
+- `max`: Maximum allowed duration in milliseconds (a finite non-negative number)
+- `percentile` (optional): Check a percentile across matching spans instead of every span (e.g., 95 for the 95th percentile). It uses the 0–100 scale; `0.95` means the 0.95th percentile, not p95.
+- `method` (optional): Percentile method, either `nearest` (default, nearest-rank) or `linear` (interpolated). The default `nearest` returns an observed duration; use `linear` for interpolation, such as the median of an even number of spans.
+- `requirePresence` (optional): Fail when no matching spans with complete timing data are present
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
 
@@ -1226,9 +1230,10 @@ Error detection methods:
 
 Configuration options:
 
-- `max_count`: Maximum number of error spans allowed
+- `max_count`: Maximum number of error spans allowed (a finite non-negative integer)
 - `max_percentage`: Maximum error rate as a percentage (0-100)
 - `pattern`: Filter spans by name pattern
+- `requirePresence`: Fail when no matching spans are present
 
 The assertion provides detailed error information including span names and error messages to help with debugging.
 

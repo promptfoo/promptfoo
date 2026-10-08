@@ -1,3 +1,8 @@
+import {
+  traceErrorSpansConfigError,
+  traceSpanCountBoundsError,
+  traceSpanDurationConfigError,
+} from '@promptfoo/contracts';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
@@ -372,29 +377,14 @@ function getTraceSpanCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || !hasNonBlankString(value.pattern)) {
     return 'Enter JSON with a span name pattern.';
   }
-  if (
-    (value.min !== undefined && (typeof value.min !== 'number' || !Number.isFinite(value.min))) ||
-    (value.max !== undefined && (typeof value.max !== 'number' || !Number.isFinite(value.max)))
-  ) {
-    return 'Enter numeric trace span count limits.';
-  }
-  return undefined;
+  return traceSpanCountBoundsError(value);
 }
 
 function getTraceSpanDurationValueError(value: unknown): string | undefined {
   if (!isRecord(value) || typeof value.max !== 'number' || !Number.isFinite(value.max)) {
     return 'Enter JSON with a maximum trace span duration.';
   }
-  if (
-    value.percentile !== undefined &&
-    (typeof value.percentile !== 'number' ||
-      !Number.isFinite(value.percentile) ||
-      value.percentile < 0 ||
-      value.percentile > 100)
-  ) {
-    return 'Enter a trace span percentile from 0 to 100.';
-  }
-  return undefined;
+  return traceSpanDurationConfigError(value);
 }
 
 function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefined {
@@ -429,6 +419,17 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
 }
 
 function getStructuredValueError(assertion: Assertion): string | undefined {
+  const type = assertion.type.startsWith('not-') ? assertion.type.slice(4) : assertion.type;
+  if (
+    type.startsWith('trace-') &&
+    typeof assertion.value === 'string' &&
+    (assertion.value.startsWith('file://') || assertion.value.startsWith('package:'))
+  ) {
+    return undefined;
+  }
+  if (type === 'trace-error-spans') {
+    return traceErrorSpansConfigError(assertion.value);
+  }
   if (
     OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&
     assertion.value !== undefined &&

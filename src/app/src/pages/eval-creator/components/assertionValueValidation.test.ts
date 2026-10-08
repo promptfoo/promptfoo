@@ -537,3 +537,106 @@ describe('supported assertion type coverage', () => {
     ).not.toBe(UNSUPPORTED_TYPE_MESSAGE);
   });
 });
+
+describe('trace assertion validation', () => {
+  it('rejects trace-span-count bounds the runtime would throw on', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-count', value: { pattern: '*', min: -1 } as any }),
+      ),
+    ).toMatch(/finite non-negative integer/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-count', value: { pattern: '*', max: 1.5 } as any }),
+      ),
+    ).toMatch(/finite non-negative integer/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-count', value: { pattern: '*', min: 5, max: 2 } as any }),
+      ),
+    ).toMatch(/greater than or equal/);
+  });
+
+  it('rejects trace-span-duration configs the runtime would throw on', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-duration', value: { pattern: '*', max: -5 } as any }),
+      ),
+    ).toMatch(/finite non-negative number/);
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trace-span-duration',
+          value: { pattern: '*', max: 10, requirePresence: 'yes' } as any,
+        }),
+      ),
+    ).toMatch(/requirePresence must be a boolean/);
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trace-span-duration',
+          value: { pattern: '*', max: 10, percentile: 95, method: 'median' } as any,
+        }),
+      ),
+    ).toMatch(/method must be/);
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trace-span-duration',
+          value: { pattern: '*', max: 10, percentile: 150 } as any,
+        }),
+      ),
+    ).toMatch(/between 0 and 100/);
+    // A valid percentile config with the default method still passes.
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trace-span-duration',
+          value: { pattern: '*', max: 10, percentile: 95 } as any,
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('validates trace-error-spans number and object forms', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'trace-error-spans', value: 0 })),
+    ).toBeUndefined();
+    expect(getRunnableAssertionValueError(make({ type: 'trace-error-spans', value: -1 }))).toMatch(
+      /max_count must be a finite non-negative integer/,
+    );
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-error-spans', value: { max_percentage: 150 } as any }),
+      ),
+    ).toMatch(/between 0 and 100/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-error-spans', value: { requirePresence: 'no' } as any }),
+      ),
+    ).toMatch(/requirePresence must be a boolean/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-error-spans', value: { max_count: 2, pattern: 'db.*' } as any }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-error-spans', value: { max_count: 0, pattern: '   ' } as any }),
+      ),
+    ).toMatch(/pattern must be a non-empty string/);
+  });
+
+  it.each(['trace-span-count', 'trace-span-duration', 'trace-error-spans'] as const)(
+    'defers external %s values until evaluation',
+    (type) => {
+      for (const value of [
+        'file://assertion.json',
+        'file://assertion.yaml',
+        'package:fixture/config',
+      ]) {
+        expect(getRunnableAssertionValueError(make({ type, value }))).toBeUndefined();
+      }
+    },
+  );
+});
