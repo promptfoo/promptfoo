@@ -1,10 +1,9 @@
 import type { TestCase } from '../../types/index';
 
 // Map of standard Arabic-script characters to their isolated Arabic
-// presentation forms (U+FB50–FDFF, U+FE70–FEFF). These codepoints render
-// identically to the base letters for Arabic-capable readers and models,
-// but break byte-level and keyword filters. The direct Arabic-script analog
-// of homoglyph substitution.
+// presentation forms (U+FB50–FDFF, U+FE70–FEFF). These compatibility
+// characters change code points and can disrupt contextual letter joining.
+// The transformation tests filters that treat the encoded letters differently.
 export const arabicPresentationFormsMap: { [key: string]: string } = {
   ء: 'ﺀ', // ARABIC LETTER HAMZA ISOLATED FORM (U+FE80)
   آ: 'ﺁ', // ARABIC LETTER ALEF WITH MADDA ABOVE ISOLATED FORM (U+FE81)
@@ -52,8 +51,7 @@ export const arabicPresentationFormsMap: { [key: string]: string } = {
 };
 
 /**
- * Convert Arabic-script text to Arabic presentation forms (visually identical
- * Unicode codepoints that bypass byte-level filters).
+ * Convert mapped Arabic-script letters to their isolated compatibility forms.
  */
 export function toArabicPresentationForms(text: string): string {
   return text
@@ -67,7 +65,7 @@ export function toArabicPresentationForms(text: string): string {
  */
 export function addArabicPresentationForms(testCases: TestCase[], injectVar: string): TestCase[] {
   return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
+    const originalText = String(testCase.vars?.[injectVar]);
     return {
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({

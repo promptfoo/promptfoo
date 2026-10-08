@@ -57,6 +57,12 @@ describe('arabic-presentation-forms strategy', () => {
       }
     });
 
+    it('preserves the mapped letters under compatibility normalization', () => {
+      const input = Object.keys(arabicPresentationFormsMap).join('') + ' مرحبًا! English 👋';
+      expect(toArabicPresentationForms(input).normalize('NFKC')).toBe(input.normalize('NFKC'));
+      expect(toArabicPresentationForms('مرحبا')).toBe('ﻡﺭﺡﺏﺍ');
+    });
+
     it('should handle empty strings', () => {
       expect(toArabicPresentationForms('')).toBe('');
     });
@@ -123,6 +129,10 @@ describe('arabic-presentation-forms strategy', () => {
         strategyId: 'arabic-presentation-forms',
         originalText: 'Hello World! 123',
       });
+    });
+
+    it('handles an omitted vars object', () => {
+      expect(addArabicPresentationForms([{}], 'prompt')[0].vars?.prompt).toBe('undefined');
     });
 
     it('should handle undefined vars', () => {
