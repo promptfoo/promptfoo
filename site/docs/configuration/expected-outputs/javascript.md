@@ -8,6 +8,18 @@ description: Build sophisticated JavaScript validators for LLM outputs with asyn
 
 The `javascript` [assertion](/docs/configuration/expected-outputs) allows you to provide a custom JavaScript function to validate the LLM output.
 
+## Restrict inline assertions and transforms
+
+Use `promptfoo eval --safe-mode` or `PROMPTFOO_SAFE_MODE=true` to reject string-based JavaScript assertions and inline expressions handled by the shared transform helper. You can also set `commandLineOptions.safeMode: true` in the eval configuration. Config settings cannot disable a guard enabled by the CLI flag or process environment.
+
+Move these expressions into reviewed `file://` scripts when using this mode. JavaScript function values passed through the Node API remain supported. Rejected assertions fail with an explanatory reason; rejected transforms produce an error.
+
+:::warning Limited execution guard
+
+This option is not a sandbox and does not make untrusted configurations safe to run. File callbacks, programmatic functions, executable providers, config modules, Python/Ruby assertions, HTTP session parsers, and HTTP status validators can still execute code. Only run configurations and referenced files that you trust, or use an independently isolated environment with appropriate credentials and network controls.
+
+:::
+
 A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
 
 You can use any valid JavaScript code in your function. The output of the LLM is provided as the `output` variable:

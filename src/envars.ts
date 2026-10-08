@@ -69,6 +69,11 @@ type EnvVars = {
   PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
   PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
+  /**
+   * Disables dynamic inline JavaScript execution in transforms and assertions.
+   * Requires pointing to dedicated script files instead (file://...).
+   */
+  PROMPTFOO_SAFE_MODE?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
   PROMPTFOO_STRIP_GRADING_RESULT?: boolean;

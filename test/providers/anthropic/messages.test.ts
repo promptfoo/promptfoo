@@ -1817,6 +1817,7 @@ describe('AnthropicMessagesProvider', () => {
         role: 'assistant',
         model,
         container: null,
+        diagnostics: null,
         stop_details: null,
         stop_reason: round < 2 ? 'tool_use' : 'end_turn',
         stop_sequence: null,
@@ -2793,6 +2794,7 @@ describe('AnthropicMessagesProvider', () => {
       type: 'message',
       role: 'assistant',
       container: null,
+      diagnostics: null,
       stop_details: null,
       stop_sequence: null,
       content: [
@@ -3605,6 +3607,7 @@ describe('AnthropicMessagesProvider', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 10,
           output_tokens: 5,
