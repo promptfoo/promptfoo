@@ -104,6 +104,7 @@ calling, the tool flags are optional for ordinary model-graded assertions; keep
 ## Use vLLM as the target model
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{{question}}'
 
@@ -140,6 +141,7 @@ Model-graded assertions call a separate grading provider. Configure that provide
 `defaultTest.options.provider` when every model-graded assertion should use the same vLLM judge:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{{answer}}'
 

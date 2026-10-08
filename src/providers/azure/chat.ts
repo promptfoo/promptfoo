@@ -81,7 +81,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   /**
    * Check if the current deployment is configured as a reasoning model.
    * Reasoning models use max_completion_tokens instead of max_tokens,
-   * don't support temperature, and accept reasoning_effort parameter.
+   * don't support temperature, and may support configurable reasoning effort.
    */
   protected isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first
@@ -103,6 +103,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      lowerName === 'gpt-chat-latest' ||
+      lowerName.startsWith('gpt-chat-latest-') ||
       isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
@@ -211,6 +213,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const gpt6Variant = getGpt6Variant(capabilityModelName);
     const useModelDefaults =
       gpt6Variant === 'sol' || gpt6Variant === 'luna' || gpt6Variant === '6.1-sol';
@@ -252,11 +255,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         )
       : undefined;
     const defaultReasoningEffort = config.omitDefaults || useModelDefaults ? undefined : 'medium';
-    const reasoningEffort = gpt6Variant
-      ? configuredGpt6Effort === undefined
-        ? defaultReasoningEffort
-        : configuredGpt6Effort
-      : (config.reasoning_effort ?? defaultReasoningEffort);
+    const reasoningEffort = isFixedReasoningModel
+      ? undefined
+      : gpt6Variant
+        ? configuredGpt6Effort === undefined
+          ? defaultReasoningEffort
+          : configuredGpt6Effort
+        : (config.reasoning_effort ?? defaultReasoningEffort);
     const renderedReasoningEffort = isReasoningModel
       ? gpt6Variant
         ? reasoningEffort
@@ -334,6 +339,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         `Forced tool choice is not supported on ${this.deploymentName} and will be omitted. Use 'auto' or 'none' instead.`,
       );
       delete body.tool_choice;
+    }
+
+    if (isFixedReasoningModel) {
+      delete body.reasoning_effort;
     }
 
     if (gpt6Variant) {
