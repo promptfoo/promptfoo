@@ -607,6 +607,10 @@ function parseStructuredJson(value: string): unknown {
 }
 
 function sanitizeCredentialText(value: string): string {
+  if (/^\s*(?:Bearer|Basic)[ \t]+[A-Za-z\d._~+/-]{20,}=*\s*$/i.test(value)) {
+    return '<redacted>';
+  }
+
   if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY(?: BLOCK)?-----/.test(value)) {
     return '<redacted>';
   }
@@ -742,15 +746,16 @@ function sanitizeCredentialText(value: string): string {
         isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
     .replace(
-      /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
+      /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
       (match, prefix: string, key: string, separator: string, quote: string) => {
         let decodedKey = key;
         try {
-          decodedKey = decodeURIComponent(key);
+          decodedKey = decodeURIComponent(key.replace(/\+/g, ' '));
         } catch {
           // Preserve malformed query parameters while still checking their literal key.
         }
-        return isCredentialAttributeKey(decodedKey)
+        const bareFormKey = /^key$/i.test(decodedKey) && (prefix === '' || /[?&#;]/.test(prefix));
+        return isCredentialAttributeKey(decodedKey) || bareFormKey
           ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
           : match;
       },
@@ -834,6 +839,10 @@ function redactQuotedCredentials(value: string): string {
 }
 
 function isCredentialAttributeKey(key: string): boolean {
+  if (/^x-session-id$/i.test(key)) {
+    return true;
+  }
+
   const parts = key
     .replace(/([a-z\d])([A-Z])/g, '$1_$2')
     .toLowerCase()
@@ -946,7 +955,7 @@ function isCredentialAttributeKey(key: string): boolean {
 
 function sanitizeAttributeByKey(key: string, value: unknown): unknown {
   try {
-    if (isCredentialAttributeKey(key) || ArrayBuffer.isView(value)) {
+    if (isCredentialAttributeKey(key) || typeof value === 'function' || ArrayBuffer.isView(value)) {
       return '<redacted>';
     }
     if (value instanceof Date) {
@@ -1168,6 +1177,10 @@ function* structuredAttributeEntries(
 }
 
 function sanitizeAttributeValue(value: unknown): unknown {
+  if (typeof value === 'function') {
+    return '<redacted>';
+  }
+
   if (
     value === undefined ||
     value === null ||

@@ -80,6 +80,87 @@ describe('OTLPTracingExporter', () => {
   }
 
   it.each(['json', 'protobuf'] as const)(
+    'redacts standalone authorization values and encoded form credentials in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        {
+          bearer: 'Bearer 0123456789abcdefghijklmnop',
+          basic: 'Basic YWxpY2U6b3BhcXVlLXBhc3N3b3Jk',
+          form: 'api+key=opaque/plus&access+token=opaque/token&token+count=12',
+          query: 'https://service.test/run?key=opaque/query&name=public',
+          formKey: 'key=opaque/form&name=public',
+          structured: { key: 'public identifier', session_status: 'complete' },
+          description: 'Basic authentication is supported',
+        },
+        format,
+      );
+      expect(attributes.bearer).toBe('<redacted>');
+      expect(attributes.basic).toBe('<redacted>');
+      expect(attributes.form).toBe('api+key=<redacted>&access+token=<redacted>&token+count=12');
+      expect(attributes.query).toBe('https://service.test/run?key=<redacted>&name=public');
+      expect(attributes.formKey).toBe('key=<redacted>&name=public');
+      expect(JSON.parse(attributes.structured as string)).toEqual({
+        key: 'public identifier',
+        session_status: 'complete',
+      });
+      expect(attributes.description).toBe('Basic authentication is supported');
+      expect(JSON.stringify(payload)).not.toContain('opaque/');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts session credential headers in every supported container in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        {
+          headers: { 'x-session-id': 'opaque/object', 'Content-Type': 'text/plain' },
+          rawHeaders: ['X-Session-Id', 'opaque/raw', 'Content-Type', 'text/plain'],
+          records: [{ name: 'X-Session-Id', value: 'opaque/record' }],
+          text: 'X-Session-Id: opaque/text',
+          nested: JSON.stringify({ headers: { 'x-session-id': 'opaque/serialized' } }),
+          session_status: 'completed',
+          session_duration: 42,
+        },
+        format,
+      );
+      expect(JSON.parse(attributes.headers as string)).toEqual({
+        'x-session-id': '<redacted>',
+        'Content-Type': 'text/plain',
+      });
+      expect(attributes.session_status).toBe('completed');
+      expect(attributes.session_duration).toBe(42);
+      expect(JSON.stringify(payload)).not.toContain('opaque/');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts callable values at custom and trace metadata roots in %s',
+    async (format) => {
+      const callback = () => 'private callable contents';
+      const exporter = new OTLPTracingExporter();
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: { type: 'custom', name: 'lookup', data: { callback, result: 'healthy' } },
+          traceMetadata: { 'promptfoo.otlp_format': format, callback },
+          error: null,
+        },
+      ] as any);
+      expect(mockFetchWithProxy).toHaveBeenCalledOnce();
+      const body = mockFetchWithProxy.mock.calls[0][1].body;
+      const payload =
+        format === 'protobuf' ? await decodeExportTraceServiceRequest(body) : JSON.parse(body);
+      const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+      expect(attributes.callback).toBe('<redacted>');
+      expect(attributes['trace.metadata.callback']).toBe('<redacted>');
+      expect(attributes.result).toBe('healthy');
+      expect(JSON.stringify(payload)).not.toContain('private callable contents');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'keeps ordinary short options and masks curl authentication in %s',
     async (format) => {
       const { attributes } = await exportCustomData(
