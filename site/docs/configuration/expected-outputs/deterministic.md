@@ -1841,7 +1841,7 @@ assert:
     threshold: 0.8
 ```
 
-By default, the assertion uses OpenAI's `text-embedding-3-large` model. You can specify a different embedding provider:
+The default embedding provider follows the [configured credentials](/docs/configuration/expected-outputs/model-graded/#multiple-graders). Set a provider explicitly to use a fixed model:
 
 ```yaml
 assert:

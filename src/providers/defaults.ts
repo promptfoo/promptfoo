@@ -4,12 +4,13 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
+import { resolveProviderApiKey } from './credentials';
 import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import { MistralEmbeddingProvider as MistralEmbeddingApiProvider } from './mistral';
 import {
-  DefaultEmbeddingProvider as MistralEmbeddingProvider,
+  DefaultEmbeddingProvider as MistralDefaultEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
   DefaultGradingProvider as MistralGradingProvider,
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
@@ -17,66 +18,81 @@ import {
 } from './mistral/defaults';
 import { getCodexDefaultProviders, hasCodexDefaultCredentials } from './openai/codexDefaults';
 import {
-  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
+  DefaultEmbeddingProvider as OpenAiDefaultEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { VoyageEmbeddingProvider } from './voyage';
 import { getXAIProviders } from './xai/defaults';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, DefaultProviders } from '../types/index';
 
-const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
+const COMPLETION_PROVIDERS = [
   'gradingJsonProvider',
   'gradingProvider',
   'llmRubricProvider',
   'suggestionsProvider',
   'synthesizeProvider',
-];
-
-const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
+] as const;
 
 let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
 
-async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise<ApiProvider> {
+const missingEmbeddingProvider: ApiProvider = {
+  id: () => 'embedding:unconfigured',
+  async callApi() {
+    return {
+      error:
+        'No embedding provider is configured. Set an embedding provider on the assertion or configure supported embedding credentials.',
+    };
+  },
+  async callEmbeddingApi() {
+    return this.callApi('');
+  },
+};
+
+async function getDefaultEmbeddingProvider(
+  env: EnvOverrides | undefined,
+  hasGoogleCredentials: () => Promise<boolean>,
+): Promise<ApiProvider> {
   if (defaultEmbeddingProvider) {
     return defaultEmbeddingProvider;
   }
+  if (resolveProviderApiKey(undefined, env, ['OPENAI_API_KEY'])) {
+    return env
+      ? new OpenAiEmbeddingProvider('text-embedding-3-large', { env })
+      : OpenAiDefaultEmbeddingProvider;
+  }
 
   const embeddingDeploymentName =
-    getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
-    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME;
-  if (embeddingDeploymentName) {
+    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ??
+    getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME');
+  const hasAzureCredentials =
+    resolveProviderApiKey(undefined, env, ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']) ||
+    ((env?.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID')) &&
+      (env?.AZURE_CLIENT_SECRET ?? getEnvString('AZURE_CLIENT_SECRET')) &&
+      (env?.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID')));
+  if (embeddingDeploymentName && hasAzureCredentials) {
     return new AzureEmbeddingProvider(embeddingDeploymentName, { env });
   }
-
-  // A chat deployment is not an embedding deployment. Prefer configured embedding
-  // API credentials before probing ADC, without changing Azure's chat selection.
-  if (
-    env?.GEMINI_API_KEY ||
-    getEnvString('GEMINI_API_KEY') ||
-    env?.GOOGLE_API_KEY ||
-    getEnvString('GOOGLE_API_KEY') ||
-    env?.PALM_API_KEY ||
-    getEnvString('PALM_API_KEY')
-  ) {
+  if (resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'])) {
     return new AIStudioEmbeddingProvider('gemini-embedding-001', { env });
   }
-  if (env?.MISTRAL_API_KEY || getEnvString('MISTRAL_API_KEY')) {
-    return new MistralEmbeddingApiProvider({ env });
+  if (resolveProviderApiKey(undefined, env, ['MISTRAL_API_KEY'])) {
+    return env ? new MistralEmbeddingApiProvider({ env }) : MistralDefaultEmbeddingProvider;
   }
-  if (env?.VOYAGE_API_KEY || getEnvString('VOYAGE_API_KEY')) {
+  if (resolveProviderApiKey(undefined, env, ['VOYAGE_API_KEY'])) {
     return new VoyageEmbeddingProvider('voyage-3.5', {}, env);
   }
-  if (await hasGoogleDefaultCredentials()) {
+  if (await hasGoogleCredentials()) {
     return getGoogleVertexEmbeddingProvider(env);
   }
-  return OpenAiEmbeddingProvider;
+  return missingEmbeddingProvider;
 }
 
 interface DefaultProviderPreferences {
@@ -90,7 +106,8 @@ interface DefaultProviderPreferences {
 }
 
 async function getDefaultProviderPreferences(
-  env?: EnvOverrides,
+  env: EnvOverrides | undefined,
+  hasGoogleCredentials: () => Promise<boolean>,
 ): Promise<DefaultProviderPreferences> {
   const hasAnthropicCredentials = Boolean(
     getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
@@ -128,9 +145,7 @@ async function getDefaultProviderPreferences(
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials;
-  const useGoogleVertexDefaults = shouldUseFallbackDefaults
-    ? await hasGoogleDefaultCredentials()
-    : false;
+  const useGoogleVertexDefaults = shouldUseFallbackDefaults ? await hasGoogleCredentials() : false;
   const useNonGoogleFallbackDefaults = shouldUseFallbackDefaults && !useGoogleVertexDefaults;
   const hasCodexCredentials =
     useNonGoogleFallbackDefaults &&
@@ -163,6 +178,8 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
 }
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+  let googleCredentials: Promise<boolean> | undefined;
+  const hasGoogleCredentials = () => (googleCredentials ??= hasGoogleDefaultCredentials());
   const {
     preferAnthropic,
     preferAzure,
@@ -171,9 +188,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     useGoogleVertexDefaults,
     useMistralDefaults,
     useXAIDefaults,
-  } = await getDefaultProviderPreferences(env);
+  } = await getDefaultProviderPreferences(env, hasGoogleCredentials);
 
-  let providers: Pick<DefaultProviders, keyof DefaultProviders>;
+  let providers: Omit<DefaultProviders, 'embeddingProvider'>;
 
   if (preferAzure) {
     logger.debug('Using Azure OpenAI default providers');
@@ -186,7 +203,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
 
     providers = {
-      embeddingProvider: await getEmbeddingProviderForAzureDefaults(env),
       gradingJsonProvider: azureProvider,
       gradingProvider: azureProvider,
       moderationProvider: OpenAiModerationProvider,
@@ -199,7 +215,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     const anthropicProviders = getAnthropicProviders(env);
 
     providers = {
-      embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
       gradingJsonProvider: anthropicProviders.gradingJsonProvider,
       gradingProvider: anthropicProviders.gradingProvider,
       llmRubricProvider: anthropicProviders.llmRubricProvider,
@@ -211,7 +226,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else if (useGoogleAiStudioDefaults) {
     logger.debug('Using Google AI Studio default providers');
     providers = {
-      embeddingProvider: getGoogleVertexEmbeddingProvider(env), // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
       moderationProvider: OpenAiModerationProvider,
       ...getGoogleAiStudioProviders(env),
     };
@@ -224,7 +238,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else if (useMistralDefaults) {
     logger.debug('Using Mistral default providers');
     providers = {
-      embeddingProvider: MistralEmbeddingProvider,
       gradingJsonProvider: MistralGradingJsonProvider,
       gradingProvider: MistralGradingProvider,
       moderationProvider: OpenAiModerationProvider,
@@ -235,14 +248,12 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else if (useXAIDefaults) {
     logger.debug('Using xAI default providers');
     providers = {
-      embeddingProvider: OpenAiEmbeddingProvider, // xAI doesn't expose an embeddings API
       moderationProvider: OpenAiModerationProvider, // xAI doesn't expose a moderation API
       ...getXAIProviders(env),
     };
   } else if (useCodexDefaults) {
     logger.debug('Using Codex SDK default providers from ChatGPT/Codex credentials');
     providers = {
-      embeddingProvider: OpenAiEmbeddingProvider,
       moderationProvider: OpenAiModerationProvider,
       ...getCodexDefaultProviders(env),
     };
@@ -250,7 +261,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     logger.debug('Using OpenAI default providers');
 
     providers = {
-      embeddingProvider: OpenAiEmbeddingProvider,
       gradingJsonProvider: OpenAiGradingJsonProvider,
       gradingProvider: OpenAiGradingProvider,
       moderationProvider: OpenAiModerationProvider,
@@ -272,10 +282,8 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     });
   }
 
-  if (defaultEmbeddingProvider) {
-    EMBEDDING_PROVIDERS.forEach((provider) => {
-      providers[provider] = defaultEmbeddingProvider;
-    });
-  }
-  return providers;
+  return {
+    ...providers,
+    embeddingProvider: await getDefaultEmbeddingProvider(env, hasGoogleCredentials),
+  };
 }
