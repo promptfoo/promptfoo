@@ -1531,7 +1531,7 @@ interface ResultsTableProps {
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   zoom: number;
-  onPaginationChange?: (pagination: PaginationState) => void;
+  onPaginationChange?: (pagination: PaginationState | null) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -1706,6 +1706,8 @@ function ResultsTable({
   React.useEffect(() => {
     onPaginationChange?.(pagination);
   }, [onPaginationChange, pagination]);
+
+  React.useEffect(() => () => onPaginationChange?.(null), [onPaginationChange]);
 
   // Persist column sizing state to prevent header resize flicker during pagination.
   // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).

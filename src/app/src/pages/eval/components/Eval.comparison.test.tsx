@@ -600,20 +600,30 @@ describe('evaluation comparison URLs', () => {
     ).toEqual([expect.objectContaining({ type: 'metric', operator: 'equals', value: 'accuracy' })]);
   });
 
-  it('does not present a previous comparison as the failed new selection', async () => {
-    const user = userEvent.setup();
-    renderPage('/eval/eval-a?comparisonEvalIds=eval-b');
-    await waitFor(() =>
-      expect(screen.getByTestId('comparison-columns')).toHaveTextContent('eval-a,eval-b'),
-    );
-    await user.click(screen.getByRole('button', { name: 'Invalid comparison' }));
-    await screen.findByText(/Unable to load comparison/);
-    expect(screen.queryByTestId('comparison-columns')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Clear comparison' }));
-    await waitFor(() =>
-      expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-a$/),
-    );
-  });
+  it.each([50, 10])(
+    'resets stale pagination after a failed comparison unmounts the table (size %s)',
+    async (pageSize) => {
+      tableFixture.realTable = true;
+      tableFixture.rowCount = 120;
+      const user = userEvent.setup();
+      renderPage('/eval/eval-a?comparisonEvalIds=eval-b');
+      await screen.findByText('eval-b row-0');
+      if (pageSize !== 50) {
+        await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
+        await user.click(screen.getByRole('option', { name: String(pageSize) }));
+      }
+      await user.click(screen.getByRole('button', { name: 'Next page' }));
+      await screen.findByText(`eval-b row-${pageSize}`);
+      await user.click(screen.getByRole('button', { name: 'Invalid comparison' }));
+      await screen.findByText(/Unable to load comparison/);
+      expect(screen.queryByTestId('output')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Clear comparison' }));
+      await screen.findByText('eval-a row-0');
+      expect(screen.getAllByTestId('output')).toHaveLength(50);
+      expect(screen.getByRole('spinbutton', { name: 'Go to page' })).toHaveValue(1);
+      expect(screen.getByRole('combobox', { name: 'Results per page' })).toHaveTextContent('50');
+    },
+  );
 
   it('keeps page controls and retries after a transient page failure', async () => {
     tableFixture.realTable = true;

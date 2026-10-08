@@ -99,8 +99,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
   const loadRequestIdRef = useRef(0);
-  const tablePaginationRef = useRef<PaginationState>({ pageIndex: 0, pageSize: 50 });
-  const handlePaginationChange = useCallback((pagination: PaginationState) => {
+  const tablePaginationRef = useRef<PaginationState | null>(null);
+  const handlePaginationChange = useCallback((pagination: PaginationState | null) => {
     tablePaginationRef.current = pagination;
   }, []);
   currentEvalIdRef.current = evalId;
@@ -138,10 +138,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     async (id: string, isBackgroundUpdate = false) => {
       const requestId = ++loadRequestIdRef.current;
       try {
-        const pagination =
-          currentEvalIdRef.current === id
-            ? tablePaginationRef.current
-            : { pageIndex: 0, pageSize: 50 };
+        const pagination = (currentEvalIdRef.current === id
+          ? tablePaginationRef.current
+          : null) ?? { pageIndex: 0, pageSize: 50 };
         setFailed(false);
         const comparisons = comparisonEvalIds.filter((comparisonId) => comparisonId !== id);
         setComparisonEvalIds(comparisons);

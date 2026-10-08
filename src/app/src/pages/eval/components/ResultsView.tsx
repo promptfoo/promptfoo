@@ -65,7 +65,7 @@ interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
-  onPaginationChange?: (pagination: PaginationState) => void;
+  onPaginationChange?: (pagination: PaginationState | null) => void;
   onRetry?: () => void;
 }
 
