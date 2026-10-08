@@ -31,6 +31,18 @@ class ProviderRegistry {
     return this.providers.has(provider as CleanupProvider);
   }
 
+  async shutdown(provider: unknown): Promise<void> {
+    const registered = provider as CleanupProvider;
+    if (this.providers.delete(registered)) {
+      try {
+        await registered.shutdown();
+      } catch (error) {
+        this.providers.add(registered);
+        throw error;
+      }
+    }
+  }
+
   private registerShutdownHandlers(): void {
     let shuttingDown = false;
 

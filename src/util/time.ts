@@ -27,3 +27,13 @@ export async function sleepWithAbort(ms: number, signal: AbortSignal): Promise<v
     signal.addEventListener('abort', onAbort, { once: true });
   });
 }
+
+/** Wait for pending work to settle up to the timeout, then release the timer. */
+export async function waitForSettled(pending: Iterable<Promise<unknown>>, timeoutMs: number) {
+  const timer = new AbortController();
+  try {
+    await Promise.race([Promise.allSettled(pending), sleepWithAbort(timeoutMs, timer.signal)]);
+  } finally {
+    timer.abort();
+  }
+}
