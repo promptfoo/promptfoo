@@ -10,6 +10,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
+import { callApi } from '@app/utils/api';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { ChevronDown, Lightbulb } from 'lucide-react';
@@ -18,8 +19,13 @@ import ChatMessages, { type Message } from '../../../eval/components/ChatMessage
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
-import { getPassRateStyles, getStrategyIdFromTest, type TestWithMetadata } from './shared';
-import type { GradingResult } from '@promptfoo/types';
+import {
+  getPassRateStyles,
+  getPromptDisplayString,
+  getStrategyIdFromTest,
+  type TestWithMetadata,
+} from './shared';
+import type { EvaluateResult } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
@@ -55,21 +61,6 @@ function sortByPriorityStrategies(a: TestWithMetadata, b: TestWithMetadata): num
   }
   // If neither has priority, maintain original order
   return 0;
-}
-
-function getPromptDisplayString(prompt: string): string {
-  try {
-    const parsedPrompt = JSON.parse(prompt);
-    if (Array.isArray(parsedPrompt)) {
-      const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
-      if (lastPrompt.content) {
-        return lastPrompt.content || '-';
-      }
-    }
-  } catch {
-    // Ignore error
-  }
-  return prompt;
 }
 
 function getOutputDisplay(output: string | object): string {
@@ -145,12 +136,31 @@ const RiskCategoryDrawer = ({
 }: RiskCategoryDrawerProps) => {
   const navigate = useNavigate();
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
-  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
-    undefined,
-  );
   const [activeTab, setActiveTab] = React.useState(0);
   const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
   const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
+  const [loadingDetailsKey, setLoadingDetailsKey] = React.useState<string | null>(null);
+  const [detailsLoadError, setDetailsLoadError] = React.useState<string | null>(null);
+  const detailsRequestRef = React.useRef(0);
+  const detailsAbortRef = React.useRef<AbortController | null>(null);
+  const detailsContextRef = React.useRef({ category, evalId, open });
+  detailsContextRef.current = { category, evalId, open };
+
+  React.useEffect(() => {
+    detailsContextRef.current = { category, evalId, open };
+    detailsRequestRef.current += 1;
+    // Stop stale detail requests when the drawer context changes.
+    detailsAbortRef.current?.abort();
+    detailsAbortRef.current = null;
+    setLoadingDetailsKey(null);
+    setDetailsLoadError(null);
+    setSelectedTest(null);
+    setDetailsDialogOpen(false);
+    setSuggestionsDialogOpen(false);
+    return () => {
+      detailsAbortRef.current?.abort();
+    };
+  }, [category, evalId, open]);
 
   const sortedFailures = React.useMemo(() => {
     return [...failures].sort(sortByPriorityStrategies);
@@ -167,6 +177,80 @@ const RiskCategoryDrawer = ({
 
   const totalTests = numPassed + numFailed;
   const passPercentage = totalTests > 0 ? Math.round((numPassed / totalTests) * 100) : 0;
+
+  const loadFullTestDetails = async (
+    test: TestWithMetadata,
+    detailsKey: string,
+    dialog: 'details' | 'suggestions' = 'details',
+  ) => {
+    const compactResult = test.result;
+    setSelectedTest(null);
+    setDetailsDialogOpen(false);
+    setSuggestionsDialogOpen(false);
+    setDetailsLoadError(null);
+
+    if (!compactResult) {
+      setDetailsLoadError('Detailed evaluation data is unavailable for this result.');
+      return;
+    }
+
+    const requestId = ++detailsRequestRef.current;
+    const requestContext = { category, evalId, open };
+    detailsAbortRef.current?.abort();
+    const abortController = new AbortController();
+    detailsAbortRef.current = abortController;
+    const isCurrentRequest = () => {
+      const currentContext = detailsContextRef.current;
+      return (
+        requestId === detailsRequestRef.current &&
+        !abortController.signal.aborted &&
+        currentContext.category === requestContext.category &&
+        currentContext.evalId === requestContext.evalId &&
+        currentContext.open === requestContext.open
+      );
+    };
+    setLoadingDetailsKey(detailsKey);
+
+    try {
+      const query = new URLSearchParams();
+      if (compactResult.id) {
+        query.set('resultId', compactResult.id);
+      }
+      if (compactResult.legacyResultIndex !== undefined) {
+        query.set('legacyResultIndex', String(compactResult.legacyResultIndex));
+      }
+      const resultIdQuery = query.size ? `?${query}` : '';
+      const response = await callApi(
+        `/results/${encodeURIComponent(evalId)}/rows/${compactResult.testIdx}/${compactResult.promptIdx}${resultIdQuery}`,
+        { cache: 'no-store', signal: abortController.signal },
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to load full result details (${response.status})`);
+      }
+      const { data: fullResult } = (await response.json()) as { data: EvaluateResult };
+      if (!isCurrentRequest()) {
+        return;
+      }
+
+      setSelectedTest({
+        ...test,
+        gradingResult: fullResult.gradingResult ?? undefined,
+        result: fullResult,
+      });
+      setDetailsDialogOpen(dialog === 'details');
+      setSuggestionsDialogOpen(dialog === 'suggestions');
+    } catch (error) {
+      if (!isCurrentRequest()) {
+        return;
+      }
+      console.error('[RiskCategoryDrawer] Failed to load full result details', error);
+      setDetailsLoadError('Some detailed evaluation data could not be loaded.');
+    } finally {
+      if (isCurrentRequest()) {
+        setLoadingDetailsKey(null);
+      }
+    }
+  };
 
   if (totalTests === 0) {
     return (
@@ -188,6 +272,11 @@ const RiskCategoryDrawer = ({
 
   // Helper to render a test item (used for both failures and passes)
   const renderTestItem = (test: TestWithMetadata, index: number, isFailed: boolean) => {
+    const detailsKey = test.result?.id
+      ? `id:${test.result.id}`
+      : test.result
+        ? `coordinates:${test.result.testIdx}:${test.result.promptIdx}`
+        : `${isFailed ? 'failure' : 'pass'}:${index}`;
     const strategyId = getStrategyIdFromTest(test);
     const hasSuggestions = test.gradingResult?.componentResults?.some(
       (result) => (result.suggestions?.length || 0) > 0,
@@ -234,11 +323,11 @@ const RiskCategoryDrawer = ({
                     <button
                       type="button"
                       aria-label="View suggestions"
+                      disabled={loadingDetailsKey !== null}
                       className="rounded-md p-1 hover:bg-muted"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setCurrentGradingResult(test.gradingResult);
-                        setSuggestionsDialogOpen(true);
+                        void loadFullTestDetails(test, detailsKey, 'suggestions');
                       }}
                     >
                       <Lightbulb className="size-3.5 text-primary" />
@@ -250,11 +339,11 @@ const RiskCategoryDrawer = ({
                     className="h-6 px-2 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedTest(test);
-                      setDetailsDialogOpen(true);
+                      void loadFullTestDetails(test, detailsKey);
                     }}
+                    disabled={loadingDetailsKey !== null}
                   >
-                    Details
+                    {loadingDetailsKey === detailsKey ? 'Loading...' : 'Details'}
                   </Button>
                 </div>
               </div>
@@ -273,7 +362,9 @@ const RiskCategoryDrawer = ({
 
           {/* Collapsible content */}
           <CollapsibleContent>
-            {/* Chat conversation */}
+            <p className="px-3 pt-2 text-xs text-muted-foreground">
+              Preview only. Open Details for the full result.
+            </p>
             <ChatMessages
               messages={chatMessages}
               displayTurnCount={maxTurns > 1}
@@ -293,6 +384,14 @@ const RiskCategoryDrawer = ({
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">{displayName}</SheetTitle>
+        {detailsLoadError && (
+          <p
+            role="alert"
+            className="sticky top-0 z-10 rounded-md border border-destructive/30 bg-card px-3 py-2 text-sm text-destructive shadow-sm"
+          >
+            {detailsLoadError}
+          </p>
+        )}
         <div className="risk-category-drawer p-2">
           <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
 
@@ -321,7 +420,8 @@ const RiskCategoryDrawer = ({
               const firstFailure = failures.length > 0 ? failures[0] : null;
               const firstPass = passes.length > 0 ? passes[0] : null;
               const testWithPluginId = firstFailure || firstPass;
-              const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+              const result = testWithPluginId?.result;
+              const pluginId = result?.metadata?.pluginId ?? result?.testCase?.metadata?.pluginId;
 
               const filterParam = encodeURIComponent(
                 JSON.stringify([
@@ -397,12 +497,18 @@ const RiskCategoryDrawer = ({
 
         <SuggestionsDialog
           open={suggestionsDialogOpen}
-          onClose={() => setSuggestionsDialogOpen(false)}
-          gradingResult={currentGradingResult}
+          onClose={() => {
+            setSuggestionsDialogOpen(false);
+            setSelectedTest(null);
+          }}
+          gradingResult={selectedTest?.gradingResult}
         />
         <EvalOutputPromptDialog
           open={detailsDialogOpen}
-          onClose={() => setDetailsDialogOpen(false)}
+          onClose={() => {
+            setDetailsDialogOpen(false);
+            setSelectedTest(null);
+          }}
           prompt={selectedTest?.result?.prompt.raw || 'Unknown'}
           output={
             typeof selectedTest?.result?.response?.output === 'object'

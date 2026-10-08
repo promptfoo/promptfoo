@@ -42,5 +42,5 @@ export default function ReportPage() {
     return null;
   }
 
-  return <UserProvider>{evalId ? <Report /> : <ReportIndex />}</UserProvider>;
+  return <UserProvider>{evalId ? <Report evalId={evalId} /> : <ReportIndex />}</UserProvider>;
 }

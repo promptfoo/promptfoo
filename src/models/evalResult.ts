@@ -937,6 +937,44 @@ export default class EvalResult {
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
+  static async findByEvalIdAndIndices(
+    evalId: string,
+    testIdx: number,
+    promptIdx: number,
+    resultId?: string,
+  ) {
+    const db = await getDb();
+    const result = await db
+      .select()
+      .from(evalResultsTable)
+      .where(
+        and(
+          eq(evalResultsTable.evalId, evalId),
+          resultId === undefined ? undefined : eq(evalResultsTable.id, resultId),
+          eq(evalResultsTable.testIdx, testIdx),
+          eq(evalResultsTable.promptIdx, promptIdx),
+        ),
+      )
+      .limit(1)
+      .get();
+    return result
+      ? new EvalResult({
+          ...result,
+          testCase: (asRecord(result.testCase) ?? { vars: {} }) as AtomicTestCase,
+          prompt: {
+            ...asRecord(result.prompt),
+            raw: typeof result.prompt?.raw === 'string' ? result.prompt.raw : '',
+            label: typeof result.prompt?.label === 'string' ? result.prompt.label : '',
+          },
+          provider: {
+            ...asRecord(result.provider),
+            id: typeof result.provider?.id === 'string' ? result.provider.id : '',
+          },
+          persisted: true,
+        })
+      : null;
+  }
+
   static async findManyByEvalIdAndTestIndices(evalId: string, testIndices: number[]) {
     if (!testIndices.length) {
       return [];
