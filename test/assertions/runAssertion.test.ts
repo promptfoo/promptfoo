@@ -27,8 +27,10 @@ vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
     resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
+  const createRequire = vi.fn().mockReturnValue(mockRequire);
   return {
-    createRequire: vi.fn().mockReturnValue(mockRequire),
+    createRequire,
+    default: { createRequire },
   };
 });
 
