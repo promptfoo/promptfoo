@@ -4,7 +4,11 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getTargetResponse } from './shared';
@@ -254,6 +258,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     const redteamHistory: Array<{ prompt: string; output: string }> = [];
 
     let lastOutput = '';
+    let targetError: string | undefined;
     let stopReason: IndirectWebPwnMetadata['stopReason'] = 'Max fetch attempts reached';
     let webPageUuid: string | undefined;
     let webPageUrl: string | undefined;
@@ -264,6 +269,9 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       // 1. Create web page with attack prompt
       logger.debug('[IndirectWebPwn] Creating web page with attack prompt');
       const webPage = await this.createWebPage(testCaseId, prompt, evalId, goal, purpose);
+      if (webPage.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: webPage.tokenUsage });
+      }
       webPageUuid = webPage.uuid;
       webPageUrl = webPage.fullUrl;
 
@@ -306,6 +314,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         }
 
         if (targetResponse.error) {
+          targetError = targetResponse.error;
           logger.error('[IndirectWebPwn] Target error', { error: targetResponse.error });
           stopReason = 'Error';
           break;
@@ -370,6 +379,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
 
     return {
       output: lastOutput,
+      ...(targetError ? { error: targetError } : {}),
       metadata: {
         redteamFinalPrompt: messages[messages.length - 2]?.content || '',
         messages: messages as unknown as Record<string, unknown>[],

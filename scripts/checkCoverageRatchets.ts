@@ -15,12 +15,10 @@ export interface CoverageThresholds {
   statements: number;
 }
 
-interface Position {
-  line: number;
-}
-
 interface StatementLocation {
-  start: Position;
+  start: {
+    line: number;
+  };
 }
 
 interface FileCoverage {
@@ -272,6 +270,8 @@ function isSourceFile(filePath: string): boolean {
     !filePath.endsWith('.test.tsx') &&
     !filePath.endsWith('.spec.ts') &&
     !filePath.endsWith('.spec.tsx') &&
+    !filePath.endsWith('.browser.ts') &&
+    !filePath.endsWith('.browser.tsx') &&
     !filePath.endsWith('.stories.tsx')
   );
 }
@@ -292,8 +292,12 @@ function isCriticalPath(report: CoverageReportConfig, filePath: string): boolean
   );
 }
 
-function pct(covered: number, total: number): number {
-  return total === 0 ? 100 : (covered / total) * 100;
+function summarizeTotals(covered: number, total: number): CoverageTotals {
+  return {
+    covered,
+    total,
+    pct: total === 0 ? 100 : (covered / total) * 100,
+  };
 }
 
 export function summarizeFileCoverage(fileCoverage: FileCoverage): FileCoverageSummary {
@@ -323,26 +327,10 @@ export function summarizeFileCoverage(fileCoverage: FileCoverage): FileCoverageS
   const coveredLines = [...lineCoverage.values()].filter(Boolean).length;
 
   return {
-    branches: {
-      covered: coveredBranches,
-      total: branchHits.length,
-      pct: pct(coveredBranches, branchHits.length),
-    },
-    functions: {
-      covered: coveredFunctions,
-      total: functions.length,
-      pct: pct(coveredFunctions, functions.length),
-    },
-    lines: {
-      covered: coveredLines,
-      total: lineCoverage.size,
-      pct: pct(coveredLines, lineCoverage.size),
-    },
-    statements: {
-      covered: coveredStatements,
-      total: statements.length,
-      pct: pct(coveredStatements, statements.length),
-    },
+    branches: summarizeTotals(coveredBranches, branchHits.length),
+    functions: summarizeTotals(coveredFunctions, functions.length),
+    lines: summarizeTotals(coveredLines, lineCoverage.size),
+    statements: summarizeTotals(coveredStatements, statements.length),
   };
 }
 

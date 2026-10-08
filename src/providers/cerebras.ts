@@ -1,7 +1,51 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { calculateCustomUsageCost, extractOpenAIBillingUsage } from './openai/billing';
+import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
+import { splitLocalOptions } from './openai/localOptions';
+import { calculateCost } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { OpenAiCompletionOptions } from './openai/types';
+
+export const CEREBRAS_CHAT_MODELS = [
+  {
+    id: 'gpt-oss-120b',
+    cost: { input: 0.35 / 1e6, output: 0.75 / 1e6 },
+  },
+  {
+    id: 'gemma-4-31b',
+    cost: { input: 0.99 / 1e6, output: 1.49 / 1e6 },
+  },
+  {
+    id: 'zai-glm-4.7',
+    cost: { input: 2.25 / 1e6, output: 2.75 / 1e6 },
+  },
+];
+
+export function calculateCerebrasCost(
+  modelName: string,
+  config: OpenAiCompletionOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  if (CEREBRAS_CHAT_MODELS.some((model) => model.id === modelName)) {
+    return calculateCost(modelName, config, promptTokens, completionTokens, CEREBRAS_CHAT_MODELS);
+  }
+  if (
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens)
+  ) {
+    return undefined;
+  }
+
+  return calculateCustomUsageCost(
+    extractOpenAIBillingUsage({ prompt_tokens: promptTokens, completion_tokens: completionTokens }),
+    config,
+    false,
+  );
+}
 
 /**
  * Creates a Cerebras provider using OpenAI-compatible chat endpoints
@@ -9,7 +53,7 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  * Documentation: https://docs.cerebras.ai
  *
  * Cerebras API supports the OpenAI-compatible chat completion interface.
- * All parameters are automatically passed through to the Cerebras API.
+ * Cerebras-supported parameters are automatically passed through to the Cerebras API.
  */
 export function createCerebrasProvider(
   providerPath: string,
@@ -22,11 +66,17 @@ export function createCerebrasProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  // Filter out basePath from config to avoid passing it to the API
-  const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
+  const config = options.config?.config || {};
+  // Only genuine model parameters belong in the request body; promptfoo's own settings
+  // (credentials, headers, cost overrides, basePath) stay local.
+  const { localOptions, modelParameters } = splitLocalOptions(config);
 
   // Create a custom provider class that overrides the getOpenAiBody method
   class CerebrasProvider extends OpenAiChatCompletionProvider {
+    override getOrganization(): string | undefined {
+      return this.config.organization;
+    }
+
     async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
       // Get the body from the parent method
       const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
@@ -37,18 +87,57 @@ export function createCerebrasProvider(
         delete body.max_tokens;
       }
 
+      // Promptfoo pricing overrides are local billing metadata, not Cerebras request fields.
+      delete body.cost;
+      delete body.inputCost;
+      delete body.outputCost;
+
       return { body, config };
+    }
+
+    protected override calculateResponseCost(
+      data: OpenAiChatCompletionCostData,
+      config: OpenAiCompletionOptions,
+      cached: boolean,
+    ): number | undefined {
+      if (cached) {
+        return 0;
+      }
+
+      const passthrough = (config.passthrough ?? {}) as Partial<OpenAiCompletionOptions> & {
+        model?: unknown;
+      };
+      const effectiveConfig = { ...passthrough, ...config };
+      // The request body uses the provider selector unless passthrough overrides it.
+      const modelName = typeof passthrough.model === 'string' ? passthrough.model : this.modelName;
+      if (data.usage) {
+        const customCost = calculateCustomUsageCost(
+          extractOpenAIBillingUsage(data.usage),
+          effectiveConfig,
+          false,
+        );
+        if (customCost !== undefined) {
+          return customCost;
+        }
+      }
+      return CEREBRAS_CHAT_MODELS.some((model) => model.id === modelName)
+        ? calculateCerebrasCost(
+            modelName,
+            effectiveConfig,
+            data.usage?.prompt_tokens,
+            data.usage?.completion_tokens,
+          )
+        : undefined;
     }
   }
 
   const cerebrasConfig = {
     ...options,
     config: {
-      apiBaseUrl: 'https://api.cerebras.ai/v1',
-      apiKeyEnvar: 'CEREBRAS_API_KEY',
-      passthrough: {
-        ...configWithoutBasePath,
-      },
+      ...localOptions,
+      apiBaseUrl: localOptions.apiBaseUrl || 'https://api.cerebras.ai/v1',
+      apiKeyEnvar: localOptions.apiKeyEnvar || 'CEREBRAS_API_KEY',
+      passthrough: { ...modelParameters, ...config.passthrough },
     },
   };
 

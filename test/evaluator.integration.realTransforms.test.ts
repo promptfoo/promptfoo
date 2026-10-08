@@ -37,10 +37,6 @@ vi.mock('../src/logger', () => ({
   },
 }));
 
-vi.mock('../src/util/file', () => ({
-  readFileCached: vi.fn(() => Promise.resolve('')),
-}));
-
 vi.mock('../src/evaluatorHelpers', async () => {
   const actual = await vi.importActual('../src/evaluatorHelpers');
   return {
@@ -187,7 +183,7 @@ describe('Transformation integration (real transform)', () => {
     const results = await evaluate(suite, new Eval({}), { maxConcurrency: 1 });
     const row = results.results[0];
     expect(row.success).toBe(false);
-    expect(String(row.error ?? '')).toContain('provider transform boom');
+    expect(row.error ?? '').toContain('provider transform boom');
   });
 
   it('marks the row as errored when a function test transform throws synchronously', async () => {
@@ -213,7 +209,7 @@ describe('Transformation integration (real transform)', () => {
     const results = await evaluate(suite, new Eval({}), { maxConcurrency: 1 });
     const row = results.results[0];
     expect(row.success).toBe(false);
-    expect(String(row.error ?? '')).toContain('test transform boom');
+    expect(row.error ?? '').toContain('test transform boom');
   });
 
   it('chains provider + test + assertion transforms (all functions) end-to-end', async () => {

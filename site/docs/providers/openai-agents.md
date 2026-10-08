@@ -26,24 +26,40 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 
 ## Prerequisites
 
-- Install the optional JavaScript SDK in the project that defines or runs the agent: `npm install @openai/agents`
+- Install Promptfoo and the supported JavaScript SDK together: `npm install promptfoo @openai/agents@^0.14.1`
 - Set `OPENAI_API_KEY` environment variable
 - Agent definition (inline or in a TypeScript/JavaScript file)
+
+The SDK is an optional peer and is not installed by default. Use the project-local `npx promptfoo` command for file-exported agents so Promptfoo and the agent share the same SDK installation. An incompatible SDK in your project does not prevent ordinary Promptfoo evals; selecting `openai:agents:*` checks compatibility.
+
+For inline agents, a global installation is also supported:
+
+```bash
+npm install -g promptfoo @openai/agents@^0.14.1
+```
+
+For a one-off inline-agent eval, run this from an empty directory outside an existing npm project, using an absolute config path:
+
+```bash
+npx --yes --package=promptfoo --package=@openai/agents@^0.14.1 promptfoo eval -c /absolute/path/config.yaml --no-cache
+```
 
 ## Basic Usage
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent:
         name: Customer Support Agent
-        model: gpt-5-mini
+        model: gpt-6-luna
         instructions: You are a helpful customer support agent.
       maxTurns: 10
 ```
 
-For repeatable eval baselines, set a model explicitly on the exported SDK agent or with `config.model`. In `@openai/agents` v0.10+, agents without a model use the SDK default model, currently `gpt-5.4-mini`, and that upstream default can change over time.
+For repeatable eval baselines, set a model explicitly on the exported SDK agent or with
+`config.model`. The SDK's fallback model can change between releases, so do not treat an
+implicit default as a stable eval input.
 
 ## Configuration Options
 
@@ -65,13 +81,20 @@ For repeatable eval baselines, set a model explicitly on the exported SDK agent 
 | `tracing`          | Enable Promptfoo OTLP export for SDK spans                                          | false                 |
 | `otlpEndpoint`     | Custom OTLP endpoint URL for Promptfoo tracing                                      | http://localhost:4318 |
 
+`config.model` and `config.modelSettings` are execution overrides. When present, each option
+replaces the corresponding field on the initial agent and every handoff agent, including agents
+loaded from a file. Omit either option to preserve that field from each agent definition.
+
+Agents invoked independently by guardrails, tool callbacks, or `Agent.asTool()` keep their own
+model and settings. Configure those agents directly when comparing models across a nested workflow.
+
 ## File-Based Configuration
 
 Load agent and tools from external files:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
@@ -128,7 +151,7 @@ import { Agent } from '@openai/agents';
 
 export default new Agent({
   name: 'Support Agent',
-  model: 'gpt-5-mini',
+  model: 'gpt-6-luna',
   instructions: 'You are a helpful customer support agent.',
 });
 ```
@@ -159,34 +182,36 @@ Transfer conversations between specialized agents:
 
 ```yaml
 providers:
-  - openai:agents:triage
+  - id: openai:agents:triage
     config:
       agent:
         name: Triage Agent
-        model: gpt-5-mini
+        model: gpt-6-luna
         instructions: Route questions to the appropriate specialist.
       handoffs:
         - agent:
             name: Technical Support
-            model: gpt-5-mini
+            model: gpt-6-luna
             instructions: Handle technical troubleshooting.
           description: Transfer for technical issues
 ```
 
 ## Guardrails
 
-Validate tool inputs and outputs with guardrails:
+Validate the initial agent input and final agent output with guardrails:
 
 ```yaml
 providers:
-  - openai:agents:secure-agent
+  - id: openai:agents:secure-agent
     config:
       agent: file://./agents/secure-agent.ts
       inputGuardrails: file://./guardrails/input-guardrails.ts
       outputGuardrails: file://./guardrails/output-guardrails.ts
 ```
 
-Guardrails run validation logic before tool execution (input) and after (output), enabling content filtering, PII detection, or custom business rules.
+These OpenAI Agents SDK guardrails enforce the initial input and final output; tool guardrails are a separate SDK feature. In Promptfoo, a tripped SDK guardrail currently surfaces as a provider error, while a successful run does not populate the response used by Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Test the application behavior with ordinary assertions, or wrap the provider and normalize tripwires when you need the guardrail assertion.
+
+See OpenAI's [guardrails and human review guide](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals) for the SDK execution model.
 
 ## Sessions
 
@@ -194,7 +219,7 @@ OpenAI Agents SDK sessions keep conversation history across agent runs. Promptfo
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session:
@@ -214,7 +239,7 @@ For more control, export an SDK `Session` instance or a factory from a file:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session: file://./sessions/support-session.ts
@@ -226,7 +251,7 @@ If you need the full `run()` surface, use `runOptions`. Promptfoo reserves `cont
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       runOptions:
@@ -265,7 +290,7 @@ Use `transformVars` to stamp each test with a stable per-test session ID, then e
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session: file://./sessions/redteam-session.ts
@@ -325,7 +350,7 @@ export default new SandboxAgent({
 
 ```yaml
 providers:
-  - openai:agents:workspace-agent
+  - id: openai:agents:workspace-agent
     config:
       agent: file://./agents/workspace-agent.ts
       sandbox:
@@ -369,7 +394,7 @@ OpenAI Agents SDK v0.7 added opt-in retry settings on `modelSettings.retry`. Pro
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       modelSettings:
@@ -394,11 +419,11 @@ You can also compose them with `any` or `all`. If you are configuring Promptfoo 
 
 ## Mock Tool Execution
 
-Use mocked tool outputs when you want deterministic evals without calling external systems:
+Use mocked tool outputs for deterministic evals without executing function tools:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
@@ -409,13 +434,20 @@ providers:
           tracking: ABC123
 ```
 
+Mock mode supports function tools and direct `Agent` handoffs only. It fails closed for explicit
+`Handoff` objects (their callbacks can have side effects), MCP servers, hosted tools, `SandboxAgent`
+capabilities, reusable prompt templates, and model `providerData` that overrides the request's tools
+or prompt. Use direct agents for handoffs with mocked tools. Lifecycle hooks can observe the
+run, but cannot change the mocked tools or handoff configuration. Hooks and agent definitions
+still run as trusted local code; mock mode does not isolate them.
+
 ## Tracing
 
 Enable OpenTelemetry tracing to debug agent execution:
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/my-agent.ts
       tracing: true # Exports to http://localhost:4318
@@ -425,7 +457,7 @@ With a custom OTLP endpoint:
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/my-agent.ts
       tracing: true
@@ -439,9 +471,9 @@ export PROMPTFOO_TRACING_ENABLED=true
 npx promptfoo eval
 ```
 
-Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo normalizes SDK tool spans into `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans into command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
+Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo records the overall run as `invoke_agent` and normalizes Responses API model calls into `chat` spans with their model, token usage, and `openai.api.type: responses`. SDK tool spans become `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans become command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
 
-When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
+When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. The exporter follows the evaluation's configured HTTP receiver, including IPv6 hosts and JSON- or protobuf-only receivers. Passing a trace context by itself does not enable export unless a receiver or explicit `otlpEndpoint` is available. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
 
 Once Promptfoo is collecting those traces, you can assert on the agent's path instead of only its final message:
 
@@ -467,14 +499,16 @@ tests:
 
       - type: trajectory:goal-success
         value: 'Determine whether order 123 shipped and tell the user the correct status'
-        provider: openai:gpt-5-mini
+        provider: openai:gpt-6-luna
 ```
 
 See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you want Promptfoo to ingest and evaluate these traces directly.
 
 ## Example: D&D Dungeon Master
 
-Full working example with D&D mechanics, dice rolling, and character management:
+The complete example, including its agent and tool files, is available in
+[examples/openai-agents-basic](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-basic).
+Its config uses the following file references:
 
 ```yaml
 description: D&D Adventure with AI Dungeon Master
@@ -519,6 +553,7 @@ For sessions, tracing assertions, sandbox agents, and skills, see the runnable [
 ```bash
 npx promptfoo@latest init --example openai-agents-advanced
 cd openai-agents-advanced
+npm install
 npx promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
 npx promptfoo eval -c promptfooconfig.sandbox.yaml --no-cache
 ```
@@ -551,6 +586,7 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 ## Related Documentation
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
+- [Codex Security SDK](/docs/providers/openai-codex-security) - Repository scans, finding validation, coverage, and scan cost evals
 - [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing and framework-specific provider wrapping
 - [Tracing](/docs/tracing) - OTLP ingestion and trajectory assertions
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety

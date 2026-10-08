@@ -219,6 +219,48 @@ describe('AzureResponsesProvider', () => {
       expect(body.temperature).toBe(0.7);
     });
 
+    it.each(['gpt-chat-latest', 'gpt-chat-latest-2026-06-24'])(
+      'uses reasoning request fields for Azure Responses alias %s',
+      async (deploymentName) => {
+        const provider = new AzureResponsesProvider(deploymentName, {
+          config: {
+            max_output_tokens: 2_000,
+            reasoning_effort: 'high',
+            temperature: 0.7,
+          } as any,
+        });
+
+        const body = await provider.getAzureResponsesBody('Hello world');
+
+        expect(body).toHaveProperty('max_output_tokens', 2_000);
+        expect(body).not.toHaveProperty('reasoning.effort');
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
+    it('preserves summaries while omitting fixed effort from prompt passthrough', async () => {
+      const direct = new AzureResponsesProvider('gpt-chat-latest');
+      const directBody = await direct.getAzureResponsesBody('hello');
+      expect(directBody).not.toHaveProperty('reasoning.effort');
+
+      const provider = new AzureResponsesProvider('opaque-deployment', {
+        config: { modelName: 'gpt-4.1' },
+      });
+      const passthrough = { reasoning: { effort: 'high', summary: 'auto' } };
+      const body = await provider.getAzureResponsesBody('hello', {
+        vars: {},
+        prompt: {
+          raw: 'hello',
+          label: 'override',
+          config: { modelName: 'gpt-chat-latest', passthrough },
+        },
+      });
+      expect(body.model).toBe('opaque-deployment');
+      expect(body.reasoning).toEqual({ summary: 'auto' });
+      expect(body).not.toHaveProperty('temperature');
+      expect(passthrough.reasoning).toEqual({ effort: 'high', summary: 'auto' });
+    });
+
     it('should correctly send temperature: 0 in the request body', async () => {
       // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
@@ -389,6 +431,47 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
+    it('should preserve partial output and expose its incomplete finish reason', async () => {
+      const mockResponse = {
+        id: 'resp_azure_incomplete',
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            status: 'incomplete',
+            content: [{ type: 'output_text', text: 'Partial Azure answer' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+      };
+      mockFetchWithCache.mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Partial Azure answer');
+      expect(result.raw).toEqual(mockResponse);
+      expect(result.finishReason).toBe('length');
+      expect(result.metadata).toMatchObject({
+        responseStatus: 'incomplete',
+        incompleteReason: 'max_output_tokens',
+      });
+      expect(result.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+      });
+    });
+
     it('should provide clear error for missing API host', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
       vi.spyOn(provider, 'getApiBaseUrl').mockReturnValue('');
@@ -483,6 +566,116 @@ describe('AzureResponsesProvider', () => {
       // gpt-4.1 is priced in AZURE_MODELS, and tokens now flow through, so cost must be > 0.
       expect(result.cost).toBeGreaterThan(0);
       expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 500 });
+    });
+
+    it('applies the cached-input rate from Responses usage details', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('gpt-5.6');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+      expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
+    });
+
+    it('preserves full cached usage when the Responses result comes from disk cache', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+            total_tokens: 3_000,
+          },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cached).toBe(true);
+      expect(result.tokenUsage).toMatchObject({ cached: 3_000, total: 3_000 });
+    });
+
+    it('applies priority pricing after Responses flattens passthrough fields', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: { passthrough: { service_tier: 'priority' } },
+      });
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cost).toBeCloseTo((2 * (1_500 * 5 + 500 * 0.5 + 1_000 * 30)) / 1e6, 12);
+    });
+
+    it('prices image-token usage from Azure Responses details', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] },
+          ],
+          usage: {
+            input_tokens: 1_000,
+            input_tokens_details: { image_tokens: 400 },
+            output_tokens: 0,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-image-1');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('Describe the image');
+
+      expect(result.cost).toBeCloseTo((600 * 5 + 400 * 10) / 1e6, 12);
     });
 
     it('should validate external response_format files', async () => {

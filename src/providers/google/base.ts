@@ -14,23 +14,37 @@
  * - callApi(): The main API call implementation
  */
 
-import path from 'path';
-
-import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import logger from '../../logger';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  resolveCallbackPath,
+  wrapError,
+} from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
+import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
-import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
+import { getVertexModelDefaultRegion } from './shared';
+import {
+  normalizeTools,
+  resolveGoogleToolConfig,
+  stripExecutableToolFileReferences,
+  validateFunctionCall,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
-import type { CompletionOptions, GoogleProviderConfig, Tool } from './types';
+import type {
+  CompletionOptions,
+  GoogleProviderConfig,
+  StreamedFunctionCall,
+  StreamedPartialArg,
+  Tool,
+} from './types';
 
 /**
  * Options for creating a Google provider instance.
@@ -42,6 +56,272 @@ export interface GoogleProviderOptions {
   id?: string;
   /** Environment variable overrides */
   env?: EnvOverrides;
+}
+
+interface PendingFunctionCall {
+  id?: string;
+  name?: string;
+  args: Record<string, unknown>;
+  argsText: string;
+}
+
+const MAX_STREAMED_FUNCTION_ARG_DEPTH = 64;
+const MAX_STREAMED_FUNCTION_ARG_INDEX = 10_000;
+const MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS = MAX_STREAMED_FUNCTION_ARG_INDEX + 1;
+
+function setPartialFunctionArg(
+  args: Record<string, unknown>,
+  partialArg: StreamedPartialArg,
+  budget: { arraySlots: number },
+): boolean {
+  const path = partialArg.jsonPath;
+  if (!path || !/^\$(?:\.[\w$ -]+|\[\d+\]|\['[^'\\\]]*'\]|\["[^"\\\]]*"\])+$/.test(path)) {
+    return false;
+  }
+
+  const segments = Array.from(
+    path.matchAll(/\.([\w$ -]+)|\[(\d+)\]|\['([^'\\\]]*)'\]|\["([^"\\\]]*)"\]/g),
+    (match) => (match[2] === undefined ? (match[1] ?? match[3] ?? match[4]) : Number(match[2])),
+  );
+  if (
+    segments.length > MAX_STREAMED_FUNCTION_ARG_DEPTH ||
+    segments.some(
+      (segment) =>
+        ['__proto__', 'prototype', 'constructor'].includes(String(segment)) ||
+        (typeof segment === 'number' &&
+          (!Number.isSafeInteger(segment) || segment > MAX_STREAMED_FUNCTION_ARG_INDEX)),
+    )
+  ) {
+    return false;
+  }
+
+  let value: unknown;
+  if ('stringValue' in partialArg) {
+    value = partialArg.stringValue;
+  } else if ('numberValue' in partialArg) {
+    value = partialArg.numberValue;
+  } else if ('boolValue' in partialArg) {
+    value = partialArg.boolValue;
+  } else if ('nullValue' in partialArg) {
+    value = null;
+  } else {
+    return true;
+  }
+
+  let current: Record<string | number, unknown> = args;
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index];
+    if (Array.isArray(current)) {
+      // Only canonical array indices are supported, including quoted indices.
+      const arrayIndex = Number(segment);
+      if (
+        !/^\d+$/.test(String(segment)) ||
+        !Number.isSafeInteger(arrayIndex) ||
+        String(arrayIndex) !== String(segment) ||
+        arrayIndex > MAX_STREAMED_FUNCTION_ARG_INDEX
+      ) {
+        return false;
+      }
+      // JSON.stringify materializes sparse holes. Bound expansion across the entire response.
+      const addedSlots = Math.max(0, arrayIndex + 1 - current.length);
+      if (budget.arraySlots + addedSlots > MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS) {
+        return false;
+      }
+      budget.arraySlots += addedSlots;
+    }
+    const existing = current[segment];
+    if (index === segments.length - 1) {
+      current[segment] =
+        typeof value === 'string' && typeof existing === 'string' ? existing + value : value;
+      return true;
+    }
+    if (!existing || typeof existing !== 'object') {
+      current[segment] = typeof segments[index + 1] === 'number' ? [] : {};
+    }
+    current = current[segment] as Record<string | number, unknown>;
+  }
+
+  return true;
+}
+
+function mergeStreamedFunctionArgs(pending: PendingFunctionCall, args: unknown): void {
+  if (typeof args !== 'string') {
+    if (args && typeof args === 'object' && !Array.isArray(args)) {
+      pending.args = { ...pending.args, ...args };
+    }
+    return;
+  }
+
+  if (pending.argsText && !args.startsWith(pending.argsText)) {
+    pending.argsText += args;
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(args);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      pending.args = { ...pending.args, ...parsed };
+      pending.argsText = '';
+      return;
+    }
+  } catch {
+    // Some streaming integrations expose cumulative or fragmented JSON strings.
+  }
+  pending.argsText = args;
+}
+
+function finalizeStreamedFunctionCall(
+  pending: PendingFunctionCall,
+): StreamedFunctionCall | undefined {
+  if (pending.argsText) {
+    try {
+      const parsed = JSON.parse(pending.argsText);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return undefined;
+      }
+      pending.args = { ...pending.args, ...parsed };
+    } catch {
+      return undefined;
+    }
+  }
+
+  return pending.name ? { id: pending.id, name: pending.name, args: pending.args } : undefined;
+}
+
+function isAnonymousFunctionCallFragment(functionCall: StreamedFunctionCall): boolean {
+  return functionCall.id === undefined && functionCall.name === undefined;
+}
+
+function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | undefined {
+  const completed: StreamedFunctionCall[] = [];
+  const pendingById = new Map<string, PendingFunctionCall>();
+  const budget = { arraySlots: 0 };
+  let pendingUnnamed: PendingFunctionCall | undefined;
+
+  for (const part of parts) {
+    const functionCall = part?.functionCall as StreamedFunctionCall | undefined;
+    if (!functionCall) {
+      continue;
+    }
+
+    const id = functionCall.id;
+    let pending = id ? pendingById.get(id) : pendingUnnamed;
+    if (isAnonymousFunctionCallFragment(functionCall)) {
+      // Vertex can omit the ID after the first chunk. Only associate an unambiguous continuation.
+      if (pendingById.size + (pendingUnnamed ? 1 : 0) > 1) {
+        return undefined;
+      }
+      pending = pendingUnnamed ?? pendingById.values().next().value;
+    }
+    if (!pending) {
+      pending = { id, name: functionCall.name, args: {}, argsText: '' };
+      if (id) {
+        pendingById.set(id, pending);
+      } else {
+        pendingUnnamed = pending;
+      }
+    } else if (functionCall.name) {
+      if (pending.name && pending.name !== functionCall.name) {
+        return undefined;
+      }
+      pending.name = functionCall.name;
+    }
+
+    if (functionCall.args !== undefined) {
+      mergeStreamedFunctionArgs(pending, functionCall.args);
+    }
+    for (const partialArg of functionCall.partialArgs ?? []) {
+      if (!setPartialFunctionArg(pending.args, partialArg, budget)) {
+        return undefined;
+      }
+    }
+
+    if (functionCall.willContinue === true) {
+      continue;
+    }
+
+    const complete = finalizeStreamedFunctionCall(pending);
+    if (!complete) {
+      return undefined;
+    }
+    completed.push(complete);
+    if (pending.id) {
+      pendingById.delete(pending.id);
+    } else {
+      pendingUnnamed = undefined;
+    }
+  }
+
+  return pendingById.size === 0 && !pendingUnnamed ? completed : undefined;
+}
+
+function restoreStreamedFunctionCallParts(
+  parts: any[],
+  functionCalls: StreamedFunctionCall[],
+): any[] {
+  const callsById = new Map<string, StreamedFunctionCall[]>();
+  const unnamedCalls: StreamedFunctionCall[] = [];
+  for (const functionCall of functionCalls) {
+    if (functionCall.id) {
+      const calls = callsById.get(functionCall.id) ?? [];
+      calls.push(functionCall);
+      callsById.set(functionCall.id, calls);
+    } else {
+      unnamedCalls.push(functionCall);
+    }
+  }
+
+  const activeCallParts = new Map<string, number>();
+  let unnamedCallPart: number | undefined;
+  const normalizedParts: any[] = [];
+
+  for (const part of parts) {
+    const fragment = part?.functionCall as StreamedFunctionCall | undefined;
+    if (!fragment) {
+      normalizedParts.push(part);
+      continue;
+    }
+
+    const activeId =
+      fragment.id ||
+      (isAnonymousFunctionCallFragment(fragment) &&
+      unnamedCallPart === undefined &&
+      activeCallParts.size === 1
+        ? activeCallParts.keys().next().value
+        : undefined);
+    const activePart = activeId ? activeCallParts.get(activeId) : unnamedCallPart;
+    if (activePart !== undefined) {
+      // Signatures can arrive on a continuation. Keep their association with the call.
+      normalizedParts[activePart] = {
+        ...normalizedParts[activePart],
+        ...part,
+        functionCall: normalizedParts[activePart].functionCall,
+      };
+      if (fragment.willContinue !== true) {
+        if (activeId) {
+          activeCallParts.delete(activeId);
+        } else {
+          unnamedCallPart = undefined;
+        }
+      }
+      continue;
+    }
+
+    const functionCall = fragment.id ? callsById.get(fragment.id)?.shift() : unnamedCalls.shift();
+    if (!functionCall) {
+      continue;
+    }
+    if (fragment.willContinue === true) {
+      if (fragment.id) {
+        activeCallParts.set(fragment.id, normalizedParts.length);
+      } else {
+        unnamedCallPart = normalizedParts.length;
+      }
+    }
+    normalizedParts.push({ ...part, functionCall });
+  }
+
+  return normalizedParts;
 }
 
 /**
@@ -72,6 +352,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
   /** Cache of loaded function callbacks */
   protected loadedFunctionCallbacks: Record<string, Function> = {};
+
+  /** References used to populate the callback cache, for prompt-level overrides. */
+  protected loadedFunctionCallbackRefs: Record<string, string | Function | undefined> = {};
+
+  /** Effective owning directories for cached file callbacks, including CLI/cwd fallback. */
+  protected loadedFunctionCallbackBasePaths: Record<string, string | undefined> = {};
 
   /** Custom provider ID function */
   protected customId?: () => string;
@@ -114,6 +400,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
     validateFunctionCall(output, this.config.tools, vars);
+  }
+
+  getAudioInputFormat(): 'google' | undefined {
+    return this.modelName.startsWith('gemini') ? 'google' : undefined;
   }
 
   /**
@@ -181,7 +471,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   getRegion(): string {
     const hasApiKey = Boolean(this.getApiKey());
-    return GoogleAuthManager.resolveRegion(this.config, this.env, hasApiKey);
+    const modelDefaultRegion = this.isVertexMode
+      ? getVertexModelDefaultRegion(this.modelName)
+      : undefined;
+    return GoogleAuthManager.resolveRegion(this.config, this.env, hasApiKey, modelDefaultRegion);
   }
 
   /**
@@ -257,59 +550,14 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * @param fileRef - File reference in format 'file://path/to/file:functionName'
    * @returns The loaded function
    */
-  protected async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
+  protected async loadExternalFunction(fileRef: string, basePath?: string): Promise<Function> {
     try {
-      const basePath = cliState.basePath || process.cwd();
-      const resolvedPath = path.resolve(basePath, filePath);
-
-      // Path traversal protection: ensure resolved path is within the base directory
-      // Use path.relative() to get relative path from base to target
-      // If path starts with '..' or is absolute, it's outside the base directory
-      const normalizedBase = path.resolve(basePath);
-      const normalizedResolved = path.resolve(resolvedPath);
-      const relativePath = path.relative(normalizedBase, normalizedResolved);
-
-      // Check if path escapes the base directory:
-      // - Starts with '..' means it goes up out of base
-      // - path.isAbsolute() handles edge cases on Windows where relative might return absolute path
-      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-        throw new Error(
-          `Path traversal detected: '${filePath}' resolves outside the base directory. ` +
-            `Resolved path '${normalizedResolved}' is not within '${normalizedBase}'.`,
-        );
+      return await loadCallbackFromFileUrl(fileRef, { basePath });
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
       }
-
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 
@@ -324,20 +572,39 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   protected async executeFunctionCallback(
     functionName: string,
     args: string,
-    config: CompletionOptions,
+    config: GoogleProviderConfig,
+    callId?: string,
   ): Promise<any> {
     try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
+      const callbacks = config.functionToolCallbacks;
+      const callbackRef =
+        callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
+          ? callbacks[functionName]
+          : undefined;
+      const callbackBasePath =
+        typeof callbackRef === 'string' && callbackRef.startsWith('file://')
+          ? resolveCallbackPath('.', config.basePath)
+          : undefined;
+      let callback: Function | undefined = Object.prototype.hasOwnProperty.call(
+        this.loadedFunctionCallbacks,
+        functionName,
+      )
+        ? this.loadedFunctionCallbacks[functionName]
+        : undefined;
+
+      if (
+        this.loadedFunctionCallbackRefs[functionName] !== callbackRef ||
+        this.loadedFunctionCallbackBasePaths[functionName] !== callbackBasePath
+      ) {
+        callback = undefined;
+      }
 
       // If not loaded yet, try to load it now
       if (!callback) {
-        const callbackRef = config.functionToolCallbacks?.[functionName];
-
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
           if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
+            callback = await this.loadExternalFunction(callbackStr, callbackBasePath);
           } else {
             // Inline function string (backward compatibility with existing behavior)
             // This uses Function constructor which has security implications
@@ -361,9 +628,13 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
           // Cache for future use
           this.loadedFunctionCallbacks[functionName] = callback;
+          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
+          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
         } else if (typeof callbackRef === 'function') {
           callback = callbackRef;
           this.loadedFunctionCallbacks[functionName] = callback;
+          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
+          this.loadedFunctionCallbackBasePaths[functionName] = callbackBasePath;
         }
       }
 
@@ -373,13 +644,135 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
 
       return result;
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error;
     }
+  }
+
+  /**
+   * Execute explicitly configured callbacks from native parts or parseable JSON envelopes.
+   */
+  protected async executeFunctionToolCallbacks(
+    output: ProviderResponse['output'],
+    config: GoogleProviderConfig,
+    toolsDisabled: boolean,
+  ): Promise<ProviderResponse['output']> {
+    if (toolsDisabled) {
+      return output;
+    }
+
+    let parsedOutput = output;
+    if (typeof output === 'string') {
+      try {
+        parsedOutput = JSON.parse(output);
+      } catch {
+        return output;
+      }
+    }
+    const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
+    // JSON text opts into tool handling only through an explicitly mapped name.
+    // A mapped opening fragment can still own later nameless continuations.
+    if (
+      typeof output === 'string' &&
+      !parts.some(
+        (part) =>
+          typeof part?.functionCall?.name === 'string' &&
+          config.functionToolCallbacks &&
+          Object.prototype.hasOwnProperty.call(
+            config.functionToolCallbacks,
+            part.functionCall.name,
+          ),
+      )
+    ) {
+      return output;
+    }
+    const { toolConfig } = resolveGoogleToolConfig(config);
+    const streamsFunctionCallArguments =
+      config.streaming === true &&
+      toolConfig?.functionCallingConfig?.streamFunctionCallArguments === true;
+    const nativeFunctionCalls = parts.flatMap((part) =>
+      part?.functionCall ? [part.functionCall] : [],
+    );
+    if (
+      !streamsFunctionCallArguments &&
+      nativeFunctionCalls.some(
+        (call) => call.willContinue === true || (call.partialArgs?.length ?? 0) > 0,
+      )
+    ) {
+      throw new Error(
+        'Streamed function-call arguments require streaming: true and toolConfig.functionCallingConfig.streamFunctionCallArguments: true.',
+      );
+    }
+    const functionCalls = streamsFunctionCallArguments
+      ? assembleStreamedFunctionCalls(parts)
+      : nativeFunctionCalls;
+    if (!functionCalls?.length) {
+      return output;
+    }
+
+    const normalizedOutput = streamsFunctionCallArguments
+      ? restoreStreamedFunctionCallParts(parts, functionCalls)
+      : output;
+    if (!config.functionToolCallbacks) {
+      return normalizedOutput;
+    }
+
+    const preparedCalls: Array<{ functionName: string; args: string; callId?: string }> = [];
+    for (const functionCall of functionCalls) {
+      const functionName = functionCall.name;
+      if (
+        typeof functionName !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)
+      ) {
+        return normalizedOutput;
+      }
+      try {
+        const args =
+          typeof functionCall.args === 'string'
+            ? JSON.parse(functionCall.args)
+            : (functionCall.args ?? {});
+        preparedCalls.push({ functionName, args: JSON.stringify(args), callId: functionCall.id });
+      } catch {
+        return normalizedOutput;
+      }
+    }
+
+    if (preparedCalls.length === 0) {
+      return normalizedOutput;
+    }
+
+    const results = [];
+    for (const { functionName, args, callId } of preparedCalls) {
+      try {
+        results.push(await this.executeFunctionCallback(functionName, args, config, callId));
+      } catch (error) {
+        throw new Error(
+          `Function callback '${functionName}' failed after ${results.length} completed callback(s). ` +
+            `Check for side effects before retrying: ${String(error)}`,
+        );
+      }
+    }
+    if (results.length === 1) {
+      return results[0] ?? '';
+    }
+    return results
+      .map((result) => {
+        if (typeof result === 'string') {
+          return result;
+        }
+        try {
+          return JSON.stringify(result) ?? String(result);
+        } catch {
+          return String(result);
+        }
+      })
+      .join('\n');
   }
 
   /**
@@ -407,4 +800,3 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 /**
  * Default exports for the base module.
  */
-export default GoogleGenericProvider;

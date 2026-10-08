@@ -95,6 +95,8 @@ promptfoo eval --env-file .env,.env.local
 
 All specified files must exist or an error is thrown.
 
+Without `--env-file`, promptfoo loads `.env` from the current directory if it exists, and values already set in your shell take precedence over the file. Three environment variables change that default: `DOTENV_PATH` names a different file, `DOTENV_OVERRIDE=true` lets the file override your shell, and `DOTENV_ENCODING` sets its encoding. The older `DOTENV_CONFIG_PATH`, `DOTENV_CONFIG_OVERRIDE`, and `DOTENV_CONFIG_ENCODING` names are used when the newer one is unset. Files passed with `--env-file` are loaded afterwards and always override both.
+
 ## `promptfoo eval`
 
 By default the `eval` command will read the `promptfooconfig.yaml` configuration file in your current directory. But, if you're looking to override certain parameters you can supply optional arguments:
@@ -112,7 +114,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-range <start:end>`         | Only run tests whose zero-based index is in the range. The end index is exclusive.                       |
 | `--filter-sample <number>`           | Only run a random sample of N tests                                                                      |
 | `--filter-sample-seed <number>`      | Numeric seed used to make `--filter-sample` select the same tests on repeated runs                       |
-| `--filter-metadata <key=value>`      | Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic. |
+| `--filter-metadata <key=value>`      | Filter tests by metadata substring. Commas separate OR values (`\,` is a comma); repeated flags use AND. |
 | `--filter-pattern <pattern>`         | Only run tests whose description matches the regex pattern                                               |
 | `--filter-prompts <pattern>`         | Only run tests with prompts whose id or label matches the regex pattern                                  |
 | `--filter-providers <providers>`     | Only run tests with these providers (regex match on provider `id` or `label`)                            |
@@ -655,14 +657,19 @@ Manage authentication for cloud features.
 
 ### `promptfoo auth login`
 
-Login to the promptfoo cloud.
+Log in to Promptfoo Cloud.
 
-| Option                | Description                                                                |
-| --------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`   | The organization ID to log in to                                           |
-| `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>` | Log in using an API key                                                    |
-| `-t, --team <team>`   | Team name, slug, or ID to use after login                                  |
+Promptfoo Cloud API keys are scoped to one organization. To switch organizations, log in with an API key from the organization you want to use. `--org` and `--team` apply only with `--api-key`.
+
+| Option                      | Description                                                                |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `-o, --org <orgId>`         | The organization ID to log in to                                           |
+| `-h, --host <host>`         | The host of the promptfoo instance (API URL if different from the app URL) |
+| `-k, --api-key <key>`       | Log in using an API key                                                    |
+| `-t, --team <team>`         | Team name, slug, or ID to use after login                                  |
+| `--auth-header-name <name>` | Header carrying the Cloud API token when logging in with `--api-key`       |
+
+For gateways that reserve `Authorization`, use `--auth-header-name X-Promptfoo-Api-Key` or `PROMPTFOO_CLOUD_AUTH_HEADER`. The value remains `Bearer <token>`. Precedence is the login flag, saved setting, environment variable, then `Authorization`. A successful login saves the header name; changing `--host` does not reset it. Pass `--auth-header-name Authorization` to reset it. See [gateway configuration](/docs/usage/sharing.md#enterprise-sharing).
 
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 
@@ -679,6 +686,7 @@ Display current authentication status including user, organization, and active t
 - User email
 - Organization name
 - Current team (if logged in to a multi-team organization)
+- API URL and effective auth header name (shown even without a saved login or if the account lookup fails)
 - App URL
 
 Example:
@@ -690,6 +698,8 @@ promptfoo auth whoami
 Output:
 
 ```
+API URL: https://api.promptfoo.app
+Auth header: Authorization
 Currently logged in as:
 User: user@company.com
 Organization: Acme Corp
@@ -711,7 +721,7 @@ Manage team switching for organizations with multiple teams.
 
 #### `promptfoo auth teams list`
 
-List all teams you have access to in the current organization.
+List the teams accessible to your API key.
 
 #### `promptfoo auth teams current`
 
@@ -739,6 +749,8 @@ promptfoo auth teams set team_12345
 ```
 
 Your team selection is remembered across CLI sessions and applies to all promptfoo operations including evals and red team testing.
+
+If your saved team is no longer accessible, promptfoo falls back to the oldest team in your current organization. It never switches organizations on its own. To use another organization, run `promptfoo auth login --api-key <apiKey>` with a key from that organization.
 
 #### Team Selection Across Organizations
 
@@ -1070,7 +1082,7 @@ These general-purpose environment variables are supported:
 | Name                                          | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Default                       |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | `FORCE_COLOR`                                 | Set to 0 to disable terminal colors for printed outputs                                                                                                                                                                                                                                                                                                                                                                                                                                                          |                               |
-| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY`        | How many assertions to run at a time                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 3                             |
+| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY`        | Maximum number of assertions to run at once per test case (minimum 1).                                                                                                                                                                                                                                                                                                                                                                                                                                           | 3                             |
 | `PROMPTFOO_CACHE_ENABLED`                     | Enable LLM request/response caching                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `true`                        |
 | `PROMPTFOO_CACHE_PATH`                        | Directory for the disk cache. Defaults to a `cache` directory under `PROMPTFOO_CONFIG_DIR`                                                                                                                                                                                                                                                                                                                                                                                                                       | `~/.promptfoo/cache`          |
 | `PROMPTFOO_CACHE_TTL`                         | Cache TTL in seconds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `1209600`                     |
@@ -1086,14 +1098,14 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_REF_PARSER`                | Prevents JSON schema dereferencing                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                               |
 | `PROMPTFOO_DISABLE_REMOTE_GENERATION`         | Disables supported Promptfoo-hosted generation fallbacks within its documented scope, including red team target/provider setup helpers that rely on remote generation. This is not a network egress firewall and does not disable explicitly configured providers, graders, telemetry, account/license checks, sharing, Cloud sync, red team target/provider test requests, or red team target/provider setup helpers that do not rely on remote generation. Example: `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` | `false`                       |
 | `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` | Disables supported Promptfoo-hosted red team generation paths, including red team target/provider setup helpers that rely on remote generation, while leaving non-red-team hosted generation, red team target/provider test requests, red team target/provider setup helpers that do not rely on remote generation, sharing, telemetry, account, and Cloud-backed controls unchanged. Example: `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`                                                                | `false`                       |
-| `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS`         | Disables OS environment variables in templates. When true, only config `env:` variables are available in templates.                                                                                                                                                                                                                                                                                                                                                                                              | `false` (true in self-hosted) |
-| `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks template processing                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `false`                       |
-| `PROMPTFOO_DISABLE_RUNTIME_WARNINGS`          | Suppresses standalone Node.js runtime compatibility reminders in the CLI and Web UI. Update checks remain independent and may still explain an incompatible package update; this setting does not change runtime support requirements.                                                                                                                                                                                                                                                                           | `false`                       |
-| `PROMPTFOO_DISABLE_UPDATE`                    | Disables automatic update availability checks. This does not suppress runtime compatibility notices.                                                                                                                                                                                                                                                                                                                                                                                                             | `false`                       |
+| `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS`         | Disables OS environment variables in templates. When true, only config `env:` variables are available in templates, file paths, and tracing settings. Suite settings cannot re-enable access disabled by the process.                                                                                                                                                                                                                                                                                            | `false` (true in self-hosted) |
+| `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks processing for config values and prompts, including when set in config `env:`. Grader templates remain enabled.                                                                                                                                                                                                                                                                                                                                                                                | `false`                       |
+| `PROMPTFOO_DISABLE_UPDATE`                    | Disables automatic update availability checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `false`                       |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`             | Prevents Array-type vars from being expanded into multiple test cases                                                                                                                                                                                                                                                                                                                                                                                                                                            |                               |
 | `PROMPTFOO_FAILED_TEST_EXIT_CODE`             | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                                                                                                                                                                                                                                                                                                                                                                                   | 100                           |
 | `PROMPTFOO_LOG_DIR`                           | Directory to write log files (both debug and error logs). Overrides the default `~/.promptfoo/logs` directory.                                                                                                                                                                                                                                                                                                                                                                                                   | `~/.promptfoo/logs`           |
 | `PROMPTFOO_PASS_RATE_THRESHOLD`               | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 100% (no failures allowed)                                                                                                                                                                                                                                                                                                                                                                                                          | 100                           |
+| `PROMPTFOO_PROMPT_SEPARATOR`                  | Separator for [multiple prompts](/docs/configuration/prompts#multiple-prompts-in-one-file) in a `.txt` file.                                                                                                                                                                                                                                                                                                                                                                                                     | `---`                         |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`              | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior.                                                                                                                                                                                                                                                                                                                                                                 |                               |
 | `PROMPTFOO_SHARE_CHUNK_SIZE`                  | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.                                                                                                                                                                                                                                                                                                                                                                         |                               |
 | `PROMPTFOO_EVAL_TIMEOUT_MS`                   | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error.                                                                                                                                                                                                                                                                                                                                                                                 |                               |

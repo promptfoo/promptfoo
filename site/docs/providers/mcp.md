@@ -6,9 +6,9 @@ description: Use Model Context Protocol (MCP) servers as providers in promptfoo 
 
 # MCP (Model Context Protocol) Provider
 
-The `mcp` provider allows you to use Model Context Protocol (MCP) servers directly as providers in promptfoo. This is particularly useful for red teaming and testing agentic systems that rely on MCP tools for function calling, data access, and external integrations.
+The `mcp` provider calls Model Context Protocol (MCP) tools directly, so you can test or red team the server itself.
 
-Unlike the [MCP integration for other providers](../integrations/mcp.md), the MCP provider treats the MCP server itself as the target system under test, allowing you to evaluate security vulnerabilities and robustness of MCP-based applications.
+To give MCP tools to a model you're testing, use the [MCP integration for other providers](../integrations/mcp.md).
 
 ## Setup
 
@@ -18,12 +18,13 @@ To use the MCP provider, you need to have an MCP server running. This can be a l
 
 1. An MCP server (local or remote)
 2. Node.js dependencies for MCP SDK (automatically handled by promptfoo)
+3. For a `.py` script in `server.path`, Python 3 and the script's dependencies must be installed. The provider runs `python3` on macOS/Linux and `python` on Windows, so that command must be available on `PATH` and meet the server's Python version requirements.
 
 ## Basic Configuration
 
 The most basic MCP provider configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: mcp
     config:
@@ -51,6 +52,34 @@ providers:
         command: node # Command to run the server
         args: ['server.js'] # Arguments for the command
         name: local-server # Optional name for the server
+        env: # Optional environment variables for the server process
+          MY_SERVER_TOKEN: '{{ env.MY_SERVER_TOKEN }}'
+          LOG_LEVEL: debug
+```
+
+`env` applies to stdio servers only (`command` or `path`). Values are layered on top of
+Promptfoo's own environment, so the server process inherits everything Promptfoo was started
+with and a per-server entry wins on conflict.
+
+Keep secrets out of the config file. `{{ env.VAR }}` placeholders are resolved from the
+environment when the provider loads, so the config stays committable while the credential comes
+from your shell or `--env-file`. A placeholder for an unset variable is preserved verbatim
+rather than collapsing to an empty string, so a missing credential fails visibly.
+
+A stdio server can also be started from a script with `path`, which accepts `.js` and `.py` files
+and is resolved relative to the config file. Use it in place of `command`/`args`: `args` is not
+applied to a `path` server, and `command` takes precedence when both are set.
+To select a virtual environment or a different Python executable, use `command` with the
+interpreter path and pass the script path in `args`.
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        path: ./mcp_server/index.js # .js runs with Node; .py runs with Python
+        name: local-server
 ```
 
 #### Remote Server (URL-based)
@@ -67,6 +96,13 @@ providers:
           Authorization: 'Bearer token'
           X-API-Key: 'your-api-key'
 ```
+
+SDK requests to the MCP endpoint configured in `server.url` reject redirects to a different origin to
+avoid forwarding credentials or request bodies to another destination. Configure `server.url` with the
+final MCP endpoint if your server redirects to a different host or port. POST requests support 307/308
+redirects within the same origin, plus same-host HTTP-to-HTTPS upgrades when both URLs use their default
+ports. OAuth discovery and token requests use Promptfoo's separate OAuth helpers and are not covered by
+this SDK redirect policy.
 
 #### Multiple Servers
 
@@ -220,21 +256,21 @@ When using OAuth authentication:
 
 #### Authentication Options Reference
 
-| Option       | Type     | Auth Type               | Required | Description                                           |
-| ------------ | -------- | ----------------------- | -------- | ----------------------------------------------------- |
-| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, or `'oauth'`      |
-| token        | string   | bearer                  | Yes      | The bearer token                                      |
-| username     | string   | basic, oauth (password) | Yes      | Username                                              |
-| password     | string   | basic, oauth (password) | Yes      | Password                                              |
-| value        | string   | api_key                 | Yes\*    | The API key value                                     |
-| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                     |
-| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`) |
-| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                     |
-| grantType    | string   | oauth                   | Yes      | `'client_credentials'` or `'password'`                |
-| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted) |
-| clientId     | string   | oauth                   | Varies   | Required for client_credentials                       |
-| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                       |
-| scopes       | string[] | oauth                   | No       | OAuth scopes to request                               |
+| Option       | Type     | Auth Type               | Required | Description                                                                                                                        |
+| ------------ | -------- | ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, `'oauth'`, or `'none'` (`''` and `'no_auth'` are accepted aliases that disable generated auth) |
+| token        | string   | bearer                  | Yes      | The bearer token                                                                                                                   |
+| username     | string   | basic, oauth (password) | Yes      | Username                                                                                                                           |
+| password     | string   | basic, oauth (password) | Yes      | Password                                                                                                                           |
+| value        | string   | api_key                 | Yes\*    | The API key value                                                                                                                  |
+| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                                                                                                  |
+| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`)                                                                              |
+| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                                                                                                  |
+| grantType    | string   | oauth                   | Varies   | `'client_credentials'` (the default when omitted) or `'password'`, which must be set explicitly                                    |
+| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted)                                                                              |
+| clientId     | string   | oauth                   | Varies   | Required for client_credentials                                                                                                    |
+| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                                                                                                    |
+| scopes       | string[] | oauth                   | No       | OAuth scopes to request                                                                                                            |
 
 \* Either `value` or `api_key` is required for api_key auth type.
 
@@ -268,10 +304,12 @@ providers:
       timeout: 900000 # Request timeout in milliseconds (15 minutes)
       debug: true # Enable debug logging
       verbose: true # Enable verbose output
-      defaultArgs: # Default arguments for all tool calls
+      defaultArgs: # Tool call arguments override these defaults
         session_id: 'test-session'
         user_role: 'customer'
 ```
+
+Tools and response transforms receive the full arguments. Debug logs list argument names only. Promptfoo redacts credential fields such as `session_id` and `apiKey` in saved result metadata and tool traces. Use the separate [server authentication](#authentication) settings for credentials that authenticate the connection itself.
 
 ### Response Transforms
 
@@ -411,12 +449,48 @@ tests:
       - type: is-json
 ```
 
-## Red Team Testing with MCP
+## Asserting on Executed Tool Calls
 
-The MCP provider is particularly powerful for red team testing of agentic systems. Here's a recommended configuration for comprehensive security testing:
+When a chat provider runs MCP tools on the model's behalf (`mcp.enabled: true` on
+`anthropic:messages` or `openai:chat`), each executed call is published on
+`metadata.toolCalls`, so you can test tool _routing_ rather than only the final answer —
+useful when several tools have overlapping domains and a wrong-but-plausible call still
+produces a plausible-looking answer.
+
+Each entry is `{ id, name, input, output, is_error }`, in call order, and spans every
+continuation round. The key is absent when no MCP tool ran, so guard with `?.`:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: anthropic:messages:claude-sonnet-5
+    config:
+      mcp:
+        enabled: true
+        server:
+          command: node
+          args: ['company_server.js']
+
+tests:
+  - vars:
+      prompt: How many people work at Acme Solar?
+    assert:
+      - type: javascript
+        value: |
+          const calls = context.metadata?.toolCalls ?? [];
+          return calls.some((c) => c.name === 'get_headcount' && !c.is_error);
+```
+
+The list is also populated on the failure paths — a run that trips `max_tool_calls`, or
+one where the model mixed MCP and non-MCP tool blocks, still reports the calls that did
+execute before the bail-out. `metadata.toolCalls` uses the same field names as the
+[Claude Agent SDK provider](/docs/providers/claude-agent-sdk), so one assertion reads both.
+
+## Red Team Testing with MCP
+
+The MCP provider is useful for red team testing of agentic systems. Here's a recommended configuration for security testing:
+
+```yaml
 description: MCP Red Team Security Testing
 
 providers:

@@ -3,11 +3,36 @@ import { loadYaml } from '../util/yamlLoad';
 
 import type { ApiProvider } from '../types/index';
 
+/** Returns the complete model suffix after the given number of provider/type segments. */
+export function modelNameFromProviderPath(providerPath: string, segments: number): string {
+  return providerPath.split(':').slice(segments).join(':');
+}
+
 /**
  * The default timeout for API requests in milliseconds.
  */
 export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+}
+
+/** Read a simple eval variable without evaluating template expressions. */
+export function resolveDirectTestVariable(value: unknown, vars?: Record<string, unknown>): unknown {
+  if (typeof value !== 'string' || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return value;
+  }
+  const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
+  return variable && vars && Object.prototype.hasOwnProperty.call(vars, variable)
+    ? vars[variable]
+    : value;
+}
+
+/** Match OpenAI-compatible output-limit environment precedence. */
+export function getOpenAIChatOutputLimitFromEnv(): number | undefined {
+  return getOpenAICompletionTokenLimitFromEnv() ?? getEnvInt('OPENAI_MAX_TOKENS');
+}
+
+export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
+  return getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
 }
 
 /**
@@ -40,6 +65,10 @@ export interface ProviderConfig {
   audioCost?: number;
   audioInputCost?: number;
   audioOutputCost?: number;
+  videoOutputCost?: number;
+  imageInputCost?: number;
+  service_tier?: string | null;
+  passthrough?: object;
 }
 
 /**
@@ -81,6 +110,17 @@ export function calculateCost(
   const outputCost =
     config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens;
+}
+
+/**
+ * Clamp reported cached prompt tokens to [0, promptTokens] for cost billing.
+ *
+ * Providers occasionally report cached token counts that exceed prompt tokens
+ * (rounding) or values that are negative or non-finite; billing those raw would
+ * produce negative or NaN costs.
+ */
+export function clampCachedTokens(cachedTokens: number | undefined, promptTokens: number): number {
+  return Number.isFinite(cachedTokens) ? Math.min(Math.max(cachedTokens!, 0), promptTokens) : 0;
 }
 
 /**

@@ -198,6 +198,7 @@ const redTeamSidebar = [
           'red-team/strategies/iterative',
           'red-team/strategies/meta',
           'red-team/strategies/hydra',
+          'red-team/strategies/goblin',
           'red-team/strategies/tree',
           'red-team/strategies/composite-jailbreaks',
         ],
@@ -556,10 +557,6 @@ const sidebars = {
     {
       type: 'doc',
       id: 'contributing',
-    },
-    {
-      type: 'doc',
-      id: 'write-for-promptfoo',
     },
     {
       type: 'doc',

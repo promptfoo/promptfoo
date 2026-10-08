@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { readFileSync } from 'fs';
 
-import { defineConfig } from 'tsdown';
+import { defineConfig, type UserConfig } from 'tsdown';
 
 const require = createRequire(import.meta.url);
 const semver = require('semver') as typeof import('semver');
@@ -11,7 +11,7 @@ const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 
 // Normalize the package.json engines range into comparator sets that the zero-dependency
 // CLI entrypoint can evaluate before importing any other modules.
-const enginesNode: string = packageJson.engines?.node ?? '>=20.0.0';
+const enginesNode: string = packageJson.engines?.node ?? '>=22.22.0';
 let nodeEngineComparatorSets: Array<
   Array<{ operator: '' | '=' | '>' | '>=' | '<' | '<='; version: string }>
 >;
@@ -24,9 +24,9 @@ try {
   );
 } catch {
   console.warn(
-    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to >=20.0.0.`,
+    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to >=22.22.0.`,
   );
-  nodeEngineComparatorSets = [[{ operator: '>=', version: '20.0.0' }]];
+  nodeEngineComparatorSets = [[{ operator: '>=', version: '22.22.0' }]];
 }
 
 // Build-time constants injected into all builds
@@ -39,107 +39,73 @@ const versionDefines = {
   __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: JSON.stringify(nodeEngineComparatorSets),
 };
 
-// All configs use clean: false. Use `npm run build:clean` for explicit cleaning.
-// This prevents race conditions when multiple configs share the same outDir.
+// Use `npm run build:clean` to avoid racing concurrent builds in the shared output directory.
+const sharedBuildOptions = {
+  target: 'node22',
+  outDir: 'dist/src',
+  sourcemap: true,
+  clean: false,
+  deps: {
+    neverBundle: /^[a-z@][^:]*/,
+    onlyBundle: false,
+  },
+} as const;
+
+function esmBuildOptions(entry: UserConfig['entry'], options: Pick<UserConfig, 'treeshake'> = {}) {
+  return {
+    ...sharedBuildOptions,
+    entry,
+    format: ['esm' as const],
+    ...options,
+    shims: true, // Provides __dirname, __filename shims automatically
+    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
+    define: {
+      ...versionDefines,
+      BUILD_FORMAT: '"esm"',
+      'process.env.BUILD_FORMAT': '"esm"',
+    },
+  };
+}
+
 export default defineConfig([
   // Server (ESM only) - stable path for workflows
-  {
-    entry: { 'server/index': 'src/server/index.ts' },
-    format: ['esm'],
-    target: 'node20',
-    outDir: 'dist/src',
-    shims: true,
-    sourcemap: true,
-    clean: false,
-    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    inlineOnly: false, // Disable warning about bundling dependencies
-    define: {
-      ...versionDefines,
-      BUILD_FORMAT: '"esm"',
-      'process.env.BUILD_FORMAT': '"esm"',
-    },
-    external: [
-      // Externalize all bare module imports so Node resolves CJS deps natively
-      /^[a-z@][^:]*/,
-    ],
-  },
+  esmBuildOptions({ 'server/index': 'src/server/index.ts' }),
   // CLI binary (ESM only)
   {
-    entry: ['src/entrypoint.ts', 'src/main.ts'],
-    format: ['esm'],
-    target: 'node20',
-    outDir: 'dist/src',
-    clean: false,
-    shims: true, // Provides __dirname, __filename shims automatically
-    sourcemap: true,
-    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    inlineOnly: false, // Disable warning about bundling dependencies
-    define: {
-      ...versionDefines,
-      BUILD_FORMAT: '"esm"',
-      'process.env.BUILD_FORMAT': '"esm"',
-    },
+    ...esmBuildOptions(['src/entrypoint.ts', 'src/main.ts']),
     outputOptions: {
       banner: '#!/usr/bin/env node',
     },
-    external: [
-      // Externalize all bare module imports so Node resolves CJS deps natively
-      /^[a-z@][^:]*/,
-      // Ensure critical native deps remain external
-      '@huggingface/transformers',
-      'playwright',
-      'sharp',
-      '@swc/core',
-      'esbuild',
-      'fsevents',
-    ],
   },
   // Library ESM build
-  {
-    entry: {
+  esmBuildOptions(
+    {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
     },
-    format: ['esm'],
-    target: 'node20',
-    outDir: 'dist/src',
-    treeshake: true,
-    sourcemap: true,
-    shims: true, // Ensure library ESM build has shims
-    clean: false,
-    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    inlineOnly: false, // Disable warning about bundling dependencies
-    define: {
-      ...versionDefines,
-      BUILD_FORMAT: '"esm"',
-      'process.env.BUILD_FORMAT': '"esm"',
-    },
-    external: [
-      // Externalize all bare module imports so Node resolves CJS deps natively
-      /^[a-z@][^:]*/,
-    ],
-  },
+    { treeshake: true },
+  ), // Ensure library ESM build has shims
   // Library CJS build for compatibility
   {
+    ...sharedBuildOptions,
+    // Native require(ESM) returns Chalk's namespace, while the CJS interop wrapper
+    // expects its default function. Bundle this ESM-only dependency so logging works
+    // without changing the require conditions of other dependencies (notably Zod).
+    deps: {
+      ...sharedBuildOptions.deps,
+      neverBundle: /^(?!chalk(?:\/|$))[a-z@][^:]*/,
+      alwaysBundle: ['chalk'],
+    },
     entry: {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
     },
     format: ['cjs'],
-    target: 'node20',
-    outDir: 'dist/src',
-    sourcemap: true,
-    clean: false,
     fixedExtension: true, // Use .cjs extension for CJS output
-    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"cjs"',
       'process.env.BUILD_FORMAT': '"cjs"',
     },
-    external: [
-      // Externalize all bare module imports so Node resolves CJS deps natively
-      /^[a-z@][^:]*/,
-    ],
   },
 ]);

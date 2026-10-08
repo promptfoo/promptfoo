@@ -57,6 +57,7 @@ describe('OpenAiResponsesProvider tool loading', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
           tools: [{ type: 'web_search_preview' }],
         },
       });
@@ -86,10 +87,11 @@ describe('OpenAiResponsesProvider tool loading', () => {
       expect(result.error).toBeUndefined();
     });
 
-    it('should return error for deep-research without web_search_preview', async () => {
+    it('should return an error for deep-research without a data source', async () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
           tools: [
             {
               type: 'function',
@@ -101,7 +103,7 @@ describe('OpenAiResponsesProvider tool loading', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result.error).toContain('requires the web_search_preview tool');
+      expect(result.error).toContain('requires at least one data source');
     });
   });
 });

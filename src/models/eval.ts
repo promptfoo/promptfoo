@@ -12,7 +12,6 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -41,9 +40,17 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions } from '../util/sanitizer';
+import {
+  sanitizeConfigForOutput,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateGenerationTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -56,8 +63,11 @@ import {
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
+  getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  projectPrompt,
+  projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -146,7 +156,10 @@ export function combineFilterConditions(
     if (idx === 0) {
       return cond;
     }
-    return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+    // Filters arrive as unvalidated JSON from the query string, and the UI sends
+    // lowercase 'or'/'and'. Anything that isn't a recognized OR falls back to AND.
+    const isOr = typeof logicOperator === 'string' && logicOperator.toUpperCase() === 'OR';
+    return isOr ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
   }, filterConditions[0].condition);
 }
 
@@ -318,6 +331,11 @@ export default class Eval {
   runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
+  /**
+   * The first non-transient HTTP status among the rows added in this run. It stands in for
+   * the database when that cannot be queried afterwards.
+   */
+  private observedTargetErrorStatus?: number;
   private failedResults = new Map<string, EvaluateResult>();
   // Reconstructed EvalResults for rows that failed to persist, cached so comparison
   // assertions reuse the SAME instance across passes (select-best then max-score).
@@ -496,7 +514,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config,
+          config: sanitizeTracingConfigForPersistence(config),
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -662,7 +680,7 @@ export default class Eval {
   async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: this.config,
+      config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
@@ -742,6 +760,14 @@ export default class Eval {
   }
 
   async addResult(result: EvaluateResult) {
+    const httpStatus = result.response?.metadata?.http?.status;
+    if (
+      this.observedTargetErrorStatus === undefined &&
+      typeof httpStatus === 'number' &&
+      isNonTransientHttpStatus(httpStatus)
+    ) {
+      this.observedTargetErrorStatus = httpStatus;
+    }
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
     });
@@ -832,13 +858,14 @@ export default class Eval {
    * Find a non-transient HTTP error status from evaluation results.
    * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
    *
-   * For persisted evals: Uses efficient O(1) database query with LIMIT 1.
+   * For persisted evals: Uses efficient O(1) database query with LIMIT 1, and also scans
+   * the rows that could not be saved, which the database does not have.
    * For non-persisted evals: Falls back to scanning in-memory results.
    */
   async findTargetErrorStatus(): Promise<number | undefined> {
-    // Helper to scan in-memory results
-    const scanInMemory = (): number | undefined => {
-      for (const result of this.results) {
+    // Helper to scan results held in memory
+    const scan = (results: Iterable<Pick<EvaluateResult, 'response'>>): number | undefined => {
+      for (const result of results) {
         const status = result.response?.metadata?.http?.status;
         if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
           return status;
@@ -846,11 +873,16 @@ export default class Eval {
       }
       return undefined;
     };
+    const scanInMemory = () => scan(this.results);
 
     // For non-persisted evals, scan in-memory results
     if (!this.persisted) {
       return scanInMemory();
     }
+
+    // A row that could not be saved is kept in memory instead. The row that stopped the eval
+    // can be one of them, and the query below would not find it.
+    const unsavedStatus = scan(this.failedResults.values());
 
     // For persisted evals, use efficient database query
     try {
@@ -875,11 +907,11 @@ export default class Eval {
         .limit(1)
         .get();
 
-      return result?.httpStatus ?? undefined;
+      return result?.httpStatus ?? unsavedStatus;
     } catch {
-      // Fall back to in-memory scan if database query fails
-      // This handles edge cases like mocked databases in tests
-      return scanInMemory();
+      // Fall back to what is held in memory if the database query fails: loaded results,
+      // rows that could not be saved, and what the rows added in this run showed.
+      return scanInMemory() ?? unsavedStatus ?? this.observedTargetErrorStatus;
     }
   }
 
@@ -1373,7 +1405,9 @@ export default class Eval {
   }
 
   async loadResults() {
-    this.results = await EvalResult.findManyByEvalId(this.id);
+    if (this.persisted) {
+      this.results = await EvalResult.findManyByEvalId(this.id);
+    }
     this._resultsLoaded = true;
   }
 
@@ -1411,6 +1445,11 @@ export default class Eval {
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
+    accumulateGenerationTokenUsage(
+      stats.tokenUsage,
+      this.config.metadata?.generationAccounting?.tokenUsage,
+    );
+
     return stats;
   }
 
@@ -1430,20 +1469,15 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+    const stripFlags = getStripFlags(this.config.env);
 
-    const prompts = shouldStripPromptText
-      ? this.prompts.map((p) => ({
-          ...p,
-          raw: '[prompt stripped]',
-        }))
-      : this.prompts;
+    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
       stats,
     };
   }
@@ -1495,17 +1529,20 @@ export default class Eval {
 
   async toResultsFile(): Promise<ResultsFile> {
     const traces = await this.getTraces();
+    const stripFlags = getStripFlags(this.config.env);
 
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: this.config,
+      config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
-      prompts: this.getPrompts(),
+      prompts: this.getPrompts().map((prompt) =>
+        projectPrompt(prompt, stripFlags.shouldStripPromptText),
+      ),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
-      ...(traces.length > 0 && { traces }),
+      ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
     };
 
     return results;
@@ -1546,7 +1583,7 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(this.config);
+    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
     const newPrompts = structuredClone(this.prompts);
@@ -1566,7 +1603,7 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: newConfig,
+          config: sanitizeTracingConfigForPersistence(newConfig),
           results: {},
           prompts: newPrompts,
           vars: newVars,

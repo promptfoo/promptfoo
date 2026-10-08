@@ -72,6 +72,40 @@ describe('HttpProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow('Network error');
   });
 
+  it('preserves original provider token usage when a response transform returns only text', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        body: { prompt: '{{ prompt }}' },
+        transformResponse: (data: any) => data.output,
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({
+        output: 'response text',
+        tokenUsage: {
+          prompt: 12,
+          completion: 7,
+          total: 19,
+          completionDetails: { reasoning: 3 },
+        },
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await expect(provider.callApi('test prompt')).resolves.toMatchObject({
+      output: 'response text',
+      tokenUsage: {
+        prompt: 12,
+        completion: 7,
+        total: 19,
+        completionDetails: { reasoning: 3 },
+      },
+    });
+  });
+
   it('should use custom method/headers/queryParams', async () => {
     provider = new HttpProvider(mockUrl, {
       config: {
@@ -639,6 +673,38 @@ describe('HttpProvider', () => {
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it.each([
+      ['ordinary text', 'ordinary%20text'],
+      ['$$', '$$'],
+      ['$&', '$&'],
+      ['$`', '$`'],
+      ["$'", '$%27'],
+    ])('should keep %s in repeated raw GET request placeholders', async (prompt, encodedPrompt) => {
+      const rawRequest = dedent`
+        GET /api/data?q={{prompt}}&repeat={{prompt}} HTTP/1.1
+        Host: example.com
+      `;
+      const provider = new HttpProvider('http', { config: { request: rawRequest } });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi(prompt);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `http://example.com/api/data?q=${encodedPrompt}&repeat=${encodedPrompt}`,
+        expect.objectContaining({ method: 'GET' }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
     });
 
     it('should handle multipart/form-data raw request with variable substitution', async () => {
@@ -2751,6 +2817,17 @@ describe('urlEncodeRawRequestPath', () => {
     const result = urlEncodeRawRequestPath(rawRequest);
     expect(result).toBe('GET /api/data?query=already%20encoded HTTP/1.1');
   });
+
+  it.each(['\n', '\r\n'])(
+    'should keep dollar patterns and the rest of the request unchanged with %j line endings',
+    (lineEnding) => {
+      const rest = `${lineEnding}X-Literal: $$ $& $\` $'${lineEnding}${lineEnding}body $$ $& $\` $'`;
+      const rawRequest = "POST /api/data?query=turn $$ into $& or $` or $' HTTP/1.1" + rest;
+      expect(urlEncodeRawRequestPath(rawRequest)).toBe(
+        'POST /api/data?query=turn%20$$%20into%20$&%20or%20$`%20or%20$%27 HTTP/1.1' + rest,
+      );
+    },
+  );
 
   it('should not leak sensitive query values when logging URL encoding', () => {
     const debugSpy = vi.spyOn(logger, 'debug');

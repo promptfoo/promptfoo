@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import { runEval } from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { mockProcessEnv } from '../../util/utils';
@@ -309,6 +310,95 @@ describe('AzureChatCompletionProvider', () => {
     afterEach(() => {
       vi.resetAllMocks();
     });
+
+    it('uses audio-token pricing from chat completion usage details', async () => {
+      provider = new AzureChatCompletionProvider('gpt-audio-1.5-2026-02-23', {
+        config: { apiHost: 'test.azure.com', apiKey: 'test-key' },
+      });
+      setAuthHeaders(provider);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+          ],
+          usage: {
+            prompt_tokens: 1_000,
+            prompt_tokens_details: { audio_tokens: 200, cached_tokens: 0 },
+            completion_tokens: 500,
+            completion_tokens_details: { audio_tokens: 100 },
+            total_tokens: 1_500,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeCloseTo((800 * 2.5 + 200 * 32 + 400 * 10 + 100 * 64) / 1e6, 12);
+    });
+
+    it('reports API prompt-cache usage for a fresh chat response', async () => {
+      provider = new AzureChatCompletionProvider('gpt-5.6', {
+        config: { apiHost: 'test.azure.com', apiKey: 'test-key' },
+      });
+      setAuthHeaders(provider);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+          ],
+          usage: {
+            prompt_tokens: 2_000,
+            prompt_tokens_details: { cached_tokens: 500 },
+            completion_tokens: 1_000,
+            total_tokens: 3_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+    });
+
+    it.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+      'uses modelName for %s cache pricing without changing the Azure deployment',
+      async (modelName) => {
+        provider = new AzureChatCompletionProvider('prod-claude', {
+          config: { apiHost: 'test.azure.com', apiKey: 'test-key', modelName },
+        });
+        setAuthHeaders(provider);
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: {
+            choices: [
+              { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+            ],
+            usage: {
+              prompt_tokens: 1_000,
+              prompt_tokens_details: { cached_tokens: 500 },
+              completion_tokens: 500,
+              total_tokens: 1_500,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await provider.callApi('test prompt');
+
+        expect(result.cost).toBeCloseTo(0.030125, 8);
+        const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+        expect(request.model).toBe('prod-claude');
+        expect(request).not.toHaveProperty('modelName');
+      },
+    );
 
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
       const mockResponse = {
@@ -769,6 +859,50 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
+    it.each(['gpt-chat-latest', 'gpt-chat-latest-2026-06-24'])(
+      'uses reasoning request fields for Azure Chat alias %s',
+      async (deploymentName) => {
+        const provider = new AzureChatCompletionProvider(deploymentName, {
+          config: {
+            max_tokens: 1_000,
+            max_completion_tokens: 2_000,
+            reasoning_effort: 'high',
+            temperature: 0.7,
+          },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+        expect(body).toHaveProperty('max_completion_tokens', 2_000);
+        expect(body).not.toHaveProperty('reasoning_effort');
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
+    it('omits default and passthrough effort for fixed-reasoning Azure deployments', async () => {
+      const direct = new AzureChatCompletionProvider('gpt-chat-latest');
+      const { body: directBody } = await direct.getOpenAiBody('hello');
+      expect(directBody).not.toHaveProperty('reasoning_effort');
+
+      const provider = new AzureChatCompletionProvider('opaque-deployment', {
+        config: { modelName: 'gpt-4.1' },
+      });
+      const passthrough = { reasoning_effort: 'high' };
+      const { body } = await provider.getOpenAiBody('hello', {
+        vars: {},
+        prompt: {
+          raw: 'hello',
+          label: 'override',
+          config: { modelName: 'gpt-chat-latest', passthrough },
+        },
+      });
+      expect(body.model).toBe('opaque-deployment');
+      expect(body).not.toHaveProperty('reasoning_effort');
+      expect(body).not.toHaveProperty('temperature');
+      expect(passthrough.reasoning_effort).toBe('high');
+    });
+
     it('omits temperature for Claude Opus 4.7 while keeping the standard chat body', async () => {
       const provider = new AzureChatCompletionProvider('claude-opus-4-7', {
         config: {
@@ -803,21 +937,96 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).not.toHaveProperty('reasoning_effort');
     });
 
-    it('omits sampling params for Claude Fable 5 while keeping the standard chat body', async () => {
-      const provider = new AzureChatCompletionProvider('claude-fable-5', {
+    it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+      'omits sampling params for %s while keeping the standard chat body',
+      async (model) => {
+        const provider = new AzureChatCompletionProvider(model, {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            max_tokens: 512,
+            temperature: 0.5,
+            top_p: 0.9,
+          },
+        });
+        const { body } = await (provider as any).getOpenAiBody('hi');
+        expect(body).toHaveProperty('max_tokens', 512);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('top_p');
+        expect(body).not.toHaveProperty('reasoning_effort');
+      },
+    );
+
+    it.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
+      'omits forced tool choice for %s',
+      async (model) => {
+        const provider = new AzureChatCompletionProvider(model, {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            tools: [
+              {
+                type: 'function',
+                function: { name: 'get_weather', parameters: { type: 'object', properties: {} } },
+              },
+            ],
+            tool_choice: 'required',
+          },
+        });
+        const { body } = await provider.getOpenAiBody('Check the weather');
+        expect(body.tools).toHaveLength(1);
+        expect(body).not.toHaveProperty('tool_choice');
+      },
+    );
+
+    it.each([
+      { modelName: 'claude-fable-5-1', tool_choice: 'required', expected: undefined },
+      {
+        modelName: 'claude-mythos-5-1',
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
+        expected: undefined,
+      },
+      { modelName: 'claude-fable-5-1', tool_choice: 'auto', expected: 'auto' },
+      { modelName: 'claude-mythos-5-1', tool_choice: 'none', expected: 'none' },
+    ] as const)(
+      'uses $modelName compatibility for an aliased deployment with $tool_choice',
+      async ({ modelName, tool_choice, expected }) => {
+        const provider = new AzureChatCompletionProvider('prod-claude', {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            modelName,
+            temperature: 0.5,
+            top_p: 0.9,
+            tools: [
+              {
+                type: 'function',
+                function: { name: 'get_weather', parameters: { type: 'object' } },
+              },
+            ],
+            tool_choice,
+          },
+        });
+        const { body } = await provider.getOpenAiBody('Check the weather');
+        expect(body.model).toBe('prod-claude');
+        expect(body.tools).toHaveLength(1);
+        expect(body.tool_choice).toEqual(expected);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('top_p');
+      },
+    );
+
+    it('keeps forced tool choice for an aliased older adaptive model', async () => {
+      const provider = new AzureChatCompletionProvider('prod-claude', {
         config: {
           apiHost: 'test.azure.com',
           apiKey: 'test-key',
-          max_tokens: 512,
-          temperature: 0.5,
-          top_p: 0.9,
+          modelName: 'claude-fable-5',
+          tool_choice: 'required',
         },
       });
-      const { body } = await (provider as any).getOpenAiBody('hi');
-      expect(body).toHaveProperty('max_tokens', 512);
-      expect(body).not.toHaveProperty('temperature');
-      expect(body).not.toHaveProperty('top_p');
-      expect(body).not.toHaveProperty('reasoning_effort');
+      const { body } = await provider.getOpenAiBody('hi');
+      expect(body.tool_choice).toBe('required');
     });
 
     it('omits sampling params for a custom Claude deployment when configured explicitly', async () => {
@@ -854,6 +1063,26 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).toHaveProperty('temperature', 0.5);
       expect(body).toHaveProperty('top_p', 0.9);
     });
+
+    it.each(['claude-prod-5', 'claude-prod-25', 'claude-team-blue-12', 'claude-prod-20260811'])(
+      'keeps sampling params for custom Claude deployment alias %s',
+      async (deploymentName) => {
+        const provider = new AzureChatCompletionProvider(deploymentName, {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            max_tokens: 512,
+            temperature: 0.5,
+            top_p: 0.9,
+          },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hi');
+
+        expect(body).toHaveProperty('temperature', 0.5);
+        expect(body).toHaveProperty('top_p', 0.9);
+      },
+    );
 
     it('omits sampling params for an opus-4-7-named deployment even without the flag', async () => {
       // Baseline name-match path: deployment name matches opus-4-7, so sampling
@@ -1096,6 +1325,177 @@ describe('AzureChatCompletionProvider', () => {
         flaggedOutput: true,
       });
       expect(result.finishReason).toBe('content_filter');
+      expect(result.output).toBe('Some content');
+    });
+
+    it.each(['guardrails', 'not-guardrails'] as const)(
+      'evaluates %s for content-filtered null output instead of reporting an integration error',
+      async (assertionType) => {
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: {
+            choices: [
+              {
+                message: { role: 'assistant', content: null },
+                finish_reason: 'content_filter',
+              },
+            ],
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const [result] = await runEval({
+          provider,
+          prompt: { raw: 'Test prompt', label: 'test-label' },
+          test: {
+            metadata: { purpose: 'A target that blocks unsafe requests' },
+            assert: [{ type: 'promptfoo:redteam:ssrf' }, { type: assertionType }],
+          },
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: true,
+          conversations: {},
+          registers: {},
+        });
+
+        expect(fetchWithCache).toHaveBeenCalledOnce();
+        expect(result.response).toMatchObject({
+          output: '',
+          finishReason: 'content_filter',
+          guardrails: { flagged: true, flaggedInput: false, flaggedOutput: true },
+        });
+        expect(result.success).toBe(assertionType === 'not-guardrails');
+        expect(result.error).toBe(
+          assertionType === 'not-guardrails' ? undefined : 'Output failed safety checks',
+        );
+        expect(result.gradingResult?.componentResults).toEqual([
+          expect.objectContaining({ pass: true }),
+          expect.objectContaining({
+            assertion: { type: assertionType },
+            pass: assertionType === 'not-guardrails',
+          }),
+        ]);
+      },
+    );
+
+    it('grades an explicit Azure refusal even when message content is null', async () => {
+      const refusal = 'I cannot help with that request.';
+      provider.config.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'result',
+          strict: true,
+          schema: { type: 'object', properties: {}, additionalProperties: false },
+        },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { message: { role: 'assistant', content: null, refusal }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 0, total_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const [result] = await runEval({
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {
+          metadata: { purpose: 'A target that refuses unsafe requests' },
+          assert: [
+            { type: 'promptfoo:redteam:ssrf' },
+            { type: 'is-refusal' },
+            { type: 'not-guardrails' },
+          ],
+        },
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: true,
+        conversations: {},
+        registers: {},
+      });
+
+      expect(result.response).toMatchObject({
+        output: refusal,
+        isRefusal: true,
+        finishReason: 'stop',
+        guardrails: { flagged: true },
+      });
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ total: 5 });
+    });
+
+    it('does not crash when the API returns an empty choices array', async () => {
+      // An empty `choices` array (e.g. when every candidate is filtered) makes
+      // `choices[0]` undefined. The rest of the parser optional-chains `choice`,
+      // but the logProbs read dereferenced `data.choices[0]` directly and threw a
+      // TypeError, which surfaced as an opaque "API response error" instead of a
+      // normal empty result.
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 0,
+          total_tokens: 10,
+        },
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.logProbs).toBeUndefined();
+      // The nullish output is what routes the row to the evaluator's canonical
+      // "No output" outcome; token usage still reflects the billed prompt.
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 10, completion: 0 });
+    });
+
+    it('does not crash when the API response has no choices field at all', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 0,
+          total_tokens: 10,
+        },
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.logProbs).toBeUndefined();
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 10, completion: 0 });
     });
 
     it('should detect input content filtering', async () => {

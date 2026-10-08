@@ -88,6 +88,8 @@ export interface ProviderOptions {
   id: string;
   label?: string;
   delay?: number;
+  transform?: CoreProviderOptions['transform'];
+  env?: CoreProviderOptions['env'];
   // Multi-variable inputs for test case generation
   inputs?: Inputs;
   config: {
@@ -101,7 +103,7 @@ export interface ProviderOptions {
     headers?: Record<string, string>;
     body?: string | object;
     messageTemplate?: string;
-    protocols?: string[];
+    protocols?: string | string[];
     // Browser specific options
     steps?: BrowserStep[];
     headless?: boolean;

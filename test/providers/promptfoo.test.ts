@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
@@ -26,6 +26,10 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
       }
     },
   };
+});
+
+afterEach(() => {
+  vi.resetAllMocks();
 });
 
 describe('PromptfooHarmfulCompletionProvider', () => {
@@ -77,6 +81,30 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({ output: ['test output'] });
+  });
+
+  it('preserves token usage returned by harmful generation', async () => {
+    const tokenUsage = { total: 18, prompt: 11, completion: 7 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ output: 'test output', tokenUsage }), { status: 200 }),
+    );
+
+    await expect(provider.callApi('test prompt')).resolves.toEqual({
+      output: ['test output'],
+      tokenUsage,
+    });
+  });
+
+  it('preserves reported token usage when harmful generation fails', async () => {
+    const tokenUsage = { total: 18, prompt: 11, completion: 7 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Generation failed', tokenUsage }), { status: 500 }),
+    );
+
+    await expect(provider.callApi('test prompt')).resolves.toMatchObject({
+      error: expect.stringContaining('Generation failed'),
+      tokenUsage,
+    });
   });
 
   it('should include target context in harmful generation requests', async () => {
@@ -223,10 +251,18 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should handle successful API call', async () => {
+    const tokenUsage = {
+      total: 100,
+      prompt: 60,
+      completion: 40,
+      cached: 12,
+      numRequests: 3,
+      completionDetails: { reasoning: 8 },
+    };
     const mockResponse = new Response(
       JSON.stringify({
         result: 'test result',
-        tokenUsage: { total: 100 },
+        tokenUsage,
       }),
       {
         status: 200,
@@ -239,7 +275,7 @@ describe('PromptfooChatCompletionProvider', () => {
 
     expect(result).toEqual({
       output: 'test result',
-      tokenUsage: { total: 100 },
+      tokenUsage,
     });
   });
 
@@ -371,6 +407,118 @@ describe('PromptfooChatCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toBe('LLM did not return a result, likely refusal');
+  });
+
+  it('preserves token usage when a remote task fails after calling a model', async () => {
+    const tokenUsage = {
+      total: 73,
+      prompt: 45,
+      completion: 28,
+      numRequests: 2,
+    };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        JSON.stringify({ message: 'Internal Server Error', details: 'Model refused', tokenUsage }),
+        { status: 500 },
+      ),
+    );
+
+    expect(await provider.callApi('test prompt')).toEqual({
+      error: 'LLM did not return a result, likely refusal',
+      tokenUsage,
+    });
+  });
+
+  it('preserves an explicit permanent Meta coordination request error', async () => {
+    const providerError = {
+      status: 400,
+      type: 'invalid_request_error',
+      code: 'invalid_json',
+    };
+    const tokenUsage = { total: 73, prompt: 45, completion: 28, numRequests: 2 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: 'Coordination request failed', providerError, tokenUsage }),
+        {
+          status: 400,
+        },
+      ),
+    );
+    const metaProvider = new PromptfooChatCompletionProvider({
+      ...options,
+      task: 'meta-agent-decision',
+    });
+
+    expect(await metaProvider.callApi('test prompt')).toEqual({
+      error:
+        'Meta-agent request failed: the upstream provider rejected the coordination request as invalid JSON (invalid_json).',
+      metadata: { remoteGenerationError: providerError },
+      tokenUsage,
+    });
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      status: 429,
+      providerError: { status: 429, type: 'rate_limit_error', code: 'rate_limit_exceeded' },
+    },
+    { status: 500, providerError: { status: 500, type: 'server_error', code: 'invalid_json' } },
+    {
+      status: 500,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'invalid_json' },
+    },
+    {
+      status: 400,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'invalid_prompt' },
+    },
+    {
+      status: 400,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'cyber_policy_violation' },
+    },
+    {
+      status: 400,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'bio_policy_violation' },
+    },
+    { status: 400, providerError: { status: 400, type: 'server_error', code: 'invalid_json' } },
+    { status: 400, providerError: undefined },
+    { status: 200, providerError: undefined },
+  ])(
+    'does not classify other Meta errors as permanent: $status $providerError',
+    async ({ status, providerError }) => {
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'Customer text mentions invalid_json and invalid_request_error',
+            providerError,
+          }),
+          { status },
+        ),
+      );
+      const metaProvider = new PromptfooChatCompletionProvider({
+        ...options,
+        task: 'meta-agent-decision',
+      });
+
+      expect(await metaProvider.callApi('test prompt')).toEqual({
+        error: 'LLM did not return a result, likely refusal',
+      });
+    },
+  );
+
+  it('keeps other remote strategies unchanged for the Meta request error envelope', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          providerError: { status: 400, type: 'invalid_request_error', code: 'invalid_json' },
+        }),
+        { status: 400 },
+      ),
+    );
+
+    expect(await provider.callApi('test prompt')).toEqual({
+      error: 'LLM did not return a result, likely refusal',
+    });
   });
 
   it('should handle API error', async () => {
@@ -552,6 +700,7 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(result.error).toContain('Remote generation is disabled');
     expect(result.error).toContain('SimulatedUser requires');
     expect(result.error).toContain('PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    expect(result.tokenUsage).toEqual({ numRequests: 0 });
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 
@@ -596,6 +745,7 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(result.error).toContain(
       'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
     );
+    expect(result.tokenUsage).toEqual({ numRequests: 0 });
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 
@@ -613,6 +763,7 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(result.error).toContain(
       'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
     );
+    expect(result.tokenUsage).toEqual({ numRequests: 0 });
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 
