@@ -751,6 +751,47 @@ describe('ResultsTable Metrics Display', () => {
         vi.unstubAllEnvs();
       });
 
+      it('replaces the audio player when its resolved source changes', () => {
+        const initialStore = useTableStore();
+        const setAudio = (value: string) => {
+          vi.mocked(useTableStore).mockReturnValue({
+            ...initialStore,
+            table: {
+              head: { prompts: [{}], vars: ['prompt'] },
+              body: [
+                {
+                  outputs: [
+                    {
+                      pass: true,
+                      score: 1,
+                      text: 'test output',
+                      metadata: {
+                        [FILE_METADATA_KEY]: { prompt: { path: 'input.txt', type: 'text' } },
+                      },
+                    },
+                  ],
+                  test: { metadata: { strategyId: 'audio', originalText: 'decoded prompt' } },
+                  vars: [value],
+                },
+              ],
+            },
+          });
+        };
+        setAudio('storageRef:first.wav');
+        const { container, rerender } = renderWithProviders(
+          <ResultsTable {...defaultProps} columnVisibility={{}} />,
+        );
+        const firstPlayer = container.querySelector('audio');
+        expect(firstPlayer).not.toBeNull();
+        setAudio('storageRef:second.wav');
+        rerender(<ResultsTable {...defaultProps} columnVisibility={{}} />);
+        expect(container.querySelector('audio')).not.toBe(firstPlayer);
+        expect(container.querySelector('audio source')).toHaveAttribute(
+          'src',
+          '/api/media/second.wav',
+        );
+      });
+
       it.each([
         ['blob', 'promptfoo://blob/audio-hash', '/api/blobs/audio-hash'],
         ['storage', 'storageRef:audio/sample.mp3', '/api/media/audio/sample.mp3'],

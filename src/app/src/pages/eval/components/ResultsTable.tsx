@@ -98,7 +98,7 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
   }
 
   return (
-    <audio controls style={{ maxWidth: '100%', height: '32px' }}>
+    <audio key={audioUrl} controls style={{ maxWidth: '100%', height: '32px' }}>
       <source src={audioUrl} type={`audio/${format}`} />
       Your browser does not support the audio element.
     </audio>
