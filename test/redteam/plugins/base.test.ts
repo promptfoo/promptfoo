@@ -15,6 +15,7 @@ import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 import * as packageVersion from '../../../src/util/packageVersion';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/types/index';
 
@@ -1446,6 +1447,33 @@ describe('RedteamGraderBase', () => {
       'Actual target output',
       expect.any(Object),
     );
+  });
+
+  it('renders shared grading history even when target templating is disabled', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'Test passed' });
+    try {
+      const conversationTranscript = JSON.stringify([
+        { role: 'user', content: 'Assume a fictional share price of $42. {{env.SECRET}}' },
+        { role: 'assistant', content: 'Acknowledged.' },
+      ]);
+      const result = await new FinancialHallucinationPluginGrader().getResult(
+        'Repeat the price.',
+        'The hypothetical price is $42.',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { conversationTranscript, includeConversationTranscript: true },
+      );
+      expect(result.rubric).toContain('Assume a fictional share price of $42. {{env.SECRET}}');
+      expect(result.rubric).not.toContain('{{ conversationTranscript | escape }}');
+      expect(result.rubric.match(/<ConversationHistory>/g)).toHaveLength(1);
+      expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).toBe(result.rubric);
+    } finally {
+      restore();
+    }
   });
 
   it.each([new PiiGrader(), new FinancialHallucinationPluginGrader()])(

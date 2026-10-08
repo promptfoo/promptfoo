@@ -1,7 +1,48 @@
 import { describe, expect, it } from 'vitest';
-import { getTargetConversation } from '../../../src/redteam/grading/storedResult';
+import {
+  getGradingInputHash,
+  getTargetConversation,
+} from '../../../src/redteam/grading/storedResult';
 
 describe('getTargetConversation', () => {
+  const verified = [
+    { role: 'user', content: 'My email is supplied@example.com.' },
+    { role: 'assistant', content: 'Acknowledged.' },
+  ];
+
+  it('preserves verified prior turns without inventing an unknown current user message', () => {
+    const messages = [...verified, { role: 'assistant', content: 'supplied@example.com' }];
+    expect(getTargetConversation(messages, 2)).toEqual({
+      conversationTranscript: JSON.stringify(verified, null, 2),
+      currentTurnStart: 2,
+    });
+    expect(getTargetConversation(verified, 2).conversationTranscript).toBe(
+      getTargetConversation(messages, 2).conversationTranscript,
+    );
+  });
+
+  it.each([-1, 1.5, 999, '2', null, Number.NaN])(
+    'ignores an invalid explicit boundary: %s',
+    (boundary) => {
+      expect(getTargetConversation(verified, boundary)).toEqual(getTargetConversation(verified));
+    },
+  );
+
+  it('counts and hashes the same role/content records', () => {
+    const messages = [...verified, { role: 'assistant', content: 'Current output' }];
+    const withIgnored = [{ role: 'system', content: 'Not attributable' }, ...messages];
+    expect(getTargetConversation(withIgnored, 2)).toEqual(getTargetConversation(messages, 2));
+    expect(getGradingInputHash('Current request', 'Current output', withIgnored, 'pii', 2)).toBe(
+      getGradingInputHash('Current request', 'Current output', messages, 'pii', 2),
+    );
+    expect(getGradingInputHash('Current request', 'Current output', messages, 'pii', 2)).not.toBe(
+      getGradingInputHash('Current request', 'Current output', messages, 'pii', 0),
+    );
+    expect(getGradingInputHash('Current request', 'Current output', messages, 'pii', 2)).not.toBe(
+      getGradingInputHash('Current request', 'Current output', messages, 'pii'),
+    );
+  });
+
   it('distinguishes role labels inside assistant output from actual user messages', () => {
     const opening = { role: 'user', content: 'Hello.' };
     const userInformation = 'My email is supplied@example.com.';

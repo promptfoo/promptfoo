@@ -79,6 +79,8 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface HydraMetadata extends BaseRedteamMetadata {
+  /** Prior role/content record count when the current input is unattributed. */
+  redteamCurrentTurnStart?: number;
   hydraRoundsCompleted?: number;
   hydraBacktrackCount?: number;
   hydraResult?: boolean;
@@ -354,6 +356,7 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let lastResponseMessages: Message[] = [];
+    let lastCurrentTurnStart: number | undefined;
     const statefulGradingHistory: Message[] = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
@@ -536,6 +539,7 @@ export class HydraProvider implements ApiProvider {
       // Send to target (different based on stateful/stateless)
       let targetPrompt: string;
       let injectedInputVars = { [this.injectVar]: processedMessage };
+      let renderVariables = vars;
 
       if (this.stateful) {
         // Stateful: send only the new message with sessionId
@@ -555,6 +559,7 @@ export class HydraProvider implements ApiProvider {
         };
 
         injectedInputVars = currentRenderInputVars ?? { [this.injectVar]: escapedMessage };
+        renderVariables = updatedVars;
         targetPrompt = await renderPrompt(
           prompt,
           updatedVars,
@@ -711,6 +716,7 @@ export class HydraProvider implements ApiProvider {
         this.stateful && !lastTransformResult ? prompt : undefined,
         filters,
         finalTargetPrompt,
+        renderVariables,
       );
       // Text layers replace the replay payload; media layers include its text
       // history. A provider that drops the payload cannot establish that history.
@@ -734,10 +740,19 @@ export class HydraProvider implements ApiProvider {
           : [{ role: 'user', content: currentGradingContent }];
       const gradingMessages: Message[] = replaysHistory
         ? [...this.conversationHistory]
-        : this.stateful && currentGradingMessages.length > 0
+        : this.stateful
           ? [...statefulGradingHistory, ...currentGradingMessages]
           : currentGradingMessages;
-      const { conversationTranscript } = getTargetConversation(gradingMessages);
+      // An unknown current input must not make the last verified user turn look
+      // like the current one when the result is graded again later.
+      lastCurrentTurnStart =
+        this.stateful && !replaysHistory && currentGradingMessages.length === 0
+          ? statefulGradingHistory.length
+          : undefined;
+      const { conversationTranscript } = getTargetConversation(
+        gradingMessages,
+        lastCurrentTurnStart,
+      );
       lastResponseMessages = [
         ...gradingMessages,
         { role: 'assistant', content: targetResponse.output || '' },
@@ -1016,6 +1031,7 @@ export class HydraProvider implements ApiProvider {
               prompt: lastFinalAttackPrompt || nextMessage,
               output: targetResponse.output,
               messages: lastResponseMessages,
+              currentTurnStart: lastCurrentTurnStart,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },
@@ -1145,6 +1161,9 @@ export class HydraProvider implements ApiProvider {
             : undefined,
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
         redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+        ...(lastCurrentTurnStart === undefined
+          ? {}
+          : { redteamCurrentTurnStart: lastCurrentTurnStart }),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

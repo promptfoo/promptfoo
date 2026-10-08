@@ -31,14 +31,10 @@ export function getGradingAssertionHash(assertion: unknown): string | undefined 
   }
 }
 
-/** Bind a verdict to its target turn without persisting another copy of the conversation. */
-export function getGradingInputHash(
-  prompt: string,
-  output: string,
-  messages?: unknown,
-  pluginId?: string,
-): string {
-  const conversation = Array.isArray(messages)
+function getGradingMessages(
+  messages: unknown,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  return Array.isArray(messages)
     ? messages
         .filter(
           (message) =>
@@ -47,43 +43,77 @@ export function getGradingInputHash(
         )
         .map(({ role, content }) => ({ role, content }))
     : [];
+}
+
+/** Bind a verdict to its target turn without persisting another copy of the conversation. */
+export function getGradingInputHash(
+  prompt: string,
+  output: string,
+  messages?: unknown,
+  pluginId?: string,
+  currentTurnStart?: number,
+): string {
+  const conversation = getGradingMessages(messages);
   return createHash('sha256')
-    .update(JSON.stringify([pluginId, prompt, output, conversation]))
+    .update(
+      JSON.stringify([
+        pluginId,
+        prompt,
+        output,
+        conversation,
+        ...(currentTurnStart === undefined ? [] : [currentTurnStart]),
+      ]),
+    )
     .digest('hex');
 }
 
-export function getTargetConversation(messages: unknown): {
+export function getTargetConversation(
+  messages: unknown,
+  currentTurnStart?: unknown,
+): {
   lastUserPrompt?: string;
   conversationTranscript?: string;
+  currentTurnStart?: number;
 } {
   if (!Array.isArray(messages)) {
     return {};
   }
+  // The boundary counts the same role/content records that enter the grade hash.
+  // Old results keep inferring their current turn from the last user message.
+  const conversation = getGradingMessages(messages);
+  const boundary =
+    typeof currentTurnStart === 'number' &&
+    Number.isInteger(currentTurnStart) &&
+    currentTurnStart >= 0 &&
+    currentTurnStart <= conversation.length
+      ? currentTurnStart
+      : undefined;
   let lastUserIndex = -1;
-  for (let index = messages.length - 1; index >= 0; index--) {
-    if (messages[index]?.role === 'user' && typeof messages[index].content === 'string') {
+  for (let index = conversation.length - 1; index >= (boundary ?? 0); index--) {
+    if (conversation[index].role === 'user') {
       lastUserIndex = index;
       break;
     }
   }
-  if (lastUserIndex < 0 || !messages[lastUserIndex].content.trim()) {
+  const lastUserPrompt =
+    lastUserIndex >= 0 && conversation[lastUserIndex].content.trim()
+      ? conversation[lastUserIndex].content
+      : undefined;
+  if (!lastUserPrompt && boundary === undefined) {
     return {};
   }
 
   // Keep the current turn separate from prior context. Only use the target
   // conversation, never the attacker history or abandoned search branches.
-  const priorMessages = messages
-    .slice(0, lastUserIndex)
-    .filter(
-      (message) =>
-        (message?.role === 'user' || message?.role === 'assistant') &&
-        typeof message.content === 'string',
-    )
-    .map(({ role, content }) => ({ role, content }));
+  const priorMessages = conversation.slice(0, boundary ?? lastUserIndex);
 
   // Keep role labels inside message content distinct from actual message roles.
   const conversationTranscript = priorMessages.length ? JSON.stringify(priorMessages, null, 2) : '';
-  return { lastUserPrompt: messages[lastUserIndex].content, conversationTranscript };
+  return {
+    ...(lastUserPrompt === undefined ? {} : { lastUserPrompt }),
+    conversationTranscript,
+    ...(boundary === undefined ? {} : { currentTurnStart: boundary }),
+  };
 }
 
 /** Attach cumulative usage without marking fresh work as a cached response. */

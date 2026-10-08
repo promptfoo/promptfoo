@@ -2066,6 +2066,31 @@ describe('getRenderedInputVariables', () => {
 });
 
 describe('rendered input serialization boundaries', () => {
+  it.each(['Private operator instructions.', 'data:image/png;base64,opaque', 7, false])(
+    'proves rendering with other variables without attributing their value: %s',
+    async (sibling) => {
+      const prompt = {
+        raw: JSON.stringify({ context: '{{sibling}}', question: '{{input}}' }),
+        label: 'mixed variables',
+      };
+      const inputVars = { input: 'supplied@example.com' };
+      const renderVariables = { ...inputVars, sibling };
+      const rendered = await renderPrompt(prompt, renderVariables, undefined, undefined, ['input']);
+      expect(JSON.parse(rendered).question).toBe(inputVars.input);
+      expect(
+        getRenderedInputVariables(
+          inputVars,
+          'input',
+          { forwardsPrompt: true },
+          prompt,
+          undefined,
+          rendered,
+          renderVariables,
+        ).vars,
+      ).toEqual(inputVars);
+    },
+  );
+
   it.each(['User: {{\n input\n}}', '{#\ncomment\n#}\n{{input}}'])(
     'omits text prompts made literal by the renderer: %s',
     async (raw) => {

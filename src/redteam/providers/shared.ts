@@ -681,6 +681,7 @@ export function accumulateGraderResult(
     prompt: string;
     output: string;
     messages?: unknown;
+    currentTurnStart?: number;
     pluginId?: string;
     assertion?: AssertionOrSet;
   },
@@ -696,6 +697,7 @@ export function accumulateGraderResult(
           input.output,
           input.messages,
           input.pluginId,
+          input.currentTurnStart,
         ),
       },
     };

@@ -41,6 +41,112 @@ describe('redteam strategy result grading', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['hydra', 'goblin'])(
+    'regrades %s with the same prior context when the current user input is unattributed',
+    async (strategy) => {
+      const prior = [
+        { role: 'user', content: 'My name is Casey Morgan.' },
+        { role: 'assistant', content: 'Acknowledged.' },
+      ];
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'The earlier user supplied the name' },
+        rubric: 'New rubric',
+      });
+      await runAssertions({
+        prompt: originalPrompt,
+        test: {
+          ...test,
+          provider: `promptfoo:redteam:${strategy}`,
+          metadata: { ...test.metadata, strategyId: `jailbreak:${strategy}` },
+        },
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: attackPrompt,
+            redteamCurrentTurnStart: 2,
+            messages: [...prior, { role: 'assistant', content: output }],
+          },
+        },
+      });
+      expect(getResult).toHaveBeenCalledTimes(1);
+      expect(getResult.mock.calls[0][0]).toBe(attackPrompt);
+      expect(getResult.mock.calls[0][1]).toBe(output);
+      expect(getResult.mock.calls[0][7]?.conversationTranscript).toBe(
+        JSON.stringify(prior, null, 2),
+      );
+    },
+  );
+
+  it.each([2, 1, -1, 1.5, 999, '2', undefined])(
+    'binds stored grades to the validated current-turn boundary: %s',
+    async (boundary) => {
+      const messages = [
+        { role: 'user', content: 'My name is Casey Morgan.' },
+        { role: 'assistant', content: 'Acknowledged.' },
+        { role: 'assistant', content: output },
+      ];
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Fresh verdict for changed context' },
+        rubric: 'New rubric',
+      });
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test: {
+          ...test,
+          provider: 'promptfoo:redteam:hydra',
+          metadata: { ...test.metadata, strategyId: 'jailbreak:hydra' },
+        },
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: attackPrompt,
+            redteamCurrentTurnStart: boundary,
+            messages,
+            storedGraderResult: {
+              ...storedResult,
+              metadata: {
+                ...storedResult.metadata,
+                redteamGradingInputHash: getGradingInputHash(
+                  attackPrompt,
+                  output,
+                  messages,
+                  'pii:social',
+                  2,
+                ),
+              },
+            },
+          },
+        },
+      });
+      expect(getResult).toHaveBeenCalledTimes(boundary === 2 ? 0 : 1);
+      expect(result.pass).toBe(boundary === 2);
+    },
+  );
+
+  it('does not apply Hydra boundaries to another strategy', async () => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'Fresh verdict' },
+      rubric: 'New rubric',
+    });
+    await runAssertions({
+      prompt: originalPrompt,
+      test,
+      providerResponse: {
+        output,
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          redteamCurrentTurnStart: 2,
+          messages: [
+            { role: 'user', content: 'An earlier request.' },
+            { role: 'assistant', content: 'Acknowledged.' },
+            { role: 'assistant', content: output },
+          ],
+        },
+      },
+    });
+    expect(getResult.mock.calls[0][7]?.conversationTranscript).toBe('');
+  });
+
   it.each(['pii:direct', 'pii:session', 'pii:social', 'pii:api-db'])(
     'reuses the strategy grade for generated %s assertions on the initial scan',
     async (pluginId) => {

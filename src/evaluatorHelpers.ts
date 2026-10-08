@@ -43,6 +43,7 @@ export function getRenderedInputVariables(
   prompt?: Prompt,
   filters?: NunjucksFilterMap,
   renderedPrompt?: string,
+  renderVariables: Record<string, VarValue> = inputVars,
 ): { vars: Record<string, string>; forwardsPrompt: boolean } {
   const referencesInput = (
     body: unknown,
@@ -71,7 +72,7 @@ export function getRenderedInputVariables(
   let parsedPromptTemplate = false;
   const hasSafeJsonLeaves = (value: unknown): boolean =>
     typeof value === 'string'
-      ? isSimpleInputTemplate(value, inputVars, filters)
+      ? isSimpleInputTemplate(value, renderVariables, filters)
       : value === null ||
         typeof value !== 'object' ||
         Object.values(value).every(hasSafeJsonLeaves);

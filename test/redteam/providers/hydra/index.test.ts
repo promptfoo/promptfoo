@@ -1340,6 +1340,119 @@ describe('HydraProvider', () => {
       },
     );
 
+    it('proves a JSON system-variable sibling without attributing operator instructions', async () => {
+      const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+        '../../../../src/evaluatorHelpers',
+      );
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+      const context = gradingContext();
+      const systemPrompt = 'Operator-only information: operator@example.com';
+      context.vars.systemPrompt = systemPrompt;
+      context.prompt.raw = JSON.stringify([
+        { role: 'system', content: '{{systemPrompt}}' },
+        { role: 'user', content: '{{input}}' },
+      ]);
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+      const result = await provider.callApi('', context);
+      expect(mockTargetProvider.callApi.mock.calls[0][0]).toContain(systemPrompt);
+      expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
+        { role: 'user', content: opening },
+        { role: 'assistant', content: acknowledgment },
+      ]);
+      expect(JSON.stringify(result.metadata.messages)).not.toContain(systemPrompt);
+    });
+
+    it.each(['image', 'pdf', 'docx'] as const)(
+      'preserves delivered text beside a materialized %s input without crediting its bytes',
+      async (type) => {
+        const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+          '../../../../src/evaluatorHelpers',
+        );
+        vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+        const media = `data:application/octet-stream;base64,${'A'.repeat(100_000)}`;
+        mockAgentProvider.callApi.mockReset();
+        for (const question of [opening, followUp]) {
+          mockAgentProvider.callApi.mockResolvedValueOnce({
+            output: JSON.stringify({ question, document: 'An attachment.' }),
+            materializationHandled: true,
+            materializedVars: { question, document: media },
+          });
+        }
+        const context = gradingContext();
+        context.prompt.raw = JSON.stringify({ question: '{{question}}', document: '{{document}}' });
+        const provider = new HydraProvider({
+          injectVar: 'input',
+          maxTurns: 2,
+          stateful: true,
+          inputs: { question: 'Question', document: { type, description: 'Attachment' } },
+        });
+        const result = await provider.callApi('', context);
+        expect(JSON.parse(mockTargetProvider.callApi.mock.calls[0][0])).toEqual({
+          question: opening,
+          document: media,
+        });
+        const history = JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript);
+        expect(history).toEqual([
+          { role: 'user', content: JSON.stringify({ question: opening }) },
+          { role: 'assistant', content: acknowledgment },
+        ]);
+        expect(JSON.stringify(result.metadata.messages)).not.toContain(media);
+      },
+    );
+
+    it.each(['missing evidence', 'rewritten prompt', 'YAML input'])(
+      'keeps earlier verified context when a later turn has %s',
+      async (mode) => {
+        const actual = await vi.importActual<typeof import('../../../../src/evaluatorHelpers')>(
+          '../../../../src/evaluatorHelpers',
+        );
+        vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(actual.renderPrompt);
+        if (mode === 'YAML input') {
+          mockAgentProvider.callApi.mockReset();
+          mockAgentProvider.callApi
+            .mockResolvedValueOnce({ output: opening })
+            .mockResolvedValueOnce({ output: '- role: user\n  content: Continue.' });
+        }
+        const context = gradingContext();
+        let requests = 0;
+        context.originalProvider = {
+          ...mockTargetProvider,
+          callApi: async (prompt, callContext, options) => {
+            const response = await mockTargetProvider.callApi(prompt, callContext, options);
+            requests++;
+            return requests === 1 || mode === 'YAML input'
+              ? { ...response, prompt }
+              : mode === 'rewritten prompt'
+                ? { ...response, prompt: 'A replacement request.' }
+                : response;
+          },
+        };
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+        const result = await provider.callApi('', context);
+        const prior = [
+          { role: 'user', content: opening },
+          { role: 'assistant', content: acknowledgment },
+        ];
+        expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual(
+          prior,
+        );
+        expect(result.metadata.messages).toEqual([
+          ...prior,
+          { role: 'assistant', content: finalOutput },
+        ]);
+        expect(result.metadata.redteamCurrentTurnStart).toBe(2);
+        expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+          getGradingInputHash(
+            result.metadata.redteamFinalPrompt!,
+            result.output,
+            result.metadata.messages,
+            'pii',
+            2,
+          ),
+        );
+      },
+    );
+
     it.each(['omit', 'replace'])(
       'excludes input that a prompt function chooses to %s',
       async (mode) => {
@@ -1359,8 +1472,13 @@ describe('HydraProvider', () => {
         ];
         const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
         const result = await provider.callApi('', context);
-        expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
-        expect(result.metadata.messages).toEqual([{ role: 'assistant', content: finalOutput }]);
+        expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
+          { role: 'assistant', content: acknowledgment },
+        ]);
+        expect(result.metadata.messages).toEqual([
+          { role: 'assistant', content: acknowledgment },
+          { role: 'assistant', content: finalOutput },
+        ]);
       },
     );
 
@@ -1390,7 +1508,9 @@ describe('HydraProvider', () => {
         const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
         const result = await provider.callApi('', context);
         expect(mockTargetProvider.callApi.mock.calls[0][0]).toContain(contact);
-        expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
+        expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
+          { role: 'assistant', content: acknowledgment },
+        ]);
         expect(JSON.stringify(result.metadata.messages)).not.toContain(contact);
       },
     );
@@ -1478,6 +1598,7 @@ describe('HydraProvider', () => {
             result.output,
             result.metadata.messages,
             'pii',
+            result.metadata.redteamCurrentTurnStart,
           ),
         );
       },
@@ -1495,8 +1616,13 @@ describe('HydraProvider', () => {
       expect(JSON.parse(mockTargetProvider.callApi.mock.calls[0][0])).toEqual({
         '{{input}}': 'Hello.',
       });
-      expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
-      expect(result.metadata.messages).toEqual([{ role: 'assistant', content: finalOutput }]);
+      expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
+        { role: 'assistant', content: acknowledgment },
+      ]);
+      expect(result.metadata.messages).toEqual([
+        { role: 'assistant', content: acknowledgment },
+        { role: 'assistant', content: finalOutput },
+      ]);
     });
 
     it.each([
@@ -1552,6 +1678,7 @@ describe('HydraProvider', () => {
           result.output,
           result.metadata.messages,
           'pii',
+          result.metadata.redteamCurrentTurnStart,
         ),
       );
     });
@@ -1629,7 +1756,9 @@ describe('HydraProvider', () => {
       });
       const result = await provider.callApi('', context);
       expect(sentBodies).toEqual([body, body]);
-      expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
+      expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
+        { role: 'assistant', content: acknowledgment },
+      ]);
       expect(JSON.stringify(result.metadata.messages)).not.toContain('hidden@example.com');
     });
 
@@ -1700,6 +1829,7 @@ describe('HydraProvider', () => {
             result.output,
             result.metadata.messages,
             'pii',
+            result.metadata.redteamCurrentTurnStart,
           ),
         );
       },
@@ -1758,6 +1888,7 @@ describe('HydraProvider', () => {
           result.output,
           result.metadata.messages,
           'pii',
+          result.metadata.redteamCurrentTurnStart,
         ),
       );
     });
@@ -1767,8 +1898,13 @@ describe('HydraProvider', () => {
       context.originalProvider = mockTargetProvider;
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
       const result = await provider.callApi('', context);
-      expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
-      expect(result.metadata.messages).toEqual([{ role: 'assistant', content: finalOutput }]);
+      expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
+        { role: 'assistant', content: acknowledgment },
+      ]);
+      expect(result.metadata.messages).toEqual([
+        { role: 'assistant', content: acknowledgment },
+        { role: 'assistant', content: finalOutput },
+      ]);
     });
 
     it.each(['image', 'pdf', 'docx'] as const)(
@@ -1854,8 +1990,13 @@ describe('HydraProvider', () => {
       vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue(context.prompt.raw);
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
       const result = await provider.callApi('', context);
-      expect(result.metadata.messages).toEqual([{ role: 'assistant', content: finalOutput }]);
-      expect(mockGrader.getResult.mock.calls[1][7].conversationTranscript).toBeUndefined();
+      expect(result.metadata.messages).toEqual([
+        { role: 'assistant', content: acknowledgment },
+        { role: 'assistant', content: finalOutput },
+      ]);
+      expect(JSON.parse(mockGrader.getResult.mock.calls[1][7].conversationTranscript)).toEqual([
+        { role: 'assistant', content: acknowledgment },
+      ]);
     });
 
     it('excludes a request rejected locally before the target call', async () => {
