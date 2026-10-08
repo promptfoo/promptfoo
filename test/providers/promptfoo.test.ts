@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
@@ -26,6 +26,10 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
       }
     },
   };
+});
+
+afterEach(() => {
+  vi.resetAllMocks();
 });
 
 describe('PromptfooHarmfulCompletionProvider', () => {
@@ -422,6 +426,98 @@ describe('PromptfooChatCompletionProvider', () => {
     expect(await provider.callApi('test prompt')).toEqual({
       error: 'LLM did not return a result, likely refusal',
       tokenUsage,
+    });
+  });
+
+  it('preserves an explicit permanent Meta coordination request error', async () => {
+    const providerError = {
+      status: 400,
+      type: 'invalid_request_error',
+      code: 'invalid_json',
+    };
+    const tokenUsage = { total: 73, prompt: 45, completion: 28, numRequests: 2 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: 'Coordination request failed', providerError, tokenUsage }),
+        {
+          status: 400,
+        },
+      ),
+    );
+    const metaProvider = new PromptfooChatCompletionProvider({
+      ...options,
+      task: 'meta-agent-decision',
+    });
+
+    expect(await metaProvider.callApi('test prompt')).toEqual({
+      error:
+        'Meta-agent request failed: the upstream provider rejected the coordination request as invalid JSON (invalid_json).',
+      metadata: { remoteGenerationError: providerError },
+      tokenUsage,
+    });
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      status: 429,
+      providerError: { status: 429, type: 'rate_limit_error', code: 'rate_limit_exceeded' },
+    },
+    { status: 500, providerError: { status: 500, type: 'server_error', code: 'invalid_json' } },
+    {
+      status: 500,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'invalid_json' },
+    },
+    {
+      status: 400,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'invalid_prompt' },
+    },
+    {
+      status: 400,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'cyber_policy_violation' },
+    },
+    {
+      status: 400,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'bio_policy_violation' },
+    },
+    { status: 400, providerError: { status: 400, type: 'server_error', code: 'invalid_json' } },
+    { status: 400, providerError: undefined },
+    { status: 200, providerError: undefined },
+  ])(
+    'does not classify other Meta errors as permanent: $status $providerError',
+    async ({ status, providerError }) => {
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'Customer text mentions invalid_json and invalid_request_error',
+            providerError,
+          }),
+          { status },
+        ),
+      );
+      const metaProvider = new PromptfooChatCompletionProvider({
+        ...options,
+        task: 'meta-agent-decision',
+      });
+
+      expect(await metaProvider.callApi('test prompt')).toEqual({
+        error: 'LLM did not return a result, likely refusal',
+      });
+    },
+  );
+
+  it('keeps other remote strategies unchanged for the Meta request error envelope', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          providerError: { status: 400, type: 'invalid_request_error', code: 'invalid_json' },
+        }),
+        { status: 400 },
+      ),
+    );
+
+    expect(await provider.callApi('test prompt')).toEqual({
+      error: 'LLM did not return a result, likely refusal',
     });
   });
 
