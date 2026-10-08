@@ -14,7 +14,7 @@ npx promptfoo@latest init --example openai-codex-sdk/bedrock
 1. Install the Codex SDK:
 
    ```bash
-   npm install @openai/codex-sdk@^0.144.0
+   npm install @openai/codex-sdk@^0.146.0
    ```
 
 2. Request access to the OpenAI frontier models in a supported AWS Region:

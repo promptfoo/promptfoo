@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { globSync } from 'glob';
 import { minimatch } from 'minimatch';
@@ -75,6 +74,7 @@ const ignored = [
   '**/dist/**',
   '**/build/**',
   '**/.docusaurus/**',
+  '**/.cache/**',
   '**/coverage/**',
   '**/__mocks__/**',
 ];
@@ -146,6 +146,10 @@ function getShadowRanges(
   new Visitor({
     BlockStatement(node) {
       lexicalScopes.push([node.start, node.end]);
+    },
+    StaticBlock(node) {
+      lexicalScopes.push([node.start, node.end]);
+      functionScopes.push([node.start, node.end]);
     },
     TSModuleBlock(node) {
       lexicalScopes.push([node.start, node.end]);
@@ -403,7 +407,7 @@ function discoverFiles(
     ]) {
       for (const file of globSync(pattern, {
         cwd: repoRoot,
-        dot: pattern === `${root}*.${extensions}`,
+        dot: true,
         nodir: true,
         ignore: sourceIgnores(root),
       }).map(normalizePath)) {
@@ -412,6 +416,7 @@ function discoverFiles(
     }
     for (const file of globSync(`${root}dist/**/*.d.{ts,mts,cts}`, {
       cwd: repoRoot,
+      dot: true,
       nodir: true,
       ignore: ['**/node_modules/**', ...configuredIgnores],
     }).map(normalizePath)) {
@@ -426,6 +431,7 @@ function discoverFiles(
   for (const root of configuredRoots) {
     for (const file of globSync([root, `${root}/**/*.${extensions}`], {
       cwd: repoRoot,
+      dot: true,
       nodir: true,
       ignore: sourceIgnores(
         manifestFor(`${root}/`, manifests) === 'package.json'
@@ -1001,8 +1007,8 @@ export function reportDependencyOwnership(
   };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
+  const repoRoot = path.resolve(import.meta.dirname, '..');
   const report = reportDependencyOwnership(repoRoot);
   if (process.argv.includes('--json')) {
     console.log(JSON.stringify(report, null, 2));

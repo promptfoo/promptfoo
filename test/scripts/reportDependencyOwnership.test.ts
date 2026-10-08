@@ -792,6 +792,14 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it('scans hidden source files and non-generated source directories', () => {
+    write('src/.hidden.ts', "import 'hidden-file';");
+    write('src/.internal/loader.ts', "import 'hidden-directory';");
+    expect(
+      reportDependencyOwnership(root, config).undeclaredUsages.map(({ dependency }) => dependency),
+    ).toEqual(['hidden-directory', 'hidden-file']);
+  });
+
   it('does not scan hidden generated source directories', () => {
     write('src/.cache/generated.js', "require('generated-only');");
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
@@ -1049,6 +1057,18 @@ describe('dependency ownership report', () => {
     write(
       'src/index.js',
       "function load(value = require('external')) { var require = () => {}; require('local'); }",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'external' }),
+    ]);
+  });
+
+  it.each(['require', 'module'])('keeps static-block %s bindings inside the block', (loader) => {
+    const call = loader === 'require' ? 'require' : 'module.require';
+    write(
+      'src/index.js',
+      `class Example { static { var ${loader} = () => {}; ${call}('local'); } }
+${call}('external');`,
     );
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
       expect.objectContaining({ dependency: 'external' }),

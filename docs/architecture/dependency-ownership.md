@@ -55,7 +55,8 @@ The scanner reads root workspaces, including npm glob exclusions and re-inclusio
 and the standalone `code-scan-action` package. For each package it scans `src/`,
 `scripts/`, `.storybook/`, and JavaScript/TypeScript files in the package root.
 It also scans configured architecture roots, including individual files, and
-JavaScript/TypeScript under `site/docs/` and `site/blog/`.
+JavaScript/TypeScript under `site/docs/` and `site/blog/`. Hidden source files and
+directories are included; generated `.cache` and `.docusaurus` output remains excluded.
 
 Supported references include static imports, literal loader calls, type imports,
 leading triple-slash type and AMD directives, module augmentations in external
