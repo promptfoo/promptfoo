@@ -382,9 +382,16 @@ export function getNumericPreparationMetadata(
   response: ProviderResponse,
 ): ProviderResponse['metadata'] {
   const usesNumericReference = hasNumericFinancialAssertions(assertions);
-  return usesNumericReference
-    ? getRecordedTargetMetadata(test, provider, response)
-    : response.metadata;
+  if (!usesNumericReference && !hasNumericFinancialAssertions(test.assert)) {
+    return response.metadata;
+  }
+  const targetMetadata = getRecordedTargetMetadata(test, provider, response);
+  if (usesNumericReference || targetMetadata === response.metadata) {
+    return targetMetadata;
+  }
+  // Sibling callbacks retain target data and executor fields, with executor values winning.
+  // This view is only for assertion context; framework grading still uses the original response.
+  return { ...targetMetadata, ...response.metadata };
 }
 
 /**

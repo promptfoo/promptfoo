@@ -141,7 +141,13 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     const metadataSnapshot = snapshotTargetMetadata(targetResponse, context.test);
     const targetMetadata = {
-      ...(metadataSnapshot === undefined ? targetResponse.metadata : {}),
+      ...(metadataSnapshot === undefined
+        ? targetResponse.metadata
+        : {
+            http: metadataSnapshot?.http,
+            headers: metadataSnapshot?.headers,
+            rateLimitKind: metadataSnapshot?.rateLimitKind,
+          }),
       redteamTargetMetadata: metadataSnapshot,
       redteamOutputIsText: typeof targetResponse.output === 'string',
     };

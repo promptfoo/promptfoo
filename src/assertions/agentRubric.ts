@@ -13,6 +13,7 @@ export const handleAgentRubric = async ({
   test,
   providerCallContext,
   providerResponse,
+  assertionValueContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string' ||
@@ -33,7 +34,7 @@ export const handleAgentRubric = async ({
     test.vars,
     assertion,
     providerCallContext,
-    providerResponse?.metadata?.workingDir,
+    (assertionValueContext?.providerResponse ?? providerResponse)?.metadata?.workingDir,
   );
 
   if (isGraderFailure(resp)) {

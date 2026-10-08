@@ -399,10 +399,9 @@ function redactSensitiveHeaders(
 // `audio`, arbitrary model output) — walking arbitrary subtrees risks rewriting user-controlled
 // content that legitimately uses an `http` key (see
 // https://github.com/promptfoo/promptfoo/pull/8876#issuecomment-4315002350).
-function redactHttpHeadersOnMetadata<T>(
-  metadata: T,
-  options?: { legacyHeadersSource?: unknown; redactLegacyHeaders?: boolean },
-): T {
+type HeaderRedactionOptions = { legacyHeadersSource?: unknown; redactLegacyHeaders?: boolean };
+
+function redactTransportHeadersOnMetadata<T>(metadata: T, options?: HeaderRedactionOptions): T {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return metadata;
   }
@@ -467,6 +466,23 @@ function redactHttpHeadersOnMetadata<T>(
   nextMetadata ??= { ...m };
   nextMetadata.http = nextHttp;
   return nextMetadata as T;
+}
+
+function redactHttpHeadersOnMetadata<T>(metadata: T, options?: HeaderRedactionOptions): T {
+  const redacted = redactTransportHeadersOnMetadata(metadata, options);
+  const record = asRecord(redacted);
+  if (!record || !Object.prototype.hasOwnProperty.call(record, 'redteamTargetMetadata')) {
+    return redacted;
+  }
+  // This executor-owned snapshot contains the selected provider's metadata. Its own
+  // legacy headers are transport data too. Follow only this one known metadata path.
+  const targetMetadata = record.redteamTargetMetadata;
+  const redactedTargetMetadata = redactTransportHeadersOnMetadata(targetMetadata, {
+    redactLegacyHeaders: true,
+  });
+  return redactedTargetMetadata === targetMetadata
+    ? redacted
+    : ({ ...record, redteamTargetMetadata: redactedTargetMetadata } as T);
 }
 
 // Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and

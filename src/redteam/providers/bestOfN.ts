@@ -180,7 +180,13 @@ export default class BestOfNProvider implements ApiProvider {
             const response: ProviderResponse = {
               ...targetResponse,
               metadata: {
-                ...(targetMetadata === undefined ? targetResponse.metadata : {}),
+                ...(targetMetadata === undefined
+                  ? targetResponse.metadata
+                  : {
+                      http: targetMetadata?.http,
+                      headers: targetMetadata?.headers,
+                      rateLimitKind: targetMetadata?.rateLimitKind,
+                    }),
                 redteamTargetMetadata: targetMetadata,
               },
             };

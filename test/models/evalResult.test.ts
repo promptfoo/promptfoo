@@ -701,6 +701,79 @@ describe('EvalResult', () => {
         expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
       });
 
+      it.each(['single', 'batch', 'jsonl'])(
+        'redacts target snapshot transport headers through the %s boundary without mutating live data',
+        async (boundary) => {
+          const targetMetadata = {
+            foo: 'target metadata remains available',
+            headers: {
+              'Set-Cookie': 'synthetic-target-session',
+              'api-key': 'synthetic-target-api-key',
+              'content-type': 'application/json',
+            },
+            http: {
+              status: 200,
+              headers: { 'x-request-id': 'synthetic-target-request', 'x-safe-debug': 'keep' },
+              requestHeaders: {
+                authorization: 'synthetic-target-auth',
+                accept: 'application/json',
+              },
+            },
+            details: { http: { headers: { 'set-cookie': 'ordinary nested content' } } },
+          };
+          const output = { http: { headers: { 'set-cookie': 'ordinary output content' } } };
+          const metadata = { redteamTargetMetadata: targetMetadata };
+          const input: EvaluateResult = {
+            ...mockEvaluateResult,
+            id: crypto.randomUUID(),
+            response: createProviderResponse({ output, metadata }),
+            metadata,
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              metadata,
+              componentResults: [{ pass: true, score: 1, reason: 'ok', metadata }],
+            },
+          };
+          let saved: Pick<EvaluateResult, 'response' | 'metadata' | 'gradingResult'>;
+          if (boundary === 'jsonl') {
+            saved = sanitizeResultForJsonlArtifact(input);
+          } else {
+            const evalId = `numeric-transport-${crypto.randomUUID()}`;
+            const result =
+              boundary === 'single'
+                ? await EvalResult.createFromEvaluateResult(evalId, input, { persist: true })
+                : (await EvalResult.createManyFromEvaluateResult([input], evalId))[0];
+            saved = (await EvalResult.findById(result.id))!;
+          }
+          for (const copy of [
+            saved.response?.metadata?.redteamTargetMetadata,
+            saved.metadata?.redteamTargetMetadata,
+            saved.gradingResult?.metadata?.redteamTargetMetadata,
+            saved.gradingResult?.componentResults?.[0].metadata?.redteamTargetMetadata,
+          ]) {
+            expect(copy).toEqual({
+              ...targetMetadata,
+              headers: {
+                'Set-Cookie': '[REDACTED]',
+                'api-key': '[REDACTED]',
+                'content-type': 'application/json',
+              },
+              http: {
+                status: 200,
+                headers: { 'x-request-id': '[REDACTED]', 'x-safe-debug': 'keep' },
+                requestHeaders: { authorization: '[REDACTED]', accept: 'application/json' },
+              },
+            });
+          }
+          expect(saved.response?.output).toEqual(output);
+          expect(input.response?.metadata?.redteamTargetMetadata).toBe(targetMetadata);
+          expect(targetMetadata.headers['Set-Cookie']).toBe('synthetic-target-session');
+          expect(targetMetadata.http.requestHeaders.authorization).toBe('synthetic-target-auth');
+        },
+      );
+
       it('preserves arbitrary legacy headers in grading metadata', async () => {
         const evalId = 'test-eval-preserve-grading-metadata-headers';
         const gradingMetadataHeaders = {
