@@ -863,6 +863,81 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runInstalledMathJsEval(
+  consumerDir: string,
+  configDir: string,
+  mathState: 'missing' | 'incompatible' | 'installed',
+): Promise<void> {
+  for (const format of ['mjs', 'cjs']) {
+    const scriptPath = path.join(consumerDir, `mathjs.${format}`);
+    const imports =
+      format === 'mjs'
+        ? `import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { evaluate } from 'promptfoo';
+const require = createRequire(import.meta.url);`
+        : `const assert = require('node:assert/strict');
+const { evaluate } = require('promptfoo');`;
+    fs.writeFileSync(
+      scriptPath,
+      `${imports}
+(async () => {
+const installed = process.argv[2] === 'installed';
+if (process.argv[2] === 'missing') {
+  assert.throws(() => require.resolve('mathjs'), { code: 'MODULE_NOT_FOUND' });
+}
+const suite = {
+  writeLatestResults: false,
+  sharing: false,
+  prompts: ['{{candidate}}'],
+  providers: [{ id: () => 'echo', callApi: async (prompt) => ({ output: prompt }) }],
+  tests: [
+    { vars: { candidate: 'first' }, assert: [{ type: 'javascript', value: '2', metric: 'Score' }] },
+    { vars: { candidate: 'second' }, assert: [{ type: 'javascript', value: '2', metric: 'Score' }] },
+  ],
+};
+const options = { cache: false, maxConcurrency: 1, maxEvalTimeMs: 120_000 };
+for (const derivedMetrics of [undefined, [], [{ name: 'Average', value: (scores) => scores.Score / scores.__count }]]) {
+  const record = await evaluate({ ...suite, derivedMetrics }, options);
+  const { results } = await record.toEvaluateSummary();
+  assert.equal(results.length, 2);
+  assert(results.every((result) => result.success && !result.error));
+  if (derivedMetrics?.length) assert.equal(record.prompts[0].metrics.namedScores.Average, 2);
+}
+const expressionSuite = {
+  ...suite,
+  derivedMetrics: [
+    { name: 'Expression', value: 'round(Score / __count, 2) + sqrt(16)' },
+    { name: 'Chained', value: (scores) => scores.Expression * 2 },
+    { name: 'Invalid', value: 'undefinedScore + 1' },
+  ],
+};
+if (!installed) {
+  await assert.rejects(evaluate(expressionSuite, options), (error) => {
+    assert.match(error.message, /npm install promptfoo mathjs/);
+    assert.match(error.message, /npm install -g promptfoo mathjs/);
+    if (process.argv[2] === 'incompatible') assert.match(error.message, /found 14.8.1/);
+    return true;
+  });
+} else {
+  const record = await evaluate(expressionSuite, options);
+  const { results } = await record.toEvaluateSummary();
+  assert(results.every((result) => result.success && !result.error));
+  assert.deepEqual(record.prompts[0].metrics.namedScores, { Score: 4, Expression: 6, Chained: 12, Invalid: 0 });
+}
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+    );
+    await runAsync(process.execPath, [scriptPath, mathState], consumerDir, {
+      NODE_PATH: '',
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+    });
+  }
+}
+
 async function runOptionalOpenAiAgentsChecks(
   consumerDir: string,
   configDir: string,
@@ -1457,6 +1532,30 @@ async function main(): Promise<void> {
           packResult.version,
         );
       }
+    }
+    await timeAsyncPhase('check missing Math.js', () =>
+      runInstalledMathJsEval(consumerDir, configDir, 'missing'),
+    );
+    // Preserve the omit-optional profile while exercising real packages in the default profile.
+    if (values.profile === 'default') {
+      installConsumerPackages(
+        'install incompatible Math.js',
+        ['mathjs@14.8.1'],
+        consumerDir,
+        consumerNpmEnv,
+      );
+      await timeAsyncPhase('check incompatible Math.js', () =>
+        runInstalledMathJsEval(consumerDir, configDir, 'incompatible'),
+      );
+      installConsumerPackages(
+        'install supported Math.js',
+        ['mathjs@^15.1.1'],
+        consumerDir,
+        consumerNpmEnv,
+      );
+      await timeAsyncPhase('check supported Math.js', () =>
+        runInstalledMathJsEval(consumerDir, configDir, 'installed'),
+      );
     }
     await timeAsyncPhase('check optional OpenAI Agents SDK', () =>
       runOptionalOpenAiAgentsChecks(consumerDir, configDir),

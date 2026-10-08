@@ -7,12 +7,15 @@ This example demonstrates custom metric naming and derivation in promptfoo.
 ```bash
 npx promptfoo@latest init --example eval-named-metrics
 cd eval-named-metrics
+npm install promptfoo mathjs@^15.1.1
 ```
+
+Math.js is required for this example's string-derived metrics.
 
 ## Run
 
 ```bash
-promptfoo eval
+npx promptfoo eval --no-cache
 ```
 
 ## Features Demonstrated
