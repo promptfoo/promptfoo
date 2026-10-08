@@ -1176,21 +1176,17 @@ async function runOptionalWatsonXChecks(
 
   // Preserve the omit-optional profile and install the real pair only in the default profile.
   if (withOptionalDependencies) {
-    runNpm(
-      'install WatsonX SDKs',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--no-package-lock',
-        '--save-exact',
-        '@ibm-cloud/watsonx-ai@^1.7.16',
-        'ibm-cloud-sdk-core@5.6.2',
-      ],
-      consumerDir,
-      npmEnv,
-    );
+    for (const args of [
+      ['@ibm-cloud/watsonx-ai@^1.7.16', 'ibm-cloud-sdk-core@5.6.2'],
+      ['--save-exact', 'ibm-cloud-sdk-core@5.6.2'],
+    ]) {
+      runNpm(
+        'install WatsonX SDKs',
+        ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', ...args],
+        consumerDir,
+        npmEnv,
+      );
+    }
     await runChecks('installed');
   }
 }
