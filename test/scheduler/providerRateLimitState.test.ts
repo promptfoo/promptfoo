@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderRateLimitState } from '../../src/scheduler/providerRateLimitState';
+import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 
 // Fast retry policy for tests - minimal delays
 const FAST_RETRY_POLICY = {
@@ -264,7 +265,6 @@ describe('ProviderRateLimitState', () => {
     it.each(['returned', 'thrown'])(
       'does not retry or throttle on a %s token-count error containing 429',
       async (mode) => {
-        const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
         const response = { error: 'HTTP 400: prompt is too long: 204291 tokens' };
         const cause = new Error(response.error);
         const call = vi.fn(async () => {
@@ -275,10 +275,7 @@ describe('ProviderRateLimitState', () => {
         });
         const pending = state
           .executeWithRetry('token-count', call, { isRateLimited: isProviderResponseRateLimited })
-          .then(
-            (value) => value,
-            (error) => error,
-          );
+          .catch((error) => error);
 
         await vi.runAllTimersAsync();
 
@@ -299,7 +296,6 @@ describe('ProviderRateLimitState', () => {
       // isRateLimited callback for ProviderResponse must honor the
       // structured `metadata.rateLimitKind: 'quota'` signal so the scheduler
       // doesn't retry hard quotas through the result path.
-      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
       let callCount = 0;
       const result = await state.executeWithRetry(
         'req-quota',
@@ -324,7 +320,6 @@ describe('ProviderRateLimitState', () => {
     it('result-path: "Quota exceeded:" prefix short-circuits retry even without metadata', async () => {
       // String-fallback path for providers that don't populate metadata but
       // still emit the canonical formatRateLimitErrorMessage prefix.
-      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
       let callCount = 0;
       const result = await state.executeWithRetry(
         'req-quota-nometa',
@@ -345,7 +340,6 @@ describe('ProviderRateLimitState', () => {
 
     it('result-path: kind=rate_limit still triggers retry', async () => {
       // Symmetric verification: per-window rate limits must still retry.
-      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
       let callCount = 0;
       const promise = state.executeWithRetry(
         'req-ratelimit',
