@@ -313,9 +313,9 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
       void initializeSourceMapSupport();
     }
 
-    // Handle both string and structured object inputs
-    const message = typeof input === 'string' ? input : input.message;
-    return winstonLogger[level]({ message, location });
+    // Preserve sanitized context for transports that consume structured fields.
+    const info = typeof input === 'string' ? { message: input } : input;
+    return winstonLogger[level]({ ...info, location });
   };
 }
 
@@ -387,7 +387,7 @@ function sanitizeContext(context: SanitizedLogContext): Record<string, unknown> 
  * If context is provided, it will be sanitized and formatted.
  *
  * When structured logging is enabled (via setStructuredLogging(true)):
- * - Passes { message, ...context } object to the logger
+ * - Passes { ...context, message } object to the logger
  * - Ideal for cloud logging integrations that expect structured data
  *
  * When structured logging is disabled (default):
@@ -412,7 +412,7 @@ function createLogMethodWithContext(
 
     if (useStructuredLogging) {
       // Structured mode: pass object with message field for cloud logging systems
-      internalLogger[level]({ message, ...sanitized });
+      internalLogger[level]({ ...sanitized, message });
     } else {
       // Default mode: format as string for CLI/console output
       const contextStr = safeJsonStringify(sanitized, true);

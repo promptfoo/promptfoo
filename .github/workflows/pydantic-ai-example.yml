@@ -2,7 +2,7 @@ name: PydanticAI example
 
 on:
   pull_request:
-    paths:
+    paths: &watched-paths
       - 'examples/integration-pydantic-ai/**'
       - 'src/**'
       - 'scripts/**'
@@ -16,18 +16,7 @@ on:
       - '.github/workflows/pydantic-ai-example.yml'
   push:
     branches: [main]
-    paths:
-      - 'examples/integration-pydantic-ai/**'
-      - 'src/**'
-      - 'scripts/**'
-      - 'drizzle/**'
-      - '.nvmrc'
-      - '.npmrc'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
-      - 'tsdown.config.ts'
-      - '.github/workflows/pydantic-ai-example.yml'
+    paths: *watched-paths
 
 permissions:
   contents: read

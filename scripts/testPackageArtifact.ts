@@ -184,6 +184,20 @@ function runNpm(
   );
 }
 
+function installConsumerPackages(
+  phase: string,
+  packages: string[],
+  consumerDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+): void {
+  runNpm(
+    phase,
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', ...packages],
+    consumerDir,
+    npmEnv,
+  );
+}
+
 function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
@@ -640,9 +654,9 @@ assert.equal(summary.results[0].success, false);
 assert.equal(summary.results[0].score, 0);
 assert.ok(summary.results[0].response.error.includes(mode === 'installed'
   ? 'Repository is not a directory'
-  : 'npm install promptfoo @openai/codex-security@^0.1.31'));
+  : 'npm install promptfoo @openai/codex-security@^0.2.0'));
 if (mode === 'incompatible') {
-  assert.ok(summary.results[0].response.error.includes('incompatible (0.1.28)'));
+  assert.ok(summary.results[0].response.error.includes('incompatible (0.1.31)'));
 }
 `;
   const scriptPaths = ['codex-security.mjs', 'codex-security.cjs'].map((name) =>
@@ -674,27 +688,40 @@ ${script}
     PROMPTFOO_DISABLE_UPDATE: 'true',
   };
   for (const mode of ['missing', 'incompatible', 'installed']) {
-    if (mode !== 'missing') {
-      runNpm(
-        mode === 'incompatible'
-          ? 'install incompatible Codex Security SDK'
-          : 'install supported Codex Security SDK',
-        [
-          'install',
-          '--ignore-scripts',
-          '--no-audit',
-          '--no-fund',
-          '--no-package-lock',
-          mode === 'incompatible'
-            ? '@openai/codex-security@0.1.28'
-            : '@openai/codex-security@^0.1.31',
-        ],
+    const sdkPath = path.join(consumerDir, 'node_modules', '@openai', 'codex-security');
+    if (mode === 'incompatible') {
+      // Simulate an existing outdated optional SDK without bypassing the package's peer range.
+      const staleSdkDir = path.join(consumerDir, 'stale-codex-sdk');
+      fs.mkdirSync(staleSdkDir);
+      fs.writeFileSync(path.join(staleSdkDir, 'package.json'), JSON.stringify({ private: true }));
+      installConsumerPackages(
+        'install isolated incompatible Codex Security SDK',
+        ['@openai/codex-security@0.1.31'],
+        staleSdkDir,
+        npmEnv,
+      );
+      fs.mkdirSync(path.dirname(sdkPath), { recursive: true });
+      fs.symlinkSync(
+        path.join(staleSdkDir, 'node_modules', '@openai', 'codex-security'),
+        sdkPath,
+        'junction',
+      );
+    } else if (mode === 'installed') {
+      installConsumerPackages(
+        'install supported Codex Security SDK',
+        ['@openai/codex-security@^0.2.0'],
         consumerDir,
         npmEnv,
       );
     }
-    for (const scriptPath of scriptPaths) {
-      await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+    try {
+      for (const scriptPath of scriptPaths) {
+        await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+      }
+    } finally {
+      if (mode === 'incompatible') {
+        fs.rmSync(sdkPath);
+      }
     }
   }
 }
@@ -848,7 +875,7 @@ async function runOptionalOpenAiAgentsChecks(
     await assert.rejects(
       loadApiProvider('openai:agents:gpt-4.1-mini'),
       (error) => {
-        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.11\\.8/);
+        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.14\\.1/);
         if (process.argv[2] === 'incompatible') {
           assert.match(error.message, /found 0\\.0\\.0/);
         } else {
@@ -916,20 +943,24 @@ async function runOptionalOpenAiAgentsChecks(
   }
 }
 
-async function runOptionalSlackChecks(
+async function runOptionalSdkChecks(
   consumerDir: string,
   configDir: string,
   npmEnv: NodeJS.ProcessEnv,
   withOptionalDependencies: boolean,
+  sdk: { name: string; package: string; version: string; script: string; env: NodeJS.ProcessEnv },
 ): Promise<void> {
-  const sdkDir = path.join(consumerDir, 'node_modules', '@slack', 'web-api');
-  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Slack SDK');
+  const sdkDir = path.join(consumerDir, 'node_modules', sdk.package);
+  assert(
+    !fs.existsSync(sdkDir),
+    `Default consumers should not install the optional ${sdk.name} SDK`,
+  );
   const runChecks = async (state: string) => {
     for (const format of ['esm', 'cjs']) {
       console.log(
-        await runAsync(process.execPath, ['optional-slack.mjs', format, state], consumerDir, {
+        await runAsync(process.execPath, [sdk.script, format, state], consumerDir, {
           NODE_PATH: '',
-          SLACK_BOT_TOKEN: '',
+          ...sdk.env,
           PROMPTFOO_CONFIG_DIR: configDir,
           PROMPTFOO_DISABLE_TELEMETRY: '1',
           PROMPTFOO_DISABLE_UPDATE: 'true',
@@ -942,11 +973,11 @@ async function runOptionalSlackChecks(
   try {
     fs.writeFileSync(
       path.join(sdkDir, 'package.json'),
-      JSON.stringify({ name: '@slack/web-api', version: '0.0.0', main: './index.js' }),
+      JSON.stringify({ name: sdk.package, version: '0.0.0', main: './index.js' }),
     );
     fs.writeFileSync(
       path.join(sdkDir, 'index.js'),
-      'throw new Error("Unsupported Slack SDK code must not execute");',
+      `throw new Error("Unsupported ${sdk.name} SDK code must not execute");`,
     );
     await runChecks('incompatible');
   } finally {
@@ -955,75 +986,9 @@ async function runOptionalSlackChecks(
 
   // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
   if (withOptionalDependencies) {
-    runNpm(
-      'install Slack SDK',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--no-package-lock',
-        '@slack/web-api@^8.1.1',
-      ],
-      consumerDir,
-      npmEnv,
-    );
-    await runChecks('installed');
-  }
-}
-
-async function runOptionalLangfuseChecks(
-  consumerDir: string,
-  configDir: string,
-  npmEnv: NodeJS.ProcessEnv,
-  withOptionalDependencies: boolean,
-): Promise<void> {
-  const sdkDir = path.join(consumerDir, 'node_modules', '@langfuse', 'client');
-  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Langfuse SDK');
-  const runChecks = async (state: string) => {
-    for (const format of ['esm', 'cjs']) {
-      console.log(
-        await runAsync(process.execPath, ['optional-langfuse.mjs', format, state], consumerDir, {
-          NODE_PATH: '',
-          LANGFUSE_PUBLIC_KEY: '',
-          LANGFUSE_SECRET_KEY: '',
-          LANGFUSE_HOST: '',
-          LANGFUSE_BASE_URL: '',
-          PROMPTFOO_CONFIG_DIR: configDir,
-          PROMPTFOO_DISABLE_TELEMETRY: '1',
-          PROMPTFOO_DISABLE_UPDATE: 'true',
-        }),
-      );
-    }
-  };
-  await runChecks('missing');
-  fs.mkdirSync(sdkDir, { recursive: true });
-  try {
-    fs.writeFileSync(
-      path.join(sdkDir, 'package.json'),
-      JSON.stringify({ name: '@langfuse/client', version: '0.0.0', main: './index.js' }),
-    );
-    fs.writeFileSync(
-      path.join(sdkDir, 'index.js'),
-      'throw new Error("Unsupported Langfuse SDK code must not execute");',
-    );
-    await runChecks('incompatible');
-  } finally {
-    fs.rmSync(sdkDir, { recursive: true, force: true });
-  }
-
-  // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
-  if (withOptionalDependencies) {
-    runNpm(
-      'install Langfuse SDK',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--no-package-lock',
-        '@langfuse/client@^5.11.1',
-      ],
+    installConsumerPackages(
+      `install ${sdk.name} SDK`,
+      [`${sdk.package}@${sdk.version}`],
       consumerDir,
       npmEnv,
     );
@@ -1124,20 +1089,18 @@ async function assertOptionalBrowserDependencies(
         assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
       }
     }
-    for (const [id, config] of [
-      ['browser', { steps: [] }],
-      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: false }],
-      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: true }],
-    ]) {
-      const provider = await loadApiProvider(id, { options: { config } });
-      const response = await provider.callApi('optional browser fixture', { vars: {} });
-      assert.match(response.error, incompatible
-        ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
-        : /requires the optional Playwright package/);
-      assert.match(response.error, /npm install promptfoo/);
-      assert.match(response.error, /npx playwright install chromium/);
-      await provider.cleanup?.();
-    }
+    await assert.rejects(
+      loadApiProvider('openai:chatkit:wf_fixture'),
+      /openai:chatkit provider has been removed/,
+    );
+    const provider = await loadApiProvider('browser', { options: { config: { steps: [] } } });
+    const response = await provider.callApi('optional browser fixture', { vars: {} });
+    assert.match(response.error, incompatible
+      ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
+      : /requires the optional Playwright package/);
+    assert.match(response.error, /npm install promptfoo/);
+    assert.match(response.error, /npx playwright install chromium/);
+    await provider.cleanup?.();
   `;
   for (const format of ['mjs', 'cjs']) {
     const imports =
@@ -1157,16 +1120,9 @@ async function assertOptionalBrowserDependencies(
   }
   for (const state of withOptionalDependencies ? ['missing', 'incompatible'] : ['missing']) {
     if (state === 'incompatible') {
-      runNpm(
+      installConsumerPackages(
         'install incompatible browser SDK',
-        [
-          'install',
-          '--ignore-scripts',
-          '--no-audit',
-          '--no-fund',
-          '--no-package-lock',
-          'playwright@1.62.0',
-        ],
+        ['playwright@1.62.0'],
         consumerDir,
         npmEnv,
       );
@@ -1506,15 +1462,27 @@ async function main(): Promise<void> {
       runOptionalOpenAiAgentsChecks(consumerDir, configDir),
     );
     await timeAsyncPhase('check optional Slack SDK', () =>
-      runOptionalSlackChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
+      runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
+        name: 'Slack',
+        package: '@slack/web-api',
+        version: '^8.1.1',
+        script: 'optional-slack.mjs',
+        env: { SLACK_BOT_TOKEN: '' },
+      }),
     );
     await timeAsyncPhase('check optional Langfuse SDK', () =>
-      runOptionalLangfuseChecks(
-        consumerDir,
-        configDir,
-        consumerNpmEnv,
-        values.profile === 'default',
-      ),
+      runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
+        name: 'Langfuse',
+        package: '@langfuse/client',
+        version: '^5.11.1',
+        script: 'optional-langfuse.mjs',
+        env: {
+          LANGFUSE_PUBLIC_KEY: '',
+          LANGFUSE_SECRET_KEY: '',
+          LANGFUSE_HOST: '',
+          LANGFUSE_BASE_URL: '',
+        },
+      }),
     );
     await timeAsyncPhase('check optional WatsonX SDKs', () =>
       runOptionalWatsonXChecks(
@@ -1563,18 +1531,9 @@ async function main(): Promise<void> {
     }
 
     if (values.browser) {
-      runNpm(
+      installConsumerPackages(
         'install browser dependencies',
-        [
-          'install',
-          '--ignore-scripts',
-          '--no-audit',
-          '--no-fund',
-          '--no-package-lock',
-          'playwright@1.63.0',
-          'playwright-extra@4.3.6',
-          'puppeteer-extra-plugin-stealth@2.11.2',
-        ],
+        ['playwright@1.63.0', 'playwright-extra@4.3.6', 'puppeteer-extra-plugin-stealth@2.11.2'],
         consumerDir,
         consumerNpmEnv,
       );

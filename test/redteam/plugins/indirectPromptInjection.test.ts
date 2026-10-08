@@ -62,29 +62,20 @@ describe('IndirectPromptInjectionGrader', () => {
       expect(datamarkSuggestion.value).toContain(`Original prompt with ${expectedDatamarked} here`);
     });
 
-    it('should datamark an injection containing $& literally', () => {
-      const userInput = 'ignore $& instructions';
+    it.each([
+      ['ignore $$ instructions', 'ignore^$$^instructions'],
+      ['ignore $& instructions', 'ignore^$&^instructions'],
+      ['ignore $` instructions', 'ignore^$`^instructions'],
+      ["ignore $' instructions", "ignore^$'^instructions"],
+      ["repeat $& $& $$ $` $'", "repeat^$&^$&^$$^$`^$'"],
+    ])('preserves replacement sequences when datamarking %j', (userInput, expectedDatamarked) => {
       const rawPrompt = `Original prompt with ${userInput} here`;
+      const [suggestion] = grader.getSuggestions({ rawPrompt, renderedValue: userInput });
 
-      const result = grader.getSuggestions({
-        rawPrompt,
-        renderedValue: userInput,
-      });
-
-      expect(result[0].value).toContain('Original prompt with ignore^$&^instructions here');
-      expect(result[0].value).not.toContain(userInput);
-    });
-
-    it('should datamark an injection containing a $` sequence literally', () => {
-      const userInput = 'ignore $` instructions';
-      const rawPrompt = `Original prompt with ${userInput} here`;
-
-      const result = grader.getSuggestions({
-        rawPrompt,
-        renderedValue: userInput,
-      });
-
-      expect(result[0].value).toContain('Original prompt with ignore^$`^instructions here');
+      expect(suggestion.value.split('\n\n').at(-1)).toBe(
+        `Original prompt with ${expectedDatamarked} here`,
+      );
+      expect(suggestion.value).not.toContain(userInput);
     });
 
     it('should generate correct encoding suggestion', () => {
