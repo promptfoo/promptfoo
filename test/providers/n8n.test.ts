@@ -662,9 +662,10 @@ describe('N8nProvider', () => {
         status: 429,
         headers: { 'retry-after': '30' },
       });
-      expect(retryOptions.isRateLimited?.(result, undefined)).toBe(false);
-      expect(retryOptions.getHeaders?.(result)).toBeUndefined();
-      expect(retryOptions.getRetryAfter?.(result, undefined)).toBeUndefined();
+      expect(provider.handlesOwnRetries).toBe(true);
+      expect(retryOptions.isRateLimited?.(result, undefined)).toBe(true);
+      expect(retryOptions.getHeaders?.(result)).toEqual({ 'retry-after': '30' });
+      expect(retryOptions.getRetryAfter?.(result, undefined)).toBe(30_000);
     });
 
     it('should treat n8n error payloads as provider errors', async () => {

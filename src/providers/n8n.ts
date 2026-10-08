@@ -586,7 +586,7 @@ export class N8nProvider implements ApiProvider {
         return {
           error: `n8n webhook call error: HTTP ${response.status} ${response.statusText}`,
           metadata: {
-            rateLimitRetryable: false,
+            rateLimitRetryable: response.status === 429,
             http: {
               status: response.status,
               statusText: response.statusText,
@@ -610,7 +610,7 @@ export class N8nProvider implements ApiProvider {
         : undefined;
       return {
         error: `n8n webhook call error: ${errorMessage}`,
-        ...(http && { metadata: { http, rateLimitRetryable: false } }),
+        ...(http && { metadata: { http, rateLimitRetryable: http.status === 429 } }),
       };
     }
 

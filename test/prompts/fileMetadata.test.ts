@@ -69,6 +69,23 @@ describe('prompt file configuration', () => {
     expect(new Set(prompts.map(generateIdFromPrompt)).size).toBe(2);
   });
 
+  it('preserves derived IDs through Markdown glob processing', async () => {
+    const prompts = await readPrompts([{ id: 'file://*.md', label: 'Group' }], directory);
+    expect(prompts.map((prompt) => prompt.id).sort()).toEqual([
+      'file://*.md:one.md',
+      'file://*.md:two.md',
+    ]);
+  });
+
+  it('gives each text chunk in a glob a distinct stable ID', async () => {
+    const prompts = await readPrompts([{ id: 'file://*.txt', label: 'Group' }], directory);
+    expect(prompts.map((prompt) => prompt.id).sort()).toEqual([
+      'file://*.txt:chunks.txt:1',
+      'file://*.txt:chunks.txt:2',
+      'file://*.txt:single.txt',
+    ]);
+  });
+
   it('gives each file and row in a CSV glob a distinct identity', async () => {
     await Promise.all([
       writeFile(path.join(directory, 'glob-one.csv'), 'prompt\nFirst row\nSecond row\n'),
