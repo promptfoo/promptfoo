@@ -305,6 +305,7 @@ interface TableState {
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   tableError: boolean;
+  tableErrorStatus: number | null;
   tableSource: {
     apiBaseUrl: string | undefined;
     evalId: string;
@@ -571,7 +572,8 @@ export const useTableStore = create<TableState>()(
       set((prevState) => ({
         table,
         isFetching: table === null ? false : prevState.isFetching,
-        tableError: false,
+        tableError: table === null ? false : prevState.tableError,
+        tableErrorStatus: table === null ? null : prevState.tableErrorStatus,
         tableSource: table ? prevState.tableSource : null,
         highlightedResultsCount: computeHighlightCount(table),
         userRatedResultsCount: computeUserRatedCount(table),
@@ -592,6 +594,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table,
           tableError: false,
+          tableErrorStatus: null,
           tableSource: null,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(table),
@@ -618,6 +621,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table: results.table,
           tableError: false,
+          tableErrorStatus: null,
           tableSource: null,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(results.table),
@@ -653,6 +657,7 @@ export const useTableStore = create<TableState>()(
 
     isFetching: false,
     tableError: false,
+    tableErrorStatus: null,
     isStreaming: false,
     setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
 
@@ -682,6 +687,7 @@ export const useTableStore = create<TableState>()(
       set({
         isFetching: skipLoadingState ? get().isFetching : true,
         tableError: false,
+        tableErrorStatus: null,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
@@ -749,6 +755,7 @@ export const useTableStore = create<TableState>()(
           set((prevState) => ({
             table: data.table,
             tableError: false,
+            tableErrorStatus: null,
             tableSource: { apiBaseUrl, evalId: id, comparisonEvalIds },
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
@@ -781,7 +788,7 @@ export const useTableStore = create<TableState>()(
         }
 
         if (requestId === evalDataRequestId) {
-          set({ isFetching: false, tableError: true });
+          set({ isFetching: false, tableError: true, tableErrorStatus: resp.status });
         }
         return null;
       } catch (error) {
@@ -792,6 +799,7 @@ export const useTableStore = create<TableState>()(
         set({
           isFetching: false,
           tableError: true,
+          tableErrorStatus: null,
           isStreaming: false,
           metadataKeysLoading: false,
           currentMetadataKeysRequest: null,

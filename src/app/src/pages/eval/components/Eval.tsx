@@ -70,6 +70,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const {
     table,
     tableError,
+    tableErrorStatus,
     tableSource,
     setTable,
     config,
@@ -94,6 +95,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
   const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
   const isHydratingFiltersRef = useRef(false);
@@ -487,6 +489,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     clearEvalState,
     fetchId,
     loadEvalById,
+    retryAttempt,
     setDefaultEvalId,
     // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
@@ -599,8 +602,18 @@ export default function Eval({ fetchId }: EvalOptions) {
     if (comparisonEvalIds.length > 0) {
       return (
         <div className="notice space-y-3">
-          <p>Unable to load comparison. All evaluations must exist and use the same dataset.</p>
-          <Button onClick={() => updateComparisonEvalIds([])}>Clear comparison</Button>
+          <p>
+            {tableErrorStatus === 400 || tableErrorStatus === 404
+              ? 'Unable to load comparison. All evaluations must exist and use the same dataset.'
+              : 'Unable to load comparison. Please try again.'}
+          </p>
+          {tableErrorStatus === 413 && (
+            <p>Clear comparison, choose fewer results per page, and compare again.</p>
+          )}
+          <div className="flex justify-center gap-2">
+            <Button onClick={() => setRetryAttempt((attempt) => attempt + 1)}>Retry</Button>
+            <Button onClick={() => updateComparisonEvalIds([])}>Clear comparison</Button>
+          </div>
         </div>
       );
     }

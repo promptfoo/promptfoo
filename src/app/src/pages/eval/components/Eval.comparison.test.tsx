@@ -1,4 +1,10 @@
 import useApiConfig from '@app/stores/apiConfig';
+import {
+  getCallApiMock,
+  mockCallApiResponse,
+  rejectCallApi,
+  resetCallApiMock,
+} from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, cleanup, screen, waitFor } from '@testing-library/react';
@@ -120,15 +126,21 @@ function tableRequests() {
 }
 
 beforeEach(() => {
-  vi.mocked(callApi).mockReset();
+  resetCallApiMock();
   socketHandlers.clear();
   tableFixture.realTable = false;
   tableFixture.rowCount = 0;
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   useTableStore.setState(initialTableState);
   useResultsViewSettingsStore.setState(initialSettings);
-  vi.mocked(callApi).mockImplementation(async (path) => {
+  getCallApiMock().mockImplementation(async (path, options) => {
     const url = new URL(String(path), window.location.origin);
+    if (
+      (options?.method ?? 'GET') !== 'GET' ||
+      (url.pathname !== '/results' && !/^\/eval\/[^/]+\/table$/.test(url.pathname))
+    ) {
+      throw new Error(`Unexpected comparison fixture request: ${options?.method ?? 'GET'} ${path}`);
+    }
     if (url.pathname === '/results') {
       return new Response(
         JSON.stringify({
@@ -375,10 +387,10 @@ describe('evaluation comparison URLs', () => {
       renderPage(`/eval/eval-a${search}`);
       await screen.findByText('eval-a row-0');
       await waitFor(() => expect(useTableStore.getState().isFetching).toBe(false));
-      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      const defaultApi = getCallApiMock().getMockImplementation()!;
       const pending: (() => Promise<void>)[] = [];
       vi.mocked(callApi).mockClear();
-      vi.mocked(callApi).mockImplementation((path, options) => {
+      getCallApiMock().mockImplementation((path, options) => {
         if (String(path).startsWith('/eval/eval-a/table')) {
           return new Promise((resolve) => {
             pending.push(async () => {
@@ -440,8 +452,8 @@ describe('evaluation comparison URLs', () => {
       await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
       await user.click(screen.getByRole('option', { name: '10' }));
       await waitFor(() => expect(screen.getAllByTestId('output')).toHaveLength(10));
-      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
-      vi.mocked(callApi).mockImplementation((path, options) => {
+      const defaultApi = getCallApiMock().getMockImplementation()!;
+      getCallApiMock().mockImplementation((path, options) => {
         if (path === '/results') {
           return failure === 'http'
             ? Promise.resolve(new Response(null, { status: 503 }))
@@ -466,7 +478,7 @@ describe('evaluation comparison URLs', () => {
       renderPage(route);
       await screen.findByTestId('comparison-columns');
       await waitFor(() => expect(useTableStore.getState().isFetching).toBe(false));
-      vi.mocked(callApi).mockResolvedValue(new Response(null, { status: 404 }));
+      mockCallApiResponse(null, { status: 404 });
       await act(async () => {
         useApiConfig.getState().setApiBaseUrl('http://other-api.example');
       });
@@ -479,7 +491,7 @@ describe('evaluation comparison URLs', () => {
   it.each(['http', 'network', 'empty'])(
     'keeps initial unavailable and empty latest-evaluation lookups distinct (%s)',
     async (outcome) => {
-      vi.mocked(callApi).mockImplementation(() =>
+      getCallApiMock().mockImplementation(() =>
         outcome === 'network'
           ? Promise.reject(new Error('Network unavailable'))
           : Promise.resolve(
@@ -522,10 +534,10 @@ describe('evaluation comparison URLs', () => {
       await screen.findByText('eval-a row-0');
       await user.click(screen.getByRole('button', { name: 'Next page' }));
       await screen.findByText('eval-a row-50');
-      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      const defaultApi = getCallApiMock().getMockImplementation()!;
       let finishParent!: (response: Response) => void;
       let comparisonRequests = 0;
-      vi.mocked(callApi).mockImplementation((path, options) => {
+      getCallApiMock().mockImplementation((path, options) => {
         const url = new URL(String(path), window.location.origin);
         if (url.pathname === '/eval/eval-a/table' && url.searchParams.has('comparisonEvalIds')) {
           if (++comparisonRequests === 1) {
@@ -567,10 +579,10 @@ describe('evaluation comparison URLs', () => {
     'ignores a stale latest-eval response after navigating to a pinned evaluation (%s)',
     async (status) => {
       const user = userEvent.setup();
-      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      const defaultApi = getCallApiMock().getMockImplementation()!;
       let finishRecents!: (response: Response) => void;
       let deferred = false;
-      vi.mocked(callApi).mockImplementation((path, options) => {
+      getCallApiMock().mockImplementation((path, options) => {
         if (path === '/results' && !deferred) {
           deferred = true;
           return new Promise((resolve) => {
@@ -596,10 +608,10 @@ describe('evaluation comparison URLs', () => {
   it.each([200, 500])(
     'ignores an older latest-eval lookup after a socket load (%s)',
     async (status) => {
-      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      const defaultApi = getCallApiMock().getMockImplementation()!;
       let finishRecents!: (response: Response) => void;
       let deferred = false;
-      vi.mocked(callApi).mockImplementation((path, options) => {
+      getCallApiMock().mockImplementation((path, options) => {
         if (path === '/results') {
           if (!deferred) {
             deferred = true;
@@ -628,7 +640,7 @@ describe('evaluation comparison URLs', () => {
   );
 
   it('shows a recoverable load error when the latest-eval lookup rejects', async () => {
-    vi.mocked(callApi).mockRejectedValue(new Error('Network unavailable'));
+    rejectCallApi(new Error('Network unavailable'));
     renderPage('/eval');
     expect(await screen.findByText('404 Eval not found')).toBeInTheDocument();
   });
@@ -699,9 +711,9 @@ describe('evaluation comparison URLs', () => {
     const user = userEvent.setup();
     renderPage('/eval/eval-a');
     await screen.findByText('eval-a row-0');
-    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+    const defaultApi = getCallApiMock().getMockImplementation()!;
     let failed = false;
-    vi.mocked(callApi).mockImplementation((path, options) => {
+    getCallApiMock().mockImplementation((path, options) => {
       const url = new URL(String(path), window.location.origin);
       if (url.pathname.endsWith('/table') && url.searchParams.get('offset') === '50' && !failed) {
         failed = true;
@@ -724,8 +736,8 @@ describe('evaluation comparison URLs', () => {
     const user = userEvent.setup();
     renderPage('/eval/eval-a');
     await screen.findByText('eval-a row-0');
-    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
-    vi.mocked(callApi).mockImplementation((path, options) => {
+    const defaultApi = getCallApiMock().getMockImplementation()!;
+    getCallApiMock().mockImplementation((path, options) => {
       const url = new URL(String(path), window.location.origin);
       if (url.pathname.endsWith('/table') && url.searchParams.get('limit') === '100') {
         return Promise.resolve(new Response(null, { status: 413 }));
@@ -752,10 +764,10 @@ describe('evaluation comparison URLs', () => {
     const user = userEvent.setup();
     renderPage(route);
     await screen.findByText('eval-a row-0');
-    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+    const defaultApi = getCallApiMock().getMockImplementation()!;
     let finishRecents!: (response: Response) => void;
     let deferred = false;
-    vi.mocked(callApi).mockImplementation((path, options) => {
+    getCallApiMock().mockImplementation((path, options) => {
       if (path === '/results' && !deferred) {
         deferred = true;
         return new Promise((resolve) => {
@@ -803,10 +815,10 @@ describe('evaluation comparison URLs', () => {
   it.each([200, 500, 'network'] as const)(
     'does not restore cleared results or errors after a delayed table response (%s)',
     async (outcome) => {
-      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      const defaultApi = getCallApiMock().getMockImplementation()!;
       let finishTable!: (response: Response) => void;
       let failTable!: (reason: Error) => void;
-      vi.mocked(callApi).mockImplementation((path, options) => {
+      getCallApiMock().mockImplementation((path, options) => {
         if (String(path).startsWith('/eval/eval-a/table')) {
           return new Promise((resolve, reject) => {
             finishTable = resolve;
@@ -852,10 +864,10 @@ describe('evaluation comparison URLs', () => {
       const user = userEvent.setup();
       renderPage('/eval/eval-a');
       await screen.findByText('eval-a row-0');
-      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      const defaultApi = getCallApiMock().getMockImplementation()!;
       let finishRecents!: (response: Response) => void;
       let deferred = false;
-      vi.mocked(callApi).mockImplementation((path, options) => {
+      getCallApiMock().mockImplementation((path, options) => {
         if (path === '/results' && !deferred) {
           deferred = true;
           return new Promise((resolve) => {
@@ -893,10 +905,10 @@ describe('evaluation comparison URLs', () => {
     const user = userEvent.setup();
     renderPage('/eval/eval-a');
     await screen.findByTestId('comparison-columns');
-    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+    const defaultApi = getCallApiMock().getMockImplementation()!;
     let finishRecents!: (response: Response) => void;
     let deferred = false;
-    vi.mocked(callApi).mockImplementation((path, options) => {
+    getCallApiMock().mockImplementation((path, options) => {
       if (path === '/results' && !deferred) {
         deferred = true;
         return new Promise((resolve) => {
@@ -927,9 +939,9 @@ describe('evaluation comparison URLs', () => {
     'keeps the current comparison when an earlier navigation resolves late with %s',
     async (status) => {
       const user = userEvent.setup();
-      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      const defaultApi = getCallApiMock().getMockImplementation()!;
       let finishOldRequest!: (response: Response) => void;
-      vi.mocked(callApi).mockImplementation((path, options) => {
+      getCallApiMock().mockImplementation((path, options) => {
         if (String(path).startsWith('/eval/eval-a/table')) {
           return new Promise((resolve) => {
             finishOldRequest = resolve;
@@ -952,6 +964,128 @@ describe('evaluation comparison URLs', () => {
       expect(screen.getByTestId('comparison-columns')).toHaveTextContent('eval-c,eval-d');
     },
   );
+
+  it.each([
+    { initial: true, failure: 'http' },
+    { initial: true, failure: 'network' },
+    { initial: false, failure: 'http' },
+    { initial: false, failure: 'network' },
+  ])(
+    'retries an initial=$initial comparison after a $failure failure',
+    async ({ initial, failure }) => {
+      const user = userEvent.setup();
+      const defaultApi = getCallApiMock().getMockImplementation()!;
+      let failComparison = true;
+      getCallApiMock().mockImplementation((path, options) => {
+        const url = new URL(path, window.location.origin);
+        if (url.searchParams.has('comparisonEvalIds') && failComparison) {
+          return failure === 'http'
+            ? Promise.resolve(new Response(null, { status: 500 }))
+            : Promise.reject(new Error('Network unavailable'));
+        }
+        return defaultApi(path, options);
+      });
+      renderPage(initial ? '/eval/eval-a?comparisonEvalIds=eval-b' : '/eval/eval-a');
+      if (!initial) {
+        await screen.findByTestId('comparison-columns');
+        await user.click(screen.getByRole('button', { name: /Eval actions/ }));
+        await user.click(screen.getByRole('menuitem', { name: 'Compare with another eval' }));
+        await user.click(screen.getByRole('button', { name: 'Select comparison B' }));
+      }
+      await screen.findByText('Unable to load comparison. Please try again.');
+      expect(screen.queryByText(/same dataset/)).not.toBeInTheDocument();
+      expect(screen.queryByTestId('comparison-columns')).not.toBeInTheDocument();
+      failComparison = false;
+      await user.click(screen.getByRole('button', { name: 'Retry' }));
+      await waitFor(() =>
+        expect(screen.getByTestId('comparison-columns')).toHaveTextContent('eval-a,eval-b'),
+      );
+      expect(new URLSearchParams(window.location.search).getAll('comparisonEvalIds')).toEqual([
+        'eval-b',
+      ]);
+    },
+  );
+
+  it('retries an unavailable latest-evaluation lookup without discarding its comparison URL', async () => {
+    const user = userEvent.setup();
+    const defaultApi = getCallApiMock().getMockImplementation()!;
+    let failRecents = true;
+    getCallApiMock().mockImplementation((path, options) =>
+      path === '/results' && failRecents
+        ? Promise.resolve(new Response(null, { status: 503 }))
+        : defaultApi(path, options),
+    );
+    renderPage('/eval?comparisonEvalIds=eval-b');
+    await screen.findByText('Unable to load comparison. Please try again.');
+    failRecents = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('comparison-columns')).toHaveTextContent('eval-a,eval-b'),
+    );
+    expect(new URLSearchParams(window.location.search).getAll('comparisonEvalIds')).toEqual([
+      'eval-b',
+    ]);
+  });
+
+  it('recovers an oversized new comparison by clearing it and choosing fewer rows', async () => {
+    tableFixture.realTable = true;
+    tableFixture.rowCount = 120;
+    const user = userEvent.setup();
+    const defaultApi = getCallApiMock().getMockImplementation()!;
+    getCallApiMock().mockImplementation((path, options) => {
+      const url = new URL(path, window.location.origin);
+      if (url.searchParams.has('comparisonEvalIds') && Number(url.searchParams.get('limit')) > 10) {
+        return Promise.resolve(new Response(null, { status: 413 }));
+      }
+      return defaultApi(path, options);
+    });
+    renderPage('/eval/eval-a');
+    await screen.findByText('eval-a row-0');
+    await user.click(screen.getByRole('button', { name: /Eval actions/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Compare with another eval' }));
+    await user.click(screen.getByRole('button', { name: 'Select comparison B' }));
+    await screen.findByText('Clear comparison, choose fewer results per page, and compare again.');
+    expect(screen.queryByText(/same dataset/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear comparison' }));
+    await screen.findByText('eval-a row-0');
+    await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
+    await user.click(screen.getByRole('option', { name: '10' }));
+    await waitFor(() => expect(screen.getAllByTestId('output')).toHaveLength(10));
+    await user.click(screen.getByRole('button', { name: /Eval actions/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Compare with another eval' }));
+    await user.click(screen.getByRole('button', { name: 'Select comparison B' }));
+    await screen.findByText('eval-b row-0');
+    expect(screen.getAllByTestId('output')).toHaveLength(20);
+    expect(screen.getByRole('combobox', { name: 'Results per page' })).toHaveTextContent('10');
+  });
+
+  it('preserves the failed-page retry alert when a local rating updates the retained table', async () => {
+    tableFixture.realTable = true;
+    tableFixture.rowCount = 120;
+    const user = userEvent.setup();
+    const defaultApi = getCallApiMock().getMockImplementation()!;
+    let failPage = true;
+    getCallApiMock().mockImplementation((path, options) => {
+      const url = new URL(path, window.location.origin);
+      return url.pathname.endsWith('/table') && url.searchParams.get('offset') === '50' && failPage
+        ? Promise.resolve(new Response(null, { status: 503 }))
+        : defaultApi(path, options);
+    });
+    renderPage('/eval/eval-a');
+    await screen.findByText('eval-a row-0');
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    await screen.findByRole('button', { name: 'Retry' });
+    act(() => {
+      const table = useTableStore.getState().table!;
+      useTableStore.getState().setTable({ ...table });
+    });
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(useTableStore.getState().tableErrorStatus).toBe(503);
+    failPage = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText('eval-a row-50');
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
 
   it.each(['deleted', 'different-dataset'])(
     'allows recovery from a %s comparison',
