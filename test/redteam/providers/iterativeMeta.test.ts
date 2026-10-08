@@ -13,7 +13,9 @@ import {
 import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
-const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
+const mockGetTargetResponse = vi.hoisted(() =>
+  vi.fn<typeof import('../../../src/redteam/providers/shared').getTargetResponse>(),
+);
 
 vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -195,6 +197,113 @@ describe('RedteamIterativeMetaProvider', () => {
     expect(snapshots).toHaveLength(checkpointCount);
     expect(mockGetTargetResponse).toHaveBeenCalledOnce();
     expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
+  });
+
+  it('checkpoints a completed target response before its pacing delay', async () => {
+    const actual = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+      '../../../src/redteam/providers/shared',
+    );
+    mockGetTargetResponse.mockImplementation(actual.getTargetResponse);
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const snapshots: ProviderResponse[] = [];
+      mockTargetProvider.delay = 50;
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Completed response',
+        tokenUsage: { numRequests: 1, total: 11 },
+      });
+      const attack = runMetaAgentRedteam({
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 2,
+        options: {
+          abortSignal: controller.signal,
+          onProgress: (response) => snapshots.push(structuredClone(response)),
+        },
+        prompt: { raw: '{{query}}', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        vars: { query: 'Synthetic objective' },
+      });
+      const stopped = expect(attack).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(snapshots.at(-1)).toMatchObject({
+        output: 'Completed response',
+        tokenUsage: { numRequests: 1, total: 11 },
+        metadata: { redteamHistory: [{ output: 'Completed response' }] },
+      });
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(50);
+      await stopped;
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retains completed grading usage and target media while the next attack is pending', async () => {
+    const controller = new AbortController();
+    const snapshots: ProviderResponse[] = [];
+    let finishNextAttack!: () => void;
+    mockAgentProvider.callApi
+      .mockResolvedValueOnce({ output: 'Synthetic probe' })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishNextAttack = () => resolve({ output: 'Late probe' });
+          }),
+      );
+    mockGetTargetResponse.mockResolvedValue({
+      output: 'Completed response',
+      tokenUsage: { numRequests: 1, total: 11 },
+      audio: { data: 'YQ==', format: 'wav' },
+      image: { data: 'Yg==', format: 'png' },
+      images: [{ data: 'Yg==', mimeType: 'image/png' }],
+    });
+    mockGetGraderById.mockReturnValue({
+      getResult: vi
+        .fn()
+        .mockResolvedValue({
+          grade: { pass: true, score: 1, tokensUsed: { total: 23, numRequests: 1 } },
+        }),
+    });
+    const attack = runMetaAgentRedteam({
+      filters: undefined,
+      injectVar: 'query',
+      numIterations: 2,
+      options: {
+        abortSignal: controller.signal,
+        onProgress: (response) => snapshots.push(structuredClone(response)),
+      },
+      prompt: { raw: '{{query}}', label: 'test' },
+      agentProvider: mockAgentProvider,
+      gradingProvider: mockGradingProvider,
+      targetProvider: mockTargetProvider,
+      test: { assert: [{ type: 'promptfoo:redteam:pii' }], metadata: { pluginId: 'pii' } },
+      vars: { query: 'Synthetic objective' },
+    });
+    await vi.waitFor(() => expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2));
+    expect(snapshots.at(-1)).toMatchObject({
+      images: [{ data: 'Yg==', mimeType: 'image/png' }],
+      tokenUsage: { numRequests: 1, total: 11, assertions: { total: 23, numRequests: 1 } },
+      metadata: {
+        redteamHistory: [
+          {
+            graderPassed: true,
+            outputAudio: { data: 'YQ==', format: 'wav' },
+            outputImage: { data: 'Yg==', format: 'png' },
+          },
+        ],
+      },
+    });
+    controller.abort();
+    const stopped = expect(attack).rejects.toThrow();
+    finishNextAttack();
+    await stopped;
+    expect(snapshots.at(-1)?.tokenUsage?.assertions?.total).toBe(23);
   });
 
   describe('constructor', () => {

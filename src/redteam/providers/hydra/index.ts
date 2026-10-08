@@ -13,6 +13,7 @@ import invariant from '../../../util/invariant';
 import { sleep, sleepWithAbort } from '../../../util/time';
 import {
   accumulateAttackerTokenUsage,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -378,15 +379,23 @@ export class HydraProvider implements ApiProvider {
 
     // Include every completed probe in checkpoints, even responses that are
     // backtracked or still awaiting grading. Keep normal grading history intact.
-    const completedTargetHistory: HydraMetadata['redteamHistory'] = [];
+    const completedTargetHistory: typeof redteamHistory = [];
     const callOptions = options ? { ...options, onProgress: undefined } : undefined;
     const publishProgress = () => {
       options?.abortSignal?.throwIfAborted();
+      const tokenUsage = structuredClone(totalTokenUsage);
+      if (storedGraderResult?.tokensUsed) {
+        accumulateGradingTokenUsage(tokenUsage, storedGraderResult.tokensUsed, {
+          cached: storedGraderResult.metadata?.cachedResponse,
+        });
+      }
       options?.onProgress?.({
         output: lastTargetResponse ? scrubOutputForHistory(lastTargetResponse.output) : undefined,
         error: lastTargetResponse?.error,
-        tokenUsage: totalTokenUsage,
+        tokenUsage,
         guardrails: lastTargetResponse?.guardrails,
+        audio: lastTargetResponse?.audio,
+        images: lastTargetResponse?.images,
         metadata: {
           redteamHistory: completedTargetHistory,
           sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
@@ -711,29 +720,51 @@ export class HydraProvider implements ApiProvider {
             },
           }
         : context;
+      let checkpointedTurn: (typeof redteamHistory)[number] | undefined;
+      const checkpointTargetResponse = (response: TargetResponse) => {
+        options?.abortSignal?.throwIfAborted();
+        // Delayed targets checkpoint before pacing; other targets checkpoint on return.
+        if (checkpointedTurn) {
+          return checkpointedTurn;
+        }
+        lastTargetResponse = response;
+        if (!(response.error && response.tokenUsage?.numRequests === 0)) {
+          lastResponseMessages = [
+            ...this.conversationHistory,
+            { role: 'assistant', content: response.output || '' },
+          ];
+        }
+        accumulateResponseTokenUsage(totalTokenUsage, response);
+        checkpointedTurn = {
+          prompt: nextMessage,
+          promptAudio: lastTransformResult?.audio,
+          promptImage: lastTransformResult?.image,
+          output: scrubOutputForHistory(response.output),
+          outputAudio: response.audio
+            ? { data: response.audio.data || '', format: response.audio.format || 'wav' }
+            : undefined,
+          outputImage:
+            response.image?.data && response.image?.format
+              ? { data: response.image.data, format: response.image.format }
+              : undefined,
+          graderPassed: undefined,
+          inputVars: currentRenderInputVars,
+        };
+        if (!(response.error && response.tokenUsage?.numRequests === 0)) {
+          completedTargetHistory.push(checkpointedTurn);
+        }
+        publishProgress();
+        return checkpointedTurn;
+      };
       options?.abortSignal?.throwIfAborted();
       let targetResponse = await getTargetResponse(
         targetProvider,
         finalTargetPrompt,
         targetContext,
         callOptions,
+        checkpointTargetResponse,
       );
-      options?.abortSignal?.throwIfAborted();
-      lastTargetResponse = targetResponse;
-      lastResponseMessages = [
-        ...this.conversationHistory,
-        { role: 'assistant', content: targetResponse.output || '' },
-      ];
-      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
-      const completedTurn: HydraMetadata['redteamHistory'][number] = {
-        prompt: nextMessage,
-        promptAudio: lastTransformResult?.audio,
-        promptImage: lastTransformResult?.image,
-        output: scrubOutputForHistory(targetResponse.output),
-        graderPassed: undefined,
-      };
-      completedTargetHistory.push(completedTurn);
-      publishProgress();
+      const completedTurn = checkpointTargetResponse(targetResponse);
 
       // Fetch trace context if tracing is enabled
       let traceContext: TraceContextData | null = null;
@@ -863,6 +894,13 @@ export class HydraProvider implements ApiProvider {
       lastResponseMessages = [...this.conversationHistory];
 
       completedTurn.output = historyOutput;
+      completedTurn.outputAudio = targetResponse.audio
+        ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
+        : undefined;
+      completedTurn.outputImage =
+        targetResponse.image?.data && targetResponse.image?.format
+          ? { data: targetResponse.image.data, format: targetResponse.image.format }
+          : undefined;
       completedTurn.trace = traceContext ? formatTraceForMetadata(traceContext) : undefined;
       completedTurn.traceSummary = computedTraceSummary;
       publishProgress();

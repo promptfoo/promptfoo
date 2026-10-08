@@ -12,6 +12,7 @@ import invariant from '../../util/invariant';
 import { sleep, sleepWithAbort } from '../../util/time';
 import {
   accumulateAttackerTokenUsage,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
@@ -200,10 +201,18 @@ export async function runMetaAgentRedteam({
   const callOptions = options ? { ...options, onProgress: undefined } : undefined;
   const publishProgress = () => {
     options?.abortSignal?.throwIfAborted();
+    const tokenUsage = structuredClone(totalTokenUsage);
+    if (storedGraderResult?.tokensUsed) {
+      accumulateGradingTokenUsage(tokenUsage, storedGraderResult.tokensUsed, {
+        cached: storedGraderResult.metadata?.cachedResponse,
+      });
+    }
     options?.onProgress?.({
       output: lastResponse?.output,
       error: lastResponse?.error,
-      tokenUsage: totalTokenUsage,
+      audio: lastResponse?.audio,
+      images: lastResponse?.images,
+      tokenUsage,
       metadata: {
         redteamHistory: completedTargetHistory,
         sessionIds,
@@ -476,28 +485,48 @@ export async function runMetaAgentRedteam({
           vars: updatedVars,
         }
       : iterationContext;
+    let checkpointedTurn: IterativeMetaMetadata['redteamHistory'][number] | undefined;
+    const checkpointTargetResponse = (response: TargetResponse) => {
+      options?.abortSignal?.throwIfAborted();
+      // Delayed targets checkpoint before pacing; other targets checkpoint on return.
+      if (checkpointedTurn) {
+        return checkpointedTurn;
+      }
+      lastResponse = response;
+      accumulateResponseTokenUsage(totalTokenUsage, response);
+      checkpointedTurn = {
+        prompt: attackPrompt,
+        promptAudio: lastTransformResult?.audio,
+        promptImage: lastTransformResult?.image,
+        output: response.output,
+        outputAudio:
+          response.audio?.data && response.audio?.format
+            ? { data: response.audio.data, format: response.audio.format }
+            : undefined,
+        outputImage:
+          response.image?.data && response.image?.format
+            ? { data: response.image.data, format: response.image.format }
+            : undefined,
+        graderPassed: undefined,
+        guardrails: response.guardrails,
+        score: 0,
+        inputVars: currentRenderInputVars,
+      };
+      if (!(response.error && response.tokenUsage?.numRequests === 0)) {
+        completedTargetHistory.push(checkpointedTurn);
+      }
+      publishProgress();
+      return checkpointedTurn;
+    };
     options?.abortSignal?.throwIfAborted();
     const initialTargetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       targetContext,
       callOptions,
+      checkpointTargetResponse,
     );
-    options?.abortSignal?.throwIfAborted();
-    lastResponse = initialTargetResponse;
-    accumulateResponseTokenUsage(totalTokenUsage, initialTargetResponse);
-    const completedTurn: IterativeMetaMetadata['redteamHistory'][number] = {
-      prompt: attackPrompt,
-      promptAudio: lastTransformResult?.audio,
-      promptImage: lastTransformResult?.image,
-      output: initialTargetResponse.output,
-      graderPassed: undefined,
-      guardrails: initialTargetResponse.guardrails,
-      score: 0,
-      inputVars: currentRenderInputVars,
-    };
-    completedTargetHistory.push(completedTurn);
-    publishProgress();
+    const completedTurn = checkpointTargetResponse(initialTargetResponse);
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
       initialTargetResponse,
       {
@@ -508,6 +537,14 @@ export async function runMetaAgentRedteam({
     );
     lastResponse = targetResponse;
     completedTurn.output = targetResponse.output;
+    completedTurn.outputAudio =
+      targetResponse.audio?.data && targetResponse.audio?.format
+        ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+        : undefined;
+    completedTurn.outputImage =
+      targetResponse.image?.data && targetResponse.image?.format
+        ? { data: targetResponse.image.data, format: targetResponse.image.format }
+        : undefined;
     publishProgress();
 
     // Fetch trace context if tracing is enabled

@@ -550,6 +550,8 @@ export async function getTargetResponse(
   targetPrompt: string,
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
+  // A completed response would otherwise remain hidden until post-call pacing ends.
+  onResponseBeforeDelay?: (response: TargetResponse) => void,
 ): Promise<TargetResponse> {
   let targetRespRaw;
 
@@ -570,58 +572,33 @@ export async function getTargetResponse(
       },
     };
   }
-  if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
-    logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-    await sleep(targetProvider.delay);
-  }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput =
     targetRespRaw &&
     Object.prototype.hasOwnProperty.call(targetRespRaw, 'output') &&
     targetRespRaw.output != null;
-
-  if (targetRespRaw?.error) {
-    const output = hasOutput
-      ? ((typeof targetRespRaw.output === 'string'
-          ? targetRespRaw.output
-          : safeJsonStringify(targetRespRaw.output)) as string)
-      : '';
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output,
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
-  }
-
-  if (hasOutput) {
-    const output = (
-      typeof targetRespRaw.output === 'string'
+  const output = hasOutput
+    ? ((typeof targetRespRaw.output === 'string'
         ? targetRespRaw.output
-        : safeJsonStringify(targetRespRaw.output)
-    ) as string;
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output,
-      tokenUsage,
-    };
-  }
-
-  if (targetRespRaw?.conversationEnded) {
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output: '',
-      tokenUsage,
-    };
-  }
-
-  return {
-    ...(targetRespRaw as ProviderResponse),
-    output: '',
-    error:
-      'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
+        : safeJsonStringify(targetRespRaw.output)) as string)
+    : '';
+  const response: TargetResponse = {
+    ...targetRespRaw,
+    output,
     tokenUsage,
+    ...(!targetRespRaw?.error && !hasOutput && !targetRespRaw?.conversationEnded
+      ? {
+          error:
+            'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
+        }
+      : {}),
   };
+  if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
+    onResponseBeforeDelay?.(response);
+    logger.debug(`Sleeping for ${targetProvider.delay}ms`);
+    await sleep(targetProvider.delay);
+  }
+  return response;
 }
 
 interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {

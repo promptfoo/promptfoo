@@ -247,6 +247,109 @@ describe('HydraProvider', () => {
     expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
   });
 
+  it('checkpoints a completed target response before its pacing delay', async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Synthetic probe' });
+      mockTargetProvider.delay = 50;
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Completed response',
+        tokenUsage: { numRequests: 1, total: 11 },
+      });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
+      const attack = provider.callApi(
+        '',
+        {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Synthetic objective' },
+          prompt: { raw: '{{input}}', label: 'test' },
+        },
+        {
+          abortSignal: controller.signal,
+          onProgress: (response) => snapshots.push(structuredClone(response)),
+        },
+      );
+      const stopped = expect(attack).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(snapshots.at(-1)).toMatchObject({
+        output: 'Completed response',
+        tokenUsage: { numRequests: 1, total: 11 },
+        metadata: { redteamHistory: [{ output: 'Completed response' }] },
+      });
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(50);
+      await stopped;
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retains completed grading usage and target media while the next attack is pending', async () => {
+    const controller = new AbortController();
+    const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
+    let finishNextAttack!: () => void;
+    mockAgentProvider.callApi
+      .mockResolvedValueOnce({ output: 'Synthetic probe' })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishNextAttack = () => resolve({ output: 'Late probe' });
+          }),
+      );
+    const mediaResponse: shared.TargetResponse = {
+      output: 'Completed response',
+      tokenUsage: { numRequests: 1, total: 11 },
+      audio: { data: 'YQ==', format: 'wav' },
+      image: { data: 'Yg==', format: 'png' },
+      images: [{ data: 'Yg==', mimeType: 'image/png' }],
+    };
+    mockTargetProvider.callApi.mockResolvedValue(mediaResponse);
+    mockGrader.getResult.mockResolvedValue({
+      grade: { pass: true, score: 1, tokensUsed: { total: 23, numRequests: 1 } },
+    });
+    const test: AtomicTestCase = {
+      assert: [{ type: 'promptfoo:redteam:pii' }],
+      metadata: { pluginId: 'pii' },
+    };
+    const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
+    const attack = provider.callApi(
+      '',
+      {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Synthetic objective' },
+        prompt: { raw: '{{input}}', label: 'test' },
+        test,
+      },
+      {
+        abortSignal: controller.signal,
+        onProgress: (response) => snapshots.push(structuredClone(response)),
+      },
+    );
+    await vi.waitFor(() => expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2));
+    expect(snapshots.at(-1)).toMatchObject({
+      images: [{ data: 'Yg==', mimeType: 'image/png' }],
+      tokenUsage: { numRequests: 1, total: 11, assertions: { total: 23, numRequests: 1 } },
+      metadata: {
+        redteamHistory: [
+          {
+            graderPassed: true,
+            outputAudio: { data: 'YQ==', format: 'wav' },
+            outputImage: { data: 'Yg==', format: 'png' },
+          },
+        ],
+      },
+    });
+    controller.abort();
+    const stopped = expect(attack).rejects.toThrow();
+    finishNextAttack();
+    await stopped;
+    expect(snapshots.at(-1)?.tokenUsage?.assertions?.total).toBe(23);
+  });
+
   describe('constructor', () => {
     it('should initialize with default config values', () => {
       const provider = new HydraProvider({
