@@ -39,7 +39,7 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
  * Extract token usage from response data, handling both OpenAI Chat Completions format
  * (prompt_tokens, completion_tokens) and Azure Responses format (input_tokens, output_tokens)
  */
-function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+export function getResponsesTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       const totalTokens =
@@ -98,12 +98,17 @@ export class ResponsesProcessor {
       };
 
       const processedOutput = await this.processOutput(data.output, context);
-      const cost = this.config.costCalculator(this.config.modelName, data.usage, requestConfig);
+      const cost = this.config.costCalculator(
+        this.config.modelName,
+        data.usage,
+        requestConfig,
+        data,
+      );
 
       if (processedOutput.isRefusal) {
         return {
           output: processedOutput.refusal,
-          tokenUsage: getTokenUsage(data, cached),
+          tokenUsage: getResponsesTokenUsage(data, cached),
           isRefusal: true,
           cached,
           ...(cost === undefined ? {} : { cost }),
@@ -128,7 +133,7 @@ export class ResponsesProcessor {
 
       const result: ProviderResponse = {
         output: finalOutput,
-        tokenUsage: getTokenUsage(data, cached),
+        tokenUsage: getResponsesTokenUsage(data, cached),
         cached,
         ...(cost === undefined ? {} : { cost }),
         raw: data,

@@ -25,7 +25,7 @@ cloudflare-gateway:{provider}:{model}
 **Examples:**
 
 - `cloudflare-gateway:openai:gpt-5.2`
-- `cloudflare-gateway:anthropic:claude-sonnet-4-5-20250929`
+- `cloudflare-gateway:anthropic:claude-sonnet-5`
 - `cloudflare-gateway:groq:openai/gpt-oss-120b`
 
 ## Required Configuration
@@ -81,6 +81,7 @@ export CF_AIG_TOKEN=your_gateway_token_here
 ## Basic Usage
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Answer this question: {{question}}'
 
@@ -190,6 +191,7 @@ providers:
 Compare responses from different providers, all routed through your Cloudflare gateway:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Explain {{topic}} in simple terms.'
 
@@ -199,7 +201,7 @@ providers:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
 
-  - id: cloudflare-gateway:anthropic:claude-sonnet-4-5-20250929
+  - id: cloudflare-gateway:anthropic:claude-sonnet-5
     config:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
@@ -266,7 +268,7 @@ View usage across all your AI providers in a single Cloudflare dashboard, making
 
 ### Rate Limit Protection
 
-AI Gateway can help manage rate limits by queuing requests, preventing your evaluations from failing due to provider rate limits.
+AI Gateway can help manage rate limits by queuing requests, preventing your evals from failing due to provider rate limits.
 
 ### Logging and Debugging
 

@@ -87,6 +87,8 @@ export interface CallApiContextParams {
   prompt: Prompt;
   vars: Record<string, VarValue>;
   debug?: boolean;
+  /** True for assertion-grader calls, independent of the prompt label. */
+  isGrading?: boolean;
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
   test?: AtomicTestCase;
@@ -122,12 +124,22 @@ export interface CallApiOptionsParams {
 
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi?: (
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
   handlesOwnDelay?: boolean;
+  /**
+   * True when callApi owns retries for its operations, including requests that
+   * must not be replayed. Scheduling still applies, but the scheduler must not
+   * retry the whole call after its transport or SDK has finished. Subclasses
+   * replacing that behavior can override this with false to use scheduler retries.
+   */
+  handlesOwnRetries?: boolean;
   getSessionId?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
@@ -152,7 +164,10 @@ export interface ApiSimilarityProvider extends ApiProvider {
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: (
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
 }
 
 export interface ApiModerationProvider extends ApiProvider {

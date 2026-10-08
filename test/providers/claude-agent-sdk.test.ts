@@ -11,20 +11,24 @@ import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import {
   CLAUDE_CODE_MODEL_ALIASES,
+  type ClaudeCodeOptions,
   ClaudeCodeSDKProvider,
   FS_READONLY_ALLOWED_TOOLS,
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
 import * as traceStore from '../../src/tracing/store';
+import { getPackageVersion } from '../../src/util/packageVersion';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { mockProcessEnv } from '../util/utils';
 import type {
   ModelUsage,
   NonNullableUsage,
   Query,
+  Options as QueryOptions,
   SDKAssistantMessageError,
   SDKMessage,
+  SDKResultMessage,
   TerminalReason,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { MockInstance } from 'vitest';
@@ -76,6 +80,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   };
 });
 vi.mock('../../src/providers/mcp/transform');
+vi.mock('../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
 vi.mock('node:module', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -289,6 +294,7 @@ describe('ClaudeCodeSDKProvider', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockQuery.mockReset();
+    vi.mocked(getPackageVersion).mockReset();
     Object.values(fsMocks).forEach((mock) => mock.mockReset());
 
     // Setup importModule to return our mockQuery
@@ -310,6 +316,273 @@ describe('ClaudeCodeSDKProvider', () => {
     vi.unstubAllEnvs();
     cliState.setActiveOtlpReceiver();
     await clearCache();
+  });
+
+  describe('resumed-session accounting', () => {
+    const prior = { ...createMockModelUsage(100, 20, 50, 5), thinkingTokens: 4, costUSD: 0.2 };
+    const current = { ...createMockModelUsage(110, 27, 53, 7), thinkingTokens: 6, costUSD: 0.201 };
+    const resultMessage = {
+      type: 'result',
+      subtype: 'success',
+      result: 'resumed output',
+      stop_reason: 'end_turn',
+      session_id: 'session',
+      uuid: '12345678-1234-1234-1234-123456789abc',
+      total_cost_usd: 0.202,
+      modelUsage: {
+        sonnet: current,
+        haiku: { ...createMockModelUsage(5, 3), costUSD: 0.001 },
+      },
+      usage: createMockUsage(10, 7),
+      duration_ms: 100,
+      duration_api_ms: 80,
+      num_turns: 1,
+      is_error: false,
+      permission_denials: [],
+    } satisfies SDKResultMessage;
+
+    function mockStatefulQuery(
+      snapshot: ((...args: unknown[]) => unknown) | null = vi
+        .fn()
+        .mockResolvedValue({ session: { total_cost_usd: 0.2, model_usage: { sonnet: prior } } }),
+      message: SDKResultMessage = resultMessage,
+      invokeHooks = true,
+    ) {
+      mockQuery.mockImplementation(({ options }: { options: QueryOptions }) => {
+        const stream = (async function* () {
+          if (invokeHooks) {
+            for (const matcher of options.hooks?.UserPromptSubmit ?? []) {
+              for (const hook of matcher.hooks) {
+                await hook(
+                  {
+                    hook_event_name: 'UserPromptSubmit',
+                    session_id: 'session',
+                    transcript_path: '/synthetic',
+                    cwd: '/synthetic',
+                    prompt: 'hello',
+                  },
+                  undefined,
+                  { signal: new AbortController().signal },
+                );
+              }
+            }
+          }
+          yield message;
+        })() as Query;
+        if (snapshot) {
+          stream.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET =
+            snapshot as Query['usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET'];
+        }
+        return stream;
+      });
+      return snapshot;
+    }
+
+    it.each<ClaudeCodeOptions>([
+      { resume: 'session' },
+      { resume: 'session', fork_session: true },
+      { continue: true },
+      { extra_args: { resume: 'session' } },
+      { extra_args: { r: 'session' } },
+      { extra_args: { continue: null } },
+      { extra_args: { c: null } },
+    ])('subtracts restored totals for %j while preserving subagent accounting', async (config) => {
+      const snapshot = mockStatefulQuery();
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'synthetic', ...config } });
+      const result = await provider.callApi('hello');
+      expect(snapshot).toHaveBeenCalledOnce();
+      expect(snapshot).toHaveBeenCalledWith({ skipBehaviors: true });
+      expect(result.output).toBe('resumed output');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(0.002);
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 20,
+        completion: 10,
+        total: 30,
+        completionDetails: { reasoning: 2, cacheReadInputTokens: 3, cacheCreationInputTokens: 2 },
+      });
+      expect(result.metadata).toMatchObject({
+        usageAccounting: 'query',
+        sessionCost: 0.202,
+        modelUsage: {
+          sonnet: { inputTokens: 10, outputTokens: 7, contextWindow: 200000 },
+          haiku: { inputTokens: 5, outputTokens: 3 },
+        },
+        sessionModelUsage: resultMessage.modelUsage,
+      });
+      expect(JSON.parse(result.raw as string).modelUsage.sonnet.inputTokens).toBe(110);
+      expect(prior.inputTokens).toBe(100);
+      expect(current.inputTokens).toBe(110);
+    });
+
+    it('preserves user hooks and snapshots only once', async () => {
+      const userHook = vi.fn().mockResolvedValue({ continue: true });
+      const snapshot = mockStatefulQuery();
+      const provider = new ClaudeCodeSDKProvider({
+        config: {
+          apiKey: 'synthetic',
+          resume: 'session',
+          hooks: { UserPromptSubmit: [{ hooks: [userHook] }] },
+        },
+      });
+      await provider.callApi('hello');
+      expect(userHook).toHaveBeenCalledOnce();
+      expect(snapshot).toHaveBeenCalledOnce();
+      const internalHook = mockQuery.mock.calls[0][0].options.hooks.UserPromptSubmit[0].hooks[0];
+      await internalHook();
+      expect(snapshot).toHaveBeenCalledOnce();
+    });
+
+    it('keeps fresh-session accounting independent of the experimental API', async () => {
+      const snapshot = mockStatefulQuery(vi.fn().mockRejectedValue(new Error('unavailable')));
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'synthetic' } });
+      const result = await provider.callApi('hello');
+      expect(snapshot).not.toHaveBeenCalled();
+      expect(result.cost).toBe(0.202);
+      expect(result.metadata?.usageAccounting).toBeUndefined();
+    });
+
+    it('accepts zero baselines from older SDKs', async () => {
+      mockStatefulQuery(
+        vi.fn().mockResolvedValue({ session: { total_cost_usd: 0, model_usage: {} } }),
+      );
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'synthetic', resume: 'session' },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.cost).toBe(0.202);
+      expect(result.metadata?.modelUsage).toEqual(resultMessage.modelUsage);
+    });
+
+    it.each(['missing', 'rejected', 'malformed', 'local-command'] as const)(
+      'marks accounting unavailable on %s without blocking output or user hooks',
+      async (mode) => {
+        const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        const userHook = vi.fn().mockResolvedValue({});
+        if (mode === 'missing') {
+          mockStatefulQuery(null);
+        } else {
+          const snapshot =
+            mode === 'rejected'
+              ? vi.fn().mockRejectedValue(new Error('synthetic control error'))
+              : vi
+                  .fn()
+                  .mockResolvedValue({ session: { total_cost_usd: Number.NaN, model_usage: {} } });
+          mockStatefulQuery(snapshot, resultMessage, mode !== 'local-command');
+        }
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            apiKey: 'synthetic',
+            resume: 'session',
+            hooks: { UserPromptSubmit: [{ hooks: [userHook] }] },
+          },
+        });
+        const result = await provider.callApi('/usage');
+        expect(result.output).toBe('resumed output');
+        expect(result.error).toBeUndefined();
+        expect(result.cost).toBeUndefined();
+        expect(result.tokenUsage).toEqual({});
+        expect(result.metadata).toMatchObject({
+          usageAccounting: 'unavailable',
+          sessionCost: 0.202,
+        });
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('per-call cost and token usage are unavailable'),
+        );
+        if (mode !== 'local-command') {
+          expect(userHook).toHaveBeenCalledOnce();
+        }
+      },
+    );
+
+    it('bounds a hung control request without suppressing user hooks', async () => {
+      vi.useFakeTimers();
+      try {
+        const userHook = vi.fn().mockResolvedValue({});
+        const snapshot = mockStatefulQuery(vi.fn().mockReturnValue(new Promise(() => {})));
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            apiKey: 'synthetic',
+            resume: 'session',
+            hooks: { UserPromptSubmit: [{ hooks: [userHook] }] },
+          },
+        });
+        const pending = provider.callApi('hello');
+        await vi.waitFor(() => expect(snapshot).toHaveBeenCalledOnce());
+        await vi.advanceTimersByTimeAsync(5_000);
+        const result = await pending;
+        expect(result.cost).toBeUndefined();
+        expect(result.metadata?.usageAccounting).toBe('unavailable');
+        expect(userHook).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not subtract a stale baseline after SDK counters reset', async () => {
+      mockStatefulQuery(undefined, {
+        ...resultMessage,
+        total_cost_usd: 0.001,
+        modelUsage: { haiku: createMockModelUsage(5, 3) },
+      });
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'synthetic', resume: 'session' },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.cost).toBe(0.001);
+      expect(result.tokenUsage).toMatchObject({ prompt: 5, completion: 3, total: 8 });
+    });
+
+    it('retains per-call accounting on an error terminal result', async () => {
+      mockStatefulQuery(undefined, {
+        ...resultMessage,
+        subtype: 'error_max_turns',
+        is_error: true,
+        errors: ['turn limit'],
+      });
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'synthetic', resume: 'session' },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.error).toContain('error_max_turns');
+      expect(result.cost).toBeCloseTo(0.002);
+      expect(result.tokenUsage).toMatchObject({ prompt: 20, completion: 10 });
+      expect(result.metadata?.usageAccounting).toBe('query');
+    });
+
+    it('recognizes token counter resets even when custom pricing is zero', async () => {
+      mockStatefulQuery(
+        vi.fn().mockResolvedValue({
+          session: { total_cost_usd: 0, model_usage: { sonnet: createMockModelUsage(100, 20) } },
+        }),
+        { ...resultMessage, total_cost_usd: 0, modelUsage: { sonnet: createMockModelUsage(5, 3) } },
+      );
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'synthetic', resume: 'session' },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.cost).toBe(0);
+      expect(result.tokenUsage).toMatchObject({ prompt: 5, completion: 3, total: 8 });
+    });
+
+    it('releases a pending baseline immediately when the caller cancels', async () => {
+      vi.useFakeTimers();
+      try {
+        const snapshot = mockStatefulQuery(vi.fn().mockReturnValue(new Promise(() => {})));
+        const controller = new AbortController();
+        const provider = new ClaudeCodeSDKProvider({
+          config: { apiKey: 'synthetic', resume: 'session' },
+        });
+        const pending = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        await vi.waitFor(() => expect(snapshot).toHaveBeenCalledOnce());
+        controller.abort();
+        const result = await pending;
+        expect(result.cost).toBeUndefined();
+        expect(result.metadata?.usageAccounting).toBe('unavailable');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('reports installation guidance for an asynchronously rejected SDK import', async () => {
@@ -340,6 +613,85 @@ describe('ClaudeCodeSDKProvider', () => {
       );
     },
   );
+
+  it.each(['0.2.129', '0.3.159', '0.3.252'])(
+    'passes a custom system prompt as a string to Agent SDK %s, which ignores the object form',
+    async (sdkVersion) => {
+      vi.mocked(getPackageVersion).mockReturnValue(sdkVersion);
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: 'You are a pirate.' },
+      });
+
+      await provider.callApi('Hello');
+      // The version is read once, when the SDK is loaded.
+      await provider.callApi('Hello again');
+
+      expect(getPackageVersion).toHaveBeenCalledExactlyOnceWith(
+        '@anthropic-ai/claude-agent-sdk',
+        '@anthropic-ai/claude-agent-sdk',
+      );
+      expect(mockQuery).toHaveBeenCalledTimes(2);
+      for (const [queryParams] of mockQuery.mock.calls) {
+        expect(queryParams.options.systemPrompt).toBe('You are a pirate.');
+      }
+    },
+  );
+
+  it.each(['0.3.257', '0.3.280', '1.0.0', 'not-a-version', null])(
+    'keeps the unrecorded custom system prompt object for Agent SDK %s',
+    async (sdkVersion) => {
+      vi.mocked(getPackageVersion).mockReturnValue(sdkVersion);
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: 'You are a pirate.' },
+      });
+
+      await provider.callApi('Hello');
+
+      expect(mockQuery.mock.calls[0][0].options.systemPrompt).toEqual({
+        type: 'custom',
+        prompt: 'You are a pirate.',
+        snapshot: false,
+      });
+    },
+  );
+
+  it('keeps the custom system prompt object when the Agent SDK manifest cannot be read', async () => {
+    vi.mocked(getPackageVersion).mockImplementation(() => {
+      throw new SyntaxError('Unexpected token in package.json');
+    });
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({
+      config: { apiKey: 'test-key', custom_system_prompt: 'You are a pirate.' },
+    });
+
+    const result = await provider.callApi('Hello');
+
+    expect(result.error).toBeUndefined();
+    expect(mockQuery.mock.calls[0][0].options.systemPrompt).toEqual({
+      type: 'custom',
+      prompt: 'You are a pirate.',
+      snapshot: false,
+    });
+  });
+
+  it('leaves the preset system prompt unchanged for an older Agent SDK', async () => {
+    vi.mocked(getPackageVersion).mockReturnValue('0.3.252');
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({
+      config: { apiKey: 'test-key', append_system_prompt: 'Be brief.' },
+    });
+
+    await provider.callApi('Hello');
+
+    expect(mockQuery.mock.calls[0][0].options.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: 'Be brief.',
+      snapshot: false,
+    });
+  });
 
   it.each([
     {
@@ -1844,6 +2196,16 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
+      let restoreEnv: () => void;
+
+      beforeEach(() => {
+        restoreEnv = mockProcessEnv({ OTEL_RESOURCE_ATTRIBUTES: undefined });
+      });
+
+      afterEach(() => {
+        restoreEnv();
+      });
+
       it('passes file defaults below explicit subprocess environment values', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
         const provider = new ClaudeCodeSDKProvider({
@@ -2226,6 +2588,43 @@ describe('ClaudeCodeSDKProvider', () => {
           `deployment.environment=prod,service.owner=team-x,promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
         );
       });
+
+      it.each([
+        {
+          label: 'valid',
+          traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+          expected:
+            'service.name=host-app,promptfoo.trace_id=0af7651916cd43dd8448eb211c80319c,promptfoo.parent_span_id=b7ad6b7169203331',
+        },
+        {
+          label: 'malformed',
+          traceparent: '00-0af7651916cd43dd8448eb211c80319c',
+          expected: 'service.name=host-app',
+        },
+      ])(
+        'preserves inherited OTEL resource attributes with $label traceparent',
+        async ({ traceparent, expected }) => {
+          const restoreEnv = mockProcessEnv({ OTEL_RESOURCE_ATTRIBUTES: 'service.name=host-app' });
+          try {
+            mockQuery.mockReturnValue(createMockResponse('ok'));
+            const provider = new ClaudeCodeSDKProvider({
+              env: { ANTHROPIC_API_KEY: 'test-api-key' },
+            });
+
+            await provider.callApi('prompt', {
+              traceparent,
+              prompt: { raw: 'prompt', label: 'prompt' },
+              vars: {},
+            } as CallApiContextParams);
+
+            expect(mockQuery.mock.calls.at(-1)?.[0].options.env.OTEL_RESOURCE_ATTRIBUTES).toBe(
+              expected,
+            );
+          } finally {
+            restoreEnv();
+          }
+        },
+      );
 
       it('overrides a user-provided promptfoo.trace_id rather than duplicating it', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));

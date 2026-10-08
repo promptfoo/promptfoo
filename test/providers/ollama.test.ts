@@ -1512,9 +1512,12 @@ describe('OllamaChatProvider', () => {
     expect(result.output).toEqual([{ function: { name: 'f', arguments: '{"a":1}' } }]);
   });
 
-  it('should normalize a missing tool-call arguments field to an empty JSON object', async () => {
+  it.each([
+    ['missing', '{"name":"f"}'],
+    ['null', '{"name":"f","arguments":null}'],
+  ])('should normalize %s tool-call arguments to an empty JSON object', async (_label, fn) => {
     vi.mocked(fetchWithCache).mockResolvedValue({
-      data: '{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"f"}}]},"done":true}\n',
+      data: `{"message":{"role":"assistant","content":"","tool_calls":[{"function":${fn}}]},"done":true}\n`,
       cached: false,
       status: 200,
       statusText: 'OK',
