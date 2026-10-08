@@ -39,6 +39,8 @@ Environment:
     LINTLANG_MIN_SEVERITY  minimum finding severity that fails the
                            assertion: critical|high|medium|low|info
                            (default: low)
+    LINTLANG_STDIN_FILENAME virtual filename selecting the input parser
+                           (default: prompt, which auto-detects)
     LINTLANG_BIN           path to the lintlang executable
                            (default: `lintlang` on PATH)
 """
@@ -85,7 +87,7 @@ def get_assert(output, context):
                 lintlang,
                 "scan",
                 "--stdin-filename",
-                "prompt",
+                os.environ.get("LINTLANG_STDIN_FILENAME", "prompt"),
                 "--format",
                 "json",
                 "--min-severity",
@@ -193,7 +195,7 @@ prompts:
   - file://prompts/support-agent.txt
 
 providers:
-  - openai:gpt-4o-mini
+  - echo
 
 defaultTest:
   assert:
@@ -205,9 +207,11 @@ tests:
       account_summary: 'Plan: Pro. Balance due: $42.00.'
 ```
 
+The `echo` provider runs this prompt-only check locally without calling a model. Replace it with your model provider when combining prompt linting with output assertions.
+
 Because the assertion reads `context['prompt']`, it lints the fully rendered prompt for each test case — including any `vars` referenced by the template. It fails explicitly when that prompt is unavailable; test variables alone cannot reconstruct it.
 
-The extensionless stdin filename lets LintLang detect JSON, YAML, or plain text, preserving message roles and structured fields in rendered chat/object prompts. Tool definitions configured separately on a provider are outside this prompt assertion's coverage. A nonzero CLI exit, input error, skipped scan, or malformed result fails the assertion instead of reporting a clean pass.
+The extensionless stdin filename lets LintLang detect JSON, YAML, or plain text, preserving message roles and structured fields in rendered chat/object prompts. Autodetection is not syntax validation: malformed JSON may fall back to plain text, and text containing colons may be interpreted as YAML. Set `LINTLANG_STDIN_FILENAME=prompt.json` for JSON prompts, `prompt.yaml` for YAML, or `prompt.txt` for plain text when the format is known. LintLang also accepts JSON with comments and trailing commas. Tool definitions configured separately on a provider are outside this prompt assertion's coverage. A nonzero CLI exit, input error, skipped scan, or malformed result fails the assertion instead of reporting a clean pass.
 
 ## Tuning the threshold
 

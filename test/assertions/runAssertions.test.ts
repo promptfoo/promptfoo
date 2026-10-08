@@ -134,6 +134,52 @@ describe('runAssertions', () => {
     });
   });
 
+  it('records a zero-weight cost metric without changing quality scoring', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          { type: 'cost', metric: 'inference_cost', weight: 0 },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
+    });
+  });
+
+  it('retains measurement metrics inside a zero-weight assertion set', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          {
+            type: 'assert-set',
+            weight: 0,
+            assert: [{ type: 'cost', metric: 'inference_cost', weight: 0 }],
+          },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
+    });
+  });
+
   it('should fail when any assertion fails', async () => {
     const output = 'Actual output';
 
@@ -946,6 +992,69 @@ describe('runAssertions with PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', () => {
     expect(result.pass).toBe(true);
     return peak;
   };
+
+  it('drains active assertions after a failure without starting queued assertions', async () => {
+    mockProcessEnv({
+      PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2',
+      PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: 'true',
+    });
+    let signalStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = vi.fn().mockReturnValue(true);
+    let settled = false;
+    const result = runAssertions({
+      test: {
+        assert: [
+          {
+            type: 'javascript',
+            value: async () => {
+              await started;
+              return { pass: false, score: 0, reason: 'first failure' };
+            },
+          },
+          {
+            type: 'javascript',
+            value: async () => {
+              signalStarted();
+              await held;
+              return { pass: false, score: 0, reason: 'later failure' };
+            },
+          },
+          { type: 'javascript', value: queued },
+        ],
+      },
+      providerResponse: { output: 'output' },
+    }).then(
+      () => {
+        settled = true;
+        return undefined;
+      },
+      (error: Error) => {
+        settled = true;
+        return error;
+      },
+    );
+
+    try {
+      await started;
+      // Let the first failure propagate while the second assertion remains held.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+      expect(queued).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await result;
+    }
+
+    expect(await result).toEqual(new Error('first failure'));
+    expect(queued).not.toHaveBeenCalled();
+  });
 
   it('runs three assertions at a time by default', async () => {
     await expect(peakConcurrency()).resolves.toBe(3);
