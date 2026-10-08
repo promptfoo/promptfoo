@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { readFileSync } from 'fs';
 
-import { defineConfig } from 'tsdown';
+import { defineConfig, type UserConfig } from 'tsdown';
 
 const require = createRequire(import.meta.url);
 const semver = require('semver') as typeof import('semver');
@@ -51,25 +51,15 @@ const sharedBuildOptions = {
   },
 } as const;
 
-export default defineConfig([
-  // Server (ESM only) - stable path for workflows
-  {
+function esmBuildOptions(
+  entry: UserConfig['entry'],
+  options: Pick<UserConfig, 'treeshake' | 'dts'> = {},
+) {
+  return {
     ...sharedBuildOptions,
-    entry: { 'server/index': 'src/server/index.ts' },
-    format: ['esm'],
-    shims: true,
-    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    define: {
-      ...versionDefines,
-      BUILD_FORMAT: '"esm"',
-      'process.env.BUILD_FORMAT': '"esm"',
-    },
-  },
-  // CLI binary (ESM only)
-  {
-    ...sharedBuildOptions,
-    entry: ['src/entrypoint.ts', 'src/main.ts'],
-    format: ['esm'],
+    entry,
+    format: ['esm' as const],
+    ...options,
     shims: true, // Provides __dirname, __filename shims automatically
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
     define: {
@@ -77,30 +67,40 @@ export default defineConfig([
       BUILD_FORMAT: '"esm"',
       'process.env.BUILD_FORMAT': '"esm"',
     },
+  };
+}
+
+export default defineConfig([
+  // Server (ESM only) - stable path for workflows
+  // Only public library entry points emit declarations. The server's index declaration
+  // otherwise races the library build for dist/src/index.d.ts.
+  esmBuildOptions({ 'server/index': 'src/server/index.ts' }, { dts: false }),
+  // CLI binary (ESM only)
+  {
+    ...esmBuildOptions(['src/entrypoint.ts', 'src/main.ts'], { dts: false }),
     outputOptions: {
       banner: '#!/usr/bin/env node',
     },
   },
   // Library ESM build
-  {
-    ...sharedBuildOptions,
-    entry: {
+  esmBuildOptions(
+    {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
     },
-    format: ['esm'],
-    treeshake: true,
-    shims: true, // Ensure library ESM build has shims
-    fixedExtension: false, // Use .js extension for ESM since package.json has type: module
-    define: {
-      ...versionDefines,
-      BUILD_FORMAT: '"esm"',
-      'process.env.BUILD_FORMAT': '"esm"',
-    },
-  },
+    { treeshake: true },
+  ), // Ensure library ESM build has shims
   // Library CJS build for compatibility
   {
     ...sharedBuildOptions,
+    // Native require(ESM) returns Chalk's namespace, while the CJS interop wrapper
+    // expects its default function. Bundle this ESM-only dependency so logging works
+    // without changing the require conditions of other dependencies (notably Zod).
+    deps: {
+      ...sharedBuildOptions.deps,
+      neverBundle: /^(?!chalk(?:\/|$))[a-z@][^:]*/,
+      alwaysBundle: ['chalk'],
+    },
     entry: {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
