@@ -53,6 +53,7 @@ const AGENTIC_PROVIDER_IDS = [
   'openai:codex-desktop',
   'openai:codex-sdk',
   'openai:agents',
+  // Keep removed providers classified as executable when importing legacy targets.
   'openai:chatkit',
   'openai:assistant',
   'azure:assistant',
