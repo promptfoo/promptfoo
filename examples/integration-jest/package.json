@@ -23,7 +23,7 @@
     "promptfoo": "latest",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.2"
   },
   "engines": {
     "node": ">=22.22.0"
