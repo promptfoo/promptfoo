@@ -418,8 +418,15 @@ describe('package manifests', () => {
       'code-scan-action/package.json',
     ].flatMap((manifestPath) => {
       const manifest = readPackageJson<PackageManifest>(manifestPath);
-      return findKnownBadRanges(manifest, KNOWN_BAD_RELEASES).map(
-        (violation) => `${manifestPath}: ${violation}`,
+      const profiles = [{ name: manifestPath, manifest }];
+      if (manifestPath === 'package.json') {
+        // Docker deletes devDependencies before installing and rebuilding production packages.
+        const productionManifest = { ...manifest };
+        delete productionManifest.devDependencies;
+        profiles.push({ name: 'Docker production manifest', manifest: productionManifest });
+      }
+      return profiles.flatMap(({ name, manifest: profile }) =>
+        findKnownBadRanges(profile, KNOWN_BAD_RELEASES).map((violation) => `${name}: ${violation}`),
       );
     });
 
