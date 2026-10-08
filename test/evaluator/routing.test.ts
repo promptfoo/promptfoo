@@ -503,6 +503,34 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     ]);
   });
 
+  it('resumes columns that share a provider and a prompt from their own saved metrics', async () => {
+    const firstProvider = duplicateProvider('duplicate-provider', 'First provider output');
+    const secondProvider = duplicateProvider('duplicate-provider', 'Second provider output');
+    const prompt = toPrompt('Test prompt');
+
+    const testSuite: TestSuite = {
+      providers: [firstProvider, secondProvider],
+      prompts: [prompt],
+      tests: [{ vars: { input: 'value' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    // The first run saved one column per provider. Nothing but their position tells them apart.
+    const column = { ...prompt, id: generateIdFromPrompt(prompt), provider: 'duplicate-provider' };
+    evalRecord.prompts = [
+      { ...column, metrics: createPromptMetrics({ testPassCount: 5 }) },
+      { ...column, metrics: createPromptMetrics({ testPassCount: 2 }) },
+    ];
+    evalRecord.persisted = true;
+
+    cliState.resume = true;
+    await evaluate(testSuite, evalRecord, {});
+
+    const table = await evalRecord.getTable();
+
+    expect(table.head.prompts.map((prompt) => prompt.metrics?.testPassCount)).toEqual([6, 3]);
+  });
+
   it('evaluate with test-level providers filter', async () => {
     const mockProvider1: ApiProvider = {
       id: () => 'provider-1',

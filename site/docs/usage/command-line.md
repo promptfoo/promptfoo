@@ -215,7 +215,7 @@ promptfoo eval --retry-errors      # retries all ERROR results from the latest e
 ```
 
 - The retry errors feature automatically finds ERROR results from the latest eval and re-runs only those test cases. This is useful when evals fail due to temporary network issues, rate limits, or API errors.
-- **Data safety**: If the retry fails, your original ERROR results are preserved. Old ERROR results are only removed after the retry succeeds. You can safely run `--retry-errors` again if it fails.
+- **Data safety**: If the retry fails, your original ERROR results are preserved. Old ERROR results are only removed after the retry succeeds, and only where the retry produced a result in their place. An ERROR result whose test did not run again, for example because the run stopped early, is kept, and the retry reports how many were kept. If a provider or prompt of the first run is no longer part of the eval, the retry stops before it runs anything. You can safely run `--retry-errors` again if it fails.
 - Cannot be used together with `--resume` or `--no-write` flags.
 - Uses the original eval's configuration and runtime options to ensure consistency.
 
@@ -469,7 +469,7 @@ promptfoo retry eval-abc123 --share
 ```
 
 :::tip Data Safety
-If the retry operation fails (network error, API timeout, etc.), your original ERROR results are preserved. You can simply run the retry command again to continue. Old ERROR results are only removed after the retry succeeds.
+If the retry operation fails (network error, API timeout, etc.), your original ERROR results are preserved. You can simply run the retry command again to continue. Old ERROR results are only removed after the retry succeeds, and only where the retry produced a result in their place. A config passed with `-c` has to make the same result columns as the eval: with other providers or prompts the retry stops before it runs anything.
 :::
 
 :::tip

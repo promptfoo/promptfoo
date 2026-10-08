@@ -54,13 +54,21 @@ import {
   writeMultipleOutputs,
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import { checkProviderApiKeys } from '../util/provider';
+import { isPromptAllowed } from '../util/promptMatching';
+import { checkProviderApiKeys, getProviderIdentifier } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import {
+  deleteErrorResults,
+  findReplacedErrorResults,
+  getErrorResultIds,
+  getRetryColumnMismatch,
+  recalculatePromptMetrics,
+  warnAboutKeptErrorResults,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -69,6 +77,7 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
+  Prompt,
   Scenario,
   TestSuite,
   UnifiedConfig,
@@ -101,6 +110,257 @@ function runtimeTagsForEval(
   };
 
   return Object.keys(tags).length > 0 ? tags : undefined;
+}
+
+/** A results-table column of a saved eval: a prompt and the provider that ran it. */
+type SavedColumn = Prompt & { provider?: string };
+
+function toReplayPrompt(column: SavedColumn): Prompt {
+  return { raw: column.raw, label: column.label, config: column.config } as Prompt;
+}
+
+function isSamePrompt(a: Prompt, b: Prompt): boolean {
+  return a.label === b.label && a.raw === b.raw;
+}
+
+/**
+ * Splits saved columns into the columns of each provider in `providerKeys`. Providers with
+ * the same identifier have the same prompt filter, so they ran the same prompts and share
+ * the columns saved under that identifier equally.
+ *
+ * Returns undefined when the columns do not belong to these providers.
+ */
+function splitColumnsByProvider(
+  columns: SavedColumn[],
+  providerKeys: string[],
+): SavedColumn[][] | undefined {
+  const sharing = new Map<string, number>();
+  for (const key of providerKeys) {
+    sharing.set(key, (sharing.get(key) ?? 0) + 1);
+  }
+  const columnsByKey = new Map<string, SavedColumn[]>();
+  for (const column of columns) {
+    if (column.provider === undefined || !sharing.has(column.provider)) {
+      return undefined;
+    }
+    const saved = columnsByKey.get(column.provider) ?? [];
+    saved.push(column);
+    columnsByKey.set(column.provider, saved);
+  }
+  const runs: SavedColumn[][] = [];
+  for (const key of providerKeys) {
+    const saved = columnsByKey.get(key) ?? [];
+    const length = saved.length / (sharing.get(key) ?? 1);
+    if (!Number.isInteger(length)) {
+      return undefined;
+    }
+    runs.push(saved.slice(0, length));
+  }
+  return runs;
+}
+
+/** Splits saved columns wherever the provider changes, without knowing the providers. */
+function splitColumnsAtProviderChanges(columns: SavedColumn[]): SavedColumn[][] | undefined {
+  if (columns.some((column) => typeof column.provider !== 'string')) {
+    return undefined;
+  }
+  const runs: SavedColumn[][] = [];
+  for (const column of columns) {
+    const run = runs[runs.length - 1];
+    if (run && run[0].provider === column.provider) {
+      run.push(column);
+    } else {
+      runs.push([column]);
+    }
+  }
+  return runs;
+}
+
+/**
+ * Merges the prompts each provider ran back into the one list they were selected from.
+ *
+ * Every run is that list with some prompts left out, so the next prompt of the list is at
+ * the front of every run that still has it. A prompt can be listed more than once, so an
+ * entry is a prompt together with how many times it came before in its run.
+ *
+ * Returns undefined when the runs disagree about the order.
+ */
+function mergeProviderRuns(runs: SavedColumn[][] | undefined): Prompt[] | undefined {
+  if (!runs) {
+    return undefined;
+  }
+  const entries = runs.map((run) => {
+    const seen = new Map<string, number>();
+    return run.map((column) => {
+      const prompt = JSON.stringify([column.label, column.raw]);
+      const occurrence = seen.get(prompt) ?? 0;
+      seen.set(prompt, occurrence + 1);
+      return { key: `${occurrence}:${prompt}`, column };
+    });
+  });
+  // How many runs still have each entry.
+  const pending = new Map<string, number>();
+  for (const { key } of entries.flat()) {
+    pending.set(key, (pending.get(key) ?? 0) + 1);
+  }
+
+  const positions = entries.map(() => 0);
+  const merged: Prompt[] = [];
+  while (pending.size > 0) {
+    const fronts = entries.map((run, index) => run[positions[index]]);
+    const atFront = new Map<string, number>();
+    for (const front of fronts) {
+      if (front) {
+        atFront.set(front.key, (atFront.get(front.key) ?? 0) + 1);
+      }
+    }
+    const next = fronts.find((front) => front && atFront.get(front.key) === pending.get(front.key));
+    if (!next) {
+      return undefined;
+    }
+    merged.push(toReplayPrompt(next.column));
+    pending.delete(next.key);
+    fronts.forEach((front, index) => {
+      if (front?.key === next.key) {
+        positions[index]++;
+      }
+    });
+  }
+  return merged;
+}
+
+/** The first provider's columns, when every provider has the same ones. */
+function getRepeatedColumns(columns: SavedColumn[], providerCount: number): Prompt[] | undefined {
+  const length = columns.length / providerCount;
+  if (!Number.isInteger(length)) {
+    return undefined;
+  }
+  const repeats = columns.every((column, index) => isSamePrompt(column, columns[index % length]));
+  return repeats ? columns.slice(0, length).map(toReplayPrompt) : undefined;
+}
+
+/** Each distinct saved prompt once, in the order of its first column. */
+function getDistinctPrompts(columns: SavedColumn[]): Prompt[] {
+  const distinct: Prompt[] = [];
+  for (const column of columns) {
+    if (!distinct.some((prompt) => isSamePrompt(prompt, column))) {
+      distinct.push(toReplayPrompt(column));
+    }
+  }
+  return distinct;
+}
+
+/**
+ * Whether the evaluator would build exactly the saved columns from `prompts`, given which
+ * prompts each provider runs.
+ */
+function buildsSavedColumns(
+  prompts: Prompt[],
+  columns: SavedColumn[],
+  providerKeys: string[],
+  providerPromptMap: TestSuite['providerPromptMap'],
+): boolean {
+  let index = 0;
+  for (const key of providerKeys) {
+    for (const prompt of prompts) {
+      if (!isPromptAllowed(prompt, providerPromptMap?.[key])) {
+        continue;
+      }
+      const column = columns[index++];
+      if (
+        !column ||
+        !isSamePrompt(column, prompt) ||
+        (column.provider !== undefined && column.provider !== key)
+      ) {
+        return false;
+      }
+    }
+  }
+  return index === columns.length;
+}
+
+/**
+ * The prompts of a saved eval, rebuilt from its results-table columns.
+ *
+ * A saved eval has one column per provider and prompt, so with several providers each
+ * prompt is saved several times. Passing every column back as a prompt would create each
+ * column once per provider again, and results would no longer line up with their columns.
+ *
+ * The list is rebuilt from the saved columns alone. The prompts the saved config resolves to
+ * now are not consulted: a prompt file can have changed since, and results stay addressed
+ * by the saved column positions. The first reconstruction from which the evaluator would
+ * build the saved columns again is used.
+ *
+ * The same goes for which prompts each provider runs. When the prompt filters of the config
+ * no longer produce the saved columns, for example because they list the labels of a prompt
+ * file that has changed, `providerPromptMap` holds filters taken from the saved columns.
+ */
+function getReplayPrompts(
+  columns: SavedColumn[],
+  testSuite: TestSuite,
+): { prompts: Prompt[]; providerPromptMap?: TestSuite['providerPromptMap'] } {
+  const providerKeys = testSuite.providers.map((provider) => getProviderIdentifier(provider));
+  const providerRuns = splitColumnsByProvider(columns, providerKeys);
+  const reconstructions = [
+    // Each provider's columns, merged. Providers can run different prompts.
+    () => mergeProviderRuns(providerRuns),
+    // The same, for columns that do not line up with the providers the config resolves to.
+    () => mergeProviderRuns(splitColumnsAtProviderChanges(columns)),
+    // Columns that do not name their provider, as long as every provider ran the same prompts.
+    () => getRepeatedColumns(columns, providerKeys.length),
+    // Such columns can also all belong to one provider, with their repeats.
+    () => columns.map(toReplayPrompt),
+    () => getDistinctPrompts(columns),
+  ];
+  // Every column as a prompt is only right when it is known to rebuild the columns: with
+  // several providers it would create each column once per provider.
+  const isNearest = [true, true, true, false, true];
+
+  let closest: Prompt[] | undefined;
+  for (const [index, reconstruct] of reconstructions.entries()) {
+    const prompts = reconstruct();
+    if (
+      prompts &&
+      buildsSavedColumns(prompts, columns, providerKeys, testSuite.providerPromptMap)
+    ) {
+      return { prompts };
+    }
+    if (isNearest[index]) {
+      closest ??= prompts;
+    }
+  }
+
+  // The config's prompt filters do not produce the saved columns. Each provider's saved
+  // columns say which prompts it ran, so they can stand in for its filter.
+  const merged = mergeProviderRuns(providerRuns);
+  if (providerRuns && merged) {
+    const providerPromptMap = Object.fromEntries(
+      providerKeys.map((key, index) => [
+        key,
+        [...new Set(providerRuns[index].map((column) => column.label))],
+      ]),
+    );
+    if (buildsSavedColumns(merged, columns, providerKeys, providerPromptMap)) {
+      return { prompts: merged, providerPromptMap };
+    }
+  }
+
+  // The providers no longer produce the saved columns, for example because one was filtered
+  // out. This is the nearest list there is.
+  logger.debug('[Eval] The saved prompt columns could not be reproduced exactly', {
+    columns: columns.length,
+    providers: providerKeys.length,
+  });
+  return { prompts: closest ?? columns.map(toReplayPrompt) };
+}
+
+/** Makes a resumed or retried eval build the prompt columns of its first run again. */
+function applyReplayPrompts(testSuite: TestSuite, columns: SavedColumn[]): void {
+  const { prompts, providerPromptMap } = getReplayPrompts(columns, testSuite);
+  testSuite.prompts = prompts;
+  if (providerPromptMap) {
+    testSuite.providerPromptMap = providerPromptMap;
+  }
 }
 
 async function resolveReplayConfigs(
@@ -454,14 +714,7 @@ async function doEvalWithEnv(
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
+        applyReplayPrompts(testSuite, resumeEval.prompts);
       }
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
@@ -512,14 +765,7 @@ async function doEvalWithEnv(
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
+        applyReplayPrompts(testSuite, resumeEval.prompts);
       }
     } else {
       ({
@@ -553,6 +799,12 @@ async function doEvalWithEnv(
         `Stored provider filter "${persistedProviderFilter}" matched no providers while ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id}. The evaluation was not changed.`,
         isCliInvocation,
       );
+    }
+    // A retry whose providers and prompts make other columns than the eval has is not run.
+    const columnMismatch =
+      resumeEval && retryErrorResultIds ? getRetryColumnMismatch(resumeEval, testSuite) : undefined;
+    if (columnMismatch) {
+      return failEvalRun(columnMismatch, isCliInvocation);
     }
     if (resumeEval) {
       cliState.resume = true;
@@ -955,11 +1207,13 @@ async function doEvalWithEnv(
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
         try {
-          await deleteErrorResults(errorResultIds);
+          // Only an error that another result has replaced is removed. A cell that did not
+          // run again, for example because the run stopped early, keeps its error.
+          const { replaced, kept } = await findReplacedErrorResults(ret.id, errorResultIds);
+          await deleteErrorResults(replaced);
           await recalculatePromptMetrics(ret);
-          logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
-          );
+          logger.debug(`Cleaned up ${replaced.length} old ERROR results after successful retry`);
+          warnAboutKeptErrorResults(kept);
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded
           logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
