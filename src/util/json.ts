@@ -345,9 +345,19 @@ export function extractJsonObjects(str: string): object[] {
   }
 
   const objectEnds = new Map<number, number>();
+  let windowStart = -1;
+  let scanWindow = '';
   for (let i = 0; i < str.length; i++) {
     if (str[i] === '{') {
-      const end = findJsonObjectEnd(str, i, objectEnds);
+      const blockStart = Math.floor(i / maxJsonLength) * maxJsonLength;
+      if (blockStart !== windowStart) {
+        windowStart = blockStart;
+        // Every eligible candidate in this block fits within the two-block window.
+        scanWindow = str.slice(windowStart, windowStart + 2 * maxJsonLength);
+        objectEnds.clear();
+      }
+      const localEnd = findJsonObjectEnd(scanWindow, i - windowStart, objectEnds);
+      const end = localEnd === -1 ? -1 : windowStart + localEnd;
       if (end > i && end - i <= maxJsonLength) {
         try {
           jsonObjects.push(JSON.parse(str.slice(i, end)));

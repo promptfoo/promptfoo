@@ -294,6 +294,41 @@ describe('json utilities', () => {
       expect(value).toBe('}');
     });
 
+    it('bounds tokenization when recovering from oversized nested containers', () => {
+      const exec = vi.spyOn(RegExp.prototype, 'exec');
+      const input = 'Result: {"value":' + '['.repeat(300_000) + ' {"keep":"}"}';
+      const objects = extractJsonObjects(input);
+      const largestInput = exec.mock.calls.reduce(
+        (largest, [text]) => Math.max(largest, text.length),
+        0,
+      );
+
+      expect(objects).toEqual([{ keep: '}' }]);
+      expect(largestInput).toBeLessThanOrEqual(200_000);
+    });
+
+    it.each([99_999, 100_000, 100_001])(
+      'extracts a maximum-size object starting at offset %i',
+      (offset) => {
+        const value = '}' + 'x'.repeat(100_000 - JSON.stringify({ value: '}' }).length);
+        expect(extractJsonObjects(' '.repeat(offset) + JSON.stringify({ value }))).toEqual([
+          { value },
+        ]);
+      },
+    );
+
+    it('recovers a child that extends beyond its oversized parent scan window', () => {
+      const child = { value: '}' + 'x'.repeat(100_000 - JSON.stringify({ value: '}' }).length) };
+      const input =
+        '{"padding":"}' + 'x'.repeat(100_000) + '","child":' + JSON.stringify(child) + '}';
+      expect(extractJsonObjects(input)).toEqual([child]);
+    });
+
+    it('recovers later JSON after malformed prefixes spanning multiple windows', () => {
+      const input = ' {"a":"}","b":'.repeat(16_000) + 'invalid {"keep":"}"}';
+      expect(extractJsonObjects(input)).toEqual([{ keep: '}' }]);
+    });
+
     it('preserves JSON literals, number forms, empty containers, and escapes', () => {
       const input = String.raw`Result: {"values":[null,true,false,-0,0.5,-2.3e+5,1E-8,{},[]],"\u0061":"\u0000\/\b\f"}`;
       expect(extractJsonObjects(input)).toEqual([
