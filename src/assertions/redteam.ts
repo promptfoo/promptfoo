@@ -202,16 +202,6 @@ export const handleRedteam = async (
   const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
-  // Hydra and Goblin retain their current-turn grading behavior. Their saved
-  // messages are still available for attack generation and reporting.
-  const providerId = getConfiguredProviderId(test, provider);
-  const gradesCurrentTurnOnly =
-    providerId === 'promptfoo:redteam:hydra' ||
-    providerId === 'promptfoo:redteam:goblin' ||
-    ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
-      test.metadata?.strategyId ?? '',
-    );
-
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
     storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
@@ -224,12 +214,7 @@ export const handleRedteam = async (
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===
-      getGradingInputHash(
-        effectivePrompt,
-        outputString,
-        gradesCurrentTurnOnly ? undefined : gradingMessages,
-        test.metadata?.pluginId,
-      )
+      getGradingInputHash(effectivePrompt, outputString, gradingMessages, test.metadata?.pluginId)
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
@@ -263,7 +248,7 @@ export const handleRedteam = async (
   let gradingContext = createInitialGradingContext({
     assertionValueContext,
     providerResponse,
-    conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
+    conversationTranscript,
   });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||

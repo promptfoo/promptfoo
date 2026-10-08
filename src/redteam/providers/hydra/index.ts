@@ -4,6 +4,7 @@ import { renderPrompt } from '../../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import { parseChatPrompt } from '../../../providers/shared';
 import {
   extractTraceIdFromTraceparent,
   fetchTraceContext,
@@ -50,6 +51,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   isConversationEndedResponse,
+  isValidChatMessageArray,
   type Message,
   runRedteamGrader,
   type TargetResponse,
@@ -353,6 +355,7 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let lastResponseMessages: Message[] = [];
+    const statefulGradingHistory: Message[] = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
@@ -666,6 +669,40 @@ export class HydraProvider implements ApiProvider {
         getTargetConversation(this.conversationHistory).lastUserPrompt ||
         nextMessage;
 
+      // Grade only context the target received. Text-only transforms replace the
+      // replay payload; media transforms include the prior conversation as text.
+      const replaysHistory =
+        lastTransformResult?.audio ||
+        lastTransformResult?.image ||
+        (!this.stateful && !lastTransformResult);
+      let currentGradingMessages: Message[] = [
+        { role: 'user', content: replaysHistory ? processedMessage : finalTargetPrompt },
+      ];
+      if (this.stateful && !lastTransformResult) {
+        try {
+          // Only a configured chat template establishes roles. Attacker text or
+          // transformed payloads that happen to contain JSON stay user content.
+          const templateMessages = parseChatPrompt<unknown>(prompt.raw, undefined);
+          const renderedMessages = parseChatPrompt<unknown>(finalTargetPrompt, undefined);
+          if (
+            isValidChatMessageArray(templateMessages) &&
+            isValidChatMessageArray(renderedMessages)
+          ) {
+            currentGradingMessages = renderedMessages.filter(
+              ({ role }) => role === 'user' || role === 'assistant',
+            );
+          }
+        } catch {
+          // Opaque requests may be valid for non-chat targets.
+        }
+      }
+      const gradingMessages: Message[] = replaysHistory
+        ? [...this.conversationHistory]
+        : this.stateful
+          ? [...statefulGradingHistory, ...currentGradingMessages]
+          : currentGradingMessages;
+      const { conversationTranscript } = getTargetConversation(gradingMessages);
+
       // Get target response
       const iterationStart = Date.now();
       const targetContext = context
@@ -686,11 +723,16 @@ export class HydraProvider implements ApiProvider {
         options,
       );
       lastTargetResponse = targetResponse;
+      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+      if (targetResponse.error && targetResponse.tokenUsage?.numRequests === 0) {
+        // A local rejection never reached the target and cannot supply context.
+        this.conversationHistory.pop();
+        continue;
+      }
       lastResponseMessages = [
-        ...this.conversationHistory,
+        ...gradingMessages,
         { role: 'assistant', content: targetResponse.output || '' },
       ];
-      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
       // Fetch trace context if tracing is enabled
       let traceContext: TraceContextData | null = null;
@@ -817,7 +859,13 @@ export class HydraProvider implements ApiProvider {
         role: 'assistant',
         content: historyOutput,
       });
-      lastResponseMessages = [...this.conversationHistory];
+      lastResponseMessages = [...gradingMessages, { role: 'assistant', content: historyOutput }];
+      if (this.stateful) {
+        statefulGradingHistory.push(...currentGradingMessages, {
+          role: 'assistant',
+          content: historyOutput,
+        });
+      }
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
       const isRefusal = isBasicRefusal(targetResponse.output);
@@ -877,9 +925,10 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Build grading context with image outputs, tracing, and exfil tracking data.
+          // Keep prior conversation separate from the current prompt and response.
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
+            conversationTranscript,
             ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
@@ -956,6 +1005,7 @@ export class HydraProvider implements ApiProvider {
             {
               prompt: lastFinalAttackPrompt || nextMessage,
               output: targetResponse.output,
+              messages: lastResponseMessages,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },

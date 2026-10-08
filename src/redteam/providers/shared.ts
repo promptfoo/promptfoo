@@ -843,9 +843,11 @@ export const messagesToRedteamHistory = (
 export function formatRedteamHistoryAsTranscript(
   history: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>,
 ): string {
-  return history
-    .map((turn, index) => `Turn ${index + 1}:\nUser: ${turn.prompt}\nAssistant: ${turn.output}`)
-    .join('\n\n');
+  const messages = history.flatMap((turn) => [
+    { role: 'user', content: turn.prompt },
+    { role: 'assistant', content: turn.output },
+  ]);
+  return messages.length ? JSON.stringify(messages, null, 2) : '';
 }
 
 export function checkPenalizedPhrases(output: string): boolean {

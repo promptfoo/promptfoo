@@ -72,16 +72,17 @@ export function getTargetConversation(messages: unknown): {
 
   // Keep the current turn separate from prior context. Only use the target
   // conversation, never the attacker history or abandoned search branches.
-  const conversationTranscript = messages
+  const priorMessages = messages
     .slice(0, lastUserIndex)
     .filter(
       (message) =>
         (message?.role === 'user' || message?.role === 'assistant') &&
         typeof message.content === 'string',
     )
-    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`)
-    .join('\n\n');
+    .map(({ role, content }) => ({ role, content }));
 
+  // Keep role labels inside message content distinct from actual message roles.
+  const conversationTranscript = priorMessages.length ? JSON.stringify(priorMessages, null, 2) : '';
   return { lastUserPrompt: messages[lastUserIndex].content, conversationTranscript };
 }
 

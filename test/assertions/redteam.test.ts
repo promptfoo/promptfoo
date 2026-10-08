@@ -524,7 +524,16 @@ describe('redteam strategy result grading', () => {
         finalPrompt ?? (reportedPrompt.trim() ? reportedPrompt : attackPrompt),
       );
       expect(getResult.mock.calls[0]?.[7]?.conversationTranscript).toBe(
-        hasHistory ? 'User: My contact is Casey Morgan.\n\nAssistant: Acknowledged.' : undefined,
+        hasHistory
+          ? JSON.stringify(
+              [
+                { role: 'user', content: 'My contact is Casey Morgan.' },
+                { role: 'assistant', content: 'Acknowledged.' },
+              ],
+              null,
+              2,
+            )
+          : undefined,
       );
     },
   );
@@ -631,7 +640,14 @@ describe('redteam strategy result grading', () => {
     });
     expect(getResult.mock.calls[0]?.[0]).toBe(attackPrompt);
     expect(getResult.mock.calls[0]?.[7]?.conversationTranscript).toBe(
-      'User: My contact is Casey Morgan.\n\nAssistant: Acknowledged.',
+      JSON.stringify(
+        [
+          { role: 'user', content: 'My contact is Casey Morgan.' },
+          { role: 'assistant', content: 'Acknowledged.' },
+        ],
+        null,
+        2,
+      ),
     );
   });
 
@@ -728,13 +744,20 @@ describe('redteam strategy result grading', () => {
       undefined,
       undefined,
       expect.objectContaining({
-        conversationTranscript: 'User: My contact is Casey Morgan.\n\nAssistant: Acknowledged.',
+        conversationTranscript: JSON.stringify(
+          [
+            { role: 'user', content: 'My contact is Casey Morgan.' },
+            { role: 'assistant', content: 'Acknowledged.' },
+          ],
+          null,
+          2,
+        ),
       }),
     );
     expect(providerResponse).toEqual(before);
   });
 
-  describe.each(['hydra', 'goblin'])('%s current-turn grading', (strategy) => {
+  describe.each(['hydra', 'goblin'])('%s conversation-aware grading', (strategy) => {
     const messages = [
       { role: 'user', content: 'My contact is Casey Morgan.' },
       { role: 'assistant', content: 'Acknowledged.' },
@@ -743,13 +766,28 @@ describe('redteam strategy result grading', () => {
     ];
     const providerId = `promptfoo:redteam:${strategy}`;
 
-    it('reuses a current-turn grade while retaining the saved conversation', async () => {
+    it('reuses a grade bound to the saved target conversation', async () => {
       const getResult = vi
         .spyOn(RedteamGraderBase.prototype, 'getResult')
         .mockRejectedValue(new Error('A second grading call must not happen'));
       const providerResponse = {
         output,
-        metadata: { redteamFinalPrompt: attackPrompt, messages, storedGraderResult: storedResult },
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          messages,
+          storedGraderResult: {
+            ...storedResult,
+            metadata: {
+              ...storedResult.metadata,
+              redteamGradingInputHash: getGradingInputHash(
+                attackPrompt,
+                output,
+                messages,
+                'pii:social',
+              ),
+            },
+          },
+        },
       };
       const before = structuredClone(providerResponse);
       const result = await runAssertions({
@@ -768,7 +806,7 @@ describe('redteam strategy result grading', () => {
     });
 
     it.each(['string', 'options', 'loaded', 'strategy-only'])(
-      'omits history during fresh grading with %s provider identification',
+      'includes prior target history during fresh grading with %s provider identification',
       async (source) => {
         const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
           grade: { pass: false, score: 0, reason: 'Current turn verdict' },
@@ -796,11 +834,20 @@ describe('redteam strategy result grading', () => {
 
         expect(getResult).toHaveBeenCalledTimes(1);
         expect(getResult.mock.calls[0][0]).toBe(attackPrompt);
-        expect(getResult.mock.calls[0][7]).not.toHaveProperty('conversationTranscript');
+        expect(getResult.mock.calls[0][7]).toMatchObject({
+          conversationTranscript: JSON.stringify(
+            [
+              { role: 'user', content: 'My contact is Casey Morgan.' },
+              { role: 'assistant', content: 'Acknowledged.' },
+            ],
+            null,
+            2,
+          ),
+        });
       },
     );
 
-    it('regrades a stored verdict that was bound to conversation history', async () => {
+    it('regrades legacy current-turn verdicts with the prior conversation', async () => {
       const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
         grade: { pass: false, score: 0, reason: 'Current turn verdict' },
         rubric: 'New rubric',
@@ -817,25 +864,23 @@ describe('redteam strategy result grading', () => {
           metadata: {
             redteamFinalPrompt: attackPrompt,
             messages,
-            storedGraderResult: {
-              ...storedResult,
-              metadata: {
-                ...storedResult.metadata,
-                redteamGradingInputHash: getGradingInputHash(
-                  attackPrompt,
-                  output,
-                  messages,
-                  'pii:social',
-                ),
-              },
-            },
+            storedGraderResult: storedResult,
           },
         },
       });
 
       expect(result.pass).toBe(false);
       expect(getResult).toHaveBeenCalledTimes(1);
-      expect(getResult.mock.calls[0][7]).not.toHaveProperty('conversationTranscript');
+      expect(getResult.mock.calls[0][7]).toMatchObject({
+        conversationTranscript: JSON.stringify(
+          [
+            { role: 'user', content: 'My contact is Casey Morgan.' },
+            { role: 'assistant', content: 'Acknowledged.' },
+          ],
+          null,
+          2,
+        ),
+      });
       expect(result.componentResults?.[0].tokensUsed).toEqual(storedResult.tokensUsed);
     });
   });

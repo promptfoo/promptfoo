@@ -57,7 +57,7 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 1. **Goal selection** – Hydra pulls the red team goal from the plugin metadata or injected variable.
 2. **Agent decisioning** – A coordinating agent in Promptfoo Cloud evaluates prior turns and chooses the next attack message.
 3. **Target probing** – The selected message is sent either as a replayed transcript or as the newest turn in a target-managed session.
-4. **Outcome grading** – Responses are graded with the configured plugin assertions and stored for later learning.
+4. **Outcome grading** – Responses are graded with the configured plugin assertions and prior conversation context, keeping earlier user inputs separate from the current target response. Backtracked turns are excluded. Text-only layers that replace the replay payload provide prior context only in target-managed session mode.
 5. **Adaptive branching** – On refusals, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`.
 
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
