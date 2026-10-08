@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -721,7 +722,20 @@ evalRouter.post(
           )
         : [];
       if (gradingResult.componentResults === undefined) {
-        gradingResult.componentResults = previousComponents;
+        gradingResult.componentResults = previousComponents.map((component) =>
+          component.assertion?.type === HUMAN_ASSERTION_TYPE &&
+          (component.pass !== gradingResult.pass || component.score !== gradingResult.score)
+            ? {
+                ...component,
+                pass: gradingResult.pass,
+                score: gradingResult.score,
+                reason:
+                  typeof gradingResult.reason === 'string'
+                    ? gradingResult.reason
+                    : 'Manual result (overrides all other grading results)',
+              }
+            : component,
+        );
       }
       const updatedComponents = gradingResult.componentResults ?? [];
       const successChanged = result.success !== gradingResult.pass;

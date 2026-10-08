@@ -385,6 +385,58 @@ describe('eval routes', () => {
       },
     );
 
+    it('updates an existing human rating on partial verdict and score changes', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      const originalMetrics = eval_.prompts[result.promptIdx].metrics;
+      const manualGrade = createManualRatingPayload(result, false);
+      const human = manualGrade.componentResults?.find(
+        (component) => component.assertion?.type === 'human',
+      );
+      invariant(human, 'Manual assertion is required');
+      human.reason = 'Reviewer marked this result as failing';
+      human.comment = 'Review note';
+      const url = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      expect((await api.post(url).send(manualGrade)).status).toBe(200);
+
+      for (const payload of [
+        { pass: true, score: 1 },
+        { pass: true, score: 1 },
+        { pass: true, score: 0.5, reason: 'Adjusted score after review' },
+        { pass: false, score: 0 },
+        { pass: false, score: 0 },
+      ]) {
+        const { pass, score } = payload;
+        const res = await api.post(url).send(payload);
+        expect(res.status).toBe(200);
+        const updatedResult = await EvalResult.findById(result.id);
+        const components = updatedResult?.gradingResult?.componentResults;
+        expect(components).toHaveLength(2);
+        expect(components?.[0]).toEqual(result.gradingResult?.componentResults?.[0]);
+        expect(components?.[1]).toEqual({
+          ...human,
+          pass,
+          score,
+          reason: payload.reason ?? 'Manual result (overrides all other grading results)',
+        });
+        const tableRes = await api.get(`/api/eval/${eval_.id}/table`);
+        const output = tableRes.body.table.body[0].outputs[result.promptIdx];
+        expect(output.pass).toBe(pass);
+        expect(output.gradingResult.componentResults[1].pass).toBe(pass);
+        const updatedEval = await Eval.findById(eval_.id);
+        expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual({
+          ...originalMetrics,
+          score,
+          testPassCount: pass ? 1 : 0,
+          testFailCount: pass ? 1 : 2,
+          assertPassCount: pass ? 2 : 1,
+          assertFailCount: pass ? 1 : 2,
+        });
+      }
+    });
+
     it.each([{ componentResults: [] }, { componentResults: null }])(
       'clears assertions only when components are supplied ($componentResults)',
       async ({ componentResults }) => {
