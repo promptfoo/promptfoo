@@ -1831,6 +1831,9 @@ export function validateFunctionCall(
   } catch (err) {
     throw new InvalidToolSchemaError((err as Error).message);
   }
+  if (interpolatedFunctions !== undefined && !Array.isArray(interpolatedFunctions)) {
+    throw new InvalidToolSchemaError('Expected the loaded functions to be an array');
+  }
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema

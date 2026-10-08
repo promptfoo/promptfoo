@@ -1537,6 +1537,17 @@ describe('OpenAI assertions', () => {
       expect(result.reason).toContain('/nonexistent/functions.json');
     });
 
+    it('keeps a functions config that is not an array as a failure under not-', async () => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { functions: { name: 'getCurrentTemperature' } as any },
+      });
+      await expect(run('not-is-valid-function-call', toolCall, provider)).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Expected the loaded functions to be an array',
+      });
+    });
+
     it('keeps a provider without a validator as a failure under not-', async () => {
       await expect(
         run('not-is-valid-function-call', toolCall, createMockProvider()),

@@ -1087,6 +1087,9 @@ export function validateFunctionCall(
   } catch (err) {
     throw new InvalidToolSchemaError((err as Error).message);
   }
+  if (interpolatedFunctions !== undefined && !Array.isArray(interpolatedFunctions)) {
+    throw new InvalidToolSchemaError('Expected the loaded functions to be an array');
+  }
   const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
