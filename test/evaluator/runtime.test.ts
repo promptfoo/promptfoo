@@ -16,6 +16,7 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { ResultFailureReason, type TestSuite } from '../../src/types/index';
+import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -248,6 +249,107 @@ describeEvaluator('evaluator runtime ports', () => {
       append.mockRestore();
     }
   });
+
+  it.each([false, true])(
+    'drains active cancellation checkpoints before closing JSONL with queued work and metricsFailure=%s',
+    async (metricsFailure) => {
+      const outputDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-cancel-drain-'));
+      const outputPath = path.join(outputDir, 'results.jsonl');
+      const writer = new JsonlFileWriter(outputPath);
+      const close = vi.spyOn(writer, 'close');
+      const write = writer.write.bind(writer);
+      let firstWritten!: () => void;
+      const firstWrite = new Promise<void>((resolve) => {
+        firstWritten = resolve;
+      });
+      vi.spyOn(writer, 'write').mockImplementation(async (row) => {
+        await write(row);
+        if ((row as EvaluateResult).testIdx === 0) {
+          firstWritten();
+        }
+      });
+      const record = createEvalRecord();
+      const append = record.addResult.bind(record);
+      let releaseCheckpoint!: () => void;
+      const checkpointGate = new Promise<void>((resolve) => {
+        releaseCheckpoint = resolve;
+      });
+      vi.spyOn(record, 'addResult').mockImplementation(async (row, options) => {
+        if (row.testIdx === 1) {
+          await checkpointGate;
+        }
+        await append(row, options);
+      });
+      const controller = new AbortController();
+      const appendPrompts = record.addPrompts.bind(record);
+      let metricsFailed = false;
+      vi.spyOn(record, 'addPrompts').mockImplementation(async (prompts) => {
+        if (metricsFailure && controller.signal.aborted && !metricsFailed) {
+          metricsFailed = true;
+          throw new Error('Synthetic metrics flush failure');
+        }
+        return appendPrompts(prompts);
+      });
+      const provider: ApiProvider = {
+        id: () => 'synthetic-concurrent-cancellation',
+        callApi: vi.fn((_prompt, context, options) => {
+          options?.onProgress?.({
+            output: `Evidence ${context?.vars.case}`,
+            tokenUsage: { total: 11, numRequests: 1 },
+          });
+          // These raw provider calls never settle, even after cancellation.
+          return new Promise<never>(() => {});
+        }),
+      };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Probe {{case}}')],
+        tests: [0, 1, 2].map((value) => ({ vars: { case: value } })),
+      };
+      const runtime: EvaluatorRuntime<Eval, EvalResult> = {
+        createEvaluationStore: (evaluation) => new EvalEvaluationStore(evaluation),
+        createResultWriters: () => [writer],
+      };
+      vi.useFakeTimers();
+      let returned = false;
+      const evaluation = evaluate(
+        suite,
+        record,
+        { maxConcurrency: 2, timeoutMs: 0, abortSignal: controller.signal },
+        runtime,
+      ).then((result) => {
+        returned = true;
+        return result;
+      });
+      try {
+        await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledTimes(2));
+        controller.abort();
+        await firstWrite;
+        await vi.advanceTimersByTimeAsync(0);
+        expect(close).not.toHaveBeenCalled();
+        expect(returned).toBe(false);
+        expect(provider.callApi).toHaveBeenCalledTimes(2);
+        releaseCheckpoint();
+        await evaluation;
+        expect(close).toHaveBeenCalledOnce();
+        const rows = (await readFile(outputPath, 'utf8'))
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line));
+        expect(rows.map((row) => row.testIdx).sort()).toEqual([0, 1]);
+        expect(rows.every((row) => row.failureReason === ResultFailureReason.ERROR)).toBe(true);
+        expect(record.getStats()).toMatchObject({
+          errors: 2,
+          tokenUsage: { total: 22, numRequests: 2 },
+        });
+      } finally {
+        releaseCheckpoint();
+        await evaluation;
+        vi.useRealTimers();
+        await rm(outputDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('exports timeout evidence when the timeout row is the first failed database write', async () => {
     const outputDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-timeout-recovery-'));

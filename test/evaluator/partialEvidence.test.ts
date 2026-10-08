@@ -79,6 +79,8 @@ describeEvaluator('partial provider evidence', () => {
         metadata: { incomplete: true, __promptfoo: { resumable: true } },
       });
       expect(await EvalResult.getCompletedIndexPairs(record.id)).toEqual(new Set());
+      // Load both result APIs before resume; neither may retain the deleted checkpoint.
+      expect((await record.getResults())[0].response?.output).toBe(checkpoint.response?.output);
       // A failure in another case can buffer this successfully saved checkpoint for JSONL.
       record.recordFinalJsonlResult((await record.toEvaluateSummary()).results[0]);
       finishProvider();
@@ -115,6 +117,14 @@ describeEvaluator('partial provider evidence', () => {
       expect(replacement[0].metadata?.__promptfoo?.resumable).toBeUndefined();
       expect(replacement[0].metadata?.incomplete).toBeUndefined();
       expect(record.getFinalJsonlResults()).toEqual([]);
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toMatchObject({
+        success: true,
+        response: { output: 'Replacement response' },
+      });
+      expect((await record.getResults())[0].response?.output).toBe('Replacement response');
+      expect((await record.toEvaluateSummary()).results).toEqual(summary.results);
       expect(provider.callApi).toHaveBeenCalledTimes(2);
       expect(record.getStats()).toMatchObject({
         successes: 1,

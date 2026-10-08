@@ -4638,21 +4638,42 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
   }) {
     let lastPromptsFlush = 0;
-    await async.forEachOfLimit(
-      concurrentRunEvalOptions,
-      processingContext.concurrency,
-      async (evalStep) => {
-        checkAbort();
-        const idx = evalStepIndexMap.get(evalStep)!;
-        await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
-        processedIndices.add(idx);
-        const now = Date.now();
-        if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
-          lastPromptsFlush = now;
-          await this.store.appendPrompts(prompts);
-        }
-      },
-    );
+    const activeSteps = new Set<Promise<void>>();
+    try {
+      await async.forEachOfLimit(
+        concurrentRunEvalOptions,
+        processingContext.concurrency,
+        async (evalStep) => {
+          checkAbort();
+          const step = (async () => {
+            const idx = evalStepIndexMap.get(evalStep)!;
+            await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+            processedIndices.add(idx);
+            const now = Date.now();
+            if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+              lastPromptsFlush = now;
+              await this.store.appendPrompts(prompts);
+            }
+          })();
+          activeSteps.add(step);
+          try {
+            await step;
+          } finally {
+            activeSteps.delete(step);
+          }
+        },
+      );
+    } finally {
+      if (
+        activeSteps.size > 0 &&
+        concurrentRunEvalOptions.some((evalStep) => evalStep.abortSignal?.aborted)
+      ) {
+        // The wrappers race uncooperative providers. Drain only their cancellation writes
+        // before cleanup closes writers, even if another worker's metrics flush failed.
+        await Promise.allSettled(activeSteps);
+      }
+    }
+    checkAbort();
   }
 
   private async saveInterruptedEval({

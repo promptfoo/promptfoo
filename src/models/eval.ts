@@ -791,6 +791,9 @@ export default class Eval {
       }
     }
     if (this.persisted) {
+      if (options?.replaceId) {
+        this.clearResults();
+      }
       // Notify watchers that new results are available, passing the eval ID
       notifyEvaluationChanged(this.id);
     }
