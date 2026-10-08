@@ -466,7 +466,13 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
       comparisonEvalIds: [],
-      setComparisonEvalIds: (comparisonEvalIds: string[]) => set(() => ({ comparisonEvalIds })),
+      setComparisonEvalIds: (comparisonEvalIds: string[]) =>
+        set((state) =>
+          state.comparisonEvalIds.length === comparisonEvalIds.length &&
+          state.comparisonEvalIds.every((id, index) => id === comparisonEvalIds[index])
+            ? state
+            : { comparisonEvalIds },
+        ),
       stickyHeader: true,
       setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 

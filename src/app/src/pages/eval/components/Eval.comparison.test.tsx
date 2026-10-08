@@ -348,6 +348,43 @@ describe('evaluation comparison URLs', () => {
     },
   );
 
+  it.each(['', '?comparisonEvalIds=eval-b'])(
+    'keeps unchanged socket refreshes in the background (%s)',
+    async (search) => {
+      tableFixture.realTable = true;
+      tableFixture.rowCount = 120;
+      renderPage(`/eval/eval-a${search}`);
+      await screen.findByText('eval-a row-0');
+      await waitFor(() => expect(useTableStore.getState().isFetching).toBe(false));
+      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      const pending: (() => Promise<void>)[] = [];
+      vi.mocked(callApi).mockClear();
+      vi.mocked(callApi).mockImplementation((path, options) => {
+        if (String(path).startsWith('/eval/eval-a/table')) {
+          return new Promise((resolve) => {
+            pending.push(async () => {
+              resolve(await defaultApi(path, options));
+            });
+          });
+        }
+        return defaultApi(path, options);
+      });
+      let refresh!: Promise<void>;
+      await act(async () => {
+        refresh = socketHandlers.get('update')!({ evalId: 'eval-a' });
+      });
+      const requestCount = tableRequests().length;
+      const isFetching = useTableStore.getState().isFetching;
+      await act(async () => {
+        await Promise.all(pending.map((finish) => finish()));
+        await refresh;
+      });
+      expect(requestCount).toBe(1);
+      expect(isFetching).toBe(false);
+      expect(useTableStore.getState().isFetching).toBe(false);
+    },
+  );
+
   it.each([200, 404])(
     'keeps the current comparison when an earlier navigation resolves late with %s',
     async (status) => {
