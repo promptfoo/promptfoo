@@ -94,7 +94,7 @@ export class LlamaProvider implements ApiProvider {
 
     try {
       return {
-        output: data.content,
+        output: data.content ?? undefined,
         cached,
         latencyMs,
       };

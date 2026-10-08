@@ -4484,6 +4484,94 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockInvokeModel).not.toHaveBeenCalled();
   });
 
+  describe.each([false, true])('native text output with cached=%s', (cached) => {
+    it.each([
+      ['mistral.mistral-large-2407-v1:0', { choices: [{ message: { content: null } }] }],
+      ['deepseek.v3-v1:0', { choices: [{ message: { content: null } }] }],
+      ['ai21.jamba-1-5-mini-v1:0', { choices: [{ message: { content: null } }] }],
+      ['meta.llama3-8b-instruct-v1:0', { generation: null }],
+      ['cohere.command-r-v1:0', { text: null }],
+      ['mistral.mistral-7b-instruct-v0:2', { outputs: [{ text: null }] }],
+      ['openai.gpt-oss-120b-1:0', { choices: [{ message: { content: null } }] }],
+      ['qwen.qwen3-32b-v1:0', { choices: [{ message: { content: null } }] }],
+      ['google.gemma-3-4b-it', { choices: [{ message: { content: null } }] }],
+    ] as const)(
+      'treats protocol-level null from %s as missing output',
+      async (modelId, wireData) => {
+        const responseJson = JSON.stringify(wireData);
+        vi.mocked(isCacheEnabled).mockReturnValue(cached);
+        mockCache.get.mockResolvedValue(cached ? responseJson : null);
+        if (!cached) {
+          mockInvokeModel.mockResolvedValueOnce({
+            body: Object.assign(new TextEncoder().encode(responseJson), {
+              transformToString: () => responseJson,
+            }),
+          });
+        }
+        const provider = new AwsBedrockCompletionProvider(modelId, {
+          config: { region: 'us-east-1' },
+        });
+
+        const response = await provider.callApi('hello');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBeUndefined();
+        expect(mockInvokeModel).toHaveBeenCalledTimes(cached ? 0 : 1);
+      },
+    );
+
+    it.each(['null', ''])('preserves the text response %j', async (content) => {
+      const responseJson = JSON.stringify({ choices: [{ message: { content } }] });
+      vi.mocked(isCacheEnabled).mockReturnValue(cached);
+      mockCache.get.mockResolvedValue(cached ? responseJson : null);
+      if (!cached) {
+        mockInvokeModel.mockResolvedValueOnce({
+          body: Object.assign(new TextEncoder().encode(responseJson), {
+            transformToString: () => responseJson,
+          }),
+        });
+      }
+      const provider = new AwsBedrockCompletionProvider('qwen.qwen3-32b-v1:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      const response = await provider.callApi('hello');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe(content);
+    });
+
+    it('preserves tool calls when message content is null', async () => {
+      const responseJson = JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [{ function: { name: 'lookup', arguments: '{"term":"weather"}' } }],
+            },
+          },
+        ],
+      });
+      vi.mocked(isCacheEnabled).mockReturnValue(cached);
+      mockCache.get.mockResolvedValue(cached ? responseJson : null);
+      if (!cached) {
+        mockInvokeModel.mockResolvedValueOnce({
+          body: Object.assign(new TextEncoder().encode(responseJson), {
+            transformToString: () => responseJson,
+          }),
+        });
+      }
+      const provider = new AwsBedrockCompletionProvider('qwen.qwen3-32b-v1:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      const response = await provider.callApi('hello');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('Called function lookup with arguments: {"term":"weather"}');
+    });
+  });
+
   it('should hash prompt and secret values in the cache key', async () => {
     const modelName = 'us.anthropic.claude-3-7-sonnet-20250219-v1:0';
     const prompt = 'PFQA_BEDROCK_PROMPT_SENTINEL';

@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
+  HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -28,6 +29,20 @@ describe('Hugging Face task response compatibility', () => {
     { label: 'positive', score: 0.9 },
     { label: 'negative', score: 0.1 },
   ];
+
+  it.each([
+    [null, undefined],
+    [undefined, undefined],
+    ['', ''],
+    ['null', 'null'],
+  ])('distinguishes absent generated text from JSON text: %j', async (text, expected) => {
+    reply([{ generated_text: text }]);
+
+    const result = await new HuggingfaceTextGenerationProvider('fixture/generator').callApi('Test');
+
+    expect(result.output).toBe(expected);
+    expect(result.error).toBeUndefined();
+  });
 
   it.each([scores, [scores]].map((data) => [data]))(
     'normalizes current and legacy classification shapes: %j',

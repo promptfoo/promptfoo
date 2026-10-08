@@ -619,9 +619,7 @@ export async function getTargetResponse(
     `
     Target returned malformed response: expected either \`output\` or \`error\` property to be set.
 
-    Instead got: ${safeJsonStringify(targetRespRaw)}
-
-    Note: Empty strings are valid output values.
+    Note: Empty strings and null are valid output values; undefined is not.
     `,
   );
 }

@@ -238,7 +238,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      const output = data.candidates[0].content;
+      const output = data.candidates[0].content ?? undefined;
       const tokenUsage = cached
         ? {
             cached: data.usageMetadata?.totalTokenCount,

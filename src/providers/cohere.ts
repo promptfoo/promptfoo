@@ -735,7 +735,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
         numRequests: 1,
       };
 
-      let output = data.text;
+      let output = data.text ?? undefined;
       if (this.config.showSearchQueries && data.search_queries) {
         output +=
           '\n\nSearch Queries:\n' +

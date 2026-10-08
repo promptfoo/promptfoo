@@ -175,7 +175,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       });
       const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
       return {
-        output: data.choices[0].text,
+        output: data.choices[0].text ?? undefined,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,

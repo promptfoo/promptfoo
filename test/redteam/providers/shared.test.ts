@@ -1176,6 +1176,33 @@ describe('shared redteam provider utilities', () => {
         });
       });
 
+      it('keeps malformed-response diagnostics free of raw provider metadata', async () => {
+        const mockProvider = createMockProvider({
+          response: {
+            output: undefined,
+            metadata: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  authorization: 'Bearer FAKE_TOKEN_CANARY',
+                  'set-cookie': 'session=FAKE_COOKIE_CANARY',
+                },
+              },
+              opaque: 'FAKE_OPAQUE_CANARY',
+            },
+          },
+        });
+
+        const error = await getTargetResponse(mockProvider, 'test prompt').catch((err) => err);
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toContain('expected either `output` or `error` property to be set');
+        expect(error.message).toContain('undefined is not');
+        expect(error.message).not.toContain('CANARY');
+        expect(error.message).not.toContain('metadata');
+      });
+
       it.each(['null', 'undefined'])('preserves literal response text %s', async (output) => {
         const mockProvider = createMockProvider({ response: { output } });
 

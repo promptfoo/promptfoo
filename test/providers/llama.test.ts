@@ -51,6 +51,25 @@ describe('LlamaProvider', () => {
     beforeEach(() => {
       vi.clearAllMocks();
     });
+
+    it.each([
+      [null, undefined],
+      [undefined, undefined],
+      ['', ''],
+      ['null', 'null'],
+    ])('distinguishes absent content from returned text: %j', async (content, expected) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { content },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await new LlamaProvider(modelName).callApi(prompt);
+
+      expect(result.output).toBe(expected);
+      expect(result.error).toBeUndefined();
+    });
     it('should call fetchWithCache with correct parameters', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         ...response,

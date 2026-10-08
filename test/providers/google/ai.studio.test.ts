@@ -700,6 +700,26 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it.each([
+      [null, undefined],
+      [undefined, undefined],
+      ['', ''],
+      ['null', 'null'],
+    ])('distinguishes absent PaLM content from JSON text: %j', async (content, expected) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AIStudioChatProvider('palm2', { config: { apiKey: 'test-key' } });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe(expected);
+      expect(result.error).toBeUndefined();
+    });
+
     it('should handle errors for non-Gemini models', async () => {
       const provider = new AIStudioChatProvider('palm2', {
         config: {
