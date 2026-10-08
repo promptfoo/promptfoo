@@ -995,11 +995,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
+      // Protocol null means absent content, unlike the JSON value parsed below.
+      const toolOutput =
+        message.function_call ||
+        (Array.isArray(message.tool_calls) && message.tool_calls.length === 0
+          ? undefined
+          : message.tool_calls) ||
+        undefined;
       let reasoning = '';
       let output: any = '';
       if (message.reasoning) {
         reasoning = message.reasoning;
-        output = message.content;
+        output = message.content ?? toolOutput;
       } else if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
           output = message.content;
@@ -1009,9 +1016,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       } else if (
         message.content === null ||
         message.content === undefined ||
-        (message.content === '' && message.tool_calls)
+        (message.content === '' && toolOutput)
       ) {
-        output = message.function_call || message.tool_calls;
+        output = toolOutput;
       } else {
         output = message.content;
       }
