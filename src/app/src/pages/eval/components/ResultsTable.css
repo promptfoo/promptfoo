@@ -543,7 +543,7 @@ table.results-table,
   z-index: 11;
 }
 
-thead {
+.results-table-sticky:not(.results-table-scroll-fallback) thead {
   animation-name: collapseHeader;
   /** Attach scroll timeline to the root scroll container */
   animation-timeline: scroll();

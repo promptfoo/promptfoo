@@ -32,6 +32,23 @@ describe('results header fallback', () => {
     );
   });
 
+  it('disables native collapse while sticky mode is off and restores it on re-enable', () => {
+    vi.mocked(CSS.supports).mockReturnValue(true);
+    mockBrowserProperty(window, 'scrollY', 100);
+    const add = vi.spyOn(window, 'addEventListener');
+    const { result, rerender } = renderHook(({ sticky }) => useHeaderCollapse(sticky), {
+      initialProps: { sticky: false },
+    });
+    expect(result.current).toBe(false);
+    rerender({ sticky: true });
+    expect(result.current).toBeUndefined();
+    rerender({ sticky: false });
+    expect(result.current).toBe(false);
+    expect(add.mock.calls.filter(([event]) => event === 'scroll' || event === 'resize')).toEqual(
+      [],
+    );
+  });
+
   it('starts expanded and collapses at the measured native threshold in either direction', () => {
     const { result } = renderHook(() => useHeaderCollapse(true));
     expect(result.current).toBe(false);

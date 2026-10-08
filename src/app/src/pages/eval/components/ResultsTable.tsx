@@ -1587,7 +1587,7 @@ function ResultsTableHeader({
       className={cn(
         'relative -mx-4 overflow-hidden px-4',
         stickyHeader && 'results-table-sticky',
-        collapsed !== undefined && 'results-table-scroll-fallback',
+        stickyHeader && collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
     >
