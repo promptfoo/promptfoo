@@ -440,8 +440,8 @@ jobs:
           rm -rf "$export_dir"
           mkdir -p "$export_dir"
 
-          mapfile -t mirror_artifact_files <<< "$MIRROR_ARTIFACT_FILES"
-          for file in "${mirror_artifact_files[@]}"; do
+          mapfile -t artifact_paths <<< "$MIRROR_ARTIFACT_FILES"
+          for file in "${artifact_paths[@]}"; do
             cp "code-scan-action/$file" "$export_dir/$file"
           done
           cp -R code-scan-action/dist "$export_dir/dist"
@@ -561,13 +561,13 @@ jobs:
           # and broke the mirror's validate-release-pr check.
           rm -rf dist
           cp -R "$export_dir/dist" dist
-          mapfile -t mirror_artifact_files <<< "$MIRROR_ARTIFACT_FILES"
-          for file in "${mirror_artifact_files[@]}"; do
+          mapfile -t artifact_paths <<< "$MIRROR_ARTIFACT_FILES"
+          for file in "${artifact_paths[@]}"; do
             cp "$export_dir/$file" "$file"
           done
           cp "$export_dir/.release-source.json" .release-source.json
 
-          git add "${mirror_artifact_files[@]}" dist .release-source.json
+          git add "${artifact_paths[@]}" dist .release-source.json
           if git diff --cached --quiet; then
             echo "No mirror changes to publish for code-scan-action v${CODE_SCAN_ACTION_VERSION}"
             exit 0
