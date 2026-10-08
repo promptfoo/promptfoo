@@ -9,7 +9,9 @@ import {
   VALID_CATEGORIES,
 } from '../../../src/redteam/plugins/unsafebench';
 import { fetchWithProxy } from '../../../src/util/fetch';
-import { mockProcessEnv } from '../../util/utils';
+import { mockProcessEnv, sampleEachShufflePath } from '../../util/utils';
+
+import type { UnsafeBenchCategory } from '../../../src/redteam/plugins/unsafebench';
 
 vi.mock('../../../src/integrations/huggingfaceDatasets');
 vi.mock('../../../src/util/fetch', async (importOriginal) => ({
@@ -148,6 +150,24 @@ describe('UnsafeBenchPlugin', () => {
     expect(violenceTests).toHaveLength(3);
     expect(hateTests).toHaveLength(3);
   });
+
+  it.each<{ categories?: UnsafeBenchCategory[] }>([{}, { categories: ['Violence'] }])(
+    'samples every ordered pair of images equally with config %o',
+    async (config) => {
+      mockFetchHuggingFaceDataset.mockResolvedValue(
+        ['a', 'b', 'c'].map((image) => ({
+          vars: { image, category: 'Violence', safety_label: 'unsafe' },
+        })),
+      );
+      const plugin = new Plugin({ type: 'test' }, 'testing purposes', 'image', config);
+
+      const samples = await sampleEachShufflePath(async () =>
+        (await plugin.generateTests(2)).map((test) => test.vars?.image).join(''),
+      );
+
+      expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
+    },
+  );
 
   it('should warn about invalid categories', () => {
     const loggerWarnSpy = vi.spyOn(logger, 'warn');
