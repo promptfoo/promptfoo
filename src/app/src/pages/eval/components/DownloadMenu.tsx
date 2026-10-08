@@ -301,10 +301,13 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     }
 
     const varName = config.redteam.injectVar || 'prompt';
+    const varIndex = table.head.vars.indexOf(varName);
     const payloads = table.body
       .map((row) => {
-        const vars = row.test.vars as Record<string, unknown>;
-        return String(vars?.[varName] || '');
+        // Table variables contain the executed attack; test vars preserve the seed.
+        // Older tables can omit the column, so retain their test-variable fallback.
+        const value = varIndex >= 0 ? row.vars[varIndex] : row.test.vars?.[varName];
+        return String(value || '');
       })
       .filter(Boolean)
       .map((input) => {
