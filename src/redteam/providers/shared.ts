@@ -3,15 +3,17 @@ import { randomUUID } from 'crypto';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
-import { getEnvBool } from '../../envars';
+import { getEnvBool, getEnvFloat } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import { getProviderCallTracingContext, wrapProviderWithRateLimiting } from '../../scheduler';
 import {
-  getProviderCallTracingContext,
-  type RateLimitRegistry,
-  wrapProviderWithRateLimiting,
-} from '../../scheduler';
+  callProviderWithContext,
+  getProviderCallAbortSignal,
+  getProviderCallExecutionContext,
+  waitForProviderCall,
+} from '../../scheduler/providerCallExecutionContext';
 import {
   type ApiProvider,
   type Assertion,
@@ -29,7 +31,6 @@ import {
 } from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
@@ -43,7 +44,7 @@ import {
 } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, DEFAULT_TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
@@ -151,7 +152,7 @@ async function loadRedteamProvider({
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
     ret = new OpenAiChatCompletionProvider(defaultModel, {
       config: {
-        temperature: TEMPERATURE,
+        temperature: getEnvFloat('PROMPTFOO_JAILBREAK_TEMPERATURE', DEFAULT_TEMPERATURE),
         response_format: jsonOnly ? { type: 'json_object' } : undefined,
       },
     });
@@ -166,23 +167,14 @@ class RedteamProviderManager {
   private multilingualProvider: ApiProvider | undefined;
   private gradingProvider: ApiProvider | undefined;
   private gradingJsonOnlyProvider: ApiProvider | undefined;
-  private rateLimitRegistry: RateLimitRegistry | undefined;
-
-  /**
-   * Set the rate limit registry to use for wrapping providers.
-   * When set, all providers returned by this manager will be wrapped
-   * with rate limiting.
-   */
-  setRateLimitRegistry(registry: RateLimitRegistry | undefined) {
-    this.rateLimitRegistry = registry;
-  }
 
   /**
    * Wrap a provider with rate limiting if a registry is configured.
    */
   private wrapProvider(provider: ApiProvider): ApiProvider {
-    if (this.rateLimitRegistry) {
-      return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
+    const registry = getProviderCallExecutionContext()?.rateLimitRegistry;
+    if (registry) {
+      return wrapProviderWithRateLimiting(provider, registry);
     }
     return provider;
   }
@@ -194,8 +186,6 @@ class RedteamProviderManager {
     this.multilingualProvider = undefined;
     this.gradingProvider = undefined;
     this.gradingJsonOnlyProvider = undefined;
-    // Note: rateLimitRegistry is intentionally NOT cleared here
-    // as it's managed by the evaluator lifecycle
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
@@ -495,22 +485,14 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
   return configuredLimit;
 }
 
-/** Invoke a red-team target with the same tracing behavior across every strategy. */
+/** Invoke a red-team target with shared tracing, pacing, and cancellation behavior. */
 export function callTargetProvider(
   targetProvider: ApiProvider,
   targetPrompt: string,
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
-  const tracingContext = getProviderCallTracingContext();
-  if (!tracingContext) {
-    return targetProvider.callApi(targetPrompt, context, options);
-  }
-
-  return tracingContext.withProviderSpan(
-    { provider: targetProvider, callContext: context },
-    async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
-  );
+  return callProviderWithContext(targetProvider, targetPrompt, context, options);
 }
 
 /** Keep strategy judge calls beneath grader-owned spans without changing their requests. */
@@ -520,10 +502,18 @@ export function callGradingProvider(
   callContext?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
-  const invoke = (context?: CallApiContextParams) =>
-    options === undefined
-      ? provider.callApi(prompt, context)
-      : provider.callApi(prompt, context, options);
+  const signal = getProviderCallAbortSignal(options?.abortSignal);
+  // The enclosing call races cancellation while retaining the actual request.
+  const waitSignal = getProviderCallExecutionContext()?.providerCallOwned ? undefined : signal;
+  const callOptions = signal ? { ...options, abortSignal: signal } : options;
+  const invoke = async (context?: CallApiContextParams) => {
+    signal?.throwIfAborted();
+    const result =
+      callOptions === undefined
+        ? provider.callApi(prompt, context)
+        : provider.callApi(prompt, context, callOptions);
+    return waitForProviderCall(result, waitSignal);
+  };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
     return invoke(callContext);
@@ -569,10 +559,6 @@ export async function getTargetResponse(
           error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
       },
     };
-  }
-  if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
-    logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-    await sleep(targetProvider.delay);
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput =

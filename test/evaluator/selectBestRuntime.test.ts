@@ -496,7 +496,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(grader.callApi).not.toHaveBeenCalled();
   });
 
-  it('recovers a grader exception without retaining a failed comparison verdict', async () => {
+  it('recovers a grader exception after an aborted resume without retaining a failed verdict', async () => {
     const { grader, suite, target } = makeSuite();
     vi.mocked(grader.callApi).mockRejectedValueOnce(new Error('temporary grader failure'));
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
@@ -533,6 +533,16 @@ describeEvaluator('select-best runtime grading configuration', () => {
     );
 
     cliState.resume = true;
+    const controller = new AbortController();
+    vi.mocked(grader.callApi).mockImplementationOnce(async () => {
+      controller.abort();
+      throw new DOMException('Comparison cancelled', 'AbortError');
+    });
+    await evaluate(suite, record, { maxConcurrency: 1, abortSignal: controller.signal });
+    const interrupted = await record.fetchResultsByTestIdx(0);
+    expect(interrupted.every((row) => row.failureReason === ResultFailureReason.ERROR)).toBe(true);
+    expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+
     await evaluate(suite, record, { maxConcurrency: 1 });
 
     const recovered = await record.fetchResultsByTestIdx(0);
@@ -544,7 +554,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(recovered.every((row) => row.failureReason !== ResultFailureReason.ERROR)).toBe(true);
     expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 0 });
     expect(target.callApi).toHaveBeenCalledTimes(2);
-    expect(grader.callApi).toHaveBeenCalledTimes(2);
+    expect(grader.callApi).toHaveBeenCalledTimes(3);
   });
 
   it.each(['malformed YAML', 'Error', 'string'])(

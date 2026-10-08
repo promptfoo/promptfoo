@@ -13,10 +13,66 @@ import {
   type TestSuite,
 } from '../../src/types/index';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { createDeferred } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator grading concurrency', () => {
+  it.each([1, 2])(
+    'finishes cancelled model grading without accepting its late success, concurrency=%s',
+    async (maxConcurrency) => {
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      const pending = createDeferred<{ output: string }>();
+      const target: ApiProvider = {
+        id: () => 'offline-target',
+        callApi: vi.fn(async () => ({ output: 'hello' })),
+      };
+      const grader: ApiProvider = {
+        id: () => 'offline-grader',
+        callApi: vi.fn(() => {
+          started.resolve();
+          return pending.promise;
+        }),
+      };
+      const record = new Eval({});
+      let finished = false;
+      const evaluation = evaluate(
+        {
+          providers: [target],
+          prompts: [toPrompt('hello')],
+          tests: [{ assert: [{ type: 'llm-rubric', value: 'simple fixture', provider: grader }] }],
+        },
+        record,
+        { maxConcurrency, abortSignal: controller.signal },
+      ).then(() => {
+        finished = true;
+      });
+      try {
+        await started.promise;
+        controller.abort();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(finished).toBe(true);
+        const before = await record.getResults();
+        expect(before.every((row) => !row.success)).toBe(true);
+        expect(before).toHaveLength(1);
+        expect(before[0].error).toMatch(/^Aborted: /);
+        expect(before[0]).toMatchObject({
+          response: { output: 'hello' },
+          gradingResult: { metadata: { __promptfoo: { assertionGradingInterrupted: true } } },
+        });
+        pending.resolve({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'late success' }),
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(await record.getResults()).toEqual(before);
+      } finally {
+        pending.resolve({ output: '{}' });
+        await evaluation;
+      }
+    },
+  );
+
   it('schedules model-graded assertion provider calls through the rate limit registry', async () => {
     const abortController = new AbortController();
     const execute = vi.fn(async (_provider: ApiProvider, callFn: () => Promise<unknown>) =>
@@ -713,51 +769,65 @@ describeEvaluator('evaluator grading concurrency', () => {
     errorSpy.mockRestore();
   });
 
-  it('still logs error when a non-abort-shaped error fires during an unrelated abort', async () => {
-    // Regression guard: if abort is in flight but the caught error is a real
-    // bug (SyntaxError, TypeError, etc.), we must not silently suppress it.
-    const { default: logger } = await import('../../src/logger');
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+  it.each([1, 2])(
+    'persists a post-provider grading failure during an unrelated abort, concurrency=%s',
+    async (maxConcurrency) => {
+      // The provider wait has completed. A grading bug outside that cancelled
+      // wait must still retain its real error classification.
+      const { default: logger } = await import('../../src/logger');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-    const abortController = new AbortController();
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async () => {
-        abortController.abort();
-        throw new SyntaxError('Unexpected token in grader output');
-      }),
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('Test prompt {{topic}}')],
-      tests: [
-        {
-          vars: { topic: 'alpha' },
-          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
-        },
-      ],
-    };
+      const abortController = new AbortController();
+      const provider: ApiProvider = {
+        id: vi.fn().mockReturnValue('target-provider'),
+        callApi: vi.fn(async (prompt: string) => ({
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        })),
+      };
+      const judge: ApiProvider = {
+        id: vi.fn().mockReturnValue('judge'),
+        callApi: vi.fn(async () => ({
+          get output() {
+            abortController.abort();
+            throw new SyntaxError('Unexpected token in grader output');
+          },
+        })),
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt {{topic}}')],
+        tests: [
+          {
+            vars: { topic: 'alpha' },
+            assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+          },
+        ],
+      };
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {
-      maxConcurrency: 1,
-      abortSignal: abortController.signal,
-    });
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency,
+        abortSignal: abortController.signal,
+      });
 
-    const gradingErrorLogs = errorSpy.mock.calls.filter(
-      ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
-    );
-    expect(gradingErrorLogs.length).toBeGreaterThanOrEqual(1);
+      const errorMessage =
+        maxConcurrency === 1 ? 'Assertion grading failed' : 'Provider call failed during eval';
+      const gradingErrorLogs = errorSpy.mock.calls.filter(
+        ([message]) => typeof message === 'string' && message.includes(errorMessage),
+      );
+      expect(gradingErrorLogs.length).toBeGreaterThanOrEqual(1);
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.stats.errors).toBe(1);
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0].error).toContain('Unexpected token in grader output');
+      expect(
+        summary.results[0].gradingResult?.metadata?.__promptfoo?.assertionGradingInterrupted,
+      ).toBeUndefined();
 
-    errorSpy.mockRestore();
-  });
+      errorSpy.mockRestore();
+    },
+  );
 
   it('logs grouping-active info when serial eval contains model-graded assertions', async () => {
     const { default: logger } = await import('../../src/logger');

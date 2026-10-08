@@ -793,14 +793,12 @@ describe('evaluator trace integration', () => {
       const provider = createMockProvider({ response: { output: 'Target output' } });
       mockFetchTraceContext.mockImplementationOnce(async () => {
         controller.abort();
-        throw new Error('cancelled by user');
+        throw new DOMException('cancelled by user', 'AbortError');
       });
 
-      const [result] = await runEval(
-        createRunOptions(provider, { abortSignal: controller.signal }),
-      );
+      const results = await runEval(createRunOptions(provider, { abortSignal: controller.signal }));
 
-      expect(result.error).toContain('cancelled by user');
+      expect(results).toEqual([]);
       expect(mockFetchTraceContext).toHaveBeenCalledWith(
         traceId,
         expect.objectContaining({ abortSignal: controller.signal }),

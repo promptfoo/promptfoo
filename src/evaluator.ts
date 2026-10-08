@@ -21,6 +21,7 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
+import { getGradingProvider } from './matchers/providers';
 import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
@@ -34,7 +35,6 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
-import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
 import {
@@ -43,6 +43,9 @@ import {
   type RateLimitRegistry,
 } from './scheduler';
 import {
+  getProviderCallExecutionContext,
+  getProviderDelay,
+  waitForProviderCall,
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from './scheduler/providerCallExecutionContext';
@@ -115,7 +118,7 @@ import {
   sanitizeUrl,
 } from './util/sanitizer';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
-import { sleep } from './util/time';
+import { sleep, sleepWithAbort } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
@@ -148,7 +151,7 @@ import type {
   Vars,
   VarValue,
 } from './types/index';
-import type { InternalEvaluateOptions } from './types/internal';
+import type { InternalEvaluateOptions, InternalRunEvalOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
 
 export class PromptSuggestionsRejectedError extends Error {
@@ -534,6 +537,8 @@ function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: T
 }
 
 const deferredGradingPromises = new WeakMap<EvaluateResult, Promise<void>>();
+// Only retain a boolean; transforms may intentionally remove private output.
+const changedGradingOutputs = new WeakSet<EvaluateResult>();
 
 const PROVIDER_GROUPED_ASSERTION_TYPES = new Set<AssertionType>([
   ...MODEL_GRADED_ASSERTION_TYPES,
@@ -622,6 +627,67 @@ function synchronizeLegacyTransportHeaders(
   return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
 }
 
+async function applyAfterEachHook(
+  row: EvaluateResult,
+  test: AtomicTestCase,
+  testSuite: TestSuite,
+): Promise<void> {
+  // Apply afterEach before persistence, with separate score and response containers.
+  if (testSuite.extensions?.length) {
+    const gradingMetadata = row.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY];
+    const interrupted = gradingMetadata?.assertionGradingInterrupted;
+    let metadataBeforeHook: unknown;
+    if (interrupted) {
+      try {
+        metadataBeforeHook = structuredClone([row.metadata ?? {}, row.response?.metadata ?? {}]);
+      } catch {
+        // If metadata cannot be compared safely, keep the hook output and require a rerun.
+      }
+    }
+    try {
+      const originalMetadata = row.metadata;
+      const originalResponseMetadata = row.response?.metadata;
+      const afterEachOut = await runExtensionHook(testSuite.extensions, 'afterEach', {
+        test,
+        result: {
+          ...row,
+          namedScores: { ...row.namedScores },
+          metadata: { ...row.metadata },
+          response: row.response
+            ? { ...row.response, metadata: { ...row.response.metadata } }
+            : row.response,
+        },
+      });
+      // runExtensionHook sanitizes namedScores via filterFiniteScores;
+      // re-sanitize here to also catch in-place mutations that bypass the merge.
+      row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
+      // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
+      // from the old transport would otherwise persist as stale credentials. Re-sync it.
+      row.metadata = synchronizeLegacyTransportHeaders(
+        originalMetadata,
+        originalResponseMetadata,
+        afterEachOut.result.metadata,
+        afterEachOut.result.response?.metadata,
+      );
+      if (row.response && afterEachOut.result.response) {
+        row.response.metadata = afterEachOut.result.response.metadata;
+      }
+    } catch (error) {
+      logger.error(`afterEach extension hook failed, persisting row without hook modifications`, {
+        error,
+      });
+    } finally {
+      if (
+        interrupted &&
+        !isDeepStrictEqual(metadataBeforeHook, [row.metadata ?? {}, row.response?.metadata ?? {}])
+      ) {
+        // Never retain a hidden copy of data the hook may have deliberately redacted.
+        gradingMetadata.assertionGradingMetadataChanged = true;
+      }
+    }
+  }
+}
+
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
@@ -642,7 +708,17 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
-function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
+type GradingState = Pick<
+  EvaluationStoreResult,
+  'success' | 'score' | 'failureReason' | 'error' | 'namedScores' | 'gradingResult'
+>;
+
+function getGradingState(result: GradingState): GradingState {
+  const { success, score, failureReason, error, namedScores, gradingResult } = result;
+  return { success, score, failureReason, error, namedScores, gradingResult };
+}
+
+function applyGradingError(row: EvaluationStoreResult, error: unknown, abortSignal?: AbortSignal) {
   const errorAsError = error instanceof Error ? error : undefined;
   // Require both signals: a third-party SDK that throws `AbortError` during a
   // non-aborted run is a real bug, and a real SyntaxError caught microseconds
@@ -672,6 +748,31 @@ function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: Ab
   row.success = false;
   row.score = 0;
   row.namedScores = {};
+}
+
+function applyDeferredGradingError(
+  row: EvaluateResult,
+  error: unknown,
+  abortSignal?: AbortSignal,
+  timeoutMs?: number,
+) {
+  applyGradingError(row, error, abortSignal);
+  if (abortSignal?.aborted && isAbortError(error)) {
+    if (timeoutMs !== undefined) {
+      row.error = `Evaluation timed out after ${timeoutMs}ms`;
+    }
+    row.gradingResult = {
+      pass: false,
+      score: 0,
+      reason: row.error!,
+      metadata: {
+        [PROMPTFOO_METADATA_KEY]: {
+          assertionGradingInterrupted: true,
+          ...(changedGradingOutputs.has(row) && { assertionGradingOutputChanged: true }),
+        },
+      },
+    };
+  }
 }
 
 function getNonTransientTargetStatus(row: EvaluateResult): number | undefined {
@@ -1100,27 +1201,57 @@ async function callActiveProvider({
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
 
   const callApi = () => {
-    onProviderInvoked();
-    const invoke = () =>
-      traceContext?.traceparent
-        ? withTracedProviderCall(
-            {
-              provider: activeProvider,
-              callContext: callApiContext,
-              promptLabel: promptForRender.label,
-              evalId: callApiContext.evaluationId,
-              testIndex,
-            },
-            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
-          )
-        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    return testSuite?.tracing
-      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-      : invoke();
+    let providerCall: Promise<ProviderResponse> | undefined;
+    return withProviderCallExecutionContext(
+      {
+        ...getProviderCallExecutionContext(),
+        abortSignal,
+        providerCallOwned: true,
+        providerDelay: {
+          provider: originalProvider,
+          delay: getProviderDelay(provider),
+          queueKey: provider,
+          state: getProviderCallExecutionContext()?.providerDelay?.state,
+        },
+      },
+      () => {
+        const invokeProvider = (context?: CallApiContextParams) => {
+          abortSignal?.throwIfAborted();
+          onProviderInvoked();
+          providerCall = Promise.resolve(
+            activeProvider.callApi(renderedPrompt, context, callApiOptions),
+          );
+          return waitForProviderCall(providerCall, abortSignal);
+        };
+        const invoke = () =>
+          traceContext?.traceparent
+            ? withTracedProviderCall(
+                {
+                  provider: activeProvider,
+                  callContext: callApiContext,
+                  promptLabel: promptForRender.label,
+                  evalId: callApiContext.evaluationId,
+                  testIndex,
+                },
+                invokeProvider,
+              )
+            : invokeProvider(callApiContext);
+        return testSuite?.tracing
+          ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+          : invoke();
+      },
+    ).finally(async () => {
+      // Cancellation settles the evaluator and tracing, but the scheduler still owns
+      // the actual request until it finishes, even if the provider ignores its signal.
+      await providerCall?.catch(() => {});
+    });
   };
-  const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
-    : await callApi();
+  const response = await waitForProviderCall(
+    rateLimitRegistry
+      ? rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
+      : callApi(),
+    abortSignal,
+  );
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
   logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -1215,10 +1346,21 @@ function getConversationLastInput(renderedJson: unknown) {
   return lastElt?.content || lastElt;
 }
 
-async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
-  if (!response.cached && !provider.handlesOwnDelay && provider.delay && provider.delay > 0) {
-    logger.debug(`Sleeping for ${provider.delay}ms`);
-    await sleep(provider.delay);
+async function applyProviderDelayIfNeeded(
+  provider: ApiProvider,
+  response: ProviderResponse,
+  delay: number,
+  abortSignal?: AbortSignal,
+) {
+  // A provider only handles a delay that it owns. Evaluation defaults stay local.
+  const handlesDelay =
+    (provider.handlesOwnDelay && provider.delay != null) ||
+    getProviderCallExecutionContext()?.providerDelay?.state?.handled;
+  if (!response.cached && !handlesDelay && delay > 0) {
+    logger.debug(`Sleeping for ${delay}ms`);
+    await (abortSignal
+      ? waitForProviderCall(sleepWithAbort(delay, abortSignal), abortSignal)
+      : sleep(delay));
   } else if (response.cached) {
     logger.debug(`Skipping delay because response is cached`);
   }
@@ -1320,6 +1462,7 @@ async function applyRunEvalResponseOutcome({
   deferGrading,
   evalId,
   latencyMs,
+  onGradingStarted,
   prompt,
   promptIdx,
   provider,
@@ -1338,6 +1481,7 @@ async function applyRunEvalResponseOutcome({
   deferGrading?: boolean;
   evalId?: string;
   latencyMs: number;
+  onGradingStarted?: (row: EvaluateResult) => void;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1374,6 +1518,7 @@ async function applyRunEvalResponseOutcome({
     deferGrading,
     evalId,
     latencyMs,
+    onGradingStarted,
     prompt,
     promptIdx,
     provider,
@@ -1395,6 +1540,7 @@ async function gradeRunEvalResponse({
   deferGrading,
   evalId,
   latencyMs,
+  onGradingStarted,
   prompt,
   promptIdx,
   provider,
@@ -1413,6 +1559,7 @@ async function gradeRunEvalResponse({
   deferGrading?: boolean;
   evalId?: string;
   latencyMs: number;
+  onGradingStarted?: (row: EvaluateResult) => void;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1456,29 +1603,31 @@ async function gradeRunEvalResponse({
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
-    ret.response = processedResponse;
-    const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal, providerCallQueue, rateLimitRegistry },
-      () =>
-        runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: assertionProviderResponse,
-          test,
-          vars,
-          latencyMs: response.latencyMs ?? latencyMs,
-          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-          traceId,
-        }).then((checkResult) => applyGradingResult(ret, checkResult)),
-    ).catch((error) => {
-      applyGradingError(ret, error, abortSignal);
-    });
-    deferredGradingPromises.set(ret, gradingPromise);
-    return;
   }
-
-  const checkResult = await withProviderCallExecutionContext(
-    { abortSignal, rateLimitRegistry },
+  ret.response = processedResponse;
+  const outputChanged = !isDeepStrictEqual(providerTransformedOutput, processedResponse.output);
+  if (outputChanged) {
+    changedGradingOutputs.add(ret);
+  }
+  if (onGradingStarted) {
+    const gradingSnapshot: EvaluateResult = {
+      ...ret,
+      response: {
+        ...processedResponse,
+        metadata: { ...processedResponse.metadata },
+      },
+      testCase: { ...test, vars: { ...vars } },
+      tokenUsage: structuredClone(ret.tokenUsage),
+      namedScores: { ...ret.namedScores },
+      metadata: { ...ret.metadata },
+    };
+    if (outputChanged) {
+      changedGradingOutputs.add(gradingSnapshot);
+    }
+    onGradingStarted(gradingSnapshot);
+  }
+  const gradingPromise = withProviderCallExecutionContext(
+    { ...getProviderCallExecutionContext(), abortSignal, providerCallQueue, rateLimitRegistry },
     () =>
       runAssertions({
         prompt: renderedPrompt,
@@ -1489,10 +1638,27 @@ async function gradeRunEvalResponse({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+      }).then((checkResult) => {
+        if (abortSignal?.aborted) {
+          throw new DOMException('Provider call cancelled', 'AbortError');
+        }
+        applyGradingResult(ret, checkResult);
       }),
-  );
-  applyGradingResult(ret, checkResult);
-  ret.response = processedResponse;
+  ).catch((error) => {
+    const interrupted = abortSignal?.aborted && isAbortError(error);
+    if (!deferGrading && !interrupted) {
+      throw error;
+    }
+    applyDeferredGradingError(ret, error, abortSignal);
+    if (interrupted) {
+      ret.testCase = { ...test, vars: { ...vars } };
+    }
+  });
+  if (deferGrading) {
+    deferredGradingPromises.set(ret, gradingPromise);
+  } else {
+    await gradingPromise;
+  }
 }
 
 async function transformRunEvalResponse({
@@ -1615,33 +1781,66 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-async function runEvalInternal({
-  provider,
-  prompt, // raw prompt
-  test,
-  testSuite,
-  delay,
-  nunjucksFilters: filters,
-  evaluateOptions,
-  // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
-  testIdx: testIndex,
-  promptIdx: promptIndex,
-  repeatIndex,
-  conversations,
-  registers,
-  isRedteam,
-  abortSignal,
-  deferGrading,
-  evalId,
-  providerCallQueue,
-  rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
-  provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
-  invariant(
-    typeof provider.delay === 'number',
-    `Provider delay should be set for ${provider.label}`,
+function runEvalInternal(
+  options: InternalRunEvalOptions,
+  onGradingStarted?: (row: EvaluateResult) => void,
+): Promise<EvaluateResult[]> {
+  const delay = resolveInvocationDelay(
+    options.provider,
+    options.delayOmitted ? undefined : options.delay,
+    options.evaluateOptions,
   );
+  return withProviderCallExecutionContext(
+    {
+      ...getProviderCallExecutionContext(),
+      providerDelay: { provider: options.provider, delay, state: { handled: false } },
+    },
+    () => runEvalInContext({ ...options, delay: delay ?? 0 }, onGradingStarted),
+  );
+}
 
+// Preserve omission so a nested provider can still use its own configured delay.
+function resolveInvocationDelay(
+  provider: ApiProvider,
+  delay?: number,
+  evaluateOptions?: InternalEvaluateOptions,
+): number | undefined {
+  const effectiveDelay =
+    provider.delay ??
+    delay ??
+    (evaluateOptions?.delayResolved ? undefined : getEnvInt('PROMPTFOO_DELAY_MS'));
+  invariant(
+    effectiveDelay === undefined || typeof effectiveDelay === 'number',
+    `Invalid delay for ${provider.label}`,
+  );
+  return effectiveDelay;
+}
+
+async function runEvalInContext(
+  {
+    provider,
+    prompt, // raw prompt
+    test,
+    testSuite,
+    delay,
+    nunjucksFilters: filters,
+    evaluateOptions,
+    // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
+    testIdx: testIndex,
+    promptIdx: promptIndex,
+    repeatIndex,
+    conversations,
+    registers,
+    isRedteam,
+    abortSignal,
+    deferGrading,
+    evalId,
+    providerCallQueue,
+    rateLimitRegistry,
+  }: RunEvalOptions,
+  onGradingStarted?: (row: EvaluateResult) => void,
+): Promise<EvaluateResult[]> {
+  const effectiveDelay = delay ?? 0;
   const state = createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
     conversations,
@@ -1727,6 +1926,7 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: state.vars,
           });
+          abortSignal?.throwIfAborted();
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
@@ -1748,7 +1948,7 @@ async function runEvalInternal({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response);
+          await applyProviderDelayIfNeeded(provider, response, effectiveDelay, abortSignal);
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -1774,7 +1974,13 @@ async function runEvalInternal({
           invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
           trackProviderUsage(provider, response);
+          // Retain completed target usage even if grading is interrupted.
+          if (response.tokenUsage) {
+            accumulateResponseTokenUsage(ret.tokenUsage, response);
+          }
+
           await applyRunEvalResponseOutcome({
+            onGradingStarted,
             abortSignal,
             deferGrading,
             evalId,
@@ -1793,11 +1999,6 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: persistedVars,
           });
-
-          // Update token usage stats
-          if (response.tokenUsage) {
-            accumulateResponseTokenUsage(ret.tokenUsage, response);
-          }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
@@ -1827,6 +2028,11 @@ async function runEvalInternal({
     }
     return rows;
   } catch (err) {
+    const aborted = isAbortError(err);
+    if (abortSignal?.aborted && aborted) {
+      // Interrupted work stays incomplete for resume or the evaluator's timeout result.
+      return [];
+    }
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
       provider,
@@ -1836,8 +2042,7 @@ async function runEvalInternal({
     });
 
     // Don't log AbortError - these are expected when scan is aborted (e.g., target unavailable)
-    const isAbortError = err instanceof Error && err.name === 'AbortError';
-    if (!isAbortError) {
+    if (!aborted) {
       logger.error('Provider call failed during eval', logContext);
     }
 
@@ -2887,9 +3092,10 @@ function createRunEvalOption({
   testIdx: number;
   testSuite: TestSuite;
   vars: Vars | undefined;
-}): RunEvalOptions {
+}): InternalRunEvalOptions {
   return {
-    delay: options.delay || 0,
+    delay: options.delay ?? 0,
+    delayOmitted: options.delay === undefined,
     provider,
     prompt: {
       ...prompt,
@@ -3252,6 +3458,7 @@ function adjustConcurrencyForSerialFeatures({
 
 interface ProcessEvalStepOptions {
   deferGrading?: boolean;
+  onGradingStarted?: (row: EvaluateResult) => void;
   onRowsReady?: () => void;
   precomputedRows?: EvaluateResult[];
   providerCallQueue?: ProviderCallQueue;
@@ -3262,6 +3469,15 @@ interface GroupedRows {
   evalStep: RunEvalOptions;
   index: number;
   rows: EvaluateResult[];
+}
+
+interface PromptGradingMetricsContext {
+  derivedMetrics: TestSuite['derivedMetrics'];
+  evalStep: RunEvalOptions;
+  mathjsModule: typeof import('mathjs') | null;
+  metrics: PromptMetrics;
+  promptEvalCount: number;
+  row: EvaluateResult;
 }
 
 interface EvalProcessingContext {
@@ -3632,10 +3848,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         current: data.current,
       });
     });
-
-    // Share rate limit registry with redteam provider manager
-    // This ensures redteam internal providers also benefit from rate limiting
-    redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
   }
 
   /**
@@ -3776,21 +3988,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private updatePromptMetricsForRow({
+  private updatePromptGradingMetrics({
     derivedMetrics,
     evalStep,
     mathjsModule,
     metrics,
     promptEvalCount,
     row,
-  }: {
-    derivedMetrics: TestSuite['derivedMetrics'];
-    evalStep: RunEvalOptions;
-    mathjsModule: typeof import('mathjs') | null;
-    metrics: PromptMetrics;
-    promptEvalCount: number;
-    row: EvaluateResult;
-  }): void {
+  }: PromptGradingMetricsContext): void {
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -3811,16 +4016,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
     metrics.assertFailCount +=
       row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-    metrics.totalLatencyMs += row.latencyMs || 0;
-    accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
-      countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
-    });
-
     if (row.gradingResult?.tokensUsed) {
       accumulateGradingTokenUsage(metrics.tokenUsage, row.gradingResult.tokensUsed, {
         cached: row.gradingResult.metadata?.cachedResponse,
       });
     }
+  }
+
+  private updatePromptMetricsForRow(context: PromptGradingMetricsContext): void {
+    this.updatePromptGradingMetrics(context);
+    const { metrics, row } = context;
+    metrics.totalLatencyMs += row.latencyMs || 0;
+    accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
+      countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
+    });
 
     if (row.incurredCost !== undefined || metrics.incurredCost !== undefined) {
       metrics.incurredCost =
@@ -3829,12 +4038,175 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics.cost += row.cost || 0;
   }
 
+  private async resumeInterruptedGrading(
+    runEvalOptions: InternalRunEvalOptions[],
+    prompts: CompletedPrompt[],
+    testSuite: TestSuite,
+    mathjsModule: typeof import('mathjs') | null,
+  ): Promise<void> {
+    if (!cliState.resume || !this.store.persisted || cliState.retryMode) {
+      return;
+    }
+    const interruptedPairs = await this.store.readCompletedIndexPairs({
+      interruptedGradingOnly: true,
+    });
+    const steps = new Map(runEvalOptions.map((step) => [getResultIndexKey(step), step]));
+    const testIndices = new Set(
+      runEvalOptions
+        .filter((step) => interruptedPairs.has(getResultIndexKey(step)))
+        .map((step) => step.testIdx),
+    );
+    for (const testIdx of testIndices) {
+      for (const result of await this.store.readResultsByTestIdx(testIdx)) {
+        if (
+          !result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingInterrupted
+        ) {
+          continue;
+        }
+        const step = steps.get(getResultIndexKey(result));
+        if (step?.abortSignal?.aborted) {
+          return;
+        }
+        if (!step || result.response?.output == null) {
+          continue;
+        }
+        const row = this.store.toEvaluateResult(result);
+        let test = step.test;
+        const previousNamedScores = row.namedScores;
+        const metadataChanged =
+          result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingMetadataChanged;
+        const outputChanged =
+          result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingOutputChanged;
+        row.error = undefined;
+        row.failureReason = ResultFailureReason.NONE;
+        row.gradingResult = undefined;
+        const timeoutMs = this.options.timeoutMs ?? getEvalTimeoutMs();
+        const timeoutController = new AbortController();
+        const abortSignal = step.abortSignal
+          ? AbortSignal.any([step.abortSignal, timeoutController.signal])
+          : timeoutController.signal;
+        const timeout =
+          timeoutMs > 0 ? setTimeout(() => timeoutController.abort(), timeoutMs) : undefined;
+        try {
+          if (outputChanged) {
+            throw new Error(
+              'Cannot resume assertion grading: a transform changed the output. Rerun the test to grade the original inputs.',
+            );
+          }
+          if (metadataChanged) {
+            throw new Error(
+              'Cannot resume assertion grading: afterEach changed metadata. Rerun the test to grade the original inputs.',
+            );
+          }
+          const check = await waitForProviderCall(
+            withCacheNamespace(
+              getRepeatCacheNamespace(step.repeatIndex, step.evaluateOptions),
+              () =>
+                withProviderCallExecutionContext(
+                  {
+                    abortSignal,
+                    rateLimitRegistry: this.rateLimitRegistry,
+                    providerDelay: {
+                      provider: step.provider,
+                      delay: resolveInvocationDelay(
+                        step.provider,
+                        step.delayOmitted ? undefined : step.delay,
+                        step.evaluateOptions,
+                      ),
+                    },
+                  },
+                  async () => {
+                    const inputs = await this.store.resolveGradingInputs?.(
+                      result.response!,
+                      result.testCase,
+                      step.test,
+                      (provider) => getGradingProvider('text', provider, null),
+                    );
+                    test = inputs?.test ?? result.testCase;
+                    const providerResponse = inputs?.providerResponse ?? result.response!;
+                    abortSignal.throwIfAborted();
+                    return runAssertions({
+                      prompt: result.prompt.raw,
+                      provider: step.provider,
+                      providerResponse: {
+                        ...providerResponse,
+                        providerTransformedOutput:
+                          providerResponse.providerTransformedOutput ?? providerResponse.output,
+                      },
+                      test,
+                      vars: test.vars ?? {},
+                      latencyMs: row.latencyMs,
+                      assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+                      traceId: row.traceId,
+                    });
+                  },
+                ),
+            ),
+            abortSignal,
+          );
+          applyGradingResult(row, check);
+        } catch (error) {
+          applyDeferredGradingError(
+            row,
+            error,
+            abortSignal,
+            timeoutController.signal.aborted && !step.abortSignal?.aborted ? timeoutMs : undefined,
+          );
+        } finally {
+          clearTimeout(timeout);
+        }
+        if (metadataChanged || outputChanged) {
+          row.namedScores = previousNamedScores;
+        } else {
+          await applyAfterEachHook(row, test, testSuite);
+        }
+        const persisted = sanitizeResultForJsonlArtifact(row);
+        Object.assign(result, getGradingState(persisted), {
+          metadata: persisted.metadata,
+          response: result.response && {
+            ...result.response,
+            metadata: persisted.response?.metadata,
+          },
+          error: persisted.error ?? null,
+          gradingResult: persisted.gradingResult ?? null,
+        });
+        const metrics = prompts[result.promptIdx]?.metrics;
+        if (metrics) {
+          metrics.testErrorCount--;
+          // An interrupted grading marker has no assertion contributions. Any named
+          // scores came from afterEach and must be replaced, not counted twice.
+          for (const [name, value] of Object.entries(previousNamedScores)) {
+            metrics.namedScores[name] -= value;
+            metrics.namedScoresCount[name]--;
+            if (metrics.namedScoreWeights) {
+              metrics.namedScoreWeights[name]--;
+            }
+          }
+          this.updatePromptGradingMetrics({
+            derivedMetrics: testSuite.derivedMetrics,
+            evalStep: step,
+            mathjsModule,
+            metrics,
+            promptEvalCount:
+              metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1,
+            row,
+          });
+        }
+        this.currentResultKeys.add(getResultIndexKey(row));
+        this.trackRowStats(row);
+        this.trackFinalJsonlResult(result);
+        await this.store.saveResult(result);
+      }
+    }
+  }
+
   private async processEvalStep(
     evalStep: RunEvalOptions,
     index: number,
     {
       deferGrading = false,
       onRowsReady,
+      onGradingStarted,
       precomputedRows,
       providerCallQueue,
       shouldSkipStaleRows,
@@ -3849,9 +4221,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           (await this.runEvalStepAfterBeforeEach(evalStep, {
             deferGrading,
             onRowsReady,
+            onGradingStarted,
             providerCallQueue,
             testSuite: context.testSuite,
           }));
+
+        if (rows.length === 0) {
+          // Let interruption handling keep this step unprocessed for resume or timeout results.
+          evalStep.abortSignal?.throwIfAborted();
+        }
 
         if (!deferGrading) {
           await this.processEvalRows(evalStep, index, rows, shouldSkipStaleRows, context);
@@ -3866,11 +4244,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading,
       onRowsReady,
+      onGradingStarted,
       providerCallQueue,
       testSuite,
     }: {
       deferGrading: boolean;
       onRowsReady?: () => void;
+      onGradingStarted?: (row: EvaluateResult) => void;
       providerCallQueue?: ProviderCallQueue;
       testSuite: TestSuite;
     },
@@ -3880,11 +4260,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     evalStep.test = beforeEachOut.test;
 
-    const rows = await runEvalInternal({
-      ...evalStep,
-      deferGrading,
-      providerCallQueue: deferGrading ? providerCallQueue : undefined,
-    });
+    const rows = await runEvalInternal(
+      {
+        ...evalStep,
+        deferGrading,
+        providerCallQueue: deferGrading ? providerCallQueue : undefined,
+      },
+      onGradingStarted,
+    );
     onRowsReady?.();
     return rows;
   }
@@ -3908,44 +4291,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       this.trackCompletedRow(evalStep, row, context);
       context.numComplete++;
 
-      // Apply afterEach hook mutations before persisting. Pass a shallow copy
-      // so in-place mutations don't corrupt the row on hook failure.
-      if (context.testSuite.extensions?.length) {
-        try {
-          const originalMetadata = row.metadata;
-          const originalResponseMetadata = row.response?.metadata;
-          const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
-            test: evalStep.test,
-            result: {
-              ...row,
-              namedScores: { ...row.namedScores },
-              metadata: { ...row.metadata },
-              response: row.response
-                ? { ...row.response, metadata: { ...row.response.metadata } }
-                : row.response,
-            },
-          });
-          // runExtensionHook sanitizes namedScores via filterFiniteScores;
-          // re-sanitize here to also catch in-place mutations that bypass the merge.
-          row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
-          // from the old transport would otherwise persist as stale credentials. Re-sync it.
-          row.metadata = synchronizeLegacyTransportHeaders(
-            originalMetadata,
-            originalResponseMetadata,
-            afterEachOut.result.metadata,
-            afterEachOut.result.response?.metadata,
-          );
-          if (row.response && afterEachOut.result.response) {
-            row.response.metadata = afterEachOut.result.response.metadata;
-          }
-        } catch (error) {
-          logger.error(
-            `afterEach extension hook failed, persisting row without hook modifications`,
-            { error },
-          );
-        }
-      }
+      await applyAfterEachHook(row, evalStep.test, context.testSuite);
 
       await this.persistEvalRow(row);
 
@@ -4020,7 +4366,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
-    const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const timeoutMs = context.options.timeoutMs ?? getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
@@ -4041,6 +4387,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let timeoutId: NodeJS.Timeout | undefined;
     let didTimeout = false;
+    let gradingRow: EvaluateResult | undefined;
     const clearEvalStepTimeout = () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -4056,6 +4403,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           {
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
+            onGradingStarted: (row) => {
+              gradingRow = row;
+            },
             providerCallQueue,
             shouldSkipStaleRows: () => didTimeout,
           },
@@ -4073,7 +4423,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (!didTimeout) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      if (gradingRow) {
+        applyDeferredGradingError(
+          gradingRow,
+          new DOMException('Provider call cancelled', 'AbortError'),
+          abortController.signal,
+          timeoutMs,
+        );
+        await this.processEvalRows(evalStep, index, [gradingRow], undefined, context);
+      } else {
+        await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      }
     } finally {
       evalStep.test = evalStepWithSignal.test;
       clearEvalStepTimeout();
@@ -4598,8 +4958,28 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!assertion) {
       return;
     }
+    for (const result of resultsToCompare) {
+      const internalMetadata = result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY];
+      const previous = internalMetadata?.comparisonBeforeAbort as GradingState | undefined;
+      if (previous) {
+        Object.assign(result, getGradingState(previous));
+        this.currentResultKeys.add(getResultIndexKey(result));
+        this.stats[result.success ? 'successes' : 'failures']++;
+        const metrics = prompts[result.promptIdx]?.metrics;
+        if (metrics) {
+          metrics.testErrorCount--;
+          metrics[result.success ? 'testPassCount' : 'testFailCount']++;
+          metrics.score += result.score;
+        }
+      }
+    }
+
+    let compareAssertion: Assertion = assertion;
     let gradingResults: GradingResult[];
     try {
+      if (providerAbortSignal?.aborted) {
+        throw new DOMException('Comparison grading cancelled', 'AbortError');
+      }
       const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
       // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
       // references and redacted credentials need to come from the current configuration.
@@ -4610,7 +4990,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           provider: undefined,
         },
       };
-      const compareAssertion = {
+      compareAssertion = {
         ...assertion,
         provider: restoreComparisonProvider(
           assertion.provider || savedTest.options?.provider,
@@ -4621,6 +5001,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
       const outputs = resultsToCompare.map((r) => r.response?.output || '');
+      const callApiContext = this.getComparisonCallApiContext(firstResult, repeatCacheContext);
+      const originalProvider = callApiContext.originalProvider;
       gradingResults = await withCacheNamespace(
         repeatCacheContext
           ? getRepeatCacheNamespace(
@@ -4630,19 +5012,71 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           : undefined,
         () =>
           withProviderCallExecutionContext(
-            { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
+            {
+              abortSignal: providerAbortSignal,
+              rateLimitRegistry: this.rateLimitRegistry,
+              providerDelay: originalProvider
+                ? {
+                    provider: originalProvider,
+                    delay: resolveInvocationDelay(
+                      originalProvider,
+                      this.options.delay,
+                      this.options,
+                    ),
+                  }
+                : undefined,
+            },
             () =>
-              runCompareAssertion(
-                comparisonTestCase,
-                compareAssertion,
-                outputs,
-                this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
-              ),
+              runCompareAssertion(comparisonTestCase, compareAssertion, outputs, callApiContext),
           ),
       );
     } catch (error) {
       if (providerAbortSignal?.aborted && isAbortError(error)) {
-        throw error;
+        for (const result of resultsToCompare) {
+          if (result.failureReason === ResultFailureReason.ERROR) {
+            continue;
+          }
+          const wasSuccess = result.success;
+          const wasScore = result.score;
+          const previous = getGradingState(result);
+          // Keep the original grading intact for resume, inside the grading projection
+          // so stripping grading results also removes the saved state.
+          result.gradingResult = {
+            pass: result.success,
+            score: result.score,
+            reason: result.error ?? '',
+            ...result.gradingResult,
+            componentResults: [...(result.gradingResult?.componentResults ?? [])],
+            metadata: {
+              ...result.gradingResult?.metadata,
+              [PROMPTFOO_METADATA_KEY]: {
+                ...result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY],
+                comparisonBeforeAbort: previous,
+              },
+            },
+          };
+          applyGradingError(result, error, providerAbortSignal);
+          mergeSelectBestGradingResult(
+            result,
+            { pass: false, score: 0, reason: result.error!, assertion: compareAssertion },
+            this.stats.tokenUsage,
+          );
+          if (this.currentResultKeys.has(getResultIndexKey(result))) {
+            this.stats[wasSuccess ? 'successes' : 'failures']--;
+            this.stats.errors++;
+          }
+          const metrics = prompts[result.promptIdx]?.metrics;
+          if (metrics) {
+            metrics[wasSuccess ? 'testPassCount' : 'testFailCount']--;
+            metrics.testErrorCount++;
+            metrics.score -= wasScore;
+          }
+          this.trackFinalJsonlResult(result);
+          if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
+            await this.store.saveResult(result);
+          }
+        }
+        return;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
       // Provider errors can contain credentials or config source snippets, so saved results get
@@ -5252,6 +5686,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
+    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
+    await this.resumeInterruptedGrading(runEvalOptions, prompts, testSuite, mathjsModule);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
@@ -5262,10 +5698,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
-
-    // Awaiting after accumulating scores lets other rows change the total
-    // before derived metrics use this row's __count.
-    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
 
     const processingContext: EvalProcessingContext = {
       assertionTypes,
@@ -5305,7 +5737,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
-        originalProgressCallback(completed, total, index, evalStep, metrics);
+        const { delayOmitted: _delayOmitted, ...publicStep } = evalStep as InternalRunEvalOptions;
+        originalProgressCallback(completed, total, index, publicStep, metrics);
       }
 
       if (isWebUI) {
@@ -5343,7 +5776,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const hasEvalStepTimeout = (options.timeoutMs ?? getEvalTimeoutMs()) > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
@@ -5430,6 +5863,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    return withProviderCallExecutionContext({ rateLimitRegistry: this.rateLimitRegistry }, () =>
+      this.evaluateInContext(),
+    );
+  }
+
+  private async evaluateInContext(): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -5507,9 +5946,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
         // Clean up rate limit registry resources
         this.rateLimitRegistry?.dispose();
-
-        // Clear registry from redteam provider manager
-        redteamProviderManager.setRateLimitRegistry(undefined);
 
         // Reset cliState.maxConcurrency to prevent stale state between evaluations
         cliState.maxConcurrency = undefined;

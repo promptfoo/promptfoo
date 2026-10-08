@@ -304,7 +304,7 @@ describe('matchesClassification', () => {
               provider: decisionsProvider(),
             }),
           ),
-        ).rejects.toBe(reason);
+        ).rejects.toMatchObject({ name: 'AbortError' });
       });
       expect(fetch).not.toHaveBeenCalled();
     });
@@ -350,7 +350,7 @@ describe('matchesClassification', () => {
           ]);
           controller.abort(reason);
           expect(signal?.aborted).toBe(true);
-          expect(await settled).toEqual({ error: reason });
+          expect(await settled).toMatchObject({ error: { name: 'AbortError' } });
           expect(fetch).toHaveBeenCalledTimes(1);
         } finally {
           release();

@@ -85,6 +85,12 @@ function spawnCli(
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
+  // Register immediately: a fast SIGINT exit may precede waitForExit().
+  // `close` also guarantees that stdout/stderr have finished draining.
+  const exitPromise = new Promise<number>((resolve) => {
+    child.once('close', (code) => resolve(code ?? 1));
+  });
+
   const outputWaiters: Array<{
     pattern: string | RegExp;
     resolve: (output: string) => void;
@@ -117,7 +123,7 @@ function spawnCli(
   });
 
   const sendSignal = (signal: NodeJS.Signals) => {
-    if (child.pid && !child.killed) {
+    if (child.pid && child.exitCode === null && child.signalCode === null) {
       child.kill(signal);
     }
   };
@@ -151,46 +157,44 @@ function spawnCli(
       outputWaiters.push({
         pattern,
         resolve: wrappedResolve,
-        reject: rejectWait,
+        reject: (error) => {
+          clearTimeout(timer);
+          rejectWait(error);
+        },
       });
     });
   };
 
-  const waitForExit = (
+  const waitForExit = async (
     timeoutMs = 30000,
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
         reject(
           new Error(
             `Process did not exit within ${timeoutMs}ms.\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`,
           ),
         );
       }, timeoutMs);
-
-      child.on('exit', (code) => {
-        clearTimeout(timer);
-        // Small delay to collect remaining output
-        setTimeout(() => {
-          resolve({ stdout, stderr, exitCode: code ?? 1 });
-        }, 100);
-      });
     });
+    try {
+      const exitCode = await Promise.race([exitPromise, timeout]);
+      return { stdout, stderr, exitCode };
+    } finally {
+      clearTimeout(timer);
+    }
   };
 
-  // Also handle exit for waiters
-  child.on('exit', (code) => {
-    // Small delay to let final output arrive
-    setTimeout(() => {
-      for (const waiter of outputWaiters) {
-        waiter.reject(
-          new Error(
-            `Process exited (code ${code}) before matching pattern.\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`,
-          ),
-        );
-      }
-      outputWaiters.length = 0;
-    }, 200);
+  child.once('close', (code) => {
+    for (const waiter of outputWaiters) {
+      waiter.reject(
+        new Error(
+          `Process exited (code ${code}) before matching pattern.\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`,
+        ),
+      );
+    }
+    outputWaiters.length = 0;
   });
 
   return {
@@ -223,6 +227,17 @@ describe('Resume E2E Tests', () => {
   afterAll(() => {
     if (fs.existsSync(OUTPUT_DIR)) {
       fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('retains the exit result for callers that wait after the CLI has closed', async () => {
+    const cli = spawnCli(['--version']);
+    try {
+      const result = await cli.waitForExit();
+      expect(result.exitCode).toBe(0);
+      expect(await cli.waitForExit(100)).toEqual(result);
+    } finally {
+      cli.kill();
     }
   });
 
