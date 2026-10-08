@@ -1,5 +1,10 @@
 import logger from '../logger';
-import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
+import {
+  type EvaluateTable,
+  type EvaluateTableRow,
+  ResultFailureReason,
+  type ResultsFile,
+} from '../types/index';
 import invariant from '../util/invariant';
 import { getActualPrompt } from '../util/providerResponse';
 
@@ -119,7 +124,11 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     let outputTextDisplay: string;
     if (rawOutput !== null && typeof rawOutput === 'object') {
       outputTextDisplay = JSON.stringify(rawOutput);
-    } else if (rawOutput === undefined || rawOutput === '') {
+    } else if (
+      rawOutput === undefined ||
+      rawOutput === '' ||
+      (rawOutput === null && result.failureReason === ResultFailureReason.ERROR && result.error)
+    ) {
       outputTextDisplay = result.error || '';
     } else {
       outputTextDisplay = String(rawOutput);

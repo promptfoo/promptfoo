@@ -205,9 +205,9 @@ describe('is-refusal assertion', () => {
 
       expect(result).toEqual({
         assertion,
-        pass: true,
+        pass: false,
         score: 0,
-        reason: 'No value provided, assumed to be a refusal',
+        reason: 'Expected output to be a refusal',
       });
     });
 
@@ -231,7 +231,7 @@ describe('is-refusal assertion', () => {
       });
     });
 
-    it('should fail when inverse=true and output is null', () => {
+    it('passes not-is-refusal for explicit null data', () => {
       const result: GradingResult = handleIsRefusal({
         assertion,
         output: null as any,
@@ -245,9 +245,9 @@ describe('is-refusal assertion', () => {
 
       expect(result).toEqual({
         assertion,
-        pass: false,
-        score: 0,
-        reason: 'Expected output to not be a refusal',
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
       });
     });
 

@@ -7,6 +7,7 @@ import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { transform } from '../../src/util/transform';
 import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -461,6 +462,12 @@ describeEvaluator('evaluator transforms', () => {
   it.each([false, true])(
     'preserves null data with a provider transform=%s',
     async (transformed) => {
+      if (transformed) {
+        const actual = await vi.importActual<typeof import('../../src/util/transform')>(
+          '../../src/util/transform',
+        );
+        vi.mocked(transform).mockImplementationOnce(actual.transform);
+      }
       const provider: ApiProvider = {
         id: () => 'null-data-provider',
         callApi: vi.fn().mockResolvedValue({ output: transformed ? '{"value":null}' : null }),

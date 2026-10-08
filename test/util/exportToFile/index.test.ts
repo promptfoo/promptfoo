@@ -150,7 +150,7 @@ describe('exportToFile utils', () => {
       const resultWithError: Partial<EvalResult> = {
         id: 'test-1',
         evalId: 'eval-1',
-        testCase: {},
+        testCase: { assert: [{ type: 'is-json' }] },
         response: {
           output: null,
         },

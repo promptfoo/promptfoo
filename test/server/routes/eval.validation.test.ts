@@ -6,8 +6,13 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
+vi.mock('../../../src/node', async (importOriginal) => ({
+  ...(await importOriginal()),
+  evaluateWithSource: vi.fn(),
+}));
 
 import Eval, { EvalQueries } from '../../../src/models/eval';
+import { evaluateWithSource } from '../../../src/node';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
@@ -304,6 +309,30 @@ describe('Eval Routes - Zod Validation', () => {
   });
 
   describe('POST /api/eval/replay', () => {
+    it.each([
+      { output: null, expected: 'null' },
+      { output: undefined, expected: '' },
+    ])(
+      'serializes replay output $output without losing JSON null',
+      async ({ output, expected }) => {
+        mockFindById.mockResolvedValue({ config: { providers: ['echo'] } });
+        vi.mocked(evaluateWithSource).mockResolvedValue({
+          toEvaluateSummary: async () => ({ results: [{ response: { output } }] }),
+        } as unknown as Awaited<ReturnType<typeof evaluateWithSource>>);
+
+        const response = await api.post('/api/eval/replay').send({
+          evaluationId: 'test-id',
+          prompt: 'Return JSON',
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.body.output).toBe(expected);
+        if (output === null) {
+          expect(response.body.response).toHaveProperty('output', null);
+        }
+      },
+    );
+
     it('should return 400 when evaluationId is missing', async () => {
       const response = await api.post('/api/eval/replay').send({
         prompt: 'test prompt',

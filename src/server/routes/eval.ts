@@ -662,7 +662,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     // Serialize non-string outputs for UI compatibility
     // Frontend expects string output; structured outputs (JSON/tools) would render as [object Object]
     let serializedOutput: string;
-    if (output === null || output === undefined) {
+    if (output === undefined) {
       serializedOutput = '';
     } else if (typeof output === 'string') {
       serializedOutput = output;

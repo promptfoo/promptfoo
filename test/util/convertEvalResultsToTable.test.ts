@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ResultFailureReason } from '../../src/types/index';
 import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
-import { createCompletedPrompt } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createEvaluateSummaryV2,
+} from '../factories/eval';
 
 import type { EvaluateTable, ResultsFile } from '../../src/types/index';
 
@@ -126,46 +131,32 @@ describe('convertResultsToTable', () => {
     expect(result.body[0].outputs[0].text).toBe('Test error');
   });
 
-  it('should handle null output by falling back to error', () => {
+  it('preserves provider errors with assertions while displaying valid null data', () => {
+    const row = createEvaluateResult({
+      response: { output: null },
+      error: 'Provider returned null',
+      gradingResult: undefined,
+      success: false,
+      score: 0,
+      failureReason: ResultFailureReason.ERROR,
+      testCase: { assert: [{ type: 'is-json' }] },
+    });
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            vars: {},
-            prompt: {
-              raw: 'test prompt',
-              label: 'Test Prompt',
-            },
-            response: {
-              output: null,
-            },
-            error: 'Provider returned null',
-            provider: {
-              id: 'test-provider',
-              label: 'Test Provider',
-            },
-            success: false,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'provider_error',
-            score: 0,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
+      createdAt: new Date(0).toISOString(),
+      author: null,
+      config: {},
+      prompts: [createCompletedPrompt('test prompt')],
+      results: createEvaluateSummaryV2({ results: [row] }),
     };
 
-    const result = convertResultsToTable(resultsFile);
-    expect(result.body[0].outputs[0].text).toBe('Provider returned null');
+    expect(convertResultsToTable(resultsFile).body[0].outputs[0].text).toBe(
+      'Provider returned null',
+    );
 
-    resultsFile.results.results[0].error = undefined;
+    row.error = undefined;
+    row.success = true;
+    row.failureReason = ResultFailureReason.NONE;
     expect(convertResultsToTable(resultsFile).body[0].outputs[0].text).toBe('null');
   });
 
