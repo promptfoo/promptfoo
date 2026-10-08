@@ -180,7 +180,11 @@ describe('OpenAI Provider', () => {
 
       expect(result.embedding).toEqual([0.25, -0.5, 1]);
       expect(result.cost).toBeCloseTo(cached ? 0 : 10 * configuredEmbeddingCostPerToken, 12);
-      expect(result.tokenUsage?.total).toBe(10);
+      expect(result.tokenUsage).toEqual(
+        cached
+          ? { total: 10, cached: 10 }
+          : { total: 10, prompt: 10, completion: 0, numRequests: 1 },
+      );
     });
 
     it('should accept numeric embeddings when base64 encoding is requested', async () => {
@@ -238,6 +242,25 @@ describe('OpenAI Provider', () => {
       expect(result.error).toContain('Invalid base64 embedding in OpenAI embeddings API response');
       expect(result.embedding).toBeUndefined();
       expect(deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it('should not expose the raw response when rejecting a base64 embedding', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          data: [{ embedding: 'not base64' }],
+          metadata: { authorization: 'Bearer response-secret-canary' },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callEmbeddingApi('test text');
+
+      expect(result.embedding).toBeUndefined();
+      expect(result.error).toBe(
+        'API error: Error: Invalid base64 embedding in OpenAI embeddings API response',
+      );
     });
 
     it('should bill a qualified passthrough embedding model through a custom gateway', async () => {

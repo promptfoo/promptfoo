@@ -140,7 +140,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       logger.error(`Response parsing error: ${String(err)}`);
       await deleteFromCache?.();
       return {
-        error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `API error: ${String(err)}`,
       };
     }
   }
