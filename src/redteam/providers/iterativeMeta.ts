@@ -75,7 +75,7 @@ interface IterativeMetaMetadata {
   vulnerabilityAchieved: boolean;
   redteamFinalPrompt?: string;
   storedGraderResult?: GradingResult;
-  stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached';
+  stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' | 'Target error';
   redteamHistory: {
     prompt: string;
     promptAudio?: MediaData;
@@ -176,7 +176,7 @@ export async function runMetaAgentRedteam({
   let bestResponse = '';
   let finalIteration = numIterations;
   let storedGraderResult: GradingResult | undefined = undefined;
-  let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
+  let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' | 'Target error' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
   let failClosedError: string | undefined;
@@ -492,10 +492,12 @@ export async function runMetaAgentRedteam({
     });
 
     if (targetResponse.error) {
-      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Target error`, {
+      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Target error, stopping attack`, {
         error: targetResponse.error,
       });
-      continue;
+      stopReason = 'Target error';
+      finalIteration = i + 1;
+      break;
     }
 
     if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
