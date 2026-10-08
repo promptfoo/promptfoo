@@ -106,10 +106,11 @@ export function prepareComments(
     reviewBody = `${ALL_CLEAR_MESSAGE}\n\n${reviewBody}`;
   }
 
-  // Append minimum severity threshold if provided
-  if (minimumSeverity && reviewBody) {
-    const severityFormatted = formatSeverity(minimumSeverity as CodeScanSeverity, 'plain');
-    reviewBody += `\n\n<sub>Minimum severity threshold: ${severityFormatted} | To re-scan after changes, comment \`@promptfoo-scanner\`</sub>`;
+  if (reviewBody) {
+    const severityPrefix = minimumSeverity
+      ? `Minimum severity threshold: ${formatSeverity(minimumSeverity as CodeScanSeverity, 'plain')} | `
+      : '';
+    reviewBody += `\n\n<sub>${severityPrefix}To re-scan after changes, comment \`@promptfoo-scanner\`</sub>`;
     reviewBody += `\n<sub>[Learn more](https://www.promptfoo.dev/docs/code-scanning/)</sub>`;
   }
 

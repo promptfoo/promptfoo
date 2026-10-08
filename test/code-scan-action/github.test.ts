@@ -8,6 +8,7 @@ import {
   getGitHubContext,
   getPRFiles,
   partitionReviewCommentsByDiff,
+  StalePullRequestHeadError,
 } from '../../code-scan-action/src/github';
 
 const mocks = vi.hoisted(() => {
@@ -83,6 +84,9 @@ vi.mock('../../code-scan-action/node_modules/@actions/github/lib/github.js', () 
 const mockDiff = mocks.mockDiff;
 
 describe('GitHub API Client', () => {
+  it('labels stale-head errors for fail-closed handling', () => {
+    expect(new StalePullRequestHeadError('stale').name).toBe('StalePullRequestHeadError');
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.github.context.eventName = 'pull_request';
@@ -98,7 +102,9 @@ describe('GitHub API Client', () => {
         },
       },
     };
-    mocks.pulls.get.mockResolvedValue({ data: mockDiff });
+    mocks.pulls.get.mockImplementation(async (options) => ({
+      data: options?.mediaType ? mockDiff : { head: { sha: 'abc123' } },
+    }));
     mocks.github.getOctokit.mockReturnValue({
       rest: { pulls: mocks.pulls },
     });
@@ -193,13 +199,51 @@ describe('GitHub API Client', () => {
       sha: 'abc123',
     };
 
-    it('clamps comments to visible diff lines and routes unmapped files to general comments', async () => {
+    it('keeps a comment inline only when its exact line is in the diff', async () => {
+      // The mock diff covers src/auth.ts lines 40-60. Line 50 is inside that range.
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
+        {
+          file: 'src/auth.ts',
+          line: 50,
+          finding: 'Finding on a changed line',
+        },
+      ]);
+
+      // Location is preserved exactly - never clamped/moved to a different line.
+      expect(result.lineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          line: 50,
+        }),
+      ]);
+      expect(result.generalComments).toEqual([]);
+      expect(result.invalidLineComments).toEqual([]);
+    });
+
+    it('routes an out-of-diff line to a general comment preserving its original location (no clamping)', async () => {
+      // src/auth.ts is in the diff but line 500 is far outside the 40-60 hunk. The previous
+      // behavior clamped this to line 61 (nearest visible line), silently re-pointing the
+      // finding at unrelated code. It must now be preserved at line 500 as a general comment.
       const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
         {
           file: 'src/auth.ts',
           line: 500,
-          finding: 'Finding in a changed file',
+          finding: 'Finding on an unchanged line reported by full-repo tracing',
         },
+      ]);
+
+      expect(result.lineComments).toEqual([]);
+      expect(result.generalComments).toEqual([]);
+      expect(result.invalidLineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          line: 500,
+        }),
+      ]);
+    });
+
+    it('routes a comment on a file absent from the diff to a general comment', async () => {
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
         {
           file: 'src/outside-diff.ts',
           line: 12,
@@ -207,30 +251,92 @@ describe('GitHub API Client', () => {
         },
       ]);
 
-      expect(result.lineComments).toEqual([
-        expect.objectContaining({
-          file: 'src/auth.ts',
-          line: 60,
-        }),
-      ]);
-      expect(result.generalComments).toEqual([]);
+      expect(result.lineComments).toEqual([]);
       expect(result.invalidLineComments).toEqual([
         expect.objectContaining({
           file: 'src/outside-diff.ts',
           line: 12,
         }),
       ]);
-      expect(mocks.github.getOctokit).toHaveBeenCalledWith('fake-token');
-      expect(mocks.pulls.get).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        pull_number: 123,
-        mediaType: { format: 'diff' },
-      });
     });
 
+    it('keeps a multi-line comment inline only when both endpoints are in the diff', async () => {
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
+        {
+          file: 'src/auth.ts',
+          startLine: 45,
+          line: 50,
+          finding: 'Multi-line finding fully inside the hunk',
+        },
+        {
+          file: 'src/auth.ts',
+          startLine: 30,
+          line: 50,
+          finding: 'Multi-line finding whose start is outside the hunk',
+        },
+        {
+          file: 'src/auth.ts',
+          startLine: 45,
+          line: 72,
+          finding: 'Multi-line finding spanning two hunks',
+        },
+      ]);
+
+      expect(result.lineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          startLine: 45,
+          line: 50,
+        }),
+      ]);
+      expect(result.invalidLineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          startLine: 30,
+          line: 50,
+        }),
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          startLine: 45,
+          line: 72,
+        }),
+      ]);
+    });
+
+    it('routes comments with no line number to general comments', async () => {
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
+        {
+          file: 'src/auth.ts',
+          line: null,
+          finding: 'File-only finding',
+        },
+      ]);
+
+      expect(result.generalComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+        }),
+      ]);
+      expect(result.lineComments).toEqual([]);
+      expect(result.invalidLineComments).toEqual([]);
+    });
+
+    it('fails closed when the pull request head changed after scanning', async () => {
+      mocks.pulls.get.mockResolvedValue({ data: { head: { sha: 'new-head' } } });
+
+      await expect(
+        partitionReviewCommentsByDiff('fake-token', mockContext, [
+          { file: 'src/auth.ts', line: 50, finding: 'stale finding' },
+        ]),
+      ).rejects.toThrow('Pull request head changed after scan');
+    });
     it('falls back to general comments when fetching the diff fails', async () => {
-      mocks.pulls.get.mockRejectedValue(new Error('Unavailable'));
+      mocks.pulls.get.mockImplementation(async (options) => {
+        if (options?.mediaType) {
+          throw new Error('Unavailable');
+        }
+        return { data: { head: { sha: 'abc123' } } };
+      });
       const comment = { file: 'src/auth.ts', line: 43, finding: 'Finding' };
 
       const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [comment]);
@@ -257,16 +363,18 @@ diff --git "a/src/caf\303\251.ts" "b/src/caf\303\251.ts"
 -old
 +new
 `;
-      mocks.pulls.get.mockResolvedValue({ data: diff });
+      mocks.pulls.get.mockImplementation(async (options) => ({
+        data: options?.mediaType ? diff : { head: { sha: 'abc123' } },
+      }));
 
       const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
-        { file: 'src/tab\tfile.ts', line: 99, finding: 'Tab filename' },
-        { file: 'src/café.ts', line: 99, finding: 'UTF-8 filename' },
+        { file: 'src/tab\tfile.ts', line: 2, finding: 'Tab filename' },
+        { file: 'src/café.ts', line: 1, finding: 'UTF-8 filename' },
       ]);
 
       expect(result.lineComments).toEqual([
-        { file: 'src/tab\tfile.ts', line: 2, startLine: null, finding: 'Tab filename' },
-        { file: 'src/café.ts', line: 1, startLine: null, finding: 'UTF-8 filename' },
+        { file: 'src/tab\tfile.ts', line: 2, finding: 'Tab filename' },
+        { file: 'src/café.ts', line: 1, finding: 'UTF-8 filename' },
       ]);
       expect(result.invalidLineComments).toEqual([]);
       expect(result.generalComments).toEqual([]);

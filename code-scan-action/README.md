@@ -12,6 +12,8 @@ After scanning, the action posts findings with severity levels and suggested fix
 
 To also surface findings in GitHub Code Scanning, configure `sarif-output-path` and upload the generated file with `github/codeql-action/upload-sarif`.
 
+Without `config-path`, the action generates scan policy from `min-severity`, `diffs-only`, and guidance inputs. With `config-path`, that explicit file supplies scan policy and those individual inputs are ignored with a warning. Keep the selected file workflow-controlled (for example, use a detached worktree at the pull request's base SHA so relative files remain available). The workflow-controlled `api-host` input remains pinned to `https://api.promptfoo.app` unless explicitly overridden.
+
 ## Quick Start
 
 **Recommended:** Install the [Promptfoo Scanner GitHub App](https://github.com/apps/promptfoo-scanner) for the easiest setup:
@@ -48,8 +50,8 @@ Fork pull request scanning is disabled by default for `pull_request` workflows. 
 
 ## SARIF Output
 
-Grant `security-events: write` in the workflow job permissions, then upload the generated file.
-The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional:
+Grant `contents: read` and `security-events: write` in the workflow job permissions, plus `actions: read` for private repositories, then upload the generated file.
+The action sets `sarif-path` only when the scanner reports `skippedFiles: 0`. It withholds SARIF and fails when files were skipped or an older CLI omits the count. PR comment reporting still works. Keep the upload step conditional:
 
 ```yaml
 - name: Run Promptfoo Code Scan
@@ -59,7 +61,7 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
     sarif-output-path: promptfoo-code-scan.sarif
 
 - name: Upload SARIF to GitHub Code Scanning
-  if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
+  if: ${{ !cancelled() && steps.promptfoo-code-scan.outputs.sarif-path != '' }}
   uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
   with:
     sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
