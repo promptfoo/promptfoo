@@ -1528,6 +1528,15 @@ describe('OpenAI assertions', () => {
       expect(result.reason).toContain('schema is invalid');
     });
 
+    it('keeps an unreadable functions file as a failure under not-', async () => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { functions: 'file:///nonexistent/functions.json' as any },
+      });
+      const result = await run('not-is-valid-function-call', toolCall, provider);
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('/nonexistent/functions.json');
+    });
+
     it('keeps a provider without a validator as a failure under not-', async () => {
       await expect(
         run('not-is-valid-function-call', toolCall, createMockProvider()),

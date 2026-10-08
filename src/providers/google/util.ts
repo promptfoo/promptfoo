@@ -1825,7 +1825,12 @@ export function validateFunctionCall(
     );
   }
 
-  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  let interpolatedFunctions: Tool[];
+  try {
+    interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  } catch (err) {
+    throw new InvalidToolSchemaError((err as Error).message);
+  }
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema

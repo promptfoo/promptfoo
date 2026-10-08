@@ -1081,10 +1081,12 @@ export function validateFunctionCall(
   }
 
   // Parse function call and validate it against schema
-  const interpolatedFunctions = maybeLoadFromExternalFileWithVars(
-    functions,
-    vars,
-  ) as OpenAiFunction[];
+  let interpolatedFunctions: OpenAiFunction[];
+  try {
+    interpolatedFunctions = maybeLoadFromExternalFileWithVars(functions, vars) as OpenAiFunction[];
+  } catch (err) {
+    throw new InvalidToolSchemaError((err as Error).message);
+  }
   const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
