@@ -1,6 +1,6 @@
 import { getEnvString } from '../../envars';
 import { resolveProviderApiKey } from '../credentials';
-import { isGpt6AstraModel } from './gpt6';
+import { isGpt6Model } from './gpt6';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -9,11 +9,36 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { FetchOptions } from '../../util/fetch/types';
 import type { OpenAiSharedOptions } from './types';
 
 export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
 export const OPENAI_ORGANIZATION_HEADER = 'OpenAI-Organization';
 export const DEFAULT_OPENAI_ORIGINATOR = 'promptfoo';
+
+export function resolveOpenAiApiUrl(
+  config: Pick<OpenAiSharedOptions, 'apiHost' | 'apiBaseUrl'>,
+  env?: EnvOverrides,
+  defaultUrl = 'https://api.openai.com/v1',
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const envApiHost = env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
+  if (envApiHost) {
+    return `https://${envApiHost}/v1`;
+  }
+  return (
+    env?.OPENAI_API_BASE_URL ||
+    env?.OPENAI_BASE_URL ||
+    getEnvString('OPENAI_API_BASE_URL') ||
+    getEnvString('OPENAI_BASE_URL') ||
+    defaultUrl
+  );
+}
 
 /**
  * Whether `customHeaders` contains a case-insensitive override for `headerName`.
@@ -107,25 +132,8 @@ export class OpenAiGenericProvider implements ApiProvider {
     return 'https://api.openai.com/v1';
   }
 
-  /** Pass a prompt-merged config to resolve that call's endpoint. */
   getApiUrl(config: OpenAiSharedOptions = this.config): string {
-    if (config.apiHost) {
-      return `https://${config.apiHost}/v1`;
-    }
-    if (config.apiBaseUrl) {
-      return config.apiBaseUrl;
-    }
-    const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-    if (envApiHost) {
-      return `https://${envApiHost}/v1`;
-    }
-    return (
-      this.env?.OPENAI_API_BASE_URL ||
-      this.env?.OPENAI_BASE_URL ||
-      getEnvString('OPENAI_API_BASE_URL') ||
-      getEnvString('OPENAI_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return resolveOpenAiApiUrl(config, this.env, this.getApiUrlDefault());
   }
 
   /** Pass a prompt-merged config to resolve that call's credential. */
@@ -142,11 +150,25 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   /**
+   * Optional HTTP-attempt authentication, including retries, polling, and cancellation.
+   * Static-key providers use getApiKey(). Adapters opting in must separately define cache
+   * isolation via shouldBustCache(); authentication alone does not establish a cache identity.
+   */
+  protected getRequestAuthentication(): FetchOptions['getAuthHeaders'] {
+    return undefined;
+  }
+
+  /**
    * Model id used for OpenAI capability and billing lookups. Subclasses can strip a vendor
    * prefix while retaining the real request model in {@link modelName}.
    */
   protected getCapabilityModelName(): string {
     return this.modelName;
+  }
+
+  /** Normalize capability checks without rewriting the request model. */
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName;
   }
 
   protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {
@@ -165,7 +187,7 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o4') ||
       /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(model) ||
       this.isGPT5Model(model) ||
-      isGpt6AstraModel(model)
+      isGpt6Model(model)
     );
   }
 

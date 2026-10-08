@@ -75,7 +75,11 @@ interface IterativeMetaMetadata {
   vulnerabilityAchieved: boolean;
   redteamFinalPrompt?: string;
   storedGraderResult?: GradingResult;
-  stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached';
+  stopReason:
+    | 'Grader failed'
+    | 'Agent abandoned'
+    | 'Agent request failed'
+    | 'Max iterations reached';
   redteamHistory: {
     prompt: string;
     promptAudio?: MediaData;
@@ -176,10 +180,10 @@ export async function runMetaAgentRedteam({
   let bestResponse = '';
   let finalIteration = numIterations;
   let storedGraderResult: GradingResult | undefined = undefined;
-  let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
-    'Max iterations reached';
+  let stopReason: IterativeMetaMetadata['stopReason'] = 'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
   let failClosedError: string | undefined;
+  let agentRequestError: string | undefined;
 
   // Track the previous iteration's trace summary for attack generation
   let previousTraceSummary: string | undefined;
@@ -273,6 +277,18 @@ export async function runMetaAgentRedteam({
       logger.debug(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
         error: agentResp.error,
       });
+      const remoteError = agentResp.metadata?.remoteGenerationError;
+      if (
+        !agentResp.isRefusal &&
+        remoteError?.status === 400 &&
+        remoteError?.type === 'invalid_request_error' &&
+        remoteError?.code === 'invalid_json'
+      ) {
+        agentRequestError = agentResp.error;
+        stopReason = 'Agent request failed';
+        finalIteration = i + 1;
+        break;
+      }
       continue;
     }
 
@@ -604,7 +620,7 @@ export async function runMetaAgentRedteam({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
-          attackPrompt,
+          finalAttackPrompt,
           targetResponse.output,
           iterationTest,
           gradingProvider,
@@ -617,7 +633,12 @@ export async function runMetaAgentRedteam({
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
-        storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult);
+        storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult, {
+          prompt: finalAttackPrompt,
+          output: targetResponse.output,
+          pluginId: test.metadata?.pluginId,
+          assertion: assertToUse,
+        });
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,
@@ -666,14 +687,11 @@ export async function runMetaAgentRedteam({
     }
   }
 
+  const error = agentRequestError || failClosedError || lastResponse?.error;
   return {
     output: bestResponse || lastResponse?.output || '',
     prompt: bestPrompt,
-    ...(failClosedError
-      ? { error: failClosedError }
-      : lastResponse?.error
-        ? { error: lastResponse.error }
-        : {}),
+    ...(error ? { error } : {}),
     metadata: {
       finalIteration,
       vulnerabilityAchieved,
@@ -758,6 +776,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<{
     output: string;
+    error?: string;
     metadata: IterativeMetaMetadata;
     tokenUsage: TokenUsage;
   }> {
