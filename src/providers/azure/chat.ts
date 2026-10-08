@@ -527,6 +527,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
     let flaggedInput = false;
     let flaggedOutput = false;
+    let isRefusal = false;
     let output = '';
     let logProbs: any;
     let finishReason: string;
@@ -562,7 +563,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         finishReason = normalizeFinishReason(choice?.finish_reason) as string;
 
         // Handle structured output
-        output = message?.content;
+        isRefusal = Boolean(message?.refusal);
+        output = message?.refusal || message?.content;
 
         // Check for errors indicating that the content filters did not run on the completion.
         // Optional-chain `choice`: in dataSources mode `find(...)` can return undefined (no
@@ -602,11 +604,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             );
           } else {
             // No callbacks configured, return raw tool/function calls
-            output = toolCalls ?? functionCall;
+            // A confirmed content-filter block is intentionally empty, not a
+            // missing provider response. Preserve any returned tool calls.
+            output = toolCalls ?? functionCall ?? (flaggedOutput ? '' : undefined);
           }
         } else if (
-          config.response_format?.type === 'json_schema' ||
-          config.response_format?.type === 'json_object'
+          !isRefusal &&
+          (config.response_format?.type === 'json_schema' ||
+            config.response_format?.type === 'json_object')
         ) {
           try {
             output = JSON.parse(output);
@@ -647,6 +652,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         latencyMs,
         logProbs,
         finishReason,
+        ...(isRefusal ? { isRefusal: true } : {}),
         cost: calculateAzureCost(
           config.modelName ?? this.deploymentName,
           config,
@@ -661,7 +667,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           data.usage?.completion_tokens_details?.image_tokens,
         ),
         guardrails: {
-          flagged: flaggedInput || flaggedOutput,
+          flagged: flaggedInput || flaggedOutput || isRefusal,
           flaggedInput,
           flaggedOutput,
         },

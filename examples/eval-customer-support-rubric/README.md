@@ -26,27 +26,41 @@ file carries the gate:
   computed and reported per metric, but one weak dimension does not fail the
   ticket.
 
-Rows 2 and 5 of `tests.csv` are deliberately flawed replies (an invented
-cancellation fee; a promised forever-discount). Row 2 is high severity and fails
-the run; row 5 is medium severity and only shows up in the metric breakdown.
-That contrast is the point of the example.
+The second and fifth test cases are deliberately flawed replies (an invented
+cancellation fee; a promised forever-discount). A failed dimension fails the
+high-severity case, while the medium-severity case records the failure in its
+metric breakdown. Actual scores depend on the grader; other replies can also
+receive low scores for unsupported claims or missing details.
 
 ## Running it
 
-To try it in a fresh directory, run `npx promptfoo@latest init --example eval-customer-support-rubric`.
+Initialize the example and enter its directory:
+
+```sh
+npx promptfoo@latest init --example eval-customer-support-rubric
+cd eval-customer-support-rubric
+```
 
 The `echo` provider stands in for the bot: it returns the canned `reply` column
 of each CSV row, so the only API key you need is the one that grades the
-rubrics (`openai:gpt-4.1-mini` in `defaultTest.options.provider`).
+rubrics (`openai:gpt-6-luna` in `defaultTest.options.provider`). Set
+`OPENAI_API_KEY` in an untracked `.env` file, then run:
 
 ```sh
-OPENAI_API_KEY=your-key npx promptfoo@latest eval -f examples/eval-customer-support-rubric/promptfooconfig.yaml
+npx promptfoo@latest eval -c promptfooconfig.yaml --env-file .env --no-cache -o results.json
 ```
 
 To reuse the harness against a real assistant, replace the `echo` provider with
-your bot (HTTP endpoint, OpenAI assistant, ...) and drop the `reply` column.
-The rubrics read `{{customer_message}}`, `{{context}}` and `{{language}}` from
-the CSV, so the grading side needs no changes.
+your bot and replace `prompt.txt` with an input prompt, for example:
+
+```text title="prompt.txt"
+Account context: {{context}}
+Customer message: {{customer_message}}
+Reply in {{language}}. Use only the supplied account facts and do not claim an action was completed unless the context confirms it.
+```
+
+Then remove the canned `reply` column from the CSV. The rubrics already use
+`customer_message`, `context`, and `language`, so the grading side needs no changes.
 
 Based on an evaluation study of Spanish telecoms and energy support chatbots:
 https://github.com/kakkarprerna/support-bot-eval
