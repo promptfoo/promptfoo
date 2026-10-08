@@ -10,7 +10,7 @@ export function toolCallVerdict(
   reason: string,
   label: string,
 ): GradingResult {
-  const pass = valid !== inverse;
+  const pass = inverse ? !valid : valid;
   return {
     pass,
     score: pass ? 1 : 0,
