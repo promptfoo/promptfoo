@@ -3,6 +3,7 @@ import { createCipheriv } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OTLPTracingExporter } from '../../../src/providers/openai/agents-tracing';
 import { decodeExportTraceServiceRequest } from '../../../src/tracing/protobuf';
+import type { SpanData } from '@openai/agents';
 
 const mockFetchWithProxy = vi.hoisted(() => vi.fn());
 
@@ -903,6 +904,58 @@ describe('OTLPTracingExporter', () => {
       expect(JSON.stringify(payload).length).toBeLessThan(10_000);
     },
   );
+
+  it('exports task and turn hierarchy without treating them as model calls', async () => {
+    const usage = {
+      input_tokens: 12,
+      output_tokens: 8,
+      cached_input_tokens: 3,
+      cache_write_input_tokens: 0,
+    };
+    const spanData: SpanData[] = [
+      { type: 'task', name: 'Support task', usage: { ...usage, requests: 1, total_tokens: 20 } },
+      { type: 'agent', name: 'Support Agent' },
+      { type: 'turn', turn: 1, agent_name: 'Support Agent', usage },
+      { type: 'response', _response: { model: 'gpt-4.1' } },
+      { type: 'function', name: 'lookup_order', input: '{}', output: 'found' },
+    ];
+    const spanIds = spanData.map((_, index) => String(index + 1).padStart(16, '0'));
+    const parentIndices = [null, 0, 1, 2, 2];
+    const spans = spanData.map((data, index) => ({
+      type: 'trace.span',
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      spanId: `span_${spanIds[index]}`,
+      parentId: parentIndices[index] === null ? null : `span_${spanIds[parentIndices[index]!]}`,
+      spanData: data,
+      traceMetadata: { 'promptfoo.otlp_format': 'json' },
+      error: null,
+    }));
+    await new OTLPTracingExporter().export(spans as any);
+
+    const exported = JSON.parse(mockFetchWithProxy.mock.calls[0][1].body).resourceSpans[0]
+      .scopeSpans[0].spans;
+    expect(exported.map((span: any) => span.name)).toEqual([
+      'agent.task',
+      'invoke_agent Support Agent',
+      'agent.turn',
+      'chat gpt-4.1',
+      'execute_tool lookup_order',
+    ]);
+    expect(exported.map((span: any) => span.parentSpanId)).toEqual([
+      undefined,
+      ...[0, 1, 2, 2].map((index) => Buffer.from(spanIds[index], 'hex').toString('base64')),
+    ]);
+    expect(exported.map((span: any) => span.kind)).toEqual([1, 1, 1, 3, 1]);
+    expect(getAttributes(exported[0])).toMatchObject({
+      'agent.name': 'Support task',
+      'agent.usage': JSON.stringify({ ...usage, requests: 1, total_tokens: 20 }),
+    });
+    expect(getAttributes(exported[2])).toMatchObject({
+      'agent.turn': 1,
+      'agent.agent_name': 'Support Agent',
+      'agent.usage': JSON.stringify(usage),
+    });
+  });
 
   it('keeps provider token counts standard and namespaces Promptfoo totals', () => {
     const exporter = new OTLPTracingExporter() as any;

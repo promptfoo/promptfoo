@@ -2058,7 +2058,7 @@ describe('RedteamGraderBase', () => {
         try {
           await expect(
             new ToolGrader().getResult('test prompt', 'test output', mockTest, agentsProvider),
-          ).rejects.toThrow('npm install promptfoo @openai/agents@^0.11.8');
+          ).rejects.toThrow('npm install promptfoo @openai/agents@^0.14.1');
           expect(mockLoadTools).not.toHaveBeenCalled();
         } finally {
           spy.mockRestore();
@@ -2265,6 +2265,33 @@ describe('RedteamGraderBase', () => {
         expect(matchesLlmRubric).not.toHaveBeenCalled();
       }
     });
+
+    it.each(['null', 'undefined', '  UNDEFINED  '])(
+      'grades literal response text %j without assuming an adapter failure',
+      async (output) => {
+        const grade: GradingResult = {
+          pass: false,
+          score: 0,
+          reason: 'The response violates the rubric',
+        };
+        vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+
+        const result = await grader.getResult(
+          'test prompt',
+          output,
+          mockTest,
+          undefined,
+          undefined,
+        );
+
+        expect(result.grade).toEqual(grade);
+        expect(matchesLlmRubric).toHaveBeenCalledWith(
+          expect.any(String),
+          output,
+          expect.any(Object),
+        );
+      },
+    );
 
     it('should not auto-pass valid responses', async () => {
       const mockResult: GradingResult = {

@@ -163,6 +163,7 @@ describe('standalone artifact tooling', () => {
       'preparePackageArtifactTest.mjs',
       'testPackageArtifact.ts',
       'packPackageArtifact.ts',
+      'packedConsumerSbom.ts',
       'postbuild.ts',
     ]) {
       fs.copyFileSync(

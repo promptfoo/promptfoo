@@ -20,14 +20,18 @@ Basic configuration example:
 providers:
   - id: deepseek:deepseek-flash
     config:
-      temperature: 0.7
       max_tokens: 4000
       passthrough:
         thinking: { type: disabled }
 
   - id: deepseek:deepseek-v4-pro
     config:
-      max_tokens: 8000
+      max_tokens: 8192
+      showThinking: true
+      passthrough:
+        thinking:
+          type: enabled
+        reasoning_effort: high
 ```
 
 ### Configuration Options
@@ -67,7 +71,8 @@ Sampling support differs by mode. `temperature` has no effect in thinking mode. 
 
 Compare DeepSeek with OpenAI on a reasoning task:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: deepseek:deepseek-v4-pro
     config:
@@ -94,6 +99,9 @@ providers:
   - id: deepseek:deepseek-v4-pro
     config:
       showThinking: false # Hide reasoning content from output
+      passthrough:
+        thinking:
+          type: enabled
 ```
 
 With `showThinking: true` (the default), the output includes reasoning when DeepSeek returns it:
