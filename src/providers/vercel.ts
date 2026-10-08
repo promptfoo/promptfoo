@@ -97,7 +97,9 @@ function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | un
 
 async function loadAiSdk() {
   try {
-    const { default: metadata } = await import('ai/package.json', { with: { type: 'json' } });
+    const { default: metadata } = await import(/* webpackIgnore: true */ 'ai/package.json', {
+      with: { type: 'json' },
+    });
     if (!semverSatisfies(metadata.version, '^6.0.264')) {
       throw new Error(
         `The installed ai package (${metadata.version}) is incompatible with the Vercel provider. ` +
@@ -105,7 +107,7 @@ async function loadAiSdk() {
           'For a global installation, use npm install -g promptfoo "ai@^6.0.264".',
       );
     }
-    return await import('ai');
+    return await import(/* webpackIgnore: true */ 'ai');
   } catch (error) {
     if (isMissingPackageImportError(error, 'ai')) {
       throw new Error(
