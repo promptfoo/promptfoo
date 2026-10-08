@@ -259,6 +259,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     const redteamHistory: Array<{ prompt: string; output: string }> = [];
 
     let lastOutput = '';
+    let targetError: string | undefined;
     let stopReason: IndirectWebPwnMetadata['stopReason'] = 'Max fetch attempts reached';
     let webPageUuid: string | undefined;
     let webPageUrl: string | undefined;
@@ -314,6 +315,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         }
 
         if (targetResponse.error) {
+          targetError = targetResponse.error;
           logger.error('[IndirectWebPwn] Target error', { error: targetResponse.error });
           stopReason = 'Error';
           break;
@@ -378,6 +380,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
 
     return {
       output: lastOutput,
+      ...(targetError ? { error: targetError } : {}),
       metadata: {
         redteamFinalPrompt: messages[messages.length - 2]?.content || '',
         messages: messages as unknown as Record<string, unknown>[],

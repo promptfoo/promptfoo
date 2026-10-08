@@ -440,7 +440,7 @@ export function discoverCommand(
       // If the target flag is provided, load it from Cloud:
       else if (args.target) {
         // Let the internal error handling bubble up:
-        const providerOptions = await getProviderFromCloud(args.target);
+        const providerOptions = await getProviderFromCloud(args.target, {});
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
         cloudTargetId = args.target;
       }

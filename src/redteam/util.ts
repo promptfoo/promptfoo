@@ -282,13 +282,7 @@ const REFUSAL_SUBSTRING_PATTERNS = [
 ].map((s) => new RegExp(`\\b${escapeRegExp(s.toLowerCase())}\\b`));
 
 export function isEmptyResponse(response: string): boolean {
-  return (
-    !response ||
-    response.trim() === '' ||
-    response.trim() === '{}' ||
-    response.trim().toLowerCase() === 'undefined' ||
-    response.trim().toLowerCase() === 'null'
-  );
+  return !response || response.trim() === '' || response.trim() === '{}';
 }
 
 export function isBasicRefusal(response: string): boolean {

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { CloudSelectionChangedError, cloudConfig } from '../../src/globalConfig/cloud';
+import * as globalConfigModule from '../../src/globalConfig/globalConfig';
+import logger, { winstonLogger } from '../../src/logger';
 import * as cloudModule from '../../src/util/cloud';
 import {
   ConfigPermissionError,
@@ -11,6 +13,7 @@ import {
   getProviderFromCloud,
   makeRequest,
   validateLinkedTargetId,
+  withCloudProviderResolver,
 } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
@@ -59,6 +62,83 @@ describe('cloud utils', () => {
   });
 
   describe('makeRequest', () => {
+    it('should omit credential-bearing error and cause details from failure logs', async () => {
+      mockCloudConfig.getApiHost.mockReturnValue('https://test-user:test-password@example.com');
+      const cause = new Error('Authorization: Bearer test-cause-credential');
+      const error = new Error(
+        'request to https://test-user:test-password@example.com failed: api_key=test-error-credential',
+        { cause },
+      );
+      mockFetchWithProxy.mockRejectedValue(error);
+      const logError = vi.spyOn(winstonLogger, 'error').mockImplementation(() => winstonLogger);
+
+      try {
+        await expect(makeRequest('test/path?api_key=test-query-credential', 'GET')).rejects.toBe(
+          error,
+        );
+        expect(error.cause).toBe(cause);
+        const output = JSON.stringify(logError.mock.calls);
+        expect(output).toContain('[Cloud] Failed to make request');
+        expect(output).toContain('example.com/api/v1/test/path');
+        expect(output).not.toContain('test-user');
+        expect(output).not.toContain('test-password');
+        expect(output).not.toContain('test-query-credential');
+        expect(output).not.toContain('test-error-credential');
+        expect(output).not.toContain('test-cause-credential');
+      } finally {
+        logError.mockRestore();
+      }
+    });
+
+    it('should return the original response without consuming it', async () => {
+      const response = new Response('cloud response');
+      mockFetchWithProxy.mockResolvedValue(response);
+
+      expect(await makeRequest('test/path', 'GET')).toBe(response);
+      expect(response.bodyUsed).toBe(false);
+    });
+
+    it.each([true, false])('should log and rethrow fetch failures (async: %s)', async (async) => {
+      const cause = new Error('connection refused');
+      const error = new Error('fetch failed', { cause });
+      const logError = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      if (async) {
+        mockFetchWithProxy.mockRejectedValue(error);
+      } else {
+        mockFetchWithProxy.mockImplementation(() => {
+          throw error;
+        });
+      }
+
+      try {
+        await expect(Promise.resolve().then(() => makeRequest('test/path', 'GET'))).rejects.toBe(
+          error,
+        );
+        expect(logError).toHaveBeenCalledWith('[Cloud] Failed to make request', {
+          url: 'https://api.example.com/api/v1/test/path',
+        });
+        expect(error.cause).toBe(cause);
+        expect(logError).toHaveBeenCalledTimes(1);
+      } finally {
+        logError.mockRestore();
+      }
+    });
+
+    it.each([null, undefined, 'network unavailable'])(
+      'should preserve non-Error promise rejections: %s',
+      async (error) => {
+        const logError = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+        mockFetchWithProxy.mockRejectedValue(error);
+
+        try {
+          await expect(makeRequest('test/path', 'GET')).rejects.toBe(error);
+          expect(logError).toHaveBeenCalledTimes(1);
+        } finally {
+          logError.mockRestore();
+        }
+      },
+    );
+
     it('should make request with correct URL and headers', async () => {
       const path = 'test/path';
       const method = 'POST';
@@ -177,17 +257,26 @@ describe('cloud utils', () => {
     });
 
     it('should handle API host with trailing slash', async () => {
-      mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
-
-      const path = 'test/path';
-      const method = 'GET';
-
-      await makeRequest(path, method);
-
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/test/path',
-        expect.any(Object),
+      const { CloudConfig } = await vi.importActual<typeof import('../../src/globalConfig/cloud')>(
+        '../../src/globalConfig/cloud',
       );
+      const readConfig = vi.spyOn(globalConfigModule, 'readGlobalConfig').mockReturnValue({
+        id: 'test-id',
+        cloud: { apiHost: 'https://api.example.com/' },
+      });
+      try {
+        const config = new CloudConfig();
+        mockCloudConfig.getApiHost.mockImplementation(() => config.getApiHost());
+
+        await makeRequest('test/path', 'GET');
+
+        expect(mockFetchWithProxy).toHaveBeenCalledWith(
+          'https://api.example.com/api/v1/test/path',
+          expect.any(Object),
+        );
+      } finally {
+        readConfig.mockRestore();
+      }
     });
 
     it('should handle path with leading slash', async () => {
@@ -304,6 +393,22 @@ describe('cloud utils', () => {
       );
     });
 
+    it('keeps the existing HTTP environment normalization', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          config: {
+            id: 'echo',
+            env: { OPENAI_API_BASE_URL: 'built-in', CUSTOM_TARGET_URL: 'custom' },
+          },
+        }),
+        ok: true,
+      } as Response);
+
+      const provider = await getProviderFromCloud('saved');
+
+      expect(provider.env).toEqual({ OPENAI_API_BASE_URL: 'built-in' });
+    });
+
     it('should throw error when provider fetch fails', async () => {
       mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
 
@@ -331,6 +436,70 @@ describe('cloud utils', () => {
       await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
         'Failed to fetch provider from cloud: test-provider.',
       );
+    });
+  });
+
+  describe('withCloudProviderResolver', () => {
+    it('retains custom environment keys from typed prepared options', async () => {
+      const env = Object.freeze({ CUSTOM_TARGET_URL: 'saved', OPENAI_API_BASE_URL: 'built-in' });
+      const provider = await withCloudProviderResolver(
+        () => ({ id: 'echo', env }),
+        () => getProviderFromCloud('saved'),
+      );
+
+      expect(provider.env).toEqual(env);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('still validates built-in environment values from the resolver', async () => {
+      const resolver = vi.fn().mockResolvedValue({ id: 'echo', env: { OPENAI_API_KEY: 42 } });
+
+      await expect(
+        withCloudProviderResolver(resolver, () => getProviderFromCloud('saved')),
+      ).rejects.toThrow();
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('preserves the callback result and supplies normalized saved options without HTTP', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+      const resolver = vi.fn().mockResolvedValue({ id: 'echo', config: { prefix: 'saved' } });
+
+      expect(withCloudProviderResolver(resolver, () => 7)).toBe(7);
+      const result = await withCloudProviderResolver(resolver, () => getProviderFromCloud('saved'));
+
+      expect(result).toEqual({ id: 'echo', config: { prefix: 'saved' } });
+      expect(resolver).toHaveBeenCalledWith('saved', undefined);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('restores the enclosing resolver after a nested operation succeeds or fails', async () => {
+      const outer = () => ({ id: 'echo', label: 'outer' });
+      const inner = () => ({ id: 'echo', label: 'inner' });
+      await withCloudProviderResolver(outer, async () => {
+        const nested = await withCloudProviderResolver(inner, () => getProviderFromCloud('saved'));
+        expect(nested.label).toBe('inner');
+        await expect(
+          withCloudProviderResolver(inner, async () => {
+            await getProviderFromCloud('saved');
+            throw new Error('operation failed');
+          }),
+        ).rejects.toThrow('operation failed');
+        expect((await getProviderFromCloud('saved')).label).toBe('outer');
+      });
+
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+      await expect(getProviderFromCloud('saved')).rejects.toThrow('Cloud config is not enabled');
+    });
+
+    it('propagates resolver failures without falling back to HTTP', async () => {
+      const error = new Error('prepared provider unavailable');
+      await expect(
+        withCloudProviderResolver(
+          () => Promise.reject(error),
+          () => getProviderFromCloud('saved'),
+        ),
+      ).rejects.toBe(error);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
   });
 
@@ -1091,7 +1260,7 @@ describe('cloud utils', () => {
       expect(result.size).toBe(0);
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/custom-policies/?&teamId=team-empty',
+        'https://api.example.com/api/v1/custom-policies/?teamId=team-empty',
         {
           method: 'GET',
           skipCloudAuthInjection: true,
@@ -1303,7 +1472,7 @@ describe('cloud utils', () => {
     });
 
     it('should handle team IDs with special characters', async () => {
-      const specialTeamId = 'team-123-@#$%';
+      const specialTeamId = 'team-123-@#$%&=';
 
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: true,
@@ -1313,7 +1482,7 @@ describe('cloud utils', () => {
       await getPoliciesFromCloud(['policy-1'], specialTeamId);
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        `https://api.example.com/api/v1/custom-policies/?id=policy-1&teamId=${specialTeamId}`,
+        'https://api.example.com/api/v1/custom-policies/?id=policy-1&teamId=team-123-%40%23%24%25%26%3D',
         {
           method: 'GET',
           skipCloudAuthInjection: true,
@@ -1321,6 +1490,12 @@ describe('cloud utils', () => {
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
+
+      const requestUrl = new URL(String(mockFetchWithProxy.mock.calls[0][0]));
+      expect(requestUrl.searchParams.getAll('teamId')).toEqual([specialTeamId]);
+      expect(requestUrl.searchParams.getAll('id')).toEqual(['policy-1']);
+      expect([...requestUrl.searchParams.keys()]).toEqual(['id', 'teamId']);
+      expect(requestUrl.hash).toBe('');
     });
 
     it('should handle HTTP error with detailed message', async () => {
@@ -2086,6 +2261,69 @@ describe('cloud utils', () => {
       await expect(
         checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
       ).rejects.toThrow('Permission denied: config unknown: Unknown error');
+    });
+
+    it.each([
+      { body: null },
+      { body: false },
+      { body: 0 },
+      { body: 'Forbidden' },
+      { body: [] },
+      { body: [{ message: 'Forbidden' }] },
+      { body: { errors: [null] } },
+      { body: { errors: [false] } },
+      { body: { errors: [[]] } },
+      { body: { errors: [{}] } },
+      { body: { errors: [{ type: 'permission', id: 'denied', message: null }] } },
+    ])('rejects 403 responses with malformed error data: $body', async ({ body }) => {
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json(body, { status: 403 }));
+
+      const result = checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam);
+      await expect(result).rejects.toBeInstanceOf(ConfigPermissionError);
+      await expect(result).rejects.toThrow('Permission denied: config unknown: Unknown error');
+    });
+
+    it.each([
+      { body: {} },
+      { body: { errors: [] } },
+      { body: { errors: null } },
+      { body: { error: { message: 'Forbidden' } } },
+    ])('uses a fallback message for missing error details: $body', async ({ body }) => {
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json(body, { status: 403 }));
+
+      const result = checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam);
+      await expect(result).rejects.toBeInstanceOf(ConfigPermissionError);
+      await expect(result).rejects.toThrow(
+        'Permission denied: config unknown: Permission check failed',
+      );
+    });
+
+    it('preserves legacy and structured error messages in a 403 response', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce(
+        Response.json(
+          {
+            errors: [
+              'Legacy error',
+              { type: 'permission', id: 'access_denied', message: 'Access denied' },
+            ],
+          },
+          { status: 403 },
+        ),
+      );
+
+      const result = checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam);
+      await expect(result).rejects.toBeInstanceOf(ConfigPermissionError);
+      await expect(result).rejects.toThrow(
+        'Permission denied: config unknown: Legacy error, permission access_denied: Access denied',
+      );
+    });
+
+    it('continues for a non-403 response with malformed error data', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json(null, { status: 500 }));
+
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).resolves.toBeUndefined();
     });
 
     it('should log warning and continue for non-403 errors', async () => {

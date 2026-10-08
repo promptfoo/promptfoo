@@ -209,8 +209,21 @@ function stripPromptPaths<T extends Partial<Prompt>>(prompt: T): T {
   return projected;
 }
 
+function stripProviderOrigin(
+  metadata: NonNullable<TestCase['metadata']>,
+): NonNullable<TestCase['metadata']> {
+  if (!metadata.__promptfoo) {
+    return metadata;
+  }
+  const { providerBasePath: _providerBasePath, ...internalMetadata } = metadata.__promptfoo;
+  return { ...metadata, __promptfoo: internalMetadata };
+}
+
 // Mutate only the sanitized share copy; local replay paths stay intact.
 function stripTestPaths(test: TestCase): void {
+  if (test.metadata) {
+    test.metadata = stripProviderOrigin(test.metadata);
+  }
   if (test.vars) {
     test.vars = stripFilePaths(test.vars);
   }
@@ -531,6 +544,9 @@ async function prepareChunkForShare(
   const sharedResults = chunk.map((row) => {
     const result = sanitizeResultForJsonlArtifact(row, stripFlags);
     result.provider = stripProviderPaths(result.provider);
+    if (result.metadata) {
+      result.metadata = stripProviderOrigin(result.metadata);
+    }
     if (result.testCase) {
       stripTestPaths(result.testCase);
     }
