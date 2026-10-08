@@ -3,17 +3,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { LRUCache } from 'lru-cache';
 import { z } from 'zod';
 import { fetchWithCache } from '../../cache';
+import { cloudConfig } from '../../globalConfig/cloud';
 import { extractProviderResponseAttributes, withGenAISpan } from '../../tracing/genaiTracer';
 import {
   formatRateLimitErrorMessage,
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
-import {
-  getCloudAuthHeaderName,
-  getCloudBearerToken,
-  isPromptfooCloudApiHost,
-} from '../../util/fetch/monkeyPatchFetch';
+import { isPromptfooCloudApiHost } from '../../util/fetch/monkeyPatchFetch';
 import { renderVarsInObject } from '../../util/render';
 import {
   isCredentialHeader,
@@ -590,10 +587,11 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     );
     const apiUrl = this.getApiUrl(config);
     // Snapshot implicit Cloud auth before async transport work, cache identity, and redaction.
-    const cloudAuthHeaderName = isPromptfooCloudApiHost(apiUrl)
-      ? getCloudAuthHeaderName()
+    const cloudRequest = cloudConfig.getRequestConfig();
+    const cloudAuthHeaderName = isPromptfooCloudApiHost(apiUrl, cloudRequest.apiHost)
+      ? cloudRequest.authHeaderName
       : undefined;
-    const cloudAuth = getCloudBearerToken(apiUrl);
+    const cloudAuth = cloudAuthHeaderName ? cloudRequest.headers?.[cloudAuthHeaderName] : undefined;
     if (cloudAuth && cloudAuthHeaderName && !hasHeaderOverride(headers, cloudAuthHeaderName)) {
       const url = new URL(apiUrl);
       // fetchWithProxy derives URL Basic auth before Cloud injection; keep that precedence.

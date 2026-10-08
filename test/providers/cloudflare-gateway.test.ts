@@ -42,6 +42,10 @@ vi.mock('../../src/esm', async () => {
   };
 });
 
+vi.mock('../../src/globalConfig/globalConfig', () => ({
+  readGlobalConfig: () => ({ id: 'test-config' }),
+}));
+
 vi.mock('fs', async (importOriginal) => {
   return {
     ...(await importOriginal()),

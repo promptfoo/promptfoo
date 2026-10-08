@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from '../../src/blobs/remoteUpload';
 import { getEnvBool } from '../../src/envars';
-import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 
@@ -13,14 +12,9 @@ vi.mock('../../src/envars', async (importOriginal) => {
   };
 });
 
-vi.mock('../../src/globalConfig/accounts', () => ({
-  isLoggedIntoCloud: vi.fn(),
-}));
-
 vi.mock('../../src/globalConfig/cloud', () => ({
   cloudConfig: {
-    getApiHost: vi.fn(),
-    getAuthHeaders: vi.fn(),
+    getRequestConfig: vi.fn(),
   },
 }));
 
@@ -32,10 +26,13 @@ describe('remote blob upload', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getEnvBool).mockReturnValue(false);
-    vi.mocked(isLoggedIntoCloud).mockReturnValue(true);
-    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-    vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({
-      Authorization: 'Bearer test-api-key',
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      apiHost: 'https://api.example.com',
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
+      authHeaderName: 'Authorization',
+      headers: { Authorization: 'Bearer test-api-key' },
+      teamId: undefined,
     });
     vi.mocked(fetchWithProxy).mockResolvedValue({
       ok: true,
@@ -56,8 +53,7 @@ describe('remote blob upload', () => {
 
   it('attempts remote upload when sharing is enabled and Cloud auth is configured', () => {
     expect(shouldAttemptRemoteBlobUpload()).toBe(true);
-    expect(cloudConfig.getApiHost).toHaveBeenCalledTimes(1);
-    expect(cloudConfig.getAuthHeaders).toHaveBeenCalledTimes(1);
+    expect(cloudConfig.getRequestConfig).toHaveBeenCalledTimes(1);
   });
 
   it('does not attempt remote upload when PROMPTFOO_DISABLE_SHARING is set', async () => {
@@ -72,13 +68,19 @@ describe('remote blob upload', () => {
     });
 
     expect(result).toBeNull();
-    expect(cloudConfig.getApiHost).not.toHaveBeenCalled();
-    expect(cloudConfig.getAuthHeaders).not.toHaveBeenCalled();
+    expect(cloudConfig.getRequestConfig).not.toHaveBeenCalled();
     expect(fetchWithProxy).not.toHaveBeenCalled();
   });
 
   it('does not attempt remote upload when Cloud auth is not configured', async () => {
-    vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      apiHost: 'https://api.example.com',
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
+      authHeaderName: 'Authorization',
+      headers: undefined,
+      teamId: undefined,
+    });
 
     expect(shouldAttemptRemoteBlobUpload()).toBe(false);
 
@@ -103,19 +105,24 @@ describe('remote blob upload', () => {
       'https://api.example.com/api/blobs',
       expect.objectContaining({
         method: 'POST',
+        skipCloudAuthInjection: true,
         headers: expect.objectContaining({
           Authorization: 'Bearer test-api-key',
           'Content-Type': 'application/json',
         }),
       }),
     );
-    expect(cloudConfig.getApiHost).toHaveBeenCalledTimes(1);
-    expect(cloudConfig.getAuthHeaders).toHaveBeenCalledTimes(1);
+    expect(cloudConfig.getRequestConfig).toHaveBeenCalledTimes(1);
   });
 
   it('posts blobs under a custom configured auth header name', async () => {
-    vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({
-      'X-Promptfoo-Api-Key': 'Bearer test-api-key',
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValueOnce({
+      apiHost: 'https://custom.example.com',
+      appUrl: 'https://custom.example.com',
+      sessionId: 'custom-session',
+      authHeaderName: 'X-Promptfoo-Api-Key',
+      headers: { 'X-Promptfoo-Api-Key': 'Bearer test-api-key' },
+      teamId: undefined,
     });
 
     await uploadBlobRemote(Buffer.from('image-bytes'), 'image/png', {
@@ -125,8 +132,9 @@ describe('remote blob upload', () => {
     });
 
     expect(fetchWithProxy).toHaveBeenCalledWith(
-      'https://api.example.com/api/blobs',
+      'https://custom.example.com/api/blobs',
       expect.objectContaining({
+        skipCloudAuthInjection: true,
         headers: expect.objectContaining({
           'X-Promptfoo-Api-Key': 'Bearer test-api-key',
         }),

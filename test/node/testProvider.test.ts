@@ -55,6 +55,14 @@ vi.mock('../../src/evaluator', () => ({
 
 vi.mock('../../src/globalConfig/cloud', () => ({
   cloudConfig: {
+    getRequestConfig: vi.fn(() => ({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
+      apiHost: 'https://api.example.com',
+      authHeaderName: 'Authorization',
+      headers: { Authorization: 'Bearer test-api-key' },
+      teamId: undefined,
+    })),
     getApiHost: vi.fn().mockReturnValue('https://api.example.com'),
     getAuthHeaders: vi.fn().mockReturnValue({ Authorization: 'Bearer test-api-key' }),
   },
@@ -99,9 +107,20 @@ vi.mock('../../src/validators/util', () => ({
   validateSessionConfig: vi.fn(),
 }));
 
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import { testProviderConnectivity, testProviderSession } from '../../src/node/testProvider';
 
 beforeEach(() => {
+  vi.mocked(cloudConfig.getRequestConfig)
+    .mockReset()
+    .mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
+      apiHost: 'https://api.example.com',
+      authHeaderName: 'Authorization',
+      headers: { Authorization: 'Bearer test-api-key' },
+      teamId: undefined,
+    });
   // Reset call history but keep implementations from vi.hoisted
   mockEvaluate.mockReset();
   mockNeverGenerateRemote.mockReset().mockReturnValue(false);
@@ -158,6 +177,31 @@ describe('testProviderConnectivity', () => {
     expect(result.success).toBe(true);
     expect(result.message).toBe('Test completed successfully');
     expect(mockEvaluate).toHaveBeenCalled();
+  });
+
+  it('uses one captured Cloud host and credential for remote analysis', async () => {
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValueOnce({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
+      apiHost: 'https://captured.example.com',
+      authHeaderName: 'X-Captured-Auth',
+      headers: { 'X-Captured-Auth': 'Bearer captured-token' },
+      teamId: undefined,
+    });
+
+    await testProviderConnectivity({ provider: createMockProvider() });
+
+    expect(cloudConfig.getRequestConfig).toHaveBeenCalledTimes(1);
+    expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      'https://captured.example.com/api/v1/providers/test',
+      expect.objectContaining({
+        skipCloudAuthInjection: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Captured-Auth': 'Bearer captured-token',
+        },
+      }),
+    );
   });
 
   it('should use custom prompt when provided', async () => {

@@ -10,12 +10,9 @@ import invariant from '../../util/invariant';
 import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { recordGenerationTokenUsage } from '../generationTokenUsage';
 import { normalizeMcpToolCall, stringifyMcpToolCall } from '../mcpToolCall';
-import {
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  shouldGenerateRemote,
-} from '../remoteGeneration';
+import { getRemoteGenerationHeaders, shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 
 import type {
   ApiProvider,
@@ -78,7 +75,7 @@ export async function fetchRemoteGeneration(
     };
 
     const response = await fetchWithCache(
-      getRemoteGenerationUrl(),
+      await resolveRemoteGenerationUrl(body),
       {
         method: 'POST',
         headers: getRemoteGenerationHeaders(),
@@ -137,7 +134,7 @@ export async function materializeMcpToolCallRemote(
       result?: unknown;
       tokenUsage?: ProviderResponse['tokenUsage'];
     }>(
-      getRemoteGenerationUrl(),
+      await resolveRemoteGenerationUrl(body),
       {
         method: 'POST',
         headers: getRemoteGenerationHeaders(),

@@ -9,6 +9,8 @@ import {
 } from '../../src/providers/promptfoo';
 import { fetchWithRetries } from '../../src/util/fetch/index';
 
+vi.mock('../../src/util/cloud', () => ({ ensureCloudTeamContext: vi.fn() }));
+
 vi.mock('../../src/cache');
 vi.mock('../../src/envars');
 vi.mock('../../src/util/fetch/index.ts');

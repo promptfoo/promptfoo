@@ -202,14 +202,14 @@ describe('TrueFoundry', () => {
 
         expect(mockedFetchWithRetries).toHaveBeenCalledWith(
           `${TRUEFOUNDRY_API_BASE}/chat/completions`,
-          {
+          expect.objectContaining({
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               Authorization: 'Bearer test-key',
             },
             body: JSON.stringify(expectedBody),
-          },
+          }),
           300000,
           undefined,
         );

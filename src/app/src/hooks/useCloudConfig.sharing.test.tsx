@@ -160,12 +160,11 @@ describe('shared cloud configuration', () => {
     await waitFor(() => expect(view.result.current.data).toEqual(disabled));
   });
 
-  it.each(['clear', 'logout', 'failed logout'] as const)(
+  it.each(['clear', 'logout'] as const)(
     'isolates an in-flight response across %s',
     async (action) => {
       useUserStore.getState().setEmail('old@example.com');
       const view = mount();
-      logoutFails = action === 'failed logout';
       await act(async () => {
         if (action === 'clear') {
           useUserStore.getState().clearUser();
@@ -185,6 +184,24 @@ describe('shared cloud configuration', () => {
       expect(view.result.current.data).toEqual(disabled);
     },
   );
+
+  it('keeps the active session and its pending configuration when logout fails', async () => {
+    useUserStore.getState().setEmail('old@example.com');
+    const view = mount();
+    logoutFails = true;
+
+    await act(async () => {
+      await expect(useUserStore.getState().logout()).rejects.toThrow('logout unavailable');
+    });
+
+    expect(useUserStore.getState().email).toBe('old@example.com');
+    expect(requests).toHaveLength(1);
+    expect(requests[0].signal?.aborted).toBe(false);
+    await act(async () => {
+      requests[0].resolve(response(enabled));
+    });
+    await waitFor(() => expect(view.result.current.data).toEqual(enabled));
+  });
 
   it('cancels the discarded StrictMode request and keeps the live result', async () => {
     const view = renderHook(() => useCloudConfig(), {

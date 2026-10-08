@@ -7,18 +7,23 @@ import {
   shareCommand,
 } from '../../src/commands/share';
 import * as envars from '../../src/envars';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import ModelAudit from '../../src/models/modelAudit';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
+  hasEvalBeenShared,
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../../src/share';
+import { resolveCloudTeam } from '../../src/util/cloud';
 import { loadDefaultConfig } from '../../src/util/config/default';
 
 vi.mock('../../src/share');
+vi.mock('../../src/globalConfig/cloud');
+vi.mock('../../src/util/cloud', () => ({ resolveCloudTeam: vi.fn() }));
 vi.mock('../../src/logger');
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -41,6 +46,8 @@ vi.mock('../../src/util/config/default');
 describe('Share Command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveCloudTeam).mockResolvedValue(undefined);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     process.exitCode = 0; // Reset exitCode before each test
   });
 
@@ -115,7 +122,7 @@ describe('Share Command', () => {
 
       const result = await createAndDisplayShareableModelAuditUrl(mockAudit, false);
 
-      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false, undefined);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(mockUrl));
       expect(result).toBe(mockUrl);
     });
@@ -132,7 +139,7 @@ describe('Share Command', () => {
 
       await createAndDisplayShareableModelAuditUrl(mockAudit, true);
 
-      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, true);
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, true, undefined);
     });
 
     it('should return null when createShareableModelAuditUrl returns null', async () => {
@@ -146,7 +153,7 @@ describe('Share Command', () => {
 
       const result = await createAndDisplayShareableModelAuditUrl(mockAudit, false);
 
-      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false, undefined);
       expect(result).toBeNull();
       expect(logger.error).toHaveBeenCalledWith(
         'Failed to create shareable URL for model audit test-audit-id',
@@ -197,10 +204,32 @@ describe('Share Command', () => {
 
       expect(ModelAudit.findById).toHaveBeenCalledWith('scan-test-123');
       expect(isModelAuditSharingEnabled).toHaveBeenCalled();
-      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false, undefined);
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('View ModelAudit Scan Results:'),
       );
+    });
+
+    it('shares and checks for an existing eval with the same resolved destination', async () => {
+      const cloudTeam = { id: 'runtime-b', organizationId: 'org-1', name: 'Runtime B' };
+      const mockEval = {
+        id: 'eval-1',
+        prompts: ['test'],
+        config: { metadata: { configId: 'config-1', teamId: 'runtime-b' } },
+      } as unknown as Eval;
+      vi.mocked(Eval.findById).mockResolvedValue(mockEval);
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(resolveCloudTeam).mockResolvedValue(cloudTeam);
+      vi.mocked(hasEvalBeenShared).mockResolvedValue(false);
+      vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-1');
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', 'eval-1']);
+
+      expect(resolveCloudTeam).toHaveBeenCalledExactlyOnceWith(mockEval.config);
+      expect(hasEvalBeenShared).toHaveBeenCalledWith(mockEval, cloudTeam);
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false, cloudTeam });
     });
 
     it('should handle eval sharing with non-scan prefixed ID', async () => {
@@ -253,7 +282,7 @@ describe('Share Command', () => {
 
       expect(Eval.latest).toHaveBeenCalledWith();
       expect(ModelAudit.latest).toHaveBeenCalledWith();
-      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false, undefined);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Sharing model audit'));
     });
 

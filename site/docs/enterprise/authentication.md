@@ -71,4 +71,4 @@ To switch organizations, run `promptfoo auth login --api-key <apiKey>` with a ke
 promptfoo auth teams current
 ```
 
-All operations (evaluations, red team scans, etc.) will use this team context until you switch to a different team.
+The selected team is the default for CLI evals and sharing. Evals loaded from Cloud use the team assigned to their configuration.
