@@ -96,9 +96,7 @@
     "ruby",
     "security",
     // Windows system utility used to terminate install-profile subprocess descendants.
-    "taskkill",
-    // Windows system utility used to locate npm's JavaScript CLI without a shell.
-    "where.exe"
+    "taskkill"
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
