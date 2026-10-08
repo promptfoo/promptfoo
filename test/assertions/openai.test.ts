@@ -1450,4 +1450,68 @@ describe('OpenAI assertions', () => {
       });
     });
   });
+
+  describe('negated tool-call assertions', () => {
+    const toolCall = {
+      name: 'getCurrentTemperature',
+      arguments: '{"location": "Paris", "unit": "Celsius"}',
+    };
+    const badArgsCall = { name: 'getCurrentTemperature', arguments: '{"location": "Paris"}' };
+
+    const run = (type: Assertion['type'], output: string | object, provider: ApiProvider) =>
+      runAssertion({
+        assertion: { type },
+        provider,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+    it.each([
+      ['not-is-valid-openai-tools-call', 'It is sunny.', true, 'Assertion passed'],
+      [
+        'not-is-valid-openai-tools-call',
+        [{ type: 'function', function: toolCall }],
+        false,
+        'Expected output to not be a valid OpenAI tools call',
+      ],
+      [
+        'not-is-valid-openai-tools-call',
+        [{ type: 'function', function: badArgsCall }],
+        true,
+        'Assertion passed',
+      ],
+      ['not-is-valid-function-call', 'It is sunny.', true, 'Assertion passed'],
+      [
+        'not-is-valid-function-call',
+        toolCall,
+        false,
+        'Expected output to not be a valid function call',
+      ],
+    ] as const)('%s on %j inverts the verdict', async (type, output, pass, reason) => {
+      await expect(run(type, output, mockProvider)).resolves.toMatchObject({
+        pass,
+        score: pass ? 1 : 0,
+        reason,
+      });
+    });
+
+    it('keeps a missing tools config as a failure under not-', async () => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', { config: {} });
+      await expect(
+        run('not-is-valid-openai-tools-call', [{ type: 'function', function: toolCall }], provider),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: 'No tools configured in provider, but output contains tool calls',
+      });
+    });
+
+    it('keeps a provider without a validator as a failure under not-', async () => {
+      await expect(
+        run('not-is-valid-function-call', toolCall, createMockProvider()),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: 'Provider does not have functionality for checking function call.',
+      });
+    });
+  });
 });

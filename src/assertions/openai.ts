@@ -1,15 +1,20 @@
 import { validateFunctionCall } from '../providers/openai/util';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
+import { toolCallVerdict } from './functionToolCall';
 
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleIsValidOpenAiToolsCall = async ({
   assertion,
+  inverse,
   output,
   provider,
   test,
 }: AssertionParams): Promise<GradingResult> => {
+  const verdict = (valid: boolean, reason: string) =>
+    toolCallVerdict(assertion, inverse, valid, reason, 'OpenAI tools call');
+
   // Handle MCP tool outputs from Responses API
   const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
 
@@ -20,23 +25,13 @@ export const handleIsValidOpenAiToolsCall = async ({
       const errorMatch = outputStr.match(/MCP Tool Error \(([^)]+)\): (.+)/);
       const toolName = errorMatch ? errorMatch[1] : 'unknown';
       const errorMsg = errorMatch ? errorMatch[2] : 'unknown error';
-      return {
-        pass: false,
-        score: 0,
-        reason: `MCP tool call failed for ${toolName}: ${errorMsg}`,
-        assertion,
-      };
+      return verdict(false, `MCP tool call failed for ${toolName}: ${errorMsg}`);
     }
 
     // MCP tool call succeeded
     const resultMatch = outputStr.match(/MCP Tool Result \(([^)]+)\):/);
     const toolName = resultMatch ? resultMatch[1] : 'unknown';
-    return {
-      pass: true,
-      score: 1,
-      reason: `MCP tool call succeeded for ${toolName}`,
-      assertion,
-    };
+    return verdict(true, `MCP tool call succeeded for ${toolName}`);
   }
 
   // Handle traditional OpenAI function/tool calls
@@ -56,14 +51,10 @@ export const handleIsValidOpenAiToolsCall = async ({
         typeof toolCall?.function?.arguments !== 'string',
     )
   ) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `OpenAI did not return a valid-looking tools response: ${JSON.stringify(
-        toolsOutput,
-      )}`,
-      assertion,
-    };
+    return verdict(
+      false,
+      `OpenAI did not return a valid-looking tools response: ${JSON.stringify(toolsOutput)}`,
+    );
   }
 
   let tools = (provider as OpenAiChatCompletionProvider).config.tools;
@@ -74,7 +65,8 @@ export const handleIsValidOpenAiToolsCall = async ({
     }
   }
 
-  // Tools must be defined when validating tool calls
+  // Tools must be defined when validating tool calls. Missing tools is a
+  // configuration error, so it fails under `not-` too.
   if (!tools) {
     return {
       pass: false,
@@ -93,18 +85,8 @@ export const handleIsValidOpenAiToolsCall = async ({
         test.vars,
       );
     });
-    return {
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion,
-    };
+    return verdict(true, 'Assertion passed');
   } catch (err) {
-    return {
-      pass: false,
-      score: 0,
-      reason: (err as Error).message,
-      assertion,
-    };
+    return verdict(false, (err as Error).message);
   }
 };

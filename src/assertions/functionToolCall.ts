@@ -1,30 +1,48 @@
 import { hasFunctionToolCallValidator } from '../contracts/providers';
 
-import type { AssertionParams, GradingResult } from '../types/index';
+import type { Assertion, AssertionParams, GradingResult } from '../types/index';
+
+/** Builds a validation verdict, inverted for `not-` assertions. Not for configuration errors. */
+export function toolCallVerdict(
+  assertion: Assertion,
+  inverse: boolean,
+  valid: boolean,
+  reason: string,
+  label: string,
+): GradingResult {
+  const pass = valid !== inverse;
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: inverse
+      ? pass
+        ? 'Assertion passed'
+        : `Expected output to not be a valid ${label}`
+      : reason,
+    assertion,
+  };
+}
 
 export const handleIsValidFunctionCall = ({
   assertion,
+  inverse,
   output,
   provider,
   test,
 }: AssertionParams): GradingResult => {
-  try {
-    if (!hasFunctionToolCallValidator(provider)) {
-      throw new Error(`Provider does not have functionality for checking function call.`);
-    }
-    provider.validateFunctionToolCall(output, test.vars);
-    return {
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion,
-    };
-  } catch (err) {
+  // Without a validator there is no verdict to negate, so this fails under `not-` too.
+  if (!hasFunctionToolCallValidator(provider)) {
     return {
       pass: false,
       score: 0,
-      reason: (err as Error).message,
+      reason: 'Provider does not have functionality for checking function call.',
       assertion,
     };
+  }
+  try {
+    provider.validateFunctionToolCall(output, test.vars);
+    return toolCallVerdict(assertion, inverse, true, 'Assertion passed', 'function call');
+  } catch (err) {
+    return toolCallVerdict(assertion, inverse, false, (err as Error).message, 'function call');
   }
 };
