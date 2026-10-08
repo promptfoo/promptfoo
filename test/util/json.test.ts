@@ -205,6 +205,25 @@ describe('json utilities', () => {
       expect(extractJsonObjects(JSON.stringify(expected))).toEqual([expected]);
     });
 
+    it.each([
+      { value: '}' },
+      { value: '{' },
+      { value: 'say "}" then \\ continue' },
+      { value: '\\', nested: { list: ['}', { text: '"quoted" {' }] } },
+      { messages: ['}'] },
+      { '{key}': '  }\n{\r\t\u0000😀\\u005c  ' },
+      { value: '{"nested":true}' },
+    ])('extracts embedded JSON without changing string contents: %j', (expected) => {
+      expect(extractJsonObjects(`Result: ${JSON.stringify(expected)} done`)).toEqual([expected]);
+    });
+
+    it('extracts separate objects with string braces without exposing nested string content', () => {
+      const first = { value: '{"nested":true}', close: '}' };
+      const second = { messages: ['{', '}'] };
+      const input = `First: ${JSON.stringify(first)} Second: ${JSON.stringify(second)}`;
+      expect(extractJsonObjects(input)).toEqual([first, second]);
+    });
+
     it('preserves exact string contents with JSON whitespace around the object', () => {
       const expected = { value: '  }\n{\r\t\u0000😀\\u005c  ' };
       expect(extractJsonObjects(` \t\r\n${JSON.stringify(expected)}\n`)).toEqual([expected]);
@@ -220,12 +239,12 @@ describe('json utilities', () => {
     it('retains the scanner fallback above the complete-JSON size limit', () => {
       const value = '}' + 'x'.repeat(100_001 - JSON.stringify({ value: '}' }).length);
       expect(extractJsonObjects(JSON.stringify({ value }))).toEqual([]);
-      expect(extractJsonObjects(' '.repeat(100_000) + '{"value":"}"}')).toEqual([]);
+      expect(extractJsonObjects(' '.repeat(100_000) + '{"value":"}"}')).toEqual([{ value: '}' }]);
     });
 
     it.each([
       ['[{"a":1},{"b":2}]', [{ a: 1 }, { b: 2 }]],
-      ['[{"value":"}"}]', []],
+      ['[{"value":"}"}]', [{ value: '}' }]],
       ['[1,2,3]', []],
       ['null', []],
       ['true', []],
@@ -235,13 +254,15 @@ describe('json utilities', () => {
       ['{"value":1', [{ value: 1 }]],
       ['```json\n{"value":1}\n```', [{ value: 1 }]],
       ['Result: {"value":1}', [{ value: 1 }]],
-      ['```json\n{"value":"}"}\n```', []],
-      ['Result: {"value":"}"}', []],
-    ])('retains fallback behavior for %s', (input, expected) => {
+      ['```json\n{"value":"}"}\n```', [{ value: '}' }]],
+      ['Result: {"value":"}"}', [{ value: '}' }]],
+    ])('extracts objects from surrounding text and tolerant formats: %s', (input, expected) => {
       expect(extractJsonObjects(input)).toEqual(expected);
     });
 
     it.each([
+      ['{reason: mentions "admin, score: 1}', { reason: 'mentions "admin', score: 1 }],
+      ['{reason: said:"admin, score: 1}', { reason: 'said:"admin', score: 1 }],
       ['{reason: uses foo:"admin, score: 1}', { reason: 'uses foo:"admin', score: 1 }],
       ['{reason: says "hello // world", score: 1}', { reason: 'says "hello // world"', score: 1 }],
       ['{reason: dir//file, score: 1}', { reason: 'dir#file', score: 1 }],
@@ -257,6 +278,9 @@ describe('json utilities', () => {
       ],
       ['{"a": 1 # note\r}', { a: 1 }],
       ['{"a": 1 // note\r}', { a: 1 }],
+      ['{"a": 1 // note: "unfinished\n}', { a: 1 }],
+      ['{"a": 1 # note: "unfinished\n}', { a: 1 }],
+      [`{reason: 'said: "admin', score: 1}`, { reason: 'said: "admin', score: 1 }],
     ])('preserves existing YAML extraction for %s', (input, expected) => {
       expect(extractJsonObjects(input)).toEqual([expected]);
     });
@@ -395,61 +419,6 @@ describe('json utilities', () => {
       const input = '{key: value, another_key: another value}';
       const expectedOutput = [{ key: 'value', another_key: 'another value' }];
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
-    });
-
-    it('should not treat braces inside string values as structural', () => {
-      expect(extractJsonObjects('{"a": "}"}')).toEqual([{ a: '}' }]);
-      expect(extractJsonObjects('{"note": "closing brace } inside", "status": "ok"}')).toEqual([
-        { note: 'closing brace } inside', status: 'ok' },
-      ]);
-      expect(extractJsonObjects('{"open": "{ unbalanced"}')).toEqual([{ open: '{ unbalanced' }]);
-    });
-
-    it('should extract JSON with string braces from surrounding text', () => {
-      const input = 'The result is {"status": "ok", "note": "brace } here"} done';
-      expect(extractJsonObjects(input)).toEqual([{ status: 'ok', note: 'brace } here' }]);
-    });
-
-    it('should not be confused by an escaped quote before a string brace', () => {
-      const input = '{"quote": "say \\"}\\" now"}';
-      expect(extractJsonObjects(input)).toEqual([{ quote: 'say "}" now' }]);
-    });
-
-    it('should not treat a bare quote inside a plain scalar as opening a string', () => {
-      const input = '{reason: mentions "admin, score: 1}';
-      expect(extractJsonObjects(input)).toEqual([{ reason: 'mentions "admin', score: 1 }]);
-    });
-
-    it('should not treat braces inside a string that is the first array element as structural', () => {
-      expect(extractJsonObjects('{"messages":["}"]}')).toEqual([{ messages: ['}'] }]);
-      expect(extractJsonObjects('{"tags": ["{open", "close}"]}')).toEqual([
-        { tags: ['{open', 'close}'] },
-      ]);
-    });
-
-    it('should ignore quotes and braces inside comments', () => {
-      expect(extractJsonObjects('{"a": 1 // note: "unfinished\n}')).toEqual([{ a: 1 }]);
-      expect(extractJsonObjects('{"a": 1 # note: "unfinished\n}')).toEqual([{ a: 1 }]);
-      expect(extractJsonObjects('{"a": 1, // }\n"b": 2}')).toEqual([{ a: 1, b: 2 }]);
-    });
-
-    it('should not treat // inside a URL as a comment', () => {
-      expect(extractJsonObjects('{url: http://example.com/a, b: "}"}')).toEqual([
-        { url: 'http://example.com/a', b: '}' },
-      ]);
-    });
-
-    it('should track single-quoted scalars', () => {
-      expect(extractJsonObjects(`{reason: 'said: "admin', score: 1}`)).toEqual([
-        { reason: 'said: "admin', score: 1 },
-      ]);
-      expect(extractJsonObjects(`{a: 'it''s }', b: 1}`)).toEqual([{ a: "it's }", b: 1 }]);
-    });
-
-    it('should not treat an apostrophe inside a plain scalar as opening a string', () => {
-      expect(extractJsonObjects(`{a: don't panic, b: "}"}`)).toEqual([
-        { a: "don't panic", b: '}' },
-      ]);
     });
 
     describe('convertSlashCommentsToHash', () => {
