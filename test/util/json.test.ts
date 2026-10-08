@@ -196,6 +196,71 @@ describe('json utilities', () => {
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
     });
 
+    it.each([
+      ['closing brace', { value: '}' }],
+      ['opening brace', { value: '{' }],
+      ['escaped quotes and backslashes', { value: 'say "}" then \\ continue' }],
+      ['nested values', { value: '{', nested: { list: ['}', { text: '"quoted" {' }] } }],
+    ])('preserves complete JSON objects with %s', (_name, expected) => {
+      expect(extractJsonObjects(JSON.stringify(expected))).toEqual([expected]);
+    });
+
+    it('preserves exact string contents with JSON whitespace around the object', () => {
+      const expected = { value: '  }\n{\r\t\u0000😀\\u005c  ' };
+      expect(extractJsonObjects(` \t\r\n${JSON.stringify(expected)}\n`)).toEqual([expected]);
+    });
+
+    it.each([99_999, 100_000])('parses a complete JSON object of %i characters', (length) => {
+      const value = '}' + 'x'.repeat(length - JSON.stringify({ value: '}' }).length);
+      const input = JSON.stringify({ value });
+      expect(input).toHaveLength(length);
+      expect(extractJsonObjects(input)).toEqual([{ value }]);
+    });
+
+    it('retains the scanner fallback above the complete-JSON size limit', () => {
+      const value = '}' + 'x'.repeat(100_001 - JSON.stringify({ value: '}' }).length);
+      expect(extractJsonObjects(JSON.stringify({ value }))).toEqual([]);
+      expect(extractJsonObjects(' '.repeat(100_000) + '{"value":"}"}')).toEqual([]);
+    });
+
+    it.each([
+      ['[{"a":1},{"b":2}]', [{ a: 1 }, { b: 2 }]],
+      ['[{"value":"}"}]', []],
+      ['[1,2,3]', []],
+      ['null', []],
+      ['true', []],
+      ['123', []],
+      ['"plain text"', []],
+      ['{"value":1,}', [{ value: 1 }]],
+      ['{"value":1', [{ value: 1 }]],
+      ['```json\n{"value":1}\n```', [{ value: 1 }]],
+      ['Result: {"value":1}', [{ value: 1 }]],
+      ['```json\n{"value":"}"}\n```', []],
+      ['Result: {"value":"}"}', []],
+    ])('retains fallback behavior for %s', (input, expected) => {
+      expect(extractJsonObjects(input)).toEqual(expected);
+    });
+
+    it.each([
+      ['{reason: uses foo:"admin, score: 1}', { reason: 'uses foo:"admin', score: 1 }],
+      ['{reason: says "hello // world", score: 1}', { reason: 'says "hello // world"', score: 1 }],
+      ['{reason: dir//file, score: 1}', { reason: 'dir#file', score: 1 }],
+      ['{reason: word\u00a0#tag, score: 1}', { reason: 'word\u00a0#tag', score: 1 }],
+      [`{reason: &r 'foo, "bar', score: 1}`, { reason: 'foo, "bar', score: 1 }],
+      [`{reason: !!str 'foo, "bar', score: 1}`, { reason: 'foo, "bar', score: 1 }],
+      ['{? ",": value, score: 1}', { ',': 'value', score: 1 }],
+      [`{!!str\n:'x, "foo', score: 1}`, { '': 'x, "foo', score: 1 }],
+      [`{base: &r "", *r :'x, "foo', score: 1}`, { base: '', '': 'x, "foo', score: 1 }],
+      [
+        `{reason # note\n:"Good, 'tis correct", score: 1}`,
+        { reason: "Good, 'tis correct", score: 1 },
+      ],
+      ['{"a": 1 # note\r}', { a: 1 }],
+      ['{"a": 1 // note\r}', { a: 1 }],
+    ])('preserves existing YAML extraction for %s', (input, expected) => {
+      expect(extractJsonObjects(input)).toEqual([expected]);
+    });
+
     it('should extract multiple JSON objects from a string', () => {
       const input = 'yolo {"key1": "value1"} some text {"key2": "value2"} fomo';
       const expectedOutput = [{ key1: 'value1' }, { key2: 'value2' }];
