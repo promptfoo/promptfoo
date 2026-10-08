@@ -1,3 +1,6 @@
+import nodeModule from 'node:module';
+import { pathToFileURL } from 'node:url';
+
 import semverSatisfies from 'semver/functions/satisfies.js';
 import invariant from '../util/invariant';
 import { isMissingPackageImportError } from '../util/packageImportErrors';
@@ -26,9 +29,16 @@ async function ensureNaturalPackage(): Promise<void> {
     return;
   }
 
-  let metadata;
+  // Keep Node's resolver intact when a consumer bundles this module with Webpack.
+  const require = nodeModule.createRequire(import.meta.url);
+  let metadata: { version: string };
   try {
-    ({ default: metadata } = await import('natural/package.json', { with: { type: 'json' } }));
+    // Resolve at use time so consumer bundlers do not require the optional peer.
+    ({ default: metadata } = await import(
+      /* webpackIgnore: true */
+      pathToFileURL(require.resolve('natural/package.json')).href,
+      { with: { type: 'json' } }
+    ));
   } catch (error) {
     if (!isMissingPackageImportError(error, 'natural')) {
       throw error;
@@ -47,8 +57,16 @@ async function ensureNaturalPackage(): Promise<void> {
   // Natural's top-level CommonJS export does not expose named ESM exports.
   // Load only the components METEOR needs, without unrelated database clients.
   const [{ PorterStemmer: stemmer }, { WordNet: wordnet }] = await Promise.all([
-    import('natural/lib/natural/stemmers/index.js'),
-    import('natural/lib/natural/wordnet/index.js'),
+    import(
+      /* webpackIgnore: true */ pathToFileURL(
+        require.resolve('natural/lib/natural/stemmers/index.js'),
+      ).href
+    ),
+    import(
+      /* webpackIgnore: true */ pathToFileURL(
+        require.resolve('natural/lib/natural/wordnet/index.js'),
+      ).href
+    ),
   ]);
   PorterStemmer = stemmer;
   WordNet = wordnet;
