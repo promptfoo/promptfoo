@@ -1068,12 +1068,14 @@ describe('shared redteam provider utilities', () => {
       expect(mockedSleep).not.toHaveBeenCalled();
     });
 
-    it('throws error when neither output nor error is set', async () => {
+    it('returns an error when neither output nor error is set', async () => {
       const mockProvider = createMockProvider({ response: {} });
 
-      await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-        /Target returned malformed response: expected either `output` or `error` property to be set/,
-      );
+      await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+        output: '',
+        error: expect.stringContaining('Target returned malformed response'),
+        tokenUsage: { numRequests: 1 },
+      });
     });
 
     it('uses default tokenUsage when not provided', async () => {
@@ -1158,21 +1160,106 @@ describe('shared redteam provider utilities', () => {
         });
       });
 
-      it('handles null output correctly', async () => {
+      it.each([null, undefined])(
+        'rejects output %s even with an undefined error field',
+        async (output) => {
+          const mockProvider = createMockProvider({
+            response: { output, error: undefined, tokenUsage: { numRequests: 1 } },
+          });
+
+          await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+            output: '',
+            error: expect.stringContaining('Target returned malformed response'),
+            tokenUsage: { numRequests: 1 },
+          });
+        },
+      );
+
+      it('keeps malformed-response diagnostics free of raw provider metadata', async () => {
         const mockProvider = createMockProvider({
           response: {
-            output: null, // Null value
-            tokenUsage: { numRequests: 1 },
+            output: undefined,
+            cost: 0.1,
+            cached: true,
+            sessionId: 'retained-session',
+            tokenUsage: { total: 17, numRequests: 2 },
+            metadata: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  authorization: 'Bearer FAKE_TOKEN_CANARY',
+                  'set-cookie': 'session=FAKE_COOKIE_CANARY',
+                },
+              },
+              opaque: 'FAKE_OPAQUE_CANARY',
+            },
           },
         });
 
-        const result = await getTargetResponse(mockProvider, 'test prompt');
+        const response = await getTargetResponse(mockProvider, 'test prompt');
 
-        expect(result).toEqual({
-          output: 'null', // Should be stringified
+        expect(response.error).toContain('expected either `output` or `error` property to be set');
+        expect(response.error).toContain('null and undefined are not');
+        expect(response.error).not.toContain('CANARY');
+        expect(response.error).not.toContain('metadata');
+        expect(response).toMatchObject({
+          output: '',
+          cost: 0.1,
+          cached: true,
+          sessionId: 'retained-session',
+          tokenUsage: { total: 17, numRequests: 2 },
+          metadata: { http: { status: 200 } },
+        });
+      });
+
+      it.each(['null', 'undefined'])('preserves literal response text %s', async (output) => {
+        const mockProvider = createMockProvider({ response: { output } });
+
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+          output,
           tokenUsage: { numRequests: 1 },
         });
       });
+
+      it.each([null, undefined])('preserves provider errors with output %s', async (output) => {
+        const mockProvider = createMockProvider({
+          response: {
+            output,
+            error: 'Target request failed',
+            sessionId: 'error-session',
+            tokenUsage: { total: 12 },
+          },
+        });
+
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
+          output: '',
+          error: 'Target request failed',
+          sessionId: 'error-session',
+          tokenUsage: { numRequests: 1, total: 12 },
+        });
+      });
+
+      it.each([null, undefined, 'Goodbye'])(
+        'preserves conversation termination with output %s',
+        async (output) => {
+          const mockProvider = createMockProvider({
+            response: {
+              output,
+              conversationEnded: true,
+              conversationEndReason: 'thread_closed',
+              tokenUsage: { total: 12 },
+            },
+          });
+
+          await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
+            output: output ?? '',
+            conversationEnded: true,
+            conversationEndReason: 'thread_closed',
+            tokenUsage: { numRequests: 1, total: 12 },
+          });
+        },
+      );
 
       it('still fails when output property is missing', async () => {
         const mockProvider = createMockProvider({
@@ -1182,9 +1269,11 @@ describe('shared redteam provider utilities', () => {
           },
         });
 
-        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-          /Target returned malformed response: expected either `output` or `error` property to be set/,
-        );
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+          output: '',
+          error: expect.stringContaining('Target returned malformed response'),
+          tokenUsage: { numRequests: 1 },
+        });
       });
 
       it('still fails when both output and error are missing', async () => {
@@ -1194,9 +1283,11 @@ describe('shared redteam provider utilities', () => {
           } as any,
         });
 
-        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-          /Target returned malformed response/,
-        );
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+          output: '',
+          error: expect.stringContaining('Target returned malformed response'),
+          tokenUsage: { numRequests: 1 },
+        });
       });
     });
   });
