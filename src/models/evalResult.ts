@@ -78,9 +78,26 @@ function projectOutputMetadata<T>(
       ) {
         return [[key, value]];
       }
-      return key === 'audio' || key === 'blobUris'
-        ? []
-        : [[key, stripMediaReferences(sanitizeForDb(value))]];
+      if (key === 'audio' || key === 'blobUris') {
+        return [];
+      }
+      const projected = stripMediaReferences(sanitizeForDb(value));
+      if (key === 'redteamHistory' && Array.isArray(projected)) {
+        return [
+          [
+            key,
+            projected.map((turn) => {
+              if (!turn || typeof turn !== 'object' || Array.isArray(turn)) {
+                return turn;
+              }
+              // Known target-image fields can contain bare base64 as well as URLs/refs.
+              const { images: _images, outputImage: _outputImage, ...history } = turn;
+              return history;
+            }),
+          ],
+        ];
+      }
+      return [[key, projected]];
     }),
   ) as T;
 }

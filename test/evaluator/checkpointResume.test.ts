@@ -28,6 +28,105 @@ function deferred() {
 }
 
 describeEvaluator('resumable checkpoint preparation', () => {
+  it.each([
+    {
+      name: 'absent',
+      checkpointUsage: undefined,
+      replacementUsage: undefined,
+      beforeRequests: 2,
+      afterRequests: 2,
+      afterTotal: 0,
+    },
+    {
+      name: 'absent to explicit zero',
+      checkpointUsage: undefined,
+      replacementUsage: { total: 0, numRequests: 0 },
+      beforeRequests: 2,
+      afterRequests: 1,
+      afterTotal: 0,
+    },
+    {
+      name: 'partial',
+      checkpointUsage: { total: 11 },
+      replacementUsage: { total: 5 },
+      beforeRequests: 2,
+      afterRequests: 2,
+      afterTotal: 5,
+    },
+    {
+      name: 'explicit zero',
+      checkpointUsage: { total: 0, numRequests: 0 },
+      replacementUsage: { total: 0, numRequests: 0 },
+      beforeRequests: 1,
+      afterRequests: 1,
+      afterTotal: 0,
+    },
+  ])(
+    'preserves inferred requests and reported zero counts for $name usage',
+    async ({ checkpointUsage, replacementUsage, beforeRequests, afterRequests, afterTotal }) => {
+      const controller = new AbortController();
+      const started = deferred();
+      let phase: 'pause' | 'resume' = 'pause';
+      let resumedRecord: Eval;
+      const target: ApiProvider = {
+        id: () => 'request-count-checkpoint',
+        callApi: vi.fn(async (_prompt, context, options) => {
+          if (context?.vars.index === 0) {
+            return { output: 'Completed without token usage' };
+          }
+          if (phase === 'resume') {
+            expect(resumedRecord.prompts[0].metrics).toMatchObject({
+              testPassCount: 1,
+              testErrorCount: 1,
+              totalLatencyMs: 10,
+              tokenUsage: { numRequests: beforeRequests },
+            });
+            return { output: 'Finished', tokenUsage: replacementUsage };
+          }
+          options?.onProgress?.({ output: 'Checkpoint', tokenUsage: checkpointUsage });
+          started.resolve();
+          return new Promise<never>(() => {});
+        }),
+      };
+      const suite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('Probe {{index}}')],
+        tests: [0, 1].map((index) => ({ vars: { index } })),
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      vi.useFakeTimers();
+      try {
+        const paused = evaluate(suite, record, {
+          maxConcurrency: 1,
+          timeoutMs: 1000,
+          abortSignal: controller.signal,
+        });
+        await started.promise;
+        await vi.advanceTimersByTimeAsync(10);
+        controller.abort();
+        await paused;
+        expect(record.prompts[0].metrics!.tokenUsage.numRequests).toBe(beforeRequests);
+        resumedRecord = (await Eval.findById(record.id))!;
+        phase = 'resume';
+        cliState.resume = true;
+        await evaluate(suite, resumedRecord, { maxConcurrency: 1, timeoutMs: 1000 });
+        expect(target.callApi).toHaveBeenCalledTimes(3);
+        expect(resumedRecord.prompts[0].metrics).toMatchObject({
+          testPassCount: 2,
+          testFailCount: 0,
+          testErrorCount: 0,
+          totalLatencyMs: 0,
+          tokenUsage: { numRequests: afterRequests, total: afterTotal },
+        });
+        expect(await resumedRecord.fetchResultsByTestIdx(0)).toHaveLength(1);
+        expect(await resumedRecord.fetchResultsByTestIdx(1)).toHaveLength(1);
+        expect((await Eval.findById(record.id))!.prompts).toEqual(resumedRecord.prompts);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it('rebuilds partial-save accounting and ordinary named metrics while preserving only configured derived values', async () => {
     // Running the configured and unconfigured cases together also checks config-context isolation.
     for (const includeDerived of [true, false]) {

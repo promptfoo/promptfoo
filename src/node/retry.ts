@@ -283,10 +283,9 @@ export async function recalculatePromptMetrics(
           ).length;
         }
 
-        // Update token usage
-        if (result.response?.tokenUsage) {
-          accumulateResponseTokenUsage(metrics.tokenUsage, result.response);
-        }
+        // Match live accounting and checkpoint subtraction: responses without usage still
+        // count as one request, while an explicit numRequests: 0 remains zero.
+        accumulateResponseTokenUsage(metrics.tokenUsage, result.response);
 
         // Update assertion token usage
         if (result.gradingResult?.tokensUsed) {
