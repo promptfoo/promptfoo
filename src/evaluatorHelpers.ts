@@ -56,8 +56,11 @@ export function getRenderedInputVariables(
     return (
       body !== null &&
       typeof body === 'object' &&
-      Object.values(body).some((value) =>
-        referencesInput(value, name, templateFilters, wholeValueOnly),
+      Object.entries(body).some(
+        ([key, value]) =>
+          // renderVarsInObject copies into ordinary objects; this setter does
+          // not create an own field and JSON serialization drops the value.
+          key !== '__proto__' && referencesInput(value, name, templateFilters, wholeValueOnly),
       )
     );
   };
@@ -84,6 +87,11 @@ export function getRenderedInputVariables(
     } catch {
       // Non-JSON prompts render as text.
     }
+  }
+  if (prompt && !parsedPromptTemplate && autoWrapRawIfPartialNunjucks(prompt.raw) !== prompt.raw) {
+    // Use the renderer's exact decision: valid multiline Nunjucks can also be
+    // wrapped as raw, so AST interpolation alone is not delivery evidence.
+    promptTemplate = undefined;
   }
   let renderedJson = renderedPrompt === undefined;
   if (renderedPrompt !== undefined) {

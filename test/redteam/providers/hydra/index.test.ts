@@ -1501,6 +1501,13 @@ describe('HydraProvider', () => {
     it.each([
       ['YAML template', '- role: user\n  content: {{input}}', 'Hello. # hidden@example.com'],
       ['YAML input', '{{input}}', '- role: user\n  content: Hello. # hidden@example.com'],
+      ['raw-wrapped interpolation', 'User: {{\n input\n}}', 'hidden@example.com'],
+      ['raw-wrapped comment', 'User: {#\ncomment\n#}\n{{input}}', 'hidden@example.com'],
+      [
+        'discarded JSON field',
+        '[{"role":"user","content":"Hello.","__proto__":{"secret":"{{input}}"}}]',
+        'hidden@example.com',
+      ],
       [
         'malformed JSON leaf',
         '[{"role":"user","content":"{{input}}","other":"{% unfinished"}]',

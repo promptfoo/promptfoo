@@ -2066,6 +2066,118 @@ describe('getRenderedInputVariables', () => {
 });
 
 describe('rendered input serialization boundaries', () => {
+  it.each(['User: {{\n input\n}}', '{#\ncomment\n#}\n{{input}}'])(
+    'omits text prompts made literal by the renderer: %s',
+    async (raw) => {
+      const prompt = { raw, label: 'raw wrapping' };
+      const vars = { input: 'hidden@example.com' };
+      const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
+      expect(rendered).not.toContain(vars.input);
+      expect(
+        getRenderedInputVariables(
+          vars,
+          'input',
+          { forwardsPrompt: true },
+          prompt,
+          undefined,
+          rendered,
+        ).vars,
+      ).toEqual({});
+    },
+  );
+
+  it('retains a real interpolation outside an existing raw block', async () => {
+    const prompt = {
+      raw: '{% raw %}Literal {{ignored}}{% endraw %} {{input}}',
+      label: 'existing raw block',
+    };
+    const vars = { input: 'supplied@example.com' };
+    const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
+    expect(rendered).toBe('Literal {{ignored}} supplied@example.com');
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'input',
+        { forwardsPrompt: true },
+        prompt,
+        undefined,
+        rendered,
+      ).vars,
+    ).toEqual(vars);
+  });
+
+  it.each([
+    ['PROMPTFOO_DISABLE_TEMPLATING', '{{input}}'],
+    ['PROMPTFOO_DISABLE_JSON_AUTOESCAPE', 'User: {{\n input\n}}'],
+  ])('omits inputs left literal with %s', async (option, raw) => {
+    const restore = mockProcessEnv({ [option]: 'true' });
+    try {
+      const prompt = { raw, label: 'disabled renderer mode' };
+      const vars = { input: 'hidden@example.com' };
+      const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
+      expect(rendered).not.toContain(vars.input);
+      expect(
+        getRenderedInputVariables(
+          vars,
+          'input',
+          { forwardsPrompt: true },
+          prompt,
+          undefined,
+          rendered,
+        ).vars,
+      ).toEqual({});
+    } finally {
+      restore();
+    }
+  });
+
+  it('preserves supported JSON leaf rendering without applying text-path raw wrapping', async () => {
+    const prompt = { raw: JSON.stringify({ content: 'User: {{\n input\n}}' }), label: 'JSON leaf' };
+    const vars = { input: 'supplied@example.com' };
+    const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
+    expect(JSON.parse(rendered).content).toBe('User: supplied@example.com');
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'input',
+        { forwardsPrompt: true },
+        prompt,
+        undefined,
+        rendered,
+      ).vars,
+    ).toEqual(vars);
+  });
+
+  it('does not credit JSON fields discarded by the renderer object copy', async () => {
+    const prompt = {
+      raw: '[{"role":"user","content":"Hello.","__proto__":{"secret":"{{input}}"}}]',
+      label: 'discarded field',
+    };
+    const vars = { input: 'hidden@example.com' };
+    const rendered = await renderPrompt(prompt, vars, undefined, undefined, ['input']);
+    expect(rendered).not.toContain(vars.input);
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'input',
+        { forwardsPrompt: true },
+        prompt,
+        undefined,
+        rendered,
+      ).vars,
+    ).toEqual({});
+    expect(
+      getRenderedInputVariables(
+        vars,
+        'question',
+        { forwardsPrompt: false, body: JSON.parse('{"__proto__":{"secret":"{{input}}"}}') },
+        { raw: 'Hello.', label: 'fixed' },
+        undefined,
+        'Hello.',
+      ).vars,
+    ).toEqual({});
+  });
+
   it.each([
     ['- role: user\n  content: {{input}}', 'Hello. # hidden@example.com'],
     ['{{input}}', '- role: user\n  content: Hello. # hidden@example.com'],
