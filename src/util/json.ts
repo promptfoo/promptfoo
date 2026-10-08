@@ -216,6 +216,17 @@ export function extractJsonObjects(str: string): object[] {
   const jsonObjects: object[] = [];
   const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
 
+  if (str.length <= maxJsonLength) {
+    try {
+      const parsed = JSON.parse(str);
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return [parsed];
+      }
+    } catch {
+      // Keep the original input for tolerant extraction below.
+    }
+  }
+
   for (let i = 0; i < str.length; i++) {
     if (str[i] === '{') {
       let openBraces = 1;
