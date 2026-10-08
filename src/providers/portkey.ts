@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { hasHeaderOverride } from './openai/index';
 
@@ -114,21 +115,7 @@ function resolvePortkeyApiKey(
   config: PortkeyConfig = {},
   env?: ProviderOptions['env'],
 ): string | undefined {
-  // The per-provider `env:` override wins over ambient process env, matching how the
-  // upstream credential is resolved in getApiKey below.
-  return config.portkeyApiKey || env?.PORTKEY_API_KEY || getEnvString('PORTKEY_API_KEY');
-}
-
-/**
- * True when Portkey itself holds the upstream provider credential — a model catalog slug
- * (`@provider/model`) or a legacy virtual key — so there is no provider key to forward.
- */
-function usesManagedCredentials(modelName: string, config: PortkeyConfig): boolean {
-  return Boolean(
-    config.portkeyVirtualKey ||
-      config.portkeyProvider?.startsWith('@') ||
-      modelName.startsWith('@'),
-  );
+  return resolveProviderApiKey({ apiKey: config.portkeyApiKey }, env, ['PORTKEY_API_KEY']);
 }
 
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
@@ -164,35 +151,56 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
    *
    * The inherited chat provider merges `context.prompt.config` over the provider config
    * shallowly, so a per-prompt `headers` block replaces this object wholesale. Rebuilding
-   * here keeps the Portkey credential attached when a prompt sets an unrelated header.
+   * here preserves provider headers when a prompt adds an unrelated header.
    */
   override getOpenAiRequestHeaders(
     customHeaders: Record<string, string> | undefined = this.config.headers,
   ): Record<string, string> {
-    return canonicalizeAuthorization(
-      super.getOpenAiRequestHeaders(
-        getPortkeyHeaders(
-          { ...this.config, headers: customHeaders },
-          resolvePortkeyApiKey(this.config, this.env),
-        ),
-      ),
+    const providerHeaders = getPortkeyHeaders(
+      this.config,
+      resolvePortkeyApiKey(this.config, this.env),
     );
+    const headers = {
+      ...Object.fromEntries(
+        Object.entries(providerHeaders).filter(([name]) => !hasHeaderOverride(customHeaders, name)),
+      ),
+      ...getPortkeyHeaders({ headers: customHeaders }),
+    };
+    const providerRoute = new Headers(providerHeaders);
+    const requestRoute = new Headers(headers);
+    // Chat resolves its bearer before applying prompt headers. Compare the route itself:
+    // different upstreams can resolve to the same explicit key or to no key.
+    const routeChanged =
+      providerRoute.get('x-portkey-provider')?.toLowerCase() !==
+        requestRoute.get('x-portkey-provider')?.toLowerCase() ||
+      providerRoute.get('x-portkey-virtual-key') !== requestRoute.get('x-portkey-virtual-key') ||
+      providerRoute.get('x-portkey-custom-host') !== requestRoute.get('x-portkey-custom-host');
+    if (!hasHeaderOverride(customHeaders, 'Authorization') && routeChanged) {
+      throw new Error(
+        'Portkey prompt headers change upstream credential routing. Configure the route on the provider or set Authorization explicitly.',
+      );
+    }
+    return canonicalizeAuthorization(super.getOpenAiRequestHeaders(headers));
   }
 
-  /**
-   * Resolves the `Authorization` bearer, which Portkey forwards to the upstream provider.
-   * The inherited implementation returned the Portkey key here (leaving Portkey's own header
-   * unset) and otherwise fell back to `OPENAI_API_KEY`, sending an OpenAI key to the gateway
-   * even when Portkey already held the provider credential.
-   */
-  getApiKey(): string | undefined {
-    // Portkey owns the upstream credential for catalog slugs and virtual keys, so forward
-    // nothing — including an apiKey inherited from a shared provider config. Callers that
-    // still need a bearer can set one explicitly through `config.headers`.
-    if (usesManagedCredentials(this.modelName, this.config)) {
+  /** Resolve the upstream bearer from the effective Portkey route, including header overrides. */
+  getApiKey(config: PortkeyConfig = this.config): string | undefined {
+    const headers = new Headers(getPortkeyHeaders(config));
+    const upstream = headers.get('x-portkey-provider')?.toLowerCase();
+    if (
+      !upstream ||
+      upstream.startsWith('@') ||
+      this.modelName.startsWith('@') ||
+      headers.get('x-portkey-virtual-key')
+    ) {
       return undefined;
     }
-    return this.config.apiKey || this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
+    // apiKeyEnvar names the gateway credential for diagnostics, never the upstream bearer.
+    return resolveProviderApiKey(
+      { apiKey: config.apiKey },
+      this.env,
+      upstream === 'openai' ? ['OPENAI_API_KEY'] : [],
+    );
   }
 
   protected override getMissingApiKeyErrorMessage(): string {
