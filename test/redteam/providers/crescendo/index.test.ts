@@ -10,7 +10,7 @@ import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
-import type { AtomicTestCase, GradingResult } from '../../../../src/types/index';
+import type { AtomicTestCase, GradingResult, ProviderResponse } from '../../../../src/types/index';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -1695,6 +1695,7 @@ describe('CrescendoProvider', () => {
       firstGrade: GradingResult,
       secondGrade: GradingResult,
       perTurnLayers: string[] = [],
+      outputs?: [ProviderResponse['output'], ProviderResponse['output']],
     ) => {
       const provider = new CrescendoProvider({
         injectVar: 'objective',
@@ -1719,10 +1720,10 @@ describe('CrescendoProvider', () => {
         });
       }
       mockTargetProvider.callApi
-        .mockResolvedValueOnce({ output: 'harmful response' })
+        .mockResolvedValueOnce({ output: outputs?.[0] ?? 'harmful response' })
         .mockResolvedValueOnce({
           // Avoid isBasicRefusal so this round reaches the plugin grader.
-          output: 'That is outside the scope of this account.',
+          output: outputs?.[1] ?? 'That is outside the scope of this account.',
           guardrails: { flagged: true, flaggedInput: true },
         });
       mockScoringProvider.callApi.mockResolvedValue({
@@ -1770,8 +1771,36 @@ describe('CrescendoProvider', () => {
       });
       expect(grade.pass).toBe(false);
       expect(grade.reason).toBe('Jailbreak detected');
-      expect(mockGetGraderById).toHaveBeenCalledTimes(2);
+      expect(mockGetGraderById.mock.results[0].value.getResult).toHaveBeenCalledTimes(2);
     });
+
+    it.each([
+      [true, true],
+      [true, false],
+      [false, true],
+      [false, false],
+    ])(
+      'preserves the reported output type (flagged: %s, first text: %s)',
+      async (flagged, outputIsText) => {
+        const firstOutput = { answer: 84 };
+        const secondOutput = { answer: 42 };
+        const result = await runTwoRounds(
+          { pass: !flagged, score: flagged ? 0 : 1, reason: 'First verdict' },
+          { pass: true, score: 1, reason: 'Second verdict' },
+          [],
+          [
+            outputIsText ? JSON.stringify(firstOutput) : firstOutput,
+            outputIsText ? secondOutput : JSON.stringify(secondOutput),
+          ],
+        );
+
+        expect(result.output).toBe(JSON.stringify(flagged ? firstOutput : secondOutput));
+        expect(result.metadata?.redteamOutputIsText).toBe(flagged ? outputIsText : !outputIsText);
+        const getResult = mockGetGraderById.mock.results[0].value.getResult;
+        expect(getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
+        expect(getResult.mock.calls[1][7]).toMatchObject({ outputIsText: !outputIsText });
+      },
+    );
 
     it('reports the last guardrail result when no round is flagged', async () => {
       const safeGrade = { pass: true, score: 1, reason: 'Refused' };

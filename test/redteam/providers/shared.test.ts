@@ -927,6 +927,7 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: true,
         output: 'test response',
         tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
         sessionId: 'test-session',
@@ -1016,9 +1017,22 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: false,
         output: '{"key":"value"}',
         tokenUsage: { numRequests: 1 },
       });
+    });
+
+    it('derives source type before serialization, ignoring target-provided markers', async () => {
+      const response = {
+        output: { amount: 100 },
+        outputIsText: true,
+        metadata: { redteamOutputIsText: true },
+      };
+      const mockProvider = createMockProvider({ response });
+      const result = await getTargetResponse(mockProvider, 'test prompt');
+      expect(result.output).toBe('{"amount":100}');
+      expect(result.outputIsText).toBe(false);
     });
 
     it('handles provider error response', async () => {
@@ -1032,6 +1046,7 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: false,
         output: '',
         error: 'API error',
         sessionId: 'error-session',
@@ -1088,6 +1103,7 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: true,
         output: 'test response',
         tokenUsage: { numRequests: 1 },
       });
@@ -1104,6 +1120,7 @@ describe('shared redteam provider utilities', () => {
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
       expect(result).toEqual({
+        outputIsText: false,
         output: '',
         conversationEnded: true,
         conversationEndReason: 'thread_closed',
@@ -1123,6 +1140,7 @@ describe('shared redteam provider utilities', () => {
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
         expect(result).toEqual({
+          outputIsText: true,
           output: '',
           tokenUsage: { numRequests: 1 },
         });
@@ -1139,6 +1157,7 @@ describe('shared redteam provider utilities', () => {
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
         expect(result).toEqual({
+          outputIsText: false,
           output: '0', // Should be stringified
           tokenUsage: { numRequests: 1 },
         });
@@ -1155,6 +1174,7 @@ describe('shared redteam provider utilities', () => {
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
         expect(result).toEqual({
+          outputIsText: false,
           output: 'false', // Should be stringified
           tokenUsage: { numRequests: 1 },
         });
@@ -1234,6 +1254,7 @@ describe('shared redteam provider utilities', () => {
 
         await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
           output: '',
+          outputIsText: false,
           error: 'Target request failed',
           sessionId: 'error-session',
           tokenUsage: { numRequests: 1, total: 12 },
@@ -1254,6 +1275,7 @@ describe('shared redteam provider utilities', () => {
 
           await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
             output: output ?? '',
+            outputIsText: typeof output === 'string',
             conversationEnded: true,
             conversationEndReason: 'thread_closed',
             tokenUsage: { numRequests: 1, total: 12 },

@@ -71,6 +71,7 @@ import type { RedteamGradingContext } from '../grading/types';
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
 interface IterativeMetaMetadata {
+  redteamOutputIsText?: boolean;
   finalIteration: number;
   vulnerabilityAchieved: boolean;
   redteamFinalPrompt?: string;
@@ -562,6 +563,7 @@ export async function runMetaAgentRedteam({
         // Build grading context with image outputs, tracing, and exfil tracking data.
         const gradingContext: RedteamGradingContext = {
           providerResponse: targetResponse,
+          outputIsText: targetResponse.outputIsText,
           ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
           ...(tracingOptions.includeInGrading
             ? { traceContext, traceSummary: gradingTraceSummary }
@@ -636,6 +638,7 @@ export async function runMetaAgentRedteam({
         storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult, {
           prompt: finalAttackPrompt,
           output: targetResponse.output,
+          outputIsText: targetResponse.outputIsText,
           pluginId: test.metadata?.pluginId,
           assertion: assertToUse,
         });
@@ -693,6 +696,7 @@ export async function runMetaAgentRedteam({
     prompt: bestPrompt,
     ...(error ? { error } : {}),
     metadata: {
+      redteamOutputIsText: lastResponse?.outputIsText,
       finalIteration,
       vulnerabilityAchieved,
       // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)

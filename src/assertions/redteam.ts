@@ -170,6 +170,7 @@ export const handleRedteam = async (
     test,
     prompt,
     outputString,
+    output,
     provider,
     renderedValue,
     providerResponse,
@@ -212,6 +213,18 @@ export const handleRedteam = async (
       test.metadata?.strategyId ?? '',
     );
 
+  const strategyOutputIsText =
+    providerId && isAttackProvider(providerId)
+      ? providerResponse.metadata?.redteamOutputIsText
+      : undefined;
+  const outputIsText =
+    typeof output === 'string' &&
+    typeof providerResponse.output === 'string' &&
+    (!(providerId && isAttackProvider(providerId)) || strategyOutputIsText === true);
+  const grader = getGraderById(assertion.type);
+  // Numeric checks require source text even when a matching stored grade exists.
+  grader?.validateOutput?.(renderedValue, { providerResponse, outputIsText });
+
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
     storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
@@ -229,6 +242,7 @@ export const handleRedteam = async (
         outputString,
         gradesCurrentTurnOnly ? undefined : gradingMessages,
         test.metadata?.pluginId,
+        typeof strategyOutputIsText === 'boolean' ? strategyOutputIsText : undefined,
       )
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
@@ -253,7 +267,6 @@ export const handleRedteam = async (
     };
   }
 
-  const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
 
   // Build grading context from provider response metadata, test metadata, and locally
@@ -265,6 +278,7 @@ export const handleRedteam = async (
     providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
   });
+  gradingContext.outputIsText = outputIsText;
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);

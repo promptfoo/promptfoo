@@ -572,8 +572,63 @@ describe('RedteamGoatProvider', () => {
     const result = await provider.callApi('test prompt', context);
 
     expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(result.metadata?.redteamOutputIsText).toBeUndefined();
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
+
+  it.each([true, false])(
+    'keeps the last output type when the target ends without a response (text: %s)',
+    async (outputIsText) => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: { role: 'user', content: 'attack prompt' } }),
+      });
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 3 });
+      const output = { answer: 84 };
+      const targetProvider = createMockTargetProvider();
+      targetProvider.callApi
+        .mockResolvedValueOnce({ output: outputIsText ? JSON.stringify(output) : output })
+        .mockResolvedValueOnce({ output: '', conversationEnded: true });
+
+      const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+      expect(result.output).toBe(JSON.stringify(output));
+      expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
+      expect(result.metadata?.stopReason).toBe('Target ended conversation');
+      expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each([true, false])(
+    'reports the unblocking output type when the following target response is empty (text: %s)',
+    async (outputIsText) => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: { role: 'user', content: 'attack prompt' } }),
+      });
+      const unblocking = vi.spyOn(redteamProviderShared, 'tryUnblocking').mockResolvedValue({
+        success: true,
+        unblockingPrompt: 'follow-up question',
+      });
+      try {
+        const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+        const output = { answer: 84 };
+        const targetProvider = createMockTargetProvider();
+        targetProvider.callApi
+          .mockResolvedValueOnce({ output: outputIsText ? { answer: 42 } : '42' })
+          .mockResolvedValueOnce({ output: outputIsText ? JSON.stringify(output) : output })
+          .mockResolvedValueOnce({ output: '', conversationEnded: true });
+
+        const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+        expect(result.output).toBe(JSON.stringify(output));
+        expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
+        expect(targetProvider.callApi).toHaveBeenCalledTimes(3);
+      } finally {
+        unblocking.mockRestore();
+      }
+    },
+  );
 
   it('should handle grader integration and stop early on failure', async () => {
     const provider = new RedteamGoatProvider({
@@ -1270,86 +1325,99 @@ describe('RedteamGoatProvider', () => {
     expect(result.metadata?.storedGraderResult?.score).toBe(0);
   });
 
-  it('should store grader result even when continueAfterSuccess is true', async () => {
-    const provider = new RedteamGoatProvider({
-      injectVar: 'goal',
-      maxTurns: 2,
-      continueAfterSuccess: true,
-    });
-
-    const targetProvider = createMockTargetProvider();
-    targetProvider.callApi
-      .mockResolvedValueOnce({ output: 'harmful response' })
-      .mockResolvedValueOnce({ output: 'blocked response', guardrails: { flagged: true } });
-
-    const firstGraderResult = {
-      pass: false,
-      score: 0,
-      reason: 'Jailbreak detected',
-    };
-
-    const secondGraderResult = {
-      pass: true,
-      score: 1,
-      reason: 'No jailbreak detected',
-    };
-
-    // Mock grader to fail on first turn, pass on second turn
-    (mockGrader.getResult as any)
-      .mockResolvedValueOnce({
-        grade: firstGraderResult,
-      })
-      .mockResolvedValueOnce({
-        grade: secondGraderResult,
+  it.each([true, false])(
+    'preserves the flagged output type after continuing (text: %s)',
+    async (outputIsText) => {
+      const firstOutput = { answer: 84 };
+      const secondOutput = { answer: 42 };
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+        continueAfterSuccess: true,
       });
 
-    // Mock remote generation API for second turn
-    mockFetch.mockImplementationOnce(async function () {
-      return {
-        json: async () => ({
-          message: { role: 'assistant', content: 'attack prompt' },
-        }),
+      const targetProvider = createMockTargetProvider();
+      targetProvider.callApi
+        .mockResolvedValueOnce({ output: outputIsText ? JSON.stringify(firstOutput) : firstOutput })
+        .mockResolvedValueOnce({
+          output: outputIsText ? secondOutput : JSON.stringify(secondOutput),
+          guardrails: { flagged: true },
+        });
 
-        ok: true,
+      const firstGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'Jailbreak detected',
       };
-    });
 
-    const testConfig = {
-      vars: {},
-      assert: [
-        {
-          type: 'contains',
-          value: 'expected content',
-        },
-      ],
-      metadata: { pluginId: 'contains' },
-    } as AtomicTestCase;
+      const secondGraderResult = {
+        pass: true,
+        score: 1,
+        reason: 'No jailbreak detected',
+      };
 
-    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+      // Mock grader to fail on first turn, pass on second turn
+      (mockGrader.getResult as any)
+        .mockResolvedValueOnce({
+          grade: firstGraderResult,
+        })
+        .mockResolvedValueOnce({
+          grade: secondGraderResult,
+        });
 
-    const result = await provider.callApi('test prompt', context);
+      // Mock remote generation API for second turn
+      mockFetch.mockImplementationOnce(async function () {
+        return {
+          json: async () => ({
+            message: { role: 'assistant', content: 'attack prompt' },
+          }),
 
-    expect(result.metadata?.storedGraderResult).toMatchObject(firstGraderResult);
-    expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
-    expect(result.metadata?.stopReason).toBe('Max turns reached');
-    expect(result.metadata?.successfulAttacks).toHaveLength(1);
-    expect(result.guardrails).toBeUndefined();
-    // The successful attack should be from the first turn
-    expect(result.metadata?.successfulAttacks?.[0]).toMatchObject({
-      turn: 0,
-      prompt: expect.any(String),
-      response: expect.any(String),
-    });
-    expect(result.metadata?.messages).toHaveLength(2);
-    expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
-      getGradingInputHash(
-        result.metadata?.redteamFinalPrompt as string,
-        result.output as string,
-        result.metadata?.messages,
-        'contains',
-      ),
-    );
-  });
+          ok: true,
+        };
+      });
+
+      const testConfig = {
+        vars: {},
+        assert: [
+          {
+            type: 'contains',
+            value: 'expected content',
+          },
+        ],
+        metadata: { pluginId: 'contains' },
+      } as AtomicTestCase;
+
+      const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.output).toBe(JSON.stringify(firstOutput));
+      expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
+      expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
+      expect(mockGrader.getResult.mock.calls[1][7]).toMatchObject({ outputIsText: !outputIsText });
+      expect(result.metadata?.storedGraderResult).toMatchObject(firstGraderResult);
+      expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
+      expect(result.metadata?.stopReason).toBe('Max turns reached');
+      expect(result.metadata?.successfulAttacks).toHaveLength(1);
+      expect(result.guardrails).toBeUndefined();
+      // The successful attack should be from the first turn
+      expect(result.metadata?.successfulAttacks?.[0]).toMatchObject({
+        turn: 0,
+        prompt: expect.any(String),
+        response: expect.any(String),
+      });
+      expect(result.metadata?.messages).toHaveLength(2);
+      expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+        getGradingInputHash(
+          result.metadata?.redteamFinalPrompt as string,
+          result.output as string,
+          result.metadata?.messages,
+          'contains',
+          outputIsText,
+        ),
+      );
+    },
+  );
 
   it('reports the flagged turn display variables after continuing', async () => {
     const runtime = await import('../../../src/redteam/shared/runtimeTransform');

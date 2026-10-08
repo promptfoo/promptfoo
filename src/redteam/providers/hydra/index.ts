@@ -78,6 +78,7 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface HydraMetadata extends BaseRedteamMetadata {
+  redteamOutputIsText?: boolean;
   hydraRoundsCompleted?: number;
   hydraBacktrackCount?: number;
   hydraResult?: boolean;
@@ -880,6 +881,7 @@ export class HydraProvider implements ApiProvider {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
+            outputIsText: targetResponse.outputIsText,
             ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
@@ -956,6 +958,7 @@ export class HydraProvider implements ApiProvider {
             {
               prompt: lastFinalAttackPrompt || nextMessage,
               output: targetResponse.output,
+              outputIsText: targetResponse.outputIsText,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },
@@ -1070,6 +1073,7 @@ export class HydraProvider implements ApiProvider {
           ? { error: lastTargetResponse.error }
           : {}),
       metadata: {
+        redteamOutputIsText: lastTargetResponse?.outputIsText,
         sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
         messages,
         ...strategyMetadata,

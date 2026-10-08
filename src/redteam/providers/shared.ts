@@ -463,6 +463,8 @@ class RedteamProviderManager {
 export const redteamProviderManager = new RedteamProviderManager();
 
 export type TargetResponse = {
+  /** Captured before object-valued target outputs are serialized. */
+  outputIsText?: boolean;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
   image?: {
@@ -589,6 +591,7 @@ export async function getTargetResponse(
     return {
       ...(targetRespRaw as ProviderResponse),
       output,
+      outputIsText: typeof targetRespRaw.output === 'string',
       error: targetRespRaw.error,
       tokenUsage,
     };
@@ -603,6 +606,7 @@ export async function getTargetResponse(
     return {
       ...(targetRespRaw as ProviderResponse),
       output,
+      outputIsText: typeof targetRespRaw.output === 'string',
       tokenUsage,
     };
   }
@@ -611,6 +615,7 @@ export async function getTargetResponse(
     return {
       ...(targetRespRaw as ProviderResponse),
       output: '',
+      outputIsText: false,
       tokenUsage,
     };
   }
@@ -618,6 +623,7 @@ export async function getTargetResponse(
   return {
     ...(targetRespRaw as ProviderResponse),
     output: '',
+    outputIsText: false,
     error:
       'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
     tokenUsage,
@@ -667,6 +673,7 @@ export function accumulateGraderResult(
     output: string;
     messages?: unknown;
     pluginId?: string;
+    outputIsText?: boolean;
     assertion?: AssertionOrSet;
   },
 ): GradingResult {
@@ -681,6 +688,7 @@ export function accumulateGraderResult(
           input.output,
           input.messages,
           input.pluginId,
+          input.outputIsText,
         ),
       },
     };
@@ -751,6 +759,7 @@ export function accumulateGraderResult(
 }
 
 export interface FlaggedTurn {
+  outputIsText?: boolean;
   graderResult: GradingResult;
   output: string;
   prompt: string | undefined;

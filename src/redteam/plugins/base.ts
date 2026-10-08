@@ -384,6 +384,12 @@ export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
 
+  /** Validate output requirements before a stored grade can be reused. */
+  validateOutput?(
+    renderedValue: AssertionValue | undefined,
+    gradingContext: RedteamGradingContext,
+  ): void;
+
   renderRubric(vars: Record<string, any>): string {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 

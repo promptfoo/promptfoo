@@ -119,6 +119,7 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
  * Represents metadata for the Custom conversation process.
  */
 export interface CustomMetadata extends BaseRedteamMetadata {
+  redteamOutputIsText?: boolean;
   customRoundsCompleted: number;
   customBacktrackCount: number;
   customResult: boolean;
@@ -598,6 +599,7 @@ export class CustomProvider implements ApiProvider {
           if (grader) {
             const gradingContext: RedteamGradingContext | undefined = {
               providerResponse: lastResponse,
+              outputIsText: lastResponse.outputIsText,
               conversationTranscript:
                 getTargetConversation(lastResponseMessages).conversationTranscript,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
@@ -605,6 +607,7 @@ export class CustomProvider implements ApiProvider {
             const gradedTurn = {
               prompt: lastFinalAttackPrompt,
               output: lastResponse.output,
+              outputIsText: lastResponse.outputIsText,
               messages: lastResponseMessages,
               guardrails: lastResponse.guardrails,
             };
@@ -740,6 +743,7 @@ export class CustomProvider implements ApiProvider {
 
     const reported = flaggedRound ?? {
       output: lastResponse.output,
+      outputIsText: lastResponse.outputIsText,
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
@@ -753,6 +757,7 @@ export class CustomProvider implements ApiProvider {
       output: reported.output,
       prompt: reported.prompt,
       metadata: {
+        redteamOutputIsText: reported.outputIsText,
         redteamFinalPrompt: reported.prompt,
         messages: reported.messages as Record<string, any>[],
         customRoundsCompleted: roundNum,

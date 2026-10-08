@@ -100,6 +100,7 @@ const DEFAULT_MAX_BACKTRACKS = 10;
  * Represents metadata for the Crescendo conversation process.
  */
 interface CrescendoMetadata extends BaseRedteamMetadata {
+  redteamOutputIsText?: boolean;
   crescendoRoundsCompleted: number;
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
@@ -660,6 +661,7 @@ export class CrescendoProvider implements ApiProvider {
             // Build grading context with image outputs, tracing, and exfil tracking data.
             let gradingContext: RedteamGradingContext | undefined = {
               providerResponse: lastResponse,
+              outputIsText: lastResponse.outputIsText,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
             };
 
@@ -730,6 +732,7 @@ export class CrescendoProvider implements ApiProvider {
                 getLastMessageContent(lastResponseMessages, 'user') ||
                 attackPrompt,
               output: lastResponse.output,
+              outputIsText: lastResponse.outputIsText,
               messages: lastResponseMessages,
               guardrails: lastResponse.guardrails,
               transformDisplayVars: lastTransformDisplayVars,
@@ -853,6 +856,7 @@ export class CrescendoProvider implements ApiProvider {
 
     const reported = flaggedRound ?? {
       output: lastResponse.output,
+      outputIsText: lastResponse.outputIsText,
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
@@ -867,6 +871,7 @@ export class CrescendoProvider implements ApiProvider {
       ...(!flaggedRound && error ? { error } : {}),
       prompt: finalPrompt,
       metadata: {
+        redteamOutputIsText: reported.outputIsText,
         sessionId: getSessionId(lastResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: reported.prompt,

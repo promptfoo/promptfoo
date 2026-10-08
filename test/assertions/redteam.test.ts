@@ -1298,6 +1298,7 @@ describe('handleRedteam', () => {
       undefined,
       {
         providerResponse,
+        outputIsText: true,
       },
     );
     expect(grade.pass).toBe(false);
@@ -1374,6 +1375,7 @@ describe('handleRedteam', () => {
       undefined,
       {
         providerResponse,
+        outputIsText: true,
       },
     );
     expect(grade.pass).toBe(false);

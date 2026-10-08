@@ -460,9 +460,18 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
-    it.each([false, true])(
-      'retains the selected earlier verdict and total usage (identical text: %s)',
-      async (identicalText) => {
+    it.each<[boolean, boolean, number]>([
+      [false, true, 2],
+      [true, true, 2],
+      [false, false, 2],
+      [true, false, 2],
+      [false, true, 3],
+      [false, false, 3],
+    ])(
+      'retains the selected earlier verdict, output type, and usage (identical text: %s, text: %s, max attempts: %s)',
+      async (identicalText, outputIsText, maxAttempts) => {
+        const firstOutput = { answer: 84 };
+        const secondOutput = { answer: identicalText ? 84 : 42 };
         mockRedteamProvider.callApi
           .mockResolvedValueOnce({
             output: JSON.stringify({ prompt: 'first attack', improvement: 'first' }),
@@ -489,8 +498,15 @@ describe('RedteamIterativeProvider', () => {
           });
         const targetProvider = createMockProvider({ id: 'target' });
         targetProvider.callApi
-          .mockResolvedValueOnce({ output: 'first response' })
-          .mockResolvedValueOnce({ output: identicalText ? 'first response' : 'second response' });
+          .mockResolvedValueOnce({
+            output: outputIsText ? JSON.stringify(firstOutput) : firstOutput,
+          })
+          .mockResolvedValueOnce({
+            output: outputIsText ? secondOutput : JSON.stringify(secondOutput),
+          })
+          .mockResolvedValue({
+            output: outputIsText ? secondOutput : JSON.stringify(secondOutput),
+          });
         const graders = await import('../../../src/redteam/graders');
         const getResult = vi
           .fn()
@@ -524,7 +540,7 @@ describe('RedteamIterativeProvider', () => {
             injectVar: 'goal',
             maxDepth: 1,
             branchingFactor: 2,
-            maxAttempts: 2,
+            maxAttempts,
           });
           const result = await provider.callApi('', {
             originalProvider: targetProvider,
@@ -536,7 +552,11 @@ describe('RedteamIterativeProvider', () => {
             } as AtomicTestCase,
           });
           expect(getResult).toHaveBeenCalledTimes(2);
-          expect(result.output).toBe('first response');
+          expect(targetProvider.callApi).toHaveBeenCalledTimes(maxAttempts);
+          expect(result.output).toBe(JSON.stringify(firstOutput));
+          expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
+          expect(getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
+          expect(getResult.mock.calls[1][7]).toMatchObject({ outputIsText: !outputIsText });
           expect(result.metadata.storedGraderResult).toMatchObject({
             reason: 'first verdict',
             tokensUsed: { total: 4, cached: 2, numRequests: 1 },
@@ -909,7 +929,7 @@ describe('RedteamIterativeProvider', () => {
 
       expect(result).toEqual({
         output: JSON.stringify(mockResponse),
-        sessionId: undefined,
+        outputIsText: false,
         tokenUsage: { numRequests: 1 },
       });
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
@@ -930,7 +950,7 @@ describe('RedteamIterativeProvider', () => {
 
       expect(result).toEqual({
         output: JSON.stringify(nonStringOutput),
-        sessionId: undefined,
+        outputIsText: false,
         tokenUsage: { numRequests: 1 },
       });
     });

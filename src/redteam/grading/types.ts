@@ -11,6 +11,8 @@ import type { RedteamHistoryEntry } from '../types';
  */
 export interface RedteamGradingContext {
   providerResponse?: ProviderResponse;
+  /** Whether the evaluated output was text before any implicit serialization. */
+  outputIsText?: boolean;
   imageOutputs?: ImageOutput[];
   traceData?: TraceData | null;
   traceContext?: TraceContextData | null;

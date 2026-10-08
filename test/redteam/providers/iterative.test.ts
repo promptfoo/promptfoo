@@ -968,8 +968,8 @@ describe('RedteamIterativeProvider', () => {
             { pass: true, score: 1, reason: 'Second verdict' },
           );
           mockGetTargetResponse
-            .mockResolvedValueOnce({ output: 'first response' })
-            .mockResolvedValueOnce({ output: 'second response' });
+            .mockResolvedValueOnce({ output: 'first response', outputIsText: true })
+            .mockResolvedValueOnce({ output: 'second response', outputIsText: false });
           const judge =
             scenario === 'zero ratings'
               ? judgeRating(0)
@@ -981,10 +981,17 @@ describe('RedteamIterativeProvider', () => {
             .mockImplementationOnce(judge);
           const result = await runConversation(2);
           expect(result.output).toBe('second response');
+          expect(result.metadata.redteamOutputIsText).toBe(false);
           expect(result.prompt).toBe('second attack');
           expect(result.metadata.redteamFinalPrompt).toBe('second attack');
           expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
-            getGradingInputHash('second attack', 'second response', undefined, 'test-plugin'),
+            getGradingInputHash(
+              'second attack',
+              'second response',
+              undefined,
+              'test-plugin',
+              false,
+            ),
           );
         },
       );
@@ -995,8 +1002,8 @@ describe('RedteamIterativeProvider', () => {
           { pass: false, score: 0, reason: 'Target produced harmful content' },
         );
         mockGetTargetResponse
-          .mockResolvedValueOnce({ output: 'benign response' })
-          .mockResolvedValueOnce({ output: 'harmful response' });
+          .mockResolvedValueOnce({ output: 'benign response', outputIsText: true })
+          .mockResolvedValueOnce({ output: 'harmful response', outputIsText: false });
         mockRedteamProvider.callApi
           .mockImplementationOnce(attackerTurn('first attack'))
           .mockImplementationOnce(judgeRating(9))
@@ -1009,6 +1016,7 @@ describe('RedteamIterativeProvider', () => {
         expect(result.metadata.finalIteration).toBe(2);
         // Previously the output and prompt came from the higher-rated benign turn.
         expect(result.output).toBe('harmful response');
+        expect(result.metadata.redteamOutputIsText).toBe(false);
         expect(result.prompt).toBe('second attack');
       });
 
@@ -1049,6 +1057,45 @@ describe('RedteamIterativeProvider', () => {
             tokensUsed: { total: cached ? 4 : 6, numRequests: cached ? 1 : 2 },
           });
           expect(result.metadata.storedGraderResult?.metadata?.cachedResponse).not.toBe(true);
+        },
+      );
+
+      it.each([true, false])(
+        'keeps the selected earlier output type (text: %s)',
+        async (outputIsText) => {
+          const shared = await vi.importActual<
+            typeof import('../../../src/redteam/providers/shared')
+          >('../../../src/redteam/providers/shared');
+          mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+          const firstOutput = outputIsText ? '84' : { answer: 84 };
+          mockTargetProvider.callApi
+            .mockResolvedValueOnce({ output: firstOutput })
+            .mockResolvedValueOnce({ output: outputIsText ? { answer: 42 } : '42' });
+          const getResult = grades(
+            { pass: true, score: 1, reason: 'First verdict' },
+            { pass: true, score: 1, reason: 'Second verdict' },
+          );
+          mockRedteamProvider.callApi
+            .mockImplementationOnce(attackerTurn('first attack'))
+            .mockImplementationOnce(judgeRating(8))
+            .mockImplementationOnce(attackerTurn('second attack'))
+            .mockImplementationOnce(judgeRating(3));
+
+          const result = await runConversation(2);
+
+          expect(result.output).toBe(outputIsText ? firstOutput : JSON.stringify(firstOutput));
+          expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
+          expect(getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
+          expect(getResult.mock.calls[1][7]).toMatchObject({ outputIsText: !outputIsText });
+          expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+            getGradingInputHash(
+              'first attack',
+              result.output,
+              undefined,
+              'test-plugin',
+              outputIsText,
+            ),
+          );
         },
       );
 

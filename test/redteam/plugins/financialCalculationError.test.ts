@@ -2,6 +2,8 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../../src/assertions/index';
+import { fetchWithCache } from '../../../src/cache';
+import { HttpProvider } from '../../../src/providers/http';
 import { RedteamGradingConfigError } from '../../../src/redteam/grading/errors';
 import {
   getGradingAssertionHash,
@@ -14,12 +16,18 @@ import cases from '../../fixtures/financial-calculation/cases.json';
 
 import type { Assertion, AssertionValue, AtomicTestCase } from '../../../src/types/index';
 
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
+
 const test: AtomicTestCase = { metadata: { purpose: 'A financial calculator' } };
 
 describe('FinancialCalculationErrorPluginGrader numeric references', () => {
   const grader = new FinancialCalculationErrorPluginGrader();
 
   beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
     vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockRejectedValue(
       new Error('Numeric grading must not call the LLM grader'),
     );
@@ -300,6 +308,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
           output,
           metadata: {
             redteamFinalPrompt: prompt,
+            redteamOutputIsText: true,
             redteamHistory: [
               { prompt: 'An earlier attempt', output, graderError: 'Grading service unavailable' },
               { prompt, output },
@@ -319,6 +328,212 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
       }),
     ).rejects.toThrow(RedteamGradingConfigError);
     expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
+  });
+
+  it('rejects object outputs from the default HTTP parser before numeric grading', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: '{"amount":9007199254740993}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const provider = new HttpProvider('https://example.com/calculator', {
+      config: { method: 'POST', body: { prompt: '{{prompt}}' } },
+    });
+    const providerResponse = await provider.callApi('Return the amount as JSON');
+    expect(providerResponse.output).toEqual({ amount: 9007199254740992 });
+    await expect(
+      runAssertion({
+        prompt: 'Return the amount as JSON',
+        test,
+        provider,
+        providerResponse,
+        assertion: {
+          type: 'promptfoo:redteam:financial:calculation-error',
+          value: { type: 'numeric', expected: { amount: '9007199254740992' } },
+        },
+      }),
+    ).rejects.toThrow(/requires raw JSON text/);
+  });
+
+  it.each([
+    ['9007199254740993', true],
+    ['9007199254740992', false],
+  ])('keeps HTTP text output exact against %s', async (amount, pass) => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: '{"amount":9007199254740993}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const provider = new HttpProvider('https://example.com/calculator', {
+      config: { method: 'POST', body: { prompt: '{{prompt}}' }, responseParser: 'text' },
+    });
+    const providerResponse = await provider.callApi('Return the amount as JSON');
+    expect(providerResponse.output).toBe('{"amount":9007199254740993}');
+    const result = await runAssertion({
+      prompt: 'Return the amount as JSON',
+      test,
+      provider,
+      providerResponse,
+      assertion: {
+        type: 'promptfoo:redteam:financial:calculation-error',
+        value: { type: 'numeric', expected: { amount } },
+      },
+    });
+    expect(result.pass).toBe(pass);
+    expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ amount: 100 }, undefined],
+    [{ amount: 100 }, 'JSON.stringify(output)'],
+    ['{"amount":100}', 'JSON.parse(output)'],
+  ])(
+    'rejects implicit serialization across assertion transforms (%j, %s)',
+    async (output, transform) => {
+      await expect(
+        runAssertion({
+          prompt: 'Return the amount as JSON',
+          test,
+          assertion: {
+            type: 'promptfoo:redteam:financial:calculation-error',
+            transform,
+            value: { type: 'numeric', expected: { amount: 100 } },
+          },
+          providerResponse: { output, metadata: { redteamOutputIsText: true } },
+        }),
+      ).rejects.toThrow(/requires raw JSON text/);
+    },
+  );
+
+  it('allows a text-preserving assertion transform', async () => {
+    const result = await runAssertion({
+      prompt: 'Return the amount as JSON',
+      test,
+      assertion: {
+        type: 'promptfoo:redteam:financial:calculation-error',
+        transform: 'output.trim()',
+        value: { type: 'numeric', expected: { amount: '9007199254740993' } },
+      },
+      providerResponse: { output: ' {"amount":9007199254740993} ' },
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it.each([true, false, undefined])(
+    'checks source eligibility before stored-grade reuse (%s)',
+    async (outputIsText) => {
+      const prompt = 'Return the amount as JSON';
+      const output = '{"amount":100}';
+      const pluginId = 'financial:calculation-error';
+      const assertion: Assertion = {
+        type: 'promptfoo:redteam:financial:calculation-error',
+        value: { type: 'numeric', expected: { amount: 100 } },
+      };
+      const result = runAssertion({
+        prompt,
+        assertion,
+        test: {
+          ...test,
+          provider: 'promptfoo:redteam:iterative:meta',
+          assert: [assertion],
+          metadata: { ...test.metadata, pluginId, strategyId: 'jailbreak:meta' },
+        },
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: prompt,
+            redteamOutputIsText: outputIsText,
+            redteamHistory: [
+              { prompt, output, graderError: 'Transient failure' },
+              { prompt, output },
+            ],
+            storedGraderResult: {
+              pass: true,
+              score: 1,
+              reason: 'Stored exact numeric grade',
+              assertion,
+              metadata: {
+                redteamGradingAssertionHash: getGradingAssertionHash(assertion),
+                redteamGradingInputHash: getGradingInputHash(
+                  prompt,
+                  output,
+                  undefined,
+                  pluginId,
+                  outputIsText,
+                ),
+              },
+            },
+          },
+        },
+      });
+      if (outputIsText === true) {
+        expect(await result).toMatchObject({ pass: true, reason: 'Stored exact numeric grade' });
+      } else {
+        await expect(result).rejects.toThrow(/requires raw JSON text/);
+      }
+    },
+  );
+
+  it('regrades when a saved grade was bound to a different source type', async () => {
+    const prompt = 'Return the amount as JSON';
+    const output = '{"amount":101}';
+    const pluginId = 'financial:calculation-error';
+    const assertion: Assertion = {
+      type: 'promptfoo:redteam:financial:calculation-error',
+      value: { type: 'numeric', expected: { amount: 100 } },
+    };
+    const result = await runAssertion({
+      prompt,
+      assertion,
+      test: {
+        ...test,
+        provider: 'promptfoo:redteam:hydra',
+        assert: [assertion],
+        metadata: { ...test.metadata, pluginId, strategyId: 'jailbreak:hydra' },
+      },
+      providerResponse: {
+        output,
+        metadata: {
+          redteamFinalPrompt: prompt,
+          redteamOutputIsText: true,
+          storedGraderResult: {
+            pass: true,
+            score: 1,
+            reason: 'Grade from a different source type',
+            assertion,
+            metadata: {
+              redteamGradingAssertionHash: getGradingAssertionHash(assertion),
+              redteamGradingInputHash: getGradingInputHash(
+                prompt,
+                output,
+                undefined,
+                pluginId,
+                false,
+              ),
+            },
+          },
+        },
+      },
+    });
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('received 101');
+  });
+
+  it('rejects object output provenance during direct strategy grading', async () => {
+    await expect(
+      grader.getResult(
+        'Calculate',
+        '{"amount":100}',
+        test,
+        undefined,
+        { type: 'numeric', expected: { amount: 100 } },
+        undefined,
+        undefined,
+        { outputIsText: false, providerResponse: { output: '{"amount":100}' } },
+      ),
+    ).rejects.toThrow(RedteamGradingConfigError);
   });
 
   it('rejects precision-losing JSON numbers through the registered assertion', async () => {
@@ -343,7 +558,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
         type: 'promptfoo:redteam:financial:calculation-error',
         value: { type: 'numeric', expected: { amount: 0.1 }, absoluteTolerance: 0.01 },
       },
-      providerResponse: { output: { amount: 0.09 } },
+      providerResponse: { output: '{"amount":0.09}' },
     });
     expect(result).toMatchObject({ pass: true, score: 1 });
     expect(RedteamGraderBase.prototype.getResult).not.toHaveBeenCalled();
@@ -362,7 +577,7 @@ describe('FinancialCalculationErrorPluginGrader numeric references', () => {
           absoluteTolerance: fixture.absoluteTolerance,
         },
       },
-      providerResponse: { output: fixture.correct },
+      providerResponse: { output: JSON.stringify(fixture.correct) },
     });
     expect(result).toMatchObject({
       pass: true,

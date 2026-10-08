@@ -508,6 +508,7 @@ type StopReason =
  * Represents metadata for the iterative tree search process.
  */
 interface TreeIterativeMetadata extends BaseRedteamMetadata {
+  redteamOutputIsText?: boolean;
   highestScore: number;
   redteamFinalPrompt?: string;
   stopReason: StopReason;
@@ -626,6 +627,7 @@ async function runRedteamConversation({
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
   let bestResponse = '';
+  let bestResponseIsText: boolean | undefined;
 
   let stoppingReason: StopReason;
 
@@ -694,6 +696,7 @@ async function runRedteamConversation({
             prompt: bestNode.prompt,
             error: error.message,
             metadata: {
+              redteamOutputIsText: bestResponseIsText,
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -913,6 +916,7 @@ async function runRedteamConversation({
         if (isNewBest) {
           maxScore = score;
           bestResponse = targetResponse.output;
+          bestResponseIsText = targetResponse.outputIsText;
           bestNode.prompt = newInjectVar;
           bestNode.inputMaterialization = inputMaterialization;
           bestNode.materializationHandled = materializationHandled;
@@ -959,6 +963,7 @@ async function runRedteamConversation({
             // Build grading context with image outputs and exfil tracking data.
             let gradingContext: RedteamGradingContext | undefined = {
               providerResponse: targetResponse,
+              outputIsText: targetResponse.outputIsText,
               ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             };
 
@@ -1033,6 +1038,7 @@ async function runRedteamConversation({
               {
                 prompt: finalInjectVar,
                 output: targetResponse.output,
+                outputIsText: targetResponse.outputIsText,
                 pluginId: test.metadata?.pluginId,
                 assertion: assertToUse,
               },
@@ -1069,6 +1075,7 @@ async function runRedteamConversation({
             output: targetResponse.output,
             prompt: newInjectVar,
             metadata: {
+              redteamOutputIsText: targetResponse.outputIsText,
               highestScore: maxScore,
               redteamFinalPrompt: finalInjectVar,
               messages: treeOutputs as Record<string, any>[],
@@ -1112,6 +1119,7 @@ async function runRedteamConversation({
             output: bestResponse,
             prompt: bestNode.prompt,
             metadata: {
+              redteamOutputIsText: bestResponseIsText,
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -1156,6 +1164,7 @@ async function runRedteamConversation({
             output: bestResponse,
             prompt: bestNode.prompt,
             metadata: {
+              redteamOutputIsText: bestResponseIsText,
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -1303,6 +1312,7 @@ async function runRedteamConversation({
       (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
     prompt: bestNode.prompt,
     metadata: {
+      redteamOutputIsText: bestResponse ? bestResponseIsText : finalTargetResponse.outputIsText,
       highestScore: maxScore,
       redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
       messages: treeOutputs as Record<string, any>[],

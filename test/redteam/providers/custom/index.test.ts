@@ -1448,100 +1448,116 @@ describe('CustomProvider', () => {
     });
   });
 
-  it('should store grader result even when continueAfterSuccess is true', async () => {
-    const testProvider = new CustomProvider({
-      injectVar: 'objective',
-      maxTurns: 2,
-      maxBacktracks: 1,
-      redteamProvider: mockRedTeamProvider,
-      stateful: false,
-      strategyText: 'Test strategy',
-      continueAfterSuccess: true,
-    });
+  it.each([true, false])(
+    'preserves the flagged output type after continuing (text: %s)',
+    async (outputIsText) => {
+      const firstOutput = { answer: 84 };
+      const secondOutput = { answer: 42 };
+      const testProvider = new CustomProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        maxBacktracks: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+        strategyText: 'Test strategy',
+        continueAfterSuccess: true,
+      });
 
-    const firstGraderResult = {
-      pass: false,
-      score: 0,
-      reason: 'First jailbreak detected',
-    };
+      const firstGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'First jailbreak detected',
+      };
 
-    const secondGraderResult = {
-      pass: true,
-      score: 1,
-      reason: 'No jailbreak on second turn',
-    };
+      const secondGraderResult = {
+        pass: true,
+        score: 1,
+        reason: 'No jailbreak on second turn',
+      };
 
-    const testRubric = 'Test grading rubric';
+      const testRubric = 'Test grading rubric';
 
-    // Create the mock getResult function outside mockImplementation so it persists across calls
-    const mockGetResult = vi
-      .fn()
-      .mockResolvedValueOnce({ grade: firstGraderResult, rubric: testRubric })
-      .mockResolvedValueOnce({ grade: secondGraderResult, rubric: testRubric });
+      // Create the mock getResult function outside mockImplementation so it persists across calls
+      const mockGetResult = vi
+        .fn()
+        .mockResolvedValueOnce({ grade: firstGraderResult, rubric: testRubric })
+        .mockResolvedValueOnce({ grade: secondGraderResult, rubric: testRubric });
 
-    // Mock grader to fail on first turn, pass on second
-    mockGetGraderById.mockImplementation(function () {
-      return {
-        getResult: mockGetResult,
-      } as any;
-    });
+      // Mock grader to fail on first turn, pass on second
+      mockGetGraderById.mockImplementation(function () {
+        return {
+          getResult: mockGetResult,
+        } as any;
+      });
 
-    const prompt = 'test prompt';
-    const context = {
-      originalProvider: mockTargetProvider,
-      vars: { objective: 'test objective' },
-      prompt: { raw: prompt, label: 'test' },
-      test: {
-        assert: [{ type: 'mock-grader' }],
-        metadata: { pluginId: 'mock' },
-      } as any,
-    };
+      const prompt = 'test prompt';
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: prompt, label: 'test' },
+        test: {
+          assert: [{ type: 'mock-grader' }],
+          metadata: { pluginId: 'mock' },
+        } as any,
+      };
 
-    mockRedTeamProvider.callApi.mockResolvedValue({
-      output: JSON.stringify({
-        generatedQuestion: 'test question',
-        rationaleBehindJailbreak: 'test rationale',
-        lastResponseSummary: 'test summary',
-      }),
-    });
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
 
-    mockTargetProvider.callApi
-      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: false } })
-      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: true } });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: outputIsText ? JSON.stringify(firstOutput) : firstOutput,
+          guardrails: { flagged: false },
+        })
+        .mockResolvedValueOnce({
+          output: outputIsText ? secondOutput : JSON.stringify(secondOutput),
+          guardrails: { flagged: true },
+        });
 
-    // Mock scoring provider responses for both turns
-    mockScoringProvider.callApi.mockResolvedValue({
-      output: JSON.stringify({
-        value: false,
-        metadata: 30,
-        rationale: 'Partial success',
-      }),
-    });
+      // Mock scoring provider responses for both turns
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          value: false,
+          metadata: 30,
+          rationale: 'Partial success',
+        }),
+      });
 
-    const result = await testProvider.callApi(prompt, context);
+      const result = await testProvider.callApi(prompt, context);
 
-    expect(result.metadata?.storedGraderResult).toEqual({
-      metadata: {
-        redteamGradingInputHash: expect.any(String),
-        redteamGradingAssertionHash: expect.any(String),
-      },
-      ...firstGraderResult,
-      assertion: { type: 'mock-grader', value: testRubric },
-    });
-    expect(result.metadata?.stopReason).toBe('Max rounds reached');
-    expect(result.metadata?.successfulAttacks).toHaveLength(1);
-    expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
-    expect(result.guardrails).toEqual({ flagged: false });
-    expect(result.metadata?.messages).toHaveLength(2);
-    expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
-      getGradingInputHash(
-        result.metadata?.redteamFinalPrompt as string,
-        result.output as string,
-        result.metadata?.messages,
-        'mock',
-      ),
-    );
-  });
+      expect(result.output).toBe(JSON.stringify(firstOutput));
+      expect(result.metadata?.redteamOutputIsText).toBe(outputIsText);
+      expect(mockGetResult.mock.calls[0][7]).toMatchObject({ outputIsText });
+      expect(mockGetResult.mock.calls[1][7]).toMatchObject({ outputIsText: !outputIsText });
+      expect(result.metadata?.storedGraderResult).toEqual({
+        metadata: {
+          redteamGradingInputHash: expect.any(String),
+          redteamGradingAssertionHash: expect.any(String),
+        },
+        ...firstGraderResult,
+        assertion: { type: 'mock-grader', value: testRubric },
+      });
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.successfulAttacks).toHaveLength(1);
+      expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
+      expect(result.guardrails).toEqual({ flagged: false });
+      expect(result.metadata?.messages).toHaveLength(2);
+      expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+        getGradingInputHash(
+          result.metadata?.redteamFinalPrompt as string,
+          result.output as string,
+          result.metadata?.messages,
+          'mock',
+          outputIsText,
+        ),
+      );
+    },
+  );
 
   it('should include modifiers in system prompt from test metadata', async () => {
     const prompt = 'test prompt';

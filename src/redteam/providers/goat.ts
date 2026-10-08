@@ -85,6 +85,7 @@ const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
  * Represents metadata for the GOAT conversation process.
  */
 interface GoatMetadata extends BaseRedteamMetadata {
+  redteamOutputIsText?: boolean;
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached' | 'Target ended conversation';
   successfulAttacks?: Array<{
@@ -249,6 +250,7 @@ export default class GoatProvider implements ApiProvider {
     }> = [];
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
+    let lastOutputIsText: boolean | undefined;
 
     // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
     let lastTransformDisplayVars: Record<string, string> | undefined;
@@ -358,6 +360,7 @@ export default class GoatProvider implements ApiProvider {
                 : safeJsonStringify(unblockingResponse.output);
 
             if (unblockingOutput) {
+              lastOutputIsText = typeof unblockingResponse.output === 'string';
               messages.push({ role: 'assistant', content: unblockingOutput });
             }
 
@@ -615,7 +618,11 @@ export default class GoatProvider implements ApiProvider {
           targetContext,
           options,
         )) as GoatProviderResponse;
+        const outputIsText = typeof targetResponse.output === 'string';
         messages.push(pendingMessage);
+        if (pendingMessage.role === 'assistant') {
+          lastOutputIsText = undefined;
+        }
         lastFinalAttackPrompt = lastTransformResult?.prompt || latestMessageContent;
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
@@ -674,6 +681,7 @@ export default class GoatProvider implements ApiProvider {
               : safeJsonStringify(targetResponse.output);
 
           if (endedOutput) {
+            lastOutputIsText = outputIsText;
             messages.push({
               role: 'assistant',
               content: endedOutput,
@@ -719,6 +727,7 @@ export default class GoatProvider implements ApiProvider {
           continue;
         }
 
+        lastOutputIsText = outputIsText;
         messages.push({
           role: 'assistant',
           content: finalOutput,
@@ -757,6 +766,7 @@ export default class GoatProvider implements ApiProvider {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
+            outputIsText,
             conversationTranscript: getTargetConversation(messages).conversationTranscript,
             ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
           };
@@ -816,6 +826,7 @@ export default class GoatProvider implements ApiProvider {
               getLastMessageContent(messages, 'user') ||
               attackerMessage.content,
             output: finalOutput,
+            outputIsText,
             messages,
             guardrails: finalResponse.guardrails,
             transformDisplayVars: lastTransformDisplayVars,
@@ -885,6 +896,7 @@ export default class GoatProvider implements ApiProvider {
     const finalPrompt = getLastMessageContent(messages, 'user') || '';
     const reported = flaggedTurn ?? {
       output: getLastMessageContent(messages, 'assistant') || '',
+      outputIsText: lastOutputIsText,
       prompt: finalPrompt,
       messages,
       guardrails: lastTargetResponse?.guardrails,
@@ -894,6 +906,7 @@ export default class GoatProvider implements ApiProvider {
       output: reported.output,
       prompt: reported.prompt,
       metadata: {
+        redteamOutputIsText: reported.outputIsText,
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: flaggedTurn ? flaggedTurn.prompt : lastFinalAttackPrompt || finalPrompt,
         messages: reported.messages as Record<string, any>[],

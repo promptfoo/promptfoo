@@ -13,7 +13,9 @@ import {
 import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
-const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
+const mockGetTargetResponse = vi.hoisted(() =>
+  vi.fn<typeof import('../../../src/redteam/providers/shared').getTargetResponse>(),
+);
 
 vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -236,54 +238,66 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.stopReason).toBe('Grader failed');
     });
 
-    it('passes target provider raw response into the grader', async () => {
-      const mockGrader = {
-        getResult: vi.fn<any>().mockResolvedValue({
-          grade: { pass: true, score: 0, reason: 'Target defended' },
-          rubric: 'test rubric',
-        }),
-      };
-      mockGetGraderById.mockReturnValue(mockGrader);
-      mockGetTargetResponse.mockResolvedValue({
-        output: 'Target response',
-        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
-        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-      });
+    it.each([true, false])(
+      'passes target output type into the grader (text: %s)',
+      async (outputIsText) => {
+        const shared = await vi.importActual<
+          typeof import('../../../src/redteam/providers/shared')
+        >('../../../src/redteam/providers/shared');
+        mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+        const output = outputIsText ? '84' : { answer: 84 };
+        const normalizedOutput = outputIsText ? output : JSON.stringify(output);
+        const mockGrader = {
+          getResult: vi.fn<any>().mockResolvedValue({
+            grade: { pass: true, score: 0, reason: 'Target defended' },
+            rubric: 'test rubric',
+          }),
+        };
+        mockGetGraderById.mockReturnValue(mockGrader);
+        mockTargetProvider.callApi.mockResolvedValue({
+          output,
+          raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        });
 
-      await runMetaAgentRedteam({
-        context: {
-          vars: { query: 'test' },
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: 'test', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 1,
+          options: undefined,
           prompt: { raw: 'test', label: 'test' },
-          originalProvider: mockTargetProvider,
-        },
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 1,
-        options: undefined,
-        prompt: { raw: 'test', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        test: {
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test: {
+            vars: { query: 'test' },
+            assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
+          } as AtomicTestCase,
           vars: { query: 'test' },
-          assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
-        } as AtomicTestCase,
-        vars: { query: 'test' },
-      });
+        });
 
-      expect(mockGrader.getResult).toHaveBeenCalled();
-      const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
-        imageOutputs?: ProviderResponse['images'];
-        providerResponse?: ProviderResponse;
-      };
-      expect(gradingContext.imageOutputs).toEqual([
-        { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
-      ]);
-      expect(gradingContext.providerResponse).toMatchObject({
-        output: 'Target response',
-        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
-      });
-    });
+        expect(mockGrader.getResult).toHaveBeenCalled();
+        expect(result.output).toBe(normalizedOutput);
+        expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
+        expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({ outputIsText });
+        const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+          imageOutputs?: ProviderResponse['images'];
+          providerResponse?: ProviderResponse;
+        };
+        expect(gradingContext.imageOutputs).toEqual([
+          { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
+        ]);
+        expect(gradingContext.providerResponse).toMatchObject({
+          output: normalizedOutput,
+          raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+        });
+      },
+    );
 
     it('should handle agent provider errors gracefully', async () => {
       mockAgentProvider.callApi = vi

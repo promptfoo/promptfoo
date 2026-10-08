@@ -100,6 +100,7 @@ const getIterativeGoalRubric = (goal: string | undefined): string => {
 type StopReason = 'Grader failed' | 'Max iterations reached';
 
 interface IterativeMetadata {
+  redteamOutputIsText?: boolean;
   finalIteration: number;
   highestScore: number;
   redteamFinalPrompt?: string;
@@ -215,6 +216,7 @@ export async function runRedteamConversation({
 
   let highestScore = 0;
   let bestResponse = '';
+  let bestResponseIsText: boolean | undefined;
   let finalIteration = numIterations;
   let bestInjectVar: string | undefined = undefined;
   let lastInjectVar: string | undefined;
@@ -564,6 +566,7 @@ export async function runRedteamConversation({
         // Build grading context with image outputs and exfil tracking data.
         let gradingContext: RedteamGradingContext | undefined = {
           providerResponse: targetResponse,
+          outputIsText: targetResponse.outputIsText,
           ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
         };
 
@@ -652,6 +655,7 @@ export async function runRedteamConversation({
           {
             prompt: finalInjectVar,
             output: targetResponse.output,
+            outputIsText: targetResponse.outputIsText,
             pluginId: test.metadata?.pluginId,
             assertion: assertToUse,
           },
@@ -698,6 +702,7 @@ export async function runRedteamConversation({
       stopReason = 'Grader failed';
       finalIteration = i + 1;
       bestResponse = targetResponse.output;
+      bestResponseIsText = targetResponse.outputIsText;
       bestInjectVar = finalInjectVar;
       bestGraderResult = storedGraderResult;
       recordTurn(undefined, tracingOptions.includeInAttack ? computedTraceSummary : undefined);
@@ -795,6 +800,7 @@ export async function runRedteamConversation({
       if (currentScore > highestScore) {
         highestScore = currentScore;
         bestResponse = targetResponse.output;
+        bestResponseIsText = targetResponse.outputIsText;
         bestInjectVar = finalInjectVar;
         bestGraderResult = storedGraderResult;
       }
@@ -870,6 +876,8 @@ export async function runRedteamConversation({
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     prompt: bestInjectVar ?? lastInjectVar,
     metadata: {
+      redteamOutputIsText:
+        bestInjectVar === undefined ? lastResponse?.outputIsText : bestResponseIsText,
       finalIteration,
       highestScore,
       redteamHistory: previousOutputs,
