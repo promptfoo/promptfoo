@@ -7,7 +7,7 @@ import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
-import { importModule } from '../../src/esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import {
   CLAUDE_CODE_MODEL_ALIASES,
@@ -18,6 +18,7 @@ import {
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
 import * as traceStore from '../../src/tracing/store';
+import { getPackageVersion } from '../../src/util/packageVersion';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { mockProcessEnv } from '../util/utils';
 import type {
@@ -74,11 +75,13 @@ vi.mock('fs', async (importOriginal) => {
 vi.mock('../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    getDirectory: vi.fn(),
     importModule: vi.fn(),
     resolvePackageEntryPoint: vi.fn(() => '@anthropic-ai/claude-agent-sdk'),
   };
 });
 vi.mock('../../src/providers/mcp/transform');
+vi.mock('../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
 vi.mock('node:module', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -291,7 +294,14 @@ describe('ClaudeCodeSDKProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(getDirectory)
+      .mockReset()
+      .mockReturnValue(path.resolve('/global/node_modules/promptfoo/dist/src'));
+    vi.mocked(resolvePackageEntryPoint)
+      .mockReset()
+      .mockReturnValue('@anthropic-ai/claude-agent-sdk');
     mockQuery.mockReset();
+    vi.mocked(getPackageVersion).mockReset().mockReturnValue('0.3.273');
     Object.values(fsMocks).forEach((mock) => mock.mockReset());
 
     // Setup importModule to return our mockQuery
@@ -309,6 +319,8 @@ describe('ClaudeCodeSDKProvider', () => {
   });
 
   afterEach(async () => {
+    vi.mocked(getDirectory).mockReset();
+    vi.mocked(resolvePackageEntryPoint).mockReset();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     cliState.setActiveOtlpReceiver();
@@ -582,12 +594,74 @@ describe('ClaudeCodeSDKProvider', () => {
     });
   });
 
+  it('loads the SDK installed beside a global Promptfoo installation', async () => {
+    const installRoot = path.resolve('/global/node_modules/promptfoo');
+    const sdkPath = path.resolve('/global/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs');
+    vi.mocked(resolvePackageEntryPoint).mockImplementation((_name, basePath) =>
+      basePath === installRoot ? sdkPath : null,
+    );
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Response');
+    expect(resolvePackageEntryPoint).toHaveBeenNthCalledWith(
+      1,
+      '@anthropic-ai/claude-agent-sdk',
+      cliState.basePath,
+    );
+    expect(getPackageVersion).toHaveBeenCalledWith('@anthropic-ai/claude-agent-sdk', sdkPath);
+    expect(importModule).toHaveBeenCalledWith(sdkPath);
+  });
+
+  it('checks the project SDK before a compatible global sibling', async () => {
+    const localPath = path.resolve(
+      '/test/basePath/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs',
+    );
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(localPath);
+    vi.mocked(getPackageVersion).mockReturnValue('0.3.235');
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('found 0.3.235');
+    expect(resolvePackageEntryPoint).toHaveBeenCalledTimes(1);
+    expect(getPackageVersion).toHaveBeenCalledWith('@anthropic-ai/claude-agent-sdk', localPath);
+    expect(importModule).not.toHaveBeenCalled();
+  });
+
   it('reports installation guidance for an asynchronously rejected SDK import', async () => {
     vi.mocked(importModule).mockRejectedValueOnce(new Error('module initialization failed'));
     const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
     const result = await provider.callApi('Import failure');
     expect(result.error).toContain('Failed to load @anthropic-ai/claude-agent-sdk');
-    expect(result.error).toContain('npm install @anthropic-ai/claude-agent-sdk');
+    expect(result.error).toContain('npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273');
+  });
+
+  it.each(['0.3.235', '0.4.0', '1.0.0', 'invalid', null])(
+    'rejects incompatible SDK %s before importing it',
+    async (version) => {
+      vi.mocked(getPackageVersion).mockReturnValue(version);
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+      const response = await provider.callApi('test');
+      expect(response.error).toContain('requires @anthropic-ai/claude-agent-sdk@^0.3.273');
+      expect(response.error).toContain(
+        'npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273',
+      );
+      expect(importModule).not.toHaveBeenCalled();
+    },
+  );
+
+  // Renovate bumps the pinned devDependency, so later 0.3.x releases must keep working.
+  it.each(['0.3.273', '0.3.277', '0.3.999'])('accepts compatible SDK %s', async (version) => {
+    vi.mocked(getPackageVersion).mockReturnValue(version);
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+    const response = await provider.callApi('test');
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('Response');
   });
 
   it.each(['', null])(
@@ -610,6 +684,72 @@ describe('ClaudeCodeSDKProvider', () => {
       );
     },
   );
+
+  it.each(['0.2.129', '0.3.159', '0.3.252', '0.3.257'])(
+    'rejects SDK %s before it can ignore custom system prompt settings',
+    async (sdkVersion) => {
+      vi.mocked(getPackageVersion).mockReturnValue(sdkVersion);
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: 'You are a pirate.' },
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.error).toContain('requires @anthropic-ai/claude-agent-sdk@^0.3.273');
+      expect(mockQuery).not.toHaveBeenCalled();
+      expect(importModule).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['0.3.273', '0.3.283'])(
+    'preserves the unrecorded custom system prompt with supported SDK %s across calls',
+    async (sdkVersion) => {
+      vi.mocked(getPackageVersion).mockReturnValue(sdkVersion);
+      mockQuery.mockImplementation(() => createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: 'You are a pirate.' },
+      });
+      expect((await provider.callApi('Hello')).error).toBeUndefined();
+      expect((await provider.callApi('Hello again')).error).toBeUndefined();
+      expect(getPackageVersion).toHaveBeenCalledExactlyOnceWith(
+        '@anthropic-ai/claude-agent-sdk',
+        '@anthropic-ai/claude-agent-sdk',
+      );
+      expect(mockQuery).toHaveBeenCalledTimes(2);
+      for (const [queryParams] of mockQuery.mock.calls) {
+        expect(queryParams.options.systemPrompt).toEqual({
+          type: 'custom',
+          prompt: 'You are a pirate.',
+          snapshot: false,
+        });
+      }
+    },
+  );
+
+  it('preserves a manifest read error without executing the SDK', async () => {
+    vi.mocked(getPackageVersion).mockImplementation(() => {
+      throw new SyntaxError('Unexpected token in package.json');
+    });
+    const provider = new ClaudeCodeSDKProvider({
+      config: { apiKey: 'test-key', custom_system_prompt: 'You are a pirate.' },
+    });
+    const result = await provider.callApi('Hello');
+    expect(result.error).toContain('Unexpected token in package.json');
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(importModule).not.toHaveBeenCalled();
+  });
+
+  it('leaves the preset system prompt unchanged for a supported Agent SDK', async () => {
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({
+      config: { apiKey: 'test-key', append_system_prompt: 'Be brief.' },
+    });
+    expect((await provider.callApi('Hello')).error).toBeUndefined();
+    expect(mockQuery.mock.calls[0][0].options.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: 'Be brief.',
+      snapshot: false,
+    });
+  });
 
   it.each([
     {
@@ -2114,6 +2254,16 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
+      let restoreEnv: () => void;
+
+      beforeEach(() => {
+        restoreEnv = mockProcessEnv({ OTEL_RESOURCE_ATTRIBUTES: undefined });
+      });
+
+      afterEach(() => {
+        restoreEnv();
+      });
+
       it('passes file defaults below explicit subprocess environment values', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
         const provider = new ClaudeCodeSDKProvider({
