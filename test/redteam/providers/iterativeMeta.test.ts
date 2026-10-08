@@ -641,12 +641,21 @@ describe('RedteamIterativeMetaProvider', () => {
       }
     });
 
-    it('should capture outputAudio when target returns audio data', async () => {
-      // Set up mockGetTargetResponse to return audio data
-      mockGetTargetResponse.mockReset();
+    it.each([
+      {
+        mediaType: 'audio',
+        historyField: 'outputAudio',
+        media: { data: 'base64audiodata', format: 'mp3' },
+      },
+      {
+        mediaType: 'image',
+        historyField: 'outputImage',
+        media: { data: 'base64imagedata', format: 'png' },
+      },
+    ])('preserves target $mediaType in history', async ({ mediaType, historyField, media }) => {
       mockGetTargetResponse.mockResolvedValue({
-        output: 'response with audio',
-        audio: { data: 'base64audiodata', format: 'mp3' },
+        output: 'response with media',
+        [mediaType]: media,
       });
 
       const result = await runMetaAgentRedteam({
@@ -667,46 +676,8 @@ describe('RedteamIterativeMetaProvider', () => {
         vars: { query: 'test' },
       });
 
-      if (result.metadata.redteamHistory.length > 0) {
-        const entry = result.metadata.redteamHistory[0];
-        expect(entry.outputAudio).toBeDefined();
-        expect(entry.outputAudio?.data).toBe('base64audiodata');
-        expect(entry.outputAudio?.format).toBe('mp3');
-      }
-    });
-
-    it('should capture outputImage when target returns image data', async () => {
-      // Set up mockGetTargetResponse to return image data
-      mockGetTargetResponse.mockReset();
-      mockGetTargetResponse.mockResolvedValue({
-        output: 'response with image',
-        image: { data: 'base64imagedata', format: 'png' },
-      });
-
-      const result = await runMetaAgentRedteam({
-        context: {
-          vars: { query: 'test' },
-          prompt: { raw: 'test', label: 'test' },
-          originalProvider: mockTargetProvider,
-        },
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 1,
-        options: undefined,
-        prompt: { raw: '{{query}}', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        test: undefined,
-        vars: { query: 'test' },
-      });
-
-      if (result.metadata.redteamHistory.length > 0) {
-        const entry = result.metadata.redteamHistory[0];
-        expect(entry.outputImage).toBeDefined();
-        expect(entry.outputImage?.data).toBe('base64imagedata');
-        expect(entry.outputImage?.format).toBe('png');
-      }
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+      expect(result.metadata.redteamHistory[0]).toMatchObject({ [historyField]: media });
     });
   });
 
@@ -1190,17 +1161,6 @@ describe('RedteamIterativeMetaProvider', () => {
         'Iteration 2: Password hunter2',
         'Iteration 3: Database mongodb://user:pass@host',
       ];
-      const cloudRequests: any[] = [];
-
-      mockAgentProvider.callApi = vi.fn().mockImplementation(async function (input: any) {
-        cloudRequests.push(JSON.parse(input as string));
-        return {
-          output: { result: 'Attack' },
-          tokenUsage: { total: 100, prompt: 50, completion: 50 },
-        };
-      }) as any;
-
-      mockGetTargetResponse.mockReset();
       for (const output of sensitiveResponses) {
         mockGetTargetResponse.mockResolvedValueOnce({ output });
       }
@@ -1226,6 +1186,9 @@ describe('RedteamIterativeMetaProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: true,
       });
 
+      const cloudRequests = mockAgentProvider.callApi.mock.calls.map(([input]) =>
+        JSON.parse(input),
+      );
       expect(mockGetTargetResponse).toHaveBeenCalledTimes(sensitiveResponses.length + 1);
       expect(cloudRequests).toHaveLength(sensitiveResponses.length + 1);
       expect(result.metadata.redteamHistory.map((entry) => entry.output)).toEqual([
