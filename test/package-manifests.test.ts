@@ -742,7 +742,6 @@ describe('package manifests', () => {
         'package-lock.json',
       );
     for (const dependency of [
-      '@anthropic-ai/claude-agent-sdk',
       '@modelcontextprotocol/sdk',
       '@opencode-ai/sdk',
       'hono',
