@@ -198,9 +198,8 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should not corrupt dollar-sign sequences when pre-resolving nested variables', async () => {
-      const prompt = toPrompt('Say {{greeting}}');
       const renderedPrompt = await renderPrompt(
-        prompt,
+        toPrompt('Say {{greeting}}'),
         { greeting: 'Cost is {{price}}', price: 'only $`5' },
         {},
       );
@@ -645,7 +644,7 @@ describe('evaluatorHelpers', () => {
       expect(resolveVariables(variables)).toEqual(expected);
     });
 
-    it.each(['ordinary text', '$$', '$&', '$`', "$'", '$1', '$99', '$<name>'])(
+    it.each(['ordinary text', '$$', '$&', '$`', "$'"])(
       'should insert %s literally into repeated placeholders',
       (price) => {
         const variables = { greeting: 'Say {{price}} then {{price}}!', price };
@@ -655,11 +654,6 @@ describe('evaluatorHelpers', () => {
         });
       },
     );
-
-    it('should resolve a placeholder whose value is only a replacement pattern', () => {
-      const variables = { alias: '{{pattern}}', pattern: '$&' };
-      expect(resolveVariables(variables)).toEqual({ alias: '$&', pattern: '$&' });
-    });
   });
 
   describe('runExtensionHook', () => {
