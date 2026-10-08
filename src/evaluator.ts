@@ -1360,13 +1360,17 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    // An absent provider result is an integration error, including in redteam
-    // scans. An intentional empty string still proceeds to the assertions.
-    ret.success = false;
-    ret.score = 0;
-    ret.error = 'No output';
-    ret.failureReason = ResultFailureReason.ERROR;
-    return;
+    const hasOutputImages = response.images?.some((image) => image.data || image.blobRef);
+    if (hasOutputImages && test.assert?.some(hasVlsuAssertion)) {
+      response = { ...response, output: '' };
+    } else {
+      // Missing text without output images remains a provider integration error.
+      ret.success = false;
+      ret.score = 0;
+      ret.error = 'No output';
+      ret.failureReason = ResultFailureReason.ERROR;
+      return;
+    }
   }
 
   await gradeRunEvalResponse({
@@ -1388,6 +1392,12 @@ async function applyRunEvalResponseOutcome({
     traceContext,
     vars,
   });
+}
+
+function hasVlsuAssertion(assertion: AssertionOrSet): boolean {
+  return assertion.type === 'assert-set'
+    ? assertion.assert.some(hasVlsuAssertion)
+    : assertion.type === 'promptfoo:redteam:vlsu';
 }
 
 async function gradeRunEvalResponse({
