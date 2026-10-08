@@ -479,29 +479,74 @@ describe('evaluation comparison URLs', () => {
     },
   );
 
-  it('does not load a stale latest-eval response after navigating to a pinned evaluation', async () => {
-    const user = userEvent.setup();
-    const defaultApi = vi.mocked(callApi).getMockImplementation()!;
-    let finishRecents!: (response: Response) => void;
-    let deferred = false;
-    vi.mocked(callApi).mockImplementation((path, options) => {
-      if (path === '/results' && !deferred) {
-        deferred = true;
-        return new Promise((resolve) => {
-          finishRecents = resolve;
-        });
-      }
-      return defaultApi(path, options);
-    });
+  it.each([200, 500])(
+    'ignores a stale latest-eval response after navigating to a pinned evaluation (%s)',
+    async (status) => {
+      const user = userEvent.setup();
+      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      let finishRecents!: (response: Response) => void;
+      let deferred = false;
+      vi.mocked(callApi).mockImplementation((path, options) => {
+        if (path === '/results' && !deferred) {
+          deferred = true;
+          return new Promise((resolve) => {
+            finishRecents = resolve;
+          });
+        }
+        return defaultApi(path, options);
+      });
+      renderPage('/eval');
+      await user.click(screen.getByRole('button', { name: 'Other eval' }));
+      await waitFor(() =>
+        expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-c$/),
+      );
+      await act(async () => {
+        finishRecents(
+          status === 200 ? await defaultApi('/results') : new Response(null, { status }),
+        );
+      });
+      expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-c$/);
+    },
+  );
+
+  it.each([200, 500])(
+    'ignores an older latest-eval lookup after a socket load (%s)',
+    async (status) => {
+      const defaultApi = vi.mocked(callApi).getMockImplementation()!;
+      let finishRecents!: (response: Response) => void;
+      let deferred = false;
+      vi.mocked(callApi).mockImplementation((path, options) => {
+        if (path === '/results') {
+          if (!deferred) {
+            deferred = true;
+            return new Promise((resolve) => {
+              finishRecents = resolve;
+            });
+          }
+          return Promise.resolve(new Response(JSON.stringify({ data: [{ evalId: 'eval-b' }] })));
+        }
+        return defaultApi(path, options);
+      });
+      renderPage('/eval');
+      await act(async () => {
+        await socketHandlers.get('update')!({ evalId: 'eval-b' });
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-b$/),
+      );
+      await act(async () => {
+        finishRecents(
+          status === 200 ? await defaultApi('/results') : new Response(null, { status }),
+        );
+      });
+      expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-b$/);
+    },
+  );
+
+  it('shows a recoverable load error when the latest-eval lookup rejects', async () => {
+    vi.mocked(callApi).mockRejectedValue(new Error('Network unavailable'));
     renderPage('/eval');
-    await user.click(screen.getByRole('button', { name: 'Other eval' }));
-    await waitFor(() =>
-      expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-c$/),
-    );
-    await act(async () => {
-      finishRecents(await defaultApi('/results'));
-    });
-    expect(screen.getByTestId('comparison-columns')).toHaveTextContent(/^eval-c$/);
+    expect(await screen.findByText('404 Eval not found')).toBeInTheDocument();
   });
 
   it.each([200, 404])(

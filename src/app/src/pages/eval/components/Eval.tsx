@@ -184,6 +184,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   );
 
   const clearEvalState = useCallback(() => {
+    loadRequestIdRef.current += 1;
     setFailed(false);
     setTable(null);
     setConfig(null);
@@ -419,11 +420,16 @@ export default function Eval({ fetchId }: EvalOptions) {
       logger.debug('[Eval] Fetching eval via recent', {});
       // Fetch from server
       const run = async () => {
-        const evals = await fetchRecentFileEvals();
-        if (cancelled) {
+        const loadRequestId = loadRequestIdRef.current;
+        const evals = await fetchRecentFileEvals({ reportFailure: false }).catch(() => undefined);
+        if (cancelled || loadRequestId !== loadRequestIdRef.current) {
           return;
         }
-        if (evals && evals.length > 0) {
+        if (!evals) {
+          setFailed(true);
+          return;
+        }
+        if (evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
           if (success && !cancelled) {
