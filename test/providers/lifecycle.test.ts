@@ -10,7 +10,6 @@ import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { cleanupProvider, trackProvider, withProviderCleanup } from '../../src/providers/lifecycle';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
-import { VoiceCrescendoProvider } from '../../src/redteam/providers/voiceCrescendo/index';
 import { createDeferred } from '../util/utils';
 
 import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
@@ -50,18 +49,15 @@ afterEach(() => {
 });
 
 describe('provider cleanup ownership', () => {
-  it.each(['crescendo', 'custom', 'voice-crescendo'])(
+  it.each(['crescendo', 'custom'])(
     'releases only configured %s delegates through public terminal cleanup',
     async (name) => {
       const cleanup = vi.fn();
       const borrowed = makeProvider();
-      const loaded: ApiProvider =
-        name === 'voice-crescendo'
-          ? new VoiceCrescendoProvider({ injectVar: 'query' })
-          : await loadStrategy(name, {
-              strategyText: 'local strategy',
-              redteamProvider: providerOptions({ cleanup }),
-            });
+      const loaded = await loadStrategy(name, {
+        strategyText: 'local strategy',
+        redteamProvider: providerOptions({ cleanup }),
+      });
       const strategy = loaded as StrategyProvider;
       await cliState.withConfig(
         {

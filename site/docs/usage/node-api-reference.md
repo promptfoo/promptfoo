@@ -100,7 +100,7 @@ interface EvaluateOptions {
 
 Load a single provider instance by path or identifier.
 
-For manually loaded Crescendo, Custom, and Voice Crescendo strategies, call
+For manually loaded Crescendo and Custom strategies, call
 `await provider.cleanup?.()` after the final call. Their cleanup is terminal and
 releases configured attacker and scoring providers; it leaves directly supplied
 providers and shared redteam cache entries open.
