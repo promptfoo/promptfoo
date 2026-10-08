@@ -654,9 +654,9 @@ assert.equal(summary.results[0].success, false);
 assert.equal(summary.results[0].score, 0);
 assert.ok(summary.results[0].response.error.includes(mode === 'installed'
   ? 'Repository is not a directory'
-  : 'npm install promptfoo @openai/codex-security@^0.1.31'));
+  : 'npm install promptfoo @openai/codex-security@^0.2.0'));
 if (mode === 'incompatible') {
-  assert.ok(summary.results[0].response.error.includes('incompatible (0.1.28)'));
+  assert.ok(summary.results[0].response.error.includes('incompatible (0.1.31)'));
 }
 `;
   const scriptPaths = ['codex-security.mjs', 'codex-security.cjs'].map((name) =>
@@ -688,22 +688,40 @@ ${script}
     PROMPTFOO_DISABLE_UPDATE: 'true',
   };
   for (const mode of ['missing', 'incompatible', 'installed']) {
-    if (mode !== 'missing') {
+    const sdkPath = path.join(consumerDir, 'node_modules', '@openai', 'codex-security');
+    if (mode === 'incompatible') {
+      // Simulate an existing outdated optional SDK without bypassing the package's peer range.
+      const staleSdkDir = path.join(consumerDir, 'stale-codex-sdk');
+      fs.mkdirSync(staleSdkDir);
+      fs.writeFileSync(path.join(staleSdkDir, 'package.json'), JSON.stringify({ private: true }));
       installConsumerPackages(
-        mode === 'incompatible'
-          ? 'install incompatible Codex Security SDK'
-          : 'install supported Codex Security SDK',
-        [
-          mode === 'incompatible'
-            ? '@openai/codex-security@0.1.28'
-            : '@openai/codex-security@^0.1.31',
-        ],
+        'install isolated incompatible Codex Security SDK',
+        ['@openai/codex-security@0.1.31'],
+        staleSdkDir,
+        npmEnv,
+      );
+      fs.mkdirSync(path.dirname(sdkPath), { recursive: true });
+      fs.symlinkSync(
+        path.join(staleSdkDir, 'node_modules', '@openai', 'codex-security'),
+        sdkPath,
+        'junction',
+      );
+    } else if (mode === 'installed') {
+      installConsumerPackages(
+        'install supported Codex Security SDK',
+        ['@openai/codex-security@^0.2.0'],
         consumerDir,
         npmEnv,
       );
     }
-    for (const scriptPath of scriptPaths) {
-      await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+    try {
+      for (const scriptPath of scriptPaths) {
+        await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+      }
+    } finally {
+      if (mode === 'incompatible') {
+        fs.rmSync(sdkPath);
+      }
     }
   }
 }
@@ -857,7 +875,7 @@ async function runOptionalOpenAiAgentsChecks(
     await assert.rejects(
       loadApiProvider('openai:agents:gpt-4.1-mini'),
       (error) => {
-        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.11\\.8/);
+        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.14\\.1/);
         if (process.argv[2] === 'incompatible') {
           assert.match(error.message, /found 0\\.0\\.0/);
         } else {
@@ -1071,20 +1089,18 @@ async function assertOptionalBrowserDependencies(
         assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
       }
     }
-    for (const [id, config] of [
-      ['browser', { steps: [] }],
-      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: false }],
-      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: true }],
-    ]) {
-      const provider = await loadApiProvider(id, { options: { config } });
-      const response = await provider.callApi('optional browser fixture', { vars: {} });
-      assert.match(response.error, incompatible
-        ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
-        : /requires the optional Playwright package/);
-      assert.match(response.error, /npm install promptfoo/);
-      assert.match(response.error, /npx playwright install chromium/);
-      await provider.cleanup?.();
-    }
+    await assert.rejects(
+      loadApiProvider('openai:chatkit:wf_fixture'),
+      /openai:chatkit provider has been removed/,
+    );
+    const provider = await loadApiProvider('browser', { options: { config: { steps: [] } } });
+    const response = await provider.callApi('optional browser fixture', { vars: {} });
+    assert.match(response.error, incompatible
+      ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
+      : /requires the optional Playwright package/);
+    assert.match(response.error, /npm install promptfoo/);
+    assert.match(response.error, /npx playwright install chromium/);
+    await provider.cleanup?.();
   `;
   for (const format of ['mjs', 'cjs']) {
     const imports =

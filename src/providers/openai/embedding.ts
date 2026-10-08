@@ -3,7 +3,12 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { appendOpenAiApiPath, assertOpenAiApiModel, getTokenUsage } from './util';
+import {
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  getTokenUsage,
+  normalizeOpenAiBillingModelName,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderEmbeddingResponse } from '../../types/index';
@@ -44,8 +49,12 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     super(modelName, options);
   }
 
-  protected getBillingModelName(): string {
-    return this.modelName;
+  protected getBillingModelName(config: OpenAiSharedOptions): string {
+    const passthroughModel = (config as OpenAiSharedOptions & { passthrough?: { model?: unknown } })
+      .passthrough?.model;
+    return typeof passthroughModel === 'string'
+      ? passthroughModel
+      : super.getBillingModelName(config);
   }
 
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
@@ -117,11 +126,13 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           error: 'No embedding found in OpenAI embeddings API response',
         };
       }
+      const billingModelName = this.getBillingModelName(this.config);
+      const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
       return {
         embedding: typeof embedding === 'string' ? decodeBase64Embedding(embedding) : embedding,
         latencyMs,
         tokenUsage: getTokenUsage(data, cached),
-        cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage, {
+        cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
           cachedResponse: cached,
         }),
       };
