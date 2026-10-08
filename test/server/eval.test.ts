@@ -1,7 +1,9 @@
 import type { Server } from 'node:http';
 
+import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -225,6 +227,58 @@ describe('eval routes', () => {
         expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual(originalMetrics);
       },
     );
+
+    it('replaces a persisted legacy manual grade containing malformed components', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      invariant(result.gradingResult, 'Grading result is required');
+      const metrics = eval_.prompts[result.promptIdx].metrics;
+      invariant(metrics, 'Metrics are required');
+      const originalMetrics = structuredClone(metrics);
+      const manualGrade = createManualRatingPayload(result, true);
+      const human = manualGrade.componentResults?.find(
+        (component) => component.assertion?.type === 'human',
+      );
+      invariant(human, 'Manual assertion is required');
+      const legacyGrade = {
+        ...manualGrade,
+        componentResults: [
+          human,
+          null,
+          { pass: 'true' },
+          ...(result.gradingResult.componentResults ?? []),
+        ],
+      };
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE eval_results
+        SET grading_result = ${JSON.stringify(legacyGrade)}
+        WHERE id = ${result.id}
+      `);
+      metrics.assertPassCount += 1;
+      await eval_.save();
+
+      const payload = createManualRatingPayload(result, false);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await api
+          .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+          .send(payload);
+        expect(res.status).toBe(200);
+        const updatedResult = await EvalResult.findById(result.id);
+        expect(updatedResult?.gradingResult).toEqual(payload);
+        const updatedEval = await Eval.findById(eval_.id);
+        expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual({
+          ...originalMetrics,
+          score: 0,
+          testPassCount: 0,
+          testFailCount: 2,
+          assertPassCount: 1,
+          assertFailCount: 2,
+        });
+      }
+    });
 
     it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
       const eval_ = await EvalFactory.create();

@@ -714,8 +714,12 @@ evalRouter.post(
         return;
       }
 
-      // Capture the current state before we change it
-      const previousComponents = result.gradingResult?.componentResults ?? [];
+      // Imported results can contain malformed components.
+      const previousComponents = Array.isArray(result.gradingResult?.componentResults)
+        ? result.gradingResult.componentResults.filter(
+            (component) => typeof component?.pass === 'boolean',
+          )
+        : [];
       const updatedComponents = gradingResult.componentResults ?? [];
       const successChanged = result.success !== gradingResult.pass;
       const scoreChange = gradingResult.score - result.score;
