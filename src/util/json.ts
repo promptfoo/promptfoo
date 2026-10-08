@@ -294,7 +294,8 @@ export function extractFirstJsonObject<T>(str: string): T {
  * // Result: { a: 1, b: 2, c: 3 }
  */
 export function orderKeys<T extends object>(obj: T, order: (keyof T)[]): T {
-  const result: T = {} as T;
+  // Avoid inherited keys and setters while collecting arbitrary source keys.
+  const result: T = Object.create(null);
 
   // Add ordered keys (excluding undefined values)
   for (const key of order) {
@@ -318,7 +319,8 @@ export function orderKeys<T extends object>(obj: T, order: (keyof T)[]): T {
     }
   }
 
-  return result;
+  // Return an ordinary object while preserving __proto__ as an own data property.
+  return { ...result };
 }
 
 /**

@@ -594,33 +594,50 @@ describe('RedteamIterativeMetaProvider', () => {
 
   describe('redteamHistory with audio/image data', () => {
     it('should include promptAudio and promptImage fields in redteamHistory entries', async () => {
-      const result = await runMetaAgentRedteam({
-        context: {
-          vars: { query: 'test' },
-          prompt: { raw: 'test', label: 'test' },
-          originalProvider: mockTargetProvider,
-        },
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 1,
-        options: undefined,
-        prompt: { raw: '{{query}}', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        test: undefined,
-        vars: { query: 'test' },
+      const runtime = await import('../../../src/redteam/shared/runtimeTransform');
+      const audio = { data: 'base64-audio-fixture', format: 'mp3' };
+      const image = { data: 'base64-image-fixture', format: 'png' };
+      const transform = vi.spyOn(runtime, 'applyRuntimeTransforms').mockResolvedValue({
+        prompt: 'transformed multimodal attack',
+        originalPrompt: 'Can you help me fix this code...',
+        audio,
+        image,
       });
+      try {
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: 'test', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 1,
+          options: undefined,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test: undefined,
+          vars: { query: 'test' },
+          perTurnLayers: ['audio', 'image'],
+        });
 
-      // redteamHistory should be present
-      expect(result.metadata.redteamHistory).toBeDefined();
-      expect(Array.isArray(result.metadata.redteamHistory)).toBe(true);
-
-      if (result.metadata.redteamHistory.length > 0) {
-        const entry = result.metadata.redteamHistory[0];
-        // These fields should be present (even if undefined without layers)
-        expect(entry).toHaveProperty('prompt');
-        expect(entry).toHaveProperty('output');
+        expect(transform).toHaveBeenCalledTimes(1);
+        expect(mockGetTargetResponse).toHaveBeenCalledTimes(1);
+        expect(mockGetTargetResponse.mock.calls[0].slice(0, 2)).toEqual([
+          mockTargetProvider,
+          'transformed multimodal attack',
+        ]);
+        expect(result.metadata.redteamHistory).toHaveLength(1);
+        expect(result.metadata.redteamHistory[0]).toMatchObject({
+          prompt: 'Can you help me fix this code...',
+          promptAudio: audio,
+          promptImage: image,
+          output: 'I cannot help with that',
+        });
+      } finally {
+        transform.mockRestore();
       }
     });
 
@@ -1174,7 +1191,6 @@ describe('RedteamIterativeMetaProvider', () => {
         'Iteration 3: Database mongodb://user:pass@host',
       ];
       const cloudRequests: any[] = [];
-      let targetCallCount = 0;
 
       mockAgentProvider.callApi = vi.fn().mockImplementation(async function (input: any) {
         cloudRequests.push(JSON.parse(input as string));
@@ -1184,16 +1200,13 @@ describe('RedteamIterativeMetaProvider', () => {
         };
       }) as any;
 
-      // Mock the targetProvider.callApi directly (not mockGetTargetResponse)
-      mockTargetProvider.callApi = vi
-        .fn<() => Promise<ProviderResponse>>()
-        .mockImplementation(async function () {
-          const response = { output: sensitiveResponses[targetCallCount] || 'Default' };
-          targetCallCount++;
-          return response;
-        }) as any;
+      mockGetTargetResponse.mockReset();
+      for (const output of sensitiveResponses) {
+        mockGetTargetResponse.mockResolvedValueOnce({ output });
+      }
+      mockGetTargetResponse.mockResolvedValue({ output: 'Final response' });
 
-      await runMetaAgentRedteam({
+      const result = await runMetaAgentRedteam({
         context: {
           vars: { query: 'test' },
           prompt: { raw: 'test', label: 'test' },
@@ -1201,7 +1214,8 @@ describe('RedteamIterativeMetaProvider', () => {
         },
         filters: undefined,
         injectVar: 'query',
-        numIterations: 3,
+        // Each sensitive response needs a subsequent coordination request.
+        numIterations: sensitiveResponses.length + 1,
         options: undefined,
         prompt: { raw: 'test', label: 'test' },
         agentProvider: mockAgentProvider,
@@ -1212,7 +1226,20 @@ describe('RedteamIterativeMetaProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: true,
       });
 
-      // Check all cloud requests
+      expect(mockGetTargetResponse).toHaveBeenCalledTimes(sensitiveResponses.length + 1);
+      expect(cloudRequests).toHaveLength(sensitiveResponses.length + 1);
+      expect(result.metadata.redteamHistory.map((entry) => entry.output)).toEqual([
+        ...sensitiveResponses,
+        'Final response',
+      ]);
+      expect(cloudRequests[0].lastAttempt).toBeUndefined();
+      for (const [index, response] of sensitiveResponses.entries()) {
+        expect(cloudRequests[index + 1].lastAttempt).toMatchObject({
+          response: '[Hidden for privacy]',
+          responseLength: response.length,
+        });
+      }
+
       const allCloudData = JSON.stringify(cloudRequests);
 
       // NONE of the sensitive data should have leaked
