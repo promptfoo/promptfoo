@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import nodeModule from 'node:module';
 import fs from 'fs/promises';
 import * as path from 'path';
 
@@ -42,7 +42,7 @@ export async function loadMathJs(): Promise<typeof import('mathjs')> {
   let math: typeof import('mathjs');
   try {
     // Keep the optional peer unresolved until string metrics are actually used.
-    math = createRequire(import.meta.url)('mathjs');
+    math = nodeModule.createRequire(import.meta.url)('mathjs');
   } catch (error) {
     if (isMissingPackageImportError(error, 'mathjs')) {
       throw Object.assign(

@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Rolldown } from 'tsdown';
 import { expect, it } from 'vitest';
+import { withWebpackBundle } from './helpers/webpack';
 
 it('keeps Math.js optional when a consumer bundles the already-built helper', async () => {
   const library = await Rolldown.rolldown({
@@ -40,4 +41,15 @@ it('keeps Math.js optional when a consumer bundles the already-built helper', as
   } finally {
     await consumer.close();
   }
+});
+
+it('keeps the Math.js loader usable after consumer Webpack bundling', async () => {
+  await withWebpackBundle<typeof import('../src/evaluatorHelpers')>(
+    new URL('../src/evaluatorHelpers.ts', import.meta.url),
+    async ({ loadMathJs }) => {
+      const math = await loadMathJs();
+      expect(math.evaluate('precision + recall', { precision: 2, recall: 4 })).toBe(6);
+    },
+    ['mathjs'],
+  );
 });

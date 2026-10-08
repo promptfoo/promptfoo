@@ -1,22 +1,22 @@
-import { createRequire } from 'node:module';
+import nodeModule from 'node:module';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadMathJs } from '../src/evaluatorHelpers';
 
 vi.mock('node:module', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:module')>();
-  return { ...actual, createRequire: vi.fn(actual.createRequire) };
+  return { ...actual, default: { ...actual, createRequire: vi.fn(actual.createRequire) } };
 });
 
 const requireMathJs = vi.fn();
 
 beforeEach(() => {
-  vi.mocked(createRequire).mockReturnValue(requireMathJs as unknown as NodeJS.Require);
+  vi.mocked(nodeModule.createRequire).mockReturnValue(requireMathJs as unknown as NodeJS.Require);
 });
 
 afterEach(() => {
   requireMathJs.mockReset();
-  vi.mocked(createRequire).mockRestore();
+  vi.mocked(nodeModule.createRequire).mockRestore();
 });
 
 describe('derived metric Math.js loading', () => {
