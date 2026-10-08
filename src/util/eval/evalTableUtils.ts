@@ -313,7 +313,9 @@ function batchToStreamRows(
       rowsByTestIdx.set(result.testIdx, row);
     }
     const nullOutputText =
-      result.failureReason === ResultFailureReason.ERROR && result.error ? result.error : 'null';
+      (result.failureReason === ResultFailureReason.ERROR || !result.gradingResult) && result.error
+        ? result.error
+        : 'null';
     row.outputs[result.promptIdx] = {
       text: result.response?.output === null ? nullOutputText : (result.response?.output ?? ''),
       pass: result.success,

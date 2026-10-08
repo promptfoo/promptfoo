@@ -1798,8 +1798,13 @@ async function runEvalInternal({
             accumulateResponseTokenUsage(ret.tokenUsage, response);
           }
 
-          if (test.options?.storeOutputAs && ret.response?.output && registers) {
-            // Save the output in a register for later use
+          if (
+            test.options?.storeOutputAs &&
+            ret.response?.output !== undefined &&
+            (!ret.response.error || ret.response.output) &&
+            registers
+          ) {
+            // Preserve valid falsy data, but keep provider-error placeholders out of registers.
             registers[test.options.storeOutputAs] = ret.response.output;
           }
 

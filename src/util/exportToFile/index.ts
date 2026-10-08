@@ -15,7 +15,9 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
   } else if (
     rawOutput === undefined ||
     rawOutput === '' ||
-    (rawOutput === null && result.failureReason === ResultFailureReason.ERROR && result.error)
+    (rawOutput === null &&
+      (result.failureReason === ResultFailureReason.ERROR || !result.gradingResult) &&
+      result.error)
   ) {
     outputTextDisplay = result.error || '';
   } else {

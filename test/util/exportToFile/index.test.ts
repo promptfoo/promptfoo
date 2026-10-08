@@ -146,48 +146,59 @@ describe('exportToFile utils', () => {
       expect(booleanOutput.text).toBe('false');
     });
 
-    it('preserves null data while retaining explicit error precedence', () => {
-      const resultWithError: Partial<EvalResult> = {
-        id: 'test-1',
-        evalId: 'eval-1',
-        testCase: { assert: [{ type: 'is-json' }] },
-        response: {
-          output: null,
-        },
-        error: 'Provider returned null',
-        prompt: {
-          raw: 'test prompt',
-          label: 'test',
-        },
-        provider: {
-          id: 'test-provider',
-        },
-        failureReason: ResultFailureReason.ERROR,
-      };
+    it.each([ResultFailureReason.NONE, ResultFailureReason.ERROR])(
+      'preserves ungraded null errors with failureReason=%s',
+      (failureReason) => {
+        const resultWithError: Partial<EvalResult> = {
+          id: 'test-1',
+          evalId: 'eval-1',
+          testCase: { assert: [{ type: 'is-json' }] },
+          response: {
+            output: null,
+          },
+          error: 'No output',
+          prompt: {
+            raw: 'test prompt',
+            label: 'test',
+          },
+          provider: {
+            id: 'test-provider',
+          },
+          failureReason,
+        };
 
-      const resultWithoutError: Partial<EvalResult> = {
-        id: 'test-2',
-        evalId: 'eval-1',
-        testCase: {},
-        response: {
-          output: null,
-        },
-        prompt: {
-          raw: 'test prompt',
-          label: 'test',
-        },
-        provider: {
-          id: 'test-provider',
-        },
-        failureReason: ResultFailureReason.NONE,
-      };
+        const resultWithoutError: Partial<EvalResult> = {
+          id: 'test-2',
+          evalId: 'eval-1',
+          testCase: {},
+          response: {
+            output: null,
+          },
+          prompt: {
+            raw: 'test prompt',
+            label: 'test',
+          },
+          provider: {
+            id: 'test-provider',
+          },
+          failureReason: ResultFailureReason.NONE,
+        };
 
-      const outputWithError = convertEvalResultToTableCell(resultWithError as EvalResult);
-      const outputWithoutError = convertEvalResultToTableCell(resultWithoutError as EvalResult);
+        const outputWithError = convertEvalResultToTableCell(resultWithError as EvalResult);
+        const outputWithoutError = convertEvalResultToTableCell(resultWithoutError as EvalResult);
 
-      expect(outputWithError.text).toBe('Provider returned null');
-      expect(outputWithoutError.text).toBe('null');
-    });
+        expect(outputWithError.text).toBe('No output');
+        expect(outputWithoutError.text).toBe('null');
+        expect(
+          convertEvalResultToTableCell({
+            ...resultWithError,
+            error: 'Expected text',
+            failureReason: ResultFailureReason.ASSERT,
+            gradingResult: { pass: false, score: 0, reason: 'Expected text' },
+          } as EvalResult).text,
+        ).toBe('null');
+      },
+    );
   });
 
   describe('convertTestResultsToTableRow', () => {

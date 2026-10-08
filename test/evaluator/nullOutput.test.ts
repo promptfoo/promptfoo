@@ -67,6 +67,81 @@ describe('null output through real transforms and assertions', () => {
     },
   );
 
+  it.each([
+    { value: null, assertionPasses: true },
+    { value: null, assertionPasses: false },
+    { value: 0, assertionPasses: true },
+    { value: false, assertionPasses: true },
+    { value: '', assertionPasses: true },
+  ])(
+    'stores transformed $value for the next test with assertionPasses=$assertionPasses',
+    async ({ value, assertionPasses }) => {
+      const registers = { saved: 'stale value' };
+      const [first] = await runEval({
+        provider: {
+          id: () => 'null-register-producer',
+          callApi: async () => ({ output: JSON.stringify({ value }) }),
+          transform: 'JSON.parse(output).value',
+        },
+        prompt: { raw: 'Produce a value', label: 'producer' },
+        test: {
+          options: { storeOutputAs: 'saved' },
+          assert: [{ type: 'javascript', value: String(assertionPasses) }],
+        },
+        registers,
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: true,
+      });
+      expect(first.success).toBe(assertionPasses);
+      expect(registers.saved).toBe(value);
+
+      const [second] = await runEval({
+        provider: {
+          id: () => 'null-register-consumer',
+          callApi: async (_prompt, context) => ({
+            output: context?.vars.saved === value ? 'observed stored value' : 'stale value',
+          }),
+        },
+        prompt: { raw: 'Consume the saved value', label: 'consumer' },
+        test: { assert: [{ type: 'equals', value: 'observed stored value' }] },
+        registers,
+        delay: 0,
+        testIdx: 1,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: true,
+      });
+      expect(second.success).toBe(true);
+    },
+  );
+
+  it.each([
+    { response: { output: undefined }, expected: 'stale value' },
+    { response: { output: null, error: 'Target failed' }, expected: 'stale value' },
+    { response: { output: 'partial output', error: 'Target failed' }, expected: 'partial output' },
+  ])(
+    'preserves existing register behavior for provider errors: %j',
+    async ({ response, expected }) => {
+      const registers = { saved: 'stale value' };
+      const [result] = await runEval({
+        provider: { id: () => 'error-register-producer', callApi: async () => response },
+        prompt: { raw: 'Produce a value', label: 'producer' },
+        test: { options: { storeOutputAs: 'saved' } },
+        registers,
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: true,
+      });
+      expect(result.success).toBe(false);
+      expect(registers.saved).toBe(expected);
+    },
+  );
+
   it('extracts context from the provider-normalized null before the test transform', async () => {
     await expect(
       resolveContext(

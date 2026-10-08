@@ -131,34 +131,41 @@ describe('convertResultsToTable', () => {
     expect(result.body[0].outputs[0].text).toBe('Test error');
   });
 
-  it('preserves provider errors with assertions while displaying valid null data', () => {
-    const row = createEvaluateResult({
-      response: { output: null },
-      error: 'Provider returned null',
-      gradingResult: undefined,
-      success: false,
-      score: 0,
-      failureReason: ResultFailureReason.ERROR,
-      testCase: { assert: [{ type: 'is-json' }] },
-    });
-    const resultsFile: ResultsFile = {
-      version: 4,
-      createdAt: new Date(0).toISOString(),
-      author: null,
-      config: {},
-      prompts: [createCompletedPrompt('test prompt')],
-      results: createEvaluateSummaryV2({ results: [row] }),
-    };
+  it.each([ResultFailureReason.NONE, ResultFailureReason.ERROR])(
+    'preserves ungraded null errors with assertions and failureReason=%s',
+    (failureReason) => {
+      const row = createEvaluateResult({
+        response: { output: null },
+        error: 'No output',
+        gradingResult: undefined,
+        success: false,
+        score: 0,
+        failureReason,
+        testCase: { assert: [{ type: 'is-json' }] },
+      });
+      const resultsFile: ResultsFile = {
+        version: 4,
+        createdAt: new Date(0).toISOString(),
+        author: null,
+        config: {},
+        prompts: [createCompletedPrompt('test prompt')],
+        results: createEvaluateSummaryV2({ results: [row] }),
+      };
 
-    expect(convertResultsToTable(resultsFile).body[0].outputs[0].text).toBe(
-      'Provider returned null',
-    );
+      expect(convertResultsToTable(resultsFile).body[0].outputs[0].text).toBe('No output');
 
-    row.error = undefined;
-    row.success = true;
-    row.failureReason = ResultFailureReason.NONE;
-    expect(convertResultsToTable(resultsFile).body[0].outputs[0].text).toBe('null');
-  });
+      row.error = undefined;
+      row.success = true;
+      row.failureReason = ResultFailureReason.NONE;
+      expect(convertResultsToTable(resultsFile).body[0].outputs[0].text).toBe('null');
+
+      row.success = false;
+      row.failureReason = ResultFailureReason.ASSERT;
+      row.error = 'Expected text';
+      row.gradingResult = { pass: false, score: 0, reason: 'Expected text' };
+      expect(convertResultsToTable(resultsFile).body[0].outputs[0].text).toBe('null');
+    },
+  );
 
   it('should preserve falsy var values like 0 and false', () => {
     const resultsFile: ResultsFile = {

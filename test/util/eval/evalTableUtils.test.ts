@@ -1338,6 +1338,16 @@ describe('evalTableUtils', () => {
             error: 'Expected text',
             gradingResult: { reason: 'Expected text' },
           },
+          {
+            testIdx: 3,
+            promptIdx: 0,
+            response: { output: null },
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.NONE,
+            error: 'No output',
+            gradingResult: null,
+          },
         ],
       });
       const rows = parseCsv(csv);
@@ -1345,6 +1355,7 @@ describe('evalTableUtils', () => {
       expect(rows[2].slice(0, 3)).toEqual(['Target request failed', 'ERROR', '0.00']);
       expect(rows[3].slice(0, 3)).toEqual(['null', 'FAIL', '0.00']);
       expect(rows[3][4]).toBe('Expected text');
+      expect(rows[4].slice(0, 3)).toEqual(['No output', 'ERROR', '0.00']);
     });
 
     it('should include dedicated metric columns when streaming CSV', async () => {
