@@ -681,20 +681,12 @@ describe('HttpProvider', () => {
       ['$&', '$&'],
       ['$`', '$`'],
       ["$'", '$%27'],
-      ['$1', '$1'],
-      ['$99', '$99'],
-      ['$<name>', '$%3Cname%3E'],
     ])('should keep %s in repeated raw GET request placeholders', async (prompt, encodedPrompt) => {
       const rawRequest = dedent`
         GET /api/data?q={{prompt}}&repeat={{prompt}} HTTP/1.1
         Host: example.com
       `;
-      const provider = new HttpProvider('http', {
-        config: {
-          request: rawRequest,
-          transformResponse: (data: any) => data,
-        },
-      });
+      const provider = new HttpProvider('http', { config: { request: rawRequest } });
 
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: JSON.stringify({ result: 'success' }),

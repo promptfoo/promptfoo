@@ -324,17 +324,15 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     // Use the built-in URL class to parse and encode the URL
     const parsedUrl = new URL(url, 'http://placeholder-base.com');
 
-    // Replace the original URL in the first line
-    // Use a replacer function so `$` sequences in the rendered URL are not treated as
-    // replacement patterns.
-    const encodedFirstLine = `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`;
-    rawRequest = rawRequest.replace(firstLine, () => encodedFirstLine);
+    // A callback preserves literal dollar patterns in the URL.
+    return rawRequest.replace(
+      firstLine,
+      () => `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+    );
   } catch (err) {
     logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
     throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
   }
-
-  return rawRequest;
 }
 
 /**
