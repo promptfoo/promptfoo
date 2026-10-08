@@ -2,12 +2,12 @@ import * as fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import type { ConnectionOptions } from 'node:tls';
 
-import { Agent, type Dispatcher, interceptors } from 'undici';
+import { Agent, type Dispatcher } from 'undici';
 import cliState from '../../cliState';
 import { getEnvBool, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { isFipsEnabled } from '../fips';
-import { stripDecompressionHeaders } from './stripDecompressionHeaders';
+import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
 
 const verifiedFipsDispatchers = new WeakSet<Pick<Dispatcher, 'dispatch'>>();
 
@@ -31,7 +31,7 @@ export function assertFipsTlsVerification(rejectUnauthorized?: boolean): void {
 export function createTlsAgent(tlsOptions: ConnectionOptions): Dispatcher {
   assertFipsTlsVerification(tlsOptions.rejectUnauthorized);
   const dispatcher = new Agent({ connect: tlsOptions })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
   if (isFipsEnabled()) {
     verifiedFipsDispatchers.add(dispatcher);
@@ -48,7 +48,9 @@ export function assertFipsDispatcher(dispatcher?: Pick<Dispatcher, 'dispatch'>):
   }
 }
 
-export function resolveTlsOptions(): ConnectionOptions | Promise<ConnectionOptions> {
+export function resolveTlsOptions(
+  logEnabled = true,
+): ConnectionOptions | Promise<ConnectionOptions> {
   assertFipsTlsVerification();
   const tlsOptions: ConnectionOptions = {
     rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', !isFipsEnabled()),
@@ -61,7 +63,9 @@ export function resolveTlsOptions(): ConnectionOptions | Promise<ConnectionOptio
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
       tlsOptions.ca = await fsPromises.readFile(resolvedPath, 'utf8');
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+      if (logEnabled) {
+        logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+      }
     } catch (error) {
       if (isFipsEnabled()) {
         throw Object.assign(
@@ -69,7 +73,9 @@ export function resolveTlsOptions(): ConnectionOptions | Promise<ConnectionOptio
           { cause: error },
         );
       }
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${error}`);
+      if (logEnabled) {
+        logger.warn(`Failed to read CA certificate from ${caCertPath}: ${error}`);
+      }
     }
     return tlsOptions;
   })();

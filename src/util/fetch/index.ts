@@ -2,7 +2,7 @@ import type { ConnectionOptions } from 'tls';
 
 import { LRUCache } from 'lru-cache';
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
+import { Agent, type Dispatcher, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -14,6 +14,7 @@ import { sleep } from '../../util/time';
 import { isFipsEnabled } from '../fips';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
+import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
@@ -22,7 +23,6 @@ import {
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
-import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 import { assertFipsDispatcher, resolveTlsOptions } from './tls';
 
 import type { FetchOptions } from './types';
@@ -131,7 +131,7 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): PooledAgent {
     connections: concurrency,
     connect: tlsOptions,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
   const entry = { dispatcher: agent, requests: 0, evicted: false };
   cachedAgents.set(cacheKey, entry);
@@ -154,7 +154,7 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
   const entry = { dispatcher: agent, requests: 0, evicted: false };
   cachedProxyAgents.set(cacheKey, entry);
@@ -245,6 +245,7 @@ export async function fetchWithProxy(
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
+  const logEnabled = new Headers(finalOptions.headers).get('x-promptfoo-silent') !== 'true';
 
   if (typeof url === 'string') {
     try {
@@ -254,9 +255,11 @@ export async function fetchWithProxy(
         // Header names are case-insensitive, and a Headers instance or array lowercases them.
         // Matching only `Authorization` would add a second value that servers receive combined.
         if (Object.keys(headers).some((name) => name.toLowerCase() === 'authorization')) {
-          logger.warn(
-            'Both URL credentials and Authorization header present - URL credentials will be ignored',
-          );
+          if (logEnabled) {
+            logger.warn(
+              'Both URL credentials and Authorization header present - URL credentials will be ignored',
+            );
+          }
         } else {
           // Userinfo percent-encodes reserved characters, and HTTP clients decode it before
           // Basic auth, so a password written as p%40ss must authenticate as p@ss. A malformed
@@ -281,12 +284,14 @@ export async function fetchWithProxy(
         finalUrlString = finalUrl;
       }
     } catch (e) {
-      logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+      if (logEnabled) {
+        logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+      }
     }
   }
 
   assertFipsDispatcher(finalOptions.dispatcher);
-  const resolvedTlsOptions = resolveTlsOptions();
+  const resolvedTlsOptions = resolveTlsOptions(logEnabled);
   const tlsOptions =
     resolvedTlsOptions instanceof Promise ? await resolvedTlsOptions : resolvedTlsOptions;
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
@@ -296,7 +301,9 @@ export async function fetchWithProxy(
   let pooledAgent: PooledAgent | undefined;
   if (!finalOptions.dispatcher) {
     if (proxyUrl) {
-      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+      if (logEnabled) {
+        logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+      }
       pooledAgent = getOrCreateProxyAgent(proxyUrl, tlsOptions);
     } else {
       pooledAgent = getOrCreateAgent(tlsOptions);
@@ -328,9 +335,11 @@ export async function fetchWithProxy(
 
       if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
         const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-        logger.debug(
-          `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
-        );
+        if (logEnabled) {
+          logger.debug(
+            `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+          );
+        }
         await sleep(backoffMs);
         continue;
       }
@@ -510,12 +519,15 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  */
 async function peekRateLimitBody(
   response: Response,
+  logEnabled: boolean,
 ): Promise<{ body: unknown; code: string | undefined; type: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
-    logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
+    if (logEnabled) {
+      logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
+    }
     return { body: undefined, code: undefined, type: undefined };
   }
 
@@ -523,7 +535,9 @@ async function peekRateLimitBody(
   try {
     text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
   } catch (err) {
-    logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
+    if (logEnabled) {
+      logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
+    }
     return { body: undefined, code: undefined, type: undefined };
   }
 
@@ -540,7 +554,9 @@ async function peekRateLimitBody(
     };
   } catch {
     // Keep the raw bytes for diagnostics; no code is extractable.
-    logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
+    if (logEnabled) {
+      logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
+    }
     return { body: text, code: undefined, type: undefined };
   }
 }
@@ -685,6 +701,7 @@ async function handleRateLimitedResponse(
   url: RequestInfo,
   attempt: number,
   maxRetries: number,
+  logEnabled: boolean,
   signal?: AbortSignal | null,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
@@ -700,7 +717,7 @@ async function handleRateLimitedResponse(
   // sees the same classification callers do.
   let rateLimitError: HttpRateLimitError | undefined;
   if (isHardRateLimit) {
-    const { body, code, type } = await peekRateLimitBody(response);
+    const { body, code, type } = await peekRateLimitBody(response, logEnabled);
     rateLimitError = buildHttpRateLimitError(response, body, code, type);
   }
 
@@ -708,9 +725,11 @@ async function handleRateLimitedResponse(
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
   if (rateLimitError?.kind === 'quota') {
-    logger.debug(
-      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${rateLimitError.code}), failing fast.`,
-    );
+    if (logEnabled) {
+      logger.debug(
+        `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${rateLimitError.code}), failing fast.`,
+      );
+    }
     throw rateLimitError;
   }
 
@@ -718,9 +737,11 @@ async function handleRateLimitedResponse(
     if (rateLimitError) {
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
-      logger.debug(
-        `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
-      );
+      if (logEnabled) {
+        logger.debug(
+          `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+        );
+      }
       throw rateLimitError;
     }
     throw new Error(
@@ -728,9 +749,11 @@ async function handleRateLimitedResponse(
     );
   }
 
-  logger.debug(
-    `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
-  );
+  if (logEnabled) {
+    logger.debug(
+      `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
+    );
+  }
   await handleRateLimit(response, signal);
 }
 
@@ -764,6 +787,8 @@ export async function fetchWithRetries(
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
   const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const logEnabled =
+    new Headers(getFetchWithProxyHeaders(url, options)).get('x-promptfoo-silent') !== 'true';
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -780,7 +805,7 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries, signal);
+        await handleRateLimitedResponse(response, url, i, maxRetries, logEnabled, signal);
         continue;
       }
 
@@ -805,9 +830,11 @@ export async function fetchWithRetries(
 
       const errorMessage = formatFetchErrorMessage(error, url);
 
-      logger.debug(
-        `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
-      );
+      if (logEnabled) {
+        logger.debug(
+          `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
+        );
+      }
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleepWithAbort(waitTime, signal);

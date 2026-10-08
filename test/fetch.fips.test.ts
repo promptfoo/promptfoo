@@ -4,6 +4,7 @@ import { getProxyForUrl } from 'proxy-from-env';
 import { Agent, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../src/envOverrides';
+import logger from '../src/logger';
 import { clearAgentCache, fetchWithProxy } from '../src/util/fetch/index';
 import { createTlsAgent } from '../src/util/fetch/tls';
 import * as fips from '../src/util/fips';
@@ -59,6 +60,26 @@ afterEach(() => {
 });
 
 describe('FIPS fetch policy with the real environment parser', () => {
+  it.each([false, true])('keeps CA diagnostics silent with FIPS=%s', async (enabled) => {
+    vi.mocked(fips.isFipsEnabled).mockReturnValue(enabled);
+    const debug = vi.spyOn(logger, 'debug').mockClear();
+    const warn = vi.spyOn(logger, 'warn').mockClear();
+    mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: '/fixture-ca.pem' });
+    vi.mocked(fs.readFile).mockResolvedValue('CA fixture');
+    const options = { headers: { 'x-promptfoo-silent': 'true' } };
+    await fetchWithProxy('https://example.test', options);
+    vi.mocked(fs.readFile).mockRejectedValue(new Error('fixture missing CA'));
+    if (enabled) {
+      await expect(fetchWithProxy('https://example.test', options)).rejects.toThrow(
+        'configured CA certificate in FIPS mode',
+      );
+    } else {
+      await fetchWithProxy('https://example.test', options);
+    }
+    expect(debug).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('rejects an opaque custom dispatcher before fetching in FIPS mode', async () => {
     const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
     await expect(fetchWithProxy('https://example.test', { dispatcher })).rejects.toThrow(
