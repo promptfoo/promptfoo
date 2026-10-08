@@ -260,6 +260,17 @@ describe('eval routes', () => {
       metrics.assertPassCount += 1;
       await eval_.save();
 
+      const annotationRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: true, score: 1, comment: 'Reviewed' });
+      expect(annotationRes.status).toBe(200);
+      expect(annotationRes.body.gradingResult.componentResults).toEqual([
+        human,
+        ...(result.gradingResult.componentResults ?? []),
+      ]);
+      const annotatedEval = await Eval.findById(eval_.id);
+      expect(annotatedEval?.prompts[result.promptIdx].metrics).toEqual(metrics);
+
       const payload = createManualRatingPayload(result, false);
       for (let attempt = 0; attempt < 2; attempt++) {
         const res = await api
@@ -334,6 +345,74 @@ describe('eval routes', () => {
     });
 
     it.each([
+      { name: 'verdict', payload: { pass: false, score: 0 }, score: 0, passes: 0, failures: 2 },
+      { name: 'score', payload: { pass: true, score: 0.25 }, score: 0.25, passes: 1, failures: 1 },
+      {
+        name: 'annotation',
+        payload: { pass: true, score: 1, comment: '!highlight Note' },
+        score: 1,
+        passes: 1,
+        failures: 1,
+      },
+    ])(
+      'preserves assertions for a partial $name update and retry',
+      async ({ payload, score, passes, failures }) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const result = (await eval_.getResults())[0];
+        invariant(result.id, 'Result ID is required');
+        const originalMetrics = eval_.prompts[result.promptIdx].metrics;
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const res = await api
+            .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+            .send(payload);
+          expect(res.status).toBe(200);
+          const updatedResult = await EvalResult.findById(result.id);
+          expect(updatedResult?.gradingResult?.componentResults).toEqual(
+            result.gradingResult?.componentResults,
+          );
+          expect(updatedResult?.success).toBe(payload.pass);
+          expect(updatedResult?.score).toBe(payload.score);
+          const updatedEval = await Eval.findById(eval_.id);
+          expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual({
+            ...originalMetrics,
+            score,
+            testPassCount: passes,
+            testFailCount: failures,
+          });
+        }
+      },
+    );
+
+    it.each([{ componentResults: [] }, { componentResults: null }])(
+      'clears assertions only when components are supplied ($componentResults)',
+      async ({ componentResults }) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const result = (await eval_.getResults())[0];
+        invariant(result.id, 'Result ID is required');
+        const originalMetrics = eval_.prompts[result.promptIdx].metrics;
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const res = await api.post(`/api/eval/${eval_.id}/results/${result.id}/rating`).send({
+            pass: true,
+            score: 1,
+            componentResults,
+          });
+          expect(res.status).toBe(200);
+          const updatedResult = await EvalResult.findById(result.id);
+          expect(updatedResult?.gradingResult?.componentResults).toEqual(componentResults);
+          const updatedEval = await Eval.findById(eval_.id);
+          expect(updatedEval?.prompts[result.promptIdx].metrics).toEqual({
+            ...originalMetrics,
+            assertPassCount: 0,
+          });
+        }
+      },
+    );
+
+    it.each([
       { resultIndex: 0, manualOverride: false },
       { resultIndex: 1, manualOverride: false },
       { resultIndex: 0, manualOverride: true },
@@ -388,7 +467,7 @@ describe('eval routes', () => {
           [{ ...result.gradingResult, comment: '!highlight Note' }, 0],
           [{ ...result.gradingResult, componentResults: null, comment: 'Note' }, 0],
           [createManualRatingPayload(result, true), 1],
-          [result.gradingResult, 0],
+          [{ ...result.gradingResult, componentResults: [] }, 0],
         ] as const) {
           expect((await api.post(url).send(gradingResult)).status).toBe(200);
           const updatedEval = await Eval.findById(eval_.id);

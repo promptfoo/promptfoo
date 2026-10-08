@@ -720,6 +720,9 @@ evalRouter.post(
             (component) => typeof component?.pass === 'boolean',
           )
         : [];
+      if (gradingResult.componentResults === undefined) {
+        gradingResult.componentResults = previousComponents;
+      }
       const updatedComponents = gradingResult.componentResults ?? [];
       const successChanged = result.success !== gradingResult.pass;
       const scoreChange = gradingResult.score - result.score;
