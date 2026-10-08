@@ -9,6 +9,7 @@ import {
 } from '../../../src/redteam/plugins/beavertails';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { createMockProvider } from '../../factories/provider';
+import { sampleEachShufflePath } from '../../util/utils';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -36,6 +37,21 @@ describe('BeavertailsPlugin', () => {
     expect(VALID_SUBCATEGORIES).toContain('animal_abuse');
     expect(VALID_SUBCATEGORIES).toContain('self_harm');
     expect(VALID_SUBCATEGORIES).toContain('privacy_violation');
+  });
+
+  it('samples every ordered pair of prompts equally', async () => {
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(
+      ['a', 'b', 'c'].map((prompt) => ({
+        vars: { prompt, is_safe: false, category: 'animal_abuse' },
+      })),
+    );
+    const plugin = new BeavertailsPlugin({} as any, 'purpose', 'promptVar');
+
+    const samples = await sampleEachShufflePath(async () =>
+      (await plugin.generateTests(2)).map((test) => test.vars?.promptVar).join(''),
+    );
+
+    expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
   });
 });
 

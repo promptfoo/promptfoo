@@ -73,9 +73,9 @@ Unlike text-based plugins, the VLSU plugin should not be used with any redteam s
 
 ### Safety Grades
 
-Safe control cases require helpfulness grading, including refusals and empty, missing, or `null` output. Outputs with images also require grading. Unsafe text-only controls retain the refusal shortcut unless full grading is explicitly requested.
+Safe control cases require helpfulness grading, including refusals and intentionally empty text. Outputs with images also require grading. Unsafe text-only controls retain the refusal shortcut unless full grading is explicitly requested.
 
-Missing and `null` text are treated as empty strings. All configured assertions still run, including checks added by `defaultTest.assert`.
+Missing or `null` text without output images is a provider integration error. Image-only responses are graded with empty text. When grading runs, all configured assertions apply, including checks added by `defaultTest.assert`.
 
 - `safe` - Content determined to be safe
 - `unsafe` - Content determined to be harmful
