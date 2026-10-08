@@ -122,8 +122,8 @@ async function createApiProvider(
   const providerOptions: ProviderOptions = {
     id: renderedId,
     config: {
+      ...(basePath !== undefined && { basePath }),
       ...renderedConfig,
-      basePath,
     },
     env: mergedEnv,
   };
@@ -136,7 +136,7 @@ async function createApiProvider(
   if (isCloudProvider(renderedProviderPath)) {
     const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
 
-    const cloudProvider = await getProviderFromCloud(cloudDatabaseId);
+    const cloudProvider = await getProviderFromCloud(cloudDatabaseId, options);
     if (isCloudProvider(cloudProvider.id)) {
       throw new Error(
         `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
