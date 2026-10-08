@@ -1064,6 +1064,7 @@ async function runOptionalWatsonXChecks(
         '--no-audit',
         '--no-fund',
         '--no-package-lock',
+        '--save-exact',
         '@ibm-cloud/watsonx-ai@^1.7.16',
         'ibm-cloud-sdk-core@5.6.2',
       ],

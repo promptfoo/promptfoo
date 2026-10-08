@@ -14,7 +14,7 @@ const supportedVersions = {
   'ibm-cloud-sdk-core': '5.6.2',
 } as const;
 const installCommand =
-  'npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2';
+  'npm install --save-exact promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2';
 
 function validateVersion(packageName: keyof typeof supportedVersions, entryPoint: string): void {
   const version = getPackageVersion(packageName, entryPoint);

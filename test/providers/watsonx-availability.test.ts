@@ -65,10 +65,10 @@ describe.each([
     it('explains co-installation before loading an absent package', async () => {
       const load = vi.fn();
       await expect(loadWatsonXDependency(packageName, load)).rejects.toThrow(
-        `The ${packageName} package is required for the WatsonX provider. Install it with: npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2`,
+        `The ${packageName} package is required for the WatsonX provider. Install it with: npm install --save-exact promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2`,
       );
       await expect(loadWatsonXDependency(packageName, load)).rejects.toThrow(
-        'npm install -g promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2',
+        'npm install -g --save-exact promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2',
       );
       expect(load).not.toHaveBeenCalled();
     });
