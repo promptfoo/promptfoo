@@ -6,7 +6,7 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
+import { trackResponseUsage } from '../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
   accumulateGradingResponseTokenUsage,
@@ -314,7 +314,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
+      trackResponseUsage(redteamProvider.id(), redteamResp);
       accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
 
       if (redteamResp.error) {
@@ -507,7 +507,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), judgeResp);
+      trackResponseUsage(redteamProvider.id(), judgeResp);
 
       let score: number;
       let scoreComponents: JudgeResponse['currentResponse']['components'];

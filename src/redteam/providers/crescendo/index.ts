@@ -12,7 +12,7 @@ import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { trackResponseUsage } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
   accumulateGradingResponseTokenUsage,
@@ -972,7 +972,7 @@ export class CrescendoProvider implements ApiProvider {
     );
 
     accumulateAttackerTokenUsage(totalTokenUsage, response);
-    TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
+    trackResponseUsage(redTeamingChat.id(), response);
 
     if (redTeamingChat.delay) {
       logger.debug(`[Crescendo] Sleeping for ${redTeamingChat.delay}ms`);
@@ -1396,7 +1396,7 @@ export class CrescendoProvider implements ApiProvider {
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), refusalResponse);
+    trackResponseUsage(scoringProvider.id(), refusalResponse);
     accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
@@ -1462,7 +1462,7 @@ export class CrescendoProvider implements ApiProvider {
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
+    trackResponseUsage(scoringProvider.id(), evalResponse);
     accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);

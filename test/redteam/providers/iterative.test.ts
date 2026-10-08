@@ -1213,12 +1213,6 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('Token Counting', () => {
-    beforeEach(async () => {
-      // Reset TokenUsageTracker between tests to ensure clean state
-      const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
-      TokenUsageTracker.getInstance().resetAllUsage();
-    });
-
     it('should correctly track token usage when target provider returns tokens', async () => {
       // Clear the mock to use the target provider directly for this test
       mockGetTargetResponse.mockReset();

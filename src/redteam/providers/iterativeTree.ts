@@ -22,7 +22,7 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
+import { trackResponseUsage } from '../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
   accumulateGradingResponseTokenUsage,
@@ -217,7 +217,7 @@ export async function evaluateResponse(
     },
     vars: {},
   });
-  TokenUsageTracker.getInstance().trackResponseUsage(provider.id(), judgeResp);
+  trackResponseUsage(provider.id(), judgeResp);
   if (tokenUsage) {
     accumulateGradingResponseTokenUsage(tokenUsage, judgeResp);
   }
@@ -307,7 +307,7 @@ export async function getNewPrompt(
   if (totalTokenUsage) {
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
   }
-  TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
+  trackResponseUsage(redteamProvider.id(), redteamResp);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);

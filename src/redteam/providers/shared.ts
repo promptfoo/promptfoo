@@ -30,7 +30,7 @@ import {
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
+import { trackResponseUsage } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
   accumulateTokenUsage,
@@ -1033,7 +1033,7 @@ export async function tryUnblocking({
       vars: {},
     });
 
-    TokenUsageTracker.getInstance().trackResponseUsage(unblockingProvider.id(), response);
+    trackResponseUsage(unblockingProvider.id(), response);
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);

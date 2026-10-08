@@ -3,7 +3,7 @@ import fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { Command } from 'commander';
-import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import {
@@ -49,7 +49,6 @@ import * as defaultConfigModule from '../../src/util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
-import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/index';
@@ -125,7 +124,6 @@ vi.mock('../../src/util/index', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/index')>()),
   writeMultipleOutputs: vi.fn(),
 }));
-vi.mock('../../src/util/tokenUsage');
 vi.mock('../../src/util/provider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/provider')>()),
   checkProviderApiKeys: vi.fn(() => new Map<string, string[]>()),
@@ -2805,73 +2803,6 @@ describe('showRedteamProviderLabelMissingWarning', () => {
   });
 });
 
-describe('Provider Token Tracking', () => {
-  let mockTokenUsageTracker: Mocked<TokenUsageTracker>;
-  const mockLogger = vi.spyOn(logger, 'info');
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockLogger.mockClear();
-
-    mockTokenUsageTracker = {
-      getProviderIds: vi.fn(),
-      getProviderUsage: vi.fn(),
-      trackUsage: vi.fn(),
-      resetAllUsage: vi.fn(),
-      resetProviderUsage: vi.fn(),
-      getTotalUsage: vi.fn(),
-      cleanup: vi.fn(),
-    } as any;
-
-    vi.mocked(TokenUsageTracker.getInstance).mockImplementation(function () {
-      return mockTokenUsageTracker;
-    });
-  });
-
-  it('should create and configure TokenUsageTracker correctly', () => {
-    const tracker = TokenUsageTracker.getInstance();
-    expect(tracker).toBeDefined();
-    expect(tracker.getProviderIds).toBeDefined();
-    expect(tracker.getProviderUsage).toBeDefined();
-  });
-
-  it('should handle provider token tracking when mocked properly', () => {
-    const providerUsageData = {
-      'openai:gpt-4': {
-        total: 1500,
-        prompt: 600,
-        completion: 900,
-        cached: 100,
-        numRequests: 5,
-        completionDetails: { reasoning: 200, acceptedPrediction: 0, rejectedPrediction: 0 },
-      },
-      'anthropic:claude-3': {
-        total: 800,
-        prompt: 300,
-        completion: 500,
-        cached: 50,
-        numRequests: 3,
-        completionDetails: { reasoning: 100, acceptedPrediction: 0, rejectedPrediction: 0 },
-      },
-    };
-
-    mockTokenUsageTracker.getProviderIds.mockReturnValue(['openai:gpt-4', 'anthropic:claude-3']);
-    mockTokenUsageTracker.getProviderUsage.mockImplementation(function (id: string) {
-      return providerUsageData[id as keyof typeof providerUsageData];
-    });
-
-    const tracker = TokenUsageTracker.getInstance();
-    const providerIds = tracker.getProviderIds();
-    expect(providerIds).toEqual(['openai:gpt-4', 'anthropic:claude-3']);
-
-    const openaiUsage = tracker.getProviderUsage('openai:gpt-4');
-    expect(openaiUsage).toEqual(providerUsageData['openai:gpt-4']);
-
-    const claudeUsage = tracker.getProviderUsage('anthropic:claude-3');
-    expect(claudeUsage).toEqual(providerUsageData['anthropic:claude-3']);
-  });
-});
-
 describe('doEval with external defaultTest', () => {
   const defaultConfig = {} as UnifiedConfig;
   const defaultConfigPath = 'config.yaml';
@@ -3043,22 +2974,8 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
     providers: [],
   } as UnifiedConfig;
 
-  let mockTokenUsageTracker: Mocked<TokenUsageTracker>;
-
   beforeEach(() => {
     vi.resetAllMocks();
-
-    // Set up TokenUsageTracker mock - required by generateEvalSummary
-    mockTokenUsageTracker = {
-      getProviderIds: vi.fn().mockReturnValue([]),
-      getProviderUsage: vi.fn(),
-      trackUsage: vi.fn(),
-      resetAllUsage: vi.fn(),
-      resetProviderUsage: vi.fn(),
-      getTotalUsage: vi.fn(),
-      cleanup: vi.fn(),
-    } as any;
-    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTokenUsageTracker);
 
     // Set up required account mocks
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });

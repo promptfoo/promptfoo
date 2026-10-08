@@ -3,7 +3,7 @@
  *
  * This reproduces the bug in #7353 where spread operator in wrapProviderWithRateLimiting
  * didn't copy prototype methods, causing "provider.id is not a function" errors
- * in redteam strategies that call TokenUsageTracker.trackUsage(provider.id(), ...).
+ * in provider accounting that calls provider.id().
  *
  * The fix explicitly delegates id() to the original provider.
  */

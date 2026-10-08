@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
 
 import type { TokenUsage } from '../../types/index';
-import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**
  * Parameters for generating an evaluation summary report.
@@ -39,8 +38,8 @@ export interface EvalSummaryParams {
   duration: number;
   /** Maximum concurrent API calls during evaluation */
   maxConcurrency: number;
-  /** Token usage tracker for provider-level breakdown */
-  tracker: TokenUsageTracker;
+  /** Provider-level token usage from this evaluation */
+  providerUsage: ReadonlyMap<string, TokenUsage>;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
 }
@@ -180,7 +179,7 @@ function getGradingUsageLine(assertions: TokenUsage['assertions']): string | und
 function getTokenUsageLines(
   tokenUsage: TokenUsage,
   isRedteam: boolean,
-  tracker: TokenUsageTracker,
+  providerUsage: ReadonlyMap<string, TokenUsage>,
 ): string[] {
   const primaryTokens = getTokenUsageTotal(tokenUsage);
   const gradingUsageLine = getGradingUsageLine(tokenUsage.assertions);
@@ -285,20 +284,18 @@ function getTokenUsageLines(
     }
   }
 
-  lines.push(...getProviderUsageLines(tracker));
+  lines.push(...getProviderUsageLines(providerUsage));
   return lines;
 }
 
-function getProviderUsageLines(tracker: TokenUsageTracker): string[] {
-  const providerIds = tracker.getProviderIds();
-  if (providerIds.length <= 1) {
+function getProviderUsageLines(providerUsage: ReadonlyMap<string, TokenUsage>): string[] {
+  if (providerUsage.size <= 1) {
     return [];
   }
 
-  const sortedProviders = providerIds
-    .map((id) => ({ id, usage: tracker.getProviderUsage(id) }))
-    .filter((p): p is { id: string; usage: NonNullable<typeof p.usage> } => p.usage != null)
-    .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
+  const sortedProviders = Array.from(providerUsage, ([id, usage]) => ({ id, usage })).sort(
+    (a, b) => (b.usage.total || 0) - (a.usage.total || 0),
+  );
 
   const lines = ['', chalk.bold('Providers:')];
 
@@ -395,7 +392,7 @@ function getResultsLines({
  *   errors: 0,
  *   duration: 5000,
  *   maxConcurrency: 4,
- *   tracker: TokenUsageTracker.getInstance(),
+ *   providerUsage: getProviderTokenUsage(evalRecord),
  * });
  *
  * lines.forEach(line => logger.info(line));
@@ -422,7 +419,7 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
       cloudEnabled: params.cloudEnabled,
     }),
     '',
-    ...getTokenUsageLines(params.tokenUsage, params.isRedteam, params.tracker),
+    ...getTokenUsageLines(params.tokenUsage, params.isRedteam, params.providerUsage),
     ...getResultsLines(params),
   ];
 }

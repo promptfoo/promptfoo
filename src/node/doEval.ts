@@ -57,7 +57,7 @@ import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
-import { TokenUsageTracker } from '../util/tokenUsage';
+import { getProviderTokenUsage } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
@@ -1082,7 +1082,7 @@ async function doEvalWithEnv(
 
     const isRedteam = Boolean(config.redteam);
     const duration = Math.round((Date.now() - startTime) / 1000);
-    const tracker = TokenUsageTracker.getInstance();
+    const providerUsage = getProviderTokenUsage(ret);
 
     // Check if scan was aborted due to target error (efficient DB query, not loading all results)
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
@@ -1103,7 +1103,7 @@ async function doEvalWithEnv(
       errors,
       duration,
       maxConcurrency,
-      tracker,
+      providerUsage,
       targetErrorStatus,
     });
 
