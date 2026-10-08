@@ -327,6 +327,113 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
+    it.each([0, 2])(
+      'stops on a permanent coordination request error after %i completed iterations',
+      async (completedIterations) => {
+        const error = 'Meta-agent request failed: upstream request is invalid JSON (invalid_json).';
+        mockAgentProvider.callApi.mockReset();
+        for (let i = 0; i < completedIterations; i++) {
+          mockAgentProvider.callApi.mockResolvedValueOnce({
+            output: { result: 'Test attack' },
+            tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+          });
+        }
+        mockAgentProvider.callApi.mockResolvedValue({
+          error,
+          metadata: {
+            remoteGenerationError: {
+              status: 400,
+              type: 'invalid_request_error',
+              code: 'invalid_json',
+            },
+          },
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 2 },
+        });
+
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 10,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          vars: { query: 'test' },
+        });
+
+        expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(completedIterations + 1);
+        expect(mockGetTargetResponse).toHaveBeenCalledTimes(completedIterations);
+        expect(mockGradingProvider.callApi).not.toHaveBeenCalled();
+        expect(result.error).toBe(error);
+        expect(result.output).toBe(completedIterations ? 'I cannot help with that' : '');
+        expect(result.metadata).toMatchObject({
+          finalIteration: completedIterations + 1,
+          stopReason: 'Agent request failed',
+          vulnerabilityAchieved: false,
+        });
+        expect(result.metadata.redteamHistory).toHaveLength(completedIterations);
+        expect(result.tokenUsage.attacker).toMatchObject({
+          total: 18 + completedIterations * 10,
+          numRequests: 2 + completedIterations,
+        });
+      },
+    );
+
+    it.each([
+      {
+        remoteGenerationError: {
+          status: 400,
+          type: 'invalid_request_error',
+          code: 'invalid_json',
+        },
+        isRefusal: true,
+      },
+      ...[
+        { status: 429, type: 'rate_limit_error', code: 'rate_limit_exceeded' },
+        { status: 500, type: 'server_error', code: 'invalid_json' },
+        { status: 400, type: 'invalid_request_error', code: 'invalid_prompt' },
+        { status: 400, type: 'invalid_request_error', code: 'cyber_policy_violation' },
+        { status: 400, type: 'invalid_request_error', code: 'bio_policy_violation' },
+        undefined,
+      ].map((remoteGenerationError) => ({ remoteGenerationError, isRefusal: false })),
+    ])(
+      'continues after an unclassified coordination error: %j',
+      async ({ remoteGenerationError, isRefusal }) => {
+        mockAgentProvider.callApi.mockResolvedValueOnce({
+          error: 'API error: invalid_json',
+          metadata: { remoteGenerationError },
+          isRefusal,
+        });
+
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 2,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          vars: { query: 'test' },
+        });
+
+        expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(mockGetTargetResponse).toHaveBeenCalledTimes(1);
+        expect(result.error).toBeUndefined();
+        expect(result.metadata.stopReason).toBe('Max iterations reached');
+        expect(result.metadata.redteamHistory).toHaveLength(1);
+      },
+    );
+
     it('should handle nunjucks template syntax in attack prompts without crashing', async () => {
       mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
         output: {
