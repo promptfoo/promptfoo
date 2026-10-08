@@ -8,9 +8,9 @@ import { createTempDir, removeTempDir } from './util/utils';
 it('isolates inherited application settings in a fresh backend test worker', () => {
   const tempDir = createTempDir('promptfoo-test-environment-');
   try {
-    // This checks shell inheritance independently of the repository's optional .env file.
+    // Supply a synthetic developer file without reading the repository's optional .env.
     const envFile = path.join(tempDir, '.env');
-    writeFileSync(envFile, '');
+    writeFileSync(envFile, 'PROMPTFOO_AUTHOR=dotenv-author\nPROMPTFOO_DOTENV_PROBE=fixture\n');
     const result = spawnSync(
       process.execPath,
       [
@@ -26,6 +26,11 @@ it('isolates inherited application settings in a fresh backend test worker', () 
         env: {
           ...process.env,
           DOTENV_PATH: envFile,
+          DOTENV_CONFIG_PATH: envFile,
+          DOTENV_ENCODING: 'utf8',
+          DOTENV_CONFIG_ENCODING: 'utf16le',
+          DOTENV_OVERRIDE: 'true',
+          DOTENV_CONFIG_OVERRIDE: 'true',
           PROMPTFOO_AUTHOR: 'host-author',
           PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
           OPENAI_API_BASE_URL: 'https://host-gateway.invalid/v1',
