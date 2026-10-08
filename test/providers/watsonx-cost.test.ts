@@ -168,9 +168,10 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
 
   it('retries client initialization after a shared failure', async () => {
     const regionalClient = client();
+    const initializationError = new Error('Client initialization failed');
     vi.mocked(WatsonXAI.newInstance)
       .mockImplementationOnce(() => {
-        throw new Error('Client initialization failed');
+        throw initializationError;
       })
       .mockReturnValue(regionalClient as any);
     const instance = provider(chat);
@@ -179,6 +180,11 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
       instance.callApi('Second'),
     ]);
     expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected']);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        expect(result.reason).toBe(initializationError);
+      }
+    }
     expect(WatsonXAI.newInstance).toHaveBeenCalledTimes(1);
     expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
 

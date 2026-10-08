@@ -24,6 +24,10 @@ interface CliState {
   // Forces remote inference wherever possible
   remote?: boolean;
 
+  // Safe mode: disables dynamic inline JavaScript execution
+  safeMode?: boolean;
+  withSafeMode<T>(enabled: boolean, fn: () => T): T;
+
   // Indicates we're running in web UI mode
   webUI?: boolean;
 
@@ -87,6 +91,8 @@ const configContext = new AsyncLocalStorage<ConfigState>();
 const globalConfigState: ConfigState = {};
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+const safeModeContext = new AsyncLocalStorage<{ enabled: boolean }>();
+let globalSafeMode: boolean | undefined;
 const basePathContext = new AsyncLocalStorage<{ basePath: string | undefined }>();
 let globalBasePath: string | undefined;
 const envContext = new AsyncLocalStorage<{
@@ -101,6 +107,20 @@ let globalMaxConcurrency: number | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
+  get safeMode() {
+    return safeModeContext.getStore()?.enabled ?? globalSafeMode;
+  },
+  set safeMode(enabled: boolean | undefined) {
+    const scope = safeModeContext.getStore();
+    if (scope) {
+      scope.enabled = Boolean(enabled);
+    } else {
+      globalSafeMode = enabled;
+    }
+  },
+  withSafeMode<T>(enabled: boolean, fn: () => T): T {
+    return safeModeContext.run({ enabled: enabled || Boolean(state.safeMode) }, fn);
+  },
   get config() {
     return (configContext.getStore() ?? globalConfigState).config;
   },

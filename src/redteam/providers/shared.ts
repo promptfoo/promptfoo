@@ -561,10 +561,12 @@ export async function getTargetResponse(
     };
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
-  const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
-  const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
+  const hasOutput =
+    targetRespRaw &&
+    Object.prototype.hasOwnProperty.call(targetRespRaw, 'output') &&
+    targetRespRaw.output != null;
 
-  if (hasError) {
+  if (targetRespRaw?.error) {
     const output = hasOutput
       ? ((typeof targetRespRaw.output === 'string'
           ? targetRespRaw.output
@@ -591,15 +593,6 @@ export async function getTargetResponse(
     };
   }
 
-  if (targetRespRaw?.error) {
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output: '',
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
-  }
-
   if (targetRespRaw?.conversationEnded) {
     return {
       ...(targetRespRaw as ProviderResponse),
@@ -608,15 +601,13 @@ export async function getTargetResponse(
     };
   }
 
-  throw new Error(
-    `
-    Target returned malformed response: expected either \`output\` or \`error\` property to be set.
-
-    Instead got: ${safeJsonStringify(targetRespRaw)}
-
-    Note: Empty strings are valid output values.
-    `,
-  );
+  return {
+    ...(targetRespRaw as ProviderResponse),
+    output: '',
+    error:
+      'Target returned malformed response: expected either `output` or `error` property to be set. Empty strings are valid output values; null and undefined are not.',
+    tokenUsage,
+  };
 }
 
 interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
