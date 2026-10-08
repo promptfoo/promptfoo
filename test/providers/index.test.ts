@@ -948,16 +948,6 @@ describe('loadApiProvider', () => {
     expect(provider.getApiKey()).toBe('provider-key');
   });
 
-  it('loadApiProvider with flexai prefers provider-level env over context env', async () => {
-    const provider = (await loadApiProvider('flexai:DeepSeek-V4-Flash-0731', {
-      options: { env: { FLEXAI_API_KEY: 'provider-key' } },
-      env: { FLEXAI_API_KEY: 'context-key' },
-    })) as OpenAiChatCompletionProvider;
-
-    expect(provider.id()).toBe('flexai:DeepSeek-V4-Flash-0731');
-    expect(provider.getApiKey()).toBe('provider-key');
-  });
-
   it('loadApiProvider with moonshot prefers provider-level env over context env', async () => {
     const provider = (await loadApiProvider('moonshot:kimi-k2.6', {
       options: { env: { MOONSHOT_API_KEY: 'provider-key' } },

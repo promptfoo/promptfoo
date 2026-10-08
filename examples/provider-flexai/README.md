@@ -1,29 +1,18 @@
 # provider-flexai (FlexAI)
 
-You can run this example with:
+Compare two FlexAI chat models and grade a similarity assertion with FlexAI's `bge-m3` embeddings, using promptfoo's OpenAI-compatible provider.
 
 ```bash
 npx promptfoo@latest init --example provider-flexai
 cd provider-flexai
 ```
 
-## Usage
-
-Set your `FLEXAI_API_KEY` environment variable. You can create a key on the [FlexAI platform](https://platform.flex.ai).
-
-Then run:
+Create a key on the [FlexAI platform](https://platform.flex.ai) and set `FLEXAI_API_KEY` in your environment. Then run:
 
 ```bash
-promptfoo eval
+npx promptfoo@latest eval
 ```
 
-View the results with `promptfoo view`.
+Both chat models use `max_tokens: 4096` and low reasoning effort. Reasoning tokens count toward the limit; increase it if a model runs out before answering. `showThinking: false` keeps reasoning out of the graded answer.
 
-## What this shows
-
-- Two FlexAI chat models compared on short factual questions, both on a single `FLEXAI_API_KEY`:
-  - `DeepSeek-V4-Flash-0731`, the default FlexAI chat model.
-  - `gpt-oss-120b` with `reasoning_effort: low`. `showThinking: false` keeps its reasoning out of the graded answer.
-- A `similar` assertion graded with FlexAI's `bge-m3` embedding model, so the example needs no other API key.
-
-Model names change over time. If one returns a 404, pick a current id from `GET https://api.flex.ai/v1/models` or [flex.ai/models](https://flex.ai/models).
+For current model IDs, see the [FlexAI catalog](https://flex.ai/models). See the [provider guide](https://www.promptfoo.dev/docs/providers/flexai/) for configuration details.

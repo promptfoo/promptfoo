@@ -327,9 +327,6 @@ type EnvVars = {
   // FAL
   FAL_KEY?: string;
 
-  // FlexAI
-  FLEXAI_API_KEY?: string;
-
   // GitHub
   GITHUB_TOKEN?: string;
 

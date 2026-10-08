@@ -825,20 +825,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('flexai:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const { createFlexAiProvider } = await import('./flexai');
-      return createFlexAiProvider(providerPath, {
-        ...providerOptions,
-        env: providerOptions.env ?? context.env,
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('github:'),
     create: async (
       providerPath: string,

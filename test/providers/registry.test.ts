@@ -1016,39 +1016,6 @@ describe('Provider Registry', () => {
       ).rejects.toThrow(/does not expose/);
     });
 
-    it('should route flexai chat, embedding, and unsupported subtypes', async () => {
-      const factory = providerMap.find((f) => f.test('flexai:DeepSeek-V4-Flash-0731'));
-      expect(factory).toBeDefined();
-      const options: ProviderOptions = {
-        ...mockProviderOptions,
-        id: undefined,
-        config: { temperature: 0.42, apiKey: 'flexai-test-key' },
-      };
-
-      const chat = await factory!.create('flexai:DeepSeek-V4-Flash-0731', options, mockContext);
-      expect(chat.constructor.name).toBe('FlexAiChatCompletionProvider');
-      expect(chat.id()).toBe('flexai:DeepSeek-V4-Flash-0731');
-      const config = (chat as any).config;
-      expect(config.temperature).toBe(0.42);
-      expect(config.apiKey).toBe('flexai-test-key');
-      expect(config.apiBaseUrl).toBe('https://api.flex.ai/v1');
-      expect(config.apiKeyEnvar).toBe('FLEXAI_API_KEY');
-
-      const explicitChat = await factory!.create('flexai:chat:gpt-oss-120b', options, mockContext);
-      expect(explicitChat.constructor.name).toBe('FlexAiChatCompletionProvider');
-      expect(explicitChat.id()).toBe('flexai:gpt-oss-120b');
-
-      for (const path of ['flexai:embedding:bge-m3', 'flexai:embeddings:bge-m3']) {
-        const embedding = await factory!.create(path, options, mockContext);
-        expect(embedding.constructor.name).toBe('FlexAiEmbeddingProvider');
-        expect(embedding.id()).toBe('flexai:embedding:bge-m3');
-      }
-
-      await expect(
-        factory!.create('flexai:completion:gpt-oss-120b', options, mockContext),
-      ).rejects.toThrow(/flexai:completion is not supported/);
-    });
-
     it('should handle moonshot providers correctly', async () => {
       const factory = providerMap.find((f) => f.test('moonshot:moonshot-v1-8k'));
       expect(factory).toBeDefined();
