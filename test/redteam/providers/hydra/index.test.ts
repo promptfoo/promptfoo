@@ -375,13 +375,17 @@ describe('HydraProvider', () => {
           audio: { data: audio.toString('base64'), format: 'wav' },
         })
         .mockResolvedValueOnce({ output: 'Completed text response' });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:pii' }],
+        metadata: { pluginId: 'pii' },
+      };
       const attack = new HydraProvider({ injectVar: 'input', maxTurns: 3 }).callApi(
         '',
         {
           originalProvider: mockTargetProvider,
           vars: { input: 'Synthetic objective' },
           prompt: { raw: '{{input}}', label: 'test' },
-          test: { assert: [{ type: 'promptfoo:redteam:pii' }], metadata: { pluginId: 'pii' } },
+          test,
         },
         {
           abortSignal: controller.signal,
