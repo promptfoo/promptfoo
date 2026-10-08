@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalPage from '../page';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
-const { socketHandlers } = vi.hoisted(() => ({
+const { socketHandlers, tableFixture } = vi.hoisted(() => ({
+  tableFixture: { realTable: false, rowCount: 0 },
   socketHandlers: new Map<string, (data: unknown) => Promise<void>>(),
 }));
 
@@ -25,15 +26,33 @@ vi.mock('socket.io-client', () => ({
     disconnect: vi.fn(),
   }),
 }));
-vi.mock('./ResultsTable', () => ({
-  default: () => {
-    const { table } = useTableStore();
-    return (
-      <div data-testid="comparison-columns">
-        {table?.head.prompts.map((p) => p.label).join(',')}
-      </div>
-    );
-  },
+vi.mock('./ResultsTable', async (importOriginal) => {
+  const { default: ActualResultsTable } = await importOriginal<typeof import('./ResultsTable')>();
+  return {
+    default: (props: React.ComponentProps<typeof ActualResultsTable>) => {
+      const { table } = useTableStore();
+      return tableFixture.realTable ? (
+        <ActualResultsTable {...props} />
+      ) : (
+        <div data-testid="comparison-columns">
+          {table?.head.prompts.map((p) => p.label).join(',')}
+        </div>
+      );
+    },
+  };
+});
+vi.mock('./EvalOutputCell', () => ({
+  default: ({
+    output,
+    rowPositionIndex,
+  }: {
+    output: { text: string };
+    rowPositionIndex: number;
+  }) => (
+    <span data-testid="output" data-row-position={rowPositionIndex}>
+      {output.text}
+    </span>
+  ),
 }));
 vi.mock('./ResultsCharts', () => ({ default: () => null }));
 vi.mock('./ResultsFilters/FiltersForm', () => ({ default: () => null }));
@@ -85,6 +104,9 @@ function tableRequests() {
 beforeEach(() => {
   vi.mocked(callApi).mockReset();
   socketHandlers.clear();
+  tableFixture.realTable = false;
+  tableFixture.rowCount = 0;
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   useTableStore.setState(initialTableState);
   useResultsViewSettingsStore.setState(initialSettings);
   vi.mocked(callApi).mockImplementation(async (path) => {
@@ -109,18 +131,36 @@ beforeEach(() => {
     if (comparisons.some((value) => ['deleted', 'different-dataset'].includes(value))) {
       return new Response(JSON.stringify({ error: 'Invalid comparison' }), { status: 400 });
     }
+    const offset = Number(url.searchParams.get('offset') || 0);
+    const count = Math.min(
+      Number(url.searchParams.get('limit') || 50),
+      Math.max(0, tableFixture.rowCount - offset),
+    );
     return new Response(
       JSON.stringify({
         table: {
           head: {
-            vars: [],
+            vars: tableFixture.rowCount ? ['sample'] : [],
             prompts: [id, ...comparisons].map((label) => ({ label, raw: label, provider: 'echo' })),
           },
-          body: [],
+          body: Array.from({ length: count }, (_, index) => {
+            const row = index + offset;
+            return {
+              testIdx: row,
+              test: {},
+              vars: [`row-${row}`],
+              outputs: [id, ...comparisons].map((evalId) => ({
+                id: `${evalId}-${row}`,
+                text: `${evalId} row-${row}`,
+                pass: true,
+                score: 1,
+              })),
+            };
+          }),
         },
         config: { description: 'Comparison fixture' },
-        totalCount: 0,
-        filteredCount: 0,
+        totalCount: tableFixture.rowCount,
+        filteredCount: tableFixture.rowCount,
       }),
     );
   });
@@ -278,6 +318,35 @@ describe('evaluation comparison URLs', () => {
       'eval-b',
     ]);
   });
+
+  it.each([50, 10])(
+    'keeps comparison rows aligned with page 2 at page size %s',
+    async (pageSize) => {
+      tableFixture.realTable = true;
+      tableFixture.rowCount = 120;
+      const user = userEvent.setup();
+      renderPage('/eval/eval-a');
+      await screen.findByText('eval-a row-0');
+      if (pageSize !== 50) {
+        await user.click(screen.getByRole('combobox', { name: 'Results per page' }));
+        await user.click(screen.getByRole('option', { name: String(pageSize) }));
+      }
+      await user.click(screen.getByRole('button', { name: 'Next page' }));
+      await screen.findByText(`eval-a row-${pageSize}`);
+      await user.click(screen.getByRole('button', { name: /Eval actions/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Compare with another eval' }));
+      await user.click(screen.getByRole('button', { name: 'Select comparison B' }));
+      await screen.findByText(`eval-b row-${pageSize}`);
+      expect(screen.queryByText('eval-b row-0')).not.toBeInTheDocument();
+      expect(screen.getAllByTestId('output')).toHaveLength(pageSize * 2);
+      expect(screen.getByRole('spinbutton', { name: 'Go to page' })).toHaveValue(2);
+      await user.click(screen.getByRole('button', { name: /Eval actions/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Clear comparison' }));
+      await waitFor(() => expect(screen.getAllByTestId('output')).toHaveLength(pageSize));
+      expect(screen.getByText(`eval-a row-${pageSize}`)).toBeInTheDocument();
+      expect(screen.queryByText('eval-a row-0')).not.toBeInTheDocument();
+    },
+  );
 
   it.each([200, 404])(
     'keeps the current comparison when an earlier navigation resolves late with %s',

@@ -729,7 +729,7 @@ export const useTableStore = create<TableState>()(
             version: data.version,
             author: data.author,
             evalId: skipSettingEvalId ? get().evalId : id,
-            isFetching: skipLoadingState ? prevState.isFetching : false,
+            isFetching: false,
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
@@ -751,7 +751,7 @@ export const useTableStore = create<TableState>()(
           return data;
         }
 
-        if (requestId === evalDataRequestId && !skipLoadingState) {
+        if (requestId === evalDataRequestId) {
           set({ isFetching: false });
         }
         return null;
@@ -761,7 +761,7 @@ export const useTableStore = create<TableState>()(
         }
         console.error('Error fetching eval data:', error);
         set({
-          isFetching: skipLoadingState ? get().isFetching : false,
+          isFetching: false,
           isStreaming: false,
           metadataKeysLoading: false,
           currentMetadataKeysRequest: null,
