@@ -264,11 +264,9 @@ describe('RedteamIterativeMetaProvider', () => {
       images: [{ data: 'Yg==', mimeType: 'image/png' }],
     });
     mockGetGraderById.mockReturnValue({
-      getResult: vi
-        .fn()
-        .mockResolvedValue({
-          grade: { pass: true, score: 1, tokensUsed: { total: 23, numRequests: 1 } },
-        }),
+      getResult: vi.fn().mockResolvedValue({
+        grade: { pass: true, score: 1, tokensUsed: { total: 23, numRequests: 1 } },
+      }),
     });
     const attack = runMetaAgentRedteam({
       filters: undefined,
