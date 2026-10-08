@@ -78,7 +78,8 @@ export function resolveVariables(
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
+          // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
+          variables[key] = value.replace(placeholder, () => variables[varName] as string);
           if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
             varsResolvedFromSkipped?.add(key);
           }
