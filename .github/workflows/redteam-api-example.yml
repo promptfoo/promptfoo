@@ -4,14 +4,12 @@ name: Redteam API example
 
 on:
   pull_request:
-    paths:
+    paths: &watched-paths
       - 'examples/redteam-api-top-10/**'
       - '.github/workflows/redteam-api-example.yml'
   push:
     branches: [main]
-    paths:
-      - 'examples/redteam-api-top-10/**'
-      - '.github/workflows/redteam-api-example.yml'
+    paths: *watched-paths
 
 permissions:
   contents: read
