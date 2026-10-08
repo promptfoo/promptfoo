@@ -476,7 +476,8 @@ jobs:
     # Signed build provenance for the executable bytes mirrored into
     # promptfoo/code-scan-action. Keep OIDC/attestation permissions isolated
     # from dependency installation and make successful attestation a hard gate
-    # before any mirror branch or PR can be published.
+    # before any mirror branch or PR can be published. The status guard also
+    # permits action-only releases whose npm-publish ancestor was skipped.
     if: ${{ always() && !cancelled() && needs.build-code-scan-action-release.result == 'success' }}
     needs: [build-code-scan-action-release]
     runs-on: ubuntu-latest
