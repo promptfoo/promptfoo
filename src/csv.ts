@@ -12,7 +12,12 @@ const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 let _assertionRegex: RegExp | null = null;
 function getAssertionRegex(): RegExp {
   if (!_assertionRegex) {
-    const assertionTypesRegex = BaseAssertionTypesSchema.options.join('|');
+    // Longer names must be tried first. `similar` is a prefix of `similar:cosine`,
+    // `similar:dot`, and `similar:euclidean`, and the value is also introduced by `:`.
+    // Left-to-right alternation would accept the shorter type and swallow the metric.
+    const assertionTypesRegex = [...BaseAssertionTypesSchema.options]
+      .sort((a, b) => b.length - a.length)
+      .join('|');
     _assertionRegex = new RegExp(
       `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
     );
