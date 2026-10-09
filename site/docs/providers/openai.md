@@ -65,6 +65,7 @@ For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`.
 | -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
 | GPT-5.6+ text, image inputs, and tools | `openai:<model>`                           | [Responses API](#responses-api)                                          |
 | Chat Completions                       | `openai:chat:<model>`                      | [Parameters](#configuring-parameters)                                    |
+| Classification and scoring             | `openai:decisions:<model>`                 | [Decisions API](./openai-decisions.md)                                   |
 | Embeddings                             | `openai:embedding:<model>`                 | [Embedding dimensions](#reducing-embedding-dimensions)                   |
 | Moderation                             | `openai:moderation:omni-moderation-latest` | [Moderation assertions](/docs/configuration/expected-outputs/moderation) |
 | Image generation                       | `openai:image:<model>`                     | [Images](#images)                                                        |
@@ -382,6 +383,8 @@ providers:
         dimensions: 1024
 ```
 
+You can also set `encoding_format: base64` under `passthrough`. Promptfoo decodes base64 responses into numeric vectors for similarity assertions; numeric responses remain supported.
+
 When grading generated text with embeddings, configure the embedding provider on the [similarity assertion](/docs/configuration/expected-outputs/similar/). See the [Embeddings API reference](https://developers.openai.com/api/reference/resources/embeddings/methods/create) for model limits.
 
 ## Responses API
@@ -427,6 +430,8 @@ providers:
 | `stream`               | Request streaming; Promptfoo collects the stream into the eval result.                                        |
 
 The provider response's `raw` field contains the Responses object, including `id` and `output` items. Its `metadata` includes extracted annotations and HTTP metadata. Use these fields when you need to inspect tool results or continue a conversation.
+
+For incomplete Responses output, `metadata.responseStatus` and `metadata.incompleteReason` expose the API status and reason. `max_output_tokens` maps to `finishReason: 'length'`, which you can check with a `finish-reason` assertion. Partial text remains available in `output`; Promptfoo does not automatically retry or continue it.
 
 </details>
 

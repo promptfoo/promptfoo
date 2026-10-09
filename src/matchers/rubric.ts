@@ -680,13 +680,7 @@ function appendMediaToChatPrompt(
   }
   if (isChatMessageArray(parsed)) {
     const messages = parsed.map((message) => ({ ...message }));
-    let userMessageIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        userMessageIndex = i;
-        break;
-      }
-    }
+    const userMessageIndex = messages.map((message) => message.role).lastIndexOf('user');
 
     if (userMessageIndex >= 0) {
       const userMessage = messages[userMessageIndex];
