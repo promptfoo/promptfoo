@@ -93,7 +93,7 @@ Toggle with **Show Charts**.
 
 ### Pass Rate
 
-Percentage of passing results for each prompt across the full eval. A result passes according to its [assertions and thresholds](/docs/configuration/expected-outputs).
+Percentage of passing results for each prompt across the full eval, including runtime errors in the total. A result passes according to its [assertions and thresholds](/docs/configuration/expected-outputs).
 
 ### Score Distribution
 
