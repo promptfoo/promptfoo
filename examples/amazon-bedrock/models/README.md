@@ -313,11 +313,23 @@ These are returned as errors in the response with `metadata.isModelError: true`.
 
 ## Nova Sonic Configuration
 
-Nova Sonic now supports configurable timeouts:
+Use `promptfooconfig.nova-2-5-sonic.yaml` for Nova 2.5 Sonic. Install FFmpeg and configure
+AWS credentials in a supported region, then run:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.nova-2-5-sonic.yaml --no-cache -o sonic-results.json
+```
+
+The prompt function converts the bundled WAV to mono PCM16 at 16 kHz before sending it.
+Inspect the response text, user transcript, and returned WAV audio. This is a single-turn
+speech smoke test; it does not execute model-requested tools. The older
+`promptfooconfig.nova-sonic.yaml` is retained as a legacy reference for the retired model.
+
+Sonic supports configurable timeouts:
 
 ```yaml
 providers:
-  - id: bedrock:nova-sonic:amazon.nova-sonic-v1:0
+  - id: bedrock:nova-2-5-sonic
     config:
       region: us-east-1
       sessionTimeout: 300000 # 5 minutes (default)

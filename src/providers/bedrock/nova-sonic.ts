@@ -72,6 +72,7 @@ export function categorizeError(error: unknown): NovaSonicError {
 // Configuration types
 interface SessionState {
   input: Readable;
+  promptEnded?: boolean;
   responseHandlers: Map<string, (data: any) => void>;
   isActive: boolean;
   audioContentId: string;
@@ -118,7 +119,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
   private readonly inferenceConfiguration: typeof DEFAULT_CONFIG.inference;
   config: BedrockAmazonNovaSonicGenerationOptions;
 
-  constructor(modelName: string = 'amazon.nova-sonic-v1:0', options: ProviderOptions = {}) {
+  constructor(modelName: string = 'amazon.nova-2-5-sonic', options: ProviderOptions = {}) {
     super(modelName, options);
     this.config = options.config ?? {};
     const inference: BedrockAmazonNovaSonicGenerationOptions['interfaceConfig'] =
@@ -242,13 +243,12 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     // Wait a moment for any final events
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    await this.sendEvent(sessionId, {
-      event: {
-        promptEnd: {
-          promptName: session.promptName,
-        },
-      },
-    });
+    if (!session.promptEnded) {
+      await this.sendEvent(sessionId, {
+        event: { promptEnd: { promptName: session.promptName } },
+      });
+      session.promptEnded = true;
+    }
 
     // Wait for any final events after prompt end
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -318,7 +318,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
   private validateRegionConfig(region = this.getRegion()): void {
     if (
-      this.modelName === 'amazon.nova-2-sonic-v1:0' &&
+      ['amazon.nova-2-sonic-v1:0', 'amazon.nova-2-5-sonic'].includes(this.modelName) &&
       !this.config.endpoint &&
       !NOVA_2_SONIC_REGIONS.includes(region as (typeof NOVA_2_SONIC_REGIONS)[number])
     ) {
@@ -332,7 +332,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
   private validateModelConfig(): void {
     if (this.modelName === 'amazon.nova-sonic-v1:0' && this.config.turnDetectionConfiguration) {
       throw new Error(
-        'turnDetectionConfiguration is only supported by amazon.nova-2-sonic-v1:0; ' +
+        'turnDetectionConfiguration is only supported by amazon.nova-2-sonic-v1:0 and amazon.nova-2-5-sonic; ' +
           'it is not supported by amazon.nova-sonic-v1:0.',
       );
     }
@@ -347,14 +347,34 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
     let assistantTranscript = '';
     let userTranscript = '';
-    let audioContent = '';
-    let hasAudioContent = false;
+    const audioChunks: Buffer[] = [];
+    let hasCompletionStart = false;
+    const textBlocks = new Map<string, { role: string; stage?: string; text: string }>();
     const toolCalls: { toolUseId: string; toolName: string; content: string }[] = [];
 
     logger.debug('prompt: ' + prompt.slice(0, 1000));
     // Set up event handlers
+    session.responseHandlers.set('completionStart', () => {
+      hasCompletionStart = true;
+    });
+    session.responseHandlers.set('contentStart', (data) => {
+      if (data.type === 'TEXT') {
+        const fields = data.additionalModelFields ? JSON.parse(data.additionalModelFields) : {};
+        textBlocks.set(data.contentId, {
+          role: data.role,
+          stage: fields.generationStage,
+          text: '',
+        });
+      }
+    });
     session.responseHandlers.set('textOutput', (data) => {
       logger.debug('textOutput: ' + JSON.stringify(data));
+      const block = textBlocks.get(data.contentId);
+      if (block) {
+        block.text += data.content;
+        return;
+      }
+      // Retain compatibility with transports that omit content framing.
       if (data.role === 'USER') {
         userTranscript += data.content + '\n';
       } else if (data.role === 'ASSISTANT') {
@@ -364,15 +384,38 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
     session.responseHandlers.set('contentEnd', async (data) => {
       logger.debug('contentEnd');
-      if (data.stopReason === 'END_TURN') {
-        await this.endSession(sessionId);
+      const block = textBlocks.get(data.contentId);
+      if (block?.text && block.stage !== 'SPECULATIVE' && data.stopReason !== 'INTERRUPTED') {
+        if (block.role === 'USER') {
+          userTranscript += block.text + '\n';
+        } else if (block.role === 'ASSISTANT') {
+          assistantTranscript += block.text + '\n';
+        }
       }
+      textBlocks.delete(data.contentId);
+      if (data.stopReason === 'END_TURN') {
+        if (hasCompletionStart) {
+          // Closing the input prompt flushes FINAL transcripts and completionEnd.
+          // Keep reading the response until those events have been processed.
+          if (!session.promptEnded) {
+            await this.sendEvent(sessionId, {
+              event: { promptEnd: { promptName: session.promptName } },
+            });
+            session.promptEnded = true;
+          }
+        } else {
+          await this.endSession(sessionId);
+        }
+      }
+    });
+    session.responseHandlers.set('completionEnd', async () => {
+      await this.endSession(sessionId);
     });
 
     session.responseHandlers.set('audioOutput', (data) => {
-      hasAudioContent = true;
       logger.debug('audioOutput');
-      audioContent += data.content;
+      // Each event is independently encoded and may contain base64 padding.
+      audioChunks.push(Buffer.from(data.content, 'base64'));
     });
 
     session.responseHandlers.set('toolUse', (data) => {
@@ -527,22 +570,21 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       }
 
       const audioConfig = this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output;
-      const audioOutput =
-        hasAudioContent && audioContent
-          ? {
-              audio: {
-                data: this.convertRawToWav(
-                  Buffer.from(audioContent, 'base64'),
-                  audioConfig.sampleRateHertz,
-                  audioConfig.sampleSizeBits,
-                  audioConfig.channelCount,
-                ).toString('base64'),
-                format: 'wav',
-                transcript: assistantTranscript,
-              },
-              userTranscript,
-            }
-          : {};
+      const audioOutput = audioChunks.some((chunk) => chunk.length > 0)
+        ? {
+            audio: {
+              data: this.convertRawToWav(
+                Buffer.concat(audioChunks),
+                audioConfig.sampleRateHertz,
+                audioConfig.sampleSizeBits,
+                audioConfig.channelCount,
+              ).toString('base64'),
+              format: 'wav',
+              transcript: assistantTranscript,
+            },
+            userTranscript,
+          }
+        : {};
 
       return {
         ...(toolCalls.length > 0 ? { error: TOOL_EXECUTION_UNSUPPORTED_ERROR } : {}),

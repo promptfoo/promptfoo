@@ -78,17 +78,22 @@ const encodeChunk = (obj: any) => ({
   chunk: { bytes: new TextEncoder().encode(JSON.stringify(obj)) },
 });
 
-function createMockStreamResponse(responseObjects: any[]) {
+function createMockStreamResponse(responseObjects: any[], beforeEvent?: (event: any) => void) {
   return {
     body: (async function* () {
       for (const event of responseObjects) {
+        beforeEvent?.(event);
         yield encodeChunk(event);
       }
     })(),
   };
 }
 
-function captureSonicRequest(mockSend: Mock, responseObjects: any[] = standardTextResponse) {
+function captureSonicRequest(
+  mockSend: Mock,
+  responseObjects: any[] = standardTextResponse,
+  beforeEvent?: (event: any) => void,
+) {
   const events: any[] = [];
   let completion: Promise<{ error?: unknown }> | undefined;
   mockSend.mockImplementation(async ({ body }) => {
@@ -107,7 +112,7 @@ function captureSonicRequest(mockSend: Mock, responseObjects: any[] = standardTe
       () => ({}),
       (error: unknown) => ({ error }),
     );
-    return createMockStreamResponse(responseObjects);
+    return createMockStreamResponse(responseObjects, beforeEvent);
   });
   return {
     events,
@@ -323,7 +328,7 @@ describe('NovaSonic Provider', () => {
       vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
       const defaultProvider = new NovaSonicProvider();
-      expect(defaultProvider.modelName).toBe('amazon.nova-sonic-v1:0');
+      expect(defaultProvider.modelName).toBe('amazon.nova-2-5-sonic');
     });
 
     it('should create the Bedrock client with the correct configuration', async () => {
@@ -469,17 +474,20 @@ describe('NovaSonic Provider', () => {
       },
     );
 
-    it('should reject Nova 2 Sonic outside its published in-region endpoints', async () => {
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-      const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
-        config: { region: 'eu-west-1' },
-      });
+    it.each(['amazon.nova-2-sonic-v1:0', 'amazon.nova-2-5-sonic'])(
+      'should reject %s outside its published in-region endpoints',
+      async (model) => {
+        vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+        const testProvider = new NovaSonicProvider(model, {
+          config: { region: 'eu-west-1' },
+        });
 
-      await expect((testProvider as any).getBedrockClient()).rejects.toThrow(
-        'Supported Regions: us-east-1, us-west-2, eu-north-1, ap-northeast-1',
-      );
-      expect(BedrockRuntimeClient).not.toHaveBeenCalled();
-    });
+        await expect((testProvider as any).getBedrockClient()).rejects.toThrow(
+          'Supported Regions: us-east-1, us-west-2, eu-north-1, ap-northeast-1',
+        );
+        expect(BedrockRuntimeClient).not.toHaveBeenCalled();
+      },
+    );
 
     it('rejects an invalid region before creating or cleaning up a session', async () => {
       vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
@@ -500,25 +508,28 @@ describe('NovaSonic Provider', () => {
       }
     });
 
-    it('should allow Nova 2 Sonic custom endpoints outside published regions and retain the signing region', async () => {
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-      const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
-        config: {
-          region: 'eu-west-1',
-          endpoint: 'https://bedrock.internal.example',
-        },
-      });
+    it.each(['amazon.nova-2-sonic-v1:0', 'amazon.nova-2-5-sonic'])(
+      'should allow %s custom endpoints outside published regions and retain the signing region',
+      async (model) => {
+        vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+        const testProvider = new NovaSonicProvider(model, {
+          config: {
+            region: 'eu-west-1',
+            endpoint: 'https://bedrock.internal.example',
+          },
+        });
 
-      await (testProvider as any).getBedrockClient();
+        await (testProvider as any).getBedrockClient();
 
-      expect(BedrockRuntimeClient).toHaveBeenCalledWith(
-        expect.objectContaining({
-          region: 'eu-west-1',
-          endpoint: 'https://bedrock.internal.example',
-          authSchemePreference: ['sigv4'],
-        }),
-      );
-    });
+        expect(BedrockRuntimeClient).toHaveBeenCalledWith(
+          expect.objectContaining({
+            region: 'eu-west-1',
+            endpoint: 'https://bedrock.internal.example',
+            authSchemePreference: ['sigv4'],
+          }),
+        );
+      },
+    );
   });
 
   describe('API Interactions', () => {
@@ -536,7 +547,7 @@ describe('NovaSonic Provider', () => {
 
       expect(BedrockRuntimeClient).toHaveBeenCalled();
       expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({ modelId: 'amazon.nova-sonic-v1:0' }),
+        expect.objectContaining({ modelId: 'amazon.nova-2-5-sonic' }),
       );
       expect(result).toMatchObject({ output: 'This is a test response\n' });
       expect(capture.events[0]).toEqual({
@@ -546,6 +557,77 @@ describe('NovaSonic Provider', () => {
       });
       expect(capture.events.at(-1)).toEqual({ sessionEnd: {} });
       expect((defaultProvider as any).sessions.size).toBe(0);
+    });
+
+    it('returns final transcripts after audio END_TURN and retains padded audio chunks', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'endSession').mockRestore();
+      vi.useFakeTimers();
+      const event = (value: unknown) => ({ event: value });
+      const textStart = (contentId: string, generationStage: string) =>
+        event({
+          contentStart: {
+            contentId,
+            role: 'ASSISTANT',
+            type: 'TEXT',
+            additionalModelFields: JSON.stringify({ generationStage }),
+          },
+        });
+      const capture = captureSonicRequest(
+        mockSend,
+        [
+          event({ completionStart: { completionId: 'completion' } }),
+          textStart('preview', 'SPECULATIVE'),
+          event({
+            textOutput: { contentId: 'preview', role: 'ASSISTANT', content: 'Unspoken preview' },
+          }),
+          event({ contentEnd: { contentId: 'preview', stopReason: 'PARTIAL_TURN' } }),
+          textStart('interruption', 'FINAL'),
+          event({
+            textOutput: {
+              contentId: 'interruption',
+              role: 'ASSISTANT',
+              content: '{ "interrupted": true }',
+            },
+          }),
+          event({ contentEnd: { contentId: 'interruption', stopReason: 'INTERRUPTED' } }),
+          event({ audioOutput: { content: Buffer.from([1, 2]).toString('base64') } }),
+          event({ audioOutput: { content: Buffer.from([3, 4]).toString('base64') } }),
+          event({ contentEnd: { contentId: 'audio', type: 'AUDIO', stopReason: 'END_TURN' } }),
+          textStart('spoken', 'FINAL'),
+          event({ textOutput: { contentId: 'spoken', role: 'ASSISTANT', content: 'Actual ' } }),
+          event({ textOutput: { contentId: 'spoken', role: 'ASSISTANT', content: 'speech' } }),
+          event({ contentEnd: { contentId: 'spoken', stopReason: 'END_TURN' } }),
+          event({ completionEnd: { stopReason: 'END_TURN' } }),
+        ],
+        (response) => {
+          if (response.event.contentStart?.contentId === 'spoken') {
+            // AWS flushes final text only once the input prompt is closed.
+            expect(sentEvent).toHaveBeenCalledWith(expect.any(String), {
+              event: { promptEnd: { promptName: expect.any(String) } },
+            });
+            expect(sentEvent).not.toHaveBeenCalledWith(expect.any(String), {
+              event: { sessionEnd: {} },
+            });
+          }
+        },
+      );
+      const provider = new NovaSonicProvider('amazon.nova-2-5-sonic', {
+        config: { region: 'us-east-1' },
+      });
+      const sentEvent = vi.spyOn(provider as any, 'sendEvent');
+      const pending = provider.callApi('AA==');
+      await vi.runAllTimersAsync();
+      const result = await pending;
+      await capture.waitForCompletion();
+      expect(result.error).toBeUndefined();
+      expect(capture.events.filter((event) => event.promptEnd)).toHaveLength(1);
+      expect(result.output).toBe('Actual speech\n');
+      expect(result.audio?.transcript).toBe('Actual speech\n');
+      expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(
+        Buffer.from([1, 2, 3, 4]),
+      );
+      expect((provider as any).sessions.size).toBe(0);
     });
 
     it('should reject turn detection for Nova Sonic v1 before opening a stream', async () => {
@@ -611,7 +693,7 @@ describe('NovaSonic Provider', () => {
       expect(createSessionSpy).toHaveBeenCalledWith('mocked-session-id');
     });
 
-    describe.each(['amazon.nova-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'])(
+    describe.each(['amazon.nova-sonic-v1:0', 'amazon.nova-2-sonic-v1:0', 'amazon.nova-2-5-sonic'])(
       '%s serialized requests',
       (model) => {
         it.each(inferenceCases)(
@@ -622,9 +704,9 @@ describe('NovaSonic Provider', () => {
             vi.useFakeTimers();
             const capture = captureSonicRequest(mockSend);
             const turnDetectionConfiguration =
-              model === 'amazon.nova-2-sonic-v1:0'
-                ? { endpointingSensitivity: 'MEDIUM' as const }
-                : undefined;
+              model === 'amazon.nova-sonic-v1:0'
+                ? undefined
+                : { endpointingSensitivity: 'MEDIUM' as const };
             const configuredProvider = new NovaSonicProvider(model, {
               config: { ...config, region: 'us-east-1', turnDetectionConfiguration },
             });
