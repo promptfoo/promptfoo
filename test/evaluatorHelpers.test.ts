@@ -698,6 +698,21 @@ describe('evaluatorHelpers', () => {
         mixed: '{% raw %}{{x}}{% endraw %} and yes',
       });
     });
+
+    it('should leave placeholders inside nested raw blocks untouched', () => {
+      // Nunjucks balances nested raw blocks: the outer block stays open until
+      // the matching endraw, so {{y}} here renders literally.
+      const variables = {
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}',
+      });
+    });
   });
 
   describe('runExtensionHook', () => {

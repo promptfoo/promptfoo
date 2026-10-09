@@ -97,7 +97,7 @@ export function resolveVariables(
   return variables;
 }
 
-const RAW_BLOCK_REGEX = /\{%\s*raw\s*%\}.*?\{%\s*endraw\s*%\}/gs;
+const RAW_TOKEN_REGEX = /\{%\s*(raw|endraw)\s*%\}/g;
 const SIMPLE_PLACEHOLDER_REGEX = /\{\{\s*(\w+)\s*\}\}/g;
 
 // Regex substitution cannot see Nunjucks structure, so a placeholder inside a
@@ -107,10 +107,7 @@ const SIMPLE_PLACEHOLDER_REGEX = /\{\{\s*(\w+)\s*\}\}/g;
 function firstUnprotectedPlaceholder(
   value: string,
 ): { placeholder: string; varName: string; index: number } | null {
-  const rawSpans: Array<[number, number]> = [];
-  for (const match of value.matchAll(RAW_BLOCK_REGEX)) {
-    rawSpans.push([match.index, match.index + match[0].length]);
-  }
+  const rawSpans = collectRawSpans(value);
   for (const match of value.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
     const start = match.index;
     if (rawSpans.some(([s, e]) => start >= s && start < e)) {
@@ -123,6 +120,29 @@ function firstUnprotectedPlaceholder(
     return { placeholder: match[0], varName: match[1]!, index: start };
   }
   return null;
+}
+
+// Nunjucks balances nested {% raw %} blocks, so a non-greedy regex that stops
+// at the first {% endraw %} under-covers: everything up to the matching close
+// of the outermost open is literal text.
+function collectRawSpans(value: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  let depth = 0;
+  let spanStart = 0;
+  for (const match of value.matchAll(RAW_TOKEN_REGEX)) {
+    if (match[1] === 'raw') {
+      if (depth === 0) {
+        spanStart = match.index;
+      }
+      depth++;
+    } else if (depth > 0) {
+      depth--;
+      if (depth === 0) {
+        spans.push([spanStart, match.index + match[0].length]);
+      }
+    }
+  }
+  return spans;
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
