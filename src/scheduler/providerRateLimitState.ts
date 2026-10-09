@@ -72,41 +72,6 @@ type ProviderExecuteOptions<T> = RateLimitExecuteOptions<T> & {
 };
 
 /**
- * Circular buffer for latency tracking.
- * O(1) insertions instead of O(n) shift().
- */
-class CircularBuffer {
-  private buffer: number[];
-  private head = 0;
-  private count = 0;
-
-  constructor(private capacity: number) {
-    this.buffer = new Array(capacity);
-  }
-
-  push(value: number): void {
-    this.buffer[this.head] = value;
-    this.head = (this.head + 1) % this.capacity;
-    if (this.count < this.capacity) {
-      this.count++;
-    }
-  }
-
-  toSortedArray(): number[] {
-    const result: number[] = [];
-    for (let i = 0; i < this.count; i++) {
-      const idx = (this.head - this.count + i + this.capacity) % this.capacity;
-      result.push(this.buffer[idx]);
-    }
-    return result.sort((a, b) => a - b);
-  }
-
-  get length(): number {
-    return this.count;
-  }
-}
-
-/**
  * Manages rate limit state and retry logic for a single rate limit key.
  */
 export class ProviderRateLimitState extends EventEmitter {
@@ -121,7 +86,8 @@ export class ProviderRateLimitState extends EventEmitter {
   private failedRequests = 0;
   private rateLimitHits = 0;
   private retriedRequests = 0;
-  private latencies = new CircularBuffer(100);
+  /** Keep the latest 100 latency measurements for bounded metric sorting and storage. */
+  private latencies: number[] = [];
 
   // Track if we've emitted ratelimit:learned for this provider
   private hasLearnedLimits = false;
@@ -254,7 +220,9 @@ export class ProviderRateLimitState extends EventEmitter {
           }
           // Completed calls retain their result and quota even if cancellation arrived
           // during completion. Cancellation still prevents another attempt.
-          this.latencies.push(Date.now() - startTime);
+          if (this.latencies.push(Date.now() - startTime) > 100) {
+            this.latencies.shift();
+          }
           releaseSlot();
 
           // Keep an independent failure's diagnostic and metadata intact, but
@@ -274,13 +242,15 @@ export class ProviderRateLimitState extends EventEmitter {
             } catch (finalizerError) {
               throw new ResultFinalizationError(finalizerError);
             }
-            this.handleSuccess();
+            this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
             this.completedRequests++;
             return finalizedResult;
           }
         } catch (error) {
           if (ownsSlot) {
-            this.latencies.push(Date.now() - startTime);
+            if (this.latencies.push(Date.now() - startTime) > 100) {
+              this.latencies.shift();
+            }
           }
 
           if (isResponseHeadersObserverError(onResponseHeaders, error)) {
@@ -470,21 +440,12 @@ export class ProviderRateLimitState extends EventEmitter {
   }
 
   /**
-   * Handle successful request.
-   */
-  private handleSuccess(): void {
-    this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
-  }
-
-  /**
    * Apply concurrency change and emit appropriate event.
    */
   private applyConcurrencyChange(change: ConcurrencyChangeResult): void {
     if (change.changed) {
       this.slotQueue.setMaxConcurrency(change.current);
-      const eventName =
-        change.reason === 'recovery' ? 'concurrency:increased' : 'concurrency:decreased';
-      this.emit(eventName, {
+      this.emit(change.reason === 'recovery' ? 'concurrency:increased' : 'concurrency:decreased', {
         rateLimitKey: this.rateLimitKey,
         ...change,
       });
@@ -512,8 +473,7 @@ export class ProviderRateLimitState extends EventEmitter {
   }
 
   getMetrics(): ProviderMetrics {
-    const sorted = this.latencies.toSortedArray();
-    const avgLatency = sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0;
+    const sorted = [...this.latencies].sort((a, b) => a - b);
 
     return {
       rateLimitKey: this.rateLimitKey,
@@ -525,7 +485,7 @@ export class ProviderRateLimitState extends EventEmitter {
       failedRequests: this.failedRequests,
       rateLimitHits: this.rateLimitHits,
       retriedRequests: this.retriedRequests,
-      avgLatencyMs: avgLatency,
+      avgLatencyMs: sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0,
       // Percentiles: for n elements, pX is at index floor((n-1) * X/100)
       p50LatencyMs: sorted[Math.floor((sorted.length - 1) * 0.5)] ?? 0,
       p99LatencyMs: sorted[Math.floor((sorted.length - 1) * 0.99)] ?? 0,

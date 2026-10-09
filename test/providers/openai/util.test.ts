@@ -11,12 +11,14 @@ import {
   getTokenUsage,
   getTokenUsageWithRequestCount,
   normalizeOpenAiServiceTierForWire,
+  OPENAI_BILLING_MODELS,
   OPENAI_CHAT_MODELS,
   OPENAI_CODEX_ONLY_MODELS,
   OPENAI_COMPLETION_MODELS,
   OPENAI_DEEP_RESEARCH_MODELS,
   OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
+  OPENAI_TRANSCRIPTION_MODELS,
   OPENAI_TTS_MODELS,
   RETIRED_OPENAI_MODEL_IDS,
   validateChatCompletionMessage,
@@ -1624,4 +1626,16 @@ describe('OpenAI model catalogs', () => {
   ])('retains model %s before its announced shutdown', (model) => {
     expect(activeModels).toContain(model);
   });
+});
+
+it('keeps transcription prices independent across model aliases', () => {
+  const costs = OPENAI_TRANSCRIPTION_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
+});
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = OPENAI_BILLING_MODELS.flatMap(({ cost }) => (cost ? [cost] : []));
+  expect(new Set(costs).size).toBe(costs.length);
+  const longContextCosts = costs.flatMap(({ longContext }) => (longContext ? [longContext] : []));
+  expect(new Set(longContextCosts).size).toBe(longContextCosts.length);
 });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GeminiImageProvider } from '../../../src/providers/google/gemini-image';
 import * as googleUtil from '../../../src/providers/google/util';
+import { checkProviderApiKeys } from '../../../src/util/provider';
 import { mockProcessEnv } from '../../util/utils';
 import type { GoogleAuthOptions } from 'google-auth-library';
 
@@ -80,6 +81,64 @@ describe('GeminiImageProvider', () => {
     mockProcessEnv({ GOOGLE_LOCATION: undefined });
     mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
     mockProcessEnv({ GEMINI_API_KEY: undefined });
+  });
+
+  describe('API key preflight', () => {
+    let restoreEnv: () => void;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({
+        GOOGLE_API_KEY: undefined,
+        GOOGLE_GENERATIVE_AI_API_KEY: undefined,
+        GEMINI_API_KEY: undefined,
+        GOOGLE_GENAI_USE_VERTEXAI: undefined,
+        VERTEX_PROJECT_ID: undefined,
+        GOOGLE_PROJECT_ID: undefined,
+        GOOGLE_CLOUD_PROJECT: undefined,
+      });
+    });
+
+    afterEach(() => restoreEnv());
+
+    it.each([
+      { config: { projectId: 'vertex-project' } },
+      { env: { GOOGLE_PROJECT_ID: 'scoped-vertex-project' } },
+      { env: { GOOGLE_CLOUD_PROJECT: 'scoped-cloud-project' } },
+      { config: { vertexai: true } },
+    ])('allows Vertex OAuth without a native API key: %j', (options) => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image', options);
+
+      expect(checkProviderApiKeys([provider])).toEqual(new Map());
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+      expect(mockGetGoogleClient).not.toHaveBeenCalled();
+    });
+
+    it('reports the missing key for native image generation', () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image');
+
+      expect(checkProviderApiKeys([provider])).toEqual(
+        new Map([['GOOGLE_API_KEY', [provider.id()]]]),
+      );
+    });
+
+    it('honors an explicit native route even when a cloud project is present', () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+        config: { vertexai: false, projectId: 'vertex-project' },
+        env: { GOOGLE_PROJECT_ID: 'scoped-vertex-project' },
+      });
+
+      expect(checkProviderApiKeys([provider])).toEqual(
+        new Map([['GOOGLE_API_KEY', [provider.id()]]]),
+      );
+    });
+
+    it('preserves an explicit API-key preflight opt-out', () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+        config: { vertexai: false, apiKeyRequired: false },
+      });
+
+      expect(checkProviderApiKeys([provider])).toEqual(new Map());
+    });
   });
 
   it('should construct with model name', () => {
@@ -301,6 +360,43 @@ describe('GeminiImageProvider', () => {
       true,
     );
   });
+
+  it.each([
+    { scope: 'provider', expressMode: undefined },
+    { scope: 'provider', expressMode: true },
+    { scope: 'process', expressMode: undefined },
+    { scope: 'process', expressMode: true },
+  ])(
+    'routes environment-selected Vertex Express for $scope with expressMode=$expressMode',
+    async ({ scope, expressMode }) => {
+      const restore =
+        scope === 'process' ? mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: 'true' }) : () => {};
+      try {
+        const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+          config: { apiKey: 'explicit-vertex-key', expressMode },
+          env: scope === 'provider' ? { GOOGLE_GENAI_USE_VERTEXAI: 'true' } : undefined,
+        });
+        mockSuccessfulImageResponse();
+
+        const result = await provider.callApi('Draw a circle');
+
+        expect(result.error).toBeUndefined();
+        expect(mockGetGoogleClient).not.toHaveBeenCalled();
+        expect(mockResolveProjectId).not.toHaveBeenCalled();
+        expect(mockFetchWithCache).toHaveBeenCalledWith(
+          'https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.1-flash-image:generateContent',
+          expect.objectContaining({
+            headers: expect.objectContaining({ 'x-goog-api-key': 'explicit-vertex-key' }),
+          }),
+          expect.any(Number),
+          'json',
+          true,
+        );
+      } finally {
+        restore();
+      }
+    },
+  );
 
   it('should honor a custom base URL for Vertex Express image requests', async () => {
     const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {

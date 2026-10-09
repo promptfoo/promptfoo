@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { isCallerAbortError } from '../util/fetch/requestSignal';
 import {
   isResponseHeadersObserverError,
@@ -23,6 +23,7 @@ import {
   validateChatCompletionMessage,
 } from './openai/util';
 import { calculateOpenRouterResponseCost, getOpenRouterBillingMetadata } from './openrouterBilling';
+import { serializeProvider } from './serialization';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './shared';
 import type OpenAI from 'openai';
 
@@ -155,14 +156,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'openrouter',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'openrouter');
   }
 
   protected override calculateResponseCost(
@@ -190,22 +184,6 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
-      return result;
-    };
-
     let prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>;
     try {
       prepared = await waitForPromiseWithAbort(
@@ -218,13 +196,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         async () => {
           throw error;
         },
-        resultExtractor,
+        (response) => extractGenAIResponse(response, true),
       );
     }
     return withGenAISpan(
       { ...spanContext, ...this.getChatTracingRequest(prepared.body) },
       () => this.executeOpenRouterCall(prepared, context, callApiOptions),
-      resultExtractor,
+      (response) => extractGenAIResponse(response, true),
     );
   }
 
