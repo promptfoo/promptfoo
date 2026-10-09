@@ -36,6 +36,13 @@ import {
 } from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
 import {
+  COMMON_OPTIONAL_PROCESS_ENV_KEYS,
+  findGitRepositoryRoot,
+  getMinimalProcessEnv,
+  runSerializedThreadTurn,
+  waitForPreviousThreadRun,
+} from './codexShared';
+import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,
   getCodexSkillRootPrefixes,
@@ -378,39 +385,6 @@ interface ThreadHandle {
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
 
-const MINIMAL_CLI_ENV_KEYS = [
-  'PATH',
-  'Path',
-  'HOME',
-  'USER',
-  'USERNAME',
-  'USERPROFILE',
-  'TMPDIR',
-  'TMP',
-  'TEMP',
-  'SHELL',
-  'COMSPEC',
-  'SystemRoot',
-  'PATHEXT',
-  'LANG',
-  'LC_ALL',
-  'TERM',
-] as const;
-
-const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
-  'CODEX_HOME',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'REQUESTS_CA_BUNDLE',
-  'NODE_EXTRA_CA_CERTS',
-  'SSH_AUTH_SOCK',
-  'GIT_SSH_COMMAND',
-] as const;
-
 const CodexCliEnvValueSchema = z.union([z.string(), z.number(), z.boolean()]).transform(String);
 
 const CodexAppServerReasoningEffortSchema = z.enum([
@@ -677,18 +651,6 @@ function mergeCodexAppServerConfig(
       override.server_request_policy,
     ),
   };
-}
-
-function getMinimalProcessEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  const processEnv = getProcessEnv();
-  for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = processEnv[key];
-    if (typeof value === 'string' && value.length > 0) {
-      env[key] = value;
-    }
-  }
-  return env;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1697,7 +1659,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     );
     const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (getProcessEnv() as Record<string, string>) : getMinimalProcessEnv()),
+      ...(inheritProcessEnv
+        ? (getProcessEnv() as Record<string, string>)
+        : getMinimalProcessEnv(getProcessEnv())),
       ...cliEnv,
     };
 
@@ -3252,60 +3216,27 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (cleanupGeneration !== this.cleanupGeneration) {
       throw new Error('codex app-server provider cleanup interrupted queued turn');
     }
-    if (!queueKey) {
-      return executeTurn();
-    }
-
-    const previousRun = this.threadRunQueues.get(queueKey) ?? Promise.resolve();
-    let releaseCurrentRun: () => void = () => {};
-    const currentRun = new Promise<void>((resolve) => {
-      releaseCurrentRun = resolve;
-    });
-    const queuedRun = previousRun.catch(() => undefined).then(() => currentRun);
-    this.threadRunQueues.set(queueKey, queuedRun);
-    void queuedRun.finally(() => {
-      if (this.threadRunQueues.get(queueKey) === queuedRun) {
-        this.threadRunQueues.delete(queueKey);
-      }
-    });
-
-    try {
-      await this.waitForPreviousThreadRun(previousRun, abortSignal);
-      if (cleanupGeneration !== this.cleanupGeneration) {
-        throw new Error('codex app-server provider cleanup interrupted queued turn');
-      }
-      return await executeTurn();
-    } finally {
-      releaseCurrentRun();
-    }
+    return runSerializedThreadTurn(
+      this.threadRunQueues,
+      queueKey,
+      abortSignal,
+      () => {
+        if (cleanupGeneration !== this.cleanupGeneration) {
+          throw new Error('codex app-server provider cleanup interrupted queued turn');
+        }
+        return executeTurn();
+      },
+      () => createAbortError('Codex app-server thread turn wait aborted'),
+    );
   }
 
   private async waitForPreviousThreadRun(
     previousRun: Promise<void>,
     abortSignal: AbortSignal | undefined,
   ): Promise<void> {
-    const previousRunDone = previousRun.catch(() => undefined);
-    if (!abortSignal) {
-      await previousRunDone;
-      return;
-    }
-    if (abortSignal.aborted) {
-      throw createAbortError('Codex app-server thread turn wait aborted');
-    }
-
-    let onAbort: (() => void) | undefined;
-    const abortPromise = new Promise<void>((_, reject) => {
-      onAbort = () => reject(createAbortError('Codex app-server thread turn wait aborted'));
-      abortSignal.addEventListener('abort', onAbort, { once: true });
-    });
-
-    try {
-      await Promise.race([previousRunDone, abortPromise]);
-    } finally {
-      if (onAbort) {
-        abortSignal.removeEventListener('abort', onAbort);
-      }
-    }
+    return waitForPreviousThreadRun(previousRun, abortSignal, () =>
+      createAbortError('Codex app-server thread turn wait aborted'),
+    );
   }
 
   private buildProviderResponse(
@@ -3667,17 +3598,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private findGitRepositoryRoot(workingDir: string): string | undefined {
-    let currentDir = path.resolve(workingDir);
-    while (true) {
-      if (fs.existsSync(path.join(currentDir, '.git'))) {
-        return currentDir;
-      }
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        return undefined;
-      }
-      currentDir = parentDir;
-    }
+    return findGitRepositoryRoot(workingDir);
   }
 
   private warnOnceForDeepTracingThreadOptions(config: CodexAppServerConfig): void {
