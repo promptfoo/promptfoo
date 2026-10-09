@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
-import { type EnvVarKey, getEnvString } from '../envars';
 import logger from '../logger';
+import { resolveProviderApiKey } from './credentials';
 import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
@@ -32,10 +32,13 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   config: any;
   env?: any;
 
-  constructor(modelName: string, config: any = {}, env?: any) {
+  constructor(modelName: string, config: any = {}, env?: any, id?: string) {
     this.modelName = modelName;
     this.config = config;
     this.env = env;
+    if (id) {
+      this.id = () => id;
+    }
   }
 
   id() {
@@ -47,12 +50,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
-      : undefined;
-    return (
-      this.config.apiKey || (namedKey ?? this.env?.VOYAGE_API_KEY ?? getEnvString('VOYAGE_API_KEY'))
-    );
+    return resolveProviderApiKey(this.config, this.env, ['VOYAGE_API_KEY']);
   }
 
   getApiUrl(): string {

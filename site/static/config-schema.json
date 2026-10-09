@@ -606,6 +606,9 @@
         "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
           "type": "string"
         },
+        "SNOWFLAKE_API_KEY": {
+          "type": "string"
+        },
         "TOGETHER_API_KEY": {
           "type": "string"
         },

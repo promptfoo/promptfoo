@@ -17,7 +17,7 @@ import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../
 import type { GoogleProviderConfig } from './types';
 
 interface GoogleImageOptions {
-  config?: GoogleProviderConfig;
+  config?: GoogleProviderConfig & { apiKeyEnvar?: string };
   id?: string;
   env?: EnvOverrides;
 }
@@ -73,7 +73,7 @@ const IMAGEN_COSTS: Record<string, number> = {
 
 export class GoogleImageProvider implements ApiProvider {
   modelName: string;
-  config: GoogleProviderConfig;
+  config: GoogleProviderConfig & { apiKeyEnvar?: string };
   env?: EnvOverrides;
   maxRetries: number = 3;
   baseRetryDelay: number = 1000; // 1 second
@@ -81,6 +81,10 @@ export class GoogleImageProvider implements ApiProvider {
   constructor(modelName: string, options: GoogleImageOptions = {}) {
     this.modelName = modelName;
     this.config = options.config || {};
+    const id = options.id;
+    if (id) {
+      this.id = () => id;
+    }
     this.env = options.env;
   }
 
@@ -361,7 +365,7 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+    return resolveProviderApiKey(this.config, this.env, [
       'GOOGLE_API_KEY',
       'GOOGLE_GENERATIVE_AI_API_KEY',
       'GEMINI_API_KEY',

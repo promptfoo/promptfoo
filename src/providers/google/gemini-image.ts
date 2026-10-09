@@ -27,7 +27,7 @@ import type {
 import type { GoogleProviderConfig } from './types';
 
 interface GeminiImageOptions {
-  config?: GoogleProviderConfig;
+  config?: GoogleProviderConfig & { apiKeyEnvar?: string };
   id?: string;
   env?: EnvOverrides;
 }
@@ -100,12 +100,16 @@ const MODEL_IMAGE_SIZES: Record<string, string[]> = {
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
-  config: GoogleProviderConfig;
+  config: GoogleProviderConfig & { apiKeyEnvar?: string };
   env?: EnvOverrides;
 
   constructor(modelName: string, options: GeminiImageOptions = {}) {
     this.modelName = modelName;
     this.config = options.config || {};
+    const id = options.id;
+    if (id) {
+      this.id = () => id;
+    }
     this.env = options.env;
   }
 
@@ -118,7 +122,7 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+    return resolveProviderApiKey(this.config, this.env, [
       'GOOGLE_API_KEY',
       'GOOGLE_GENERATIVE_AI_API_KEY',
       'GEMINI_API_KEY',

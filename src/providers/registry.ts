@@ -720,7 +720,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = modelNameFromProviderPath(providerPath, 1);
       return new ClouderaAiChatCompletionProvider(modelName, {
         ...providerOptions,
         config: providerOptions.config || {},
@@ -1693,6 +1693,7 @@ export const providerMap: ProviderFactory[] = [
         modelNameFromProviderPath(providerPath, 1),
         providerOptions.config,
         providerOptions.env,
+        providerOptions.id,
       );
     },
   },

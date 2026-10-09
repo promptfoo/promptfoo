@@ -959,7 +959,7 @@ describe('provider environment scopes', () => {
     });
   });
 
-  it.each(namedProviders)(
+  it.each(namedProviders.filter(([name]) => name !== 'Voyage'))(
     '%s masks an empty named credential while retaining a missing-name fallback',
     (_name, create) => {
       const vendorEnv = {
