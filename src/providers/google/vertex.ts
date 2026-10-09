@@ -339,7 +339,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return client;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     // Determine the system based on model name
     const system = this.modelName.includes('claude')
       ? 'vertex:anthropic'
@@ -366,7 +370,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context),
+      () => this.callApiInternal(prompt, context, options),
       extractGenAIResponse,
     );
   }
@@ -374,11 +378,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
       return this.callClaudeApi(prompt, context);
     } else if (this.modelName.includes('gemini')) {
-      return this.callGeminiApi(prompt, context);
+      return this.callGeminiApi(prompt, context, options);
     } else if (this.modelName.includes('llama')) {
       return this.callLlamaApi(prompt, context);
     }
@@ -637,10 +642,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return hasApiKey && !explicitlyDisabled && !hasOAuthConfig;
   }
 
-  async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+  async callGeminiApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    await this.initializeMCP(options?.abortSignal);
 
     // Merge configs from the provider and the prompt
     const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;

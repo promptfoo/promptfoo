@@ -157,11 +157,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Google AI Studio API.
    */
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     // Wait for MCP initialization if pending
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.initializeMCP(options?.abortSignal);
 
     const apiKey = this.getApiKey();
     if (!apiKey) {

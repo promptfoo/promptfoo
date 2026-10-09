@@ -209,6 +209,69 @@ describe('MCPClient', () => {
       expect(mockGetOAuthTokenWithExpiry).not.toHaveBeenCalled();
     });
 
+    it('does not spawn a transport after cleanup cancels SDK loading', async () => {
+      mcpClient = new MCPClient({ server: { command: 'node' } });
+      const startup = mcpClient.initialize();
+      const rejected = expect(startup).rejects.toThrow();
+      await mcpClient.cleanup();
+      await rejected;
+      expect(StdioClientTransport).not.toHaveBeenCalled();
+      expect(mcpClient.hasInitialized).toBe(false);
+    });
+
+    it('closes an unpublished connection and rejects a late handshake', async () => {
+      let connected!: () => void;
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockClient.connect.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            connected = resolve;
+            started();
+          }),
+      );
+      mcpClient = new MCPClient({ server: { command: 'node' } });
+      const startup = mcpClient.initialize();
+      const rejected = expect(startup).rejects.toThrow();
+      await ready;
+      await mcpClient.cleanup();
+      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      connected();
+      await rejected;
+      expect(mockClient.listTools).not.toHaveBeenCalled();
+      expect(mcpClient.hasInitialized).toBe(false);
+    });
+
+    it('aborts OAuth acquisition before any transport starts', async () => {
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockGetOAuthTokenWithExpiry.mockImplementationOnce(
+        (_auth, _url, _rejected, signal) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+            started();
+          }),
+      );
+      mcpClient = new MCPClient({
+        server: {
+          url: 'https://cancel-startup.example.test',
+          auth: { type: 'oauth', clientId: 'fixture', clientSecret: 'fixture' },
+        },
+      });
+      const startup = mcpClient.initialize();
+      const rejected = expect(startup).rejects.toThrow();
+      await ready;
+      await mcpClient.cleanup();
+      await rejected;
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+      expect(SSEClientTransport).not.toHaveBeenCalled();
+    });
+
     it('defaults enabled and OAuth grant without changing the input', async () => {
       const auth = {
         type: 'oauth',
@@ -222,6 +285,8 @@ describe('MCPClient', () => {
       expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledWith(
         { ...auth, grantType: 'client_credentials' },
         'https://mcp.example.test',
+        undefined,
+        expect.any(AbortSignal),
       );
       expect(input).not.toHaveProperty('enabled');
       expect(auth).not.toHaveProperty('grantType');
@@ -281,7 +346,9 @@ describe('MCPClient', () => {
         args: ['start'],
         env: process.env as Record<string, string>,
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, {
+        signal: expect.any(AbortSignal),
+      });
       await mcpClient.cleanup();
       expect(mcpClient.hasInitialized).toBe(false);
     });
@@ -370,7 +437,9 @@ describe('MCPClient', () => {
           CUSTOM_MCP_VAR: 'custom_value',
         },
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, {
+        signal: expect.any(AbortSignal),
+      });
       await mcpClient.cleanup();
     });
 
@@ -506,7 +575,9 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, {
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('should initialize with remote server using StreamableHTTPClientTransport with headers', async () => {
@@ -539,7 +610,9 @@ describe('MCPClient', () => {
           }),
         }),
       );
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, {
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
@@ -737,7 +810,10 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(mockClient.listTools).toHaveBeenCalledWith(undefined, { timeout: 900000 });
+      expect(mockClient.listTools).toHaveBeenCalledWith(undefined, {
+        timeout: 900000,
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('should pass timeout options to connect()', async () => {
@@ -758,7 +834,10 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(mockClient.connect).toHaveBeenCalledWith(expect.anything(), { timeout: 300000 });
+      expect(mockClient.connect).toHaveBeenCalledWith(expect.anything(), {
+        timeout: 300000,
+        signal: expect.any(AbortSignal),
+      });
     });
 
     it('should ping server when pingOnConnect is true', async () => {
@@ -1438,7 +1517,12 @@ describe('MCPClient', () => {
         mcpClient = new MCPClient({ enabled: true, server: { ...oauthServer, auth } });
         await mcpClient.initialize();
 
-        expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledWith(auth, oauthServer.url);
+        expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledWith(
+          auth,
+          oauthServer.url,
+          undefined,
+          expect.any(AbortSignal),
+        );
         const options = vi.mocked(StreamableHTTPClientTransport).mock.calls[0][1];
         expect(options?.requestInit?.headers).not.toHaveProperty('Authorization');
         expect(options).not.toHaveProperty('authProvider');
@@ -1486,6 +1570,7 @@ describe('MCPClient', () => {
         oauthServer.auth,
         oauthServer.url,
         'revoked',
+        undefined,
       );
     });
 
