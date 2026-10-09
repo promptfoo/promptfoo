@@ -675,6 +675,48 @@
         "AZURE_CONTENT_SAFETY_API_VERSION": {
           "type": "string"
         },
+        "AWS_ENDPOINT_URL": {
+          "type": "string"
+        },
+        "AWS_ENDPOINT_URL_BEDROCK_RUNTIME": {
+          "type": "string"
+        },
+        "AWS_ENDPOINT_URL_BEDROCK_AGENT_RUNTIME": {
+          "type": "string"
+        },
+        "AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME": {
+          "type": "string"
+        },
+        "AWS_ENDPOINT_URL_S3": {
+          "type": "string"
+        },
+        "AWS_ENDPOINT_URL_STS": {
+          "type": "string"
+        },
+        "AWS_ENDPOINT_URL_SSO": {
+          "type": "string"
+        },
+        "AWS_ENDPOINT_URL_SSO_OIDC": {
+          "type": "string"
+        },
+        "AWS_USE_FIPS_ENDPOINT": {
+          "type": "string"
+        },
+        "AWS_USE_DUALSTACK_ENDPOINT": {
+          "type": "string"
+        },
+        "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS": {
+          "type": "string"
+        },
+        "AWS_CREDENTIAL_EXPIRATION": {
+          "type": "string"
+        },
+        "AWS_CREDENTIAL_SCOPE": {
+          "type": "string"
+        },
+        "AWS_ACCOUNT_ID": {
+          "type": "string"
+        },
         "AWS_SHARED_CREDENTIALS_FILE": {
           "type": "string"
         },

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
   getAwsCredentialCacheNamespace,
@@ -19,6 +19,8 @@ import {
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 import { SageMakerEmbeddingProvider } from '../../src/providers/sagemaker';
 import { mockProcessEnv } from '../util/utils';
+
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 
 let restore: (() => void) | undefined;
 afterEach(() => {
