@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { Sqlite3Client } from '@libsql/client/sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
@@ -18,6 +19,7 @@ import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 import { createDeferred, mockProcessEnv } from '../util/utils';
+import type { Client } from '@libsql/client/node';
 
 import type { LockRecoveryProbeResult } from './fixtures/lockRecoveryProbe';
 import type { ShutdownQueueProbeResult } from './fixtures/shutdownQueueProbe';
@@ -514,6 +516,27 @@ describe('database', () => {
   });
 
   describe('getDb', () => {
+    it('closes and evicts a client when initialization fails', async () => {
+      let failedClient: Sqlite3Client | undefined;
+      const execute = vi.spyOn(Sqlite3Client.prototype, 'execute').mockImplementationOnce(function (
+        this: Sqlite3Client,
+      ) {
+        failedClient = this;
+        return Promise.reject(new Error('Injected initialization failure'));
+      });
+      try {
+        await expect(getDb()).rejects.toThrow('Injected initialization failure');
+        expect(failedClient?.closed).toBe(true);
+        expect(isDbOpen()).toBe(false);
+      } finally {
+        execute.mockRestore();
+      }
+
+      const reopened = await getDb();
+      expect(isDbOpen()).toBe(true);
+      expect((reopened as typeof reopened & { $client: Client }).$client).not.toBe(failedClient);
+    });
+
     beforeEach(() => {
       vi.mocked(getEnvBool).mockImplementation((key) => {
         if (key === 'IS_TESTING') {
@@ -947,8 +970,8 @@ describe('database', () => {
       },
     );
 
-    it.each(['reconnect-failure', 'configuration-failure'])(
-      'rejects later statements and transactions after %s',
+    it.each(['reconnect-failure', 'configuration-failure', 'close-failure'])(
+      'rejects later statements and transactions after %s, but reopens on demand',
       async (mode) => {
         const result = await runDatabaseProbe<LockRecoveryProbeResult>(
           'lockRecoveryProbe',
@@ -957,13 +980,18 @@ describe('database', () => {
         );
 
         expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
-        expect(result.clientClosedAfterFailure).toBe(true);
+        expect(result.clientClosedAfterFailure).toBe(mode !== 'close-failure');
         expect(result.followupRowsAffected).toBeNull();
         expect(result.followupError).toMatch(/closed/i);
         expect(result.transactionAfterFailureError).toMatch(/closed/i);
         expect(result.callbackCalls).toBe(0);
-        expect(result.beforeCloseIds).toEqual([1]);
-        expect(result.afterCloseIds).toEqual([1]);
+        expect(result.dbOpenAfterFailure).toBe(false);
+        expect(result.reopenedError).toBeNull();
+        expect(result.reopenedRowsAffected).toBe(1);
+        expect(result.staleReadAfterReopenError).toMatch(/closed/i);
+        expect(result.replacementStillCached).toBe(true);
+        expect(result.beforeCloseIds).toEqual([1, 5]);
+        expect(result.afterCloseIds).toEqual([1, 5]);
       },
     );
   });

@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 
 import { eq } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { getDb } from '../../src/database/index';
+import { closeDb, getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import { TraceStore } from '../../src/tracing/store';
@@ -67,6 +67,20 @@ describe('TraceStore span persistence', () => {
       .where(eq(spansTable.traceId, 'concurrent-insertions'));
     expect(spans).toHaveLength(1);
     expect(spans[0]).toMatchObject({ name: 'target.call', spanId: 'shared-span' });
+  });
+
+  it('follows the current connection after the one it used is closed', async () => {
+    const traceStore = await createTrace('reconnect-after-close');
+    await traceStore.addSpans('reconnect-after-close', [
+      { spanId: 'before-close', name: 'target.call', startTime: 1 },
+    ]);
+
+    // A failed lock recovery drops the cached connection the same way: this store
+    // is a process-wide singleton, so it must not keep using the closed handle.
+    await closeDb();
+    await runDbMigrations();
+
+    await expect(traceStore.getSpans('reconnect-after-close')).resolves.toEqual([]);
   });
 
   it('allows the same span ID in different traces', async () => {
