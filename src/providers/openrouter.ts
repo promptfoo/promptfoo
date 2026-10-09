@@ -1,6 +1,11 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { isCallerAbortError } from '../util/fetch/requestSignal';
+import {
+  isResponseHeadersObserverError,
+  preserveResponseHeadersObserverError,
+} from '../util/fetch/responseHeadersObserver';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../util/finishReason';
 import {
   getOpenAiGatewayRateLimitKind,
@@ -14,10 +19,11 @@ import {
   getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
   getTokenUsageWithRequestCount,
+  isOpenAiErrorOnlyResponse,
   validateChatCompletionMessage,
 } from './openai/util';
 import { calculateOpenRouterResponseCost, getOpenRouterBillingMetadata } from './openrouterBilling';
-import { getRequestTimeoutMs } from './shared';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -130,6 +136,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    throwIfAborted(callApiOptions?.abortSignal);
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'openrouter',
@@ -160,7 +167,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     let prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>;
     try {
-      prepared = await this.getOpenAiBody(prompt, context, callApiOptions);
+      prepared = await waitForPromiseWithAbort(
+        this.getOpenAiBody(prompt, context, callApiOptions),
+        callApiOptions?.abortSignal,
+      );
     } catch (error) {
       return withGenAISpan(
         spanContext,
@@ -172,7 +182,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     }
     return withGenAISpan(
       { ...spanContext, ...this.getChatTracingRequest(prepared.body) },
-      () => this.executeOpenRouterCall(prepared, context),
+      () => this.executeOpenRouterCall(prepared, context, callApiOptions),
       resultExtractor,
     );
   }
@@ -180,8 +190,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
   private async executeOpenRouterCall(
     prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>,
     context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, config } = prepared;
+    throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
@@ -230,10 +242,25 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
             ...config.headers,
           },
           body: JSON.stringify(body),
+          ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
         },
         getRequestTimeoutMs(),
         'json',
         context?.bustCache ?? context?.debug,
+        undefined,
+        (response) => {
+          if (
+            response.status >= 200 &&
+            response.status < 300 &&
+            response.headers &&
+            getOpenAiGatewayRateLimitKind(response.data) !== 'quota'
+          ) {
+            callApiOptions?.onResponseHeaders?.(response.headers);
+          }
+        },
+        callApiOptions?.onResponseHeaders
+          ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
+          : undefined,
       ));
 
       const policy = getOpenAiPolicyRefusal(data, true);
@@ -302,15 +329,31 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           },
         };
       }
+      // Cache coalescing can complete this diagnostic before a shared caller aborts.
+      // Usable choices and all other processing retain their cancellation checks.
+      if (isOpenAiErrorOnlyResponse(data)) {
+        return { error: formatOpenAiError(data) };
+      }
+      throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
+      if (
+        !isResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err) &&
+        isCallerAbortError(err, callApiOptions?.abortSignal)
+      ) {
+        throwIfAborted(callApiOptions?.abortSignal);
+      }
       logger.error(`API call error: ${String(err)}`);
       const rateLimitResponse = getOpenAiRateLimitResponse(err, responseHeaders);
       if (rateLimitResponse) {
-        return rateLimitResponse;
+        return preserveResponseHeadersObserverError(
+          callApiOptions?.onResponseHeaders,
+          err,
+          rateLimitResponse,
+        );
       }
-      return {
+      return preserveResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err, {
         error: `API call error: ${String(err)}`,
-      };
+      });
     }
 
     if (data?.error) {

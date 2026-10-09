@@ -5,6 +5,7 @@
  * code paths that bypass the main evaluator.
  */
 
+import { composeResponseHeadersObservers } from '../util/fetch/responseHeadersObserver';
 import { isSafeCost, isSafeTokenCount } from '../util/numeric';
 import { parseRetryAfter } from './headerParser';
 import {
@@ -204,7 +205,20 @@ export function wrapProviderWithRateLimiting(
     ): Promise<ProviderResponse> => {
       return registry.execute(
         provider,
-        () => originalCallApi(prompt, context, options),
+        (onResponseHeaders) =>
+          originalCallApi(
+            prompt,
+            context,
+            onResponseHeaders
+              ? {
+                  ...options,
+                  onResponseHeaders: composeResponseHeadersObservers(
+                    onResponseHeaders,
+                    options?.onResponseHeaders,
+                  ),
+                }
+              : options,
+          ),
         createProviderRateLimitOptions(options?.abortSignal),
       );
     },

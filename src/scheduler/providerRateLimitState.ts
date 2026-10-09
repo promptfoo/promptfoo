@@ -1,20 +1,23 @@
 import { EventEmitter } from 'events';
 
 import {
+  createResponseHeadersObserver,
+  isResponseHeadersObserverError,
+  isResponseHeadersObserverErrorResponse,
+  type ResponseHeadersObserver,
+} from '../util/fetch/responseHeadersObserver';
+import {
   AdaptiveConcurrency,
   type ConcurrencyChangeResult,
   WARNING_THRESHOLD,
 } from './adaptiveConcurrency';
+import { sleepWithAbort, throwIfAborted } from './cancellation';
 import { parseRateLimitHeaders } from './headerParser';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 
 import type { RateLimitExecuteOptions } from './types';
 
-/**
- * Sentinel error for rate limit exhaustion.
- * Used to short-circuit the catch block and prevent double-release/double-count.
- */
 export class RateLimitExhaustedError extends Error {
   constructor(
     message: string,
@@ -22,6 +25,17 @@ export class RateLimitExhaustedError extends Error {
   ) {
     super(message);
     this.name = 'RateLimitExhaustedError';
+  }
+}
+
+/**
+ * Wraps a finalizeResult throw so the retry classifier below skips it: a
+ * finalizer failure is not provider work and must never trigger another call.
+ */
+class ResultFinalizationError extends Error {
+  constructor(readonly original: unknown) {
+    super('finalizeResult failed');
+    this.name = 'ResultFinalizationError';
   }
 }
 
@@ -56,8 +70,6 @@ type ProviderExecuteOptions<T> = RateLimitExecuteOptions<T> & {
    */
   maxRetriesOverride?: number;
 };
-
-type ResultDisposition<T> = { retry: true } | { retry: false; result: T };
 
 /**
  * Circular buffer for latency tracking.
@@ -142,7 +154,7 @@ export class ProviderRateLimitState extends EventEmitter {
    */
   async executeWithRetry<T>(
     requestId: string,
-    callFn: () => Promise<T>,
+    callFn: (onResponseHeaders?: ResponseHeadersObserver) => Promise<T>,
     options: ProviderExecuteOptions<T>,
   ): Promise<T> {
     this.totalRequests++;
@@ -153,193 +165,224 @@ export class ProviderRateLimitState extends EventEmitter {
         ? this.retryPolicy
         : { ...this.retryPolicy, maxRetries: options.maxRetriesOverride };
 
-    while (true) {
-      // Acquire slot (may wait for rate limit window via queue)
-      // Queue timeout failures are counted as failed requests
-      try {
-        await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
-      } catch (acquireError) {
-        // Queue timeout or other acquire failures
-        this.failedRequests++;
-        this.emit('queue:timeout', {
-          rateLimitKey: this.rateLimitKey,
-          requestId,
-          error: String(acquireError),
-        });
-        throw acquireError;
-      }
-
-      const startTime = Date.now();
-      let result: T;
-      try {
-        options.abortSignal?.throwIfAborted();
-        result = await callFn();
-      } catch (error) {
-        this.latencies.push(Date.now() - startTime);
-        const lastError = error as Error;
-        this.slotQueue.release();
-
-        let isRateLimited: boolean;
-        let retryAfterMs: number | undefined;
+    try {
+      while (true) {
         try {
+          await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
+        } catch (acquireError) {
+          this.emit(options.abortSignal?.aborted ? 'queue:cancelled' : 'queue:timeout', {
+            rateLimitKey: this.rateLimitKey,
+            requestId,
+            error: String(acquireError),
+          });
+          throw acquireError;
+        }
+
+        // A result can release its slot before retry backoff. Only this owner may
+        // release it, including aborts between the grant and callFn invocation.
+        let ownsSlot = true;
+        let observedHeaders: Record<string, string> | undefined;
+        const onResponseHeaders = createResponseHeadersObserver(
+          this,
+          ([headers, backoff], alreadyObserved) => {
+            if (ownsSlot) {
+              if (backoff) {
+                if (!alreadyObserved) {
+                  // The lower target fetch selected this deadline before its wait.
+                  // Replaying relative headers when a consumer joins would extend it.
+                  this.updateFromHeaders(headers, false, backoff.resetAt);
+                  this.handleRateLimit(undefined, backoff.resetAt);
+                }
+              } else {
+                observedHeaders = headers;
+                if (!alreadyObserved) {
+                  this.updateFromHeaders(headers, false);
+                }
+              }
+              return true;
+            }
+            return alreadyObserved;
+          },
+        );
+        const releaseSlot = () => {
+          if (ownsSlot) {
+            ownsSlot = false;
+            this.slotQueue.release();
+          }
+        };
+        const startTime = Date.now();
+        let retryError: Error | undefined;
+        let retryResult: T | undefined;
+        let isRateLimited: boolean;
+        let isRetryableResult = false;
+        let retryAfterMs: number | undefined;
+
+        try {
+          throwIfAborted(options.abortSignal);
+          const result = await callFn(onResponseHeaders);
+          retryResult = result;
+          const hasErrorResponse =
+            result !== null &&
+            typeof result === 'object' &&
+            'error' in result &&
+            typeof result.error === 'string' &&
+            result.error.length > 0;
+          const hasRefusalResponse =
+            result !== null &&
+            typeof result === 'object' &&
+            'isRefusal' in result &&
+            result.isRefusal === true;
+          const headers = options.getHeaders?.(result);
+          const isObserverError = isResponseHeadersObserverErrorResponse(result);
           isRateLimited =
-            options.isRateLimited?.(undefined, lastError) ?? this.isRateLimitError(lastError);
-          retryAfterMs = options.getRetryAfter?.(undefined, lastError);
+            options.canRetry?.() !== false &&
+            !isObserverError &&
+            (options.isRateLimited?.(result, undefined) ?? false);
+          isRetryableResult =
+            options.canRetry?.() !== false &&
+            !isObserverError &&
+            (options.isRetryableResult?.(result) ?? false);
+          retryAfterMs = options.getRetryAfter?.(result, undefined);
+
+          // Observer diagnostics may carry another service's headers. Keep the
+          // actual wire quota already learned by onResponseHeaders instead.
+          if (!isObserverError && headers && (headers !== observedHeaders || isRateLimited)) {
+            this.updateFromHeaders(headers, isRateLimited);
+          }
           if (isRateLimited) {
             this.handleRateLimit(retryAfterMs);
           }
-        } catch (classificationError) {
-          this.failedRequests++;
-          throw classificationError;
+          // Completed calls retain their result and quota even if cancellation arrived
+          // during completion. Cancellation still prevents another attempt.
+          this.latencies.push(Date.now() - startTime);
+          releaseSlot();
+
+          // Keep an independent failure's diagnostic and metadata intact, but
+          // never retry it once the caller has cancelled.
+          if (options.abortSignal?.aborted && hasErrorResponse) {
+            this.failedRequests++;
+            return result;
+          }
+
+          if (
+            (!isRateLimited && !isRetryableResult) ||
+            (options.abortSignal?.aborted && hasRefusalResponse)
+          ) {
+            let finalizedResult: T;
+            try {
+              finalizedResult = options.finalizeResult?.(result, retryResults) ?? result;
+            } catch (finalizerError) {
+              throw new ResultFinalizationError(finalizerError);
+            }
+            this.handleSuccess();
+            this.completedRequests++;
+            return finalizedResult;
+          }
+        } catch (error) {
+          if (ownsSlot) {
+            this.latencies.push(Date.now() - startTime);
+          }
+
+          if (isResponseHeadersObserverError(onResponseHeaders, error)) {
+            throw error;
+          }
+
+          if (error instanceof ResultFinalizationError) {
+            throw error.original;
+          }
+
+          // Cancellation is final, even for a custom reason or a message that
+          // resembles a retryable error. Preserve unrelated provider errors.
+          if (
+            (options.abortSignal?.aborted &&
+              (error === options.abortSignal.reason || !(error instanceof Error))) ||
+            (error instanceof Error &&
+              (error.name === 'AbortError' || error.name === 'AbortException'))
+          ) {
+            throw error;
+          }
+
+          retryError = error as Error;
+          isRateLimited =
+            options.canRetry?.() !== false &&
+            (options.isRateLimited?.(undefined, retryError) ?? this.isRateLimitError(retryError));
+          retryAfterMs = options.getRetryAfter?.(undefined, retryError);
+          if (isRateLimited) {
+            this.handleRateLimit(retryAfterMs);
+          }
+          if (options.abortSignal?.aborted) {
+            throw error;
+          }
+        } finally {
+          releaseSlot();
         }
 
-        // Never retry a call that failed because the caller cancelled it.
         if (
-          !options.abortSignal?.aborted &&
-          shouldRetry(attempt, lastError, isRateLimited, retryPolicy)
+          options.canRetry?.() === false ||
+          !shouldRetry(attempt, retryError, isRateLimited || isRetryableResult, retryPolicy)
         ) {
-          attempt++;
-          try {
-            await this.waitForRetry(
-              attempt,
-              retryPolicy,
-              retryAfterMs,
-              isRateLimited ? 'ratelimit' : 'error',
-              options.abortSignal,
-            );
-          } catch (retryError) {
-            this.failedRequests++;
+          if (retryError) {
             throw retryError;
           }
-          continue;
+          if (isRetryableResult) {
+            // Transient-availability exhaustion returns the terminal result with
+            // bounded retry usage merged, not the rate-limit sentinel.
+            const finalizedResult =
+              options.finalizeResult?.(retryResult as T, retryResults) ?? (retryResult as T);
+            this.failedRequests++;
+            return finalizedResult;
+          }
+          if (!options.onRateLimitExhausted && options.finalizeResult) {
+            // A bare finalizeResult keeps the older structured-return behavior;
+            // the registry's onRateLimitExhausted contract throws to convert.
+            const finalizedResult = options.finalizeResult(retryResult as T, retryResults);
+            this.failedRequests++;
+            return finalizedResult;
+          }
+          throw new RateLimitExhaustedError(
+            `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
+            retryResult,
+          );
         }
 
-        this.failedRequests++;
-        throw lastError;
-      }
-
-      this.latencies.push(Date.now() - startTime);
-      try {
-        const disposition = await this.processResult(
-          result,
-          attempt,
-          retryPolicy,
-          options,
-          retryResults,
-        );
-        if (disposition.retry) {
-          attempt++;
-          continue;
-        }
-        return disposition.result;
-      } catch (error) {
-        this.failedRequests++;
-        throw error;
-      }
-    }
-  }
-
-  private async processResult<T>(
-    result: T,
-    attempt: number,
-    retryPolicy: RetryPolicy,
-    options: ProviderExecuteOptions<T>,
-    retryResults: T[],
-  ): Promise<ResultDisposition<T>> {
-    let isRateLimited = false;
-    let isRetryableResult = false;
-    let retryAfterMs: number | undefined;
-    try {
-      const headers = options.getHeaders?.(result);
-      isRateLimited = options.isRateLimited?.(result, undefined) ?? false;
-      isRetryableResult = options.isRetryableResult?.(result) ?? false;
-      retryAfterMs = options.getRetryAfter?.(result, undefined);
-      if (headers) {
-        this.updateFromHeaders(headers, isRateLimited);
-      }
-    } finally {
-      this.slotQueue.release();
-    }
-
-    if (isRateLimited || isRetryableResult) {
-      if (isRateLimited) {
-        this.handleRateLimit(retryAfterMs);
-      }
-      if (attempt < retryPolicy.maxRetries) {
         // Only transient-availability retries feed the terminal merge; a
         // rate-limited retry must surface the last raw result as-is.
-        if (isRetryableResult) {
-          retryResults.push(result);
+        if (isRetryableResult && retryResult !== undefined) {
+          retryResults.push(retryResult);
         }
-        options.abortSignal?.throwIfAborted();
-        await this.waitForRetry(
-          attempt + 1,
+
+        attempt++;
+        const delay = this.recordRetry(
+          attempt,
           retryPolicy,
           retryAfterMs,
           isRateLimited ? 'ratelimit' : 'error',
-          options.abortSignal,
         );
-        return { retry: true };
-      }
-      return {
-        retry: false,
-        result: this.finishRetryableResult(
-          result,
-          attempt,
-          options,
-          retryResults,
-          isRetryableResult,
-        ),
-      };
-    }
 
-    const finalizedResult = options.finalizeResult?.(result, retryResults) ?? result;
-    this.handleSuccess();
-    this.completedRequests++;
-    return { retry: false, result: finalizedResult };
+        // Both result and exception retries wait after their slot is released.
+        await sleepWithAbort(delay, options.abortSignal);
+      }
+    } catch (error) {
+      this.failedRequests++;
+      throw error;
+    }
   }
 
-  private async waitForRetry(
+  private recordRetry(
     attempt: number,
     retryPolicy: RetryPolicy,
     retryAfterMs: number | undefined,
     reason: 'ratelimit' | 'error',
-    signal?: AbortSignal,
-  ): Promise<void> {
+  ): number {
     this.retriedRequests++;
-    const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
+    const delayMs = getRetryDelay(attempt, retryPolicy, retryAfterMs);
     this.emit('request:retrying', {
       rateLimitKey: this.rateLimitKey,
       attempt,
-      delayMs: delay,
+      delayMs,
       reason,
     });
-    await this.sleep(delay, signal);
-  }
-
-  private finishRetryableResult<T>(
-    result: T,
-    attempt: number,
-    options: ProviderExecuteOptions<T>,
-    retryResults: readonly T[],
-    isRetryableResult: boolean,
-  ): T {
-    if (isRetryableResult) {
-      const finalizedResult = options.finalizeResult?.(result, retryResults) ?? result;
-      this.failedRequests++;
-      return finalizedResult;
-    }
-    // A caller that set onRateLimitExhausted opted into the throw-and-convert
-    // contract (the registry emits request:failed and converts); a bare
-    // finalizeResult keeps the older structured-return behavior.
-    if (!options.onRateLimitExhausted && options.finalizeResult) {
-      this.failedRequests++;
-      return options.finalizeResult(result, retryResults);
-    }
-    throw new RateLimitExhaustedError(
-      `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
-      result,
-    );
+    return delayMs;
   }
 
   /**
@@ -349,8 +392,21 @@ export class ProviderRateLimitState extends EventEmitter {
    *   When false, retry-after headers are ignored to prevent incorrectly blocking the
    *   queue on successful responses from providers/proxies that include these headers.
    */
-  private updateFromHeaders(headers: Record<string, string>, isRateLimited: boolean): void {
+  private updateFromHeaders(
+    headers: Record<string, string>,
+    isRateLimited: boolean,
+    selectedResetAt?: number,
+  ): void {
     const parsed = parseRateLimitHeaders(headers);
+    if (selectedResetAt !== undefined) {
+      const existingResetAt = this.slotQueue.getResetAt();
+      // A selected backoff must not shorten quota learned by a concurrent call.
+      // Fresh successful responses still replace quota through the normal path.
+      parsed.resetAt =
+        existingResetAt !== null && existingResetAt > Date.now()
+          ? Math.max(existingResetAt, selectedResetAt)
+          : selectedResetAt;
+    }
 
     // Emit ratelimit:learned only once per provider when we first see limit headers
     if (
@@ -395,12 +451,12 @@ export class ProviderRateLimitState extends EventEmitter {
    * Handle rate limit hit.
    * Delegates to SlotQueue which preserves existing resetAt from headers.
    */
-  private handleRateLimit(retryAfterMs?: number): void {
+  private handleRateLimit(retryAfterMs?: number, selectedResetAt?: number): void {
     this.rateLimitHits++;
 
-    // Pass retryAfterMs to queue (may be undefined)
-    // SlotQueue.markRateLimited preserves existing resetAt from headers if no retryAfter provided
-    this.slotQueue.markRateLimited(retryAfterMs);
+    // Proactive queue processing may already have cleared an elapsed deadline.
+    // Keep the selected timestamp explicit so it cannot become unknown quota.
+    this.slotQueue.markRateLimited(retryAfterMs, selectedResetAt);
 
     const change = this.adaptiveConcurrency.recordRateLimit();
     this.applyConcurrencyChange(change);
@@ -445,21 +501,6 @@ export class ProviderRateLimitState extends EventEmitter {
       message.includes('rate limit') ||
       message.includes('too many requests')
     );
-  }
-
-  private async sleep(ms: number, signal?: AbortSignal): Promise<void> {
-    signal?.throwIfAborted();
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        signal?.removeEventListener('abort', onAbort);
-        resolve();
-      }, ms);
-      const onAbort = () => {
-        clearTimeout(timeout);
-        reject(signal?.reason);
-      };
-      signal?.addEventListener('abort', onAbort, { once: true });
-    });
   }
 
   /**
