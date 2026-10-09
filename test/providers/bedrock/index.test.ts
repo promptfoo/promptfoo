@@ -25,6 +25,7 @@ import {
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
+import { createChatMessage, createChatUsage } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 
 import type {
@@ -35,6 +36,100 @@ import type {
   LlamaMessage,
   TextGenerationOptions,
 } from '../../../src/providers/bedrock/index';
+
+const createMistralUsageCheck = (modelHandler: IBedrockModel) => async () => {
+  const mockResponse = createMistralChatResponse();
+
+  const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+  expect(result).toEqual({
+    prompt: 30,
+    completion: 45,
+    total: 75,
+    numRequests: 1,
+  });
+};
+
+const createMistralChatResponse = () => ({
+  id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
+  object: 'chat.completion',
+  created: 1743034280,
+  model: 'mistral-large-2407',
+  choices: [
+    {
+      index: 0,
+      message: createChatMessage('assistant', 'Test response'),
+      finish_reason: 'stop',
+    },
+  ],
+  prompt_tokens: 30,
+  completion_tokens: 45,
+});
+
+const createSampledRegionConfig = () => ({
+  region: 'us-east-1',
+  temperature: 0.5,
+});
+
+const createWeatherToolDefinition = () => ({
+  name: 'get_current_weather',
+  description: 'Get the current weather in a given location',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      location: { type: 'string' as const },
+      unit: { type: 'string' as const, enum: ['celsius', 'fahrenheit'] },
+    },
+    required: ['location'],
+  },
+});
+
+const createRegionConfig = () => ({
+  region: 'us-east-1',
+});
+
+const createChatResponse = (
+  content: string = '<reasoning>Think think</reasoning>The answer is 42.',
+) => ({
+  choices: [
+    {
+      message: {
+        content,
+      },
+    },
+  ],
+});
+
+const createImagePromptMessage = () => ({
+  role: 'user',
+  content: [
+    { type: 'image' as const, source: { bytes: 'testImageData' } },
+    { type: 'text' as const, text: 'What is in this image?' },
+  ],
+});
+
+const createCompletionUsage = () => ({
+  usage: createChatUsage(25, 50, 75),
+});
+
+const createThinkTaggedCompletionResponse = () => ({
+  choices: [
+    {
+      text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
+    },
+  ],
+});
+
+const createApiKeyRegionOptions = () => ({
+  config: {
+    region: 'us-east-1',
+    apiKey: 'test-api-key',
+  },
+});
+
+const createThinkingRegionConfig = () => ({
+  region: 'us-east-1',
+  thinking: { type: 'enabled' as const, budget_tokens: 5000 },
+});
 
 const RETIRED_BEDROCK_MODEL_IDS = [
   'amazon.titan-text-express-v1',
@@ -272,12 +367,7 @@ describe('AwsBedrockGenericProvider', () => {
 
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
-        super('test-model', {
-          config: {
-            region: 'us-east-1',
-            apiKey: 'test-api-key',
-          },
-        });
+        super('test-model', createApiKeyRegionOptions());
       }
     })();
 
@@ -333,12 +423,7 @@ describe('AwsBedrockGenericProvider', () => {
 
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
-        super('test-model', {
-          config: {
-            region: 'us-east-1',
-            apiKey: 'test-api-key',
-          },
-        });
+        super('test-model', createApiKeyRegionOptions());
       }
     })();
 
@@ -491,20 +576,7 @@ describe('AwsBedrockGenericProvider', () => {
     it('should include tools and tool_choice in params when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
-        tools: [
-          {
-            name: 'get_current_weather',
-            description: 'Get the current weather in a given location',
-            input_schema: {
-              type: 'object',
-              properties: {
-                location: { type: 'string' },
-                unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
-              },
-              required: ['location'],
-            },
-          },
-        ],
+        tools: [createWeatherToolDefinition()],
         tool_choice: {
           type: 'auto',
         },
@@ -520,9 +592,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should not include tools and tool_choice in params when not provided', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createRegionConfig();
 
       const params = await modelHandler.params(config, 'Test prompt');
 
@@ -533,20 +603,7 @@ describe('AwsBedrockGenericProvider', () => {
     it('should include specific tool_choice when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
-        tools: [
-          {
-            name: 'get_current_weather',
-            description: 'Get the current weather in a given location',
-            input_schema: {
-              type: 'object',
-              properties: {
-                location: { type: 'string' },
-                unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
-              },
-              required: ['location'],
-            },
-          },
-        ],
+        tools: [createWeatherToolDefinition()],
         tool_choice: {
           type: 'tool',
           name: 'get_current_weather',
@@ -560,9 +617,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should handle JSON message array with image content', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createRegionConfig();
 
       const prompt = JSON.stringify([
         {
@@ -602,9 +657,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should handle JSON message array with system message and image content', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createRegionConfig();
 
       const prompt = JSON.stringify([
         { role: 'system', content: 'You are a helpful assistant.' },
@@ -646,10 +699,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('omits temperature for Claude Opus 4.7 on Bedrock invokeModel path', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        temperature: 0.5,
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createSampledRegionConfig();
       // Regional inference profile ID — matches `us.`, `eu.`, `jp.`, `global.` via .includes()
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
@@ -661,10 +711,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('omits temperature for Claude Opus 4.8 on Bedrock invokeModel path', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        temperature: 0.5,
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createSampledRegionConfig();
       // Regional inference profile ID — matches `us.`, `eu.`, `jp.`, `global.` via .includes()
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
@@ -879,10 +926,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createThinkingRegionConfig();
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
         'hi',
@@ -953,10 +997,7 @@ describe('AwsBedrockGenericProvider', () => {
     );
 
     it('keeps manual thinking enabled for non-deprecated Claude Opus 4.6 on Bedrock invokeModel', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createThinkingRegionConfig();
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
         'hi',
@@ -1000,10 +1041,7 @@ describe('AwsBedrockGenericProvider', () => {
       // Messages provider surfaces the one-time heads-up instead. This guards
       // against re-introducing the per-request log spam that was flagged in review.
       const warnSpy = vi.spyOn(logger, 'warn');
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        temperature: 0.5,
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createSampledRegionConfig();
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
         'hi',
@@ -1032,9 +1070,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should convert lone system message to user message', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createRegionConfig();
 
       // Test with string content
       const promptWithStringContent = JSON.stringify([
@@ -1223,13 +1259,19 @@ describe('AwsBedrockGenericProvider', () => {
       expect(credentials).toBeUndefined();
     });
 
-    it('should return undefined for API key authentication when apiKey is provided in config', async () => {
+    const verifyBedrockApiKeyAuth = async () => {
       const provider = new TestBedrockProvider({
+        // No accessKeyId/secretAccessKey provided
         apiKey: 'test-api-key',
       });
       const credentials = await provider.getCredentials();
-      expect(credentials).toBeUndefined();
-    });
+      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
+    };
+
+    it(
+      'should return undefined for API key authentication when apiKey is provided in config',
+      verifyBedrockApiKeyAuth,
+    );
 
     it('should return undefined for API key authentication when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
       mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
@@ -1263,14 +1305,7 @@ describe('AwsBedrockGenericProvider', () => {
       }); // Explicit credentials take priority
     });
 
-    it('should use API key when no explicit credentials are provided', async () => {
-      const provider = new TestBedrockProvider({
-        apiKey: 'test-api-key',
-        // No accessKeyId/secretAccessKey provided
-      });
-      const credentials = await provider.getCredentials();
-      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
-    });
+    it('should use API key when no explicit credentials are provided', verifyBedrockApiKeyAuth);
   });
 });
 
@@ -1398,6 +1433,20 @@ describe('parseValue', () => {
 
 describe('llama', () => {
   describe('getLlamaModelHandler', () => {
+    const createLlamaPromptCheck =
+      (handler: ReturnType<typeof getLlamaModelHandler>) => async () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        await expect(handler.params(config, prompt)).resolves.toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_gen_len: 512,
+        });
+      };
+
     describe('LLAMA2', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V2);
 
@@ -1506,35 +1555,19 @@ describe('llama', () => {
     describe('LLAMA3_1', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_1);
 
-      it('should generate correct prompt for a single user message', async () => {
-        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
-        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        await expect(handler.params(config, prompt)).resolves.toEqual({
-          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
-
-          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
-          temperature: 0.5,
-          top_p: 0.9,
-          max_gen_len: 512,
-        });
-      });
+      it(
+        'should generate correct prompt for a single user message',
+        createLlamaPromptCheck(handler),
+      );
     });
 
     describe('LLAMA3_2', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
 
-      it('should generate correct prompt for a single user message', async () => {
-        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
-        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        await expect(handler.params(config, prompt)).resolves.toEqual({
-          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
-
-          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
-          temperature: 0.5,
-          top_p: 0.9,
-          max_gen_len: 512,
-        });
-      });
+      it(
+        'should generate correct prompt for a single user message',
+        createLlamaPromptCheck(handler),
+      );
 
       it('should use max_gen_len parameter', async () => {
         const config = { max_gen_len: 1000 };
@@ -1547,18 +1580,10 @@ describe('llama', () => {
     describe('LLAMA3_3', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_3);
 
-      it('should generate correct prompt for a single user message', async () => {
-        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
-        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        await expect(handler.params(config, prompt)).resolves.toEqual({
-          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
-
-          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
-          temperature: 0.5,
-          top_p: 0.9,
-          max_gen_len: 512,
-        });
-      });
+      it(
+        'should generate correct prompt for a single user message',
+        createLlamaPromptCheck(handler),
+      );
 
       it('should use max_gen_len parameter', async () => {
         const config = { max_gen_len: 1000 };
@@ -1992,15 +2017,7 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
   describe('getLlamaModelHandler LLAMA3_2 with images', () => {
     it('should include images array in params when multimodal content provided (11B)', async () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
-      const prompt = JSON.stringify([
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { bytes: 'testImageData' } },
-            { type: 'text', text: 'What is in this image?' },
-          ],
-        },
-      ]);
+      const prompt = JSON.stringify([createImagePromptMessage()]);
       const params = await handler.params(
         {},
         prompt,
@@ -2063,15 +2080,7 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
 
     it('should throw error when images are provided to 1B/3B text-only models', async () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
-      const prompt = JSON.stringify([
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { bytes: 'testImageData' } },
-            { type: 'text', text: 'What is in this image?' },
-          ],
-        },
-      ]);
+      const prompt = JSON.stringify([createImagePromptMessage()]);
       await expect(
         handler.params({}, prompt, undefined, 'us.meta.llama3-2-3b-instruct-v1:0'),
       ).rejects.toThrow(/Multimodal content \(images\) detected/);
@@ -2292,13 +2301,7 @@ describe('BEDROCK_MODEL MISTRAL', () => {
 
   describe('tokenUsage', () => {
     it('should use explicit token usage when available', async () => {
-      const mockResponse = {
-        usage: {
-          prompt_tokens: 25,
-          completion_tokens: 50,
-          total_tokens: 75,
-        },
-      };
+      const mockResponse = createCompletionUsage();
 
       const result = modelHandler.tokenUsage!(mockResponse, 'Some input text');
 
@@ -2492,9 +2495,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       // An eval framework must not hide application-visible content by default. The raw
       // <reasoning>...</reasoning> block the API returned stays in `output` unless the user
       // explicitly opts into a transformation via showThinking.
-      const mockResponse = {
-        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
-      };
+      const mockResponse = createChatResponse();
 
       expect(modelHandler.output({}, mockResponse)).toBe(
         '<reasoning>Think think</reasoning>The answer is 42.',
@@ -2502,17 +2503,13 @@ describe('BEDROCK_MODEL OPENAI', () => {
     });
 
     it('should strip the <reasoning> block when showThinking is false (parity with the openai: providers)', async () => {
-      const mockResponse = {
-        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
-      };
+      const mockResponse = createChatResponse();
 
       expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('The answer is 42.');
     });
 
     it('should surface reasoning as Thinking: when showThinking is true', async () => {
-      const mockResponse = {
-        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
-      };
+      const mockResponse = createChatResponse();
 
       expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe(
         'Thinking: Think think\n\nThe answer is 42.',
@@ -2861,45 +2858,13 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   });
 
   describe('tokenUsage', () => {
-    it('should extract token usage from chat completion format', async () => {
-      const mockResponse = {
-        id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
-        object: 'chat.completion',
-        created: 1743034280,
-        model: 'mistral-large-2407',
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Test response',
-            },
-            finish_reason: 'stop',
-          },
-        ],
-        prompt_tokens: 30,
-        completion_tokens: 45,
-      };
-
-      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
-      expect(result).toEqual({
-        prompt: 30,
-        completion: 45,
-        total: 75,
-        numRequests: 1,
-      });
-    });
+    it(
+      'should extract token usage from chat completion format',
+      createMistralUsageCheck(modelHandler),
+    );
 
     it('should return undefined token counts when not provided by the API', async () => {
-      const mockResponse = {
-        choices: [
-          {
-            message: {
-              content: 'This is a test response',
-            },
-          },
-        ],
-      };
+      const mockResponse = createChatResponse('This is a test response');
 
       const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
       expect(result).toHaveProperty('prompt', undefined);
@@ -2993,13 +2958,7 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
 
   describe('output', () => {
     it('should extract text from DeepSeek response with thinking', async () => {
-      const mockResponse = {
-        choices: [
-          {
-            text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
-          },
-        ],
-      };
+      const mockResponse = createThinkTaggedCompletionResponse();
       const config = { showThinking: true };
 
       const result = modelHandler.output(config, mockResponse);
@@ -3008,13 +2967,7 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
     });
 
     it('should hide thinking when showThinking is false', async () => {
-      const mockResponse = {
-        choices: [
-          {
-            text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
-          },
-        ],
-      };
+      const mockResponse = createThinkTaggedCompletionResponse();
       const config = { showThinking: false };
 
       const result = modelHandler.output(config, mockResponse);
@@ -3180,13 +3133,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
     const modelHandler = BEDROCK_MODEL.MISTRAL;
 
     it('should extract token usage from API response when available', async () => {
-      const mockResponse = {
-        usage: {
-          prompt_tokens: 25,
-          completion_tokens: 50,
-          total_tokens: 75,
-        },
-      };
+      const mockResponse = createCompletionUsage();
 
       const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
       expect(result).toEqual({
@@ -3249,34 +3196,10 @@ describe('BEDROCK_MODEL token counting functionality', () => {
   describe('MISTRAL_LARGE_2407 model handler', () => {
     const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
-    it('should extract token usage from chat completion format', async () => {
-      const mockResponse = {
-        id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
-        object: 'chat.completion',
-        created: 1743034280,
-        model: 'mistral-large-2407',
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Test response',
-            },
-            finish_reason: 'stop',
-          },
-        ],
-        prompt_tokens: 30,
-        completion_tokens: 45,
-      };
-
-      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
-      expect(result).toEqual({
-        prompt: 30,
-        completion: 45,
-        total: 75,
-        numRequests: 1,
-      });
-    });
+    it(
+      'should extract token usage from chat completion format',
+      createMistralUsageCheck(modelHandler),
+    );
 
     it('should handle string token counts', async () => {
       const mockResponse = {
@@ -3312,15 +3235,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
     });
 
     it('should return undefined token counts when not provided by the API', async () => {
-      const mockResponse = {
-        choices: [
-          {
-            message: {
-              content: 'This is a test response',
-            },
-          },
-        ],
-      };
+      const mockResponse = createChatResponse('This is a test response');
 
       const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
       expect(result).toHaveProperty('prompt', undefined);
@@ -4039,9 +3954,7 @@ describe('AwsBedrockCompletionProvider', () => {
     };
 
     vi.mocked(getCache).mockResolvedValue(mockCache as any);
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
 
     originalModelHandler = AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'];
 
@@ -4286,10 +4199,7 @@ describe('AwsBedrockCompletionProvider', () => {
     const provider = new (class extends AwsBedrockCompletionProvider {
       constructor() {
         super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
-          config: {
-            region: 'us-east-1',
-            temperature: 0.5,
-          } as BedrockClaudeMessagesCompletionOptions,
+          config: createSampledRegionConfig() as BedrockClaudeMessagesCompletionOptions,
         });
       }
     })();
@@ -4314,10 +4224,7 @@ describe('AwsBedrockCompletionProvider', () => {
     const provider = new (class extends AwsBedrockCompletionProvider {
       constructor() {
         super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
-          config: {
-            region: 'us-east-1',
-            temperature: 0.5,
-          } as BedrockClaudeMessagesCompletionOptions,
+          config: createSampledRegionConfig() as BedrockClaudeMessagesCompletionOptions,
         });
       }
     })();
@@ -4461,16 +4368,12 @@ describe('AwsBedrockCompletionProvider', () => {
     const mockCachedResponseData = { completion: 'cached response' };
 
     mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponseData));
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
 
     const provider = new (class extends AwsBedrockCompletionProvider {
       constructor() {
         super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
-          config: {
-            region: 'us-east-1',
-          } as BedrockClaudeMessagesCompletionOptions,
+          config: createRegionConfig() as BedrockClaudeMessagesCompletionOptions,
         });
       }
     })();
@@ -4903,15 +4806,9 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
     it('should handle thinking mode response', async () => {
       const config = { showThinking: true };
-      const responseJson = {
-        choices: [
-          {
-            message: {
-              content: '<think>Let me think about this step by step...</think>The answer is 42',
-            },
-          },
-        ],
-      };
+      const responseJson = createChatResponse(
+        '<think>Let me think about this step by step...</think>The answer is 42',
+      );
 
       const result = qwenHandler.output(config, responseJson);
 
@@ -4920,15 +4817,9 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
     it('should hide thinking when showThinking is false', async () => {
       const config = { showThinking: false };
-      const responseJson = {
-        choices: [
-          {
-            message: {
-              content: '<think>Let me think about this step by step...</think>The answer is 42',
-            },
-          },
-        ],
-      };
+      const responseJson = createChatResponse(
+        '<think>Let me think about this step by step...</think>The answer is 42',
+      );
 
       const result = qwenHandler.output(config, responseJson);
 
