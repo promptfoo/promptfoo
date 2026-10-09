@@ -942,6 +942,49 @@ describe('PythonProvider', () => {
     });
   });
 
+  describe('early registration', () => {
+    it('registers an initializing worker pool and does not restore it after forced shutdown', async () => {
+      let poolStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        poolStarted = resolve;
+      });
+      let finishInitialization!: () => void;
+      const poolInitialization = new Promise<void>((resolve) => {
+        finishInitialization = resolve;
+      });
+      mockPoolInstance.initialize.mockImplementationOnce(async () => {
+        poolStarted();
+        await poolInitialization;
+      });
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+      const shutdown = vi.spyOn(provider, 'shutdown');
+      const initialization = provider.initialize();
+      const rejection = expect(initialization).rejects.toThrow(
+        'initialization interrupted by cleanup',
+      );
+      try {
+        await started;
+        const disposal = providerRegistry.shutdownAll();
+        await vi.waitFor(() => expect(mockPoolInstance.shutdown).toHaveBeenCalled());
+        expect(shutdown).toHaveBeenCalledOnce();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalled();
+
+        finishInitialization();
+        await rejection;
+        await disposal;
+        await expect(provider.initialize()).resolves.toBeUndefined();
+        expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+      } finally {
+        finishInitialization();
+        await Promise.allSettled([initialization]);
+        await provider.shutdown();
+        shutdown.mockRestore();
+      }
+    });
+  });
+
   describe.each(['cleanup', 'shutdown'] as const)('%s', (method) => {
     it.each([false, true])(
       'retains a replacement pool while disposing the old pool (initialized=%s)',
@@ -1035,7 +1078,7 @@ describe('PythonProvider', () => {
             ).toHaveBeenCalledTimes(1),
           );
           cleanup = provider[method]();
-          expect(mockPoolInstance.shutdown).not.toHaveBeenCalled();
+          expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(stage === 'pool' ? 1 : 0);
           if (rejectInitialization) {
             initialization.reject(new Error('pool init failed'));
           } else {
@@ -1049,7 +1092,7 @@ describe('PythonProvider', () => {
             ),
           );
           await cleanup;
-          const disposals = stage === 'configuration' && rejectInitialization ? 0 : 1;
+          const disposals = stage === 'configuration' ? 0 : 1;
           expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(disposals);
           expect(mockPoolInstance.execute).not.toHaveBeenCalled();
           expect(providerRegistry.has(provider)).toBe(false);
