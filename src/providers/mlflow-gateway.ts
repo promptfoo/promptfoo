@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvVarKey } from '../envars';
@@ -69,8 +70,9 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
 
     const gatewayUrl =
       normalizeGatewayUrl(providerOptions.config?.gatewayUrl) ??
-      normalizeGatewayUrl(getProviderEnvString(providerOptions.env, MLFLOW_GATEWAY_URL_ENV_VAR)) ??
-      normalizeGatewayUrl(getEnvString(MLFLOW_GATEWAY_URL_ENV_VAR));
+      normalizeGatewayUrl(
+        resolveProviderEnv(providerOptions.env, [MLFLOW_GATEWAY_URL_ENV_VAR])?.value,
+      );
 
     if (!gatewayUrl) {
       throw new Error(
