@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqProvider } from '../../../src/providers/groq/index';
 import { mockProcessEnv } from '../../util/utils';
@@ -16,6 +16,7 @@ describe('GroqProvider', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     restoreEnv();
     await clearCache();
   });
@@ -106,6 +107,75 @@ describe('GroqProvider', () => {
       const provider = new GroqProvider('o1-mini', {});
       expect(provider['supportsTemperature']()).toBe(false);
     });
+  });
+
+  it.each([
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: undefined,
+      expected: { max_completion_tokens: 100 },
+    },
+    {
+      model: 'qwen/qwen3.6-27b',
+      maxCompletionTokens: undefined,
+      expected: { max_completion_tokens: 100 },
+    },
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: 40,
+      expected: { max_completion_tokens: 40 },
+    },
+    {
+      model: 'openai/gpt-oss-120b',
+      maxCompletionTokens: 0,
+      expected: { max_completion_tokens: 0 },
+    },
+    {
+      model: 'tenant/custom-served-model',
+      maxCompletionTokens: undefined,
+      expected: { max_tokens: 100 },
+    },
+  ])(
+    'preserves the token limit for $model ($maxCompletionTokens)',
+    async ({ model, maxCompletionTokens, expected }) => {
+      const provider = new GroqProvider(model, {
+        config: { max_tokens: 100, max_completion_tokens: maxCompletionTokens },
+      });
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body).toMatchObject({ model, ...expected });
+      if ('max_completion_tokens' in expected) {
+        expect(body).not.toHaveProperty('max_tokens');
+      }
+    },
+  );
+
+  it.each(
+    ['qwen/qwen3.6-27b', 'openai/gpt-oss-120b'].flatMap((model) => [
+      { model, envCap: undefined, omitDefaults: false, expected: undefined },
+      { model, envCap: '321', omitDefaults: false, expected: undefined },
+      { model, envCap: '0', omitDefaults: false, expected: undefined },
+      { model, envCap: '321', omitDefaults: true, expected: undefined },
+      { model, envCap: undefined, omitDefaults: true, expected: undefined },
+    ]),
+  )(
+    'omits non-reasoning defaults for reasoning passthrough $model (env=$envCap, omitDefaults=$omitDefaults)',
+    async ({ model, envCap, omitDefaults, expected }) => {
+      vi.stubEnv('OPENAI_MAX_TOKENS', envCap);
+      const provider = new GroqProvider('llama-3.3-70b-versatile', {
+        config: { omitDefaults, passthrough: { model } },
+      });
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body.model).toBe(model);
+      expect(body.max_completion_tokens).toBe(expected);
+      expect(body).not.toHaveProperty('max_tokens');
+    },
+  );
+
+  it('preserves an explicit passthrough token limit', async () => {
+    const provider = new GroqProvider('openai/gpt-oss-120b', {
+      config: { max_tokens: 100, passthrough: { max_completion_tokens: 20 } },
+    });
+    expect((await provider.getOpenAiBody('Hello')).body.max_completion_tokens).toBe(20);
   });
 
   describe('serialization', () => {
