@@ -200,6 +200,8 @@ must be expanded into explicit test cases first.
 See [Prompt Optimization](/docs/usage/prompt-optimization) for workflow guidance,
 target selection details, and validation split recommendations.
 
+A result-persistence failure is an operational error even when the pass-rate threshold is met. Recoverable results are retained in requested JSONL output. Runs with `--no-write` continue to use the configured pass-rate threshold.
+
 ### Pause and Resume
 
 ```sh
