@@ -21,7 +21,10 @@ export function isRejectedPrefixedGrokId(
 ): boolean {
   return (
     modelName.includes('.xai.') &&
-    (explicitMantleRequest || !NATIVE_GROK_PROFILE_MODELS.has(modelName))
+    // Native profile ARNs are not model IDs in Mantle's namespace. They may contain
+    // the model ID or a user-chosen name; let the native provider handle them.
+    (explicitMantleRequest ||
+      (!modelName.startsWith('arn:') && !NATIVE_GROK_PROFILE_MODELS.has(modelName)))
   );
 }
 

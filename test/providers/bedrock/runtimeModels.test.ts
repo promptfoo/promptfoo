@@ -34,6 +34,26 @@ describe('Bedrock Runtime model compatibility', () => {
     });
   });
 
+  it.each(['', 'completion:', 'converse:'])(
+    'preserves Grok profile ARNs through the %s native selector',
+    async (selector) => {
+      for (const arn of [
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.xai.grok-4.7',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/team.xai.eval',
+      ]) {
+        const provider = await factory.create(
+          `bedrock:${selector}${arn}`,
+          { config: { inferenceModelType: 'xai', region: 'us-east-1' } },
+          {} as never,
+        );
+        expect(provider).toBeInstanceOf(
+          selector === 'converse:' ? AwsBedrockConverseProvider : AwsBedrockCompletionProvider,
+        );
+        expect(isRejectedPrefixedGrokId(arn, true)).toBe(true);
+      }
+    },
+  );
+
   it.each(['us.xai.grok-4.7', 'global.xai.grok-4.7'])(
     'loads %s through Converse without selecting Mantle',
     async (model) => {
@@ -111,7 +131,6 @@ describe('Bedrock Runtime pricing', () => {
     ['global.zai.glm-5.3', 1.68, 5.28, 0.312, 2.1],
     ['global.xai.grok-4.7', 2, 6, 0.5, 0],
     ['us.moonshotai.kimi-k3', 3.3, 16.5, 0.33, 4.125],
-    ['in.moonshotai.kimi-k3', 3.3, 16.5, 0.33, 4.125],
     ['global.moonshotai.kimi-k3', 3, 15, 0.3, 3.75],
   ] as const)('prices %s cache usage and service tiers', (model, input, output, read, write) => {
     for (const [type, multiplier] of [
@@ -152,6 +171,13 @@ describe('Bedrock Runtime pricing', () => {
   it('does not reuse GLM 5 pricing for a bare GLM 5.3 ID', () => {
     expect(getBedrockPricing('us.zai.glm-5.3', 'us-east-1')).toBeUndefined();
     expect(calculateBedrockCost('zai.glm-5.3', 800, 500)).toBeUndefined();
+  });
+
+  it.each([
+    'in.moonshotai.kimi-k3',
+    'arn:aws:bedrock:ap-south-1:123456789012:inference-profile/in.moonshotai.kimi-k3',
+  ])('leaves unpublished India Kimi pricing unknown for %s', (model) => {
+    expect(calculateBedrockCost(model, 800, 500, 200, 100, 'ap-south-1')).toBeUndefined();
   });
 
   it('does not invent cache-write pricing for Grok 4.7', () => {
