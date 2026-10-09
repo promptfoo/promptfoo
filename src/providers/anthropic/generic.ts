@@ -12,8 +12,8 @@ import {
   loadClaudeCodeCredential,
 } from './claudeCodeAuth';
 import type { ClientOptions } from '@anthropic-ai/sdk';
-import type { Cache } from 'cache-manager';
 
+import type { getCacheWriteContext } from '../../cache';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
@@ -218,9 +218,12 @@ export class AnthropicGenericProvider implements ApiProvider {
   private readonly ephemeralCacheNamespace = randomUUID();
   private readonly ephemeralResponseCache = new Map<
     string,
-    { response: string; expiresAt: number }
+    {
+      response: string;
+      expiresAt: number;
+      cacheContext: ReturnType<typeof getCacheWriteContext>;
+    }
   >();
-  private ephemeralCacheClearGeneration = 0;
 
   constructor(
     modelName: string,
@@ -391,44 +394,47 @@ export class AnthropicGenericProvider implements ApiProvider {
   }
 
   protected async getCachedResponse(
-    cache: Cache,
     cacheKey: string,
     ephemeralCacheKey: string,
-    clearGeneration: number,
+    cacheContext: ReturnType<typeof getCacheWriteContext>,
+    signal?: AbortSignal,
   ): Promise<string | undefined> {
     if (this.label) {
-      return cache.get<string | undefined>(cacheKey);
+      return cacheContext.get<string>(cacheKey, signal);
     }
 
-    this.syncEphemeralCache(clearGeneration);
-    const entry = this.ephemeralResponseCache.get(ephemeralCacheKey);
+    // The generation identifies both the backend and its most recent clear.
+    const key = `${cacheContext.generation}:${ephemeralCacheKey}`;
+    const entry = this.ephemeralResponseCache.get(key);
     if (!entry) {
       return undefined;
     }
-    if (entry.expiresAt <= Date.now()) {
-      this.ephemeralResponseCache.delete(ephemeralCacheKey);
+    if (!entry.cacheContext.isCurrent() || entry.expiresAt <= Date.now()) {
+      this.ephemeralResponseCache.delete(key);
       return undefined;
     }
     return entry.response;
   }
 
   protected async setCachedResponse(
-    cache: Cache,
     cacheKey: string,
     ephemeralCacheKey: string,
-    clearGeneration: number,
+    cacheContext: ReturnType<typeof getCacheWriteContext>,
     ttlMs: number,
     response: string,
   ): Promise<void> {
     if (this.label) {
-      await cache.set(cacheKey, response);
+      await cacheContext.set(cacheKey, response);
+      return;
+    }
+    if (!cacheContext.isCurrent()) {
       return;
     }
 
-    this.syncEphemeralCache(clearGeneration);
+    const key = `${cacheContext.generation}:${ephemeralCacheKey}`;
 
     if (
-      !this.ephemeralResponseCache.has(ephemeralCacheKey) &&
+      !this.ephemeralResponseCache.has(key) &&
       this.ephemeralResponseCache.size >= MAX_EPHEMERAL_RESPONSE_CACHE_ENTRIES
     ) {
       const oldestKey = this.ephemeralResponseCache.keys().next().value;
@@ -436,17 +442,12 @@ export class AnthropicGenericProvider implements ApiProvider {
         this.ephemeralResponseCache.delete(oldestKey);
       }
     }
-    this.ephemeralResponseCache.set(ephemeralCacheKey, {
+    this.ephemeralResponseCache.set(key, {
       response,
       expiresAt: ttlMs <= 0 ? Number.POSITIVE_INFINITY : Date.now() + ttlMs,
+      // Live local entries depend on this scope's generation even when it leaves the idle LRU.
+      cacheContext,
     });
-  }
-
-  private syncEphemeralCache(clearGeneration: number): void {
-    if (this.ephemeralCacheClearGeneration !== clearGeneration) {
-      this.ephemeralResponseCache.clear();
-      this.ephemeralCacheClearGeneration = clearGeneration;
-    }
   }
 
   /**

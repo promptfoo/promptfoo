@@ -442,10 +442,10 @@ export function isCacheEnabled(): boolean;
 
 ### `clearCache()`
 
-Clear all cached results.
+Clear the default cache and any other caches this process still holds. Pass a directory to clear only that cache, including after an eval ends.
 
 ```typescript
-export async function clearCache(): Promise<void>;
+export async function clearCache(cachePath?: string): Promise<boolean>;
 ```
 
 **Example:**
@@ -456,6 +456,9 @@ import { cache, evaluate } from 'promptfoo';
 // Clear old cache
 await cache.clearCache();
 await evaluate(testSuite); // Will refetch all provider calls
+
+// Clear a custom PROMPTFOO_CACHE_PATH after its eval has finished
+await cache.clearCache('/tmp/my-eval-cache');
 ```
 
 ---
@@ -544,7 +547,9 @@ console.log(result.data); // the fetched data
 ```
 
 **Configuration:**
-Set cache location and TTL via environment variables:
+Set cache location and TTL through environment variables or the eval's top-level `env` field:
+
+Without `PROMPTFOO_CACHE_PATH`, the cache uses `<PROMPTFOO_CONFIG_DIR>/cache` (normally `~/.promptfoo/cache`). An eval's scoped `PROMPTFOO_CONFIG_DIR` changes its cache location; the database keeps its startup directory.
 
 ```bash
 # Cache directory (default: ~/.promptfoo/cache)

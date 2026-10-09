@@ -1,3 +1,5 @@
+/// <reference lib="es2021.weakref" />
+
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
 import fs from 'fs';
@@ -6,7 +8,8 @@ import path from 'path';
 import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
-import { getEnvBool, getEnvInt, getEnvString } from './envars';
+import { LRUCache } from 'lru-cache';
+import { getEnvBool, getEnvInt, getEnvOverrides, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
@@ -31,9 +34,62 @@ import type { CacheOptions } from './types/cache';
 import type { FetchRateLimitObservation } from './util/fetch/index';
 import type { FetchOptions } from './util/fetch/types';
 
-let cacheInstance: Cache | undefined;
-const namespacedCacheInstances = new Map<string, Cache>();
-let cacheClearGeneration = 0;
+interface CacheBackend {
+  filePath?: string;
+  clearGeneration: number;
+  namespaces: CacheRegistry<string, { namespace: string; clearGeneration: number }>;
+  instances: CacheRegistry<number, Cache>;
+  claims: Set<string>;
+  inflight: Map<string, InflightFetchResponse>;
+  writes: Map<Promise<unknown>, string>;
+  clears: Map<Promise<boolean>, string | undefined>;
+}
+
+// Bound idle retention while preserving identity for callers that still hold a
+// cache. In particular, eviction must not create competing writers for one file.
+class CacheRegistry<Key extends string | number, Value extends object> {
+  private readonly retained: LRUCache<Key, Value>;
+  private readonly references = new Map<Key, WeakRef<Value>>();
+  private readonly finalizer = new FinalizationRegistry<Key>((key) => {
+    if (!this.references.get(key)?.deref()) {
+      this.references.delete(key);
+    }
+  });
+
+  constructor(max: number) {
+    this.retained = new LRUCache({ max });
+  }
+
+  get(key: Key): Value | undefined {
+    const value = this.retained.get(key) ?? this.references.get(key)?.deref();
+    if (value) {
+      this.retained.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: Key, value: Value, retain = true): void {
+    if (retain) {
+      this.retained.set(key, value);
+    }
+    this.references.set(key, new WeakRef(value));
+    this.finalizer.register(value, key);
+  }
+
+  *values(): IterableIterator<Value> {
+    for (const reference of this.references.values()) {
+      const value = reference.deref();
+      if (value) {
+        yield value;
+      }
+    }
+  }
+}
+
+const cacheBackends = new CacheRegistry<string, CacheBackend>(32);
+// Pending store operations can outlive a temporary cache-manager handle.
+const storeOwners = new WeakMap<object, CacheBackend>();
+let nextCacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 // The CLI and the public ESM/CJS entry points can load separate copies of this
@@ -47,10 +103,8 @@ const cacheEnabledStorage = (cacheContextGlobal[CACHE_ENABLED_CONTEXT] ??= new A
   enabled: boolean;
 }>());
 
-let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
-
-const cacheType =
-  getEnvString('PROMPTFOO_CACHE_TYPE') || (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
+// Explicit API overrides remain process-wide; environment defaults are invocation-scoped.
+let enabled: boolean | undefined;
 
 /** Default cache TTL: 14 days in seconds */
 const DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24 * 14;
@@ -84,65 +138,160 @@ export function getCache() {
   return getCacheInstance();
 }
 
-function getCacheInstance() {
+function resolveCachePath(cachePath: string): string {
+  const absolutePath = path.resolve(cachePath);
+  let ancestor = absolutePath;
+  while (true) {
+    try {
+      return path.join(fs.realpathSync(ancestor), path.relative(ancestor, absolutePath));
+    } catch (error) {
+      const parent = path.dirname(ancestor);
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || parent === ancestor) {
+        // Preserve the existing disk-store/claim error handling for inaccessible paths.
+        return absolutePath;
+      }
+      try {
+        // A file or directory alias may point at a cache that has not been created yet.
+        if (fs.lstatSync(ancestor).isSymbolicLink()) {
+          const target = path.resolve(parent, fs.readlinkSync(ancestor));
+          return resolveCachePath(path.join(target, path.relative(ancestor, absolutePath)));
+        }
+      } catch {
+        // Keep walking to the nearest existing parent.
+      }
+      // Resolve an existing parent when this invocation has not created its cache yet.
+      ancestor = parent;
+    }
+  }
+}
+
+function getCacheFileIdentity(filePath: string) {
+  let ancestor = filePath;
+  try {
+    while (true) {
+      const stat = fs.statSync(ancestor, { bigint: true, throwIfNoEntry: false });
+      if (stat) {
+        return stat.ino > 0n
+          ? JSON.stringify([
+              stat.dev.toString(),
+              stat.ino.toString(),
+              path.relative(ancestor, filePath),
+            ])
+          : undefined;
+      }
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) {
+        return undefined;
+      }
+      ancestor = parent;
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+function getCacheBackend(
+  cacheEnabled = getEffectiveCacheEnabled(),
+  cachePath?: string,
+  retain = cacheEnabled,
+): CacheBackend {
+  const cacheType =
+    getEnvString('PROMPTFOO_CACHE_TYPE') ||
+    (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
+  const scopedConfigDirectory =
+    getEnvOverrides()?.PROMPTFOO_CONFIG_DIR ?? getEnvOverrides('file')?.PROMPTFOO_CONFIG_DIR;
+  const filePath =
+    cachePath !== undefined || (cacheType === 'disk' && cacheEnabled)
+      ? resolveCachePath(
+          path.join(
+            cachePath ??
+              (getEnvString('PROMPTFOO_CACHE_PATH') ||
+                path.join(scopedConfigDirectory || getConfigDirectoryPath(), 'cache')),
+            'cache.json',
+          ),
+        )
+      : undefined;
+  const identity = JSON.stringify(filePath ?? null);
+  let backend = retain ? cacheBackends.get(identity) : undefined;
+  if (!backend && retain && filePath) {
+    const fileIdentity = getCacheFileIdentity(filePath);
+    if (fileIdentity) {
+      // Resolve an unfamiliar alias against live paths, avoiding a stale inode index.
+      for (const candidate of cacheBackends.values()) {
+        if (candidate.filePath && getCacheFileIdentity(candidate.filePath) === fileIdentity) {
+          return candidate;
+        }
+      }
+    }
+  }
+  if (!backend) {
+    backend = {
+      filePath,
+      clearGeneration: nextCacheClearGeneration++,
+      namespaces: new CacheRegistry(32),
+      instances: new CacheRegistry<number, Cache>(16),
+      claims: new Set(),
+      inflight: new Map(),
+      writes: new Map(),
+      clears: new Map(),
+    };
+    // Disabled handles remain isolated, but global clearing must still reach live ones.
+    cacheBackends.set(retain ? identity : `disabled:${backend.clearGeneration}`, backend, retain);
+  }
+  return backend;
+}
+
+function getCacheInstance(backend = getCacheBackend(), ttl = getCacheTtlMs()) {
+  let cacheInstance = backend.instances.get(ttl);
   if (!cacheInstance) {
-    let cachePath = '';
-    const stores = [];
+    // Different TTL defaults must share one store, especially for disk caches: two
+    // KeyvFile instances for the same file can overwrite each other's contents.
+    const existingInstance = backend.instances.values().next().value;
+    const stores = existingInstance ? existingInstance.stores : [];
 
-    if (cacheType === 'disk' && enabled) {
-      cachePath =
-        getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
-
-      if (!fs.existsSync(cachePath)) {
-        logger.info(`Creating cache folder at ${cachePath}.`);
-        fs.mkdirSync(cachePath, { recursive: true });
+    if (!existingInstance && backend.filePath) {
+      const directory = path.dirname(backend.filePath);
+      if (!fs.existsSync(directory)) {
+        logger.info(`Creating cache folder at ${directory}.`);
+        fs.mkdirSync(directory, { recursive: true });
       }
 
-      const newCacheFile = path.join(cachePath, 'cache.json');
-
       try {
-        const store = new KeyvFile({
-          filename: newCacheFile,
-        });
-
-        const keyv = new Keyv({
-          store,
-          ttl: getCacheTtlMs(),
-        });
-
-        stores.push(keyv);
+        const store = new KeyvFile({ filename: backend.filePath });
+        stores.push(new Keyv({ store }));
       } catch (err) {
         logger.warn(
           `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
             `Using memory cache instead.`,
         );
-        // Falls through to memory cache
       }
     }
 
-    // Initialize cache (disk if stores array has items, memory otherwise)
-    cacheInstance = createCache({
-      stores,
-      ttl: getCacheTtlMs(),
-      refreshThreshold: 0, // Disable background refresh
-    });
+    cacheInstance = createCache({ stores, ttl, refreshThreshold: 0 });
+    for (const store of cacheInstance.stores) {
+      storeOwners.set(store, backend);
+      if (store.opts.store) {
+        storeOwners.set(store.opts.store, backend);
+      }
+    }
     const clear = cacheInstance.clear.bind(cacheInstance);
-    cacheInstance.clear = async () => {
-      const result = await clear();
-      cacheClearGeneration += 1;
-      return result;
-    };
+    cacheInstance.clear = () =>
+      clearBackendCache(backend, undefined, async () => {
+        const result = await clear();
+        backend.claims.clear();
+        if (backend.filePath) {
+          fs.rmSync(getClaimsPath(backend.filePath), { force: true, recursive: true });
+        }
+        return result;
+      });
+    backend.instances.set(ttl, cacheInstance);
   }
   return cacheInstance;
 }
 
 function getNamespacedCache(namespace: string) {
-  const cachedNamespaceInstance = namespacedCacheInstances.get(namespace);
-  if (cachedNamespaceInstance) {
-    return cachedNamespaceInstance;
-  }
-
-  const cache = getCacheInstance();
+  const backend = getCacheBackend();
+  const cache = getCacheInstance(backend);
   const namespacedCache = {
     ...cache,
     get: (key: string) => cache.get(getScopedCacheKey(key, namespace)),
@@ -166,7 +315,7 @@ function getNamespacedCache(namespace: string) {
     },
     mdel: (keys: string[]) => cache.mdel(keys.map((key) => getScopedCacheKey(key, namespace))),
     ttl: (key: string) => cache.ttl(getScopedCacheKey(key, namespace)),
-    clear: () => clearNamespacedCache(cache, namespace),
+    clear: () => clearNamespacedCache(cache, namespace, backend),
     wrap: (...args: Parameters<Cache['wrap']>) =>
       cache.wrap(
         getScopedCacheKey(args[0] as string, namespace),
@@ -176,7 +325,6 @@ function getNamespacedCache(namespace: string) {
       ),
   } as Cache;
 
-  namespacedCacheInstances.set(namespace, namespacedCache);
   return namespacedCache;
 }
 
@@ -201,8 +349,82 @@ export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheN
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
 }
 
+function getCacheGeneration(backend: CacheBackend) {
+  const namespace = getCurrentCacheNamespace();
+  if (!namespace) {
+    return backend;
+  }
+  let state = backend.namespaces.get(namespace);
+  if (!state) {
+    // Active calls retain their state; an evicted idle namespace starts with a fresh token.
+    state = { namespace, clearGeneration: nextCacheClearGeneration++ };
+    backend.namespaces.set(namespace, state);
+  }
+  return state;
+}
+
+/** Opaque invalidation token for the currently selected backend and namespace. */
 export function getCacheClearGeneration() {
-  return cacheClearGeneration;
+  return getCacheGeneration(getCacheBackend()).clearGeneration;
+}
+
+/** Capture the cache scope that requests and provider-local entries depend on. */
+export function getCacheWriteContext() {
+  const backend = getCacheBackend();
+  const ttl = getCacheTtlMs();
+  const generationState = getCacheGeneration(backend);
+  const generation = generationState.clearGeneration;
+  const namespace = getCurrentCacheNamespace() ?? '';
+  return {
+    generation,
+    isCurrent: () => generationState.clearGeneration === generation,
+    async get<T>(key: string, signal?: AbortSignal | null): Promise<T | undefined> {
+      throwIfAborted(signal);
+      const scopedKey = getScopedCacheKey(key, namespace);
+      const clearing = getPendingCacheClears(backend, scopedKey);
+      if (clearing.length > 0) {
+        await waitForPromiseWithAbort(Promise.allSettled(clearing), signal);
+        throwIfAborted(signal);
+      }
+      if (generationState.clearGeneration !== generation) {
+        return undefined;
+      }
+      const value = await waitForPromiseWithAbort(
+        getCacheInstance(backend, ttl).get<T>(scopedKey),
+        signal,
+      );
+      throwIfAborted(signal);
+      return generationState.clearGeneration === generation ? value : undefined;
+    },
+    set: (key: string, value: unknown) => {
+      const scopedKey = getScopedCacheKey(key, namespace);
+      return mutateCacheIfCurrent(backend, generationState, generation, scopedKey, () =>
+        getCacheInstance(backend, ttl).set(scopedKey, value),
+      );
+    },
+  };
+}
+
+function getPendingCacheClears(backend: CacheBackend, cacheKey: string) {
+  return [...backend.clears]
+    .filter(([, prefix]) => !prefix || cacheKey.startsWith(prefix))
+    .map(([clearing]) => clearing);
+}
+
+async function mutateCacheIfCurrent(
+  backend: CacheBackend,
+  generationState: { clearGeneration: number },
+  clearGeneration: number,
+  cacheKey: string,
+  mutate: () => Promise<unknown>,
+) {
+  await Promise.allSettled(getPendingCacheClears(backend, cacheKey));
+  if (generationState.clearGeneration !== clearGeneration) {
+    return;
+  }
+  const write = mutate().finally(() => backend.writes.delete(write));
+  backend.writes.set(write, cacheKey);
+  await write;
 }
 
 function getUnscopedCacheKey(cacheKey: string, namespace: string) {
@@ -210,42 +432,70 @@ function getUnscopedCacheKey(cacheKey: string, namespace: string) {
   return cacheKey.startsWith(namespacePrefix) ? cacheKey.slice(namespacePrefix.length) : cacheKey;
 }
 
-async function clearNamespacedCache(cache: Cache, namespace: string) {
-  const namespacePrefix = `${namespace}:`;
-
-  for (const store of cache.stores) {
-    if (!store.iterator) {
-      throw new Error(
-        `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
-      );
-    }
-
-    const keysToDelete: string[] = [];
-    for await (const [key] of store.iterator(undefined)) {
-      if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
-        keysToDelete.push(key);
-      }
-    }
-
-    if (keysToDelete.length === 0) {
-      continue;
-    }
-
-    try {
-      if (store.deleteMany) {
-        await store.deleteMany(keysToDelete);
-      } else {
-        await Promise.all(keysToDelete.map((key) => store.delete(key)));
-      }
-    } catch (err) {
-      throw new Error(
-        `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
-      );
+function clearBackendCache(
+  backend: CacheBackend,
+  namespace: string | undefined,
+  clear: () => Promise<boolean>,
+): Promise<boolean> {
+  const prefix = namespace ? `${namespace}:` : undefined;
+  const generation = nextCacheClearGeneration++;
+  if (!prefix) {
+    backend.clearGeneration = generation;
+    backend.inflight.clear();
+  }
+  for (const state of backend.namespaces.values()) {
+    if (!prefix || state.namespace === namespace || state.namespace.startsWith(prefix)) {
+      state.clearGeneration = generation;
     }
   }
+  // Drain started writes; later fetches wait for deletion before reading or writing.
+  const clearing = Promise.allSettled(
+    [...backend.writes]
+      .filter(([, key]) => !prefix || key.startsWith(prefix))
+      .map(([write]) => write),
+  )
+    .then(clear)
+    .finally(() => backend.clears.delete(clearing));
+  backend.clears.set(clearing, prefix);
+  return clearing;
+}
 
-  cacheClearGeneration += 1;
-  return true;
+function clearNamespacedCache(cache: Cache, namespace: string, backend: CacheBackend) {
+  return clearBackendCache(backend, namespace, async () => {
+    const namespacePrefix = `${namespace}:`;
+    for (const store of cache.stores) {
+      if (!store.iterator) {
+        throw new Error(
+          `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
+        );
+      }
+
+      const keysToDelete: string[] = [];
+      for await (const [key] of store.iterator(undefined)) {
+        if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
+          keysToDelete.push(key);
+        }
+      }
+
+      if (keysToDelete.length === 0) {
+        continue;
+      }
+
+      try {
+        if (store.deleteMany) {
+          await store.deleteMany(keysToDelete);
+        } else {
+          await Promise.all(keysToDelete.map((key) => store.delete(key)));
+        }
+      } catch (err) {
+        throw new Error(
+          `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
+        );
+      }
+    }
+
+    return true;
+  });
 }
 
 /**
@@ -296,7 +546,11 @@ export function withCacheEnabled<T>(enabledOverride: boolean | undefined, fn: ()
 }
 
 function getEffectiveCacheEnabled() {
-  return cacheEnabledStorage.getStore()?.enabled ?? enabled;
+  return (
+    cacheEnabledStorage.getStore()?.enabled ??
+    enabled ??
+    getEnvBool('PROMPTFOO_CACHE_ENABLED', true)
+  );
 }
 
 export type FetchWithCacheResult<T> = {
@@ -333,8 +587,6 @@ type InflightFetchResponse = {
   };
 };
 
-const inflightFetchResponses = new Map<string, InflightFetchResponse>();
-const claimedCacheKeys = new Set<string>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const IGNORED_FETCH_CACHE_HEADERS = new Set(['traceparent', 'tracestate']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
@@ -626,15 +878,16 @@ export function getAbortSignalScopedKey(key: string, signal?: AbortSignal | null
  * separate eval processes cannot both attribute the same background response's usage.
  */
 export function claimCacheKeyOnce(cacheKey: string): boolean {
+  // Disabling response caching must still retain process-local one-time claims.
+  const backend = getCacheBackend(getEffectiveCacheEnabled(), undefined, true);
+  const claimedCacheKeys = backend.claims;
   const scopedCacheKey = getScopedCacheKey(cacheKey);
   if (claimedCacheKeys.has(scopedCacheKey)) {
     return false;
   }
 
-  if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
-    const cachePath =
-      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
-    const claimsPath = path.join(cachePath, 'claims');
+  if (backend.filePath) {
+    const claimsPath = getClaimsPath(backend.filePath);
     try {
       fs.mkdirSync(claimsPath, { recursive: true });
       const handle = fs.openSync(path.join(claimsPath, sha256(scopedCacheKey)), 'wx');
@@ -653,6 +906,11 @@ export function claimCacheKeyOnce(cacheKey: string): boolean {
 
   claimedCacheKeys.add(scopedCacheKey);
   return true;
+}
+
+function getClaimsPath(filePath: string): string {
+  const name = path.basename(filePath);
+  return path.join(path.dirname(filePath), name === 'cache.json' ? 'claims' : `${name}.claims`);
 }
 
 function getSanitizedResponse(
@@ -687,8 +945,9 @@ function serializeFetchResponse(
 function deserializeFetchResponse<T>(
   response: SerializedFetchResponse,
   cached: boolean,
-  cache: Cache,
   cacheKey: string,
+  writeCache: (value: SerializedFetchResponse) => Promise<void>,
+  deleteCache: () => Promise<void>,
   sanitizeResponse?: CacheOptions['sanitizeResponse'],
 ) {
   const parsedResponse = JSON.parse(response);
@@ -706,7 +965,7 @@ function deserializeFetchResponse<T>(
     headers: sanitized.headers,
     latencyMs: parsedResponse.latencyMs,
     deleteFromCache: async () => {
-      await cache.del(cacheKey);
+      await deleteCache();
       logger.debug(`Evicted from cache: ${cacheKey}`);
     },
     updateCache: async (
@@ -715,8 +974,7 @@ function deserializeFetchResponse<T>(
       statusText: string,
       headers?: Record<string, string>,
     ) => {
-      await cache.set(
-        cacheKey,
+      await writeCache(
         serializeFetchResponse(
           data,
           status,
@@ -1025,7 +1283,24 @@ export async function fetchWithCache<T = unknown>(
     return result;
   }
 
-  const cache = getCacheInstance();
+  const backend = getCacheBackend();
+  const cache = getCacheInstance(backend);
+  const inflightFetchResponses = backend.inflight;
+  const generationState = getCacheGeneration(backend);
+  const clearGeneration = generationState.clearGeneration;
+  const writeCache = (value: SerializedFetchResponse) =>
+    mutateCacheIfCurrent(backend, generationState, clearGeneration, cacheKey, () =>
+      cache.set(cacheKey, value),
+    );
+  const deleteCache = () =>
+    mutateCacheIfCurrent(backend, generationState, clearGeneration, cacheKey, () =>
+      cache.del(cacheKey),
+    );
+  const pendingClears = getPendingCacheClears(backend, cacheKey);
+  if (pendingClears.length > 0) {
+    await waitForPromiseWithAbort(Promise.allSettled(pendingClears), signal);
+    throwIfAborted(signal);
+  }
 
   const cachedResponse = await waitForPromiseWithAbort(
     cache.get<SerializedFetchResponse>(cacheKey),
@@ -1036,8 +1311,9 @@ export async function fetchWithCache<T = unknown>(
     const result = deserializeFetchResponse<T>(
       cachedResponse,
       true,
-      cache,
       cacheKey,
+      writeCache,
+      deleteCache,
       sanitizeResponse,
     );
     if (logEnabled) {
@@ -1057,7 +1333,7 @@ export async function fetchWithCache<T = unknown>(
     return result;
   }
 
-  const inflightCacheKey = getAbortSignalScopedKey(cacheKey, signal);
+  const inflightCacheKey = getAbortSignalScopedKey(`${clearGeneration}:${cacheKey}`, signal);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
@@ -1081,7 +1357,7 @@ export async function fetchWithCache<T = unknown>(
     const publication = response
       .then(async (preparedResponse) => {
         if (preparedResponse.cacheable) {
-          await cache.set(cacheKey, preparedResponse.response);
+          await writeCache(preparedResponse.response);
         }
       })
       .finally(() => {
@@ -1112,8 +1388,9 @@ export async function fetchWithCache<T = unknown>(
     const result: FetchWithCacheResult<T> = deserializeFetchResponse<T>(
       response,
       false,
-      cache,
       cacheKey,
+      writeCache,
+      deleteCache,
       sanitizeResponse,
     );
     if (coalesced) {
@@ -1171,9 +1448,10 @@ export function disableCache() {
 }
 
 /**
- * Clear all cached results.
+ * Clear the configured default and all retained cache backends.
+ * Pass a cache directory to target it, including after its invocation has ended.
  *
- * Removes all cached provider responses. The cache will refetch on next access.
+ * The next request to a cleared cache refetches its response.
  *
  * @example
  * ```typescript
@@ -1183,17 +1461,12 @@ export function disableCache() {
  * const results = await evaluate(testSuite);  // Refetches all
  * ```
  */
-export async function clearCache() {
-  inflightFetchResponses.clear();
-  namespacedCacheInstances.clear();
-  const result = await getCacheInstance().clear();
-  claimedCacheKeys.clear();
-  if (cacheType === 'disk') {
-    const cachePath =
-      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
-    fs.rmSync(path.join(cachePath, 'claims'), { force: true, recursive: true });
-  }
-  return result;
+export async function clearCache(cachePath?: string) {
+  // Explicit clearing works even when reads/writes are disabled.
+  const configured = getCacheBackend(true, cachePath);
+  const backends = cachePath === undefined ? [...cacheBackends.values()] : [configured];
+  await Promise.all(backends.map((backend) => getCacheInstance(backend).clear()));
+  return true;
 }
 
 /**

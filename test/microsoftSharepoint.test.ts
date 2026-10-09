@@ -262,9 +262,6 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
   });
 
   describe('Authentication', () => {
-    // Note: Some auth validation tests are skipped due to client caching in getConfidentialClient
-    // These scenarios are covered by integration tests and actual usage
-
     it('should throw error when token acquisition fails', async () => {
       mockMsalClient.acquireTokenByClientCredential.mockResolvedValue(null);
 

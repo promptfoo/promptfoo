@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache, getCache, isCacheEnabled, withCacheNamespace } from '../../src/cache';
+import {
+  fetchWithCache,
+  getCache,
+  getCacheWriteContext,
+  isCacheEnabled,
+  withCacheNamespace,
+} from '../../src/cache';
 import logger from '../../src/logger';
 import {
   MistralChatCompletionProvider,
@@ -21,6 +27,7 @@ vi.mock('../../src/cache', async () => ({
   fetchWithCache: vi.fn(),
   getCache: vi.fn(),
   isCacheEnabled: vi.fn(),
+  getCacheWriteContext: vi.fn(),
 }));
 
 vi.mock('../../src/util', async () => ({
@@ -31,6 +38,14 @@ vi.mock('../../src/util', async () => ({
 describe('Mistral', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getCacheWriteContext).mockImplementation(() => ({
+      generation: 0,
+      isCurrent: () => true,
+      get: <T>(key: string) => getCache().get<T>(key),
+      set: async (key, value) => {
+        await getCache().set(key, value);
+      },
+    }));
     vi.mocked(fetchWithCache).mockReset();
     vi.mocked(maybeLoadToolsFromExternalFile).mockImplementation(async (tools) => tools);
     vi.mocked(isCacheEnabled).mockReturnValue(false);

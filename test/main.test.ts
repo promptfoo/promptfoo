@@ -88,7 +88,10 @@ describe('setupEnvFilesFromArgv', () => {
   it('should load env files before command actions run', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '.env.local']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local', { refreshConfigDirectory: true });
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local', {
+      refreshConfigDirectory: true,
+      quiet: true,
+    });
     expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
@@ -97,6 +100,7 @@ describe('setupEnvFilesFromArgv', () => {
 
     expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three'], {
       refreshConfigDirectory: true,
+      quiet: true,
     });
   });
 
@@ -110,7 +114,10 @@ describe('setupEnvFilesFromArgv', () => {
   it('should recognize the --env-path alias', () => {
     setupEnvFilesFromArgv(['eval', '--env-path', '.env.staging']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging', { refreshConfigDirectory: true });
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging', {
+      refreshConfigDirectory: true,
+      quiet: true,
+    });
   });
 
   it('should be a no-op when no env flags are present', () => {

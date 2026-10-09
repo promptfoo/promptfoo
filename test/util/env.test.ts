@@ -57,6 +57,13 @@ describe('setupEnv', () => {
     removeTempDir(directory);
   });
 
+  it('loads explicit files without logging before CLI console initialization', () => {
+    const file = writeEnv('fixture.env', 'PROMPTFOO_ENV_TEST_VALUE=loaded');
+    setupEnv(file, { quiet: true });
+    expect(process.env.PROMPTFOO_ENV_TEST_VALUE).toBe('loaded');
+    expect(loggerInfoSpy).not.toHaveBeenCalled();
+  });
+
   it.each([undefined, [], '', ' , ', ['', '  ', '']])(
     'loads implicit .env without overriding host values (%j)',
     (envPath) => {

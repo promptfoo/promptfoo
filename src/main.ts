@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import cliState from './cliState';
 import { codeScansCommand } from './codeScan/index';
+import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
@@ -53,7 +54,7 @@ import { VERSION } from './version';
 async function main() {
   const argv = process.argv.slice(2);
   setupEnvFilesFromArgv(argv);
-  initializeRunLogging();
+  initializeRunLogging({ structuredOutput: requestsStructuredCodeScanOutput(argv) });
 
   // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
   if (!process.env.PROMPTFOO_DISABLE_UPDATE && typeof process.env.CI !== 'undefined') {

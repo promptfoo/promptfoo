@@ -59,7 +59,9 @@ describe('public Chat outcomes during default disk publication', () => {
     const stores = cacheModule.getCache().stores;
     expect(stores).toHaveLength(1);
     expect(stores[0].store).toBeInstanceOf(KeyvFile);
-    expect(stores[0].store.opts.filename).toBe(path.join(cacheDirectory, 'cache.json'));
+    const filename = stores[0].store.opts.filename;
+    expect(fs.realpathSync(path.dirname(filename))).toBe(fs.realpathSync(cacheDirectory));
+    expect(path.basename(filename)).toBe('cache.json');
     expect(stores[0].store.opts.writeDelay).toBe(100);
   });
 
