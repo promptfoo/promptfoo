@@ -1,5 +1,4 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import {
@@ -7,6 +6,8 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { getOpenAiEffectiveServiceTier } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
@@ -275,17 +276,14 @@ export class XAIResponsesProvider implements ApiProvider {
   }
 
   protected getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.XAI_API_KEY || getEnvString('XAI_API_KEY');
+    return resolveProviderApiKey(this.config, this.env, ['XAI_API_KEY']);
   }
 
   protected getApiUrl(): string {
     if (this.config.apiBaseUrl) {
       return this.config.apiBaseUrl;
     }
-    if (this.env?.XAI_API_BASE_URL) {
-      return this.env.XAI_API_BASE_URL;
-    }
-    const envApiBaseUrl = getEnvString('XAI_API_BASE_URL');
+    const envApiBaseUrl = resolveProviderEnv(this.env, ['XAI_API_BASE_URL'])?.value;
     if (envApiBaseUrl) {
       return envApiBaseUrl;
     }
