@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
@@ -61,7 +61,9 @@ describe('VVAH example provider', () => {
         options: SpawnOptions,
       ) => {
         if (_command === 'taskkill') {
-          return new EventEmitter() as unknown as ChildProcess;
+          const killer = new EventEmitter();
+          queueMicrotask(() => killer.emit('close', 0));
+          return killer as unknown as ChildProcess;
         }
         args = argv;
         spawnOptions = options;
@@ -242,6 +244,85 @@ describe('VVAH example provider', () => {
     },
   );
 
+  it.each(['ſecurity-scan/findings.json', 'ſecurity-remediation/fix.py', '.enV/config'])(
+    'rejects folded reserved artifact path %s',
+    async (name) => {
+      vi.mocked(spawn).mockImplementation(() => {
+        throw new Error('Unexpected scan');
+      });
+      expect(
+        (await provider().callApi(JSON.stringify({ files: { [name]: 'untrusted artifact' } })))
+          .error,
+      ).toContain('Invalid source file path');
+      expect(spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('waits for Windows taskkill completion before removing the workspace', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    const killer = new EventEmitter();
+    const originalSpawn = vi.mocked(spawn).getMockImplementation()!;
+    vi.mocked(spawn).mockImplementation(((command: string, ...args: unknown[]) =>
+      command === 'taskkill'
+        ? killer
+        : (originalSpawn as (...args: unknown[]) => ChildProcess)(
+            command,
+            ...args,
+          )) as typeof spawn);
+    const controller = new AbortController();
+    let settled = false;
+    const pending = provider()
+      .callApi(prompt, undefined, { abortSignal: controller.signal })
+      .then((result) => {
+        settled = true;
+        return result;
+      });
+    await started;
+    controller.abort();
+    child.emit('close', null);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(settled).toBe(false);
+    await expect(access(cwd)).resolves.toBeUndefined();
+    killer.emit('close', 0);
+    expect((await pending).error).toContain('aborted');
+    await expect(access(cwd)).rejects.toThrow();
+  });
+
+  it.each(['failed', 'timed out', 'unavailable'])(
+    'retains the workspace if Windows taskkill is %s',
+    async (kind) => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+      const killer = new EventEmitter();
+      const originalSpawn = vi.mocked(spawn).getMockImplementation()!;
+      vi.mocked(spawn).mockImplementation(((command: string, ...args: unknown[]) =>
+        command === 'taskkill'
+          ? killer
+          : (originalSpawn as (...args: unknown[]) => ChildProcess)(
+              command,
+              ...args,
+            )) as typeof spawn);
+      const controller = new AbortController();
+      const pending = provider().callApi(prompt, undefined, { abortSignal: controller.signal });
+      await started;
+      controller.abort();
+      child.emit('close', null);
+      if (kind === 'unavailable') {
+        killer.emit('error', new Error('ENOENT'));
+      }
+      killer.emit('close', kind === 'failed' ? 1 : null);
+      try {
+        const result = await pending;
+        expect(result.error).toContain('could not confirm descendant termination');
+        expect(result.error).toContain(cwd);
+        expect(result.output).toBeUndefined();
+        expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+        await expect(access(cwd)).resolves.toBeUndefined();
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('reports missing VVAH installation and removes staged files', async () => {
     const resultPromise = provider().callApi(prompt);
     await started;
@@ -339,7 +420,11 @@ describe('VVAH example provider', () => {
         controller.abort();
       }
       if (process.platform === 'win32') {
-        expect(spawn).toHaveBeenCalledWith('taskkill', ['/pid', '12345', '/T', '/F']);
+        expect(spawn).toHaveBeenCalledWith(
+          'taskkill',
+          ['/pid', '12345', '/T', '/F'],
+          expect.objectContaining({ timeout: 2000, windowsHide: true }),
+        );
       } else {
         expect(process.kill).toHaveBeenCalledWith(-12345, 'SIGKILL');
       }
