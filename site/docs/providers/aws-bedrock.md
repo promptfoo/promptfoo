@@ -2036,6 +2036,41 @@ For Claude models that no longer support sampling parameters — [Opus 4.7](http
 
 [Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` is mapped to its native `inferenceConfig.topK` request field; for [Cohere Command R and R+](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command-r-plus.html), it is mapped to `k`.
 
+### Native Knowledge Base API options
+
+Set `retrievalConfiguration`, `generationConfiguration`, and
+`orchestrationConfiguration` using the native
+[RetrieveAndGenerate shapes](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerate.html).
+This exposes metadata filters, implicit filtering, reranking, prompt templates,
+generation guardrails, query decomposition, and model-specific request fields.
+An explicit `generationConfiguration` replaces the convenience sampling options;
+`numberOfResults` overrides only the retrieval result count, preserving other
+retrieval settings.
+
+`sessionId`, `sessionConfiguration` (including KMS encryption), and `userContext`
+are forwarded to AWS. The response exposes `metadata.sessionId`, `metadata.citations`,
+and `metadata.guardrailAction`; an `INTERVENED` action sets `guardrails.flagged`.
+Reuse the returned session ID explicitly to continue a conversation. Calls with an
+explicit session ID bypass the cache so each turn reaches AWS.
+
+Set `streaming: true` for
+[RetrieveAndGenerateStream](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerateStream.html).
+Promptfoo collects text and citations into one eval response and surfaces service
+exception events as errors. Streaming calls bypass the cache.
+
+For [Retrieve](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Retrieve.html)
+without generation, use `bedrock:kb` with `operation: retrieve` and `knowledgeBaseId`.
+No generation model is required. `retrievalConfiguration`, `guardrailConfiguration`,
+`userContext`, and `nextToken` are supported. The output is a JSON array of retrieval
+results; `metadata.nextToken` exposes the next page when present. Pagination is
+explicit, so one eval call retrieves one page.
+
+To query supplied documents instead of a Knowledge Base, provide the complete
+`retrieveAndGenerateConfiguration` with `type: EXTERNAL_SOURCES`. This native object
+replaces the generated Knowledge Base configuration and removes the requirement for
+`knowledgeBaseId`. For byte-content sources, encode `byteContent.data` as base64 in
+JSON/YAML. External-source model and region restrictions are determined by AWS.
+
 ### Knowledge Base Example
 
 Here's a complete example to test your Knowledge Base with a few questions:
