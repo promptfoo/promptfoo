@@ -819,18 +819,17 @@ function getFetchCacheKey(
   );
 }
 
-function getAbortSignalId(signal: AbortSignal) {
+/** Key in-flight requests by abort signal so only callers cancelled together share one. */
+export function getAbortSignalScopedKey(key: string, signal?: AbortSignal | null) {
+  if (!signal) {
+    return key;
+  }
   let signalId = abortSignalIds.get(signal);
   if (signalId === undefined) {
     signalId = ++nextAbortSignalId;
     abortSignalIds.set(signal, signalId);
   }
-  return signalId;
-}
-
-function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
-  return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
+  return `${key}:signal:${signalId}`;
 }
 
 /**
@@ -1245,7 +1244,10 @@ export async function fetchWithCache<T = unknown>(
     return result;
   }
 
-  const inflightCacheKey = `${clearGeneration}:${getInflightFetchCacheKey(cacheKey, url, fetchOptions)}`;
+  const inflightCacheKey = getAbortSignalScopedKey(
+    `${clearGeneration}:${cacheKey}`,
+    fetchOptions.signal ?? (url instanceof Request ? url.signal : undefined),
+  );
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {

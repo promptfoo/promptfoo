@@ -2,6 +2,7 @@ import { createHmac } from 'crypto';
 
 import {
   fetchWithCache,
+  getAbortSignalScopedKey,
   getCache,
   getCacheWriteContext,
   getScopedCacheKey,
@@ -19,6 +20,7 @@ import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
@@ -352,8 +354,12 @@ function fetchMistralWithDedupe(
   cacheKey: string,
   clearGeneration: number,
   fetcher: () => Promise<MistralFetchResult>,
+  abortSignal?: AbortSignal,
 ): Promise<MistralFetchResult> {
-  const inflightCacheKey = `${clearGeneration}:${getScopedCacheKey(cacheKey)}`;
+  const inflightCacheKey = getAbortSignalScopedKey(
+    `${clearGeneration}:${getScopedCacheKey(cacheKey)}`,
+    abortSignal,
+  );
   let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
@@ -804,6 +810,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
 }
 
 export class MistralEmbeddingProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: MistralChatCompletionOptions;
   env?: EnvOverrides;
@@ -880,7 +888,11 @@ export class MistralEmbeddingProvider implements ApiProvider {
     }
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('Mistral API key must be set for embedding');
@@ -925,24 +937,31 @@ export class MistralEmbeddingProvider implements ApiProvider {
       });
 
       try {
-        ({ data, cached } = await fetchMistralWithDedupe(cacheKey, clearGeneration, async () => {
-          return (await fetchWithCache(
-            url,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-promptfoo-silent': 'true',
-                Authorization: `Bearer ${apiKey}`,
+        ({ data, cached } = await fetchMistralWithDedupe(
+          cacheKey,
+          clearGeneration,
+          async () => {
+            return (await fetchWithCache(
+              url,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-promptfoo-silent': 'true',
+                  Authorization: `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify(body),
+                ...(options?.abortSignal && { signal: options.abortSignal }),
               },
-              body: JSON.stringify(body),
-            },
-            getRequestTimeoutMs(),
-            'json',
-            true,
-          )) as unknown as MistralFetchResult;
-        }));
+              getRequestTimeoutMs(),
+              'json',
+              true,
+            )) as unknown as MistralFetchResult;
+          },
+          options?.abortSignal,
+        ));
       } catch (err) {
+        options?.abortSignal?.throwIfAborted();
         logger.error(`API call error: ${err}`);
         throw err;
       }
