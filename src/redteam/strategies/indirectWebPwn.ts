@@ -6,6 +6,7 @@ import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { WebPageTrackingIdsSchema } from '../types/webPage';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -84,12 +85,11 @@ function cleanupExpiredPageState(): void {
 }
 
 // Keep outgoing identifiers aligned with the Cloud tracking request contract.
-const webPageTrackingIdsSchema = z.object({
-  uuid: z.string().uuid(),
+const webPageTrackingIdsSchema = WebPageTrackingIdsSchema.extend({
   evalId: z
     .string()
     .transform((value) => value.replace(/^eval-/, ''))
-    .pipe(z.string().min(1).max(256)),
+    .pipe(WebPageTrackingIdsSchema.shape.evalId),
 });
 
 /**
