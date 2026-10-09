@@ -57,9 +57,7 @@ describe('Ruby utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();
-    rubyUtils.state.cachedRubyPath = null;
-    rubyUtils.state.validationPromise = null;
-    rubyUtils.state.validatingPath = null;
+
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(fs.readFile).mockResolvedValue(
       JSON.stringify({ type: 'final_result', data: 'secret-result' }),

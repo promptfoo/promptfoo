@@ -181,7 +181,7 @@ export async function loadApiProvider(
   const basePath = context.basePath ?? cliState.basePath;
   return cliState.withBasePath(basePath, () =>
     cliState.withEnv(env, () =>
-      createApiProvider(providerPath, { ...context, basePath, env }, context.env),
+      createApiProvider(providerPath, { ...context, basePath, env }, undefined, context.env),
     ),
   );
 }
@@ -189,25 +189,43 @@ export async function loadApiProvider(
 async function createApiProvider(
   providerPath: string,
   context: LoadApiProviderContext,
-  callerEnv: EnvOverrides | undefined,
+  completeTemplateEnv?: EnvOverrides,
+  callerEnv?: EnvOverrides,
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
 
   // Merge environment overrides: context.env (test suite level) is base,
   // options.env (provider-specific) takes precedence for per-provider customization
-  const renderedProviderPath = renderEnvOnlyInObject(
-    providerPath,
-    mergeProviderEnv('', env, options.env),
-  );
-  const mergedEnv = mergeProviderEnv(renderedProviderPath, env, options.env);
+  // Explicit templates address named variables, so they need the complete map.
+  // Alias precedence is only for implicit provider environment lookup.
+  const templateEnv =
+    completeTemplateEnv ??
+    mergeProviderEnv({ id: providerPath, preserveAliases: true }, env, options.env);
+  const renderTemplate = <T>(value: T): T =>
+    cliState.withEnv(templateEnv, () => renderEnvOnlyInObject(value, templateEnv));
+  const renderedProviderPath = renderTemplate(providerPath);
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
-  const renderedConfig = options.config
-    ? renderEnvOnlyInObject(options.config, mergedEnv)
-    : undefined;
-  const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
+  const renderedConfig = options.config ? renderTemplate(options.config) : undefined;
+  const renderedId = options.id ? renderTemplate(options.id) : undefined;
+  const mergedEnv = mergeProviderEnv(
+    { id: renderedProviderPath, config: renderedConfig },
+    env,
+    options.env,
+  );
+
+  // Named selectors use the complete namespace, not implicit native-alias pruning.
+  const apiKeyEnvar = renderedConfig?.apiKeyEnvar;
+  if (
+    mergedEnv &&
+    templateEnv &&
+    typeof apiKeyEnvar === 'string' &&
+    Object.prototype.hasOwnProperty.call(templateEnv, apiKeyEnvar)
+  ) {
+    mergedEnv[apiKeyEnvar] = templateEnv[apiKeyEnvar];
+  }
 
   const providerOptions: ProviderOptions = {
     id: renderedId,
@@ -233,9 +251,14 @@ async function createApiProvider(
       );
     }
 
-    const resolvedCloudPath = renderEnvOnlyInObject(
-      cloudProvider.id,
-      mergeProviderEnv('', env, cloudProvider.env, options.env),
+    const cloudTemplateEnv = mergeProviderEnv(
+      { id: cloudProvider.id, preserveAliases: true },
+      templateEnv,
+      cloudProvider.env,
+      options.env,
+    );
+    const resolvedCloudPath = cliState.withEnv(cloudTemplateEnv, () =>
+      renderEnvOnlyInObject(cloudProvider.id, cloudTemplateEnv),
     );
 
     // Merge local config overrides with cloud provider config
@@ -253,7 +276,12 @@ async function createApiProvider(
       prompts: options.prompts ?? cloudProvider.prompts,
       inputs: options.inputs ?? cloudProvider.inputs,
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
-      env: mergeProviderEnv(resolvedCloudPath, env, cloudProvider.env, options.env),
+      env: mergeProviderEnv(
+        { id: resolvedCloudPath, config: { ...cloudProvider.config, ...renderedConfig } },
+        env,
+        cloudProvider.env,
+        options.env,
+      ),
     };
 
     logger.debug(
@@ -266,7 +294,9 @@ async function createApiProvider(
       env: mergedOptions.env,
     };
 
-    const provider = await loadApiProvider(resolvedCloudPath, mergedContext);
+    const provider = await cliState.withEnv(mergedOptions.env, () =>
+      createApiProvider(cloudProvider.id, mergedContext, cloudTemplateEnv),
+    );
     // Preserve the target already fetched above for per-evaluation grading context.
     provider.config ??= {};
     provider.config.linkedTargetId ??= renderedProviderPath;
@@ -288,32 +318,43 @@ async function createApiProvider(
       );
     }
 
-    invariant(fileContent.id, `Provider config ${relativePath} must have an id`);
+    const fileProviderId = fileContent.id;
+    invariant(fileProviderId, `Provider config ${relativePath} must have an id`);
     logger.info('Loaded provider from config file', {
       providerConfigPath: relativePath,
       providerId: fileContent.id,
     });
 
-    const resolvedFilePath = renderEnvOnlyInObject(
-      fileContent.id,
-      mergeProviderEnv('', env, fileContent.env, callerEnv, options.env),
+    const fileTemplateEnv = mergeProviderEnv(
+      { id: fileProviderId, preserveAliases: true },
+      templateEnv,
+      fileContent.env,
+      callerEnv,
+      options.env,
     );
-    // Explicit callers can override file defaults. An inherited evaluation environment
-    // remains below file defaults, as it does for files expanded by loadApiProviders.
+    const resolvedFilePath = cliState.withEnv(fileTemplateEnv, () =>
+      renderEnvOnlyInObject(fileProviderId, fileTemplateEnv),
+    );
+    // Explicit callers override file defaults; inherited evaluation values remain below them.
     const mergedFileEnv = mergeProviderEnv(
-      resolvedFilePath,
+      { id: resolvedFilePath, config: fileContent.config },
       env,
       fileContent.env,
       callerEnv,
       options.env,
     );
-    return loadApiProvider(resolvedFilePath, {
-      basePath,
-      options: {
-        ...fileContent,
-        env: mergedFileEnv,
-      },
-    });
+
+    return cliState.withEnv(mergedFileEnv, () =>
+      createApiProvider(
+        fileProviderId,
+        {
+          basePath,
+          env: mergedFileEnv,
+          options: { ...fileContent, env: mergedFileEnv },
+        },
+        fileTemplateEnv,
+      ),
+    );
   }
 
   for (const factory of await getProviderFactories(renderedProviderPath)) {
@@ -324,7 +365,7 @@ async function createApiProvider(
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;
-      ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
+      ret.label ||= renderTemplate(options.label || '');
       return ret;
     }
   }
