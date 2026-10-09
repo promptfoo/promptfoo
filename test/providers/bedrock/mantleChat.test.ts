@@ -355,6 +355,8 @@ describe('bedrock mantle Chat Completions provider', () => {
         'json',
         true,
         undefined,
+        expect.any(Function),
+        undefined,
       );
       const request = vi.mocked(fetchWithCache).mock.calls[0][1];
       expect(await request?.getAuthHeaders?.()).toEqual({ Authorization: 'Bearer bedrock-key' });
@@ -555,6 +557,8 @@ describe('bedrock mantle Chat Completions provider', () => {
         expect.any(Number),
         'json',
         true,
+        undefined,
+        expect.any(Function),
         undefined,
       );
       expect(result.output).toBe('Mantle output');

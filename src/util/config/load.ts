@@ -14,7 +14,7 @@ import cliState from '../../cliState';
 import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { readPrompts, readProviderPromptMap } from '../../prompts/index';
+import { readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
@@ -1145,7 +1145,7 @@ async function resolveLoadedConfig(
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
   // This enables:
-  // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
+  // 1. Loading per-instance `prompts` filters from external files (#1307)
   // 2. Filtering by resolved provider ids/labels (not just file paths)
   // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
   const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
@@ -1274,14 +1274,6 @@ async function resolveLoadedConfig(
     }
   }
 
-  // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
-  // This ensures that `prompts` filters from external provider files are respected (#1307)
-  // and that the map is consistent with the filtered providers
-  const parsedProviderPromptMap = readProviderPromptMap(
-    { providers: filteredProviderConfigs },
-    parsedPrompts,
-  );
-
   if (parsedPrompts.length === 0) {
     const message =
       'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.';
@@ -1305,7 +1297,6 @@ async function resolveLoadedConfig(
     tags: config.tags,
     prompts: parsedPrompts,
     providers: parsedProviders,
-    providerPromptMap: parsedProviderPromptMap,
     tests: parsedTests,
     scenarios: parsedScenarios as Scenario[],
     defaultTest,
