@@ -961,6 +961,23 @@ function resumableCheckpointFilter() {
     ), 0) = 1`;
 }
 
+/** The persisted fields consumed when rebuilding prompt metrics. */
+export type EvalResultMetrics = Pick<
+  EvalResult,
+  | 'id'
+  | 'testIdx'
+  | 'promptIdx'
+  | 'testCase'
+  | 'success'
+  | 'failureReason'
+  | 'score'
+  | 'latencyMs'
+  | 'cost'
+  | 'response'
+  | 'gradingResult'
+  | 'namedScores'
+>;
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -1198,12 +1215,22 @@ export default class EvalResult {
 
   // This is a generator that yields batches of results from the database
   // These are batched by test Id, not just results to ensure we get all results for a given test
+  static findManyByEvalIdBatched(
+    evalId: string,
+    opts: { batchSize?: number; projection: 'metrics' },
+  ): AsyncGenerator<EvalResultMetrics[]>;
+  static findManyByEvalIdBatched(
+    evalId: string,
+    opts?: { batchSize?: number; projection?: undefined },
+  ): AsyncGenerator<EvalResult[]>;
+  static findManyByEvalIdBatched(
+    evalId: string,
+    opts: { batchSize?: number; projection?: 'metrics' },
+  ): AsyncGenerator<EvalResult[] | EvalResultMetrics[]>;
   static async *findManyByEvalIdBatched(
     evalId: string,
-    opts?: {
-      batchSize?: number;
-    },
-  ): AsyncGenerator<EvalResult[]> {
+    opts?: { batchSize?: number; projection?: 'metrics' },
+  ): AsyncGenerator<EvalResult[] | EvalResultMetrics[]> {
     const db = await getDb();
     const batchSize = opts?.batchSize || 100;
     let offset = 0;
@@ -1222,19 +1249,47 @@ export default class EvalResult {
       }
 
       offset = nextResult.testIdx;
-      const results = await db
-        .select()
-        .from(evalResultsTable)
-        .where(
-          and(
-            eq(evalResultsTable.evalId, evalId),
-            gte(evalResultsTable.testIdx, offset),
-            lt(evalResultsTable.testIdx, offset + batchSize),
-          ),
-        )
-        .all();
-
-      yield results.map((result) => new EvalResult({ ...result, persisted: true }));
+      const whereClause = and(
+        eq(evalResultsTable.evalId, evalId),
+        gte(evalResultsTable.testIdx, offset),
+        lt(evalResultsTable.testIdx, offset + batchSize),
+      );
+      if (opts?.projection === 'metrics') {
+        // Reconciliation does not consume prompt/provider artifacts. Do not make it
+        // depend on decoding those fields, while required metric JSON still fails normally.
+        const results = await db
+          .select({
+            id: evalResultsTable.id,
+            testIdx: evalResultsTable.testIdx,
+            promptIdx: evalResultsTable.promptIdx,
+            testCase: evalResultsTable.testCase,
+            success: evalResultsTable.success,
+            failureReason: evalResultsTable.failureReason,
+            score: evalResultsTable.score,
+            latencyMs: evalResultsTable.latencyMs,
+            cost: evalResultsTable.cost,
+            response: evalResultsTable.response,
+            gradingResult: evalResultsTable.gradingResult,
+            namedScores: evalResultsTable.namedScores,
+          })
+          .from(evalResultsTable)
+          .where(whereClause)
+          .all();
+        // Preserve the metric-field defaults applied by the full EvalResult constructor.
+        yield results.map((result) => ({
+          ...result,
+          latencyMs: result.latencyMs || 0,
+          cost: result.cost || 0,
+          response: result.response || undefined,
+          namedScores: result.namedScores || {},
+          failureReason: isResultFailureReason(result.failureReason)
+            ? result.failureReason
+            : ResultFailureReason.NONE,
+        }));
+      } else {
+        const results = await db.select().from(evalResultsTable).where(whereClause).all();
+        yield results.map((result) => new EvalResult({ ...result, persisted: true }));
+      }
       offset += batchSize;
     }
   }

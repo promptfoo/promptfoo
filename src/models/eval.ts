@@ -62,6 +62,7 @@ import {
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
+  type EvalResultMetrics,
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
@@ -844,7 +845,15 @@ export default class Eval {
     return reconstructed;
   }
 
-  async *fetchResultsBatched(batchSize: number = 100) {
+  fetchResultsBatched(
+    batchSize: number,
+    options: { projection: 'metrics' },
+  ): AsyncGenerator<EvalResultMetrics[], void>;
+  fetchResultsBatched(batchSize?: number): AsyncGenerator<EvalResult[], void>;
+  async *fetchResultsBatched(
+    batchSize: number = 100,
+    options?: { projection: 'metrics' },
+  ): AsyncGenerator<EvalResult[] | EvalResultMetrics[], void> {
     if (!this.persisted) {
       for (let offset = 0; offset < this.results.length; offset += batchSize) {
         yield this.results.slice(offset, offset + batchSize);
@@ -852,8 +861,10 @@ export default class Eval {
       return;
     }
 
-    for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
-      yield batch;
+    if (options?.projection === 'metrics') {
+      yield* EvalResult.findManyByEvalIdBatched(this.id, { batchSize, projection: 'metrics' });
+    } else {
+      yield* EvalResult.findManyByEvalIdBatched(this.id, { batchSize });
     }
   }
 

@@ -74,7 +74,9 @@ export async function recalculatePromptMetrics(
   // Stream results in batches to avoid OOM with large evaluations
   let currentResultId: string | undefined;
   try {
-    for await (const batch of evalRecord.fetchResultsBatched(RECALCULATE_BATCH_SIZE)) {
+    for await (const batch of evalRecord.fetchResultsBatched(RECALCULATE_BATCH_SIZE, {
+      projection: 'metrics',
+    })) {
       batchNumber++;
       logger.debug(`Processing batch ${batchNumber} with ${batch.length} results`);
 
