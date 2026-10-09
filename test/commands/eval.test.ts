@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
-import { disableCache, withCacheNamespace } from '../../src/cache';
+import { disableCache, withCacheEnabled, withCacheNamespace } from '../../src/cache';
 import cliState from '../../src/cliState';
 import {
   doEval as commandDoEval,
@@ -2083,6 +2083,7 @@ describe('evalCommand', () => {
     record.runtimeOptions = { cache: false };
     const findById = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(record);
     const latest = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(record);
+    vi.mocked(withCacheEnabled).mockImplementation((_enabled, callback) => callback());
     vi.mocked(withCacheNamespace).mockImplementation((_namespace, callback) => callback());
     if (mode === 'retry-errors') {
       vi.mocked(getErrorResultIds).mockResolvedValueOnce(['mocked-retry-row']);
@@ -2152,6 +2153,7 @@ describe('evalCommand', () => {
       findById.mockRestore();
       latest.mockRestore();
       tracker.mockRestore();
+      vi.mocked(withCacheEnabled).mockReset();
       vi.mocked(withCacheNamespace).mockReset();
       vi.mocked(evaluate).mockReset();
     }
