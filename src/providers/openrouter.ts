@@ -470,7 +470,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           expiresAt: typeof audio.expires_at === 'number' ? audio.expires_at : undefined,
           data: typeof audio.data === 'string' ? audio.data : undefined,
           transcript: typeof audio.transcript === 'string' ? audio.transcript : undefined,
-          format: typeof audio.format === 'string' ? audio.format : 'wav',
+          format: typeof audio.format === 'string' ? audio.format : (body.audio?.format ?? 'wav'),
         },
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,

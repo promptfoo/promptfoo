@@ -528,6 +528,44 @@ describe('OpenRouter', () => {
       }
     });
 
+    it('falls back to the requested audio format when the response omits it', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('openai/gpt-4o-audio-preview', {
+          config: { audio: { voice: 'alloy', format: 'mp3' } },
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: null,
+                    audio: { id: 'audio-2', data: 'UklGRg==', transcript: 'Hello there' },
+                  },
+                  finish_reason: 'stop',
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        // The blob extractor picks the stored MIME type from this field, so a
+        // requested MP3 must not come back labeled as WAV.
+        expect(result.audio?.format).toBe('mp3');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('evicts malformed responses while preserving bounded accounting metadata', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
