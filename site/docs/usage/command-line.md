@@ -183,6 +183,8 @@ PROMPTFOO_PASS_RATE_THRESHOLD=75 promptfoo eval \
 
 The lock hashes the resolved default test, tests, assertions, scenarios, repeat count, and range. This includes the loaded contents of referenced test files rather than only their filenames. The manifest follows the open [PRML v0.1 specification](https://spec.falsify.dev/v0.1), including its canonical byte format, so independent implementations can reproduce the manifest hash. Existing lock files are never overwritten.
 
+To keep the commitment self-contained, eval locks reject extension hooks, in-memory function values, and unresolved `file://` or `package:` references. Replace these with static, data-backed criteria before locking.
+
 Use `--verify` for a later run. Verification happens before provider calls, and the threshold stored in the lock is authoritative for the run:
 
 ```sh
