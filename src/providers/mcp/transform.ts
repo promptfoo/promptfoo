@@ -1,11 +1,11 @@
+import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
 import { sanitizeSchemaForGemini } from '../google/util';
 import {
   applyQueryParams,
   getAuthHeaders,
   getAuthQueryParams,
-  getOAuthToken,
+  getOAuthTokenWithExpiry,
   renderAuthVars,
-  requiresAsyncAuth,
 } from './util';
 import type { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -17,7 +17,6 @@ import type {
 } from '../google/types';
 import type { OpenAiTool } from '../openai/util';
 import type {
-  MCPConfig,
   MCPOAuthClientCredentialsAuth,
   MCPOAuthPasswordAuth,
   MCPServerConfig,
@@ -116,73 +115,40 @@ export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {
 }
 
 export async function transformMCPConfigToClaudeCode(
-  config: MCPConfig,
+  input: unknown,
 ): Promise<Record<string, ClaudeCodeMcpServerConfig>> {
-  validateMCPConfigForClaudeCode(config);
+  const config = validateMCPConfigForClaudeCode(input);
 
   if (config.enabled === false) {
     return {};
   }
 
-  const serverConfigs = [...(config.servers ?? [])];
-  if (config.server) {
-    serverConfigs.push(config.server);
-  }
-
+  const serverConfigs = getServerConfigs(config);
   const servers = await Promise.all(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
-
-  return Object.fromEntries(servers);
+  return Object.fromEntries(
+    servers.map((server, index) => [getClaudeCodeServerName(serverConfigs[index]), server]),
+  );
 }
 
-export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
-    throw new Error('Claude Agent SDK MCP configuration must be an object');
-  }
+function getServerConfigs(config: McpConfigParsed): MCPServerConfig[] {
+  return [...(config.servers ?? []), ...(config.server ? [config.server] : [])];
+}
 
-  if (config.enabled !== undefined && typeof config.enabled !== 'boolean') {
-    throw new Error('Claude Agent SDK MCP `enabled` must be a boolean');
-  }
-  if (config.enabled === false) {
-    return;
-  }
+// Preserve legacy names so existing tool allow and deny rules keep matching.
+function getClaudeCodeServerName({ name, url, command }: MCPServerConfig): string {
+  return name ?? url ?? command ?? 'default';
+}
 
-  const isMalformedServer = (server: unknown) => {
-    if (!server || typeof server !== 'object' || Array.isArray(server)) {
-      return true;
-    }
-    const candidate = server as Record<string, unknown>;
-    if (
-      ['name', 'url', 'command', 'path'].some(
-        (field) => candidate[field] !== undefined && typeof candidate[field] !== 'string',
-      ) ||
-      (candidate.args !== undefined &&
-        (!Array.isArray(candidate.args) ||
-          candidate.args.some((argument) => typeof argument !== 'string'))) ||
-      (candidate.headers !== undefined &&
-        (!candidate.headers ||
-          typeof candidate.headers !== 'object' ||
-          Array.isArray(candidate.headers) ||
-          Object.values(candidate.headers).some((value) => typeof value !== 'string'))) ||
-      (candidate.auth !== undefined &&
-        (!candidate.auth || typeof candidate.auth !== 'object' || Array.isArray(candidate.auth))) ||
-      (candidate.env !== undefined &&
-        (!candidate.env ||
-          typeof candidate.env !== 'object' ||
-          Array.isArray(candidate.env) ||
-          Object.values(candidate.env).some((value) => typeof value !== 'string')))
-    ) {
-      return true;
-    }
-    return false;
-  };
-  if (
-    (config.server !== undefined && isMalformedServer(config.server)) ||
-    (config.servers !== undefined &&
-      (!Array.isArray(config.servers) || config.servers.some(isMalformedServer)))
-  ) {
-    throw new Error('Claude Agent SDK MCP `server`/`servers` configuration is malformed');
+export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed {
+  const result = McpConfigSchema.safeParse(input);
+  if (!result.success) {
+    throw new Error(`Claude Agent SDK MCP configuration is malformed: ${result.error.message}`);
+  }
+  const config = result.data;
+  if (!config.enabled) {
+    return config;
   }
 
   const hasUnsupportedExclusions =
@@ -193,25 +159,46 @@ export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
       'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
     );
   }
+
+  const namespaces = new Map<string, number>();
+  for (const [index, server] of getServerConfigs(config).entries()) {
+    const name = getClaudeCodeServerName(server);
+    // Match the SDK's tool-name normalization without renaming the configured servers.
+    let namespace = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (name.startsWith('claude.ai ')) {
+      namespace = namespace.replace(/_+/g, '_').replace(/^_|_$/g, '');
+    }
+    const previous = namespaces.get(namespace);
+    if (previous !== undefined) {
+      // Names can be credential-bearing URLs; identify the entries without echoing them.
+      throw new Error(
+        `Claude Agent SDK MCP servers ${previous + 1} and ${index + 1} have colliding tool names; give each server a unique \`name\` using letters, numbers, hyphens, or underscores.`,
+      );
+    }
+    namespaces.set(namespace, index);
+  }
+  return config;
 }
 
 async function transformMCPServerConfigToClaudeCode(
   config: MCPServerConfig,
-): Promise<[string, ClaudeCodeMcpServerConfig]> {
-  const key = config.name ?? config.url ?? config.command ?? 'default';
-  let out: ClaudeCodeMcpServerConfig | undefined;
+): Promise<ClaudeCodeMcpServerConfig> {
+  let out: ClaudeCodeMcpServerConfig;
 
   if (config.url) {
     // Render environment variables in auth config
     const renderedConfig = renderAuthVars(config);
 
-    // Handle OAuth token fetching if needed
-    let oauthToken: string | undefined;
-    if (requiresAsyncAuth(renderedConfig) && renderedConfig.auth?.type === 'oauth') {
-      oauthToken = await getOAuthToken(
-        renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
-      );
-    }
+    // The Claude Agent SDK takes static headers, so fetch one OAuth token up front
+    const oauthToken =
+      renderedConfig.auth?.type === 'oauth'
+        ? (
+            await getOAuthTokenWithExpiry(
+              renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+              config.url,
+            )
+          ).accessToken
+        : undefined;
 
     // Apply query params for api_key with query placement
     const queryParams = getAuthQueryParams(renderedConfig);
@@ -242,5 +229,5 @@ async function transformMCPServerConfigToClaudeCode(
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }
 
-  return [key, out];
+  return out;
 }

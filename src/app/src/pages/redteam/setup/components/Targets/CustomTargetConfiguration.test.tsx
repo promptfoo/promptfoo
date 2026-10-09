@@ -5,7 +5,7 @@ import { render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
-import { getProviderInitialConfig } from './providerInitialConfig';
+import { createDefaultProvider } from './providerCatalog';
 
 import type { ProviderOptions } from '../../types';
 
@@ -88,7 +88,7 @@ describe('CustomTargetConfiguration', () => {
     'shows the generated %s configuration without replacing a user target',
     async (providerType) => {
       const user = userEvent.setup();
-      const initialConfig = getProviderInitialConfig(providerType)!;
+      const initialConfig = createDefaultProvider(providerType)!;
       const updateCustomTarget = vi.fn();
       render(
         <CustomTargetConfiguration

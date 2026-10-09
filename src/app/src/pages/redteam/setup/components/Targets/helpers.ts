@@ -1,5 +1,3 @@
-import { getProviderInitialConfig } from './providerInitialConfig';
-
 type LocalOpenAiProviderType = 'llamafile' | 'vllm' | 'text-generation-webui';
 
 export function isOpenAiChatProviderId(providerId?: string): boolean {
@@ -16,6 +14,20 @@ export function isBedrockAgentProviderId(providerId?: string): boolean {
 
 export function isLocalOpenAiProviderType(type: unknown): type is LocalOpenAiProviderType {
   return type === 'llamafile' || type === 'vllm' || type === 'text-generation-webui';
+}
+
+export function getLocalProviderConfig(providerType: string): Record<string, unknown> | undefined {
+  const apiBaseUrl =
+    providerType === 'llamafile'
+      ? 'http://localhost:8080/v1'
+      : providerType === 'vllm'
+        ? 'http://localhost:8000/v1'
+        : providerType === 'text-generation-webui'
+          ? 'http://localhost:5000/v1'
+          : undefined;
+  return apiBaseUrl
+    ? { type: providerType, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false }
+    : undefined;
 }
 
 export function hasCustomOpenAiBaseUrl(config?: Record<string, unknown>): boolean {
@@ -48,7 +60,7 @@ export function withLocalProviderType(
         apiBaseUrl:
           typeof config.apiBaseUrl === 'string' && config.apiBaseUrl.trim()
             ? config.apiBaseUrl
-            : getProviderInitialConfig(providerType)?.config.apiBaseUrl,
+            : getLocalProviderConfig(providerType)?.apiBaseUrl,
       }
     : config;
 }
@@ -148,7 +160,7 @@ export function getProviderType(
     return 'file';
   }
 
-  // Handle provider formats like 'openrouter:openai/gpt-5.4' or 'azure:chat:'
+  // Handle provider formats like 'openrouter:openai/gpt-6-sol' or 'azure:chat:'
   const providerType = providerId.includes(':') ? providerId.split(':')[0] : providerId;
   if (providerType === 'https') {
     return 'http';

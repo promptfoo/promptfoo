@@ -9,7 +9,7 @@ import { useToast } from '@app/hooks/useToast';
 import { normalizeLocalProviders } from '@app/pages/redteam/setup/components/Targets/helpers';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import {
   countTests,
   normalizePrompts,

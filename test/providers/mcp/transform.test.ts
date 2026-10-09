@@ -1,14 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getCache } from '../../../src/cache';
+import * as esm from '../../../src/esm';
+import { ClaudeCodeSDKProvider } from '../../../src/providers/claude-agent-sdk';
 import {
   transformMCPConfigToClaudeCode,
   transformMCPToolsToAnthropic,
   transformMCPToolsToGoogle,
   transformMCPToolsToOpenAi,
+  validateMCPConfigForClaudeCode,
 } from '../../../src/providers/mcp/transform';
+import * as mcpUtil from '../../../src/providers/mcp/util';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { MCPTool } from '../../../src/providers/mcp/types';
 import type { OpenAiTool } from '../../../src/providers/openai/util';
+
+vi.mock('../../../src/util/fetch/index');
+afterEach(() => vi.resetAllMocks());
 
 describe('transformMCPToolsToOpenAi', () => {
   it('should transform MCP tools to OpenAI format', () => {
@@ -248,6 +257,36 @@ describe('transformMCPToolsToOpenAi', () => {
 });
 
 describe('transformMCPConfigToClaudeCode', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('validates nested auth before converting any server', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        servers: [
+          { command: 'node' },
+          { url: 'https://mcp.example.test', auth: { type: 'api_key' } },
+        ],
+      }),
+    ).rejects.toThrow('api_key auth requires value or api_key');
+  });
+
+  it('normalizes no-auth and preserves URL precedence for the SDK adapter', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        server: {
+          name: 'remote',
+          url: 'https://mcp.example.test',
+          command: 'ignored',
+          auth: { type: 'none' },
+        },
+      }),
+    ).resolves.toEqual({
+      remote: { type: 'http', url: 'https://mcp.example.test', headers: {} },
+    });
+  });
+
   it('returns no servers when MCP is disabled', async () => {
     await expect(
       transformMCPConfigToClaudeCode({
@@ -257,23 +296,191 @@ describe('transformMCPConfigToClaudeCode', () => {
           command: 'npx',
           args: ['disabled-server'],
         },
+        servers: [{ name: 'disabled', command: 'other-server' }],
       }),
     ).resolves.toEqual({});
   });
 
-  it('uses the singular server when it shares a key with a plural server', async () => {
+  it('rejects duplicate names before any OAuth token is fetched', async () => {
+    const tokenRequest = vi.spyOn(mcpUtil, 'getOAuthTokenWithExpiry').mockResolvedValue({
+      accessToken: 'test-token',
+      expiresAt: Date.now() + 3_600_000,
+    });
+    const oauth = {
+      type: 'oauth' as const,
+      grantType: 'client_credentials' as const,
+      clientId: 'id',
+      clientSecret: 'secret',
+      tokenUrl: 'https://auth.example.com/token',
+    };
     await expect(
       transformMCPConfigToClaudeCode({
         enabled: true,
-        server: { name: 'shared', command: 'single-server' },
-        servers: [{ name: 'shared', command: 'plural-server' }],
+        servers: [
+          { name: 'shared', url: 'https://a.example.com/mcp', auth: oauth },
+          { name: 'shared', url: 'https://b.example.com/mcp', auth: oauth },
+        ],
       }),
-    ).resolves.toEqual({ shared: { type: 'stdio', command: 'single-server', args: [] } });
+    ).rejects.toThrow(/MCP servers.*unique `name`/);
+    expect(tokenRequest).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'explicit names',
+      { server: { name: 'npx', command: 'a' }, servers: [{ name: 'npx', command: 'b' }] },
+    ],
+    [
+      'an explicit name and a command',
+      { servers: [{ name: 'npx', command: 'a' }, { command: 'npx' }] },
+    ],
+    ['path servers', { servers: [{ path: 'first.js' }, { path: 'second.js' }] }],
+    [
+      'commands with different args',
+      {
+        servers: [
+          { command: 'npx', args: ['a'] },
+          { command: 'npx', args: ['b'] },
+        ],
+      },
+    ],
+    [
+      'urls',
+      {
+        servers: [
+          { url: 'https://h.example.com/mcp?token=secret' },
+          { url: 'https://h.example.com/mcp?token=secret' },
+        ],
+      },
+    ],
+    [
+      'empty names',
+      {
+        servers: [
+          { name: '', command: 'first' },
+          { name: '', command: 'second' },
+        ],
+      },
+    ],
+    [
+      'prototype-property names',
+      {
+        servers: [
+          { name: '__proto__', command: 'first' },
+          { name: '__proto__', command: 'second' },
+        ],
+      },
+    ],
+    [
+      'names differing only in punctuation',
+      {
+        servers: [
+          { name: 'tools.local', command: 'first' },
+          { name: 'tools_local', command: 'second' },
+        ],
+      },
+    ],
+    [
+      'an explicit name and a normalized URL',
+      {
+        servers: [
+          { url: 'https://mcp.example.com' },
+          { name: 'https___mcp_example_com', command: 'local' },
+        ],
+      },
+    ],
+    [
+      'Claude connector names',
+      {
+        servers: [
+          { name: 'claude.ai  tools ', command: 'first' },
+          { name: 'claude_ai_tools', command: 'second' },
+        ],
+      },
+    ],
+  ])('rejects %s that resolve to the same tool namespace', (_, servers) => {
+    expect(() => validateMCPConfigForClaudeCode({ enabled: true, ...servers })).toThrow(
+      /MCP servers.*unique `name`/,
+    );
+  });
+
+  it.each([false, true])(
+    'does not echo credential-bearing collision keys (reversed: %s)',
+    (reversed) => {
+      const url =
+        'https://user:password@mcp.example.com/path-secret?token=query-secret#fragment-secret';
+      const servers = [{ url }, { name: url, command: 'local' }];
+      if (reversed) {
+        servers.reverse();
+      }
+
+      expect(() => validateMCPConfigForClaudeCode({ servers })).toThrow(
+        'Claude Agent SDK MCP servers 1 and 2 have colliding tool names; give each server a unique `name` using letters, numbers, hyphens, or underscores.',
+      );
+    },
+  );
+
+  it('rejects colliding tool namespaces before a cached provider response can be returned', async () => {
+    const cache = await getCache();
+    const read = vi
+      .spyOn(cache, 'get')
+      .mockResolvedValue(JSON.stringify({ output: 'stale result' }));
+    const sdkImport = vi
+      .spyOn(esm, 'importModule')
+      .mockRejectedValue(new Error('SDK must not load'));
+    const provider = new ClaudeCodeSDKProvider({
+      config: {
+        apiKey: 'test-key',
+        cache_mcp: true,
+        mcp: {
+          servers: [
+            { name: 'tools.local', command: 'first' },
+            { name: 'tools_local', command: 'second' },
+          ],
+        },
+      },
+    });
+
+    await expect(provider.callApi('Test prompt')).rejects.toThrow(/MCP servers.*unique `name`/);
+    expect(read).not.toHaveBeenCalled();
+    expect(sdkImport).not.toHaveBeenCalled();
+  });
+
+  it('keeps the existing name for each unnamed server', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [
+          { command: 'npx', args: ['-y', 'some-server'] },
+          { url: 'https://mcp.example.com/v1?token=abc' },
+          { path: 'server.js' },
+          { name: '', command: 'named-empty' },
+        ],
+      }),
+    ).resolves.toEqual({
+      npx: { type: 'stdio', command: 'npx', args: ['-y', 'some-server'] },
+      'https://mcp.example.com/v1?token=abc': {
+        type: 'http',
+        url: 'https://mcp.example.com/v1?token=abc',
+        headers: {},
+      },
+      default: { type: 'stdio', command: process.execPath, args: ['server.js'] },
+      '': { type: 'stdio', command: 'named-empty', args: [] },
+    });
+  });
+
+  it('keeps case and hyphen variants as separate tool namespaces', async () => {
+    const names = ['tools-local', 'tools_local', 'Tools-local'];
+    const servers = await transformMCPConfigToClaudeCode({
+      servers: names.map((name) => ({ name, command: 'mcp-server' })),
+    });
+
+    expect(Object.keys(servers)).toEqual(names);
   });
 
   it('rejects a server without a URL, command, or path', async () => {
     await expect(transformMCPConfigToClaudeCode({ enabled: true, server: {} })).rejects.toThrow(
-      'MCP configuration cannot be converted to Claude Agent SDK MCP server config',
+      'Either command or path or url must be specified for MCP server',
     );
   });
 
@@ -339,18 +546,19 @@ describe('transformMCPConfigToClaudeCode', () => {
     });
   });
 
-  it('preserves prototype-shaped server names as own entries', async () => {
-    const servers = await transformMCPConfigToClaudeCode({
-      enabled: true,
-      server: { name: '__proto__', command: 'mcp-server' },
-    });
+  it.each(['__proto__', 'constructor', 'toString'])(
+    'preserves %s as an own server entry',
+    async (name) => {
+      const servers = await transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { name, command: 'mcp-server' },
+      });
 
-    expect(Object.hasOwn(servers, '__proto__')).toBe(true);
-    expect(servers.__proto__).toEqual({ type: 'stdio', command: 'mcp-server', args: [] });
-    expect(JSON.stringify(servers)).toBe(
-      '{"__proto__":{"type":"stdio","command":"mcp-server","args":[]}}',
-    );
-  });
+      expect(Object.hasOwn(servers, name)).toBe(true);
+      expect(servers[name]).toEqual({ type: 'stdio', command: 'mcp-server', args: [] });
+      expect(Object.getPrototypeOf(servers)).toBe(Object.prototype);
+    },
+  );
 
   it('preserves per-server env for command-based stdio servers', async () => {
     await expect(
@@ -398,6 +606,18 @@ describe('transformMCPConfigToClaudeCode', () => {
       },
     });
   });
+
+  it.each([{ command: 'npx', args: ['plain-server'] }, { path: 'server.js' }])(
+    'omits absent env from stdio config %j',
+    async (server) => {
+      const servers = await transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { name: 'plain', ...server },
+      });
+
+      expect(Object.hasOwn(servers.plain, 'env')).toBe(false);
+    },
+  );
 
   it.each([
     null,
@@ -756,5 +976,35 @@ describe('transformMCPToolsToGoogle', () => {
 
     expect(parameters?.type).toBe('OBJECT');
     expect(parameters?.properties).toEqual({});
+  });
+});
+
+describe('Claude MCP OAuth discovery', () => {
+  it('discovers the token endpoint from the remote server URL', async () => {
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ token_endpoint: 'https://claude-discovery.example.com/token' }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: 'fixture-token', expires_in: 3600 })),
+      );
+    const result = await transformMCPConfigToClaudeCode({
+      server: {
+        name: 'remote',
+        url: 'https://claude-discovery.example.com/mcp/',
+        auth: { type: 'oauth', clientId: 'fixture-client', clientSecret: 'fixture-secret' },
+      },
+    });
+    expect(fetchWithProxy).toHaveBeenNthCalledWith(
+      1,
+      'https://claude-discovery.example.com/mcp/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
+    );
+    expect(result.remote).toMatchObject({
+      url: 'https://claude-discovery.example.com/mcp/',
+      headers: { Authorization: 'Bearer fixture-token' },
+    });
   });
 });

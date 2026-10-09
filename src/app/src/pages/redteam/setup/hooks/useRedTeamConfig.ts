@@ -7,6 +7,7 @@ import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { getProviderType, withLocalProviderType } from '../components/Targets/helpers';
+import { getProviderEditorType } from '../components/Targets/providerCatalog';
 import {
   getCurrentTargetConfigInvalidMarker,
   registerTargetConfigReconciler,
@@ -51,6 +52,7 @@ const AGENTIC_PROVIDER_IDS = [
   'openai:codex-desktop',
   'openai:codex-sdk',
   'openai:agents',
+  // Keep removed providers classified as executable when importing legacy targets.
   'openai:chatkit',
   'openai:assistant',
   'azure:assistant',
@@ -1709,7 +1711,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         finishNonObjectTargetRecovery?.();
       },
       setFullConfig: (config) => {
-        const providerType = getProviderType(config.target?.id, config.target?.config);
+        const providerType = getProviderEditorType(config.target?.id, config.target?.config);
         let normalizedConfig =
           config.target && config.target.config === undefined
             ? {

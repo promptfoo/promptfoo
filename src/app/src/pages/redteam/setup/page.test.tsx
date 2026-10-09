@@ -5,12 +5,14 @@ import { callApi } from '@app/utils/api';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { load as loadYaml } from 'js-yaml';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
 import RedTeamSetupPage from './page';
+import { generateOrderedYaml } from './utils/yamlHelpers';
 
 // Define these variables outside the test
 const mockNavigate = vi.fn();
@@ -22,9 +24,9 @@ const mockLocation = {
   key: 'default',
 };
 
-// Mock react-router-dom
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+// Mock react-router
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -538,7 +540,47 @@ redteam:
       });
     });
 
-    it('should preserve legacy GPT-5 target IDs when loading a YAML config', async () => {
+    it.each(['openai:gpt-5-mini', 'openai:gpt-6.1-sol'])(
+      'preserves OpenAI target %s when loading a YAML config',
+      async (modelId) => {
+        const user = userEvent.setup();
+
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
+
+        const loadButton = screen.getByRole('button', { name: /Load Config/i });
+        await user.click(loadButton);
+
+        const yamlContent = `
+description: OpenAI target config
+targets:
+  - ${modelId}
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Test purpose
+  plugins:
+    - shell-injection
+`;
+        const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput).toBeTruthy();
+        await user.upload(fileInput, file);
+
+        await waitFor(() => {
+          const { config, providerType } = useRedTeamConfig.getState();
+          expect(config.target.id).toBe(modelId);
+          expect(config.target.label).toBe(modelId);
+          expect(providerType).toBe('openai');
+        });
+      },
+    );
+
+    it('preserves the dated Sonnet 4.5 preset when importing a saved YAML configuration', async () => {
       const user = userEvent.setup();
 
       render(
@@ -547,43 +589,78 @@ redteam:
         </MemoryRouter>,
       );
 
-      const loadButton = screen.getByRole('button', { name: /Load Config/i });
-      await user.click(loadButton);
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
 
-      const yamlContent = `
-description: Legacy GPT-5 target config
+      const file = new File(
+        [
+          `description: Saved Sonnet configuration
 targets:
-  - openai:gpt-5-mini
+  - claude-sonnet-4-5-20250929
 prompts:
   - "{{prompt}}"
 redteam:
-  purpose: Test purpose
-  plugins:
-    - shell-injection
-`;
-      const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+  purpose: Answer product questions
+`,
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
 
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      expect(fileInput).toBeTruthy();
       await user.upload(fileInput, file);
 
       await waitFor(() => {
-        const { config, providerType } = useRedTeamConfig.getState();
-        expect(config.target.id).toBe('openai:gpt-5-mini');
-        expect(config.target.label).toBe('openai:gpt-5-mini');
-        expect(providerType).toBe('openai');
+        expect(useRedTeamConfig.getState().config.target).toMatchObject({
+          id: 'claude-sonnet-4-5-20250929',
+          label: 'claude-sonnet-4-5-20250929',
+        });
       });
     });
 
     it.each([
-      ['vertex:gemini-3.1-pro-preview', 'global'],
-      ['vertex:gemini-2.5-pro', undefined],
-      ['vertex:gemini-3.6-flash', 'global'],
-      ['vertex:gemini-3.7-flash', 'global'],
-      ['vertex:gemini-3.8-flash', 'global'],
-    ])(
-      'should preserve legacy Vertex target ID %s when loading a YAML config',
-      async (targetId, region) => {
+      ['vertex:gemini-3.8-flash', undefined],
+      ['vertex:gemini-3.7-flash', undefined],
+      ['vertex:gemini-3.6-flash', undefined],
+      ['vertex:gemini-3.5-flash-lite', undefined],
+      [{ id: 'vertex:gemini-3.6-flash', config: { region: 'eu' } }, 'eu'],
+    ] as const)(
+      'preserves omitted or explicit Vertex regions when importing %j',
+      async (target, region) => {
+        const user = userEvent.setup();
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
+        await user.click(screen.getByRole('button', { name: /Load Config/i }));
+        const file = new File(
+          [
+            JSON.stringify({
+              targets: [target],
+              prompts: ['{{prompt}}'],
+              redteam: { purpose: 'Test' },
+            }),
+          ],
+          'config.yaml',
+          { type: 'text/yaml' },
+        );
+        await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+        await waitFor(() => {
+          const { config } = useRedTeamConfig.getState();
+          expect(config.target.id).toBe(typeof target === 'string' ? target : target.id);
+          expect(config.target.config?.region).toBe(region);
+          const exported = loadYaml(generateOrderedYaml(config)) as {
+            targets: { config?: { region?: string } }[];
+          };
+          expect(exported.targets[0].config?.region).toBe(region);
+        });
+      },
+    );
+
+    it.each(['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'])(
+      'should preserve existing Vertex target ID %s when loading a YAML config',
+      async (targetId) => {
         const user = userEvent.setup();
 
         render(
@@ -616,7 +693,6 @@ redteam:
           const { config, providerType } = useRedTeamConfig.getState();
           expect(config.target.id).toBe(targetId);
           expect(config.target.label).toBe(targetId);
-          expect(config.target.config?.region).toBe(region);
           expect(providerType).toBe('vertex');
         });
       },

@@ -1,6 +1,7 @@
 import { getEnvString } from '../../envars';
 import { resolveProviderApiKey } from '../credentials';
-import { isGpt6AstraModel } from './gpt6';
+import { resolveProviderEnv } from '../env';
+import { isGpt6Model } from './gpt6';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -9,6 +10,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { FetchOptions } from '../../util/fetch/types';
 import type { OpenAiSharedOptions } from './types';
 
 export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
@@ -27,6 +29,29 @@ export function hasHeaderOverride(
 ): boolean {
   const target = headerName.toLowerCase();
   return Object.keys(customHeaders ?? {}).some((key) => key.toLowerCase() === target);
+}
+
+export function resolveOpenAiApiUrl(
+  config: OpenAiSharedOptions = {},
+  env?: EnvOverrides,
+  defaultUrl = 'https://api.openai.com/v1',
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const endpoint = resolveProviderEnv(env, [
+    'OPENAI_API_HOST',
+    'OPENAI_API_BASE_URL',
+    'OPENAI_BASE_URL',
+  ]);
+  return endpoint
+    ? endpoint.name === 'OPENAI_API_HOST'
+      ? `https://${endpoint.value}/v1`
+      : endpoint.value
+    : defaultUrl;
 }
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -68,20 +93,21 @@ export class OpenAiGenericProvider implements ApiProvider {
     return `[OpenAI Provider ${this.modelName}]`;
   }
 
-  getOrganization(): string | undefined {
+  getOrganization(config: OpenAiSharedOptions = this.config): string | undefined {
     return (
-      this.config.organization ||
-      this.env?.OPENAI_ORGANIZATION ||
-      getEnvString('OPENAI_ORGANIZATION')
+      config.organization || this.env?.OPENAI_ORGANIZATION || getEnvString('OPENAI_ORGANIZATION')
     );
   }
 
+  /** Pass a prompt-merged config to derive that call's endpoint-dependent defaults. */
   getOpenAiRequestHeaders(
     customHeaders: Record<string, string> | undefined = this.config.headers,
+    config: OpenAiSharedOptions = this.config,
   ): Record<string, string> {
     let sendsToOpenAiApi = false;
     try {
-      sendsToOpenAiApi = new URL(this.getApiUrl()).hostname.toLowerCase() === 'api.openai.com';
+      sendsToOpenAiApi =
+        new URL(this.getApiUrl(config)).hostname.toLowerCase() === 'api.openai.com';
     } catch {
       // Leave malformed custom URLs to the request path to validate.
     }
@@ -93,7 +119,7 @@ export class OpenAiGenericProvider implements ApiProvider {
     const hasOrganizationOverride = hasHeaderOverride(customHeaders, OPENAI_ORGANIZATION_HEADER);
 
     const sendOriginatorDefault = !hasOriginatorOverride && sendsToOpenAiApi;
-    const organization = hasOrganizationOverride ? undefined : this.getOrganization();
+    const organization = hasOrganizationOverride ? undefined : this.getOrganization(config);
 
     return {
       ...(sendOriginatorDefault ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
@@ -106,31 +132,16 @@ export class OpenAiGenericProvider implements ApiProvider {
     return 'https://api.openai.com/v1';
   }
 
-  getApiUrl(): string {
-    if (this.config.apiHost) {
-      return `https://${this.config.apiHost}/v1`;
-    }
-    if (this.config.apiBaseUrl) {
-      return this.config.apiBaseUrl;
-    }
-    const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-    if (envApiHost) {
-      return `https://${envApiHost}/v1`;
-    }
-    return (
-      this.env?.OPENAI_API_BASE_URL ||
-      this.env?.OPENAI_BASE_URL ||
-      getEnvString('OPENAI_API_BASE_URL') ||
-      getEnvString('OPENAI_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+  getApiUrl(config: OpenAiSharedOptions = this.config): string {
+    return resolveOpenAiApiUrl(config, this.env, this.getApiUrlDefault());
   }
 
-  getApiKey(): string | undefined {
+  /** Pass a prompt-merged config to resolve that call's credential. */
+  getApiKey(config: OpenAiSharedOptions = this.config): string | undefined {
     return resolveProviderApiKey(
-      this.config,
+      config,
       this.env,
-      this.config.useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
+      config.useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
     );
   }
 
@@ -139,11 +150,25 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   /**
+   * Optional HTTP-attempt authentication, including retries, polling, and cancellation.
+   * Static-key providers use getApiKey(). Adapters opting in must separately define cache
+   * isolation via shouldBustCache(); authentication alone does not establish a cache identity.
+   */
+  protected getRequestAuthentication(): FetchOptions['getAuthHeaders'] {
+    return undefined;
+  }
+
+  /**
    * Model id used for OpenAI capability and billing lookups. Subclasses can strip a vendor
    * prefix while retaining the real request model in {@link modelName}.
    */
   protected getCapabilityModelName(): string {
     return this.modelName;
+  }
+
+  /** Normalize capability checks without rewriting the request model. */
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName;
   }
 
   protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {
@@ -162,7 +187,7 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o4') ||
       /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(model) ||
       this.isGPT5Model(model) ||
-      isGpt6AstraModel(model)
+      isGpt6Model(model)
     );
   }
 
@@ -178,8 +203,8 @@ export class OpenAiGenericProvider implements ApiProvider {
     return context?.bustCache ?? context?.debug;
   }
 
-  protected getMissingApiKeyErrorMessage(): string {
-    return `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`;
+  protected getMissingApiKeyErrorMessage(config: OpenAiSharedOptions = this.config): string {
+    return `API key is not set. Set the ${config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`;
   }
 
   // @ts-ignore: Params are not used in this implementation

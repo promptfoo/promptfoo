@@ -11,7 +11,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import Prism from '@app/lib/prism';
+import { highlightJSON } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import deepEqual from 'fast-deep-equal';
 import {
@@ -25,8 +25,8 @@ import {
   Terminal,
 } from 'lucide-react';
 import { withLocalProviderType } from './helpers';
+import { createDefaultProvider } from './providerCatalog';
 import { getProviderDocumentationUrl } from './providerDocumentationMap';
-import { getProviderInitialConfig } from './providerInitialConfig';
 
 import type { ProviderOptions } from '../../types';
 
@@ -56,20 +56,8 @@ interface ProviderConfig {
   configDescription: string;
 }
 
-const highlightJSON = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.json;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'json');
-  } catch {
-    return code;
-  }
-};
-
 const getProviderConfig = (providerType?: string): ProviderConfig => {
-  const initialConfig = providerType ? getProviderInitialConfig(providerType) : undefined;
+  const initialConfig = providerType ? createDefaultProvider(providerType) : undefined;
   const initialGuidance: Record<string, { title: string; helpText: string }> = {
     together: {
       title: 'Together AI',
@@ -464,8 +452,8 @@ const CustomTargetConfiguration = ({
     // A provider ID can contain script extensions in its opaque model name.
     // Only file paths (optionally with a Windows drive or script function) get a prefix.
     const isScriptPath = /^(?:[a-z]:[\\/])?[^:]*\.(?:py|js)(?::[^/\\]+)?$/i.test(value);
-    const isJsonPath = /^(?:[a-z]:[\\/])?[^:]*\.json$/i.test(value);
-    const idToSave = isScriptPath || isJsonPath ? `file://${value}` : value;
+    const isConfigPath = /^(?:[a-z]:[\\/])?[^:]*\.(?:json|ya?ml)$/i.test(value);
+    const idToSave = isScriptPath || isConfigPath ? `file://${value}` : value;
     updateCustomTarget('id', idToSave);
   };
 

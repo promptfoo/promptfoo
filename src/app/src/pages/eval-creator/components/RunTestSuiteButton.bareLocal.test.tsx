@@ -11,7 +11,7 @@ import { getCallApiMock, mockCallApiRoutes, resetCallApiMock } from '@app/tests/
 import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import * as yaml from 'js-yaml';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
 import type { Config } from '@app/pages/redteam/setup/types';

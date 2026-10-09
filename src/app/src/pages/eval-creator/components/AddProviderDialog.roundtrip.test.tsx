@@ -7,7 +7,7 @@ import { getCallApiMock, mockCallApiRoutes, resetCallApiMock } from '@app/tests/
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AddProviderDialog from './AddProviderDialog';
 import { ProvidersListSection } from './ProvidersListSection';
@@ -355,43 +355,56 @@ describe('eval provider configuration round trips', () => {
     },
   );
 
-  it('keeps an imported JSON provider file routed after rename, Save, reopen, and Run', async () => {
-    const user = userEvent.setup();
-    act(() =>
-      useStore.getState().setConfig({
-        providers: [
-          { id: 'file://providers.json', label: 'JSON provider', config: { temperature: 0.2 } },
-        ],
-        prompts: ['Hello'],
-        tests: [{}],
-      }),
-    );
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'json-job' } }]);
-    renderWithProviders(<EvalProviderSetup />);
-    await user.click(screen.getByRole('button', { name: 'Edit JSON provider' }));
-    expect(screen.getByRole('textbox', { name: /JavaScript File Path/ })).toHaveValue(
-      'providers.json',
-    );
-    await replaceText(
-      user,
-      screen.getByRole('textbox', { name: /JavaScript File Path/ }),
-      'providers-prod.json',
-    );
-    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
-    const expected = [
-      { id: 'file://providers-prod.json', label: 'JSON provider', config: { temperature: 0.2 } },
-    ];
-    expect(useStore.getState().config.providers).toEqual(expected);
-    expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(expected);
-    await user.click(screen.getByRole('button', { name: 'Edit JSON provider' }));
-    expect(screen.getByRole('textbox', { name: /JavaScript File Path/ })).toHaveValue(
-      'providers-prod.json',
-    );
-    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
-    await user.click(screen.getByRole('button', { name: 'Run Eval' }));
-    const [, request] = getCallApiMock().mock.calls.find(([path]) => path === '/eval/job')!;
-    expect(JSON.parse(request!.body as string).providers).toEqual(expected);
-  });
+  it.each(['json', 'yaml', 'yml'])(
+    'keeps an imported %s provider file routed after rename, Save, reopen, and Run',
+    async (extension) => {
+      const user = userEvent.setup();
+      act(() =>
+        useStore.getState().setConfig({
+          providers: [
+            {
+              id: `file://providers.${extension}`,
+              label: 'JSON provider',
+              config: { temperature: 0.2 },
+            },
+          ],
+          prompts: ['Hello'],
+          tests: [{}],
+        }),
+      );
+      mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'json-job' } }]);
+      renderWithProviders(<EvalProviderSetup />);
+      await user.click(screen.getByRole('button', { name: 'Edit JSON provider' }));
+      expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(
+        `providers.${extension}`,
+      );
+      await replaceText(
+        user,
+        screen.getByRole('textbox', { name: /Target ID/ }),
+        `providers-prod.${extension}`,
+      );
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      const expected = [
+        {
+          id: `file://providers-prod.${extension}`,
+          label: 'JSON provider',
+          config: { temperature: 0.2 },
+        },
+      ];
+      expect(useStore.getState().config.providers).toEqual(expected);
+      expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+        expected,
+      );
+      await user.click(screen.getByRole('button', { name: 'Edit JSON provider' }));
+      expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(
+        `providers-prod.${extension}`,
+      );
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      await user.click(screen.getByRole('button', { name: 'Run Eval' }));
+      const [, request] = getCallApiMock().mock.calls.find(([path]) => path === '/eval/job')!;
+      expect(JSON.parse(request!.body as string).providers).toEqual(expected);
+    },
+  );
 
   it.each(
     [

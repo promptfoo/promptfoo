@@ -11,7 +11,7 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as yaml from 'js-yaml';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProvidersListSection } from './ProvidersListSection';
 import RunTestSuiteButton from './RunTestSuiteButton';

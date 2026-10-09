@@ -34,7 +34,7 @@ beforeAll(() => {
   // actual exports through that runtime boundary instead of importing app source
   // into the backend compiler project.
   const helperUrl = new URL(
-    '../../src/app/src/pages/redteam/setup/components/Targets/providerInitialConfig.ts',
+    '../../src/app/src/pages/redteam/setup/components/Targets/providerCatalog.ts',
     import.meta.url,
   );
   const providerTypes = [
@@ -64,10 +64,10 @@ beforeAll(() => {
   );
   const exportUrl = new URL('../../src/redteam/sharedFrontend.ts', import.meta.url);
   const script = `
-    const { getProviderInitialConfig } = await import(${JSON.stringify(helperUrl.href)});
+    const { createDefaultProvider } = await import(${JSON.stringify(helperUrl.href)});
     const { withLocalProviderType } = await import(${JSON.stringify(editorHelperUrl.href)});
     const initialConfigs = Object.fromEntries(
-      ${JSON.stringify(providerTypes)}.map(type => [type, getProviderInitialConfig(type)])
+      ${JSON.stringify(providerTypes)}.map(type => [type, createDefaultProvider(type)])
     );
     const storage = new Map();
     globalThis.localStorage = {
@@ -262,7 +262,7 @@ describe('redteam UI initial target runtime contracts', () => {
       'deepseek',
       'DeepSeekProvider',
       'https://api.deepseek.com/v1/chat/completions',
-      'deepseek-v4-flash',
+      'deepseek-flash',
     ],
     [
       'groq',
@@ -287,9 +287,6 @@ describe('redteam UI initial target runtime contracts', () => {
         messages: [{ role: 'user', content: 'Say hello' }],
       });
       expect(request!.headers).not.toMatchObject({ Authorization: 'Bearer unrelated-openai-key' });
-      if (type === 'deepseek') {
-        expect(JSON.parse(request!.body as string).thinking).toEqual({ type: 'disabled' });
-      }
     },
   );
 

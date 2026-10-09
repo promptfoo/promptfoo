@@ -1,5 +1,5 @@
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
-import { getProviderInitialConfig } from '@app/pages/redteam/setup/components/Targets/providerInitialConfig';
+import { createDefaultProvider } from '@app/pages/redteam/setup/components/Targets/providerCatalog';
 import { useStore } from '@app/stores/evalConfig';
 import {
   getCallApiMock,
@@ -20,7 +20,7 @@ const renderWithProvider = (ui: React.ReactElement) => {
 const mockShowToast = vi.fn();
 let sourceEvalId: string | undefined;
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: sourceEvalId ? { sourceEvalId } : null }),
 }));
@@ -53,7 +53,7 @@ describe('RunTestSuiteButton', () => {
   )(
     'submits the rehydrated $type target with its credential policy ($auth)',
     async ({ type, auth }) => {
-      const initial = getProviderInitialConfig(type)!;
+      const initial = createDefaultProvider(type)!;
       const provider = {
         ...initial,
         id: 'openai:chat:tenant/private-served-model:Q4_K_M',

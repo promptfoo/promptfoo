@@ -40,7 +40,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import isEqual from 'fast-deep-equal';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { generateOrderedYaml, getRuntimeRedteamConfig } from '../utils/yamlHelpers';

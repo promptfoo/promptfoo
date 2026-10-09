@@ -7,8 +7,8 @@ import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
-import { getProviderType } from './helpers';
 import ProviderTypeSelector from './ProviderTypeSelector';
+import { getProviderEditorType } from './providerCatalog';
 
 import type { ProviderOptions } from '../../types';
 
@@ -59,7 +59,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     recordEvent('webui_page_view', { page: 'redteam_config_target_type_selection' });
     // Keep persisted providerType aligned with the local selection state on mount.
     if (hasCompleteSavedConfig && !providerType && config.target?.id) {
-      setProviderType(getProviderType(config.target.id, config.target.config));
+      setProviderType(getProviderEditorType(config.target.id, config.target.config));
     } else if (!hasCompleteSavedConfig && providerType) {
       setProviderType(undefined);
     }
