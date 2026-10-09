@@ -4,7 +4,7 @@ import { OpenAiAgentsApiProvider } from '../../../src/providers/openai/agents-ap
 import { withGenAISpan } from '../../../src/providers/tracing';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { checkProviderApiKeys } from '../../../src/util/provider';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -2206,18 +2206,20 @@ describe('OpenAiAgentsApiProvider', () => {
 
   it('honors eval cancellation that arrives while cleanup retries deletion', async () => {
     vi.useFakeTimers();
+    const deletionStarted = createDeferred<void>();
     let deletions = 0;
     mockApi((_pathname, method) => {
       if (method !== 'DELETE') {
         return undefined;
       }
       deletions++;
+      deletionStarted.resolve();
       return deletions < 3 ? apiError(409, 'session must be durably idle') : undefined;
     });
     const controller = new AbortController();
     const pending = provider().callApi('hi', undefined, { abortSignal: controller.signal });
     const rejected = expect(pending).rejects.toThrow('cancel eval');
-    await vi.waitFor(() => expect(deletions).toBeGreaterThan(0));
+    await deletionStarted.promise;
     controller.abort(new Error('cancel eval'));
     await vi.advanceTimersByTimeAsync(5_000);
     await rejected;
