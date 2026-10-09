@@ -1,17 +1,18 @@
-const { createLoggerModule } = await vi.hoisted(async () => import('../../../factories/logger'));
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
 import { mockProcessEnv } from '../../../util/utils';
 
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
 
-const createAgentConfig = () => ({
-  config: { agentId: 'test-agent-123' },
-});
-
 // Mock dependencies
-vi.mock('../../../../src/logger', () => createLoggerModule());
+vi.mock('../../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 vi.mock('../../../../src/providers/elevenlabs/client');
 vi.mock('../../../../src/providers/elevenlabs/cache');
 vi.mock('../../../../src/providers/elevenlabs/cost-tracker', () => {
@@ -120,7 +121,9 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should include agent ID when configured', () => {
-      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', createAgentConfig());
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: { agentId: 'test-agent-123' },
+      });
       const str = provider.toString();
 
       expect(str).toContain('test-agent-123');
@@ -385,7 +388,9 @@ describe('ElevenLabsAgentsProvider', () => {
 
   describe('error handling', () => {
     it('should handle API errors gracefully', async () => {
-      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', createAgentConfig());
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: { agentId: 'test-agent-123' },
+      });
 
       // Mock the client's post method to reject
       (provider as any).client.post = vi
@@ -399,7 +404,9 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should handle failed simulation status', async () => {
-      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', createAgentConfig());
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: { agentId: 'test-agent-123' },
+      });
 
       const mockApiResponse: AgentSimulationResponse = {
         status: 'failed',

@@ -217,11 +217,15 @@ describe('poison command', () => {
         dir: null,
       };
 
-      vi.mocked(fs.readFileSync).mockReturnValue('test content');
+      vi.mocked(fs.readFileSync).mockImplementation(function () {
+        return 'test content';
+      });
       vi.mocked(path.relative).mockImplementation(function (_from, _to) {
         return 'test.txt';
       });
-      vi.mocked(path.dirname).mockReturnValue('output-dir');
+      vi.mocked(path.dirname).mockImplementation(function () {
+        return 'output-dir';
+      });
       vi.mocked(path.join).mockImplementation(function (...args) {
         return args.join('/');
       });
@@ -350,7 +354,9 @@ describe('poison command', () => {
       vi.mocked(path.relative).mockImplementation(function (_from, _to) {
         return 'test.txt';
       });
-      vi.mocked(path.dirname).mockReturnValue('output-dir');
+      vi.mocked(path.dirname).mockImplementation(function () {
+        return 'output-dir';
+      });
       vi.mocked(path.join).mockImplementation(function (...args) {
         return args.join('/');
       });
@@ -388,7 +394,9 @@ describe('poison command', () => {
         outputDir: 'output-dir',
       };
 
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.existsSync).mockImplementation(function () {
+        return true;
+      });
       vi.mocked(fs.statSync)
         .mockImplementationOnce(function () {
           return {
@@ -408,7 +416,9 @@ describe('poison command', () => {
       vi.mocked(path.relative).mockImplementation(function (_from, _to) {
         return 'file1.txt';
       });
-      vi.mocked(path.dirname).mockReturnValue('output-dir');
+      vi.mocked(path.dirname).mockImplementation(function () {
+        return 'output-dir';
+      });
 
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',

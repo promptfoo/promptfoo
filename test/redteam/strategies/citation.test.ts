@@ -10,7 +10,6 @@ import {
   neverGenerateRemote,
 } from '../../../src/redteam/remoteGeneration';
 import { addCitationTestCases } from '../../../src/redteam/strategies/citation';
-import { createMockFetchResponse } from '../../providers/mockProviderResponses';
 
 import type { ApiProvider, TestCase, TokenUsage } from '../../../src/types/index';
 
@@ -69,8 +68,8 @@ describe('citation strategy', () => {
   ];
 
   it('should generate citation test cases successfully', async () => {
-    mockFetchWithCache.mockResolvedValueOnce(
-      createMockFetchResponse({
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
         result: {
           topic: 'test topic',
           key: 'test key',
@@ -79,8 +78,11 @@ describe('citation strategy', () => {
             content: 'Smith, J. (2024). Test Article. Journal of Testing, 1(1), 1-10.',
           },
         },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const result = await addCitationTestCases(testCases, 'prompt', {});
 
@@ -117,14 +119,17 @@ describe('citation strategy', () => {
       id: () => 'generation-provider',
       callApi: vi.fn().mockResolvedValue({ output: 'unused' }),
     };
-    mockFetchWithCache.mockResolvedValueOnce(
-      createMockFetchResponse({
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
         result: {
           citation: { type: 'Journal Article', content: 'Tracked citation' },
         },
         tokenUsage: { total: 18, prompt: 12, completion: 6, numRequests: 1 },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const result = await addCitationTestCases(
       testCases,
@@ -143,14 +148,17 @@ describe('citation strategy', () => {
   });
 
   it('forwards targetId without serializing unrelated config', async () => {
-    mockFetchWithCache.mockResolvedValueOnce(
-      createMockFetchResponse({
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
         result: {
           topic: 'test topic',
           citation: { type: 'Journal Article', content: 'Test citation' },
         },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     await addCitationTestCases(testCases, 'prompt', {
       targetId: 'cloud-target-123',
@@ -165,14 +173,17 @@ describe('citation strategy', () => {
   });
 
   it('forwards supported citation options without serializing unrelated config', async () => {
-    mockFetchWithCache.mockResolvedValueOnce(
-      createMockFetchResponse({
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
         result: {
           topic: 'test topic',
           citation: { type: 'Journal Article', content: 'Test citation' },
         },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     await addCitationTestCases(testCases, 'prompt', {
       useAcademic: true,
@@ -219,14 +230,17 @@ describe('citation strategy', () => {
   });
 
   it('should handle invalid response structure gracefully', async () => {
-    mockFetchWithCache.mockResolvedValueOnce(
-      createMockFetchResponse({
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
         result: {
           topic: 'test topic',
           // missing citation field
         },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const result = await addCitationTestCases(testCases, 'prompt', {});
 
@@ -257,8 +271,8 @@ describe('citation strategy', () => {
       },
     ];
 
-    mockFetchWithCache.mockResolvedValueOnce(
-      createMockFetchResponse({
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
         result: {
           topic: 'test topic',
           key: 'test key',
@@ -267,8 +281,11 @@ describe('citation strategy', () => {
             content: 'Author, A. (2024). Test Book. Publisher.',
           },
         },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const result = await addCitationTestCases(testCasesWithoutAssert, 'prompt', {});
 
@@ -277,8 +294,8 @@ describe('citation strategy', () => {
   });
 
   it('should preserve original text in metadata', async () => {
-    mockFetchWithCache.mockResolvedValueOnce(
-      createMockFetchResponse({
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
         result: {
           topic: 'test topic',
           key: 'test key',
@@ -287,8 +304,11 @@ describe('citation strategy', () => {
             content: 'Example.com. (2024). Test Page. https://example.com',
           },
         },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const result = await addCitationTestCases(testCases, 'prompt', {});
 

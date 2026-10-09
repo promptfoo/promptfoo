@@ -4,8 +4,8 @@
  * Test and evaluate voice AI agents with LLM backends
  */
 
+import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
-import { getElevenLabsApiKey } from '../auth';
 import { ElevenLabsCache } from '../cache';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
@@ -72,8 +72,8 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       this.id = () => id;
     }
 
-    // Preserve the initial asynchronous readiness boundary.
-    this.initPromise = Promise.resolve();
+    // Initialize advanced features asynchronously
+    this.initPromise = this.initializeAdvancedFeatures();
   }
 
   id(): string {
@@ -82,6 +82,31 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
 
   toString(): string {
     return `[ElevenLabs Agents Provider] ${this.config.agentId || 'Ephemeral Agent'}`;
+  }
+
+  /**
+   * Initialize advanced features
+   */
+  private async initializeAdvancedFeatures(): Promise<void> {
+    try {
+      // Validate configurations
+      this.validateConfigurations();
+
+      // No initialization needed yet - will be done per-agent during callApi
+    } catch (error) {
+      logger.error('[ElevenLabs Agents] Advanced features initialization failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't throw - fall back to basic agent functionality
+    }
+  }
+
+  /**
+   * Validate all advanced feature configurations
+   */
+  private validateConfigurations(): void {
+    // No advanced feature validations needed currently
+    // Future advanced features will be validated here
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -335,7 +360,13 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
    * Get API key from config or environment
    */
   private getApiKey(): string | undefined {
-    return getElevenLabsApiKey(this, () => this.env);
+    return (
+      this.config.apiKey ||
+      (this.config.apiKeyEnvar && this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]) ||
+      (this.config.apiKeyEnvar && getEnvString(this.config.apiKeyEnvar as any)) ||
+      this.env?.ELEVENLABS_API_KEY ||
+      getEnvString('ELEVENLABS_API_KEY')
+    );
   }
 
   /**

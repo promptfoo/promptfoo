@@ -129,14 +129,22 @@ describe('doRedteamRun', () => {
       defaultConfig: {},
       defaultConfigPath: 'promptfooconfig.yaml',
     });
-    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
     vi.mocked(fsPromises.access).mockResolvedValue(undefined);
     vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
     vi.mocked(fsPromises.writeFile).mockResolvedValue();
-    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
-    vi.mocked(fs.mkdirSync).mockReturnValue('');
+    vi.mocked(os.tmpdir).mockImplementation(function () {
+      return '/tmp';
+    });
+    vi.mocked(fs.mkdirSync).mockImplementation(function () {
+      return '';
+    });
     vi.mocked(fs.writeFileSync).mockImplementation(function () {});
-    vi.mocked(yaml.dump).mockReturnValue('mocked-yaml-content');
+    vi.mocked(yaml.dump).mockImplementation(function () {
+      return 'mocked-yaml-content';
+    });
     vi.mocked(doGenerateRedteam).mockResolvedValue({});
   });
 

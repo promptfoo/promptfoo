@@ -5,12 +5,6 @@ import { createAtomicTestCase } from '../factories/testSuite';
 
 import type { AssertionParams, AssertionValue } from '../../src/types/index';
 
-const createNameSchema = () => ({
-  type: 'object',
-  required: ['name'],
-  properties: { name: { type: 'string' } },
-});
-
 const mockProvider = createMockProvider({
   id: 'mock',
   response: createProviderResponse({ output: 'mock' }),
@@ -80,7 +74,11 @@ describe('handleIsJson', () => {
       makeParams({
         assertion: { type: 'is-json', value: 'file://schema.json' },
         renderedValue: 'file://schema.json' as AssertionValue,
-        valueFromScript: createNameSchema(),
+        valueFromScript: {
+          type: 'object',
+          required: ['name'],
+          properties: { name: { type: 'string' } },
+        },
         outputString: '{"name": "promptfoo"}',
       }),
     );
@@ -150,7 +148,11 @@ describe('handleContainsJson', () => {
       makeParams({
         assertion: { type: 'contains-json', value: 'file://schema.json' },
         renderedValue: 'file://schema.json' as AssertionValue,
-        valueFromScript: createNameSchema(),
+        valueFromScript: {
+          type: 'object',
+          required: ['name'],
+          properties: { name: { type: 'string' } },
+        },
         outputString: 'result: {"name": "promptfoo"}',
       }),
     );

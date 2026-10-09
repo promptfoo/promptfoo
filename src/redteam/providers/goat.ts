@@ -76,14 +76,10 @@ import type {
 } from '../../types/providers';
 import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
-import type { FlaggedTurn, Message, SuccessfulAttack } from './shared';
+import type { FlaggedTurn, Message } from './shared';
 
 const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
   '[Image output attached. Inspect the attached image directly for visual grading.]';
-
-interface SuccessfulGoatAttack extends SuccessfulAttack {
-  traceSummary?: string;
-}
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -91,7 +87,12 @@ interface SuccessfulGoatAttack extends SuccessfulAttack {
 interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached' | 'Target ended conversation';
-  successfulAttacks?: SuccessfulGoatAttack[];
+  successfulAttacks?: Array<{
+    turn: number;
+    prompt: string;
+    response: string;
+    traceSummary?: string;
+  }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   traceSnapshots?: Record<string, unknown>[];
@@ -142,7 +143,12 @@ export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
   private readonly nunjucks: any;
   private readonly perTurnLayers: LayerConfig[];
-  private successfulAttacks: SuccessfulGoatAttack[] = [];
+  private successfulAttacks: Array<{
+    turn: number;
+    prompt: string;
+    response: string;
+    traceSummary?: string;
+  }> = [];
 
   id() {
     return 'promptfoo:redteam:goat';

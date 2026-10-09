@@ -338,7 +338,12 @@ export class HydraProvider implements ApiProvider {
     this.conversationHistory = [];
     this.sessionId = undefined;
     const sessionIds: string[] = [];
-    const successfulAttacks: NonNullable<HydraMetadata['successfulAttacks']> = [];
+    const successfulAttacks: Array<{
+      turn: number;
+      message: string;
+      response: string;
+      traceSummary?: string;
+    }> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;

@@ -78,7 +78,12 @@ export const handleTraceErrorSpans = ({
   // Handle simple number value for backwards compatibility
   if (typeof value === 'number') {
     maxCount = value;
-  } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+  } else if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof value !== 'function'
+  ) {
     const objValue = value as TraceErrorSpansValue;
     maxCount = objValue.max_count;
     maxPercentage = objValue.max_percentage;
@@ -132,15 +137,17 @@ export const handleTraceErrorSpans = ({
     pass = false;
     reason = `Error rate ${errorPercentage.toFixed(1)}% exceeds threshold ${maxPercentage}% `;
     reason += `(${errorCount} errors out of ${matchingSpans.length} spans)`;
-  } else if (errorCount === 0) {
-    reason = `No errors found in ${matchingSpans.length} spans matching pattern "${pattern}"`;
   } else {
-    reason = `Found ${errorCount} error(s) in ${matchingSpans.length} spans (${errorPercentage.toFixed(1)}%)`;
-    if (maxCount !== undefined) {
-      reason += `, within threshold of ${maxCount}`;
-    }
-    if (maxPercentage !== undefined) {
-      reason += `, within threshold of ${maxPercentage}%`;
+    if (errorCount === 0) {
+      reason = `No errors found in ${matchingSpans.length} spans matching pattern "${pattern}"`;
+    } else {
+      reason = `Found ${errorCount} error(s) in ${matchingSpans.length} spans (${errorPercentage.toFixed(1)}%)`;
+      if (maxCount !== undefined) {
+        reason += `, within threshold of ${maxCount}`;
+      }
+      if (maxPercentage !== undefined) {
+        reason += `, within threshold of ${maxPercentage}%`;
+      }
     }
   }
 

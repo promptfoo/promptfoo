@@ -1,6 +1,6 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
-import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types/index';
 
@@ -41,7 +41,12 @@ export class ToxicChatPlugin extends RedteamPluginBase {
   }
 
   getAssertions(_prompt: string): Assertion[] {
-    return [createAssertion(PLUGIN_ID, 'ToxicChat')];
+    return [
+      {
+        type: PLUGIN_ID,
+        metric: 'ToxicChat',
+      },
+    ];
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {

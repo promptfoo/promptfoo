@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderRateLimitState } from '../../src/scheduler/providerRateLimitState';
+import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 
 // Fast retry policy for tests - minimal delays
 const FAST_RETRY_POLICY = {
@@ -261,6 +262,33 @@ describe('ProviderRateLimitState', () => {
       expect(metrics.rateLimitHits).toBeGreaterThan(0);
     });
 
+    it.each(['returned', 'thrown'])(
+      'does not retry or throttle on a %s token-count error containing 429',
+      async (mode) => {
+        const response = { error: 'HTTP 400: prompt is too long: 204291 tokens' };
+        const cause = new Error(response.error);
+        const call = vi.fn(async () => {
+          if (mode === 'thrown') {
+            throw cause;
+          }
+          return response;
+        });
+        const pending = state
+          .executeWithRetry('token-count', call, { isRateLimited: isProviderResponseRateLimited })
+          .catch((error) => error);
+
+        await vi.runAllTimersAsync();
+
+        expect(await pending).toBe(mode === 'thrown' ? cause : response);
+        expect(call).toHaveBeenCalledTimes(1);
+        expect(state.getMetrics()).toMatchObject({
+          rateLimitHits: 0,
+          retriedRequests: 0,
+          maxConcurrency: 5,
+        });
+      },
+    );
+
     it('result-path: kind=quota in result.metadata short-circuits retry', async () => {
       // The PR's transport-layer fail-fast is undermined when a provider
       // catches HttpRateLimitError and folds it into ProviderResponse.error
@@ -268,7 +296,6 @@ describe('ProviderRateLimitState', () => {
       // isRateLimited callback for ProviderResponse must honor the
       // structured `metadata.rateLimitKind: 'quota'` signal so the scheduler
       // doesn't retry hard quotas through the result path.
-      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
       let callCount = 0;
       const result = await state.executeWithRetry(
         'req-quota',
@@ -293,7 +320,6 @@ describe('ProviderRateLimitState', () => {
     it('result-path: "Quota exceeded:" prefix short-circuits retry even without metadata', async () => {
       // String-fallback path for providers that don't populate metadata but
       // still emit the canonical formatRateLimitErrorMessage prefix.
-      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
       let callCount = 0;
       const result = await state.executeWithRetry(
         'req-quota-nometa',
@@ -314,7 +340,6 @@ describe('ProviderRateLimitState', () => {
 
     it('result-path: kind=rate_limit still triggers retry', async () => {
       // Symmetric verification: per-window rate limits must still retry.
-      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
       let callCount = 0;
       const promise = state.executeWithRetry(
         'req-ratelimit',
@@ -344,22 +369,19 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('executeWithRetry - retry behavior', () => {
-    const createRetryCall =
-      (nextAttempt: () => number, succeedOn = 2) =>
-      async () => {
-        if (nextAttempt() < succeedOn) {
-          throw new Error('Rate limit');
-        }
-        return 'success';
-      };
-
     it('should retry on rate limit and eventually succeed', async () => {
       let attempt = 0;
 
       // Start the request - it will retry after rate limit
       const promise = state.executeWithRetry(
         'req-1',
-        createRetryCall(() => ++attempt),
+        async () => {
+          attempt++;
+          if (attempt < 2) {
+            throw new Error('Rate limit');
+          }
+          return 'success';
+        },
         {
           // Use 0 for immediate retry to avoid timing-dependent flakiness
           // (non-zero values race against slot queue's resetAt timer)
@@ -383,7 +405,13 @@ describe('ProviderRateLimitState', () => {
       let attempt = 0;
       const promise = state.executeWithRetry(
         'req-1',
-        createRetryCall(() => ++attempt),
+        async () => {
+          attempt++;
+          if (attempt < 2) {
+            throw new Error('Rate limit');
+          }
+          return 'success';
+        },
         {
           // Use 0 for immediate retry to avoid timing-dependent flakiness
           // (non-zero values race against slot queue's resetAt timer)
@@ -405,7 +433,13 @@ describe('ProviderRateLimitState', () => {
       let attempt = 0;
       const promise = state.executeWithRetry(
         'req-1',
-        createRetryCall(() => ++attempt, 3),
+        async () => {
+          attempt++;
+          if (attempt < 3) {
+            throw new Error('Rate limit');
+          }
+          return 'success';
+        },
         {
           // Use 0 for immediate retry to avoid timing-dependent flakiness
           // (non-zero values race against slot queue's resetAt timer)

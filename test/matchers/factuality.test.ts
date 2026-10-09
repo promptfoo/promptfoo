@@ -6,25 +6,17 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { GradingConfig } from '../../src/types/index';
 
-const createLegacyCategoryResponse = () => ({
-  output:
-    '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
-  tokenUsage: { total: 10, prompt: 5, completion: 5 },
-});
-
-const createJsonCategoryResponse = () => ({
-  output:
-    '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
-  tokenUsage: { total: 10, prompt: 5, completion: 5 },
-});
-
 describe('matchesFactuality', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue(createLegacyCategoryResponse());
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output:
+        '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   afterEach(() => {
@@ -37,7 +29,11 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = vi.fn().mockResolvedValue(createLegacyCategoryResponse());
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output:
+        '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
@@ -60,7 +56,11 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = vi.fn().mockResolvedValue(createJsonCategoryResponse());
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output:
+        '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
@@ -167,7 +167,11 @@ describe('matchesFactuality', () => {
       },
     };
 
-    const mockCallApi = vi.fn().mockResolvedValue(createJsonCategoryResponse());
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output:
+        '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 

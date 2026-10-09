@@ -19,10 +19,6 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-/**
- * MCP SDK RequestOptions type for timeout configuration.
- */
-import type { RequestOptions as MCPRequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 
 import type {
   MCPConfig,
@@ -34,6 +30,15 @@ import type {
 } from './types';
 
 /**
+ * Stored OAuth configuration for a server, used for token refresh.
+ */
+interface OAuthServerConfig {
+  serverKey: string;
+  serverConfig: MCPServerConfig;
+  auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth;
+}
+
+/**
  * Environment for a spawned stdio MCP server: the promptfoo process environment with
  * the server's own `env` map layered on top. Per-server values win so a config can
  * override an inherited variable (e.g. a scoped token) without unsetting the rest.
@@ -41,6 +46,15 @@ import type {
 function getStdioEnv(server: MCPServerConfig): Record<string, string> {
   const parentEnv = getProcessEnv() as Record<string, string>;
   return server.env ? { ...parentEnv, ...server.env } : parentEnv;
+}
+
+/**
+ * MCP SDK RequestOptions type for timeout configuration.
+ */
+interface MCPRequestOptions {
+  timeout?: number;
+  resetTimeoutOnProgress?: boolean;
+  maxTotalTimeout?: number;
 }
 
 async function loadMcpClientSdk(): Promise<
@@ -95,10 +109,8 @@ export class MCPClient {
     string,
     StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
   > = new Map();
-  /**
-   * Stored OAuth configuration for servers that need token refresh (when tokenUrl is configured).
-   */
-  private oauthConfigs: Map<string, MCPServerConfig> = new Map();
+  // Store OAuth configs for servers that need token refresh (when tokenUrl is configured)
+  private oauthConfigs: Map<string, OAuthServerConfig> = new Map();
   // Track token expiration time per server
   private tokenExpiresAt: Map<string, number> = new Map();
   // Lock mechanism to prevent concurrent token refresh per server
@@ -217,7 +229,11 @@ export class MCPClient {
           authHeaders = { Authorization: `Bearer ${accessToken}` };
 
           // Store config and expiration for proactive token refresh
-          this.oauthConfigs.set(serverKey, server);
+          this.oauthConfigs.set(serverKey, {
+            serverKey,
+            serverConfig: server,
+            auth: oauthAuth,
+          });
           this.tokenExpiresAt.set(serverKey, expiresAt);
         } else {
           // For non-OAuth auth types (bearer, basic, api_key), use static headers
@@ -353,7 +369,7 @@ export class MCPClient {
 
   private async refreshOAuthToken(
     serverKey: string,
-    oauthConfig: MCPServerConfig,
+    oauthConfig: OAuthServerConfig,
     forceRefresh: boolean,
   ): Promise<void> {
     // Wait for each active refresh lock. Its owner clears it in finally; once no lock
@@ -405,7 +421,7 @@ export class MCPClient {
    */
   private async performTokenRefresh(
     serverKey: string,
-    oauthConfig: MCPServerConfig,
+    oauthConfig: OAuthServerConfig,
   ): Promise<void> {
     // Close existing connection
     const existingTransport = this.transports.get(serverKey);
@@ -422,7 +438,7 @@ export class MCPClient {
     this.transports.delete(serverKey);
 
     // Reconnect with fresh token
-    await this.connectToServer(oauthConfig, serverKey);
+    await this.connectToServer(oauthConfig.serverConfig, serverKey);
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 

@@ -238,6 +238,15 @@ describe('evalCommand', () => {
     );
   });
 
+  it('should include --safe-mode option in help text', () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    const helpText = cmd.helpInformation();
+    expect(helpText).toContain('--safe-mode');
+    expect(helpText).toContain(
+      'Disable dynamic inline JavaScript execution for transforms and assertions',
+    );
+  });
+
   it('should apply resolved author when --no-write is used', async () => {
     const cmdObj = { table: false, write: false };
     const config = {} as UnifiedConfig;
@@ -2186,6 +2195,88 @@ describe('evalCommand', () => {
     } finally {
       vi.unstubAllEnvs();
       loggerInfoSpy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('should set the failed-test exit code when the eval was stopped by an unavailable target', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      // Every row that ran before the stop passed.
+      (evalRecord as Eval).prompts = [
+        { metrics: { testPassCount: 1, testFailCount: 0, testErrorCount: 0 } },
+      ] as any;
+      vi.spyOn(evalRecord as Eval, 'findTargetErrorStatus').mockResolvedValue(404);
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval({ write: false }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+      expect(process.exitCode).toBe(100);
+      expect(loggerInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('Pass rate'));
+    } finally {
+      loggerInfoSpy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it.each([
+    ['every earlier row passed', { testPassCount: 1, testFailCount: 0, testErrorCount: 0 }],
+    ['the stopping row is an error', { testPassCount: 1, testFailCount: 0, testErrorCount: 1 }],
+  ])(
+    'should clean up providers after an eval that an unavailable target stopped, when %s',
+    async (_name, metrics) => {
+      const previousExitCode = process.exitCode;
+      process.exitCode = undefined;
+      const cleanup = vi.fn().mockResolvedValue(undefined);
+      const provider = {
+        id: () => 'cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup,
+      } as ApiProvider;
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: { prompts: [], providers: [provider] },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        (evalRecord as Eval).prompts = [{ metrics }] as any;
+        vi.spyOn(evalRecord as Eval, 'findTargetErrorStatus').mockResolvedValue(403);
+        return evalRecord as Eval;
+      });
+
+      try {
+        await doEval({ write: false }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+        // Providers can hold child processes and sockets, which a failing exit code must not
+        // leave behind.
+        expect(process.exitCode).toBe(100);
+        expect(cleanup).toHaveBeenCalledTimes(1);
+      } finally {
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
+
+  it("should leave the exit code alone when a reusable caller's eval was stopped by an unavailable target", async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      (evalRecord as Eval).prompts = [
+        { metrics: { testPassCount: 1, testFailCount: 0, testErrorCount: 0 } },
+      ] as any;
+      vi.spyOn(evalRecord as Eval, 'findTargetErrorStatus').mockResolvedValue(404);
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval({ write: false }, defaultConfig, defaultConfigPath, { eventSource: 'library' });
+
+      expect(process.exitCode).toBeUndefined();
+    } finally {
       process.exitCode = previousExitCode;
     }
   });

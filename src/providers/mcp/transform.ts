@@ -28,9 +28,6 @@ import type {
 export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
   return tools.map((tool) => {
     const schema: MCPToolInputSchema = tool.inputSchema;
-    // Default to empty properties for missing or invalid schemas.
-    // Also handle schemas that don't have a properties field.
-    // This shouldn't normally happen with MCP SDK, but handle it gracefully.
     let properties: Record<string, any> = {};
     let required: string[] | undefined = undefined;
     let additionalProperties: boolean | Record<string, any> | undefined = undefined;
@@ -44,6 +41,13 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
       if ('additionalProperties' in schema) {
         additionalProperties = schema.additionalProperties;
       }
+    } else if (schema && typeof schema === 'object') {
+      // Schema exists but doesn't have properties field
+      // This shouldn't normally happen with MCP SDK, but handle it gracefully
+      properties = {};
+    } else {
+      // No schema or invalid schema
+      properties = {};
     }
 
     return {
@@ -148,7 +152,10 @@ export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed 
     return config;
   }
 
-  if (config.tools !== undefined || config.exclude_tools?.length) {
+  const hasUnsupportedExclusions =
+    config.exclude_tools !== undefined &&
+    (!Array.isArray(config.exclude_tools) || config.exclude_tools.length > 0);
+  if (config.tools !== undefined || hasUnsupportedExclusions) {
     throw new Error(
       'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
     );

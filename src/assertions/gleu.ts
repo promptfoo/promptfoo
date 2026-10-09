@@ -1,5 +1,5 @@
 import invariant from '../util/invariant';
-import { countNGrams, getNGrams } from './ngrams';
+import { getNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -90,11 +90,18 @@ export function calculateGleuScore(
 
       // For brevity in calculations, we'll process based on the unique n-grams
       // and their occurrence counts in each text
+      const candidateNGramCounts = new Map<string, number>();
+      const referenceNGramCounts = new Map<string, number>();
+
       // Count occurrences of each n-gram in candidate
-      const candidateNGramCounts = countNGrams(candidateNGrams);
+      for (const gram of candidateNGrams) {
+        candidateNGramCounts.set(gram, (candidateNGramCounts.get(gram) || 0) + 1);
+      }
 
       // Count occurrences of each n-gram in reference
-      const referenceNGramCounts = countNGrams(referenceNGrams);
+      for (const gram of referenceNGrams) {
+        referenceNGramCounts.set(gram, (referenceNGramCounts.get(gram) || 0) + 1);
+      }
 
       // Calculate matching n-grams - we'll count each n-gram match the minimum number
       // of times it appears in both the candidate and reference

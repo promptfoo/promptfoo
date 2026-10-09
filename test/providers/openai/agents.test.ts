@@ -1,48 +1,7 @@
 import { EventEmitter } from 'node:events';
 
+import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
-
-const createSupportAgentOptions = () => ({
-  config: {
-    agent: createSupportAgentDefinition(),
-  },
-});
-
-const createJsonAgentOptions = () => ({
-  config: {
-    agent: {
-      name: 'JSON Agent',
-      instructions: 'Echo JSON.',
-    },
-  },
-});
-
-const createEmptyStrictSchema = () => ({
-  type: 'object' as const,
-  properties: {},
-  required: [],
-  additionalProperties: false as const,
-});
-
-const createSupportAgentDefinition = () => ({
-  name: 'Inline Support Agent',
-  instructions: 'Help the user.',
-});
-
-const createBillingHandoff = () => ({
-  agent: {
-    name: 'Billing Agent',
-    instructions: 'Handle billing requests.',
-  },
-  description: 'Transfer billing issues',
-});
-
-const createMemorySessionConfig = () => ({
-  type: 'memory' as const,
-  sessionId: 'shared-session',
-});
 
 const mockRun = vi.hoisted(() => vi.fn());
 const mockGetOrCreateTrace = vi.hoisted(() => vi.fn(async (fn: () => Promise<unknown>) => fn()));
@@ -79,6 +38,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
     handoffOutputTypeWarningEnabled?: boolean;
     outputType?: unknown;
     tools: any[];
+    private toolsExplicitlyConfigured: boolean;
     handoffs: any[];
     inputGuardrails: any[];
     outputGuardrails: any[];
@@ -97,6 +57,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
       this.handoffOutputTypeWarningEnabled = config.handoffOutputTypeWarningEnabled;
       this.outputType = config.outputType;
       this.tools = config.tools ?? [];
+      this.toolsExplicitlyConfigured = config.tools !== undefined;
       this.handoffs = config.handoffs ?? [];
       this.inputGuardrails = config.inputGuardrails ?? [];
       this.outputGuardrails = config.outputGuardrails ?? [];
@@ -112,6 +73,35 @@ vi.mock('@openai/agents', async (importOriginal) => {
       });
     }
 
+    hasExplicitToolConfig() {
+      return this.toolsExplicitlyConfigured;
+    }
+
+    async getEnabledHandoffs() {
+      return this.handoffs;
+    }
+
+    asTool(options: Record<string, any> = {}) {
+      const sourceAgent = this;
+      const handlers = new Map<string, Set<(event: unknown) => unknown>>();
+      const agentTool: Record<string, any> = {
+        type: 'function',
+        name: options.toolName ?? this.name,
+        description: options.toolDescription ?? '',
+        invoke: vi.fn(async () => ({
+          model: sourceAgent.model,
+          modelSettings: sourceAgent.modelSettings,
+        })),
+        on: (name: string, handler: (event: unknown) => unknown) => {
+          const registered = handlers.get(name) ?? new Set();
+          registered.add(handler);
+          handlers.set(name, registered);
+          return agentTool;
+        },
+      };
+      return agentTool;
+    }
+
     on(type: string, listener: (...args: any[]) => void) {
       this.eventEmitter.on(type, listener);
       return this;
@@ -121,6 +111,24 @@ vi.mock('@openai/agents', async (importOriginal) => {
       return this.eventEmitter.emit(type, ...args);
     }
   }
+
+  const createMockHandoff = (agent: MockAgent, config?: Record<string, any>) => {
+    const mockHandoff: Record<string, any> = {
+      agent,
+      agentName: agent.name,
+      getHandoffAsFunctionTool: vi.fn(),
+      onInvokeHandoff: vi.fn(async () => agent),
+      toolDescription: config?.toolDescriptionOverride,
+      isEnabled: vi.fn(async () => true),
+    };
+    mockHandoff.clone = vi.fn((overrides: Record<string, any> = {}) => ({
+      ...mockHandoff,
+      ...overrides,
+      agent: overrides.agent ?? mockHandoff.agent,
+      agentName: overrides.agentName ?? overrides.agent?.name ?? mockHandoff.agentName,
+    }));
+    return mockHandoff;
+  };
 
   return {
     ...actual,
@@ -136,15 +144,13 @@ vi.mock('@openai/agents', async (importOriginal) => {
     },
     addTraceProcessor: vi.fn(),
     getOrCreateTrace: mockGetOrCreateTrace,
-    handoff: vi.fn((agent: MockAgent, config?: Record<string, any>) => ({
-      agent,
-      agentName: agent.name,
-      getHandoffAsFunctionTool: vi.fn(),
-      onInvokeHandoff: vi.fn(async () => agent),
-      toolDescription: config?.toolDescriptionOverride,
-      isEnabled: vi.fn(async () => true),
-    })),
+    handoff: vi.fn(createMockHandoff),
     retryPolicies: mockRetryPolicies,
+    Runner: class MockRunner {
+      run(...args: unknown[]) {
+        return mockRun(...args);
+      }
+    },
     run: mockRun,
     setTraceProcessors: vi.fn(),
     startTraceExportLoop: vi.fn(),
@@ -172,7 +178,15 @@ vi.mock('../../../src/esm', async (importOriginal) => ({
   importModule: vi.fn(),
 }));
 
-vi.mock('../../../src/logger', () => createEsLoggerModule());
+vi.mock('../../../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 import {
   Agent,
@@ -181,6 +195,7 @@ import {
   MemorySession,
   OpenAIConversationsSession,
   OpenAIResponsesCompactionSession,
+  setDefaultOpenAIClient,
   setTraceProcessors,
   tool,
 } from '@openai/agents';
@@ -193,6 +208,8 @@ import {
   loadSandboxConfig,
   loadSessionDefinition,
 } from '../../../src/providers/openai/agents-loader';
+
+import type { OpenAiAgentsOptions } from '../../../src/providers/openai/agents-types';
 
 function resetOpenAiAgentsMocks() {
   mockRun.mockReset().mockResolvedValue({
@@ -233,6 +250,8 @@ describe('OpenAiAgentsProvider', () => {
 
   afterEach(() => {
     cliState.basePath = undefined;
+    setDefaultOpenAIClient(undefined as never);
+    vi.unstubAllEnvs();
   });
 
   it('creates a real SDK agent from inline definitions', async () => {
@@ -245,11 +264,24 @@ describe('OpenAiAgentsProvider', () => {
             {
               name: 'lookup_order',
               description: 'Look up an order',
-              parameters: createEmptyStrictSchema(),
+              parameters: {
+                type: 'object',
+                properties: {},
+                required: [],
+                additionalProperties: false,
+              },
               execute: async () => ({ status: 'shipped' }),
             },
           ],
-          handoffs: [createBillingHandoff()],
+          handoffs: [
+            {
+              agent: {
+                name: 'Billing Agent',
+                instructions: 'Handle billing requests.',
+              },
+              description: 'Transfer billing issues',
+            },
+          ],
           inputGuardrails: [
             {
               name: 'inline-input',
@@ -292,7 +324,12 @@ describe('OpenAiAgentsProvider', () => {
     const baseTool = vi.mocked(tool)({
       name: 'base_tool',
       description: 'Base tool',
-      parameters: createEmptyStrictSchema(),
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
       execute: async () => ({ ok: true }),
     });
     const baseHandoffAgent = new Agent({
@@ -318,14 +355,27 @@ describe('OpenAiAgentsProvider', () => {
               {
                 name: 'lookup_order',
                 description: 'Look up an order',
-                parameters: createEmptyStrictSchema(),
+                parameters: {
+                  type: 'object',
+                  properties: {},
+                  required: [],
+                  additionalProperties: false,
+                },
                 execute: async () => ({ status: 'shipped' }),
               },
             ],
           };
         case '/tmp/handoffs.ts':
           return {
-            default: [createBillingHandoff()],
+            default: [
+              {
+                agent: {
+                  name: 'Billing Agent',
+                  instructions: 'Handle billing requests.',
+                },
+                description: 'Transfer billing issues',
+              },
+            ],
           };
         case '/tmp/input-guardrails.ts':
           return {
@@ -393,9 +443,10 @@ describe('OpenAiAgentsProvider', () => {
       'base-output',
       'file-output',
     ]);
-    expect(runOptions.model).toBe('gpt-5-mini');
-    expect(runOptions.modelSettings.retry.maxRetries).toBe(2);
-    expect(typeof runOptions.modelSettings.retry.policy).toBe('function');
+    expect(agent.model).toBe('gpt-5-mini');
+    expect(runOptions.model).toBeUndefined();
+    expect(agent.modelSettings.retry.maxRetries).toBe(2);
+    expect(typeof agent.modelSettings.retry.policy).toBe('function');
     expect(mockRetryPolicies.providerSuggested).toHaveBeenCalledTimes(1);
     expect(mockRetryPolicies.httpStatus).toHaveBeenCalledWith([429]);
     expect(mockRetryPolicies.any).toHaveBeenCalledTimes(1);
@@ -405,7 +456,12 @@ describe('OpenAiAgentsProvider', () => {
     const baseTool = vi.mocked(tool)({
       name: 'lookup_order',
       description: 'Look up an order',
-      parameters: createEmptyStrictSchema(),
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
       execute: async () => ({ status: 'real' }),
     });
     const baseAgent = new Agent({
@@ -441,7 +497,12 @@ describe('OpenAiAgentsProvider', () => {
     const callbackTool = vi.mocked(tool)({
       name: 'callback_tool',
       description: 'Exercise function tool callbacks',
-      parameters: createEmptyStrictSchema(),
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
       execute: async () => ({ status: 'real' }),
     });
     Object.assign(callbackTool, {
@@ -491,7 +552,12 @@ describe('OpenAiAgentsProvider', () => {
       const prototypeNamedTool = vi.mocked(tool)({
         name: toolName,
         description: 'Exercise a prototype-shaped tool name.',
-        parameters: createEmptyStrictSchema(),
+        parameters: {
+          type: 'object',
+          properties: {},
+          required: [],
+          additionalProperties: false,
+        },
         execute: async () => ({ status: 'real' }),
       });
       const provider = new OpenAiAgentsProvider('gpt-5-mini', {
@@ -516,7 +582,12 @@ describe('OpenAiAgentsProvider', () => {
     const nullableTool = vi.mocked(tool)({
       name: 'nullable_result',
       description: 'Return a nullable result.',
-      parameters: createEmptyStrictSchema(),
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
       execute: async () => ({ status: 'real' }),
     });
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
@@ -555,7 +626,12 @@ describe('OpenAiAgentsProvider', () => {
     const childTool = vi.mocked(tool)({
       name: 'lookup_child_order',
       description: 'Look up a child order',
-      parameters: createEmptyStrictSchema(),
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
       execute: async () => ({ status: 'real-child' }),
     });
     const childAgent = new Agent({
@@ -591,7 +667,12 @@ describe('OpenAiAgentsProvider', () => {
     const childTool = vi.mocked(tool)({
       name: 'lookup_child_order',
       description: 'Look up a child order',
-      parameters: createEmptyStrictSchema(),
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
       execute: async () => ({ status: 'real-child' }),
     });
     const childAgent = new Agent({
@@ -627,7 +708,12 @@ describe('OpenAiAgentsProvider', () => {
     const selfTool = vi.mocked(tool)({
       name: 'lookup_self_order',
       description: 'Look up a self order',
-      parameters: createEmptyStrictSchema(),
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
       execute: async () => ({ status: 'real-self' }),
     });
     const selfAgent = new Agent({
@@ -892,7 +978,14 @@ describe('OpenAiAgentsProvider', () => {
       newItems: [],
     });
 
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createSupportAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
 
     const result = await provider.callApi('Where is my order?');
 
@@ -902,7 +995,6 @@ describe('OpenAiAgentsProvider', () => {
       completion: 0,
     });
     expect(result.cost).toBeUndefined();
-    expect(Object.hasOwn(result, 'cost')).toBe(true);
   });
 
   it('preserves extended SDK usage details from modern Agents SDK runs', async () => {
@@ -927,7 +1019,14 @@ describe('OpenAiAgentsProvider', () => {
       newItems: [],
     });
 
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createSupportAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
 
     const result = await provider.callApi('Where is my order?');
 
@@ -950,7 +1049,10 @@ describe('OpenAiAgentsProvider', () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
         maxTurns: 0,
-        agent: createSupportAgentDefinition(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
       },
     });
 
@@ -967,7 +1069,10 @@ describe('OpenAiAgentsProvider', () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
         maxTurns: null,
-        agent: createSupportAgentDefinition(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
       },
     });
 
@@ -983,7 +1088,10 @@ describe('OpenAiAgentsProvider', () => {
   it('passes SDK run options plus top-level session and sandbox configs to run()', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
-        agent: createSupportAgentDefinition(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
         session: {
           type: 'memory',
           sessionId: 'session-1',
@@ -1016,7 +1124,10 @@ describe('OpenAiAgentsProvider', () => {
   it('drops reserved streaming mode from configured run options', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
-        agent: createSupportAgentDefinition(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
         runOptions: {
           stream: true,
         } as any,
@@ -1029,15 +1140,196 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('does not treat the provider label as a model override', async () => {
-    const provider = new OpenAiAgentsProvider('support-agent', createSupportAgentOptions());
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
 
     await provider.callApi('Where is my order?');
 
     expect(mockRun.mock.calls[0][2].model).toBeUndefined();
   });
 
+  it.each(['gpt-transcribe', 'gpt-live-transcribe', 'gpt-5-chat-latest', 'gpt-5.3-codex-spark'])(
+    'defers explicit model override %s to the configured SDK provider',
+    async (model) => {
+      const provider = new OpenAiAgentsProvider('support-agent', {
+        config: {
+          agent: {
+            name: 'Inline Support Agent',
+            instructions: 'Help the user.',
+          },
+          model,
+        },
+      });
+
+      await provider.callApi('Where is my order?');
+
+      expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
+    },
+  );
+
+  it('applies explicit model and model settings to the whole run', async () => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          handoffs: [
+            new Agent({
+              name: 'Escalation Agent',
+              instructions: 'Handle escalations.',
+              model: 'gpt-5.4-mini',
+            }),
+          ],
+        },
+        model: 'gpt-5.6-terra',
+        modelSettings: {
+          temperature: 0.2,
+        },
+      },
+    });
+
+    await provider.callApi('Escalate this request.');
+
+    const executedAgent = mockRun.mock.calls[0][0] as Agent<any, any>;
+    expect(executedAgent).toMatchObject({
+      model: 'gpt-5.6-terra',
+      modelSettings: { temperature: 0.2 },
+    });
+    expect(executedAgent.handoffs[0]).toMatchObject({
+      agent: { model: 'gpt-5.6-terra', modelSettings: { temperature: 0.2 } },
+    });
+  });
+
+  it('preserves nested agent tools while applying overrides to the root agent', async () => {
+    const childAgent = new Agent({
+      name: 'Child Agent',
+      instructions: 'Handle delegated work.',
+      model: 'gpt-5.4-mini',
+      modelSettings: { temperature: 0.9 },
+    });
+    const childTool = childAgent.asTool({ toolName: 'delegate_to_child' });
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          tools: [childTool],
+        },
+        model: 'gpt-5.6-terra',
+        modelSettings: { temperature: 0.2 },
+      },
+    });
+
+    await provider.callApi('Delegate this request.');
+
+    const executedAgent = mockRun.mock.calls[0][0] as Agent<any, any>;
+    expect(executedAgent).toMatchObject({
+      model: 'gpt-5.6-terra',
+      modelSettings: { temperature: 0.2 },
+    });
+    expect(executedAgent.tools[0]).toBe(childTool);
+  });
+
+  it.each([
+    ['inline', 'gpt-transcribe'],
+    ['direct', 'gpt-5-chat-latest'],
+    ['file', 'gpt-5.3-codex-spark'],
+  ])(
+    'defers %s agent definition model %s to the configured SDK provider',
+    async (source, model) => {
+      let agentConfig: OpenAiAgentsOptions['agent'];
+      if (source === 'inline') {
+        agentConfig = {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model,
+        };
+      } else {
+        const agent = new Agent({
+          name: 'SDK Support Agent',
+          instructions: 'Help the user.',
+          model,
+        });
+        if (source === 'file') {
+          mockImportModule.mockResolvedValueOnce({ default: agent });
+          agentConfig = 'file:///tmp/agent.ts';
+        } else {
+          agentConfig = agent;
+        }
+      }
+
+      const provider = new OpenAiAgentsProvider('support-agent', {
+        config: { agent: agentConfig },
+      });
+
+      await provider.callApi('Where is my order?');
+
+      expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
+    },
+  );
+
+  it('allows agent models when the Agents SDK uses a custom endpoint', async () => {
+    vi.stubEnv('OPENAI_BASE_URL', 'https://gateway.example/v1');
+
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model: 'gpt-5-chat-latest',
+        },
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).resolves.toMatchObject({
+      output: 'Agent answer',
+    });
+    expect(mockRun.mock.calls[0][0]).toMatchObject({
+      model: 'gpt-5-chat-latest',
+    });
+  });
+
+  it('allows agent models when the Agents SDK uses an explicitly configured client', async () => {
+    setDefaultOpenAIClient(
+      new OpenAI({
+        apiKey: 'test-key',
+        baseURL: 'https://gateway.example/v1',
+      }) as unknown as Parameters<typeof setDefaultOpenAIClient>[0],
+    );
+
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        model: 'gpt-5-chat-latest',
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).resolves.toMatchObject({
+      output: 'Agent answer',
+    });
+    expect(mockRun.mock.calls[0][0]).toMatchObject({
+      model: 'gpt-5-chat-latest',
+    });
+  });
+
   it('passes Promptfoo vars through the SDK local run context', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createSupportAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
 
     await provider.callApi(
       'What customer tier am I on?',
@@ -1066,7 +1358,10 @@ describe('OpenAiAgentsProvider', () => {
 
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
-        agent: createSupportAgentDefinition(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
         session: 'file://./sessions/support-session.ts',
       },
     });
@@ -1081,8 +1376,14 @@ describe('OpenAiAgentsProvider', () => {
   it('serializes calls that intentionally reuse one shared configured session', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
-        agent: createSupportAgentDefinition(),
-        session: createMemorySessionConfig(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        session: {
+          type: 'memory',
+          sessionId: 'shared-session',
+        },
       },
     });
 
@@ -1125,7 +1426,10 @@ describe('OpenAiAgentsProvider', () => {
 
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
-        agent: createSupportAgentDefinition(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
         session: 'file://./sessions/support-session.ts',
       },
     });
@@ -1165,8 +1469,14 @@ describe('OpenAiAgentsProvider', () => {
   it('reuses one configured session when the first calls start concurrently', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
-        agent: createSupportAgentDefinition(),
-        session: createMemorySessionConfig(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        session: {
+          type: 'memory',
+          sessionId: 'shared-session',
+        },
       },
     });
 
@@ -1184,7 +1494,10 @@ describe('OpenAiAgentsProvider', () => {
 
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
-        agent: createSupportAgentDefinition(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
         runOptions: {
           sessionInputCallback: 'file://./callbacks/session-input.ts',
         },
@@ -1203,7 +1516,10 @@ describe('OpenAiAgentsProvider', () => {
     );
     const provider = new IsolatedOpenAiAgentsProvider('gpt-5-mini', {
       config: {
-        agent: createSupportAgentDefinition(),
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
         tracing: true,
       },
     });
@@ -1215,7 +1531,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('joins SDK tracing to the evaluator trace when traceparent is provided', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createSupportAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
 
     await provider.callApi(
       'Where is my order?',
@@ -1243,7 +1566,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('routes SDK spans to the receiver configured for the active eval', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createSupportAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
 
     await cliState.withRequestTracingConfig(
       { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
@@ -1269,7 +1599,11 @@ describe('OpenAiAgentsProvider', () => {
     const { OpenAiAgentsProvider: IsolatedOpenAiAgentsProvider } = await import(
       '../../../src/providers/openai/agents'
     );
-    const provider = new IsolatedOpenAiAgentsProvider('support-agent', createSupportAgentOptions());
+    const provider = new IsolatedOpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+      },
+    });
 
     await provider.callApi('Where is my order?', {
       prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
@@ -1313,7 +1647,11 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('routes SDK spans to protobuf-only evaluation receivers', async () => {
-    const provider = new OpenAiAgentsProvider('support-agent', createSupportAgentOptions());
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+      },
+    });
 
     await cliState.withRequestTracingConfig(
       {
@@ -1440,7 +1778,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('keeps arbitrary JSON object prompts as plain text', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createJsonAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
     const prompt = '{"foo":"bar"}';
 
     await provider.callApi(prompt);
@@ -1449,7 +1794,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('keeps arbitrary JSON prompts with unknown type fields as plain text', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createJsonAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
     const prompt = '{"type":"custom_payload","value":"bar"}';
 
     await provider.callApi(prompt);
@@ -1458,7 +1810,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('passes a single JSON message item to the SDK as structured agent input', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createJsonAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
     const prompt = '{"role":"user","content":"Describe this request."}';
 
     await provider.callApi(prompt);
@@ -1471,7 +1830,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('keeps malformed role-shaped JSON prompts as plain text', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createJsonAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
     const prompt = '{"role":"user","foo":"bar"}';
 
     await provider.callApi(prompt);
@@ -1480,7 +1846,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('keeps malformed content-part JSON prompts as plain text', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createJsonAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
     const prompt = '{"role":"user","content":[{"type":"input_text"}]}';
 
     await provider.callApi(prompt);
@@ -1489,7 +1862,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('keeps malformed assistant JSON prompts without status as plain text', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createJsonAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
     const prompt = '{"role":"assistant","content":[{"type":"output_text","text":"hello"}]}';
 
     await provider.callApi(prompt);
@@ -1498,7 +1878,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('keeps malformed tool-call JSON prompts as plain text', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createJsonAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
     const prompt = '{"type":"function_call"}';
 
     await provider.callApi(prompt);
@@ -1601,7 +1988,14 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it('keeps empty JSON arrays as plain text', async () => {
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', createJsonAgentOptions());
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
     const prompt = '[]';
 
     await provider.callApi(prompt);

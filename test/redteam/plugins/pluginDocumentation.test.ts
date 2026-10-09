@@ -92,8 +92,6 @@ describe('Plugin Documentation', () => {
     'index.ts',
     'base.ts',
     'dataExfil.ts', // Grader class, not a user-facing plugin
-    'graderContext.ts', // Shared rubric rendering helper
-    'graderPrefixes.ts', // Shared rubric text
     'imageDatasetPluginBase.ts',
     'imageDatasetUtils.ts',
     'multiInputFormat.ts',

@@ -9,7 +9,6 @@ import { loadYaml } from '../../util/yamlLoad';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
-import { appendPluginMetricSuffix } from './assertions';
 import { canGenerateRemoteWithSelection, getStrategyGenerationProvider } from './types';
 
 import type { TestCase } from '../../types/index';
@@ -168,10 +167,11 @@ async function generateMultilingual(
 
     // Create chunks of test cases with explicit chunk numbers
     const chunks: Array<{ data: TestCase[]; chunkNum: number }> = [];
+    let chunkCounter = 0;
     for (let i = 0; i < testCases.length; i += chunkSize) {
       chunks.push({
         data: testCases.slice(i, i + chunkSize),
-        chunkNum: chunks.length + 1,
+        chunkNum: ++chunkCounter,
       });
     }
 
@@ -344,21 +344,6 @@ async function generateMultilingual(
   }
 }
 
-function collectTranslations(data: Record<string, unknown>, languages: string[]) {
-  const translations: Record<string, string> = {};
-  let missingLanguages = false;
-
-  for (const lang of languages) {
-    if (data[lang] && typeof data[lang] === 'string') {
-      translations[lang] = data[lang];
-    } else {
-      missingLanguages = true;
-    }
-  }
-
-  return { translations, missingLanguages };
-}
-
 /**
  * Translates a given text into multiple target languages.
  *
@@ -417,7 +402,16 @@ async function translateBatchCore(
     try {
       const jsonResult = JSON.parse(result.output);
       if (jsonResult && typeof jsonResult === 'object') {
-        const { translations, missingLanguages } = collectTranslations(jsonResult, languages);
+        const translations: Record<string, string> = {};
+        let missingLanguages = false;
+
+        for (const lang of languages) {
+          if (jsonResult[lang] && typeof jsonResult[lang] === 'string') {
+            translations[lang] = jsonResult[lang];
+          } else {
+            missingLanguages = true;
+          }
+        }
 
         if (!missingLanguages) {
           return translations;
@@ -436,7 +430,12 @@ async function translateBatchCore(
       try {
         const jsonFromCodeBlock = JSON.parse(codeBlockMatch[1]);
         if (jsonFromCodeBlock && typeof jsonFromCodeBlock === 'object') {
-          const { translations } = collectTranslations(jsonFromCodeBlock, languages);
+          const translations: Record<string, string> = {};
+          for (const lang of languages) {
+            if (jsonFromCodeBlock[lang] && typeof jsonFromCodeBlock[lang] === 'string') {
+              translations[lang] = jsonFromCodeBlock[lang];
+            }
+          }
           if (Object.keys(translations).length > 0) {
             return translations;
           }
@@ -447,7 +446,12 @@ async function translateBatchCore(
     try {
       const yamlResult = loadYaml(result.output) as any;
       if (yamlResult && typeof yamlResult === 'object') {
-        const { translations } = collectTranslations(yamlResult, languages);
+        const translations: Record<string, string> = {};
+        for (const lang of languages) {
+          if (yamlResult[lang] && typeof yamlResult[lang] === 'string') {
+            translations[lang] = yamlResult[lang];
+          }
+        }
         if (Object.keys(translations).length > 0) {
           return translations;
         }
@@ -614,7 +618,12 @@ export async function addMultilingual(
     for (const [lang, translatedText] of Object.entries(translations)) {
       results.push({
         ...testCase,
-        assert: appendPluginMetricSuffix(testCase, `Multilingual-${lang.toUpperCase()}`),
+        assert: testCase.assert?.map((assertion) => ({
+          ...assertion,
+          metric: assertion.type?.startsWith('promptfoo:redteam:')
+            ? `${assertion.type?.split(':').pop() || assertion.metric}/Multilingual-${lang.toUpperCase()}`
+            : assertion.metric,
+        })),
         vars: {
           ...testCase.vars,
           [injectVar]: translatedText,

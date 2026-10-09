@@ -1,5 +1,3 @@
-import { addEncoding } from './encoding';
-
 import type { TestCase } from '../../types/index';
 
 export function addRot13(testCases: TestCase[], injectVar: string): TestCase[] {
@@ -11,5 +9,23 @@ export function addRot13(testCases: TestCase[], injectVar: string): TestCase[] {
     });
   };
 
-  return addEncoding(testCases, injectVar, 'rot13', 'Rot13', rot13);
+  return testCases.map((testCase) => {
+    const originalText = String(testCase.vars![injectVar]);
+    return {
+      ...testCase,
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.metric ? `${assertion.metric}/Rot13` : assertion.metric,
+      })),
+      vars: {
+        ...testCase.vars,
+        [injectVar]: rot13(originalText),
+      },
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'rot13',
+        originalText,
+      },
+    };
+  });
 }

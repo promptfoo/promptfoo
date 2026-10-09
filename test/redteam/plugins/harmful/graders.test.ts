@@ -40,7 +40,9 @@ describe('HarmfulGrader', () => {
 
   describe('getResult', () => {
     it('should pass and return score 1 for basic refusal', async () => {
-      vi.mocked(isBasicRefusal).mockReturnValue(true);
+      vi.mocked(isBasicRefusal).mockImplementation(function () {
+        return true;
+      });
 
       const result = await grader.getResult(
         'test prompt',
@@ -59,7 +61,9 @@ describe('HarmfulGrader', () => {
     });
 
     it('should fallback to superclass getResult for non-refusal', async () => {
-      vi.mocked(isBasicRefusal).mockReturnValue(false);
+      vi.mocked(isBasicRefusal).mockImplementation(function () {
+        return false;
+      });
 
       const superGetResult = vi.spyOn(Object.getPrototypeOf(HarmfulGrader.prototype), 'getResult');
       superGetResult.mockResolvedValue({
@@ -136,60 +140,177 @@ describe('HarmfulGrader', () => {
   });
 });
 
-describe.each([
-  {
-    name: 'HarmfulPrivacyGrader',
-    Grader: HarmfulPrivacyGrader,
-    rubricTest: 'should have privacy-specific rubric',
-    terms: ['privacy violation'],
-  },
-  {
-    name: 'SelfHarmGrader',
-    Grader: SelfHarmGrader,
-    rubricTest: 'should have self-harm specific rubric',
-    terms: ['self-harm'],
-  },
-  {
-    name: 'GraphicContentGrader',
-    Grader: GraphicContentGrader,
-    rubricTest: 'should have graphic content specific rubric',
-    terms: ['gratuitously graphic', 'disturbing content'],
-  },
-  {
-    name: 'SexualContentGrader',
-    Grader: SexualContentGrader,
-    rubricTest: 'should have sexual content specific rubric',
-    terms: ['inappropriate sexual content', 'Sexually suggestive'],
-  },
-  {
-    name: 'ProfanityGrader',
-    Grader: ProfanityGrader,
-    rubricTest: 'should have profanity specific rubric',
-    terms: ['profanity', 'inappropriate language'],
-  },
-  {
-    name: 'CopyrightViolationGrader',
-    Grader: CopyrightViolationGrader,
-    rubricTest: 'should have copyright specific rubric',
-    terms: ['copyright violations', 'copyrighted content'],
-  },
-])('$name', ({ Grader, rubricTest, terms }) => {
-  let grader: HarmfulGrader;
+describe('HarmfulPrivacyGrader', () => {
+  let grader: HarmfulPrivacyGrader;
   let mockTest: AtomicTestCase;
 
   beforeEach(() => {
-    grader = new Grader();
+    grader = new HarmfulPrivacyGrader();
     mockTest = createMockTest();
   });
 
-  it(rubricTest, () => {
-    for (const term of terms) {
-      expect(grader.rubric).toContain(term);
-    }
+  it('should have privacy-specific rubric', () => {
+    expect(grader.rubric).toContain('privacy violation');
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockReturnValue(true);
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
+
+    const result = await grader.getResult(
+      'test prompt',
+      'I cannot help with that.',
+      mockTest,
+      createMockProvider() as ApiProvider,
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.score).toBe(1);
+  });
+});
+
+describe('SelfHarmGrader', () => {
+  let grader: SelfHarmGrader;
+  let mockTest: AtomicTestCase;
+
+  beforeEach(() => {
+    grader = new SelfHarmGrader();
+    mockTest = createMockTest();
+  });
+
+  it('should have self-harm specific rubric', () => {
+    expect(grader.rubric).toContain('self-harm');
+  });
+
+  it('should inherit basic refusal handling from parent', async () => {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
+
+    const result = await grader.getResult(
+      'test prompt',
+      'I cannot help with that.',
+      mockTest,
+      createMockProvider() as ApiProvider,
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.score).toBe(1);
+  });
+});
+
+describe('GraphicContentGrader', () => {
+  let grader: GraphicContentGrader;
+  let mockTest: AtomicTestCase;
+
+  beforeEach(() => {
+    grader = new GraphicContentGrader();
+    mockTest = createMockTest();
+  });
+
+  it('should have graphic content specific rubric', () => {
+    expect(grader.rubric).toContain('gratuitously graphic');
+    expect(grader.rubric).toContain('disturbing content');
+  });
+
+  it('should inherit basic refusal handling from parent', async () => {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
+
+    const result = await grader.getResult(
+      'test prompt',
+      'I cannot help with that.',
+      mockTest,
+      createMockProvider() as ApiProvider,
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.score).toBe(1);
+  });
+});
+
+describe('SexualContentGrader', () => {
+  let grader: SexualContentGrader;
+  let mockTest: AtomicTestCase;
+
+  beforeEach(() => {
+    grader = new SexualContentGrader();
+    mockTest = createMockTest();
+  });
+
+  it('should have sexual content specific rubric', () => {
+    expect(grader.rubric).toContain('inappropriate sexual content');
+    expect(grader.rubric).toContain('Sexually suggestive');
+  });
+
+  it('should inherit basic refusal handling from parent', async () => {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
+
+    const result = await grader.getResult(
+      'test prompt',
+      'I cannot help with that.',
+      mockTest,
+      createMockProvider() as ApiProvider,
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.score).toBe(1);
+  });
+});
+
+describe('ProfanityGrader', () => {
+  let grader: ProfanityGrader;
+  let mockTest: AtomicTestCase;
+
+  beforeEach(() => {
+    grader = new ProfanityGrader();
+    mockTest = createMockTest();
+  });
+
+  it('should have profanity specific rubric', () => {
+    expect(grader.rubric).toContain('profanity');
+    expect(grader.rubric).toContain('inappropriate language');
+  });
+
+  it('should inherit basic refusal handling from parent', async () => {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
+
+    const result = await grader.getResult(
+      'test prompt',
+      'I cannot help with that.',
+      mockTest,
+      createMockProvider() as ApiProvider,
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.score).toBe(1);
+  });
+});
+
+describe('CopyrightViolationGrader', () => {
+  let grader: CopyrightViolationGrader;
+  let mockTest: AtomicTestCase;
+
+  beforeEach(() => {
+    grader = new CopyrightViolationGrader();
+    mockTest = createMockTest();
+  });
+
+  it('should have copyright specific rubric', () => {
+    expect(grader.rubric).toContain('copyright violations');
+    expect(grader.rubric).toContain('copyrighted content');
+  });
+
+  it('should inherit basic refusal handling from parent', async () => {
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
 
     const result = await grader.getResult(
       'test prompt',

@@ -314,25 +314,6 @@ function serializeToolAttribute(value: unknown): string | undefined {
   }
 }
 
-// Extract provider token usage for response attributes on the span.
-export function extractGenAIResponse(
-  response: ProviderResponse,
-  includeFinishReason = false,
-): GenAISpanResult {
-  const result: GenAISpanResult = {};
-  if (response.tokenUsage) {
-    result.tokenUsage = {
-      prompt: response.tokenUsage.prompt,
-      completion: response.tokenUsage.completion,
-      total: response.tokenUsage.total,
-    };
-  }
-  if (includeFinishReason && response.finishReason) {
-    result.finishReasons = [response.finishReason];
-  }
-  return result;
-}
-
 export function recordSpanError(span: Span, error: unknown): void {
   span.setStatus({
     code: SpanStatusCode.ERROR,
@@ -343,7 +324,6 @@ export function recordSpanError(span: Span, error: unknown): void {
     span.recordException(error);
   }
 }
-
 /**
  * Execute a function within a GenAI span.
  *

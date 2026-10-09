@@ -17,26 +17,6 @@ import type {
   ProviderResponse,
 } from '../../src/types/index';
 
-const createAssertion = <TType extends 'equals' | 'contains'>(
-  type: TType,
-  value: string = 'Hello world',
-  weight: number = 2,
-) => ({
-  type,
-  value,
-  weight,
-});
-
-const createExpectedOutputAssertion = () => ({
-  type: 'equals' as const,
-  value: 'Expected output',
-});
-
-const createCrescendoMedicalMetadata = () => ({
-  pluginId: 'medical:prioritization-error',
-  strategyId: 'crescendo',
-});
-
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
@@ -123,7 +103,12 @@ const _Grader = new TestGrader();
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
-    assert: [createExpectedOutputAssertion()],
+    assert: [
+      {
+        type: 'equals',
+        value: 'Expected output',
+      },
+    ],
   };
 
   beforeEach(() => {
@@ -146,6 +131,52 @@ describe('runAssertions', () => {
     expect(result).toMatchObject({
       pass: true,
       reason: 'All assertions passed',
+    });
+  });
+
+  it('records a zero-weight cost metric without changing quality scoring', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          { type: 'cost', metric: 'inference_cost', weight: 0 },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
+    });
+  });
+
+  it('retains measurement metrics inside a zero-weight assertion set', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          {
+            type: 'assert-set',
+            weight: 0,
+            assert: [{ type: 'cost', metric: 'inference_cost', weight: 0 }],
+          },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
     });
   });
 
@@ -203,7 +234,18 @@ describe('runAssertions', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.5,
-        assert: [createAssertion('equals'), createAssertion('contains', 'world', 1)],
+        assert: [
+          {
+            type: 'equals',
+            value: 'Hello world',
+            weight: 2,
+          },
+          {
+            type: 'contains',
+            value: 'world',
+            weight: 1,
+          },
+        ],
       },
       providerResponse: { output: 'Hi there world' },
     });
@@ -219,7 +261,18 @@ describe('runAssertions', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.25,
-        assert: [createAssertion('equals'), createAssertion('contains', 'world', 1)],
+        assert: [
+          {
+            type: 'equals',
+            value: 'Hello world',
+            weight: 2,
+          },
+          {
+            type: 'contains',
+            value: 'world',
+            weight: 1,
+          },
+        ],
       },
       providerResponse: { output: 'Hi there world' },
     });
@@ -267,7 +320,12 @@ describe('runAssertions', () => {
         assert: [
           {
             type: 'assert-set',
-            assert: [createExpectedOutputAssertion()],
+            assert: [
+              {
+                type: 'equals',
+                value: 'Expected output',
+              },
+            ],
           },
         ],
       };
@@ -291,7 +349,18 @@ describe('runAssertions', () => {
           {
             type: 'assert-set',
             threshold: 0.25,
-            assert: [createAssertion('equals'), createAssertion('contains', 'Expected', 1)],
+            assert: [
+              {
+                type: 'equals',
+                value: 'Hello world',
+                weight: 2,
+              },
+              {
+                type: 'contains',
+                value: 'Expected',
+                weight: 1,
+              },
+            ],
           },
         ],
       };
@@ -315,7 +384,18 @@ describe('runAssertions', () => {
           {
             type: 'assert-set',
             threshold: 0.5,
-            assert: [createAssertion('equals'), createAssertion('contains', 'Expected', 1)],
+            assert: [
+              {
+                type: 'equals',
+                value: 'Hello world',
+                weight: 2,
+              },
+              {
+                type: 'contains',
+                value: 'Expected',
+                weight: 1,
+              },
+            ],
           },
         ],
       };
@@ -488,7 +568,10 @@ describe('runAssertions', () => {
           value: 'test assertion',
         },
       ],
-      metadata: createCrescendoMedicalMetadata(),
+      metadata: {
+        pluginId: 'medical:prioritization-error',
+        strategyId: 'crescendo',
+      },
     };
 
     const providerResponse: ProviderResponse = {
@@ -546,7 +629,10 @@ describe('runAssertions', () => {
     const test: AtomicTestCase = {
       provider: 'promptfoo:redteam:crescendo',
       assert: [assertion],
-      metadata: createCrescendoMedicalMetadata(),
+      metadata: {
+        pluginId: 'medical:prioritization-error',
+        strategyId: 'crescendo',
+      },
     };
 
     const providerResponse: ProviderResponse = {
@@ -636,7 +722,10 @@ describe('runAssertions', () => {
           type: 'assert-set',
           metric: '{{metricGroup}}',
           assert: [
-            createExpectedOutputAssertion(),
+            {
+              type: 'equals',
+              value: 'Expected output',
+            },
             {
               type: 'contains',
               value: 'output',

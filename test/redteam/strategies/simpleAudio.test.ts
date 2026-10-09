@@ -4,7 +4,6 @@ import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
-import { createMockFetchResponse } from '../../providers/mockProviderResponses';
 import { mockConsole } from '../../util/utils';
 
 import type { TestCase } from '../../../src/types/index';
@@ -60,9 +59,12 @@ describe('audio strategy', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchWithCache.mockResolvedValue(
-      createMockFetchResponse({ audioBase64: 'bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh' }),
-    );
+    mockFetchWithCache.mockResolvedValue({
+      data: { audioBase64: 'bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh' },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
     mockNeverGenerateRemote.mockReturnValue(false);
   });
 
@@ -127,9 +129,12 @@ describe('audio strategy', () => {
   describe('addAudioToBase64', () => {
     it('should convert test cases with the specified variable', async () => {
       // Setup mock to return a predictable response
-      mockFetchWithCache.mockResolvedValue(
-        createMockFetchResponse({ audioBase64: 'bW9ja2VkLWF1ZGlv' }),
-      );
+      mockFetchWithCache.mockResolvedValue({
+        data: { audioBase64: 'bW9ja2VkLWF1ZGlv' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const testCases: TestCase[] = [
         {

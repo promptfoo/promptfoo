@@ -1,7 +1,6 @@
 import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  extractGenAIResponse,
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
@@ -97,25 +96,6 @@ describe('genaiTracer', () => {
       );
     });
   });
-
-  it.each([false, true])(
-    'projects only supported legacy response fields (finishReason=%s)',
-    (finishReason) => {
-      const response = {
-        output: 'body',
-        cached: true,
-        finishReason: 'stop',
-        tokenUsage: { prompt: 2, completion: 3, total: 5, cached: 4 },
-      };
-      const result = extractGenAIResponse(response, finishReason);
-      expect(result).toEqual({
-        tokenUsage: { prompt: 2, completion: 3, total: 5 },
-        ...(finishReason ? { finishReasons: ['stop'] } : {}),
-      });
-      expect(result.tokenUsage).not.toBe(response.tokenUsage);
-      expect(extractGenAIResponse({})).toEqual({});
-    },
-  );
 
   describe('withGenAISpan', () => {
     const baseContext: GenAISpanContext = {

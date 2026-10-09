@@ -2,14 +2,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
 import { sha256 } from '../../../src/util/createHash';
 
-const { createNodeHttpHandlerFactory, createBedrockCacheFactory } = await vi.hoisted(
-  () => import('../../factories/moduleMocks'),
-);
-
-const createAgentConfig = () => ({
-  config: { agentId: 'agent-123', agentAliasId: 'alias-456', region: 'us-east-1' },
-});
-
 const mockSend = vi.fn();
 const mockBedrockClient = {
   send: mockSend,
@@ -29,7 +21,19 @@ vi.mock('@aws-sdk/client-bedrock-agent-runtime', async (importOriginal) => {
 
 let BedrockAgentRuntimeClient: typeof import('@aws-sdk/client-bedrock-agent-runtime').BedrockAgentRuntimeClient;
 
-vi.mock('@smithy/node-http-handler', createNodeHttpHandlerFactory());
+vi.mock('@smithy/node-http-handler', () => ({
+  __esModule: true,
+  NodeHttpHandler: vi.fn().mockImplementation(function () {
+    return {
+      handle: vi.fn(),
+    };
+  }),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      handle: vi.fn(),
+    };
+  }),
+}));
 
 vi.mock('proxy-agent', () => ({
   __esModule: true,
@@ -41,10 +45,18 @@ const mockGet = vi.hoisted(() => vi.fn());
 const mockSet = vi.hoisted(() => vi.fn());
 const mockIsCacheEnabled = vi.fn().mockReturnValue(false);
 
-vi.mock(
-  '../../../src/cache',
-  createBedrockCacheFactory(mockGet, mockSet, () => mockIsCacheEnabled),
-);
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getCache: vi.fn().mockImplementation(function () {
+      return {
+        get: mockGet,
+        set: mockSet,
+      };
+    }),
+    isCacheEnabled: () => mockIsCacheEnabled(),
+  };
+});
 
 function buildAgentCacheKey({
   agentId,
@@ -241,7 +253,9 @@ describe('AwsBedrockAgentsProvider', () => {
             metadata: { guardrails: { applied: true } },
           }),
     );
-    const provider = new AwsBedrockAgentsProvider('agent-123', createAgentConfig());
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: { agentId: 'agent-123', agentAliasId: 'alias-456', region: 'us-east-1' },
+    });
     mockSend.mockResolvedValueOnce(makeCompletionResponse('fresh response'));
 
     const result = await provider.callApi('Describe a quiet garden');
@@ -388,7 +402,13 @@ describe('AwsBedrockAgentsProvider', () => {
   });
 
   it('should create the agent runtime client with the expected region', async () => {
-    const provider = new AwsBedrockAgentsProvider('agent-123', createAgentConfig());
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: {
+        agentId: 'agent-123',
+        agentAliasId: 'alias-456',
+        region: 'us-east-1',
+      },
+    });
 
     await provider.getAgentRuntimeClient();
 

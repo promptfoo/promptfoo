@@ -1,5 +1,3 @@
-import { appendMetricSuffix } from './assertions';
-
 import type { TestCase } from '../../types/index';
 
 export function addCustom(
@@ -25,7 +23,10 @@ export function addCustom(
           ...config,
         },
       },
-      assert: appendMetricSuffix(testCase, displayName),
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.metric ? `${assertion.metric}/${displayName}` : assertion.metric,
+      })),
       metadata: {
         ...testCase.metadata,
         strategyId,

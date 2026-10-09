@@ -43,6 +43,26 @@ describe('isProviderResponseRateLimited', () => {
       expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
     });
 
+    it.each([
+      '429',
+      '429 Too Many Requests',
+      'Request failed with status code 429.',
+      'API error (429)',
+      '{"error":{"code":429}}',
+    ])('should detect a standalone 429 in returned and thrown errors: %s', (error) => {
+      expect(isProviderResponseRateLimited({ error }, undefined)).toBe(true);
+      expect(isProviderResponseRateLimited(undefined, new Error(error))).toBe(true);
+    });
+
+    it.each([
+      'HTTP 400: prompt is too long: 204291 tokens > 200000 maximum',
+      'API error: 500 Internal Server Error (request_id: req_a4290f)',
+      'Invalid value for max_tokens: 4290',
+    ])('should preserve non-rate-limit returned and thrown errors: %s', (error) => {
+      expect(isProviderResponseRateLimited({ error }, undefined)).toBe(false);
+      expect(isProviderResponseRateLimited(undefined, new Error(error))).toBe(false);
+    });
+
     it('should handle undefined result.error gracefully', () => {
       const result: ProviderResponse = {
         output: 'success',
@@ -202,13 +222,11 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(new Error('bad record mac'))).toBe(true);
   });
 
-  const verifyProtocolError = () => {
+  it('should detect EPROTO errors', () => {
     expect(isTransientConnectionError(new Error('write EPROTO 00000000:error:0A000126'))).toBe(
       true,
     );
-  };
-
-  it('should detect EPROTO errors', verifyProtocolError);
+  });
 
   it('should detect ECONNRESET errors', () => {
     expect(isTransientConnectionError(new Error('ECONNRESET'))).toBe(true);
@@ -257,7 +275,11 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(new Error('write EPROTO: cert_untrusted'))).toBe(false);
   });
 
-  it('should still match plain EPROTO without permanent phrases', verifyProtocolError);
+  it('should still match plain EPROTO without permanent phrases', () => {
+    expect(isTransientConnectionError(new Error('write EPROTO 00000000:error:0A000126'))).toBe(
+      true,
+    );
+  });
 
   it('should detect ECONNRESET via error.code', () => {
     const error = new Error('read failed');

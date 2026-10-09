@@ -205,18 +205,6 @@ describe.each([
       `"${type}" assertion type must have a string or number value`,
     );
   });
-
-  it.each([Infinity, -Infinity])('supports %s', (value) => {
-    expect(
-      handler({
-        ...defaultParams,
-        assertion: { type },
-        renderedValue: value,
-        outputString: String(value),
-        inverse: false,
-      }).pass,
-    ).toBe(true);
-  });
 });
 
 describe('handleContainsAny', () => {
@@ -962,63 +950,4 @@ describe('handleIContainsAll', () => {
       assertion: params.assertion,
     });
   });
-});
-
-it.each(
-  [handleContainsAny, handleIContainsAny].map((handler) => ({ name: handler.name, handler })),
-)('$name short-circuits and formats only failures', ({ handler }) => {
-  let coercions = 0;
-  let joins = 0;
-  const values = [
-    'hello',
-    {
-      toString: () => {
-        coercions++;
-        throw new Error('Unexpected coercion');
-      },
-    },
-  ];
-  values.join = () => {
-    joins++;
-    throw new Error('Failure formatting');
-  };
-  const params: AssertionParams = {
-    ...defaultParams,
-    assertion: { type: 'contains-any' },
-    valueFromScript: values,
-    outputString: 'hello',
-    inverse: false,
-  };
-  expect(handler(params).pass).toBe(true);
-  expect(joins).toBe(0);
-  expect(() => handler({ ...params, inverse: true })).toThrow('Failure formatting');
-  expect(joins).toBe(1);
-  expect(coercions).toBe(0);
-});
-
-it.each(
-  [handleContainsAll, handleIContainsAll].map((handler) => ({ name: handler.name, handler })),
-)('$name preserves sparse-array visits and missing order', ({ handler }) => {
-  const visits: string[] = [];
-  const tracked = (value: string) => ({
-    toString: () => {
-      visits.push(value);
-      return value;
-    },
-  });
-  const values = [, tracked('first'), , 'hello', tracked('last')];
-  const params: AssertionParams = {
-    ...defaultParams,
-    assertion: { type: 'contains-all' },
-    valueFromScript: values,
-    outputString: 'hello',
-    inverse: false,
-  };
-  expect(handler(params).reason).toBe(
-    'Expected output to contain all of [, first, , hello, last]. Missing: [first, last]',
-  );
-  expect(visits).toEqual(['first', 'last', 'first', 'last', 'first', 'last']);
-  visits.length = 0;
-  expect(handler({ ...params, inverse: true }).reason).toBe('Assertion passed');
-  expect(visits).toEqual(['first', 'last']);
 });

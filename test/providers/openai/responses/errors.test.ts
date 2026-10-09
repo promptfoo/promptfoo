@@ -1,5 +1,3 @@
-import { createApiKeyOptions } from '../../../factories/literalFixtures';
-import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -23,9 +21,12 @@ describe('OpenAiResponsesProvider error handling', () => {
       statusText: 'Bad Request',
     };
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(
-      createMockFetchResponse(mockApiResponse, { status: 400, statusText: 'Bad Request' }),
-    );
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    });
 
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
@@ -58,18 +59,18 @@ describe('OpenAiResponsesProvider error handling', () => {
 
   it('should handle API errors correctly', async () => {
     // Setup mock for fetchWithCache to return an error
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(
-      createMockFetchResponse(
-        {
-          error: {
-            message: 'Invalid request',
-            type: 'invalid_request_error',
-            code: 'invalid_api_key',
-          },
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        error: {
+          message: 'Invalid request',
+          type: 'invalid_request_error',
+          code: 'invalid_api_key',
         },
-        { status: 400, statusText: 'Bad Request' },
-      ),
-    );
+      },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    });
 
     // Initialize the provider
     const provider = new OpenAiResponsesProvider('gpt-4o', {
@@ -119,11 +120,18 @@ describe('OpenAiResponsesProvider error handling', () => {
       },
     };
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(
-      createMockFetchResponse(mockApiResponse, { status: 400, statusText: 'Bad Request' }),
-    );
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    });
 
-    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
 
     const result = await provider.callApi('Test prompt');
 
@@ -140,10 +148,19 @@ describe('OpenAiResponsesProvider error handling', () => {
     };
 
     // Setup mock for fetchWithCache
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     // Initialize the provider
-    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
 
     // Call the API
     const result = await provider.callApi('Test prompt');
@@ -174,9 +191,18 @@ describe('OpenAiResponsesProvider error handling', () => {
     };
 
     // Initialize the provider
-    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     // Ensure we get output without error
     const result = await provider.callApi('Test prompt');
@@ -211,10 +237,19 @@ describe('OpenAiResponsesProvider error handling', () => {
     };
 
     // Setup mock for fetchWithCache
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     // Initialize the provider
-    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
 
     // Call the API - since there's no content, it should return an empty string
     const result = await provider.callApi('Test prompt');
@@ -237,10 +272,19 @@ describe('OpenAiResponsesProvider error handling', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     // Initialize the provider
-    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
 
     // Call the API
     const result = await provider.callApi('Test prompt');
@@ -261,7 +305,11 @@ describe('OpenAiResponsesProvider error handling', () => {
     vi.mocked(cache.fetchWithCache).mockRejectedValue(new Error('Network error'));
 
     // Initialize the provider
-    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
 
     // Call the API
     const result = await provider.callApi('Test prompt');

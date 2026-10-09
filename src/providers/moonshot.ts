@@ -1,9 +1,10 @@
+import { getEnvString } from '../envars';
 import { renderVarsInObject } from '../util/index';
-import { resolveConfiguredApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { serializeProvider } from './serialization';
 import { clampCachedTokens } from './shared';
 
+import type { EnvVarKey } from '../envars';
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -27,6 +28,14 @@ type MoonshotConfig = OpenAiCompletionOptions & {
 type MoonshotProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: MoonshotConfig;
 };
+
+function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
+  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
+    const value = env[key as keyof EnvOverrides];
+    return value === undefined ? undefined : String(value);
+  }
+  return undefined;
+}
 
 // The Kimi models (kimi-k3, kimi-k2.5 / kimi-k2.6 / kimi-k2.7-code, …) are
 // "thinking" models that pin temperature, top_p, n and the penalties to fixed
@@ -103,7 +112,13 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
   // base provider we do NOT fall back to OPENAI_API_KEY, which would send an
   // OpenAI key to Moonshot and 401.
   override getApiKey(): string | undefined {
-    return resolveConfiguredApiKey(this);
+    if (this.config.apiKey !== undefined) {
+      return this.config.apiKey;
+    }
+    const apiKeyEnvar = this.config.apiKeyEnvar as EnvVarKey | undefined;
+    return apiKeyEnvar
+      ? (getProviderEnvString(this.env, apiKeyEnvar) ?? getEnvString(apiKeyEnvar))
+      : undefined;
   }
 
   override getApiUrl(): string {
@@ -132,7 +147,14 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return serializeProvider(this, 'moonshot');
+    return {
+      provider: 'moonshot',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.config.apiKey && { apiKey: undefined }),
+      },
+    };
   }
 
   // Strip the sampling params promptfoo injects (temperature defaults to 0,

@@ -14,13 +14,6 @@ export function createLoggerModule(): LoggerModule {
   };
 }
 
-export function createLoggerModuleWithLevel(): LoggerModule & { getLogLevel: Mock } {
-  return {
-    ...createLoggerModule(),
-    getLogLevel: vi.fn().mockReturnValue('info'),
-  };
-}
-
 export function createErrorFirstLoggerModule(): LoggerModule {
   return {
     default: {
@@ -39,12 +32,5 @@ export function createWarningLoggerModule(): { default: Omit<LoggerModule['defau
       warn: vi.fn(),
       error: vi.fn(),
     },
-  };
-}
-
-export function createEsLoggerModule(errorFirst = false): LoggerModule & { __esModule: boolean } {
-  return {
-    __esModule: true,
-    ...(errorFirst ? createErrorFirstLoggerModule() : createLoggerModule()),
   };
 }

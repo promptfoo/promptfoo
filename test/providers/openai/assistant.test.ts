@@ -1,53 +1,57 @@
+import { trace } from '@opentelemetry/api';
 import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
-import { createApiKeyOptions } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
-import { installTracerSpy } from './tracing';
 
 import type { CallbackContext } from '../../../src/providers/openai/types';
 
-const createMessageCreationSteps = () => ({
-  data: [
-    {
-      id: 'step_1',
-      step_details: {
-        type: 'message_creation',
-        message_creation: {
-          message_id: 'msg_1',
-        },
-      },
-    },
-  ],
-});
-
-const createAssistantTextMessage = () => ({
-  role: 'assistant',
-  content: [
-    {
-      type: 'text',
-      text: {
-        value: 'Test response',
-      },
-    },
-  ],
-});
-
-const createCompletedAssistantRun = () => ({
-  id: 'run_123',
-  thread_id: 'thread_123',
-  status: 'completed',
-});
-
-const createApiErrorMessageDescriptor = () => ({
-  value: 'API Error',
-  writable: true,
-  configurable: true,
-});
-
 vi.mock('openai');
+
+interface RecordedSpan {
+  name: string;
+  attributes: Record<string, any>;
+  status?: { code: number; message?: string };
+  ended: boolean;
+}
+
+function installTracerSpy(): RecordedSpan[] {
+  const spans: RecordedSpan[] = [];
+  const make = (name: string, attributes: Record<string, any> = {}) => {
+    const entry: RecordedSpan = { name, attributes: { ...attributes }, ended: false };
+    spans.push(entry);
+    return {
+      setAttribute: (key: string, value: unknown) => {
+        entry.attributes[key] = value;
+      },
+      setAttributes: (attrs: Record<string, unknown>) => Object.assign(entry.attributes, attrs),
+      setStatus: (status: { code: number; message?: string }) => {
+        entry.status = status;
+      },
+      end: () => {
+        entry.ended = true;
+      },
+      recordException: () => undefined,
+      addEvent: () => undefined,
+      spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+      isRecording: () => true,
+      updateName: () => undefined,
+    };
+  };
+  vi.spyOn(trace, 'getTracer').mockReturnValue({
+    startSpan: (name: string, options?: { attributes?: Record<string, unknown> }) =>
+      make(name, options?.attributes),
+    startActiveSpan: (...args: any[]) => {
+      const name = args[0];
+      const options = typeof args[1] === 'object' ? args[1] : undefined;
+      const callback = args[args.length - 1];
+      return callback(make(name, options?.attributes));
+    },
+  } as any);
+  return spans;
+}
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
@@ -97,12 +101,50 @@ describe('OpenAI Provider', () => {
       },
     });
 
+    it.each(['gpt-transcribe', 'gpt-live-transcribe', 'gpt-5.3-codex-spark'])(
+      'should reject unsupported first-party model override %s in the direct constructor',
+      (modelName) => {
+        expect(
+          () =>
+            new OpenAiAssistantProvider('test-assistant-id', {
+              config: { apiKey: 'test-key', modelName },
+            }),
+        ).toThrow();
+      },
+    );
+
     it('should handle successful assistant completion', async () => {
-      const mockRun = createCompletedAssistantRun();
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
 
-      const mockSteps = createMessageCreationSteps();
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'message_creation',
+              message_creation: {
+                message_id: 'msg_1',
+              },
+            },
+          },
+        ],
+      };
 
-      const mockMessage = createAssistantTextMessage();
+      const mockMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: {
+              value: 'Test response',
+            },
+          },
+        ],
+      };
 
       mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
@@ -127,8 +169,18 @@ describe('OpenAI Provider', () => {
 
     it('drops the SDK organization option when a case-variant org header overrides it', async () => {
       const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
-      const mockSteps = createMessageCreationSteps();
-      const mockMessage = createAssistantTextMessage();
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: { type: 'message_creation', message_creation: { message_id: 'msg_1' } },
+          },
+        ],
+      };
+      const mockMessage = {
+        role: 'assistant',
+        content: [{ type: 'text', text: { value: 'Test response' } }],
+      };
       mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
@@ -158,11 +210,21 @@ describe('OpenAI Provider', () => {
 
     it('passes custom gateway query credentials through the SDK default query', async () => {
       const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
-      const mockSteps = createMessageCreationSteps();
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: { type: 'message_creation', message_creation: { message_id: 'msg_1' } },
+          },
+        ],
+      };
       mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
-      mockClient.beta.threads.messages.retrieve.mockResolvedValue(createAssistantTextMessage());
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue({
+        role: 'assistant',
+        content: [{ type: 'text', text: { value: 'Test response' } }],
+      });
       const gatewayProvider = new OpenAiAssistantProvider('test-assistant-id', {
         config: {
           apiKey: 'test-key',
@@ -183,14 +245,26 @@ describe('OpenAI Provider', () => {
     it('emits an agent invocation span around the assistant run', async () => {
       const spans = installTracerSpy();
       const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
-      const mockSteps = createMessageCreationSteps();
-      const mockMessage = createAssistantTextMessage();
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: { type: 'message_creation', message_creation: { message_id: 'msg_1' } },
+          },
+        ],
+      };
+      const mockMessage = {
+        role: 'assistant',
+        content: [{ type: 'text', text: { value: 'Test response' } }],
+      };
       mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
       mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
 
-      const localProvider = new OpenAiAssistantProvider('test-assistant-id', createApiKeyOptions());
+      const localProvider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: { apiKey: 'test-key' },
+      });
       await localProvider.callApi('Test prompt');
 
       const agentSpan = spans.find((span) => span.name === 'invoke_agent');
@@ -211,7 +285,9 @@ describe('OpenAI Provider', () => {
       const spans = installTracerSpy();
       mockClient.beta.threads.createAndRun.mockRejectedValue(new Error('assistant boom'));
 
-      const localProvider = new OpenAiAssistantProvider('test-assistant-id', createApiKeyOptions());
+      const localProvider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: { apiKey: 'test-key' },
+      });
       const result = await localProvider.callApi('Test prompt');
       expect(result.error).toBeDefined();
 
@@ -223,11 +299,37 @@ describe('OpenAI Provider', () => {
     });
 
     it('should preserve an explicit temperature of 0', async () => {
-      const mockRun = createCompletedAssistantRun();
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
 
-      const mockSteps = createMessageCreationSteps();
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'message_creation',
+              message_creation: {
+                message_id: 'msg_1',
+              },
+            },
+          },
+        ],
+      };
 
-      const mockMessage = createAssistantTextMessage();
+      const mockMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: {
+              value: 'Test response',
+            },
+          },
+        ],
+      };
 
       mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
       mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
@@ -339,12 +441,24 @@ describe('OpenAI Provider', () => {
 
     it('should handle API errors', async () => {
       const error = new OpenAI.APIError(500, {}, 'API Error', new Headers());
-      Object.defineProperty(error, 'type', createApiErrorMessageDescriptor());
-      Object.defineProperty(error, 'message', createApiErrorMessageDescriptor());
+      Object.defineProperty(error, 'type', {
+        value: 'API Error',
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(error, 'message', {
+        value: 'API Error',
+        writable: true,
+        configurable: true,
+      });
 
       mockClient.beta.threads.createAndRun.mockRejectedValueOnce(error);
 
-      const provider = new OpenAiAssistantProvider('test-assistant-id', createApiKeyOptions());
+      const provider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
 
       const result = await provider.callApi('Test prompt');
 

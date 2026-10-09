@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { createDeepSeekProvider } from '../../src/providers/deepseek';
 import { mockProcessEnv } from '../util/utils';
-import { createMockFetchResponse } from './mockProviderResponses';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import type { OpenAiCompletionOptions } from '../../src/providers/openai/types';
@@ -92,28 +91,34 @@ describe('DeepSeek current models', () => {
     { prompt_cache_hit_tokens: 500_000 },
     { prompt_tokens_details: { cached_tokens: 500_000 } },
   ])('prices current Flash cache reads from the API usage fields', async (cacheUsage) => {
-    vi.mocked(fetchWithCache).mockResolvedValue(
-      createMockFetchResponse({
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
         choices: [{ message: { content: 'Hello' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000, ...cacheUsage },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
     const result = await provider().callApi('Hello');
     expect(result.output).toBe('Hello');
     expect(result.cost).toBeCloseTo(1.353);
   });
 
   it('uses prompt-level cost overrides', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(
-      createMockFetchResponse({
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
         choices: [{ message: { content: 'Hello' }, finish_reason: 'stop' }],
         usage: {
           prompt_tokens: 1_000_000,
           completion_tokens: 1_000_000,
           prompt_cache_hit_tokens: 500_000,
         },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
     const result = await provider().callApi('Hello', {
       vars: {},
       prompt: {

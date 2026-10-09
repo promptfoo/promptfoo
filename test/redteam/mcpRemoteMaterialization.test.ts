@@ -5,14 +5,23 @@ import { getEnvBool, getEnvInt, getEnvString } from '../../src/envars';
 import { getUserEmail, isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { materializeMcpToolCallRemote } from '../../src/redteam/extraction/util';
 
-const { createDisabledCloudConfigFactory } = await vi.hoisted(
-  () => import('../factories/moduleMocks'),
-);
-
 vi.mock('../../src/cache');
 vi.mock('../../src/envars');
 vi.mock('../../src/globalConfig/accounts');
-vi.mock('../../src/globalConfig/cloud', createDisabledCloudConfigFactory());
+vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    CloudConfig: class {
+      isEnabled() {
+        return false;
+      }
+      getApiHost() {
+        return 'https://api.promptfoo.app';
+      }
+    },
+  };
+});
 
 describe('materializeMcpToolCallRemote', () => {
   const searchCompaniesTool = {

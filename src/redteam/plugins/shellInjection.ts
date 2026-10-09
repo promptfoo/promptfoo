@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion } from '../../types/index';
 
@@ -93,7 +93,12 @@ export class ShellInjectionPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [createAssertion(PLUGIN_ID, 'ShellInjection')];
+    return [
+      {
+        type: PLUGIN_ID,
+        metric: 'ShellInjection',
+      },
+    ];
   }
 }
 

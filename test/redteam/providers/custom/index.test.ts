@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runEval } from '../../../../src/evaluator';
+import logger from '../../../../src/logger';
 import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
-import { CustomProvider } from '../../../../src/redteam/providers/custom/index';
+import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
-import { createFailingGrader, createPassingGrader } from '../../../factories/mockGrader';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
+
+import type { Message } from '../../../../src/redteam/providers/shared';
 
 // Hoisted mocks for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -70,6 +73,49 @@ vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal
   };
 });
 
+describe('MemorySystem', () => {
+  let memorySystem: MemorySystem;
+
+  beforeEach(() => {
+    memorySystem = new MemorySystem();
+  });
+
+  it('should add and retrieve messages for a conversation', () => {
+    const conversationId = 'test-convo';
+    const message: Message = { role: 'user', content: 'test message' };
+
+    memorySystem.addMessage(conversationId, message);
+    const conversation = memorySystem.getConversation(conversationId);
+
+    expect(conversation).toHaveLength(1);
+    expect(conversation[0]).toEqual(message);
+  });
+
+  it('should return empty array for non-existent conversation', () => {
+    const conversation = memorySystem.getConversation('non-existent');
+    expect(conversation).toEqual([]);
+  });
+
+  it('should duplicate conversation excluding last turn', () => {
+    const conversationId = 'test-convo';
+    const messages: Message[] = [
+      { role: 'system', content: 'system message' },
+      { role: 'user', content: 'user message 1' },
+      { role: 'assistant', content: 'assistant message 1' },
+      { role: 'user', content: 'user message 2' },
+      { role: 'assistant', content: 'assistant message 2' },
+    ];
+
+    messages.forEach((msg) => memorySystem.addMessage(conversationId, msg));
+
+    const newConversationId = memorySystem.duplicateConversationExcludingLastTurn(conversationId);
+    const newConversation = memorySystem.getConversation(newConversationId);
+
+    expect(newConversation).toHaveLength(3);
+    expect(newConversation).toEqual(messages.slice(0, 3));
+  });
+});
+
 describe('CustomProvider', () => {
   let customProvider: CustomProvider;
   let mockRedTeamProvider: MockApiProvider;
@@ -115,7 +161,15 @@ describe('CustomProvider', () => {
 
     // Set up default getGraderById mock
     mockGetGraderById.mockReset();
-    mockGetGraderById.mockImplementation(createFailingGrader);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: false,
+          },
+        })),
+      } as any;
+    });
 
     // Set up default tryUnblocking mock
     vi.mocked(tryUnblocking).mockReset();
@@ -426,9 +480,15 @@ describe('CustomProvider', () => {
 
   it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
-    mockGetGraderById.mockImplementation(
-      /* Pass means no jailbreak detected */ createPassingGrader,
-    );
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: true, // Pass means no jailbreak detected
+          },
+        })),
+      } as any;
+    });
 
     // Create a new provider with smaller max turns for this test
     const testProvider = new CustomProvider({
@@ -753,7 +813,15 @@ describe('CustomProvider', () => {
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
-    mockGetGraderById.mockImplementation(createPassingGrader);
+    mockGetGraderById.mockImplementation(function () {
+      return {
+        getResult: vi.fn(async () => ({
+          grade: {
+            pass: true,
+          },
+        })),
+      } as any;
+    });
 
     const testProvider = new CustomProvider({
       injectVar: 'objective',
@@ -881,40 +949,136 @@ describe('CustomProvider', () => {
     expect(result.metadata?.successfulAttacks?.length).toBeGreaterThan(0);
   });
 
-  it('should surface final target error while preserving mapped output', async () => {
+  it.each(['HTTP 504', { status: 504 }])(
+    'surfaces final target error %j while preserving output',
+    async (error) => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'simple',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'p', label: 'l' },
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'attack',
+          rationaleBehindJailbreak: 'r',
+          lastResponseSummary: 's',
+        }),
+      });
+
+      // final target returns error with output
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'This is 504',
+        error: error as unknown as string,
+      });
+
+      // refusal false, eval not 100
+      mockScoringProvider.callApi
+        .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 0 }) })
+        .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 50 }) });
+
+      const result = await provider.callApi('p', context);
+      expect(result.output).toBe('This is 504');
+      expect(result.error).toBe(typeof error === 'string' ? error : 'Error');
+    },
+  );
+
+  it.each([
+    { unblocking: false, ended: false },
+    { unblocking: true, ended: false },
+    { unblocking: false, ended: true },
+  ])('clears a prior missing-output error after recovery: %j', async ({ unblocking, ended }) => {
     const provider = new CustomProvider({
       injectVar: 'objective',
-      strategyText: 'simple',
-      maxTurns: 1,
+      strategyText: 'Local recovery fixture',
+      maxTurns: 2,
+      maxBacktracks: 1,
       redteamProvider: mockRedTeamProvider,
       stateful: false,
     });
-
-    const context = {
-      originalProvider: mockTargetProvider,
-      vars: { objective: 'test objective' },
-      prompt: { raw: 'p', label: 'l' },
-    };
-
+    const infoSpy = vi.spyOn(logger, 'info');
     mockRedTeamProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
         generatedQuestion: 'attack',
-        rationaleBehindJailbreak: 'r',
-        lastResponseSummary: 's',
+        rationaleBehindJailbreak: 'rationale',
+        lastResponseSummary: 'summary',
       }),
+      tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
+    });
+    if (unblocking) {
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'Please confirm the request',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+      vi.mocked(tryUnblocking).mockResolvedValueOnce({
+        success: true,
+        unblockingPrompt: 'Confirmed',
+      });
+    }
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, numRequests: 1 },
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: { authorization: 'Bearer CUSTOM_SECRET_CANARY' },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        output: ended ? '' : 'I cannot help with that request.',
+        ...(ended ? { conversationEnded: true } : {}),
+        tokenUsage: { total: 8, prompt: 6, completion: 2, numRequests: 1 },
+      });
+    const prompt = { raw: 'Test prompt', label: 'test' };
+    const [result] = await runEval({
+      provider: {
+        id: () => 'custom-recovery-fixture',
+        callApi: () =>
+          provider.callApi('Test prompt', {
+            originalProvider: mockTargetProvider,
+            prompt,
+            vars: { objective: 'Test objective' },
+          }),
+      },
+      prompt,
+      test: { assert: [{ type: 'is-refusal' }] },
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: true,
     });
 
-    // final target returns error with output
-    mockTargetProvider.callApi.mockResolvedValue({ output: 'This is 504', error: 'HTTP 504' });
-
-    // refusal false, eval not 100
-    mockScoringProvider.callApi
-      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 0 }) })
-      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 50 }) });
-
-    const result = await provider.callApi('p', context);
-    expect(result.output).toBe('This is 504');
-    expect(result.error).toBe('HTTP 504');
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.tokenUsage).toMatchObject({
+      total: unblocking ? 16 : 13,
+      numRequests: unblocking ? 3 : 2,
+      attacker: { total: 40, numRequests: 2 },
+    });
+    expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+    expect(
+      infoSpy.mock.calls.some(([message]) => String(message).includes('CUSTOM_SECRET_CANARY')),
+    ).toBe(false);
+    if (!unblocking) {
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Target error'),
+        expect.objectContaining({
+          response: expect.objectContaining({ metadata: expect.any(Object) }),
+        }),
+      );
+    }
   });
 
   it('should handle custom strategy text with round-specific logic', async () => {

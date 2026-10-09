@@ -1,9 +1,3 @@
-import {
-  createDebugContextFixture,
-  createEnabledSetting,
-  createGetOptions,
-  createHttpResponse,
-} from '../../factories/literalFixtures';
 // Request lifecycle tests: body determination, session handling, validation, transforms, token estimation, abort signals.
 import './setup';
 
@@ -22,54 +16,6 @@ import {
   HttpProvider,
 } from '../../../src/providers/http';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
-
-const createJsonPostOptions = () => ({
-  config: {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: { key: '{{ prompt }}' },
-  },
-});
-
-const createAuthenticatedSessionPostOptions = () => ({
-  config: {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: { query: '{{ prompt }}', session: '{{ sessionId }}' },
-    session: {
-      url: 'http://test.com/auth/session',
-      method: 'POST',
-      responseParser: 'data.body.sessionId',
-    },
-  },
-});
-
-const createSessionPostOptions = () => ({
-  config: {
-    method: 'POST',
-    body: { query: '{{ prompt }}' },
-    session: {
-      url: 'http://test.com/auth/session',
-      responseParser: 'data.body.sessionId',
-    },
-  },
-});
-
-const createSuccessJsonResponse = () => ({
-  data: { result: 'success' },
-  status: 200,
-  headers: { 'content-type': 'application/json' },
-  statusText: 'OK',
-  cached: false,
-});
-
-const createStatusOptions = (validateStatus: string = 'status >= 200 && status < 300') => ({
-  config: {
-    method: 'POST',
-    body: { key: 'value' },
-    validateStatus,
-  },
-});
 
 describe('determineRequestBody', () => {
   it('should merge parsed prompt object with config body when content type is JSON', () => {
@@ -255,7 +201,13 @@ describe('constructor validation', () => {
 
 describe('content type handling', () => {
   it('should handle JSON content type with object body', async () => {
-    const provider = new HttpProvider('http://test.com', createJsonPostOptions());
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
 
     const mockResponse = {
       data: JSON.stringify({ result: 'success' }),
@@ -401,7 +353,13 @@ describe('request transformation', () => {
 
 describe('response handling', () => {
   it('should handle successful JSON response', async () => {
-    const provider = new HttpProvider('http://test.com', createJsonPostOptions());
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
 
     const mockResponse = {
       data: JSON.stringify({ result: 'success' }),
@@ -452,9 +410,17 @@ describe('response handling', () => {
       cached: false,
     });
 
-    const provider = new HttpProvider(mockUrl, createGetOptions());
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+      },
+    });
 
-    const result = await provider.callApi('test', createDebugContextFixture('test', 'test'));
+    const result = await provider.callApi('test', {
+      debug: true,
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+    });
 
     expect(result.metadata).toEqual({
       http: {
@@ -484,7 +450,13 @@ describe('response handling', () => {
       },
     });
 
-    vi.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessJsonResponse());
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: { result: 'success' },
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      statusText: 'OK',
+      cached: false,
+    });
 
     const result = await provider.callApi('hello', {
       debug: true,
@@ -520,7 +492,13 @@ describe('response handling', () => {
       },
     });
 
-    vi.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessJsonResponse());
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: { result: 'success' },
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      statusText: 'OK',
+      cached: false,
+    });
 
     const result = await provider.callApi('hello', {
       debug: true,
@@ -550,7 +528,11 @@ describe('response handling', () => {
       cached: false,
     });
 
-    const provider = new HttpProvider(mockUrl, createGetOptions());
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+      },
+    });
 
     const result = await provider.callApi('test');
     expect(result.output).toEqual(mockData);
@@ -577,7 +559,11 @@ describe('response handling', () => {
       },
     });
 
-    const result = await provider.callApi('test', createDebugContextFixture('test', 'test'));
+    const result = await provider.callApi('test', {
+      debug: true,
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+    });
 
     expect(result.raw).toEqual(mockData);
     expect(result.metadata).toHaveProperty('http', {
@@ -687,7 +673,11 @@ describe('response handling', () => {
     });
 
     // Call with debug mode
-    const result = await provider.callApi('test', createDebugContextFixture('test', 'test'));
+    const result = await provider.callApi('test', {
+      debug: true,
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+    });
 
     // Verify transformed response and debug info
     expect(result.output).toEqual({ transformed: true });
@@ -817,10 +807,18 @@ describe('session endpoint', () => {
   });
 
   it('should reuse session when context contains our fetched sessionId (Hydra pattern)', async () => {
-    const provider = new HttpProvider(
-      'http://test.com/api',
-      createAuthenticatedSessionPostOptions(),
-    );
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { query: '{{ prompt }}', session: '{{ sessionId }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          method: 'POST',
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
 
     // First call: fetch session
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
@@ -866,10 +864,18 @@ describe('session endpoint', () => {
   });
 
   it('should fetch fresh session when context contains unknown sessionId (Meta-agent pattern)', async () => {
-    const provider = new HttpProvider(
-      'http://test.com/api',
-      createAuthenticatedSessionPostOptions(),
-    );
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { query: '{{ prompt }}', session: '{{ sessionId }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          method: 'POST',
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
 
     // First call with client-generated UUID
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
@@ -918,7 +924,16 @@ describe('session endpoint', () => {
   });
 
   it('should throw error when session endpoint fails', async () => {
-    const provider = new HttpProvider('http://test.com/api', createSessionPostOptions());
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        body: { query: '{{ prompt }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
 
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: 'Unauthorized',
@@ -934,7 +949,16 @@ describe('session endpoint', () => {
   });
 
   it('should throw error when session endpoint returns no sessionId', async () => {
-    const provider = new HttpProvider('http://test.com/api', createSessionPostOptions());
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        body: { query: '{{ prompt }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
 
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: JSON.stringify({ error: 'no session created' }),
@@ -1069,7 +1093,12 @@ describe('error handling', () => {
       },
     });
 
-    const mockResponse = createHttpResponse('Error message', 400, 'Bad Request');
+    const mockResponse = {
+      data: 'Error message',
+      status: 400,
+      statusText: 'Bad Request',
+      cached: false,
+    };
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow(
@@ -1161,7 +1190,13 @@ describe('validateStatus', () => {
 
   describe('string-based validators', () => {
     it('should handle expression format', async () => {
-      const provider = new HttpProvider('http://test.com', createStatusOptions());
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'status >= 200 && status < 300',
+        },
+      });
 
       // Test successful case
       const mockResponse = {
@@ -1176,7 +1211,12 @@ describe('validateStatus', () => {
       expect(result.output).toEqual({ result: 'success' });
 
       // Test failure case
-      const errorResponse = createHttpResponse('Error message', 400, 'Bad Request');
+      const errorResponse = {
+        data: 'Error message',
+        status: 400,
+        statusText: 'Bad Request',
+        cached: false,
+      };
       vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
 
       await expect(provider.callApi('test')).rejects.toThrow(
@@ -1185,7 +1225,13 @@ describe('validateStatus', () => {
     });
 
     it('should handle arrow function format with parameter', async () => {
-      const provider = new HttpProvider('http://test.com', createStatusOptions('(s) => s < 500'));
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: '(s) => s < 500',
+        },
+      });
 
       // Test accepting 4xx status
       const mockResponse = {
@@ -1200,7 +1246,12 @@ describe('validateStatus', () => {
       expect(result.output).toEqual({ result: 'success' });
 
       // Test rejecting 5xx status
-      const errorResponse = createHttpResponse('Error message', 500, 'Server Error');
+      const errorResponse = {
+        data: 'Error message',
+        status: 500,
+        statusText: 'Server Error',
+        cached: false,
+      };
       vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
 
       await expect(provider.callApi('test')).rejects.toThrow(
@@ -1209,7 +1260,13 @@ describe('validateStatus', () => {
     });
 
     it('should handle arrow function format without parameter', async () => {
-      const provider = new HttpProvider('http://test.com', createStatusOptions('() => true'));
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: '() => true',
+        },
+      });
 
       // Test accepting all status codes
       const responses = [
@@ -1233,10 +1290,13 @@ describe('validateStatus', () => {
     });
 
     it('should handle regular function format', async () => {
-      const provider = new HttpProvider(
-        'http://test.com',
-        createStatusOptions('function(status) { return status < 500; }'),
-      );
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'function(status) { return status < 500; }',
+        },
+      });
 
       // Test accepting 4xx status
       const mockResponse = {
@@ -1251,7 +1311,12 @@ describe('validateStatus', () => {
       expect(result.output).toEqual({ result: 'success' });
 
       // Test rejecting 5xx status
-      const errorResponse = createHttpResponse('Error message', 500, 'Server Error');
+      const errorResponse = {
+        data: 'Error message',
+        status: 500,
+        statusText: 'Server Error',
+        cached: false,
+      };
       vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
 
       await expect(provider.callApi('test')).rejects.toThrow(
@@ -1262,9 +1327,20 @@ describe('validateStatus', () => {
 
   describe('error handling', () => {
     it('should handle malformed string expressions', async () => {
-      const provider = new HttpProvider('http://test.com', createStatusOptions('invalid[syntax'));
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          validateStatus: 'invalid[syntax',
+        },
+      });
 
-      const mockResponse = createHttpResponse();
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
@@ -1386,7 +1462,12 @@ describe('transform response error handling', () => {
       },
     });
 
-    const mockResponse = createHttpResponse();
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Transform failed');
@@ -1400,7 +1481,12 @@ describe('transform response error handling', () => {
       },
     });
 
-    const mockResponse = createHttpResponse();
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Failed to transform response');
@@ -1476,7 +1562,12 @@ describe('arrow function parsing in transformResponse', () => {
       },
     });
 
-    const mockResponse = createHttpResponse();
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     const result = await provider.callApi('test');
@@ -1550,7 +1641,176 @@ describe('status validator error handling', () => {
       },
     });
 
-    const mockResponse = createHttpResponse();
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+  });
+
+  it('should throw error for malformed file-based validator', async () => {
+    vi.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
+
+    await expect(createValidateStatus('file://invalid-validator.js')).rejects.toThrow(
+      /Status validator malformed/,
+    );
+  });
+
+  it('should throw error for unsupported validator type', async () => {
+    await expect(createValidateStatus(123 as any)).rejects.toThrow(
+      'Unsupported status validator type: number',
+    );
+  });
+});
+
+describe('string-based validators', () => {
+  it('should handle expression format', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'status >= 200 && status < 300',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 201,
+      statusText: 'Created',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+
+    const errorResponse = {
+      data: 'Error message',
+      status: 400,
+      statusText: 'Bad Request',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 400 Bad Request: Error message',
+    );
+  });
+
+  it('should handle arrow function format with parameter', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: '(s) => s < 500',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+
+    const errorResponse = {
+      data: 'Error message',
+      status: 500,
+      statusText: 'Server Error',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 500 Server Error: Error message',
+    );
+  });
+
+  it('should handle arrow function format without parameter', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: '() => true',
+      },
+    });
+
+    const responses = [
+      { status: 200, statusText: 'OK' },
+      { status: 404, statusText: 'Not Found' },
+      { status: 500, statusText: 'Server Error' },
+    ];
+
+    for (const { status, statusText } of responses) {
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status,
+        statusText,
+        cached: false,
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+    }
+  });
+
+  it('should handle regular function format', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'function(status) { return status < 500; }',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+
+    const errorResponse = {
+      data: 'Error message',
+      status: 500,
+      statusText: 'Server Error',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 500 Server Error: Error message',
+    );
+  });
+
+  it('should handle malformed string expressions', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'invalid[syntax',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
@@ -1623,7 +1883,9 @@ describe('HttpProvider with token estimation', () => {
       config: {
         method: 'POST',
         body: { prompt: '{{prompt}}' },
-        tokenEstimation: createEnabledSetting(),
+        tokenEstimation: {
+          enabled: true,
+        },
       },
     });
 
@@ -1678,7 +1940,9 @@ describe('HttpProvider with token estimation', () => {
       config: {
         method: 'POST',
         body: { prompt: '{{prompt}}' },
-        tokenEstimation: createEnabledSetting(),
+        tokenEstimation: {
+          enabled: true,
+        },
         transformResponse: () => ({
           output: 'Test response',
           tokenUsage: {
@@ -1716,7 +1980,9 @@ describe('HttpProvider with token estimation', () => {
 
           {"prompt": "{{prompt}}"}
         `,
-        tokenEstimation: createEnabledSetting(),
+        tokenEstimation: {
+          enabled: true,
+        },
       },
     });
 
@@ -1743,7 +2009,9 @@ describe('HttpProvider with token estimation', () => {
       config: {
         method: 'POST',
         body: { prompt: '{{prompt}}' },
-        tokenEstimation: createEnabledSetting(),
+        tokenEstimation: {
+          enabled: true,
+        },
         transformResponse: 'json.message',
       },
     });
@@ -1768,7 +2036,9 @@ describe('HttpProvider with token estimation', () => {
       config: {
         method: 'POST',
         body: { prompt: '{{prompt}}' },
-        tokenEstimation: createEnabledSetting(),
+        tokenEstimation: {
+          enabled: true,
+        },
         transformResponse: 'json', // returns the whole object, not a string
       },
     });
@@ -1910,7 +2180,13 @@ describe('HttpProvider - Abort Signal Handling', () => {
   });
 
   it('should pass abortSignal to fetchWithCache', async () => {
-    const provider = new HttpProvider('http://example.com/api', createJsonPostOptions());
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
 
     const abortController = new AbortController();
     const mockResponse = {
@@ -1970,7 +2246,13 @@ describe('HttpProvider - Abort Signal Handling', () => {
   });
 
   it('should work without abortSignal (backwards compatibility)', async () => {
-    const provider = new HttpProvider('http://example.com/api', createJsonPostOptions());
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
 
     const mockResponse = {
       data: JSON.stringify({ result: 'response text' }),

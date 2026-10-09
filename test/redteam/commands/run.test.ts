@@ -1,7 +1,3 @@
-const { createLoggerModuleWithLevel } = await vi.hoisted(
-  async () => import('../../factories/logger'),
-);
-
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmailValidationError } from '../../../src/globalConfig/accounts';
@@ -17,7 +13,15 @@ vi.mock('../../../src/cliState', () => ({
   },
 }));
 
-vi.mock('../../../src/logger', () => createLoggerModuleWithLevel());
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
+}));
 
 vi.mock('../../../src/telemetry', () => ({
   default: {

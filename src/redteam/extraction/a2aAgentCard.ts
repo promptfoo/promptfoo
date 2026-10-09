@@ -1,9 +1,18 @@
 import logger from '../../logger';
 import { A2AProvider } from '../../providers/a2a';
-import { getProviderPath } from './providerPath';
 
 import type { A2AAgentCard, A2AAgentSkill } from '../../providers/a2a/types';
 import type { ApiProvider } from '../../types/index';
+
+function getProviderPath(provider: ApiProvider): string | null {
+  if (typeof provider.id === 'function') {
+    return provider.id();
+  }
+  if (typeof provider.id === 'string') {
+    return provider.id;
+  }
+  return null;
+}
 
 function isA2AProviderPath(providerPath: string): boolean {
   return providerPath === 'a2a' || providerPath.startsWith('a2a:');

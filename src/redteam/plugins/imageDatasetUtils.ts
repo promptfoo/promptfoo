@@ -1,3 +1,4 @@
+import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 
@@ -115,4 +116,69 @@ export function fisherYatesShuffle<T>(array: T[]): T[] {
  */
 export function getStringField(field: unknown, defaultValue: string = ''): string {
   return typeof field === 'string' ? field : defaultValue;
+}
+
+/**
+ * Base class for image dataset managers with caching
+ */
+export abstract class ImageDatasetManager<T> {
+  protected datasetCache: T[] | null = null;
+  protected abstract pluginId: string;
+  protected abstract datasetPath: string;
+  protected abstract fetchLimit: number;
+
+  /**
+   * Ensure the dataset is loaded into cache
+   */
+  protected async ensureDatasetLoaded(): Promise<void> {
+    if (this.datasetCache !== null) {
+      logger.debug(
+        `[${this.pluginId}] Using cached dataset with ${this.datasetCache.length} records`,
+      );
+      return;
+    }
+
+    logger.debug(`[${this.pluginId}] Fetching ${this.fetchLimit} records from dataset`);
+
+    try {
+      const records = await fetchHuggingFaceDataset(this.datasetPath, this.fetchLimit);
+
+      if (!records || records.length === 0) {
+        throw new Error(`No records returned from dataset. Check your Hugging Face API token.`);
+      }
+
+      logger.debug(`[${this.pluginId}] Fetched ${records.length} total records`);
+
+      // Process records - to be implemented by subclass
+      this.datasetCache = await this.processRecords(records);
+
+      logger.debug(`[${this.pluginId}] Cached ${this.datasetCache.length} processed records`);
+    } catch (error) {
+      logger.error(
+        `[${this.pluginId}] Error fetching dataset: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(
+        `Failed to fetch dataset: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Process raw records from Hugging Face into the desired format
+   * Must be implemented by subclasses
+   */
+  protected abstract processRecords(records: any[]): Promise<T[]>;
+
+  /**
+   * Get filtered records based on plugin configuration
+   * Must be implemented by subclasses
+   */
+  public abstract getFilteredRecords(limit: number, config?: any): Promise<T[]>;
+
+  /**
+   * Clear the cache - useful for testing
+   */
+  public clearCache(): void {
+    this.datasetCache = null;
+  }
 }

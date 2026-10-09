@@ -665,8 +665,6 @@ async function runCodeScan(): Promise<void> {
 
   core.info('✅ Not a setup PR - proceeding with security scan');
 
-  const oidcToken = await authenticateWithOidc();
-
   let finalConfigPath = inputs.configPath;
   const minimumSeverity = inputs.minimumSeverity;
   if (!finalConfigPath) {
@@ -698,6 +696,8 @@ async function runCodeScan(): Promise<void> {
     const promptfooVersion = inputs.promptfooVersion;
     async function runPromptfooScan(): Promise<ScanResponse> {
       const promptfooEntrypoint = await installPromptfooCli(promptfooVersion);
+      // OIDC tokens are short-lived; installation must not consume their authentication window.
+      const oidcToken = await authenticateWithOidc();
 
       core.info('🚀 Running promptfoo code-scans run...');
 

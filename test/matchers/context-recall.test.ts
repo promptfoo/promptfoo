@@ -3,18 +3,16 @@ import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefault
 import { matchesContextRecall } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
-const createAttributionResponse = () => ({
-  output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',
-  tokenUsage: { total: 10, prompt: 5, completion: 5 },
-});
-
 describe('matchesContextRecall', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue(createAttributionResponse());
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   afterEach(() => {
@@ -44,7 +42,10 @@ describe('matchesContextRecall', () => {
     const threshold = 0.5;
 
     const mockCallApi = vi.fn().mockImplementation(() => {
-      return Promise.resolve(createAttributionResponse());
+      return Promise.resolve({
+        output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
     });
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);

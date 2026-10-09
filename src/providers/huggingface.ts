@@ -23,13 +23,6 @@ function singleRow(data: unknown): unknown {
   return Array.isArray(data) && data.length === 1 && Array.isArray(data[0]) ? data[0] : data;
 }
 
-function classificationResponse(ret: ProviderClassificationResponse): ProviderResponse {
-  return {
-    error: ret.error,
-    output: JSON.stringify(ret.classification),
-  };
-}
-
 interface HuggingfaceProviderOptions {
   apiKey?: string;
   apiEndpoint?: string;
@@ -292,13 +285,15 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 }
 
+type HuggingfaceTextClassificationOptions = HuggingfaceProviderOptions;
+
 export class HuggingfaceTextClassificationProvider implements ApiProvider {
   modelName: string;
-  config: HuggingfaceProviderOptions;
+  config: HuggingfaceTextClassificationOptions;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceProviderOptions } = {},
+    options: { id?: string; config?: HuggingfaceTextClassificationOptions } = {},
   ) {
     const { id, config } = options;
     this.modelName = modelName;
@@ -380,22 +375,26 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    return classificationResponse(await this.callClassificationApi(prompt));
+    const ret = await this.callClassificationApi(prompt);
+    return {
+      error: ret.error,
+      output: JSON.stringify(ret.classification),
+    };
   }
 }
 
-type HuggingfaceInferenceOptions = HuggingfaceProviderOptions & {
+type HuggingfaceFeatureExtractionOptions = HuggingfaceProviderOptions & {
   use_cache?: boolean;
   wait_for_model?: boolean;
 };
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   modelName: string;
-  config: HuggingfaceInferenceOptions;
+  config: HuggingfaceFeatureExtractionOptions;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceInferenceOptions } = {},
+    options: { id?: string; config?: HuggingfaceFeatureExtractionOptions } = {},
   ) {
     const { id, config } = options;
     this.modelName = modelName;
@@ -475,13 +474,18 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   }
 }
 
+type HuggingfaceSentenceSimilarityOptions = HuggingfaceProviderOptions & {
+  use_cache?: boolean;
+  wait_for_model?: boolean;
+};
+
 export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
   modelName: string;
-  config: HuggingfaceInferenceOptions;
+  config: HuggingfaceSentenceSimilarityOptions;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceInferenceOptions } = {},
+    options: { id?: string; config?: HuggingfaceSentenceSimilarityOptions } = {},
   ) {
     const { id, config } = options;
     this.modelName = modelName;
@@ -660,6 +664,10 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    return classificationResponse(await this.callClassificationApi(prompt));
+    const ret = await this.callClassificationApi(prompt);
+    return {
+      error: ret.error,
+      output: JSON.stringify(ret.classification),
+    };
   }
 }

@@ -3,13 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 import { mockProcessEnv } from '../../util/utils';
-import { registerAzureBaseUrlTests } from './baseUrlTests';
-
-const createClientCredentials = () => ({
-  azureClientId: 'private-client',
-  azureClientSecret: 'private-secret',
-  azureTenantId: 'private-tenant',
-});
 
 vi.mock('@azure/identity', () => {
   class FakeCredential {
@@ -39,7 +32,45 @@ describe('AzureGenericProvider', () => {
       restoreEnv();
     });
 
-    registerAzureBaseUrlTests();
+    it('should return apiBaseUrl if set', () => {
+      const provider = new AzureGenericProvider('test-deployment', {
+        config: { apiBaseUrl: 'https://custom.azure.com' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://custom.azure.com');
+    });
+
+    it('should return apiBaseUrl without trailing slash if set', () => {
+      const provider = new AzureGenericProvider('test-deployment', {
+        config: { apiBaseUrl: 'https://custom.azure.com/' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://custom.azure.com');
+    });
+
+    it('should construct URL from apiHost without protocol', () => {
+      const provider = new AzureGenericProvider('test-deployment', {
+        config: { apiHost: 'api.azure.com' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://api.azure.com');
+    });
+
+    it('should remove protocol from apiHost if present', () => {
+      const provider = new AzureGenericProvider('test-deployment', {
+        config: { apiHost: 'https://api.azure.com' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://api.azure.com');
+    });
+
+    it('should remove trailing slash from apiHost if present', () => {
+      const provider = new AzureGenericProvider('test-deployment', {
+        config: { apiHost: 'api.azure.com/' },
+      });
+      expect(provider.getApiBaseUrl()).toBe('https://api.azure.com');
+    });
+
+    it('should return undefined if neither apiBaseUrl nor apiHost is set', () => {
+      const provider = new AzureGenericProvider('test-deployment', {});
+      expect(provider.getApiBaseUrl()).toBeUndefined();
+    });
   });
 
   describe('Entra ID token refresh', () => {
@@ -117,7 +148,11 @@ describe('AzureGenericProvider', () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       const debugSpy = vi.spyOn(logger, 'debug');
       const provider = new AzureGenericProvider('d', {
-        config: createClientCredentials(),
+        config: {
+          azureClientId: 'private-client',
+          azureClientSecret: 'private-secret',
+          azureTenantId: 'private-tenant',
+        },
       });
       await provider.ensureInitialized();
 
@@ -148,7 +183,11 @@ describe('AzureGenericProvider', () => {
           });
         },
         async () => {
-          const config = createClientCredentials();
+          const config = {
+            azureClientId: 'private-client',
+            azureClientSecret: 'private-secret',
+            azureTenantId: 'private-tenant',
+          };
           const providerCredentials = [];
           for (const deployment of ['first', 'second']) {
             const provider = new AzureGenericProvider(deployment, { config });

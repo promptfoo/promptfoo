@@ -1,66 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
-
 import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureAssistantProvider } from '../../../src/providers/azure/assistant';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { sleep } from '../../../src/util/time';
 
-const createToolActionRun = () => ({
-  id: 'run-123',
-  status: 'requires_action',
-  required_action: {
-    type: 'submit_tool_outputs',
-    submit_tool_outputs: {
-      tool_calls: [
-        {
-          id: 'call-123',
-          type: 'function',
-          function: {
-            name: 'testFunction',
-            arguments: '{"param": "value"}',
-          },
-        },
-      ],
-    },
-  },
-});
-
-const createAzureAuthHeaders = () => ({
-  'Content-Type': 'application/json',
-  'api-key': 'test-key',
-});
-
-const createFileSearchSteps = () => ({
-  data: [
-    {
-      id: 'step-123',
-      type: 'tool_calls',
-      step_details: {
-        tool_calls: [
-          {
-            type: 'file_search',
-            file_search: {
-              query: 'search term',
-              results: ['file1.txt', 'file2.txt'],
-            },
-          },
-        ],
-      },
-    },
-  ],
-});
-
-const createQuotaExceededError = () => ({
-  status: 429,
-  code: 'insufficient_quota',
-});
-
 vi.mock('../../../src/cache');
 vi.mock('../../../src/util/time');
-vi.mock('../../../src/logger', () => createEsLoggerModule(true));
+vi.mock('../../../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
 
 describe('Azure Assistant Provider', () => {
   let provider: AzureAssistantProvider;
@@ -86,7 +41,10 @@ describe('Azure Assistant Provider', () => {
 
     // Set up test spies on provider's private methods
     vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
-    vi.spyOn(provider as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+    vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+      'Content-Type': 'application/json',
+      'api-key': 'test-key',
+    });
     vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
     vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
     vi.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
@@ -536,7 +494,10 @@ describe('Azure Assistant Provider', () => {
 
       // Set up private methods mocking
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
-      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
       vi.spyOn(provider as any, 'processCompletedRun').mockResolvedValue({
@@ -549,7 +510,25 @@ describe('Azure Assistant Provider', () => {
         .mockResolvedValueOnce(mockThreadResponse)
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce(mockRunResponse)
-        .mockResolvedValueOnce(createToolActionRun())
+        .mockResolvedValueOnce({
+          id: 'run-123',
+          status: 'requires_action',
+          required_action: {
+            type: 'submit_tool_outputs',
+            submit_tool_outputs: {
+              tool_calls: [
+                {
+                  id: 'call-123',
+                  type: 'function',
+                  function: {
+                    name: 'testFunction',
+                    arguments: '{"param": "value"}',
+                  },
+                },
+              ],
+            },
+          },
+        })
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({ id: 'run-123', status: 'completed' });
 
@@ -617,7 +596,10 @@ describe('Azure Assistant Provider', () => {
 
       // Set up private methods mocking
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
-      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
       vi.spyOn(provider as any, 'processCompletedRun').mockResolvedValue({
@@ -685,7 +667,10 @@ describe('Azure Assistant Provider', () => {
       (provider as any).authHeaders = { 'api-key': 'test-key' };
 
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
-      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
       vi.spyOn(provider as any, 'processCompletedRun').mockResolvedValue({
@@ -698,7 +683,25 @@ describe('Azure Assistant Provider', () => {
         .mockResolvedValueOnce(mockThreadResponse)
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce(mockRunResponse)
-        .mockResolvedValueOnce(createToolActionRun())
+        .mockResolvedValueOnce({
+          id: 'run-123',
+          status: 'requires_action',
+          required_action: {
+            type: 'submit_tool_outputs',
+            submit_tool_outputs: {
+              tool_calls: [
+                {
+                  id: 'call-123',
+                  type: 'function',
+                  function: {
+                    name: 'testFunction',
+                    arguments: '{"param": "value"}',
+                  },
+                },
+              ],
+            },
+          },
+        })
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({ id: 'run-123', status: 'completed' });
 
@@ -741,7 +744,10 @@ describe('Azure Assistant Provider', () => {
       (provider as any).authHeaders = { 'api-key': 'test-key' };
 
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
-      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
       vi.spyOn(provider as any, 'processCompletedRun').mockResolvedValue({
@@ -754,7 +760,25 @@ describe('Azure Assistant Provider', () => {
         .mockResolvedValueOnce(mockThreadResponse)
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce(mockRunResponse)
-        .mockResolvedValueOnce(createToolActionRun())
+        .mockResolvedValueOnce({
+          id: 'run-123',
+          status: 'requires_action',
+          required_action: {
+            type: 'submit_tool_outputs',
+            submit_tool_outputs: {
+              tool_calls: [
+                {
+                  id: 'call-123',
+                  type: 'function',
+                  function: {
+                    name: 'testFunction',
+                    arguments: '{"param": "value"}',
+                  },
+                },
+              ],
+            },
+          },
+        })
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({ id: 'run-123', status: 'completed' });
 
@@ -972,7 +996,25 @@ describe('Azure Assistant Provider', () => {
         ],
       };
 
-      const mockStepsResponse = createFileSearchSteps();
+      const mockStepsResponse = {
+        data: [
+          {
+            id: 'step-123',
+            type: 'tool_calls',
+            step_details: {
+              tool_calls: [
+                {
+                  type: 'file_search',
+                  file_search: {
+                    query: 'search term',
+                    results: ['file1.txt', 'file2.txt'],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
 
       const mockRunResponse = { id: 'run-123', created_at: Date.now() };
 
@@ -1149,7 +1191,25 @@ describe('Azure Assistant Provider', () => {
       // Edge case with no messages, only tool calls
       const mockMessagesResponse = { data: [] };
 
-      const mockStepsResponse = createFileSearchSteps();
+      const mockStepsResponse = {
+        data: [
+          {
+            id: 'step-123',
+            type: 'tool_calls',
+            step_details: {
+              tool_calls: [
+                {
+                  type: 'file_search',
+                  file_search: {
+                    query: 'search term',
+                    results: ['file1.txt', 'file2.txt'],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
 
       const mockRunResponse = { id: 'run-123', created_at: Date.now() };
 
@@ -1253,7 +1313,10 @@ describe('Azure Assistant Provider', () => {
       });
       (zeroRetryProvider as any).authHeaders = { 'api-key': 'test-key' };
       (zeroRetryProvider as any).makeRequest = AzureAssistantProvider.prototype['makeRequest'];
-      vi.spyOn(zeroRetryProvider as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+      vi.spyOn(zeroRetryProvider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
 
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: { success: true },
@@ -1306,7 +1369,10 @@ describe('Azure Assistant Provider', () => {
     });
 
     it('propagates kind=quota into result.metadata so the scheduler does not retry', () => {
-      const err = new HttpRateLimitError(createQuotaExceededError());
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+      });
       const result = (provider as any).formatError(err);
       expect(result.metadata?.rateLimitKind).toBe('quota');
     });
@@ -1360,9 +1426,15 @@ describe('Azure Assistant Provider', () => {
 
       vi.spyOn(provider2 as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
       vi.spyOn(provider2 as any, 'ensureInitialized').mockResolvedValue(undefined);
-      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
 
-      const quota = new HttpRateLimitError(createQuotaExceededError());
+      const quota = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+      });
       vi.spyOn(provider2 as any, 'makeRequest').mockRejectedValue(quota);
 
       const result = await (provider2 as any).pollRunWithToolCallHandling(
@@ -1392,7 +1464,10 @@ describe('Azure Assistant Provider', () => {
       (provider2 as any).authHeaders = { 'api-key': 'test-key' };
       vi.spyOn(provider2 as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
       vi.spyOn(provider2 as any, 'ensureInitialized').mockResolvedValue(undefined);
-      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
 
       const rateLimit = new HttpRateLimitError({
         status: 429,
@@ -1539,7 +1614,10 @@ describe('Azure Assistant Provider', () => {
       (provider as any).authHeaders = { 'api-key': 'test-key' };
 
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
-      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
       vi.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
@@ -1649,7 +1727,10 @@ describe('Azure Assistant Provider', () => {
       (provider as any).authHeaders = { 'api-key': 'test-key' };
 
       vi.spyOn(provider as any, 'makeRequest').mockImplementation(vi.fn());
-      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue(createAzureAuthHeaders());
+      vi.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
       vi.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
       vi.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
       vi.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);

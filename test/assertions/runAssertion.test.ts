@@ -6,68 +6,10 @@ import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { fetchWithRetries } from '../../src/util/fetch/index';
-import {
-  createContentTypeResponse,
-  createStringAssertion,
-  createThresholdAssertion,
-  createTypeConfig,
-} from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
-
-const createQueryAndContextTest = () => ({
-  vars: {
-    query: 'What is the capital of France?',
-    context: 'Paris is the capital of France.',
-  },
-});
-
-const createDateSchema = () => ({
-  type: 'object' as const,
-  properties: {
-    date: {
-      type: 'string' as const,
-      format: 'date',
-    },
-  },
-  required: ['date'],
-});
-
-const createContextOnlyTest = () => ({
-  vars: {
-    context: 'Paris is the capital of France.',
-  },
-});
-
-const createQueryOnlyTest = () => ({
-  vars: {
-    query: 'What is the capital of France?',
-  },
-});
-
-const createCaseInsensitiveAlternativesAssertion = () => ({
-  type: 'icontains-any' as const,
-  value: ['option1', 'option2', 'option3'],
-});
-
-const createCoordinatesSchema = () => ({
-  required: ['latitude', 'longitude'],
-  type: 'object',
-  properties: {
-    latitude: {
-      type: 'number',
-      minimum: -90,
-      maximum: 90,
-    },
-    longitude: {
-      type: 'number',
-      minimum: -180,
-      maximum: 180,
-    },
-  },
-});
 
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
@@ -184,7 +126,22 @@ describe('runAssertion', () => {
 
   const isJsonAssertionWithSchema: Assertion = {
     type: 'is-json',
-    value: createCoordinatesSchema(),
+    value: {
+      required: ['latitude', 'longitude'],
+      type: 'object',
+      properties: {
+        latitude: {
+          type: 'number',
+          minimum: -90,
+          maximum: 90,
+        },
+        longitude: {
+          type: 'number',
+          minimum: -180,
+          maximum: 180,
+        },
+      },
+    },
   };
 
   const isJsonAssertionWithSchemaYamlString: Assertion = {
@@ -250,7 +207,32 @@ describe('runAssertion', () => {
 
   const containsJsonAssertionWithSchema: Assertion = {
     type: 'contains-json',
-    value: createCoordinatesSchema(),
+    value: {
+      required: ['latitude', 'longitude'],
+      type: 'object',
+      properties: {
+        latitude: {
+          type: 'number',
+          minimum: -90,
+          maximum: 90,
+        },
+        longitude: {
+          type: 'number',
+          minimum: -180,
+          maximum: 180,
+        },
+      },
+    },
+  };
+
+  const javascriptStringAssertion: Assertion = {
+    type: 'javascript',
+    value: 'output === "Expected output"',
+  };
+
+  const javascriptStringAssertionWithNumber: Assertion = {
+    type: 'javascript',
+    value: 'output.length * 10',
   };
 
   const javascriptBooleanAssertionWithConfig: Assertion = {
@@ -259,6 +241,12 @@ describe('runAssertion', () => {
     config: {
       maximumOutputSize: 20,
     },
+  };
+
+  const javascriptStringAssertionWithNumberAndThreshold: Assertion = {
+    type: 'javascript',
+    value: 'output.length * 10',
+    threshold: 0.5,
   };
 
   it('should pass when the equality assertion passes', async () => {
@@ -378,7 +366,10 @@ describe('runAssertion', () => {
   });
 
   it('should pass when the equality assertion with object passes with external json', async () => {
-    const assertion: Assertion = createStringAssertion('equals', 'file:///output.json');
+    const assertion: Assertion = {
+      type: 'equals',
+      value: 'file:///output.json',
+    };
 
     vi.mocked(path.resolve).mockReturnValue('/base/path/output.json');
     vi.mocked(path.extname).mockReturnValue('.json');
@@ -401,7 +392,10 @@ describe('runAssertion', () => {
   });
 
   it('should fail when the equality assertion with object fails with external object', async () => {
-    const assertion: Assertion = createStringAssertion('equals', 'file:///output.json');
+    const assertion: Assertion = {
+      type: 'equals',
+      value: 'file:///output.json',
+    };
 
     vi.mocked(path.resolve).mockReturnValue('/base/path/output.json');
     vi.mocked(path.extname).mockReturnValue('.json');
@@ -600,7 +594,16 @@ describe('runAssertion', () => {
 
   it('should validate JSON with formats using ajv-formats', async () => {
     const output = '{"date": "2021-08-29"}';
-    const schemaWithFormat = createDateSchema();
+    const schemaWithFormat = {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          format: 'date',
+        },
+      },
+      required: ['date'],
+    };
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -618,7 +621,16 @@ describe('runAssertion', () => {
 
   it('should validate JSON with formats using ajv-formats - failure', async () => {
     const output = '{"date": "not a date"}';
-    const schemaWithFormat = createDateSchema();
+    const schemaWithFormat = {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          format: 'date',
+        },
+      },
+      required: ['date'],
+    };
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -636,11 +648,31 @@ describe('runAssertion', () => {
   });
 
   it('should pass when the is-json assertion passes with external schema', async () => {
-    const assertion: Assertion = createStringAssertion('is-json', 'file:///schema.json');
+    const assertion: Assertion = {
+      type: 'is-json',
+      value: 'file:///schema.json',
+    };
 
     vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
     vi.mocked(path.extname).mockReturnValue('.json');
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(createCoordinatesSchema()));
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        required: ['latitude', 'longitude'],
+        type: 'object',
+        properties: {
+          latitude: {
+            type: 'number',
+            minimum: -90,
+            maximum: 90,
+          },
+          longitude: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+          },
+        },
+      }),
+    );
 
     const output = '{"latitude": 80.123, "longitude": -1}';
 
@@ -659,11 +691,31 @@ describe('runAssertion', () => {
   });
 
   it('should fail when the is-json assertion fails with external schema', async () => {
-    const assertion: Assertion = createStringAssertion('is-json', 'file:///schema.json');
+    const assertion: Assertion = {
+      type: 'is-json',
+      value: 'file:///schema.json',
+    };
 
     vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
     vi.mocked(path.extname).mockReturnValue('.json');
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(createCoordinatesSchema()));
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        required: ['latitude', 'longitude'],
+        type: 'object',
+        properties: {
+          latitude: {
+            type: 'number',
+            minimum: -90,
+            maximum: 90,
+          },
+          longitude: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+          },
+        },
+      }),
+    );
 
     const output = '{"latitude": "high", "longitude": [-1]}';
 
@@ -912,7 +964,9 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: createTypeConfig('contains-sql'),
+      assertion: {
+        type: 'contains-sql',
+      },
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
@@ -928,7 +982,9 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: createTypeConfig('contains-sql'),
+      assertion: {
+        type: 'contains-sql',
+      },
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
@@ -944,7 +1000,9 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: createTypeConfig('contains-sql'),
+      assertion: {
+        type: 'contains-sql',
+      },
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
@@ -960,7 +1018,9 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: createTypeConfig('contains-sql'),
+      assertion: {
+        type: 'contains-sql',
+      },
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
@@ -975,7 +1035,9 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: createTypeConfig('contains-sql'),
+      assertion: {
+        type: 'contains-sql',
+      },
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
@@ -1067,11 +1129,31 @@ describe('runAssertion', () => {
   });
 
   it('should pass when the contains-json assertion passes with external schema', async () => {
-    const assertion: Assertion = createStringAssertion('contains-json', 'file:///schema.json');
+    const assertion: Assertion = {
+      type: 'contains-json',
+      value: 'file:///schema.json',
+    };
 
     vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
     vi.mocked(path.extname).mockReturnValue('.json');
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(createCoordinatesSchema()));
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        required: ['latitude', 'longitude'],
+        type: 'object',
+        properties: {
+          latitude: {
+            type: 'number',
+            minimum: -90,
+            maximum: 90,
+          },
+          longitude: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+          },
+        },
+      }),
+    );
 
     const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
 
@@ -1090,11 +1172,31 @@ describe('runAssertion', () => {
   });
 
   it('should fail contains-json assertion with invalid data against external schema', async () => {
-    const assertion: Assertion = createStringAssertion('contains-json', 'file:///schema.json');
+    const assertion: Assertion = {
+      type: 'contains-json',
+      value: 'file:///schema.json',
+    };
 
     vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
     vi.mocked(path.extname).mockReturnValue('.json');
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(createCoordinatesSchema()));
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        required: ['latitude', 'longitude'],
+        type: 'object',
+        properties: {
+          latitude: {
+            type: 'number',
+            minimum: -90,
+            maximum: 90,
+          },
+          longitude: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+          },
+        },
+      }),
+    );
 
     const output = 'here is the answer\n\n```{"latitude": "medium", "longitude": -1}```';
 
@@ -1210,6 +1312,56 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should pass when the javascript assertion passes', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass a score through when the javascript returns a number', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithNumber,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: output.length * 10,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when javascript returns an output string that is smaller than the maximum size threshold', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1.0,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should disregard invalid inputs for assert index', async () => {
     const output = 'Expected output';
 
@@ -1235,6 +1387,95 @@ describe('runAssertion', () => {
       pass: true,
       score: 1.0,
       reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when javascript returns an output string that is larger than the maximum size threshold', async () => {
+    const output = 'Expected output with some extra characters';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptBooleanAssertionWithConfig,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function returned false'),
+    });
+  });
+
+  it('should pass when javascript returns a number above threshold', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithNumberAndThreshold,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: output.length * 10,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when javascript returns a number below threshold', async () => {
+    const output = '';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithNumberAndThreshold,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: output.length * 10,
+      reason: expect.stringContaining('Custom function returned false'),
+    });
+  });
+
+  it('should set score when javascript returns false', async () => {
+    const output = 'Test output';
+
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'output.length < 1',
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function returned false'),
+    });
+  });
+
+  it('should fail when the javascript assertion fails', async () => {
+    const output = 'Different output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Custom function returned false\noutput === "Expected output"',
     });
   });
 
@@ -1414,7 +1655,10 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      assertion: createCaseInsensitiveAlternativesAssertion(),
+      assertion: {
+        type: 'icontains-any',
+        value: ['option1', 'option2', 'option3'],
+      },
       test: {} as AtomicTestCase,
       providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
@@ -1430,7 +1674,10 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
-      assertion: createCaseInsensitiveAlternativesAssertion(),
+      assertion: {
+        type: 'icontains-any',
+        value: ['option1', 'option2', 'option3'],
+      },
       test: {} as AtomicTestCase,
       providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
@@ -1604,7 +1851,12 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     vi.mocked(fetchWithRetries).mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify({ pass: true }), createContentTypeResponse())),
+      Promise.resolve(
+        new Response(JSON.stringify({ pass: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
 
     const result: GradingResult = await runAssertion({
@@ -1623,7 +1875,12 @@ describe('runAssertion', () => {
   it('should fail when the webhook assertion fails', async () => {
     const output = 'Different output';
     vi.mocked(fetchWithRetries).mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify({ pass: false }), createContentTypeResponse())),
+      Promise.resolve(
+        new Response(JSON.stringify({ pass: false }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
 
     const result: GradingResult = await runAssertion({
@@ -1929,7 +2186,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('latency', 100),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
         latencyMs: 50,
         test: {} as AtomicTestCase,
         providerResponse,
@@ -1948,7 +2208,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('latency', 100),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
         latencyMs: 1000,
         test: {} as AtomicTestCase,
         providerResponse,
@@ -1986,7 +2249,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('latency', 100),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
         latencyMs: 0,
         test: {} as AtomicTestCase,
         providerResponse,
@@ -2022,7 +2288,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('latency', 100),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
         latencyMs: 100,
         test: {} as AtomicTestCase,
         providerResponse,
@@ -2041,7 +2310,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('latency', 0),
+        assertion: {
+          type: 'latency',
+          threshold: 0,
+        },
         latencyMs: 0,
         test: {} as AtomicTestCase,
         providerResponse,
@@ -2060,7 +2332,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('latency', 0),
+        assertion: {
+          type: 'latency',
+          threshold: 0,
+        },
         latencyMs: 1,
         test: {} as AtomicTestCase,
         providerResponse,
@@ -2079,7 +2354,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('not-latency', 100),
+        assertion: {
+          type: 'not-latency',
+          threshold: 100,
+        },
         latencyMs: 50,
         test: {} as AtomicTestCase,
         providerResponse,
@@ -2098,7 +2376,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('not-latency', 100),
+        assertion: {
+          type: 'not-latency',
+          threshold: 100,
+        },
         latencyMs: 1000,
         test: {} as AtomicTestCase,
         providerResponse,
@@ -2390,7 +2671,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('cost', 0.001),
+        assertion: {
+          type: 'cost',
+          threshold: 0.001,
+        },
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -2409,7 +2693,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('cost', 0.001),
+        assertion: {
+          type: 'cost',
+          threshold: 0.001,
+        },
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -2428,7 +2715,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('cost', 0),
+        assertion: {
+          type: 'cost',
+          threshold: 0,
+        },
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -2447,7 +2737,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('cost', 0),
+        assertion: {
+          type: 'cost',
+          threshold: 0,
+        },
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -2466,7 +2759,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('not-cost', 0.001),
+        assertion: {
+          type: 'not-cost',
+          threshold: 0.001,
+        },
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -2485,7 +2781,10 @@ describe('runAssertion', () => {
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: createThresholdAssertion('not-cost', 0.001),
+        assertion: {
+          type: 'not-cost',
+          threshold: 0.001,
+        },
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -2680,10 +2979,10 @@ describe('runAssertion', () => {
     it('should pass when required elements are present', async () => {
       const output =
         '<analysis><classification>T-shirt</classification><color>Red</color></analysis>';
-      const assertion: Assertion = createStringAssertion(
-        'is-xml',
-        'analysis.classification,analysis.color',
-      );
+      const assertion: Assertion = {
+        type: 'is-xml',
+        value: 'analysis.classification,analysis.color',
+      };
 
       const result = await runAssertion({
         prompt: 'Generate XML',
@@ -2703,10 +3002,10 @@ describe('runAssertion', () => {
 
     it('should fail when required elements are missing', async () => {
       const output = '<analysis><classification>T-shirt</classification></analysis>';
-      const assertion: Assertion = createStringAssertion(
-        'is-xml',
-        'analysis.classification,analysis.color',
-      );
+      const assertion: Assertion = {
+        type: 'is-xml',
+        value: 'analysis.classification,analysis.color',
+      };
 
       const result = await runAssertion({
         prompt: 'Generate XML',
@@ -2905,10 +3204,10 @@ describe('runAssertion', () => {
     it('should pass when required elements are present in the XML', async () => {
       const output =
         'Before <analysis><classification>T-shirt</classification><color>Red</color></analysis> After';
-      const assertion: Assertion = createStringAssertion(
-        'contains-xml',
-        'analysis.classification,analysis.color',
-      );
+      const assertion: Assertion = {
+        type: 'contains-xml',
+        value: 'analysis.classification,analysis.color',
+      };
 
       const result = await runAssertion({
         prompt: 'Generate text with specific XML',
@@ -2928,10 +3227,10 @@ describe('runAssertion', () => {
 
     it('should fail when required elements are missing in the XML', async () => {
       const output = 'Before <analysis><classification>T-shirt</classification></analysis> After';
-      const assertion: Assertion = createStringAssertion(
-        'contains-xml',
-        'analysis.classification,analysis.color',
-      );
+      const assertion: Assertion = {
+        type: 'contains-xml',
+        value: 'analysis.classification,analysis.color',
+      };
 
       const result = await runAssertion({
         prompt: 'Generate text with specific XML',
@@ -3016,8 +3315,16 @@ describe('runAssertion', () => {
 
   describe('context-relevance assertion', () => {
     it('should pass when all required vars are present', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-relevance', 0.7);
-      const test: AtomicTestCase = createQueryAndContextTest();
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+      };
 
       const result = await runAssertion({
         assertion,
@@ -3037,7 +3344,10 @@ describe('runAssertion', () => {
     });
 
     it('should use resolved vars for context-based grading', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-relevance', 0.7);
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
       const test: AtomicTestCase = {
         vars: {
           query: 'What is the capital of France?',
@@ -3064,7 +3374,10 @@ describe('runAssertion', () => {
     });
 
     it('should throw an error when vars object is missing', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-relevance', 0.7);
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
       const test: AtomicTestCase = {};
 
       await expect(
@@ -3077,8 +3390,15 @@ describe('runAssertion', () => {
     });
 
     it('should throw an error when query var is missing', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-relevance', 0.7);
-      const test: AtomicTestCase = createContextOnlyTest();
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          context: 'Paris is the capital of France.',
+        },
+      };
 
       await expect(
         runAssertion({
@@ -3092,8 +3412,15 @@ describe('runAssertion', () => {
     });
 
     it('should throw an error when context var is missing', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-relevance', 0.7);
-      const test: AtomicTestCase = createQueryOnlyTest();
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+        },
+      };
 
       await expect(
         runAssertion({
@@ -3109,8 +3436,16 @@ describe('runAssertion', () => {
 
   describe('context-faithfulness assertion', () => {
     it('should pass when all required vars are present', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-faithfulness', 0.7);
-      const test: AtomicTestCase = createQueryAndContextTest();
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+      };
 
       const result = await runAssertion({
         assertion,
@@ -3130,7 +3465,10 @@ describe('runAssertion', () => {
     });
 
     it('should throw an error when vars object is missing', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-faithfulness', 0.7);
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
       const test: AtomicTestCase = {};
 
       await expect(
@@ -3143,8 +3481,15 @@ describe('runAssertion', () => {
     });
 
     it('should throw an error when query var is missing', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-faithfulness', 0.7);
-      const test: AtomicTestCase = createContextOnlyTest();
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          context: 'Paris is the capital of France.',
+        },
+      };
 
       await expect(
         runAssertion({
@@ -3158,8 +3503,15 @@ describe('runAssertion', () => {
     });
 
     it('should throw an error when context var is missing', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-faithfulness', 0.7);
-      const test: AtomicTestCase = createQueryOnlyTest();
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+        },
+      };
 
       await expect(
         runAssertion({
@@ -3173,8 +3525,16 @@ describe('runAssertion', () => {
     });
 
     it('should throw an error when output is not a string', async () => {
-      const assertion: Assertion = createThresholdAssertion('context-faithfulness', 0.7);
-      const test: AtomicTestCase = createQueryAndContextTest();
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+      };
 
       await expect(
         runAssertion({
@@ -3211,10 +3571,30 @@ describe('runAssertion', () => {
       });
     });
 
-    it.each([
-      'should handle transform when metadata is undefined',
-      'should handle transform when providerResponse has no metadata',
-    ])('%s', async () => {
+    it('should handle transform when metadata is undefined', async () => {
+      const output = 'Test output';
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'No metadata',
+        transform: 'context.metadata ? "Has metadata" : "No metadata"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle transform when providerResponse has no metadata', async () => {
       const output = 'Test output';
 
       const assertion: Assertion = {

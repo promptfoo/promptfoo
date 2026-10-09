@@ -1,6 +1,6 @@
-import { matchesFactuality } from '../matchers/llmGrading';
+import { isGraderFailure, matchesFactuality } from '../matchers/llmGrading';
+import { invertScore } from '../matchers/shared';
 import invariant from '../util/invariant';
-import { finalizeGradedAssertion } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -30,5 +30,15 @@ export const handleFactuality = async ({
     providerCallContext,
   );
 
-  return finalizeGradedAssertion(resp, assertion, inverse, true);
+  // Grader failures must remain failures under negation.
+  if (isGraderFailure(resp)) {
+    return { ...resp, assertion };
+  }
+
+  return {
+    ...resp,
+    pass: resp.pass !== inverse,
+    score: inverse ? invertScore(resp.score) : resp.score,
+    assertion,
+  };
 };

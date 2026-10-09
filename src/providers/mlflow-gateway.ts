@@ -1,14 +1,22 @@
-import { getEnvString, getProviderEnvString } from '../envars';
+import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { serializeProvider } from './serialization';
 
 import type { EnvVarKey } from '../envars';
+import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 const MLFLOW_GATEWAY_URL_ENV_VAR = 'MLFLOW_GATEWAY_URL';
 const MLFLOW_GATEWAY_API_KEY_ENV_VAR = 'MLFLOW_GATEWAY_API_KEY';
 const MLFLOW_GATEWAY_API_PATH = '/gateway/mlflow/v1';
+
+function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
+  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
+    const value = env[key as keyof EnvOverrides];
+    return value === undefined ? undefined : String(value);
+  }
+  return undefined;
+}
 
 function normalizeGatewayUrl(gatewayUrl: string | undefined): string | undefined {
   const trimmedGatewayUrl = gatewayUrl?.trim();
@@ -129,6 +137,13 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
   // Bearer token set inline in config would be written out verbatim wherever the
   // provider is JSON.stringify-ed.
   toJSON() {
-    return serializeProvider(this, 'mlflow-gateway');
+    return {
+      provider: 'mlflow-gateway',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.config.apiKey && { apiKey: undefined }),
+      },
+    };
   }
 }

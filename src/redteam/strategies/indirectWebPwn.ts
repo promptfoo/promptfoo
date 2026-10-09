@@ -5,7 +5,6 @@ import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { appendMetricSuffix } from './assertions';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -52,13 +51,16 @@ const MAX_PAGE_STATE_ENTRIES = 1000;
  */
 function cleanupExpiredPageState(): void {
   const now = Date.now();
-  let expiredCount = 0;
+  const expiredKeys: string[] = [];
 
   for (const [key, state] of pageStateMap.entries()) {
     if (now - state.createdAt > PAGE_STATE_TTL_MS) {
-      pageStateMap.delete(key);
-      expiredCount++;
+      expiredKeys.push(key);
     }
+  }
+
+  for (const key of expiredKeys) {
+    pageStateMap.delete(key);
   }
 
   // If still over limit after TTL cleanup, remove oldest entries
@@ -72,9 +74,9 @@ function cleanupExpiredPageState(): void {
     }
   }
 
-  if (expiredCount > 0) {
+  if (expiredKeys.length > 0) {
     logger.debug('[IndirectWebPwn] Cleaned up expired page state entries', {
-      removedCount: expiredCount,
+      removedCount: expiredKeys.length,
       remainingCount: pageStateMap.size,
     });
   }
@@ -374,7 +376,10 @@ function transformForStandaloneMode(
           ...config,
         },
       },
-      assert: appendMetricSuffix(testCase, metricSuffix),
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
+      })),
       metadata: {
         ...testCase.metadata,
         strategyId,

@@ -61,16 +61,6 @@ describe('PythonProvider with file references', () => {
   const providers: PythonProvider[] = [];
 
   beforeEach(() => {
-    const createNestedLogger = () =>
-      function () {
-        return {
-          debug: vi.fn(),
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-        } as unknown as Logger;
-      };
-
     vi.clearAllMocks();
     // Reset mock pool
     mocks.PythonWorkerPoolMock.mockClear();
@@ -86,14 +76,30 @@ describe('PythonProvider with file references', () => {
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
 
-    vi.mocked(logger.debug).mockImplementation(createNestedLogger());
+    vi.mocked(logger.debug).mockImplementation(function () {
+      return {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as Logger;
+    });
 
-    vi.mocked(logger.error).mockImplementation(createNestedLogger());
+    vi.mocked(logger.error).mockImplementation(function () {
+      return {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as Logger;
+    });
 
     vi.mocked(path.resolve).mockImplementation(function (...parts) {
       return parts.join('/');
     });
-    vi.mocked(path.relative).mockReturnValue('relative/path');
+    vi.mocked(path.relative).mockImplementation(function () {
+      return 'relative/path';
+    });
     vi.mocked(path.join).mockImplementation(function (...parts) {
       return parts.join('/');
     });
@@ -117,7 +123,9 @@ describe('PythonProvider with file references', () => {
       };
     });
 
-    vi.mocked(fsSync.readFileSync).mockReturnValue('mock file content');
+    vi.mocked(fsSync.readFileSync).mockImplementation(function () {
+      return 'mock file content';
+    });
     vi.mocked(fs.readFile).mockResolvedValue('mock file content');
   });
 

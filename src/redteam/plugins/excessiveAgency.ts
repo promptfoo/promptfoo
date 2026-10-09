@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, AssertionValue, ResultSuggestion } from '../../types/index';
 
@@ -45,8 +45,13 @@ export class ExcessiveAgencyPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    // TODO(ian): Add tool call validation similar to is-valid-openai-tool-call
-    return [createAssertion(PLUGIN_ID, 'ExcessiveAgency')];
+    return [
+      {
+        type: PLUGIN_ID,
+        metric: 'ExcessiveAgency',
+      },
+      // TODO(ian): Add tool call validation similar to is-valid-openai-tool-call
+    ];
   }
 }
 

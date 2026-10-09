@@ -17,17 +17,6 @@ import type {
   Prompt,
 } from '../../../src/types/index';
 
-const createContainsTestCase = () => ({
-  vars: {},
-  assert: [
-    {
-      type: 'contains',
-      value: 'expected content',
-    },
-  ],
-  metadata: { pluginId: 'contains' },
-});
-
 // Mock the graders module at the top level
 const mockGrader = {
   getResult: vi.fn(),
@@ -606,7 +595,16 @@ describe('RedteamGoatProvider', () => {
       },
     });
 
-    const testConfig = createContainsTestCase() as AtomicTestCase;
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'contains',
+          value: 'expected content',
+        },
+      ],
+      metadata: { pluginId: 'contains' },
+    } as AtomicTestCase;
 
     const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
 
@@ -1068,7 +1066,16 @@ describe('RedteamGoatProvider', () => {
       grade: mockGraderResult,
     });
 
-    const testConfig = createContainsTestCase() as AtomicTestCase;
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'contains',
+          value: 'expected content',
+        },
+      ],
+      metadata: { pluginId: 'contains' },
+    } as AtomicTestCase;
 
     const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
 
@@ -1307,7 +1314,16 @@ describe('RedteamGoatProvider', () => {
       };
     });
 
-    const testConfig = createContainsTestCase() as AtomicTestCase;
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'contains',
+          value: 'expected content',
+        },
+      ],
+      metadata: { pluginId: 'contains' },
+    } as AtomicTestCase;
 
     const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
 

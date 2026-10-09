@@ -1,5 +1,3 @@
-const { createLoggerModule } = await vi.hoisted(async () => import('../factories/logger'));
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
@@ -9,19 +7,19 @@ import {
 } from '../../src/providers/minimax';
 import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { mockProcessEnv } from '../util/utils';
-import { createMockFetchResponse } from './mockProviderResponses';
-
-const createSamplingEnvironment = () => ({
-  OPENAI_TOP_P: '0.5',
-  OPENAI_PRESENCE_PENALTY: '0.7',
-  OPENAI_FREQUENCY_PENALTY: '0.9',
-});
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
   fetchWithCache: vi.fn(),
 }));
-vi.mock('../../src/logger', () => createLoggerModule());
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 describe('calculateMiniMaxCost', () => {
   it('should calculate cost without cache for MiniMax-M3', () => {
@@ -353,7 +351,11 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should not leak OpenAI sampling env defaults (OPENAI_TOP_P / OPENAI_PRESENCE_PENALTY / OPENAI_FREQUENCY_PENALTY) into MiniMax requests', async () => {
-    const restoreOpenAiSamplingEnv = mockProcessEnv(createSamplingEnvironment());
+    const restoreOpenAiSamplingEnv = mockProcessEnv({
+      OPENAI_TOP_P: '0.5',
+      OPENAI_PRESENCE_PENALTY: '0.7',
+      OPENAI_FREQUENCY_PENALTY: '0.9',
+    });
     try {
       const provider = createMiniMaxProvider('minimax:MiniMax-M2.7') as any;
       const { body } = await provider.getOpenAiBody('Test prompt');
@@ -367,7 +369,11 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should preserve explicit MiniMax sampling parameters even when OPENAI_* sampling envs are set', async () => {
-    const restoreOpenAiSamplingEnv = mockProcessEnv(createSamplingEnvironment());
+    const restoreOpenAiSamplingEnv = mockProcessEnv({
+      OPENAI_TOP_P: '0.5',
+      OPENAI_PRESENCE_PENALTY: '0.7',
+      OPENAI_FREQUENCY_PENALTY: '0.9',
+    });
     try {
       const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
         config: { config: { top_p: 0.95, presence_penalty: 0.1, frequency_penalty: 0.2 } },
@@ -383,8 +389,8 @@ describe('MiniMaxProvider', () => {
   });
 
   it('should call a configured MiniMax-compatible endpoint and charge prompt-cache reads', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce(
-      createMockFetchResponse({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
         choices: [{ message: { content: 'MiniMax output' }, finish_reason: 'stop' }],
         usage: {
           total_tokens: 15,
@@ -392,8 +398,11 @@ describe('MiniMaxProvider', () => {
           completion_tokens: 5,
           prompt_tokens_details: { cached_tokens: 4 },
         },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
 
     const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
       config: {
@@ -457,8 +466,8 @@ describe('MiniMaxProvider', () => {
   it.each([0, 25, 100])(
     'calculates native cached token usage %s before normalization',
     async (cachedTokens) => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce(
-        createMockFetchResponse({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
           choices: [{ message: { content: 'MiniMax response' }, finish_reason: 'stop' }],
           usage: {
             prompt_tokens: 100,
@@ -466,8 +475,11 @@ describe('MiniMaxProvider', () => {
             total_tokens: 150,
             prompt_tokens_details: { cached_tokens: cachedTokens },
           },
-        }),
-      );
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
       const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
         config: { config: { apiKey: 'fixture-key' } },
       });

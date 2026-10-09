@@ -1,5 +1,3 @@
-import { addEncoding } from './encoding';
-
 import type { TestCase } from '../../types/index';
 
 export function addLeetspeak(testCases: TestCase[], injectVar: string): TestCase[] {
@@ -27,5 +25,23 @@ export function addLeetspeak(testCases: TestCase[], injectVar: string): TestCase
       .join('');
   };
 
-  return addEncoding(testCases, injectVar, 'leetspeak', 'Leetspeak', toLeetspeak);
+  return testCases.map((testCase) => {
+    const originalText = String(testCase.vars![injectVar]);
+    return {
+      ...testCase,
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.metric ? `${assertion.metric}/Leetspeak` : assertion.metric,
+      })),
+      vars: {
+        ...testCase.vars,
+        [injectVar]: toLeetspeak(originalText),
+      },
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'leetspeak',
+        originalText,
+      },
+    };
+  });
 }

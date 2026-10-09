@@ -13,7 +13,6 @@ import * as path from 'path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { mockProcessEnv } from '../../util/utils';
-import { createMockFetchResponse } from '../mockProviderResponses';
 
 // Only mock the network layer, not file operations
 vi.mock('../../../src/cache');
@@ -98,8 +97,8 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
       .mockReturnValue('https://test.openai.azure.com');
 
     // Mock successful API response
-    mockFetchWithCache.mockResolvedValue(
-      createMockFetchResponse({
+    mockFetchWithCache.mockResolvedValue({
+      data: {
         output: [
           {
             type: 'message',
@@ -113,8 +112,11 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
           },
         ],
         usage: { input_tokens: 10, output_tokens: 20 },
-      }),
-    );
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
   });
 
   afterEach(() => {

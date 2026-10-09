@@ -6,10 +6,6 @@ import type nunjucks from 'nunjucks';
 
 import type { AssertionParams } from '../../src/types/index';
 
-const createEmptyTest = () => ({
-  options: {},
-  vars: {},
-});
 vi.mock('../../src/matchers/llmGrading');
 vi.mock('../../src/util/templates');
 
@@ -59,7 +55,10 @@ describe('handlePiScorer', () => {
       prompt: 'test prompt',
       providerResponse: {},
       renderedValue: {},
-      test: createEmptyTest(),
+      test: {
+        options: {},
+        vars: {},
+      },
     };
 
     await expect(handlePiScorer(params)).rejects.toThrow(
@@ -85,7 +84,10 @@ describe('handlePiScorer', () => {
       prompt: undefined,
       providerResponse: {},
       renderedValue: 'test value',
-      test: createEmptyTest(),
+      test: {
+        options: {},
+        vars: {},
+      },
     };
 
     await expect(handlePiScorer(params)).rejects.toThrow(

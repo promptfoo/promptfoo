@@ -1,17 +1,8 @@
-const { createLoggerModule } = await vi.hoisted(async () => import('../factories/logger'));
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { getEnvInt, getEnvString } from '../../src/envars';
 import { createQuiverAiProvider, QuiverAiProvider } from '../../src/providers/quiverai';
 import { fetchWithProxy } from '../../src/util/fetch/index';
-import { createApiKeyOptions } from '../factories/literalFixtures';
-import { createMockFetchResponse } from './mockProviderResponses';
-
-const createVectorizeConfig = () => ({
-  config: { apiKey: 'test-key' },
-  mode: 'vectorize' as const,
-});
 
 vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
@@ -28,7 +19,14 @@ vi.mock('../../src/envars', () => ({
   getEnvBool: vi.fn(),
 }));
 
-vi.mock('../../src/logger', () => createLoggerModule());
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 function makeSvgResponse(
   svgs: string[],
@@ -97,38 +95,55 @@ describe('QuiverAI Provider', () => {
 
   describe('QuiverAiProvider', () => {
     it('should initialize with correct model name', () => {
-      const provider = new QuiverAiProvider('arrow-1.1', createApiKeyOptions());
+      const provider = new QuiverAiProvider('arrow-1.1', {
+        config: { apiKey: 'test-key' },
+      });
       expect(provider.modelName).toBe('arrow-1.1');
       expect(provider.mode).toBe('generation');
     });
 
     it('should return correct provider id', () => {
-      const provider = new QuiverAiProvider('arrow-1.1', createApiKeyOptions());
+      const provider = new QuiverAiProvider('arrow-1.1', {
+        config: { apiKey: 'test-key' },
+      });
       expect(provider.id()).toBe('quiverai:arrow-1.1');
     });
 
     it('should return correct vectorize provider id', () => {
-      const provider = new QuiverAiProvider('arrow-1.1-max', createVectorizeConfig());
+      const provider = new QuiverAiProvider('arrow-1.1-max', {
+        config: { apiKey: 'test-key' },
+        mode: 'vectorize',
+      });
       expect(provider.id()).toBe('quiverai:vectorize:arrow-1.1-max');
     });
 
     it('should return correct string representation', () => {
-      const provider = new QuiverAiProvider('arrow-1.1', createApiKeyOptions());
+      const provider = new QuiverAiProvider('arrow-1.1', {
+        config: { apiKey: 'test-key' },
+      });
       expect(provider.toString()).toBe('[QuiverAI Provider arrow-1.1]');
     });
 
     it('should return vectorize string representation', () => {
-      const provider = new QuiverAiProvider('arrow-1.1', createVectorizeConfig());
+      const provider = new QuiverAiProvider('arrow-1.1', {
+        config: { apiKey: 'test-key' },
+        mode: 'vectorize',
+      });
       expect(provider.toString()).toBe('[QuiverAI Vectorize Provider arrow-1.1]');
     });
 
     it('should use correct API URL for generation', () => {
-      const provider = new QuiverAiProvider('arrow-1.1', createApiKeyOptions());
+      const provider = new QuiverAiProvider('arrow-1.1', {
+        config: { apiKey: 'test-key' },
+      });
       expect(provider.getApiUrl()).toBe('https://api.quiver.ai/v1/svgs/generations');
     });
 
     it('should use correct API URL for vectorization', () => {
-      const provider = new QuiverAiProvider('arrow-1.1', createVectorizeConfig());
+      const provider = new QuiverAiProvider('arrow-1.1', {
+        config: { apiKey: 'test-key' },
+        mode: 'vectorize',
+      });
       expect(provider.getApiUrl()).toBe('https://api.quiver.ai/v1/svgs/vectorizations');
     });
 
@@ -180,9 +195,12 @@ describe('QuiverAI Provider', () => {
 
   describe('callApi - non-streaming generation (stream: false)', () => {
     it('should call API with correct request body', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg></svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = new QuiverAiProvider('arrow-1.1', {
         config: {
@@ -220,9 +238,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should include references and all sampling params in request body', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg></svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const refs = [{ url: 'https://example.com/img.png' }];
       const provider = createProvider({
@@ -245,9 +266,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should normalize URL string references to {url} objects', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg></svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({
         stream: false,
@@ -271,9 +295,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should return SVG output from data array', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg><circle r="50"/></svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg><circle r="50"/></svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false });
       const result = await provider.callApi('A circle');
@@ -282,9 +309,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should join multiple SVGs when n > 1', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg>1</svg>', '<svg>2</svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg>1</svg>', '<svg>2</svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false, n: 2 });
       const result = await provider.callApi('test');
@@ -292,11 +322,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should expose response id and credits in metadata', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(
-          makeSvgResponse(['<svg></svg>'], { id: 'resp_abc', credits: 20 }),
-        ) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>'], { id: 'resp_abc', credits: 20 }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
@@ -304,9 +335,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should handle cached responses as one logical request', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg></svg>']), { cached: true }) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>']),
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
@@ -315,12 +349,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should handle API error responses with request_id', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(
-          makeErrorResponse('rate_limit_exceeded', 'Rate limit exceeded', 429),
-          { status: 429, statusText: 'Too Many Requests' },
-        ) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeErrorResponse('rate_limit_exceeded', 'Rate limit exceeded', 429),
+        cached: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+      } as any);
 
       const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
@@ -330,12 +364,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should handle non-2xx response with unexpected body shape', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(
-          { unexpected: 'format' },
-          { status: 500, statusText: 'Internal Server Error' },
-        ) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { unexpected: 'format' },
+        cached: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      } as any);
 
       const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
@@ -344,9 +378,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should handle non-2xx response with string body', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse('Bad Gateway', { status: 502, statusText: 'Bad Gateway' }) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: 'Bad Gateway',
+        cached: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+      } as any);
 
       const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
@@ -355,9 +392,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should pass bustCache flag to fetchWithCache when context.debug is true', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg></svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false });
       await provider.callApi('test', { debug: true } as any);
@@ -372,9 +412,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should pass bustCache flag from context.bustCache', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg></svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false });
       await provider.callApi('test', { bustCache: true } as any);
@@ -389,9 +432,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should not bust cache when no context provided', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg></svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false });
       await provider.callApi('test');
@@ -415,17 +461,18 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should extract token usage from deprecated usage block', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(
-          makeSvgResponse(['<svg></svg>'], {
-            usage: {
-              total_tokens: 100,
-              input_tokens: 20,
-              output_tokens: 80,
-            },
-          }),
-        ) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>'], {
+          usage: {
+            total_tokens: 100,
+            input_tokens: 20,
+            output_tokens: 80,
+          },
+        }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
@@ -438,9 +485,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should only include non-null config values in request body', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg></svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false });
       await provider.callApi('test');
@@ -459,9 +509,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should merge prompt context config over provider config', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg></svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg></svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false, temperature: 0.5 });
       await provider.callApi('test', {
@@ -477,9 +530,12 @@ describe('QuiverAI Provider', () => {
 
   describe('callApi - non-streaming vectorize', () => {
     it('should send vectorize request with image url derived from prompt', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg>vec</svg>'], { credits: 15 })) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg>vec</svg>'], { credits: 15 }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createVectorizeProvider({ stream: false, auto_crop: true });
       const result = await provider.callApi('https://example.com/logo.png');
@@ -504,9 +560,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should accept config.image override for vectorize', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg>vec</svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg>vec</svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createVectorizeProvider({
         stream: false,
@@ -523,9 +582,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should parse data: URL prompts as base64 image input', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg>vec</svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg>vec</svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createVectorizeProvider({ stream: false });
       await provider.callApi('data:image/png;base64,aGVsbG8=');
@@ -545,9 +607,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should parse JSON object prompts as image input', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg>vec</svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg>vec</svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createVectorizeProvider({ stream: false });
       await provider.callApi('{"url":"https://example.com/x.png"}');
@@ -579,9 +644,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should treat raw base64 prompts as base64 image input', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg>vec</svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg>vec</svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createVectorizeProvider({ stream: false });
       await provider.callApi('aGVsbG8gd29ybGQ=');
@@ -611,9 +679,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should not include generation-only keys in vectorize body', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg>vec</svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg>vec</svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createVectorizeProvider({
         stream: false,
@@ -963,9 +1034,12 @@ describe('QuiverAI Provider', () => {
     });
 
     it('should use non-streaming when stream: false', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(makeSvgResponse(['<svg>non-stream</svg>'])) as any,
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: makeSvgResponse(['<svg>non-stream</svg>']),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
 
       const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');

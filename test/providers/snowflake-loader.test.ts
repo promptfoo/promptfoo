@@ -8,12 +8,6 @@ import { SnowflakeCortexProvider } from '../../src/providers/snowflake';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { mockProcessEnv } from '../util/utils';
 
-const createUncachedPromptContext = () => ({
-  vars: {},
-  prompt: { raw: 'Hello', label: 'Hello' },
-  bustCache: true,
-});
-
 const model = 'tenant/custom-model:stable';
 const providerId = `snowflake:${model}`;
 const completion = {
@@ -73,7 +67,11 @@ describe('Snowflake public provider loading', () => {
 
     expect(provider).toBeInstanceOf(SnowflakeCortexProvider);
     expect(provider.id()).toBe('customer-cortex');
-    const result = await provider.callApi('Hello', createUncachedPromptContext());
+    const result = await provider.callApi('Hello', {
+      vars: {},
+      prompt: { raw: 'Hello', label: 'Hello' },
+      bustCache: true,
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe(
@@ -112,7 +110,11 @@ describe('Snowflake public provider loading', () => {
       { env: { SNOWFLAKE_API_KEY: 'suite-token' } },
     );
 
-    await provider.callApi('Hello', createUncachedPromptContext());
+    await provider.callApi('Hello', {
+      vars: {},
+      prompt: { raw: 'Hello', label: 'Hello' },
+      bustCache: true,
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:1234/cortex/api/v2/cortex/inference:complete',
       expect.objectContaining({
@@ -138,7 +140,11 @@ describe('Snowflake public provider loading', () => {
         { env: { SNOWFLAKE_API_KEY: 'suite-token', OPENAI_ORGANIZATION: 'suite-organization' } },
       );
 
-      await provider.callApi('Hello', createUncachedPromptContext());
+      await provider.callApi('Hello', {
+        vars: {},
+        prompt: { raw: 'Hello', label: 'Hello' },
+        bustCache: true,
+      });
       expect(fetchMock).toHaveBeenCalledWith(
         'https://configured-account.snowflakecomputing.com/api/v2/cortex/inference:complete',
         expect.objectContaining({
@@ -174,7 +180,11 @@ describe('Snowflake public provider loading', () => {
       options: override ? { env: { SNOWFLAKE_API_KEY: override } } : undefined,
     });
 
-    await provider.callApi('Hello', createUncachedPromptContext());
+    await provider.callApi('Hello', {
+      vars: {},
+      prompt: { raw: 'Hello', label: 'Hello' },
+      bustCache: true,
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://file-account.snowflakecomputing.com/api/v2/cortex/inference:complete',
       expect.objectContaining({
@@ -215,7 +225,11 @@ describe('Snowflake public provider loading', () => {
           },
         ]);
         const pending = registry.execute(provider, () =>
-          provider.callApi('Hello', createUncachedPromptContext()),
+          provider.callApi('Hello', {
+            vars: {},
+            prompt: { raw: 'Hello', label: 'Hello' },
+            bustCache: true,
+          }),
         );
         await vi.runAllTimersAsync();
         const result = await pending;

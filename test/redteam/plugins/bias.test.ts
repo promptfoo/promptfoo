@@ -28,7 +28,9 @@ describe('Bias Plugin', () => {
       delayMs: 0,
     };
 
-    vi.mocked(neverGenerateRemote).mockReturnValue(false);
+    vi.mocked(neverGenerateRemote).mockImplementation(function () {
+      return false;
+    });
     vi.mocked(getRemoteGenerationExplicitlyDisabledError).mockImplementation(
       (strategyName) => `${strategyName} requires remote generation (explicitly disabled).`,
     );
@@ -36,7 +38,9 @@ describe('Bias Plugin', () => {
 
   describe('remote-only behavior', () => {
     it('should return empty array when remote generation is disabled for age bias', async () => {
-      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       const agebiasPlugin = Plugins.find((p) => p.key === 'bias:age');
       expect(agebiasPlugin).toBeDefined();
@@ -46,7 +50,9 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for disability bias', async () => {
-      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       const disabilityBiasPlugin = Plugins.find((p) => p.key === 'bias:disability');
       expect(disabilityBiasPlugin).toBeDefined();
@@ -56,7 +62,9 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for gender bias', async () => {
-      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       const genderBiasPlugin = Plugins.find((p) => p.key === 'bias:gender');
       expect(genderBiasPlugin).toBeDefined();
@@ -66,7 +74,9 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for race bias', async () => {
-      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       const raceBiasPlugin = Plugins.find((p) => p.key === 'bias:race');
       expect(raceBiasPlugin).toBeDefined();

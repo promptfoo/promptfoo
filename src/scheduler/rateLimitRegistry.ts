@@ -62,29 +62,7 @@ export class RateLimitRegistry extends EventEmitter {
     }
 
     const rateLimitKey = getRateLimitKey(provider);
-    /**
-     * Get or create provider rate limit state for a given rate limit key.
-     */
-    if (!this.states.has(rateLimitKey)) {
-      const state = new ProviderRateLimitState({
-        rateLimitKey,
-        maxConcurrency: this.maxConcurrency,
-        minConcurrency: this.minConcurrency,
-        queueTimeoutMs: this.queueTimeoutMs,
-      });
-
-      // Forward events
-      state.on('ratelimit:hit', (data) => this.emit('ratelimit:hit', data));
-      state.on('ratelimit:warning', (data) => this.emit('ratelimit:warning', data));
-      state.on('ratelimit:learned', (data) => this.emit('ratelimit:learned', data));
-      state.on('concurrency:increased', (data) => this.emit('concurrency:increased', data));
-      state.on('concurrency:decreased', (data) => this.emit('concurrency:decreased', data));
-      state.on('request:retrying', (data) => this.emit('request:retrying', data));
-
-      this.states.set(rateLimitKey, state);
-    }
-
-    const state = this.states.get(rateLimitKey)!;
+    const state = this.getOrCreateState(rateLimitKey);
 
     // Generate unique request ID for metrics/logging
     const requestId = `${rateLimitKey}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -126,6 +104,32 @@ export class RateLimitRegistry extends EventEmitter {
   }
 
   /**
+   * Get or create provider rate limit state for a given rate limit key.
+   */
+  private getOrCreateState(rateLimitKey: string): ProviderRateLimitState {
+    if (!this.states.has(rateLimitKey)) {
+      const state = new ProviderRateLimitState({
+        rateLimitKey,
+        maxConcurrency: this.maxConcurrency,
+        minConcurrency: this.minConcurrency,
+        queueTimeoutMs: this.queueTimeoutMs,
+      });
+
+      // Forward events
+      state.on('ratelimit:hit', (data) => this.emit('ratelimit:hit', data));
+      state.on('ratelimit:warning', (data) => this.emit('ratelimit:warning', data));
+      state.on('ratelimit:learned', (data) => this.emit('ratelimit:learned', data));
+      state.on('concurrency:increased', (data) => this.emit('concurrency:increased', data));
+      state.on('concurrency:decreased', (data) => this.emit('concurrency:decreased', data));
+      state.on('request:retrying', (data) => this.emit('request:retrying', data));
+
+      this.states.set(rateLimitKey, state);
+    }
+
+    return this.states.get(rateLimitKey)!;
+  }
+
+  /**
    * Get metrics for all tracked providers.
    */
   getMetrics(): Record<string, ProviderMetrics> {
@@ -146,6 +150,13 @@ export class RateLimitRegistry extends EventEmitter {
     this.states.clear();
     this.removeAllListeners();
   }
+}
+
+/**
+ * Factory function to create a registry for an evaluation.
+ */
+export function createRateLimitRegistry(options: RateLimitRegistryOptions): RateLimitRegistry {
+  return new RateLimitRegistry(options);
 }
 
 /**

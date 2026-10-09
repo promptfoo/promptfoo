@@ -13,7 +13,6 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { appendPluginMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
 
@@ -155,7 +154,12 @@ export async function addAudioToBase64(
 
     audioTestCases.push({
       ...testCase,
-      assert: appendPluginMetricSuffix(testCase, 'Audio-Encoded'),
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.type?.startsWith('promptfoo:redteam:')
+          ? `${assertion.type?.split(':').pop() || assertion.metric}/Audio-Encoded`
+          : assertion.metric,
+      })),
       vars: {
         ...testCase.vars,
         // Use base64 for the prompt (provider expects this)

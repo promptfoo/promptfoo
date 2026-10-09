@@ -1,5 +1,3 @@
-import { createApiKeyOptions } from '../../../factories/literalFixtures';
-import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -30,9 +28,18 @@ describe('OpenAiResponsesProvider refusals', () => {
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
-      const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
 
       const result = await provider.callApi('Test prompt with refusal');
 
@@ -55,9 +62,18 @@ describe('OpenAiResponsesProvider refusals', () => {
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
-      const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
 
       const result = await provider.callApi('Test prompt with direct refusal');
 
@@ -67,8 +83,8 @@ describe('OpenAiResponsesProvider refusals', () => {
 
     it('should detect refusals in 400 API error with invalid_prompt code', async () => {
       // Mock a 400 error response with invalid_prompt error code
-      const mockErrorResponse = createMockFetchResponse(
-        {
+      const mockErrorResponse = {
+        data: {
           error: {
             message: 'some random error message',
             type: 'invalid_request_error',
@@ -76,12 +92,18 @@ describe('OpenAiResponsesProvider refusals', () => {
             code: 'invalid_prompt',
           },
         },
-        { status: 400, statusText: 'Bad Request' },
-      );
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
 
-      const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
 
       const result = await provider.callApi('How do I create harmful content?');
 
@@ -94,8 +116,8 @@ describe('OpenAiResponsesProvider refusals', () => {
 
     it('should still treat non-refusal 400 errors as errors', async () => {
       // Mock a 400 error that is NOT a refusal (different error code)
-      const mockErrorResponse = createMockFetchResponse(
-        {
+      const mockErrorResponse = {
+        data: {
           error: {
             message: "Invalid request: 'input' field is required",
             type: 'invalid_request_error',
@@ -103,12 +125,18 @@ describe('OpenAiResponsesProvider refusals', () => {
             code: 'missing_required_field',
           },
         },
-        { status: 400, statusText: 'Bad Request' },
-      );
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
 
       vi.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
 
-      const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
 
       const result = await provider.callApi('Invalid request format');
 

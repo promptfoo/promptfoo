@@ -1,6 +1,6 @@
-import { matchesLlmRubric } from '../matchers/llmGrading';
+import { isGraderFailure, matchesLlmRubric } from '../matchers/llmGrading';
+import { invertScore } from '../matchers/shared';
 import invariant from '../util/invariant';
-import { finalizeGradedAssertion } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -38,5 +38,14 @@ export const handleLlmRubric = async ({
     providerCallContext,
   );
 
-  return finalizeGradedAssertion(resp, assertion, inverse);
+  if (isGraderFailure(resp)) {
+    return { ...resp, assertion };
+  }
+
+  const score = inverse ? invertScore(resp.score) : resp.score;
+  return {
+    ...resp,
+    pass: resp.pass !== inverse,
+    score,
+  };
 };

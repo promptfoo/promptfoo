@@ -55,7 +55,9 @@ describe('fetchRemoteGeneration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
+      return 'https://api.promptfoo.app/api/v1/task';
+    });
   });
 
   it('should fetch remote generation for purpose task', async () => {

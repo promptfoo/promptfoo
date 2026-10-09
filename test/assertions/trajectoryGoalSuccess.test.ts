@@ -1,16 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleTrajectoryGoalSuccess } from '../../src/assertions/trajectory';
 import { matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
-import { createPassingGrade } from '../factories/literalFixtures';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AtomicTestCase, GradingResult } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
-
-const createInvertedGoalAssertion = () => ({
-  type: 'not-trajectory:goal-success' as const,
-  value: 'Resolve the order lookup task',
-});
 
 vi.mock('../../src/matchers/llmGrading', async () => {
   const actual = await vi.importActual<typeof import('../../src/matchers/llmGrading')>(
@@ -167,9 +161,11 @@ describe('handleTrajectoryGoalSuccess', () => {
   });
 
   it('passes resolved assertion vars instead of the raw test vars', async () => {
-    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue(
-      createPassingGrade(1, 'Goal achieved'),
-    );
+    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Goal achieved',
+    });
 
     const params: AssertionParams = {
       ...defaultParams,
@@ -196,14 +192,19 @@ describe('handleTrajectoryGoalSuccess', () => {
   });
 
   it('inverts the result for not-trajectory:goal-success assertions', async () => {
-    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue(
-      createPassingGrade(1, 'Goal achieved'),
-    );
+    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Goal achieved',
+    });
 
     const params: AssertionParams = {
       ...defaultParams,
       inverse: true,
-      assertion: createInvertedGoalAssertion(),
+      assertion: {
+        type: 'not-trajectory:goal-success',
+        value: 'Resolve the order lookup task',
+      },
     };
 
     const result = await handleTrajectoryGoalSuccess(params);
@@ -231,7 +232,10 @@ describe('handleTrajectoryGoalSuccess', () => {
     const params: AssertionParams = {
       ...defaultParams,
       inverse: true,
-      assertion: createInvertedGoalAssertion(),
+      assertion: {
+        type: 'not-trajectory:goal-success',
+        value: 'Resolve the order lookup task',
+      },
     };
 
     const result = await handleTrajectoryGoalSuccess(params);

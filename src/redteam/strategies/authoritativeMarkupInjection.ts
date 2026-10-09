@@ -1,5 +1,4 @@
 import logger from '../../logger';
-import { appendMetricSuffix } from './assertions';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
@@ -20,7 +19,12 @@ export async function addAuthoritativeMarkupInjectionTestCases(
           ...config,
         },
       },
-      assert: appendMetricSuffix(testCase, 'AuthoritativeMarkupInjection'),
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.metric
+          ? `${assertion.metric}/AuthoritativeMarkupInjection`
+          : assertion.metric,
+      })),
       metadata: {
         ...testCase.metadata,
         strategyId: 'authoritative-markup-injection',

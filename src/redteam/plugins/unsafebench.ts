@@ -2,7 +2,8 @@ import dedent from 'dedent';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
+import { sampleArray } from '../../util/generation';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
 
@@ -266,13 +267,11 @@ class UnsafeBenchDatasetManager {
         const normalizedCategory = category.toLowerCase();
         const categoryRecords = recordsByCategory[normalizedCategory] || [];
 
-        // Shuffle and take up to perCategory records
-        const shuffled = categoryRecords.sort(() => Math.random() - 0.5);
-        result.push(...shuffled.slice(0, perCategory));
+        // Take up to perCategory random records
+        const selected = sampleArray(categoryRecords, perCategory);
+        result.push(...selected);
 
-        logger.debug(
-          `[unsafebench] Selected ${Math.min(perCategory, shuffled.length)} records for category ${category}`,
-        );
+        logger.debug(`[unsafebench] Selected ${selected.length} records for category ${category}`);
       }
 
       // Return the results, limiting to the requested total
@@ -280,7 +279,7 @@ class UnsafeBenchDatasetManager {
     }
 
     // If no categories specified, just shuffle and return the requested number
-    const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5).slice(0, limit);
+    const shuffledRecords = sampleArray(filteredRecords, limit);
     logger.debug(`[unsafebench] Selected ${shuffledRecords.length} random unsafe records`);
 
     return shuffledRecords;
@@ -462,7 +461,8 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
   protected getAssertions(category: string): Assertion[] {
     return [
       {
-        ...createAssertion(PLUGIN_ID, 'UnsafeBench'),
+        type: PLUGIN_ID,
+        metric: 'UnsafeBench',
         value: { category },
       },
     ];

@@ -1,6 +1,7 @@
 import { matchesAgentRubric } from '../matchers/agent';
+import { isGraderFailure } from '../matchers/llmGrading';
+import { invertScore } from '../matchers/shared';
 import invariant from '../util/invariant';
-import { finalizeGradedAssertion } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -35,5 +36,14 @@ export const handleAgentRubric = async ({
     providerResponse?.metadata?.workingDir,
   );
 
-  return finalizeGradedAssertion(resp, assertion, inverse);
+  if (isGraderFailure(resp)) {
+    return { ...resp, assertion };
+  }
+
+  const score = inverse ? invertScore(resp.score) : resp.score;
+  return {
+    ...resp,
+    pass: resp.pass !== inverse,
+    score,
+  };
 };

@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockFetchResponse } from './mockProviderResponses';
 
 // `nscale.test.ts` mocks `src/providers/openai` wholesale, so it can only assert
 // the shape of the config object handed to the OpenAI provider — never what is
@@ -21,12 +20,15 @@ import { mockProcessEnv } from '../util/utils';
 import type { ApiProvider } from '../../src/types/providers';
 
 function mockResponse() {
-  vi.mocked(fetchWithCache).mockResolvedValue(
-    createMockFetchResponse({
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: {
       choices: [{ message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-    }) as any,
-  );
+    },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+  } as any);
 }
 
 async function callWithConfig(config: Record<string, unknown>) {
@@ -56,9 +58,12 @@ describe('Nscale request construction', () => {
   });
 
   it('keeps scoped image credentials out of config and sends them as request authentication', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(
-      createMockFetchResponse({ data: [{ url: 'https://example.invalid/image.png' }] }),
-    );
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { data: [{ url: 'https://example.invalid/image.png' }] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
     const provider = createNscaleProvider('nscale:image:flux/flux.1-schnell', {
       env: { NSCALE_SERVICE_TOKEN: 'scoped-nscale-secret' },
     });
@@ -189,8 +194,8 @@ describe.each([
       MISSING_NSCALE_KEY: undefined,
     });
     vi.mocked(fetchWithCache).mockReset();
-    vi.mocked(fetchWithCache).mockResolvedValue(
-      createMockFetchResponse(
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
         mode === 'embedding'
           ? { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } }
           : {
@@ -203,8 +208,10 @@ describe.each([
               ],
               usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
             },
-      ),
-    );
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
   });
 
   afterEach(() => {

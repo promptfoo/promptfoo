@@ -9,7 +9,6 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
-import { appendMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
 import type { StrategyRuntimeContext } from './types';
@@ -100,7 +99,10 @@ async function generateGcgPrompts(
           ...testCase.vars,
           [injectVar]: response,
         },
-        assert: appendMetricSuffix(testCase, 'GCG'),
+        assert: testCase.assert?.map((assertion) => ({
+          ...assertion,
+          metric: assertion.metric ? `${assertion.metric}/GCG` : assertion.metric,
+        })),
         metadata: {
           ...testCase.metadata,
           strategyId: 'gcg',

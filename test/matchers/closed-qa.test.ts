@@ -6,18 +6,16 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { GradingConfig } from '../../src/types/index';
 
-const createMixedVerdictResponse = () => ({
-  output: 'foo \n \n bar\n Y Y \n',
-  tokenUsage: { total: 10, prompt: 5, completion: 5 },
-});
-
 describe('matchesClosedQa', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue(createMixedVerdictResponse());
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foo \n \n bar\n Y Y \n',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   afterEach(() => {
@@ -30,7 +28,10 @@ describe('matchesClosedQa', () => {
     const output = 'Sample output';
     const grading = {};
 
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce(createMixedVerdictResponse());
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: 'foo \n \n bar\n Y Y \n',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
 
     await expect(matchesClosedQa(input, expected, output, grading)).resolves.toEqual({
       pass: true,

@@ -1,7 +1,7 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
@@ -558,11 +558,23 @@ export class OllamaCompletionProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context),
-      (response) => extractGenAIResponse(response, true),
-    );
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
   private async callApiInternal(
@@ -706,11 +718,23 @@ export class OllamaChatProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context),
-      (response) => extractGenAIResponse(response, true),
-    );
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
   private async callApiInternal(

@@ -56,8 +56,13 @@ export async function createTransformResponse(
             ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
             : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
         );
+        let resp: ProviderResponse | string;
         const processShim = getProcessShim();
-        const resp = transformFn(data || null, text, context || undefined, processShim);
+        if (context) {
+          resp = transformFn(data || null, text, context, processShim);
+        } else {
+          resp = transformFn(data || null, text, undefined, processShim);
+        }
 
         return normalizeResponseTransformResult(resp);
       } catch (err) {
@@ -106,23 +111,50 @@ export async function createTransformRequest(
         // Check if it's a function expression (either arrow or regular)
         const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
 
-        let body: string;
+        let transformFn: Function;
+        // Add process parameter for ESM compatibility - allows process.mainModule.require to work
         if (isFunctionExpression) {
           // For function expressions, call them with the arguments
-          body = `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`;
+          transformFn = new Function(
+            'prompt',
+            'vars',
+            'context',
+            'process',
+            `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`,
+          );
         } else {
           // Check if it contains a return statement
           const hasReturn = /\breturn\b/.test(trimmedTransform);
-          // Use as function body if it has return statements; otherwise wrap the expression.
-          body = hasReturn
-            ? `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`
-            : `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`;
-        }
-        // Add process parameter for ESM compatibility - allows process.mainModule.require to work
-        const transformFn = new Function('prompt', 'vars', 'context', 'process', body);
 
+          if (hasReturn) {
+            // Use as function body if it has return statements
+            transformFn = new Function(
+              'prompt',
+              'vars',
+              'context',
+              'process',
+              `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            );
+          } else {
+            // Wrap simple expressions with return
+            transformFn = new Function(
+              'prompt',
+              'vars',
+              'context',
+              'process',
+              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            );
+          }
+        }
+
+        let result: any;
         const processShim = getProcessShim();
-        return await transformFn(prompt, vars, context || undefined, processShim);
+        if (context) {
+          result = await transformFn(prompt, vars, context, processShim);
+        } else {
+          result = await transformFn(prompt, vars, undefined, processShim);
+        }
+        return result;
       } catch (err) {
         logger.error(
           `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(sanitizeProviderObject(context, 'request transform'))}.`,

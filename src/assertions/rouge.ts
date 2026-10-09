@@ -1,8 +1,18 @@
 import * as rouge from 'js-rouge';
 import invariant from '../util/invariant';
-import { countNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
+
+/**
+ * Counts how many times each n-gram occurs.
+ */
+function countNGrams(ngrams: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const ngram of ngrams) {
+    counts.set(ngram, (counts.get(ngram) ?? 0) + 1);
+  }
+  return counts;
+}
 
 /**
  * Computes a ROUGE-N F-score using clipped n-gram counts.

@@ -4,11 +4,6 @@ import * as transformUtil from '../../src/util/transform';
 
 import type { Assertion, AtomicTestCase } from '../../src/types/index';
 
-const createContextAssertion = (contextTransform: string) => ({
-  type: 'context-faithfulness' as const,
-  contextTransform,
-});
-
 vi.mock('../../src/util/transform', async (importOriginal) => {
   const actual = await importOriginal<typeof transformUtil>();
   return {
@@ -82,7 +77,10 @@ describe('resolveContext', () => {
     it('should transform output to get context', async () => {
       mockTransform.mockResolvedValue('transformed context' as any);
 
-      const assertion: Assertion = createContextAssertion('output.context');
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.context',
+      };
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       const result = await resolveContext(assertion, test, { context: 'data' }, 'prompt');
@@ -124,7 +122,10 @@ describe('resolveContext', () => {
     it('should prioritize contextTransform over context variable', async () => {
       mockTransform.mockResolvedValue('transformed context' as any);
 
-      const assertion: Assertion = createContextAssertion('output.context');
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.context',
+      };
       const test: AtomicTestCase = {
         vars: { context: 'original context' },
         options: {},
@@ -146,7 +147,10 @@ describe('resolveContext', () => {
     it('should throw error if transform returns non-string and non-string-array', async () => {
       mockTransform.mockResolvedValue(123 as any);
 
-      const assertion: Assertion = createContextAssertion('output.invalid');
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.invalid',
+      };
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
@@ -157,7 +161,10 @@ describe('resolveContext', () => {
     it('should throw error if transform returns array with non-string elements', async () => {
       mockTransform.mockResolvedValue(['valid', 123, 'invalid'] as any);
 
-      const assertion: Assertion = createContextAssertion('output.invalid');
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.invalid',
+      };
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
@@ -168,7 +175,10 @@ describe('resolveContext', () => {
     it('should throw error if transform fails', async () => {
       mockTransform.mockRejectedValue(new Error('Transform failed'));
 
-      const assertion: Assertion = createContextAssertion('output.invalid');
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.invalid',
+      };
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
@@ -266,7 +276,10 @@ describe('resolveContext', () => {
     it('should throw error when contextTransform returns empty string', async () => {
       mockTransform.mockResolvedValue('' as any);
 
-      const assertion: Assertion = createContextAssertion('output.empty');
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.empty',
+      };
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
@@ -277,7 +290,10 @@ describe('resolveContext', () => {
     it('should throw error when contextTransform returns empty array', async () => {
       mockTransform.mockResolvedValue([] as any);
 
-      const assertion: Assertion = createContextAssertion('output.empty');
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.empty',
+      };
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(

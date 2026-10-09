@@ -47,6 +47,41 @@ export interface ProviderMetrics {
 }
 
 /**
+ * Circular buffer for latency tracking.
+ * O(1) insertions instead of O(n) shift().
+ */
+class CircularBuffer {
+  private buffer: number[];
+  private head = 0;
+  private count = 0;
+
+  constructor(private capacity: number) {
+    this.buffer = new Array(capacity);
+  }
+
+  push(value: number): void {
+    this.buffer[this.head] = value;
+    this.head = (this.head + 1) % this.capacity;
+    if (this.count < this.capacity) {
+      this.count++;
+    }
+  }
+
+  toSortedArray(): number[] {
+    const result: number[] = [];
+    for (let i = 0; i < this.count; i++) {
+      const idx = (this.head - this.count + i + this.capacity) % this.capacity;
+      result.push(this.buffer[idx]);
+    }
+    return result.sort((a, b) => a - b);
+  }
+
+  get length(): number {
+    return this.count;
+  }
+}
+
+/**
  * Manages rate limit state and retry logic for a single rate limit key.
  */
 export class ProviderRateLimitState extends EventEmitter {
@@ -61,11 +96,7 @@ export class ProviderRateLimitState extends EventEmitter {
   private failedRequests = 0;
   private rateLimitHits = 0;
   private retriedRequests = 0;
-  /**
-   * Keep the latest 100 latency measurements.
-   * This bounded history limits metric sorting and storage.
-   */
-  private latencies: number[] = [];
+  private latencies = new CircularBuffer(100);
 
   // Track if we've emitted ratelimit:learned for this provider
   private hasLearnedLimits = false;
@@ -113,25 +144,11 @@ export class ProviderRateLimitState extends EventEmitter {
   ): Promise<T> {
     this.totalRequests++;
     let attempt = 0;
+    let lastError: Error | undefined;
     const retryPolicy =
       options.maxRetriesOverride === undefined
         ? this.retryPolicy
         : { ...this.retryPolicy, maxRetries: options.maxRetriesOverride };
-
-    const retry = (retryAfterMs: number | undefined, reason: 'ratelimit' | 'error') => {
-      attempt++;
-      this.retriedRequests++;
-      const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
-
-      this.emit('request:retrying', {
-        rateLimitKey: this.rateLimitKey,
-        attempt,
-        delayMs: delay,
-        reason,
-      });
-
-      return new Promise<void>((resolve) => setTimeout(resolve, delay));
-    };
 
     while (true) {
       // Acquire slot (may wait for rate limit window via queue)
@@ -153,9 +170,8 @@ export class ProviderRateLimitState extends EventEmitter {
 
       try {
         const result = await callFn();
-        if (this.latencies.push(Date.now() - startTime) > 100) {
-          this.latencies.shift();
-        }
+        const latencyMs = Date.now() - startTime;
+        this.latencies.push(latencyMs);
 
         // Extract headers and check for rate limit
         const headers = options.getHeaders?.(result);
@@ -164,52 +180,7 @@ export class ProviderRateLimitState extends EventEmitter {
 
         // Update state from headers BEFORE releasing slot
         if (headers) {
-          /**
-           * Update state from response headers.
-           * @param headers - Response headers
-           * @param isRateLimited - Whether the response indicates a rate limit (e.g., HTTP 429).
-           *   When false, retry-after headers are ignored to prevent incorrectly blocking the
-           *   queue on successful responses from providers/proxies that include these headers.
-           */
-          const parsed = parseRateLimitHeaders(headers);
-
-          // Emit ratelimit:learned only once per provider when we first see limit headers
-          if (
-            !this.hasLearnedLimits &&
-            (parsed.limitRequests !== undefined || parsed.limitTokens !== undefined)
-          ) {
-            this.hasLearnedLimits = true;
-            this.emit('ratelimit:learned', {
-              rateLimitKey: this.rateLimitKey,
-              requestLimit: parsed.limitRequests,
-              tokenLimit: parsed.limitTokens,
-            });
-          }
-
-          // Update slot queue with new state (remaining counts, limits, reset times)
-          this.slotQueue.updateRateLimitState(parsed);
-
-          // Only apply retry-after as a rate limit enforcement when the response is actually
-          // rate-limited. This prevents incorrectly blocking the queue if a provider or proxy
-          // includes retry-after headers in successful (200) responses.
-          if (isRateLimited && parsed.retryAfterMs !== undefined) {
-            this.slotQueue.markRateLimited(parsed.retryAfterMs);
-          }
-
-          // Check for proactive throttling
-          const ratios = this.slotQueue.getRemainingRatio();
-          const minRatio = Math.min(ratios.requests ?? 1, ratios.tokens ?? 1);
-
-          if (minRatio < WARNING_THRESHOLD) {
-            this.emit('ratelimit:warning', {
-              rateLimitKey: this.rateLimitKey,
-              requestRatio: ratios.requests,
-              tokenRatio: ratios.tokens,
-            });
-
-            // Proactive concurrency reduction
-            this.applyConcurrencyChange(this.adaptiveConcurrency.recordApproachingLimit(minRatio));
-          }
+          this.updateFromHeaders(headers, isRateLimited);
         }
 
         // Release slot
@@ -220,7 +191,18 @@ export class ProviderRateLimitState extends EventEmitter {
 
           // Check if we should retry
           if (shouldRetry(attempt, undefined, true, retryPolicy)) {
-            await retry(retryAfterMs, 'ratelimit');
+            attempt++;
+            this.retriedRequests++;
+            const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
+
+            this.emit('request:retrying', {
+              rateLimitKey: this.rateLimitKey,
+              attempt,
+              delayMs: delay,
+              reason: 'ratelimit',
+            });
+
+            await this.sleep(delay);
             continue;
           }
 
@@ -234,10 +216,7 @@ export class ProviderRateLimitState extends EventEmitter {
         }
 
         // Success
-        /**
-         * Handle successful request.
-         */
-        this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+        this.handleSuccess();
         this.completedRequests++;
         return result;
       } catch (error) {
@@ -246,11 +225,10 @@ export class ProviderRateLimitState extends EventEmitter {
           throw error;
         }
 
-        if (this.latencies.push(Date.now() - startTime) > 100) {
-          this.latencies.shift();
-        }
+        const latencyMs = Date.now() - startTime;
+        this.latencies.push(latencyMs);
 
-        const lastError = error as Error;
+        lastError = error as Error;
 
         // Release slot
         this.slotQueue.release();
@@ -266,7 +244,18 @@ export class ProviderRateLimitState extends EventEmitter {
 
         // Check if we should retry
         if (shouldRetry(attempt, lastError, isRateLimited, retryPolicy)) {
-          await retry(retryAfterMs, isRateLimited ? 'ratelimit' : 'error');
+          attempt++;
+          this.retriedRequests++;
+          const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
+
+          this.emit('request:retrying', {
+            rateLimitKey: this.rateLimitKey,
+            attempt,
+            delayMs: delay,
+            reason: isRateLimited ? 'ratelimit' : 'error',
+          });
+
+          await this.sleep(delay);
           continue;
         }
 
@@ -274,6 +263,55 @@ export class ProviderRateLimitState extends EventEmitter {
         this.failedRequests++;
         throw lastError;
       }
+    }
+  }
+
+  /**
+   * Update state from response headers.
+   * @param headers - Response headers
+   * @param isRateLimited - Whether the response indicates a rate limit (e.g., HTTP 429).
+   *   When false, retry-after headers are ignored to prevent incorrectly blocking the
+   *   queue on successful responses from providers/proxies that include these headers.
+   */
+  private updateFromHeaders(headers: Record<string, string>, isRateLimited: boolean): void {
+    const parsed = parseRateLimitHeaders(headers);
+
+    // Emit ratelimit:learned only once per provider when we first see limit headers
+    if (
+      !this.hasLearnedLimits &&
+      (parsed.limitRequests !== undefined || parsed.limitTokens !== undefined)
+    ) {
+      this.hasLearnedLimits = true;
+      this.emit('ratelimit:learned', {
+        rateLimitKey: this.rateLimitKey,
+        requestLimit: parsed.limitRequests,
+        tokenLimit: parsed.limitTokens,
+      });
+    }
+
+    // Update slot queue with new state (remaining counts, limits, reset times)
+    this.slotQueue.updateRateLimitState(parsed);
+
+    // Only apply retry-after as a rate limit enforcement when the response is actually
+    // rate-limited. This prevents incorrectly blocking the queue if a provider or proxy
+    // includes retry-after headers in successful (200) responses.
+    if (isRateLimited && parsed.retryAfterMs !== undefined) {
+      this.slotQueue.markRateLimited(parsed.retryAfterMs);
+    }
+
+    // Check for proactive throttling
+    const ratios = this.slotQueue.getRemainingRatio();
+    const minRatio = Math.min(ratios.requests ?? 1, ratios.tokens ?? 1);
+
+    if (minRatio < WARNING_THRESHOLD) {
+      this.emit('ratelimit:warning', {
+        rateLimitKey: this.rateLimitKey,
+        requestRatio: ratios.requests,
+        tokenRatio: ratios.tokens,
+      });
+
+      // Proactive concurrency reduction
+      this.applyConcurrencyChange(this.adaptiveConcurrency.recordApproachingLimit(minRatio));
     }
   }
 
@@ -300,12 +338,21 @@ export class ProviderRateLimitState extends EventEmitter {
   }
 
   /**
+   * Handle successful request.
+   */
+  private handleSuccess(): void {
+    this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+  }
+
+  /**
    * Apply concurrency change and emit appropriate event.
    */
   private applyConcurrencyChange(change: ConcurrencyChangeResult): void {
     if (change.changed) {
       this.slotQueue.setMaxConcurrency(change.current);
-      this.emit(change.reason === 'recovery' ? 'concurrency:increased' : 'concurrency:decreased', {
+      const eventName =
+        change.reason === 'recovery' ? 'concurrency:increased' : 'concurrency:decreased';
+      this.emit(eventName, {
         rateLimitKey: this.rateLimitKey,
         ...change,
       });
@@ -324,6 +371,10 @@ export class ProviderRateLimitState extends EventEmitter {
     );
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   /**
    * Get current queue depth without sorting latencies.
    * Use this for frequent checks instead of getMetrics().
@@ -333,7 +384,8 @@ export class ProviderRateLimitState extends EventEmitter {
   }
 
   getMetrics(): ProviderMetrics {
-    const sorted = [...this.latencies].sort((a, b) => a - b);
+    const sorted = this.latencies.toSortedArray();
+    const avgLatency = sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0;
 
     return {
       rateLimitKey: this.rateLimitKey,
@@ -345,7 +397,7 @@ export class ProviderRateLimitState extends EventEmitter {
       failedRequests: this.failedRequests,
       rateLimitHits: this.rateLimitHits,
       retriedRequests: this.retriedRequests,
-      avgLatencyMs: sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0,
+      avgLatencyMs: avgLatency,
       // Percentiles: for n elements, pX is at index floor((n-1) * X/100)
       p50LatencyMs: sorted[Math.floor((sorted.length - 1) * 0.5)] ?? 0,
       p99LatencyMs: sorted[Math.floor((sorted.length - 1) * 0.99)] ?? 0,

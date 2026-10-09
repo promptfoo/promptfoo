@@ -1,19 +1,10 @@
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
-
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 import { AzureGenericProvider } from '../../../src/providers/azure/generic';
-import { createResponseMessage } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
-
-const createCachedAgentResponse = () => ({
-  output: 'cached response',
-  __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
-});
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -23,7 +14,15 @@ vi.mock('../../../src/cache', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../src/logger', () => createEsLoggerModule(true));
+vi.mock('../../../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
 
 const projectUrl = 'https://test.services.ai.azure.com/api/projects/test-project';
 const mockAgent = {
@@ -50,7 +49,13 @@ function createMessageResponse(text: string) {
     id: 'resp_123',
     model: 'gpt-4.1',
     error: null,
-    output: [createResponseMessage(text)],
+    output: [
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text }],
+      },
+    ],
     usage: {
       input_tokens: 10,
       output_tokens: 5,
@@ -804,7 +809,10 @@ describe('AzureFoundryAgentProvider', () => {
     it('emits an agent invocation span but no gen_ai.turn spans on a cache hit', async () => {
       const spans = installSpanRecorder();
       const mockCache = {
-        get: vi.fn().mockResolvedValue(createCachedAgentResponse()),
+        get: vi.fn().mockResolvedValue({
+          output: 'cached response',
+          __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
+        }),
         set: vi.fn().mockResolvedValue(undefined),
       };
       vi.mocked(isCacheEnabled).mockReturnValue(true);
@@ -835,7 +843,10 @@ describe('AzureFoundryAgentProvider', () => {
     it('restores the resolved agent identity from cache for a new legacy-ID provider', async () => {
       const spans = installSpanRecorder();
       const mockCache = {
-        get: vi.fn().mockResolvedValue(createCachedAgentResponse()),
+        get: vi.fn().mockResolvedValue({
+          output: 'cached response',
+          __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
+        }),
         set: vi.fn().mockResolvedValue(undefined),
       };
       vi.mocked(isCacheEnabled).mockReturnValue(true);

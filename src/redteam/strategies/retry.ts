@@ -186,15 +186,18 @@ export async function addRetryTestCases(
   _injectVar: string, // Unused - provider config (including injectVar) comes from stored test cases
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
-  // Count test cases by plugin ID
-  const testsByPlugin = new Map<string, number>();
+  // Group test cases by plugin ID
+  const testsByPlugin = new Map<string, TestCaseWithPlugin[]>();
   for (const test of testCases) {
     const pluginId = test.metadata?.pluginId;
     if (!pluginId) {
       continue;
     }
 
-    testsByPlugin.set(pluginId, (testsByPlugin.get(pluginId) ?? 0) + 1);
+    if (!testsByPlugin.has(pluginId)) {
+      testsByPlugin.set(pluginId, []);
+    }
+    testsByPlugin.get(pluginId)!.push(test);
   }
 
   const targetIds: string[] = (config?.targetIds ?? []) as string[];
@@ -207,9 +210,9 @@ export async function addRetryTestCases(
   // For each plugin, get its failed test cases
   const retryTestCases: TestCase[] = [];
   for (const targetId of targetIds) {
-    for (const [pluginId, count] of testsByPlugin.entries()) {
+    for (const [pluginId, tests] of testsByPlugin.entries()) {
       // Use configured numTests if available, otherwise use original test count
-      const maxTests = typeof config.numTests === 'number' ? config.numTests : count;
+      const maxTests = typeof config.numTests === 'number' ? config.numTests : tests.length;
 
       // Fetch only the number of tests we need for efficiency
       const failedTests = await getFailedTestCases(pluginId, targetId, maxTests);

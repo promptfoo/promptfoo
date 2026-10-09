@@ -2,19 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
 import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import invariant from '../../src/util/invariant';
-import { createPassingGrade, createThresholdAssertion } from '../factories/literalFixtures';
 
 import type { AssertionValueFunctionContext } from '../../src/types/index';
-
-const createProviderOutput = () => ({
-  output: 'test output',
-  tokenUsage: {},
-});
-
-const createEmptyTestOptions = () => ({
-  vars: {},
-  options: {},
-});
 
 vi.mock('../../src/matchers/rag');
 vi.mock('../../src/util/invariant');
@@ -31,18 +20,31 @@ describe('handleAnswerRelevance', () => {
 
   it('should call matchesAnswerRelevance with correct parameters', async () => {
     const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
-    mockMatchesAnswerRelevance.mockResolvedValue(createPassingGrade());
+    mockMatchesAnswerRelevance.mockResolvedValue({
+      pass: true,
+      score: 0.8,
+      reason: 'test reason',
+    });
 
     const result = await handleAnswerRelevance({
-      assertion: createThresholdAssertion('answer-relevance', 0.7),
+      assertion: {
+        type: 'answer-relevance',
+        threshold: 0.7,
+      },
       output: 'test output',
       prompt: 'test prompt',
-      test: createEmptyTestOptions(),
+      test: {
+        vars: {},
+        options: {},
+      },
       baseType: 'answer-relevance',
       assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
-      providerResponse: createProviderOutput(),
+      providerResponse: {
+        output: 'test output',
+        tokenUsage: {},
+      },
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
@@ -65,10 +67,17 @@ describe('handleAnswerRelevance', () => {
 
   it('should use query from vars if available', async () => {
     const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
-    mockMatchesAnswerRelevance.mockResolvedValue(createPassingGrade());
+    mockMatchesAnswerRelevance.mockResolvedValue({
+      pass: true,
+      score: 0.8,
+      reason: 'test reason',
+    });
 
     const result = await handleAnswerRelevance({
-      assertion: createThresholdAssertion('answer-relevance', 0.7),
+      assertion: {
+        type: 'answer-relevance',
+        threshold: 0.7,
+      },
       output: 'test output',
       prompt: 'test prompt',
       test: {
@@ -81,7 +90,10 @@ describe('handleAnswerRelevance', () => {
       assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
-      providerResponse: createProviderOutput(),
+      providerResponse: {
+        output: 'test output',
+        tokenUsage: {},
+      },
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
@@ -152,7 +164,11 @@ describe('handleAnswerRelevance', () => {
 
   it('should use default threshold of 0.5 if not specified', async () => {
     const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
-    mockMatchesAnswerRelevance.mockResolvedValue(createPassingGrade());
+    mockMatchesAnswerRelevance.mockResolvedValue({
+      pass: true,
+      score: 0.8,
+      reason: 'test reason',
+    });
 
     const result = await handleAnswerRelevance({
       assertion: {
@@ -160,12 +176,18 @@ describe('handleAnswerRelevance', () => {
       },
       output: 'test output',
       prompt: 'test prompt',
-      test: createEmptyTestOptions(),
+      test: {
+        vars: {},
+        options: {},
+      },
       baseType: 'answer-relevance',
       assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
-      providerResponse: createProviderOutput(),
+      providerResponse: {
+        output: 'test output',
+        tokenUsage: {},
+      },
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
@@ -199,12 +221,18 @@ describe('handleAnswerRelevance', () => {
       },
       output: 'test output',
       prompt: 'test prompt',
-      test: createEmptyTestOptions(),
+      test: {
+        vars: {},
+        options: {},
+      },
       baseType: 'answer-relevance',
       assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: true,
       outputString: 'test output',
-      providerResponse: createProviderOutput(),
+      providerResponse: {
+        output: 'test output',
+        tokenUsage: {},
+      },
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(

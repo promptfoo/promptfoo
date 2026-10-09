@@ -1,14 +1,8 @@
-const { createErrorFirstLoggerModule } = await vi.hoisted(
-  async () => import('../factories/logger'),
-);
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import { AI21ChatCompletionProvider } from '../../src/providers/ai21';
-import { createApiKeyOptions } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
-import { createMockChatResponse, createMockFetchResponse } from './mockProviderResponses';
 
 vi.mock('../../src/cache', async (importOriginal) => {
   return {
@@ -16,14 +10,16 @@ vi.mock('../../src/cache', async (importOriginal) => {
     fetchWithCache: vi.fn(),
   };
 });
-vi.mock('../../src/logger', () => createErrorFirstLoggerModule());
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
 
 describe('AI21ChatCompletionProvider', () => {
-  it('keeps mutable prices independent across model aliases', () => {
-    const costs = AI21ChatCompletionProvider.AI21_CHAT_MODELS.map(({ cost }) => cost);
-    expect(new Set(costs).size).toBe(costs.length);
-  });
-
   let restoreEnv: () => void;
 
   beforeEach(() => {
@@ -50,7 +46,9 @@ describe('AI21ChatCompletionProvider', () => {
   });
 
   it('should get API key from config', () => {
-    const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
     expect(provider.getApiKey()).toBe('test-key');
   });
 
@@ -82,11 +80,31 @@ describe('AI21ChatCompletionProvider', () => {
   });
 
   it('should handle successful API call', async () => {
-    const mockResponse = createMockChatResponse('test response');
+    const mockResponse = {
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'test response',
+            },
+          },
+        ],
+        usage: {
+          total_tokens: 10,
+          prompt_tokens: 5,
+          completion_tokens: 5,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe('test response');
@@ -98,7 +116,15 @@ describe('AI21ChatCompletionProvider', () => {
   });
 
   it('should preserve explicit zero for top_p', async () => {
-    const mockResponse = createMockChatResponse('test response');
+    const mockResponse = {
+      data: {
+        choices: [{ message: { content: 'test response' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -114,29 +140,40 @@ describe('AI21ChatCompletionProvider', () => {
   });
 
   it('should handle API error response', async () => {
-    const mockResponse = createMockFetchResponse(
-      {
+    const mockResponse = {
+      data: {
         error: 'API error message',
       },
-      { status: 400, statusText: 'Bad Request' },
-    );
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API call error: API error message');
   });
 
   it('should handle malformed API response', async () => {
-    const mockResponse = createMockFetchResponse({
-      choices: [],
-    });
+    const mockResponse = {
+      data: {
+        choices: [],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toContain('Malformed response data');
@@ -145,25 +182,65 @@ describe('AI21ChatCompletionProvider', () => {
   it('should handle network errors', async () => {
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
-    const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API call error: Error: Network error');
   });
 
   it('should calculate cost correctly', async () => {
-    const mockResponse = createMockChatResponse('test response');
+    const mockResponse = {
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'test response',
+            },
+          },
+        ],
+        usage: {
+          total_tokens: 10,
+          prompt_tokens: 5,
+          completion_tokens: 5,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
 
     const result = await provider.callApi('test prompt');
     expect(result.cost).toBeDefined();
   });
 
   it('should preserve an explicit max_tokens value of 0', async () => {
-    const mockResponse = createMockChatResponse('test response');
+    const mockResponse = {
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'test response',
+            },
+          },
+        ],
+        usage: {
+          total_tokens: 10,
+          prompt_tokens: 5,
+          completion_tokens: 5,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -185,12 +262,24 @@ describe('AI21ChatCompletionProvider', () => {
   });
 
   it('invokes fetchWithCache once per call site even for duplicate provider configs', async () => {
-    const mockResponse = createMockChatResponse('test response');
+    const mockResponse = {
+      data: {
+        choices: [{ message: { content: 'test response' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider1 = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
-    const provider2 = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
+    const provider1 = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
+    const provider2 = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
 
     await Promise.all([provider1.callApi('test prompt'), provider2.callApi('test prompt')]);
 

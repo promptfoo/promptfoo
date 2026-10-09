@@ -8,21 +8,21 @@ import {
 } from '../../src/providers/novita';
 import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { mockProcessEnv } from '../util/utils';
-import { createMockFetchResponse } from './mockProviderResponses';
-
-const createNovitaKeyConfig = () => ({
-  config: { apiKey: 'novita-key' },
-});
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
   fetchWithCache: vi.fn(),
 }));
 
-const chatSuccessResponse = createMockFetchResponse({
-  choices: [{ message: { content: 'Novita output' }, finish_reason: 'stop' }],
-  usage: { prompt_tokens: 4, completion_tokens: 3, total_tokens: 7 },
-});
+const chatSuccessResponse = {
+  data: {
+    choices: [{ message: { content: 'Novita output' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 4, completion_tokens: 3, total_tokens: 7 },
+  },
+  cached: false,
+  status: 200,
+  statusText: 'OK',
+};
 
 describe('Novita providers', () => {
   let restoreEnv: () => void;
@@ -201,7 +201,9 @@ describe('Novita providers', () => {
       vi.mocked(fetchWithCache).mockRejectedValue(
         new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded' }),
       );
-      const provider = new NovitaChatCompletionProvider('chat-model', createNovitaKeyConfig());
+      const provider = new NovitaChatCompletionProvider('chat-model', {
+        config: { apiKey: 'novita-key' },
+      });
 
       const result = await provider.callApi('hello');
 
@@ -211,13 +213,18 @@ describe('Novita providers', () => {
 
   describe('completion and embedding calls', () => {
     it('sends completions with Novita defaults and reports output', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse({
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
           choices: [{ text: 'Completion output' }],
           usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
-        }) as any,
-      );
-      const provider = new NovitaCompletionProvider('completion-model', createNovitaKeyConfig());
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
+      const provider = new NovitaCompletionProvider('completion-model', {
+        config: { apiKey: 'novita-key' },
+      });
 
       const result = await provider.callApi('complete this');
 
@@ -232,13 +239,18 @@ describe('Novita providers', () => {
 
     it('sends embeddings without leaking OpenAI configuration and returns vectors', async () => {
       mockProcessEnv({ OPENAI_ORGANIZATION: 'org-secret' });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse({
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
           data: [{ embedding: [0.1, 0.2] }],
           usage: { prompt_tokens: 2, total_tokens: 2 },
-        }) as any,
-      );
-      const provider = new NovitaEmbeddingProvider('embedding-model', createNovitaKeyConfig());
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any);
+      const provider = new NovitaEmbeddingProvider('embedding-model', {
+        config: { apiKey: 'novita-key' },
+      });
 
       const result = await provider.callEmbeddingApi('embed this');
 

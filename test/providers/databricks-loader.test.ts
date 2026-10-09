@@ -2,19 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { loadApiProvider } from '../../src/providers';
-import { createMockFetchResponse } from './mockProviderResponses';
-
-const createSuiteEnvironment = () => ({
-  env: {
-    DATABRICKS_WORKSPACE_URL: 'https://suite.example.test',
-    DATABRICKS_TOKEN: 'suite-token',
-  },
-});
-
-const createProviderEnvironment = () => ({
-  DATABRICKS_WORKSPACE_URL: 'https://provider.example.test',
-  DATABRICKS_TOKEN: 'provider-token',
-});
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -34,11 +21,12 @@ beforeEach(() => {
   originalConfig = cliState.config;
   cliState.config = undefined;
   vi.mocked(fetchWithCache).mockReset();
-  vi.mocked(fetchWithCache).mockResolvedValue(
-    createMockFetchResponse({
-      choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }],
-    }),
-  );
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: { choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }] },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+  });
 });
 afterEach(() => {
   cliState.config = originalConfig;
@@ -50,12 +38,15 @@ describe('Databricks loader request configuration', () => {
   it.each([true, false])(
     'uses Databricks chat endpoint for isPayPerToken=%s with usage metadata',
     async (isPayPerToken) => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse({
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
           choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }],
           usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
-        }),
-      );
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
       const provider = await loadApiProvider('databricks:customer-endpoint', {
         options: {
           config: {
@@ -88,11 +79,19 @@ describe('Databricks loader request configuration', () => {
       vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');
       vi.stubEnv('DATABRICKS_TOKEN', 'process-token');
       if (source === 'registered suite') {
-        cliState.config = createSuiteEnvironment();
+        cliState.config = {
+          env: {
+            DATABRICKS_WORKSPACE_URL: 'https://suite.example.test',
+            DATABRICKS_TOKEN: 'suite-token',
+          },
+        };
       }
       const provider = await loadApiProvider('databricks:customer-endpoint', {
         options: {
-          env: createProviderEnvironment(),
+          env: {
+            DATABRICKS_WORKSPACE_URL: 'https://provider.example.test',
+            DATABRICKS_TOKEN: 'provider-token',
+          },
         },
       });
 
@@ -107,7 +106,12 @@ describe('Databricks loader request configuration', () => {
   it('uses the registered suite workspace and token over the process pair', async () => {
     vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');
     vi.stubEnv('DATABRICKS_TOKEN', 'process-token');
-    cliState.config = createSuiteEnvironment();
+    cliState.config = {
+      env: {
+        DATABRICKS_WORKSPACE_URL: 'https://suite.example.test',
+        DATABRICKS_TOKEN: 'suite-token',
+      },
+    };
     const provider = await loadApiProvider('databricks:customer-endpoint');
     expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
     expectRequest('https://suite.example.test/serving-endpoints/chat/completions', 'suite-token');
@@ -118,7 +122,10 @@ describe('Databricks loader request configuration', () => {
     vi.stubEnv('DATABRICKS_TOKEN', 'process-token');
     const provider = await loadApiProvider('databricks:customer-endpoint', {
       options: {
-        env: createProviderEnvironment(),
+        env: {
+          DATABRICKS_WORKSPACE_URL: 'https://provider.example.test',
+          DATABRICKS_TOKEN: 'provider-token',
+        },
         config: { workspaceUrl: 'https://configured.example.test', apiKey: 'configured-token' },
       },
     });

@@ -1,4 +1,3 @@
-import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -58,13 +57,14 @@ describe('OpenAiResponsesProvider tool loading', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
           tools: [{ type: 'web_search_preview' }],
         },
       });
 
       // Mock the API call
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(
-        createMockFetchResponse({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
           id: 'resp_123',
           object: 'response',
           status: 'completed',
@@ -76,8 +76,11 @@ describe('OpenAiResponsesProvider tool loading', () => {
             },
           ],
           usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
-        }),
-      );
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       // This should not throw TypeError because config.tools is now an array
       const result = await provider.callApi('test');
@@ -88,6 +91,7 @@ describe('OpenAiResponsesProvider tool loading', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
           tools: [
             {
               type: 'function',

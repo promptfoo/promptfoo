@@ -1,14 +1,16 @@
-const { createWarningLoggerModule } = await vi.hoisted(
-  async () => import('../../factories/logger'),
-);
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
 import type { CallApiContextParams } from '../../../src/types/index';
 
 // Mock dependencies
-vi.mock('../../../src/logger', () => createWarningLoggerModule());
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 vi.mock('../../../src/envars', () => ({
   getEnvInt: vi.fn().mockReturnValue(2), // 2 iterations for tests

@@ -1,5 +1,3 @@
-import { createApiKeyOptions } from '../../../factories/literalFixtures';
-import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -7,13 +5,6 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
-
-const createDeepwikiTool = () => ({
-  type: 'mcp' as const,
-  server_label: 'deepwiki',
-  server_url: 'https://mcp.deepwiki.com/mcp',
-  require_approval: 'never' as const,
-});
 
 describe('OpenAiResponsesProvider MCP request handling', () => {
   describe('MCP (Model Context Protocol) support', () => {
@@ -37,7 +28,12 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4.1', {
         config: {
@@ -91,7 +87,12 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4.1', {
         config: {
@@ -159,12 +160,24 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4.1', {
         config: {
           apiKey: 'test-key',
-          tools: [createDeepwikiTool()],
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'deepwiki',
+              server_url: 'https://mcp.deepwiki.com/mcp',
+              require_approval: 'never',
+            },
+          ],
         },
       });
 
@@ -206,9 +219,18 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
         usage: { input_tokens: 25, output_tokens: 20, total_tokens: 45 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
-      const provider = new OpenAiResponsesProvider('gpt-4.1', createApiKeyOptions());
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
 
       const result = await provider.callApi('Test prompt');
 
@@ -248,9 +270,18 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
-      const provider = new OpenAiResponsesProvider('gpt-4.1', createApiKeyOptions());
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
 
       const result = await provider.callApi('Test prompt');
 
@@ -276,7 +307,12 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
         usage: { input_tokens: 20, output_tokens: 5, total_tokens: 25 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4.1', {
         config: {
@@ -318,7 +354,12 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
         usage: { input_tokens: 30, output_tokens: 15, total_tokens: 45 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4.1', {
         config: {
@@ -338,7 +379,12 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
                 },
               },
             },
-            createDeepwikiTool(),
+            {
+              type: 'mcp',
+              server_label: 'deepwiki',
+              server_url: 'https://mcp.deepwiki.com/mcp',
+              require_approval: 'never',
+            },
           ],
         },
       });
@@ -377,7 +423,12 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new OpenAiResponsesProvider('gpt-4.1', {
         config: {

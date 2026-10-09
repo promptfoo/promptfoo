@@ -1,4 +1,3 @@
-import { createMockFetchResponse } from '../../mockProviderResponses';
 // Register the shared Responses HTTP mocks before importing the provider.
 import './setup';
 
@@ -40,7 +39,12 @@ describe('GPT-6.1 Sol Responses with Ultrafast', () => {
         ...responseData,
         model: 'gpt-6.1-sol',
         service_tier: reported,
-        usage: { input_tokens: 1000, output_tokens: 100, total_tokens: 1100 },
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 100,
+          total_tokens: 1100,
+          input_tokens_details: { cache_write_tokens: 0 },
+        },
       },
     });
     const result = await new OpenAiResponsesProvider('gpt-6.1-sol', {
@@ -151,7 +155,9 @@ describe('GPT-6 Astra Responses billing', () => {
       const result = await provider.callApi('Summarize the job.');
 
       const [, options] = vi.mocked(cache.fetchWithCache).mock.calls[0];
-      expect(JSON.parse(options?.body as string).service_tier).toBe(passthrough);
+      expect(JSON.parse(options?.body as string).service_tier).toBe(
+        passthrough === 'fast' ? 'priority' : passthrough,
+      );
       expect(result.error).toBeUndefined();
       expect(result.cost).toBeCloseTo(cost, 10);
     },
@@ -196,9 +202,12 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
           [{ inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, 0.0023],
         ] as const) {
           for (const deployment of [model, `prod-${model}`]) {
-            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
-              createMockFetchResponse({ ...data, model: deployment }),
-            );
+            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+              data: { ...data, model: deployment },
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
             const result = await new OpenAiResponsesProvider(deployment, {
               config: { apiKey: 'test-key', apiBaseUrl, ...rates },
             }).callApi('A test prompt');
@@ -273,9 +282,12 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
         [webItem, 0.31],
         [fileItem, 0.3025],
       ] as const) {
-        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
-          createMockFetchResponse(payload([item])),
-        );
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: payload([item]),
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
         const native = await new OpenAiResponsesProvider(model, {
           config: { apiKey: 'test-key', ...rates },
         }).callApi('A test prompt');
@@ -505,7 +517,12 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
             'https://openrouter.ai/api/v1',
             'https://proxy.example.test/openrouter/api/v1',
           ]) {
-            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(raw));
+            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+              data: raw,
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
             const result = await new OpenAiResponsesProvider(`openai/${model}`, {
               config: { apiKey: 'test-key', apiBaseUrl, stream },
             }).callApi('A benign test prompt');
@@ -557,9 +574,12 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
               ? []
               : [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }],
         };
-        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
-          createMockFetchResponse(data, { status: 400, statusText: 'Bad Request' }),
-        );
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data,
+          cached: false,
+          status: 400,
+          statusText: 'Bad Request',
+        });
         return { result: await provider.callApi('A benign prompt'), data };
       };
       for (const [text, expected] of [
@@ -659,7 +679,12 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
       ]) {
         for (const { events, refusal } of cases) {
           const raw = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
-          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(raw));
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            data: raw,
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
           const result = await new OpenAiResponsesProvider(model, {
             config: { apiKey: 'test-key', apiBaseUrl, stream: true },
           }).callApi('A benign test prompt');
@@ -931,7 +956,12 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
   ] as const)(
     'distinguishes global and U.S. Bedrock Runtime pricing for %s',
     async (model, globalCost, usCost) => {
-      const usage = { input_tokens: 1_000, output_tokens: 1_000, total_tokens: 2_000 };
+      const usage = {
+        input_tokens: 1_000,
+        output_tokens: 1_000,
+        total_tokens: 2_000,
+        cache_write_input_tokens: 0,
+      };
       for (const [profile, expected] of [
         ['global', globalCost],
         ['us', usCost],
@@ -1004,7 +1034,12 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
     ['gpt-5.6-terra', 0.014],
     ['gpt-5.6-luna', 0.0014],
   ] as const)('applies GovCloud rates for %s only on In-Region Mantle', async (model, baseCost) => {
-    const usage = { input_tokens: 1_000, output_tokens: 1_000, total_tokens: 2_000 };
+    const usage = {
+      input_tokens: 1_000,
+      output_tokens: 1_000,
+      total_tokens: 2_000,
+      cache_write_input_tokens: 0,
+    };
     const runtimeUrl = 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1';
     const callApi = async (wireModel: string, apiBaseUrl: string) => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
@@ -1035,7 +1070,12 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
   ] as const)(
     'uses Bedrock Runtime rates across dual-stack and FIPS hosts for %s',
     async (model, global, us) => {
-      const usage = { input_tokens: 1_000, output_tokens: 1_000, total_tokens: 2_000 };
+      const usage = {
+        input_tokens: 1_000,
+        output_tokens: 1_000,
+        total_tokens: 2_000,
+        cache_write_input_tokens: 0,
+      };
       for (const hostname of [
         'bedrock-runtime.us-east-1.api.aws',
         'bedrock-runtime-fips.us-east-1.amazonaws.com',
@@ -1061,4 +1101,17 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
       }
     },
   );
+  it('keeps unrelated gateway namespaces out of the OpenAI billing catalog', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      data: { ...responseData, model: 'vendor/gpt-6-sol' },
+    });
+    const result = await new OpenAiResponsesProvider('vendor/gpt-6-sol', {
+      config: { apiKey: 'test-key', apiBaseUrl: 'https://gateway.example.test/v1' },
+    }).callApi('A test prompt');
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBeUndefined();
+  });
 });

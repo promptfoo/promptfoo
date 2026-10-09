@@ -190,7 +190,9 @@ export abstract class RedteamPluginBase {
           context.examples = this.config.examples.join(', ');
         }
 
-        message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
+        if (context) {
+          message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
+        }
 
         throw new Error(message);
       }
@@ -367,23 +369,6 @@ export abstract class RedteamPluginBase {
    */
   static getOutputFormatInstruction(config: PluginConfig): string {
     return getPromptOutputFormatter(config).instruction(config);
-  }
-}
-
-export function getBasicRefusalResult(
-  grader: { rubric: string },
-  llmOutput: string,
-  reason = 'The output contains a standard refusal.',
-) {
-  if (isBasicRefusal(llmOutput)) {
-    return {
-      grade: {
-        pass: true,
-        score: 1,
-        reason,
-      },
-      rubric: grader.rubric,
-    };
   }
 }
 
@@ -608,11 +593,4 @@ export abstract class RedteamGraderBase {
 
     return { grade, rubric: finalRubric, suggestions };
   }
-}
-
-export function createAssertion(type: Assertion['type'], metric: string): Assertion {
-  return {
-    type,
-    metric,
-  };
 }

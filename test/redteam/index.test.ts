@@ -30,34 +30,6 @@ import { mockProcessEnv, stripAnsi } from '../util/utils';
 import type { ApiProvider } from '../../src/types/index';
 import type { Inputs } from '../../src/types/shared';
 
-function createIncrementFirstProgressBar() {
-  return {
-    increment: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
-    update: vi.fn(),
-  } as any;
-}
-
-function createStartFirstProgressBar() {
-  return {
-    start: vi.fn(),
-    update: vi.fn(),
-    stop: vi.fn(),
-    increment: vi.fn(),
-  } as any;
-}
-
-function createCustomStrategyFinder(mockCustomAction: (typeof Strategies)[number]['action']) {
-  return function (predicate: any) {
-    if (typeof predicate === 'function') {
-      const strategies = [{ id: 'custom', action: mockCustomAction }];
-      return strategies.find(predicate);
-    }
-    return undefined;
-  };
-}
-
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
 vi.mock('../../src/providers');
@@ -134,11 +106,22 @@ describe('synthesize', () => {
       throw new Error(`Process.exit called with code ${code}`);
     });
     vi.mocked(validateStrategies).mockImplementation(async function () {});
-    vi.mocked(cliProgress.SingleBar).mockImplementation(createIncrementFirstProgressBar);
+    vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+      return {
+        increment: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        update: vi.fn(),
+      } as any;
+    });
     // Disable remote generation by default to avoid health checks interfering
     // with tests that don't explicitly set this behaviour
-    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
-    vi.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
+    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
+      return 'https://api.test/health';
+    });
     vi.mocked(checkRemoteHealth).mockResolvedValue({
       status: 'OK',
       message: 'Cloud API is healthy',
@@ -1194,7 +1177,13 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include the exact 'custom' strategy
-      vi.spyOn(Strategies, 'find').mockImplementation(createCustomStrategyFinder(mockCustomAction));
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+        if (typeof predicate === 'function') {
+          const strategies = [{ id: 'custom', action: mockCustomAction }];
+          return strategies.find(predicate);
+        }
+        return undefined;
+      });
 
       const result = await synthesize({
         language: 'en',
@@ -1231,7 +1220,13 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include only the base 'custom' strategy
-      vi.spyOn(Strategies, 'find').mockImplementation(createCustomStrategyFinder(mockCustomAction));
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+        if (typeof predicate === 'function') {
+          const strategies = [{ id: 'custom', action: mockCustomAction }];
+          return strategies.find(predicate);
+        }
+        return undefined;
+      });
 
       const result = await synthesize({
         language: 'en',
@@ -1866,8 +1861,12 @@ describe('synthesize', () => {
         return ['query'];
       });
 
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      vi.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
+        return 'https://api.test/health';
+      });
       vi.mocked(checkRemoteHealth).mockResolvedValue({
         status: 'OK',
         message: 'Cloud API is healthy',
@@ -1890,7 +1889,9 @@ describe('synthesize', () => {
     });
 
     it('should skip health check when remote generation is disabled', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
 
       await synthesize({
         language: 'en',
@@ -1925,7 +1926,9 @@ describe('synthesize', () => {
     });
 
     it('should skip health check when URL is null', async () => {
-      vi.mocked(getRemoteHealthUrl).mockReturnValue(null);
+      vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
+        return null;
+      });
 
       await synthesize({
         language: 'en',
@@ -2570,9 +2573,20 @@ describe('Language configuration', () => {
     vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
     vi.mocked(validateStrategies).mockImplementation(async function () {});
-    vi.mocked(cliProgress.SingleBar).mockImplementation(createIncrementFirstProgressBar);
-    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
-    vi.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
+    vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+      return {
+        increment: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        update: vi.fn(),
+      } as any;
+    });
+    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
+      return 'https://api.test/health';
+    });
     vi.mocked(checkRemoteHealth).mockResolvedValue({
       status: 'OK',
       message: 'OK',
@@ -3324,7 +3338,14 @@ describe('Language configuration', () => {
       vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
       vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
 
-      vi.mocked(cliProgress.SingleBar).mockImplementation(createStartFirstProgressBar);
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          update: vi.fn(),
+          stop: vi.fn(),
+          increment: vi.fn(),
+        } as any;
+      });
     });
 
     it('should cap strategy output when numTests is configured', async () => {
@@ -3937,7 +3958,14 @@ describe('Language configuration', () => {
       vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
       vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
 
-      vi.mocked(cliProgress.SingleBar).mockImplementation(createStartFirstProgressBar);
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          update: vi.fn(),
+          stop: vi.fn(),
+          increment: vi.fn(),
+        } as any;
+      });
     });
 
     it('should pass the resolved request provider to strategy actions', async () => {

@@ -3,7 +3,6 @@ import { handleContextRelevance } from '../../src/assertions/contextRelevance';
 import * as contextUtils from '../../src/assertions/contextUtils';
 import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import { matchesContextRelevance } from '../../src/matchers/rag';
-import { createQueryContext } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 
 vi.mock('../../src/matchers/rag');
@@ -35,10 +34,13 @@ describe('handleContextRelevance', () => {
         type: 'context-relevance',
         threshold: 0.8,
       },
-      test: createQueryContext(
-        'What is the capital of France?',
-        'France is a country in Europe. Paris is the capital.',
-      ),
+      test: {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'France is a country in Europe. Paris is the capital.',
+        },
+        options: {},
+      },
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
@@ -48,10 +50,13 @@ describe('handleContextRelevance', () => {
           query: 'What is the capital of France?',
           context: 'France is a country in Europe. Paris is the capital.',
         },
-        test: createQueryContext(
-          'What is the capital of France?',
-          'France is a country in Europe. Paris is the capital.',
-        ),
+        test: {
+          vars: {
+            query: 'What is the capital of France?',
+            context: 'France is a country in Europe. Paris is the capital.',
+          },
+          options: {},
+        },
         logProbs: undefined,
         provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
@@ -102,10 +107,13 @@ describe('handleContextRelevance', () => {
         type: 'context-relevance',
         threshold: 0.7,
       },
-      test: createQueryContext(
-        'What is the capital of France?',
-        'Information about weather patterns in Australia.',
-      ),
+      test: {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Information about weather patterns in Australia.',
+        },
+        options: {},
+      },
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
@@ -115,10 +123,13 @@ describe('handleContextRelevance', () => {
           query: 'What is the capital of France?',
           context: 'Information about weather patterns in Australia.',
         },
-        test: createQueryContext(
-          'What is the capital of France?',
-          'Information about weather patterns in Australia.',
-        ),
+        test: {
+          vars: {
+            query: 'What is the capital of France?',
+            context: 'Information about weather patterns in Australia.',
+          },
+          options: {},
+        },
         logProbs: undefined,
         provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
@@ -157,7 +168,13 @@ describe('handleContextRelevance', () => {
       assertion: {
         type: 'context-relevance',
       },
-      test: createQueryContext('test query', 'test context'),
+      test: {
+        vars: {
+          query: 'test query',
+          context: 'test context',
+        },
+        options: {},
+      },
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
@@ -203,7 +220,13 @@ describe('handleContextRelevance', () => {
       assertion: {
         type: 'not-context-relevance',
       },
-      test: createQueryContext('test query', 'test context'),
+      test: {
+        vars: {
+          query: 'test query',
+          context: 'test context',
+        },
+        options: {},
+      },
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
@@ -347,14 +370,20 @@ describe('handleContextRelevance', () => {
 
     const result = await handleContextRelevance({
       assertion: { type: 'not-context-relevance' },
-      test: createQueryContext('What is the capital of France?', 'test context'),
+      test: {
+        vars: { query: 'What is the capital of France?', context: 'test context' },
+        options: {},
+      },
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
       assertionValueContext: {
         prompt: 'test prompt',
         vars: { query: 'What is the capital of France?', context: 'test context' },
-        test: createQueryContext('What is the capital of France?', 'test context'),
+        test: {
+          vars: { query: 'What is the capital of France?', context: 'test context' },
+          options: {},
+        },
         logProbs: undefined,
         provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },

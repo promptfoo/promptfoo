@@ -3,7 +3,6 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
-import { appendPluginMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
 
@@ -234,7 +233,12 @@ export async function addImageToBase64(
 
     imageTestCases.push({
       ...testCase,
-      assert: appendPluginMetricSuffix(testCase, 'Image-Encoded'),
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.type?.startsWith('promptfoo:redteam:')
+          ? `${assertion.type?.split(':').pop() || assertion.metric}/Image-Encoded`
+          : assertion.metric,
+      })),
       vars: {
         ...testCase.vars,
         // Use base64 for the prompt (provider expects this)

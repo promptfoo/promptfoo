@@ -46,4 +46,5 @@ export type HttpAuthInput = z.input<typeof HttpAuthInputSchema>;
 export const HttpAuthInputJsonSchema = z.toJSONSchema(HttpAuthInputSchema, {
   target: 'draft-07',
   io: 'input',
+  unrepresentable: 'throw',
 });

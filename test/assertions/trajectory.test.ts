@@ -9,164 +9,10 @@ import {
   extractTrajectorySteps,
   summarizeTrajectoryForJudge,
 } from '../../src/assertions/trajectoryUtils';
-import { createStringAssertion } from '../factories/literalFixtures';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
-
-const createOrderIdArgs = () => ({
-  order_id: '123',
-});
-
-const createOrdersPaginationDefaultsAssertion = () => ({
-  name: 'orders',
-  mode: 'exact',
-  args: { status: 'Q' },
-  defaults: { page: 1, page_size: 5 },
-});
-
-const createOrdersPageAssertion = () => ({
-  name: 'orders',
-  mode: 'exact',
-  args: { status: 'Q' },
-  defaults: { page: 1 },
-});
-
-const createSearchHistoryAssertion = (mode: string, includeHistory: boolean) => ({
-  name: 'search_orders',
-  mode,
-  args: { order_id: '123' },
-  defaults: { include_history: includeHistory },
-});
-
-const createSearchThenReplySequence = () => ({
-  mode: 'exact',
-  steps: ['search_orders', 'compose_reply'],
-});
-
-const createFriendlyReplyAssertion = () => ({
-  pattern: 'compose_*',
-  mode: 'exact',
-  arguments: {
-    tone: 'friendly',
-    citations: ['doc_1', 'doc_2'],
-  },
-});
-
-const createToolTraceAttributes = (toolArguments: string) => ({
-  'tool.name': 'orders',
-  'tool.arguments': toolArguments,
-});
-
-const createCitedReplyAssertion = () => ({
-  name: 'compose_reply',
-  args: {
-    citations: ['doc_1', 'doc_2'],
-  },
-});
-
-const createDifferentOrderAssertion = () => ({
-  name: 'search_orders',
-  args: {
-    order_id: '999',
-  },
-});
-
-const createSearchWithoutDefaultsAssertion = () => ({
-  name: 'search_orders',
-  mode: 'exact',
-  args: { order_id: '123' },
-  defaults: {},
-});
-
-const createSortedOrdersAssertion = () => ({
-  name: 'orders',
-  mode: 'exact',
-  args: { status: 'Q' },
-  defaults: { sort: { field: 'created', order: 'desc' } },
-});
-
-const createNullCursorOrdersAssertion = () => ({
-  name: 'orders',
-  mode: 'exact',
-  args: { status: 'Q' },
-  defaults: { cursor: null },
-});
-
-const createExplicitPageOrdersAssertion = () => ({
-  name: 'orders',
-  mode: 'exact',
-  args: { status: 'Q', page: 2 },
-  defaults: { page: 1 },
-});
-
-const createLegacyArgumentsSearchAssertion = () => ({
-  name: 'search_orders',
-  mode: 'exact',
-  arguments: { order_id: '123' },
-  defaults: { include_history: false },
-});
-
-const createArrayArgumentsOrdersAssertion = () => ({
-  name: 'orders',
-  mode: 'exact',
-  args: [1, 2, 3],
-  defaults: { page: 1 },
-});
-
-const createExactSearchCountAssertion = () => ({
-  pattern: 'search*',
-  min: 2,
-  max: 2,
-});
-
-const createDefaultModeSearchAssertion = () => ({
-  name: 'search_orders',
-  args: { order_id: '123' },
-  defaults: { include_history: false },
-});
-
-const createSingleCommandCountAssertion = () => ({
-  type: 'command' as const,
-  min: 1,
-  max: 1,
-});
-
-const createSpanPatternAssertion = (pattern: string) => ({
-  pattern,
-  min: 1,
-});
-
-const createMissingToolAssertion = () => ({
-  name: 'missing_tool',
-  min: 1,
-});
-
-const createCustomerLookupAssertion = () => ({
-  name: 'lookup_customer',
-  args: { customer_id: 'cust_1234' },
-});
-
-const createMaximumToolCountAssertion = () => ({
-  type: 'tool' as const,
-  max: 3,
-});
-
-const createMinimumToolCountAssertion = () => ({
-  type: 'tool' as const,
-  min: 4,
-});
-
-const createOrdersAssertion = (): AssertionParams['assertion'] => ({
-  type: 'trajectory:tool-args-match',
-  value: createOrdersPaginationDefaultsAssertion(),
-});
-
-const createPagedOrdersAssertion = (): AssertionParams['assertion'] => ({
-  type: 'trajectory:tool-args-match',
-  value: createOrdersPageAssertion(),
-});
 
 const mockProvider = createMockProvider({
   id: 'mock',
@@ -745,7 +591,10 @@ describe('trajectory assertions', () => {
           trace: undefined,
         },
         baseType: 'trajectory:tool-used',
-        assertion: createStringAssertion('trajectory:tool-used', 'search_orders'),
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: 'search_orders',
+        },
         renderedValue: 'search_orders',
       };
 
@@ -758,7 +607,10 @@ describe('trajectory assertions', () => {
       const params: AssertionParams = {
         ...defaultParams,
         baseType: 'trajectory:tool-used',
-        assertion: createStringAssertion('trajectory:tool-used', 'search_orders'),
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: 'search_orders',
+        },
         renderedValue: 'search_orders',
       };
 
@@ -778,9 +630,17 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-used',
         assertion: {
           type: 'trajectory:tool-used',
-          value: createExactSearchCountAssertion(),
+          value: {
+            pattern: 'search*',
+            min: 2,
+            max: 2,
+          },
         },
-        renderedValue: createExactSearchCountAssertion(),
+        renderedValue: {
+          pattern: 'search*',
+          min: 2,
+          max: 2,
+        },
       };
 
       const result = handleTrajectoryToolUsed(params);
@@ -799,9 +659,15 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-used',
         assertion: {
           type: 'trajectory:tool-used',
-          value: createSpanPatternAssertion('search*'),
+          value: {
+            pattern: 'search*',
+            min: 1,
+          },
         },
-        renderedValue: createSpanPatternAssertion('search*'),
+        renderedValue: {
+          pattern: 'search*',
+          min: 1,
+        },
       };
 
       const result = handleTrajectoryToolUsed(params);
@@ -886,9 +752,15 @@ describe('trajectory assertions', () => {
         inverse: true,
         assertion: {
           type: 'not-trajectory:tool-used',
-          value: createMissingToolAssertion(),
+          value: {
+            name: 'missing_tool',
+            min: 1,
+          },
         },
-        renderedValue: createMissingToolAssertion(),
+        renderedValue: {
+          name: 'missing_tool',
+          min: 1,
+        },
       };
 
       const result = handleTrajectoryToolUsed(params);
@@ -986,9 +858,15 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-sequence',
         assertion: {
           type: 'trajectory:tool-sequence',
-          value: createSearchThenReplySequence(),
+          value: {
+            mode: 'exact',
+            steps: ['search_orders', 'compose_reply'],
+          },
         },
-        renderedValue: createSearchThenReplySequence(),
+        renderedValue: {
+          mode: 'exact',
+          steps: ['search_orders', 'compose_reply'],
+        },
       };
 
       const result = handleTrajectoryToolSequence(params);
@@ -1029,9 +907,15 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-sequence',
         assertion: {
           type: 'trajectory:tool-sequence',
-          value: createSearchThenReplySequence(),
+          value: {
+            mode: 'exact',
+            steps: ['search_orders', 'compose_reply'],
+          },
         },
-        renderedValue: createSearchThenReplySequence(),
+        renderedValue: {
+          mode: 'exact',
+          steps: ['search_orders', 'compose_reply'],
+        },
       };
 
       const result = handleTrajectoryToolSequence(params);
@@ -1169,12 +1053,16 @@ describe('trajectory assertions', () => {
           type: 'trajectory:tool-args-match',
           value: {
             name: 'search_orders',
-            args: createOrderIdArgs(),
+            args: {
+              order_id: '123',
+            },
           },
         },
         renderedValue: {
           name: 'search_orders',
-          args: createOrderIdArgs(),
+          args: {
+            order_id: '123',
+          },
         },
       };
 
@@ -1194,9 +1082,19 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-args-match',
         assertion: {
           type: 'trajectory:tool-args-match',
-          value: createCitedReplyAssertion(),
+          value: {
+            name: 'compose_reply',
+            args: {
+              citations: ['doc_1', 'doc_2'],
+            },
+          },
         },
-        renderedValue: createCitedReplyAssertion(),
+        renderedValue: {
+          name: 'compose_reply',
+          args: {
+            citations: ['doc_1', 'doc_2'],
+          },
+        },
       };
 
       const result = handleTrajectoryToolArgsMatch(params);
@@ -1215,9 +1113,23 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-args-match',
         assertion: {
           type: 'trajectory:tool-args-match',
-          value: createFriendlyReplyAssertion(),
+          value: {
+            pattern: 'compose_*',
+            mode: 'exact',
+            arguments: {
+              tone: 'friendly',
+              citations: ['doc_1', 'doc_2'],
+            },
+          },
         },
-        renderedValue: createFriendlyReplyAssertion(),
+        renderedValue: {
+          pattern: 'compose_*',
+          mode: 'exact',
+          arguments: {
+            tone: 'friendly',
+            citations: ['doc_1', 'doc_2'],
+          },
+        },
       };
 
       const result = handleTrajectoryToolArgsMatch(params);
@@ -1253,9 +1165,15 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-args-match',
         assertion: {
           type: 'trajectory:tool-args-match',
-          value: createCustomerLookupAssertion(),
+          value: {
+            name: 'lookup_customer',
+            args: { customer_id: 'cust_1234' },
+          },
         },
-        renderedValue: createCustomerLookupAssertion(),
+        renderedValue: {
+          name: 'lookup_customer',
+          args: { customer_id: 'cust_1234' },
+        },
       };
 
       const result = handleTrajectoryToolArgsMatch(params);
@@ -1269,9 +1187,19 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:tool-args-match',
         assertion: {
           type: 'trajectory:tool-args-match',
-          value: createDifferentOrderAssertion(),
+          value: {
+            name: 'search_orders',
+            args: {
+              order_id: '999',
+            },
+          },
         },
-        renderedValue: createDifferentOrderAssertion(),
+        renderedValue: {
+          name: 'search_orders',
+          args: {
+            order_id: '999',
+          },
+        },
       };
 
       const result = handleTrajectoryToolArgsMatch(params);
@@ -1292,12 +1220,16 @@ describe('trajectory assertions', () => {
           type: 'trajectory:tool-args-match',
           value: {
             name: 'missing_tool',
-            args: createOrderIdArgs(),
+            args: {
+              order_id: '123',
+            },
           },
         },
         renderedValue: {
           name: 'missing_tool',
-          args: createOrderIdArgs(),
+          args: {
+            order_id: '123',
+          },
         },
       };
 
@@ -1336,12 +1268,16 @@ describe('trajectory assertions', () => {
           type: 'trajectory:tool-args-match',
           value: {
             name: 'search_orders',
-            args: createOrderIdArgs(),
+            args: {
+              order_id: '123',
+            },
           },
         },
         renderedValue: {
           name: 'search_orders',
-          args: createOrderIdArgs(),
+          args: {
+            order_id: '123',
+          },
         },
       };
 
@@ -1364,12 +1300,16 @@ describe('trajectory assertions', () => {
           type: 'not-trajectory:tool-args-match',
           value: {
             name: 'search_orders',
-            args: createOrderIdArgs(),
+            args: {
+              order_id: '123',
+            },
           },
         },
         renderedValue: {
           name: 'search_orders',
-          args: createOrderIdArgs(),
+          args: {
+            order_id: '123',
+          },
         },
       };
 
@@ -1392,12 +1332,16 @@ describe('trajectory assertions', () => {
           type: 'not-trajectory:tool-args-match',
           value: {
             name: 'missing_tool',
-            args: createOrderIdArgs(),
+            args: {
+              order_id: '123',
+            },
           },
         },
         renderedValue: {
           name: 'missing_tool',
-          args: createOrderIdArgs(),
+          args: {
+            order_id: '123',
+          },
         },
       };
 
@@ -1440,13 +1384,17 @@ describe('trajectory assertions', () => {
           value: {
             name: 'search_orders',
             mode: 'excat',
-            args: createOrderIdArgs(),
+            args: {
+              order_id: '123',
+            },
           },
         },
         renderedValue: {
           name: 'search_orders',
           mode: 'excat',
-          args: createOrderIdArgs(),
+          args: {
+            order_id: '123',
+          },
         },
       };
 
@@ -1478,11 +1426,15 @@ describe('trajectory assertions', () => {
         assertion: {
           type: 'trajectory:tool-args-match',
           value: {
-            args: createOrderIdArgs(),
+            args: {
+              order_id: '123',
+            },
           },
         },
         renderedValue: {
-          args: createOrderIdArgs(),
+          args: {
+            order_id: '123',
+          },
         },
       };
 
@@ -1498,9 +1450,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createSearchHistoryAssertion('exact', false),
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: { include_history: false },
+            },
           },
-          renderedValue: createSearchHistoryAssertion('exact', false),
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: { include_history: false },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1519,9 +1481,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createSearchHistoryAssertion('exact', true),
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: { include_history: true },
+            },
           },
-          renderedValue: createSearchHistoryAssertion('exact', true),
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: { include_history: true },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1541,7 +1513,10 @@ describe('trajectory assertions', () => {
               name: 'tool.call',
               startTime: 1000,
               endTime: 1100,
-              attributes: createToolTraceAttributes('{"status":"Q","page":1,"page_size":5}'),
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1,"page_size":5}',
+              },
             },
           ],
         };
@@ -1552,8 +1527,21 @@ describe('trajectory assertions', () => {
             trace: allDefaultsTrace,
           },
           baseType: 'trajectory:tool-args-match',
-          assertion: createOrdersAssertion(),
-          renderedValue: createOrdersPaginationDefaultsAssertion(),
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1583,8 +1571,21 @@ describe('trajectory assertions', () => {
             trace: traceWithoutDefault,
           },
           baseType: 'trajectory:tool-args-match',
-          assertion: createOrdersAssertion(),
-          renderedValue: createOrdersPaginationDefaultsAssertion(),
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1614,8 +1615,21 @@ describe('trajectory assertions', () => {
             trace: hallucinatedTrace,
           },
           baseType: 'trajectory:tool-args-match',
-          assertion: createPagedOrdersAssertion(),
-          renderedValue: createOrdersPageAssertion(),
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1 },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1630,9 +1644,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createSearchWithoutDefaultsAssertion(),
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: {},
+            },
           },
-          renderedValue: createSearchWithoutDefaultsAssertion(),
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: {},
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1664,9 +1688,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createSortedOrdersAssertion(),
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { sort: { field: 'created', order: 'desc' } },
+            },
           },
-          renderedValue: createSortedOrdersAssertion(),
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { sort: { field: 'created', order: 'desc' } },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1679,9 +1713,17 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createDefaultModeSearchAssertion(),
+            value: {
+              name: 'search_orders',
+              args: { order_id: '123' },
+              defaults: { include_history: false },
+            },
           },
-          renderedValue: createDefaultModeSearchAssertion(),
+          renderedValue: {
+            name: 'search_orders',
+            args: { order_id: '123' },
+            defaults: { include_history: false },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1721,7 +1763,10 @@ describe('trajectory assertions', () => {
               name: 'tool.call',
               startTime: 1000,
               endTime: 1100,
-              attributes: createToolTraceAttributes('{"status":"Q","page":1}'),
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1}',
+              },
             },
           ],
         };
@@ -1729,8 +1774,21 @@ describe('trajectory assertions', () => {
           ...defaultParams,
           assertionValueContext: { ...defaultParams.assertionValueContext, trace: docsTrace },
           baseType: 'trajectory:tool-args-match',
-          assertion: createOrdersAssertion(),
-          renderedValue: createOrdersPaginationDefaultsAssertion(),
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1757,8 +1815,21 @@ describe('trajectory assertions', () => {
           ...defaultParams,
           assertionValueContext: { ...defaultParams.assertionValueContext, trace: docsTrace },
           baseType: 'trajectory:tool-args-match',
-          assertion: createOrdersAssertion(),
-          renderedValue: createOrdersPaginationDefaultsAssertion(),
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1787,9 +1858,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createNullCursorOrdersAssertion(),
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { cursor: null },
+            },
           },
-          renderedValue: createNullCursorOrdersAssertion(),
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { cursor: null },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1805,7 +1886,10 @@ describe('trajectory assertions', () => {
               name: 'tool.call',
               startTime: 1000,
               endTime: 1100,
-              attributes: createToolTraceAttributes('{"status":"Q","page":1}'),
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1}',
+              },
             },
           ],
         };
@@ -1818,9 +1902,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createExplicitPageOrdersAssertion(),
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q', page: 2 },
+              defaults: { page: 1 },
+            },
           },
-          renderedValue: createExplicitPageOrdersAssertion(),
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q', page: 2 },
+            defaults: { page: 1 },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1847,8 +1941,21 @@ describe('trajectory assertions', () => {
           ...defaultParams,
           assertionValueContext: { ...defaultParams.assertionValueContext, trace: nestedTrace },
           baseType: 'trajectory:tool-args-match',
-          assertion: createPagedOrdersAssertion(),
-          renderedValue: createOrdersPageAssertion(),
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1 },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1862,9 +1969,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'not-trajectory:tool-args-match',
-            value: createSearchHistoryAssertion('exact', false),
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              args: { order_id: '123' },
+              defaults: { include_history: false },
+            },
           },
-          renderedValue: createSearchHistoryAssertion('exact', false),
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            args: { order_id: '123' },
+            defaults: { include_history: false },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1881,7 +1998,10 @@ describe('trajectory assertions', () => {
               name: 'tool.call',
               startTime: 1000,
               endTime: 1100,
-              attributes: createToolTraceAttributes('{"status":"Q","page":1,"page_size":5}'),
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1,"page_size":5}',
+              },
             },
           ],
         };
@@ -1892,8 +2012,21 @@ describe('trajectory assertions', () => {
             trace: allDefaultsTrace,
           },
           baseType: 'trajectory:tool-args-match',
-          assertion: createOrdersAssertion(),
-          renderedValue: createOrdersPaginationDefaultsAssertion(),
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1, page_size: 5 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1, page_size: 5 },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -1907,9 +2040,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createSearchHistoryAssertion('partial', true),
+            value: {
+              name: 'search_orders',
+              mode: 'partial',
+              args: { order_id: '123' },
+              defaults: { include_history: true },
+            },
           },
-          renderedValue: createSearchHistoryAssertion('partial', true),
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'partial',
+            args: { order_id: '123' },
+            defaults: { include_history: true },
+          },
         };
 
         // The observed call has include_history:false, which does not equal the
@@ -1939,8 +2082,21 @@ describe('trajectory assertions', () => {
           ...defaultParams,
           assertionValueContext: { ...defaultParams.assertionValueContext, trace: protoTrace },
           baseType: 'trajectory:tool-args-match',
-          assertion: createPagedOrdersAssertion(),
-          renderedValue: createOrdersPageAssertion(),
+          assertion: {
+            type: 'trajectory:tool-args-match',
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: { status: 'Q' },
+              defaults: { page: 1 },
+            },
+          },
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: { status: 'Q' },
+            defaults: { page: 1 },
+          },
         };
 
         // A non-default __proto__ key must be preserved through stripping so exact
@@ -1960,7 +2116,10 @@ describe('trajectory assertions', () => {
               name: 'tool.call',
               startTime: 1000,
               endTime: 1100,
-              attributes: createToolTraceAttributes('{"status":"Q","page":1}'),
+              attributes: {
+                'tool.name': 'orders',
+                'tool.arguments': '{"status":"Q","page":1}',
+              },
             },
           ],
         };
@@ -1996,9 +2155,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createLegacyArgumentsSearchAssertion(),
+            value: {
+              name: 'search_orders',
+              mode: 'exact',
+              arguments: { order_id: '123' },
+              defaults: { include_history: false },
+            },
           },
-          renderedValue: createLegacyArgumentsSearchAssertion(),
+          renderedValue: {
+            name: 'search_orders',
+            mode: 'exact',
+            arguments: { order_id: '123' },
+            defaults: { include_history: false },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -2027,9 +2196,19 @@ describe('trajectory assertions', () => {
           baseType: 'trajectory:tool-args-match',
           assertion: {
             type: 'trajectory:tool-args-match',
-            value: createArrayArgumentsOrdersAssertion(),
+            value: {
+              name: 'orders',
+              mode: 'exact',
+              args: [1, 2, 3],
+              defaults: { page: 1 },
+            },
           },
-          renderedValue: createArrayArgumentsOrdersAssertion(),
+          renderedValue: {
+            name: 'orders',
+            mode: 'exact',
+            args: [1, 2, 3],
+            defaults: { page: 1 },
+          },
         };
 
         const result = handleTrajectoryToolArgsMatch(params);
@@ -2343,9 +2522,17 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:step-count',
         assertion: {
           type: 'trajectory:step-count',
-          value: createSingleCommandCountAssertion(),
+          value: {
+            type: 'command',
+            min: 1,
+            max: 1,
+          },
         },
-        renderedValue: createSingleCommandCountAssertion(),
+        renderedValue: {
+          type: 'command',
+          min: 1,
+          max: 1,
+        },
       };
 
       const result = handleTrajectoryStepCount(params);
@@ -2364,9 +2551,15 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:step-count',
         assertion: {
           type: 'trajectory:step-count',
-          value: createSpanPatternAssertion('reasoning*'),
+          value: {
+            pattern: 'reasoning*',
+            min: 1,
+          },
         },
-        renderedValue: createSpanPatternAssertion('reasoning*'),
+        renderedValue: {
+          pattern: 'reasoning*',
+          min: 1,
+        },
       };
 
       const result = handleTrajectoryStepCount(params);
@@ -2385,9 +2578,15 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:step-count',
         assertion: {
           type: 'trajectory:step-count',
-          value: createMaximumToolCountAssertion(),
+          value: {
+            type: 'tool',
+            max: 3,
+          },
         },
-        renderedValue: createMaximumToolCountAssertion(),
+        renderedValue: {
+          type: 'tool',
+          max: 3,
+        },
       };
 
       const result = handleTrajectoryStepCount(params);
@@ -2407,9 +2606,15 @@ describe('trajectory assertions', () => {
         baseType: 'trajectory:step-count',
         assertion: {
           type: 'not-trajectory:step-count',
-          value: createMinimumToolCountAssertion(),
+          value: {
+            type: 'tool',
+            min: 4,
+          },
         },
-        renderedValue: createMinimumToolCountAssertion(),
+        renderedValue: {
+          type: 'tool',
+          min: 4,
+        },
       };
 
       const result = handleTrajectoryStepCount(params);

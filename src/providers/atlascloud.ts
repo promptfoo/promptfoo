@@ -1,5 +1,4 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { serializeProvider } from './serialization';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -27,7 +26,14 @@ export class AtlasCloudProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return serializeProvider(this, 'atlascloud');
+    return {
+      provider: 'atlascloud',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        ...(this.config.apiKey && { apiKey: undefined }),
+      },
+    };
   }
 }
 

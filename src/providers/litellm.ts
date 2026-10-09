@@ -199,7 +199,7 @@ export function createLiteLLMProvider(
   // Build the config object with proper defaults
   // omitDefaults: true ensures temperature/max_tokens are not sent unless explicitly
   // configured, allowing the LiteLLM proxy to apply its own model-specific defaults.
-  const mergedConfig: LiteLLMCompletionOptions = {
+  const litellmConfigDefaults: LiteLLMCompletionOptions = {
     apiKeyEnvar: 'LITELLM_API_KEY',
     apiKeyRequired: false,
     apiBaseUrl: resolvedApiBaseUrl,
@@ -207,6 +207,10 @@ export function createLiteLLMProvider(
   };
 
   // Merge configs, with explicit config values taking precedence
+  const mergedConfig: LiteLLMCompletionOptions = {
+    ...litellmConfigDefaults,
+  };
+
   // Only override properties that are actually defined and not null in config
   Object.keys(config).forEach((key) => {
     if (config[key] !== undefined && config[key] !== null) {
@@ -233,6 +237,9 @@ export function createLiteLLMProvider(
     case 'embedding':
     case 'embeddings':
       return new LiteLLMEmbeddingProvider(modelName, litellmConfig);
+
+    case 'chat':
+      return new LiteLLMProvider(modelName, litellmConfig);
 
     default:
       // Default to chat for backward compatibility (e.g., 'litellm:gpt-4')

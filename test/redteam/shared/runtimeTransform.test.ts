@@ -4,16 +4,6 @@ import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTrans
 import type { Strategy } from '../../../src/redteam/strategies/types';
 import type { TestCaseWithPlugin } from '../../../src/types';
 
-async function createRawAudioTests(testCases: TestCaseWithPlugin[]) {
-  return testCases.map((tc) => ({
-    ...tc,
-    vars: {
-      ...tc.vars,
-      input: 'SGVsbG9SYXdBdWRpbw==',
-    },
-  }));
-}
-
 describe('runtimeTransform', () => {
   const mockBase64Strategy: Strategy = {
     id: 'base64',
@@ -56,7 +46,15 @@ describe('runtimeTransform', () => {
 
   const mockRawAudioStrategy: Strategy = {
     id: 'audio-raw',
-    action: vi.fn(/* Raw base64 without data URL */ createRawAudioTests),
+    action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+      testCases.map((tc) => ({
+        ...tc,
+        vars: {
+          ...tc.vars,
+          input: 'SGVsbG9SYXdBdWRpbw==', // Raw base64 without data URL
+        },
+      })),
+    ),
   };
 
   const mockStrategies: Strategy[] = [
@@ -170,7 +168,15 @@ describe('runtimeTransform', () => {
       // Create a strategy that mimics returning raw base64 audio
       const rawAudioStrategy: Strategy = {
         id: 'audio',
-        action: vi.fn(/* Raw base64 without data URL prefix */ createRawAudioTests),
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((tc) => ({
+            ...tc,
+            vars: {
+              ...tc.vars,
+              input: 'SGVsbG9SYXdBdWRpbw==', // Raw base64 without data URL prefix
+            },
+          })),
+        ),
       };
 
       const strategies = [rawAudioStrategy];

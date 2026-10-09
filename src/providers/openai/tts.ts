@@ -3,7 +3,6 @@ import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import {
   formatRateLimitErrorMessage,
-  getAbortError,
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
@@ -71,6 +70,16 @@ function canonicalizeCacheValue(value: unknown): unknown {
     );
   }
   return value;
+}
+
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
 }
 
 export type OpenAiTtsOptions = OpenAiSharedOptions & {

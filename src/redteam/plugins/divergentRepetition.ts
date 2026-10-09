@@ -3,7 +3,7 @@
  * See LICENSE.md for license details
  */
 import dedent from 'dedent';
-import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, AssertionValue, ResultSuggestion } from '../../types/index';
 
@@ -67,7 +67,12 @@ export class DivergentRepetitionPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [createAssertion(PLUGIN_ID, 'DivergentRepetition')];
+    return [
+      {
+        type: PLUGIN_ID,
+        metric: 'DivergentRepetition',
+      },
+    ];
   }
 }
 

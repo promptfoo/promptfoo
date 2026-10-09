@@ -11,7 +11,6 @@ import {
   waitForNativeTraceExport,
 } from '../../src/providers/tracing';
 import * as traceStore from '../../src/tracing/store';
-import { createOtlpOptions } from '../factories/literalFixtures';
 
 describe('provider tracing integration', () => {
   afterEach(() => {
@@ -173,7 +172,11 @@ describe('provider tracing integration', () => {
   });
 
   it('does not borrow another evaluation receiver without owning a lease', () => {
-    cliState.setActiveOtlpReceiver(createOtlpOptions());
+    cliState.setActiveOtlpReceiver({
+      host: '127.0.0.1',
+      port: 4318,
+      acceptFormats: ['json'],
+    });
 
     expect(isActiveTracingExport('http://127.0.0.1:4318', 'http/json')).toBe(false);
   });
@@ -181,7 +184,11 @@ describe('provider tracing integration', () => {
   it.each(['http://localhost:4318', 'http://127.0.0.1:4318/', 'http://127.0.0.1:4318/v1/traces/'])(
     'recognizes equivalent local receiver endpoint %s',
     async (endpoint) => {
-      cliState.setActiveOtlpReceiver(createOtlpOptions());
+      cliState.setActiveOtlpReceiver({
+        host: '127.0.0.1',
+        port: 4318,
+        acceptFormats: ['json'],
+      });
 
       await cliState.withRequestTracingConfig(
         { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },

@@ -7,7 +7,12 @@ import {
   ImageDatasetPluginBase,
   type ImageDatasetPluginConfig,
 } from './imageDatasetPluginBase';
-import { fetchImageAsBase64, fisherYatesShuffle, getStringField } from './imageDatasetUtils';
+import {
+  fetchImageAsBase64,
+  fisherYatesShuffle,
+  getStringField,
+  ImageDatasetManager,
+} from './imageDatasetUtils';
 
 const PLUGIN_ID = 'promptfoo:redteam:vlguard';
 const DATASET_BASE_URL = 'https://huggingface.co/datasets/ys-zong/VLGuard/resolve/main';
@@ -135,9 +140,10 @@ interface VLGuardMetadataRecord {
  * Fetches metadata from {split}.json and images from HuggingFace
  * @internal - exported for testing purposes only
  */
-export class VLGuardDatasetManager {
-  protected datasetCache: VLGuardInput[] | null = null;
+export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   private static instance: VLGuardDatasetManager | null = null;
+  protected pluginId = 'vlguard';
+  protected datasetPath = `huggingface://datasets/ys-zong/VLGuard`;
   // Fetch all records - the dataset has ~3000 total (train: 1999, test: 1000)
   // Images are fetched on-demand with bounded concurrency
   protected fetchLimit = 3000;
@@ -150,7 +156,9 @@ export class VLGuardDatasetManager {
   // Current split being used
   private currentSplit: VLGuardSplit = 'both';
 
-  private constructor() {}
+  private constructor() {
+    super();
+  }
 
   /**
    * Get singleton instance
@@ -163,6 +171,20 @@ export class VLGuardDatasetManager {
   }
 
   /**
+   * Set the split to use for fetching records
+   */
+  setSplit(split: VLGuardSplit): void {
+    this.currentSplit = split;
+  }
+
+  /**
+   * Get the current split
+   */
+  getSplit(): VLGuardSplit {
+    return this.currentSplit;
+  }
+
+  /**
    * Clear the cache - useful for testing
    */
   static clearCache(): void {
@@ -171,6 +193,13 @@ export class VLGuardDatasetManager {
       VLGuardDatasetManager.instance.metadataCache.clear();
       VLGuardDatasetManager.instance.splitCache.clear();
     }
+  }
+
+  /**
+   * Required by base class but not used since we override ensureDatasetLoaded
+   */
+  protected async processRecords(_records: any[]): Promise<VLGuardInput[]> {
+    throw new Error('processRecords should not be called directly - use ensureDatasetLoaded');
   }
 
   /**
@@ -415,7 +444,7 @@ export class VLGuardDatasetManager {
   }
 
   /**
-   * Load the dataset using custom metadata fetching
+   * Override ensureDatasetLoaded to use our custom metadata fetching
    */
   protected async ensureDatasetLoaded(): Promise<void> {
     // Check if we have cached data for the current split
@@ -496,7 +525,7 @@ export class VLGuardDatasetManager {
   async getFilteredRecords(limit: number, config?: VLGuardPluginConfig): Promise<VLGuardInput[]> {
     // Set the split from config (default: 'both' for maximum coverage)
     const split = config?.split ?? 'both';
-    this.currentSplit = split;
+    this.setSplit(split);
     logger.debug(`[vlguard] Using ${split === 'both' ? 'both splits' : `${split} split`}`);
 
     await this.ensureDatasetLoaded();
