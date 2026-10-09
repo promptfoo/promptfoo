@@ -613,7 +613,7 @@ describeEvaluator('evaluator runtime ports', () => {
         { restorePromptColumns: true, generateSuggestions: true },
         createInMemoryRuntime(store),
       );
-      expect(generatePrompts).toHaveBeenCalledWith('original', 1);
+      expect(generatePrompts).toHaveBeenCalledWith('original', 1, undefined);
       expect(evaluation.prompts.map((prompt) => prompt.raw)).toEqual(['original', 'generated']);
       expect(evaluation.results).toHaveLength(2);
       expect(evaluation.results.every((result) => result.success)).toBe(true);

@@ -10,6 +10,7 @@ import Eval from './models/eval';
 import { toSerializableProviderRef } from './models/evalResult';
 import { processPrompts } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
+import { providerRegistry } from './providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
@@ -322,7 +323,9 @@ export async function evaluateWithSource(
   const { prompts: _prompts, providers: _providers, ...config } = testSuite;
   return cliState.withConfig(config, () =>
     cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
-      cliState.withEnv(testSuite.env ?? {}, () => evaluateWithEnv(testSuite, options)),
+      cliState.withEnv(testSuite.env ?? {}, () =>
+        providerRegistry.withEvaluation(() => evaluateWithEnv(testSuite, options)),
+      ),
     ),
   );
 }
@@ -337,6 +340,7 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
     env: testSuiteConfig.env,
   });
+  options.abortSignal?.throwIfAborted();
   const providerMap = buildConfiguredProviderMap(loadedProviders);
   const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);

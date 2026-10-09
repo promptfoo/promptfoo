@@ -77,6 +77,20 @@ describe('contracts leaf surface', () => {
   });
 
   describe('ProviderEnvOverridesSchema', () => {
+    it.each([
+      { PROMPTFOO_PYTHON: 'python3', PROMPTFOO_PYTHON_WORKERS: '2' },
+      { PROMPTFOO_PYTHON: '', PROMPTFOO_PYTHON_WORKERS: '' },
+    ])('preserves Python runtime overrides: %j', (env) => {
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
+    it.each(['PROMPTFOO_PYTHON', 'PROMPTFOO_PYTHON_WORKERS'])(
+      'rejects non-string %s values',
+      (key) => {
+        expect(ProviderEnvOverridesSchema.safeParse({ [key]: 2 }).success).toBe(false);
+      },
+    );
+
     it('preserves Google Cloud project and location aliases', () => {
       const env = {
         GOOGLE_CLOUD_PROJECT: 'live-project',
@@ -91,6 +105,19 @@ describe('contracts leaf surface', () => {
         expect(ProviderEnvOverridesSchema.safeParse({ [key]: 123 }).success).toBe(false);
       },
     );
+
+    it.each([
+      'AZURE_AI_PROJECT_URL',
+      'SNOWFLAKE_ACCOUNT_IDENTIFIER',
+      'GOOGLE_APPLICATION_CREDENTIALS',
+      'PROMPTFOO_TRACING_ENABLED',
+      'PROMPTFOO_MAX_CONCURRENCY',
+    ])('preserves %s strings and empty masks while rejecting other values', (key) => {
+      for (const value of ['fixture', '']) {
+        expect(ProviderEnvOverridesSchema.parse({ [key]: value })).toEqual({ [key]: value });
+      }
+      expect(ProviderEnvOverridesSchema.safeParse({ [key]: 123 }).success).toBe(false);
+    });
 
     it('parses a known env key', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({ OPENAI_API_KEY: 'sk-known' });

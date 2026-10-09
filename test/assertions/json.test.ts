@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { handleContainsJson, handleIsJson } from '../../src/assertions/json';
+import cliState from '../../src/cliState';
+import { validateFunctionCall } from '../../src/providers/google/util';
+import { resetAjv } from '../../src/util/json';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase } from '../factories/testSuite';
 
@@ -36,6 +39,51 @@ const NAME_SCHEMA_YAML = [
   '  name:',
   '    type: string',
 ].join('\n');
+
+describe.each([
+  { type: 'is-json' as const, handler: handleIsJson },
+  { type: 'contains-json' as const, handler: handleContainsJson },
+])('$type ordering annotations', ({ type, handler }) => {
+  it.each(['false', 'true'])(
+    'works before and after function validation (relaxed=%s)',
+    (disabled) => {
+      resetAjv();
+      cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: disabled }, () => {
+        const params = makeParams({
+          assertion: { type },
+          renderedValue: {
+            type: 'object',
+            properties: { name: { type: 'string' } },
+            required: ['name'],
+            property_ordering: ['name'],
+          },
+          outputString: '{"name":"fixture"}',
+        });
+        expect(handler(params).pass).toBe(true);
+        expect(handler({ ...params, outputString: '{"name":1}' }).pass).toBe(false);
+        validateFunctionCall(
+          [{ functionCall: { name: 'fixture', args: { name: 'fixture' } } }],
+          [
+            {
+              functionDeclarations: [
+                {
+                  name: 'fixture',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { name: { type: 'STRING' } },
+                    required: ['name'],
+                  },
+                },
+              ],
+            },
+          ],
+        );
+        expect(handler(params).pass).toBe(true);
+        expect(handler({ ...params, outputString: '{"name":1}' }).pass).toBe(false);
+      });
+    },
+  );
+});
 
 describe('handleIsJson', () => {
   it('passes for valid JSON with no schema', () => {

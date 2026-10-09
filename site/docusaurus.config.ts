@@ -577,6 +577,10 @@ const config: Config = {
           },
           // Deleted guides redirected to guides index
           {
+            from: '/docs/guides/lintlang-prompt-assertion',
+            to: '/docs/guides/',
+          },
+          {
             from: '/docs/guides/cohere-command-r-benchmark',
             to: '/docs/guides/',
           },
