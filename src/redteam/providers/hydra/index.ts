@@ -90,6 +90,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
     turn: number;
     message: string;
     response: string;
+    isBase64?: boolean;
     traceSummary?: string;
   }>;
   totalSuccessfulAttacks?: number;
@@ -343,6 +344,7 @@ export class HydraProvider implements ApiProvider {
       turn: number;
       message: string;
       response: string;
+      isBase64?: boolean;
       traceSummary?: string;
     }> = [];
 
@@ -354,6 +356,13 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let lastResponseMessages: Array<Message & Pick<TargetResponse, 'isBase64'>> = [];
+    // Keep classification out of the provider-facing transcript. Message objects survive
+    // prefix retention and backtracking; only metadata snapshots receive the media hint.
+    const binaryMessages = new WeakSet<Message>();
+    const getCheckpointMessages = () =>
+      this.conversationHistory.map((message) =>
+        binaryMessages.has(message) ? { ...message, isBase64: true } : message,
+      );
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
@@ -733,7 +742,7 @@ export class HydraProvider implements ApiProvider {
         lastTargetResponse = response;
         if (!(response.error && response.tokenUsage?.numRequests === 0)) {
           lastResponseMessages = [
-            ...this.conversationHistory,
+            ...getCheckpointMessages(),
             { role: 'assistant', content: response.output || '', isBase64: response.isBase64 },
           ];
         }
@@ -892,11 +901,12 @@ export class HydraProvider implements ApiProvider {
           : targetResponse.output;
 
       // Add response to conversation history
-      this.conversationHistory.push({
-        role: 'assistant',
-        content: historyOutput,
-      });
-      lastResponseMessages = [...this.conversationHistory];
+      const assistantMessage: Message = { role: 'assistant', content: historyOutput };
+      this.conversationHistory.push(assistantMessage);
+      if (targetResponse.isBase64 === true) {
+        binaryMessages.add(assistantMessage);
+      }
+      lastResponseMessages = getCheckpointMessages();
 
       completedTurn.output = historyOutput;
       completedTurn.images = targetResponse.images;
@@ -1087,6 +1097,7 @@ export class HydraProvider implements ApiProvider {
           turn,
           message: nextMessage,
           response: targetResponse.output,
+          isBase64: targetResponse.isBase64,
           traceSummary: computedTraceSummary,
         });
         stopReason = 'Grader failed';
@@ -1139,6 +1150,7 @@ export class HydraProvider implements ApiProvider {
     const messages = lastResponseMessages.map((msg) => ({
       role: msg.role,
       content: msg.content,
+      ...(msg.isBase64 === true && { isBase64: true }),
     })) as Record<string, any>[];
     const targetProbeCount = totalTokenUsage.numRequests ?? 0;
     const roundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;

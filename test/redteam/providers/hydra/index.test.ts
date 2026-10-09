@@ -3,6 +3,7 @@ import { getBlobByHash } from '../../../../src/blobs';
 import * as blobExtractor from '../../../../src/blobs/extractor';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { runDbMigrations } from '../../../../src/migrate';
+import { sanitizeResultForJsonlArtifact } from '../../../../src/models/evalResult';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import {
   getGradingAssertionHash,
@@ -13,6 +14,7 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../../../../src/redteam/remoteGeneration';
+import { createEvaluateResult } from '../../../factories/eval';
 import {
   createMockProvider,
   createProviderResponse,
@@ -193,6 +195,171 @@ describe('HydraProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
+
+  it.each(
+    [false, true].flatMap((inline) =>
+      ['attacker', 'grader', 'later-text', 'backtrack', 'final-success'].map((stage) => ({
+        inline,
+        stage,
+      })),
+    ),
+  )(
+    'retains media hints through $stage checkpoints (inline=$inline) without changing wire messages',
+    async ({ inline, stage }) => {
+      await runDbMigrations();
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
+      const image =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
+      const controller = new AbortController();
+      const snapshots: import('../../../../src/types/index').ProviderResponse[] = [];
+      let ready!: () => void;
+      const pendingStarted = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      let release!: () => void;
+      let agentCalls = 0;
+      let targetCalls = 0;
+      const assertPlainMessages = (messages: Array<{ role: string; content: string }>) => {
+        for (const message of messages) {
+          expect(Object.keys(message).sort()).toEqual(['content', 'role']);
+        }
+        if (
+          inline &&
+          messages.some((message) => message.role === 'assistant' && message.content !== 'Refused')
+        ) {
+          expect(messages.find((message) => message.role === 'assistant')?.content).toBe(image);
+        }
+      };
+      mockAgentProvider.callApi.mockImplementation(async (prompt) => {
+        assertPlainMessages(JSON.parse(prompt).conversationHistory);
+        agentCalls++;
+        const pauseAt =
+          stage === 'attacker'
+            ? 2
+            : stage === 'later-text'
+              ? 3
+              : stage === 'backtrack'
+                ? 4
+                : undefined;
+        if (agentCalls === pauseAt) {
+          ready();
+          return new Promise((resolve) => {
+            release = () => resolve({ output: 'Late probe' });
+          });
+        }
+        return { output: `Probe ${agentCalls}` };
+      });
+      mockTargetProvider.callApi.mockImplementation(async (prompt) => {
+        assertPlainMessages(JSON.parse(prompt));
+        targetCalls++;
+        if (stage === 'backtrack' && targetCalls === 2) {
+          return { output: 'Refused' };
+        }
+        if (targetCalls > 1) {
+          return { output: 'Ordinary later response' };
+        }
+        return { output: image, isBase64: true, format: 'png' };
+      });
+      mockIsBasicRefusal.mockImplementation((output) => output === 'Refused');
+      mockGrader.getResult.mockImplementation(async () => {
+        if (stage === 'grader') {
+          ready();
+          return new Promise((resolve) => {
+            release = () => resolve({ grade: { pass: true, score: 1 } });
+          });
+        }
+        return {
+          grade: { pass: stage !== 'final-success', score: stage === 'final-success' ? 0 : 1 },
+        };
+      });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 4, maxBacktracks: 3 });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:pii' }],
+        metadata: { pluginId: 'pii' },
+      };
+      const attack = provider.callApi(
+        '',
+        {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Synthetic objective' },
+          prompt: { raw: '{{input}}', label: 'test' },
+          test,
+        },
+        {
+          abortSignal: controller.signal,
+          onProgress: (response) => snapshots.push(structuredClone(response)),
+        },
+      );
+      const strip = {
+        shouldStripMetadata: false,
+        shouldStripPromptText: false,
+        shouldStripResponseOutput: true,
+        shouldStripTestVars: false,
+        shouldStripGradingResult: false,
+      };
+      const project = (response: import('../../../../src/types/index').ProviderResponse) =>
+        sanitizeResultForJsonlArtifact(
+          createEvaluateResult({ response, metadata: response.metadata }),
+          strip,
+        );
+      try {
+        if (stage === 'final-success') {
+          const response = await attack;
+          expect(response.metadata.successfulAttacks?.[0]).toMatchObject({
+            response: image,
+            isBase64: true,
+          });
+          expect(
+            response.metadata.messages?.find((message) => message.role === 'assistant'),
+          ).toMatchObject({ content: image, isBase64: true });
+          const projected = project(response);
+          for (const metadata of [projected.metadata, projected.response?.metadata]) {
+            expect(metadata?.successfulAttacks[0]).toMatchObject({
+              message: 'Probe 1',
+              response: '[output stripped]',
+            });
+            expect(
+              metadata?.messages.find((message: { role: string }) => message.role === 'assistant')
+                .content,
+            ).toBe('[output stripped]');
+          }
+        } else {
+          await Promise.race([pendingStarted, attack]);
+          expect(
+            snapshots
+              .at(-1)
+              ?.metadata?.messages.some(
+                (message: { role: string; content: string; isBase64?: boolean }) =>
+                  message.role === 'assistant' && message.isBase64 === true,
+              ),
+          ).toBe(true);
+          if (stage === 'later-text' || stage === 'backtrack') {
+            expect(
+              snapshots
+                .at(-1)
+                ?.metadata?.messages.some(
+                  (message: { content: string }) => message.content === 'Ordinary later response',
+                ),
+            ).toBe(true);
+          }
+          controller.abort();
+          const stopped = expect(attack).rejects.toThrow();
+          release();
+          await stopped;
+        }
+        for (const snapshot of snapshots) {
+          const original = structuredClone(snapshot);
+          expect(JSON.stringify(project(snapshot))).not.toContain(image);
+          expect(snapshot).toEqual(original);
+        }
+      } finally {
+        controller.abort();
+        release?.();
+        await attack.catch(() => undefined);
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 
   it('checkpoints completed probes before grading and stops on cancellation', async () => {
     const controller = new AbortController();

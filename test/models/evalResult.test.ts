@@ -1300,6 +1300,9 @@ describe('EvalResult', () => {
             { role: 'user', content: 'Keep the prompt' },
             { role: 'assistant', content: output, isBase64 },
           ],
+          successfulAttacks: [
+            { turn: 1, message: 'Keep the attack prompt', response: output, isBase64 },
+          ],
           opaque: 'A'.repeat(2400),
         };
         const input = createEvaluateResult({
@@ -1329,6 +1332,11 @@ describe('EvalResult', () => {
             for (const values of [projected.metadata, projected.response?.metadata]) {
               expect(values?.opaque).toBe(metadata.opaque);
               expect(values?.messages[0].content).toBe('Keep the prompt');
+              expect(values?.successfulAttacks[0]).toMatchObject({
+                turn: 1,
+                message: 'Keep the attack prompt',
+                response: isBase64 ? '[output stripped]' : output,
+              });
               expect(values?.messages[1].content).toBe(isBase64 ? '[output stripped]' : output);
               expect(values?.redteamHistory[0].output).toBe(
                 isBase64 ? '[output stripped]' : output,

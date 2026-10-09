@@ -114,6 +114,16 @@ function projectOutputMetadata<T>(
           ],
         ];
       }
+      if (key === 'successfulAttacks' && Array.isArray(projected)) {
+        return [
+          [
+            key,
+            projected.map((attack) =>
+              attack?.isBase64 === true ? { ...attack, response: '[output stripped]' } : attack,
+            ),
+          ],
+        ];
+      }
       return [[key, projected]];
     }),
   ) as T;
