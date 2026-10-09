@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runEval } from '../../../../src/evaluator';
+import logger from '../../../../src/logger';
+import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
@@ -286,6 +289,35 @@ describe('CustomProvider', () => {
     const result = await provider.callApi('test prompt', context);
 
     expect(result.metadata?.sessionId).toBe('context-session-id');
+  });
+
+  it('passes the rendered turn variables and session context to the target', async () => {
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'original objective', sessionId: 'existing-session', literal: 'value\n' },
+      prompt: { raw: '{{objective}}', label: 'test' },
+    };
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'target response' });
+
+    await (customProvider as any).sendPrompt(
+      'rendered attack',
+      context.prompt,
+      context.vars,
+      undefined,
+      mockTargetProvider,
+      1,
+      context,
+    );
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      'rendered attack',
+      expect.objectContaining({
+        ...context,
+        vars: { ...context.vars, objective: 'rendered attack' },
+      }),
+      undefined,
+    );
+    expect(context.vars.objective).toBe('original objective');
   });
 
   it('should include sessionId from target response when stateful is true', async () => {
@@ -917,40 +949,136 @@ describe('CustomProvider', () => {
     expect(result.metadata?.successfulAttacks?.length).toBeGreaterThan(0);
   });
 
-  it('should surface final target error while preserving mapped output', async () => {
+  it.each(['HTTP 504', { status: 504 }])(
+    'surfaces final target error %j while preserving output',
+    async (error) => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'simple',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'p', label: 'l' },
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'attack',
+          rationaleBehindJailbreak: 'r',
+          lastResponseSummary: 's',
+        }),
+      });
+
+      // final target returns error with output
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'This is 504',
+        error: error as unknown as string,
+      });
+
+      // refusal false, eval not 100
+      mockScoringProvider.callApi
+        .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 0 }) })
+        .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 50 }) });
+
+      const result = await provider.callApi('p', context);
+      expect(result.output).toBe('This is 504');
+      expect(result.error).toBe(typeof error === 'string' ? error : 'Error');
+    },
+  );
+
+  it.each([
+    { unblocking: false, ended: false },
+    { unblocking: true, ended: false },
+    { unblocking: false, ended: true },
+  ])('clears a prior missing-output error after recovery: %j', async ({ unblocking, ended }) => {
     const provider = new CustomProvider({
       injectVar: 'objective',
-      strategyText: 'simple',
-      maxTurns: 1,
+      strategyText: 'Local recovery fixture',
+      maxTurns: 2,
+      maxBacktracks: 1,
       redteamProvider: mockRedTeamProvider,
       stateful: false,
     });
-
-    const context = {
-      originalProvider: mockTargetProvider,
-      vars: { objective: 'test objective' },
-      prompt: { raw: 'p', label: 'l' },
-    };
-
+    const infoSpy = vi.spyOn(logger, 'info');
     mockRedTeamProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
         generatedQuestion: 'attack',
-        rationaleBehindJailbreak: 'r',
-        lastResponseSummary: 's',
+        rationaleBehindJailbreak: 'rationale',
+        lastResponseSummary: 'summary',
       }),
+      tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
+    });
+    if (unblocking) {
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'Please confirm the request',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+      vi.mocked(tryUnblocking).mockResolvedValueOnce({
+        success: true,
+        unblockingPrompt: 'Confirmed',
+      });
+    }
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, numRequests: 1 },
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: { authorization: 'Bearer CUSTOM_SECRET_CANARY' },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        output: ended ? '' : 'I cannot help with that request.',
+        ...(ended ? { conversationEnded: true } : {}),
+        tokenUsage: { total: 8, prompt: 6, completion: 2, numRequests: 1 },
+      });
+    const prompt = { raw: 'Test prompt', label: 'test' };
+    const [result] = await runEval({
+      provider: {
+        id: () => 'custom-recovery-fixture',
+        callApi: () =>
+          provider.callApi('Test prompt', {
+            originalProvider: mockTargetProvider,
+            prompt,
+            vars: { objective: 'Test objective' },
+          }),
+      },
+      prompt,
+      test: { assert: [{ type: 'is-refusal' }] },
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: true,
     });
 
-    // final target returns error with output
-    mockTargetProvider.callApi.mockResolvedValue({ output: 'This is 504', error: 'HTTP 504' });
-
-    // refusal false, eval not 100
-    mockScoringProvider.callApi
-      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 0 }) })
-      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 50 }) });
-
-    const result = await provider.callApi('p', context);
-    expect(result.output).toBe('This is 504');
-    expect(result.error).toBe('HTTP 504');
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.tokenUsage).toMatchObject({
+      total: unblocking ? 16 : 13,
+      numRequests: unblocking ? 3 : 2,
+      attacker: { total: 40, numRequests: 2 },
+    });
+    expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+    expect(
+      infoSpy.mock.calls.some(([message]) => String(message).includes('CUSTOM_SECRET_CANARY')),
+    ).toBe(false);
+    if (!unblocking) {
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Target error'),
+        expect.objectContaining({
+          response: expect.objectContaining({ metadata: expect.any(Object) }),
+        }),
+      );
+    }
   });
 
   it('should handle custom strategy text with round-specific logic', async () => {
@@ -1377,9 +1505,9 @@ describe('CustomProvider', () => {
       }),
     });
 
-    mockTargetProvider.callApi.mockResolvedValue({
-      output: 'target response',
-    });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: false } })
+      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: true } });
 
     // Mock scoring provider responses for both turns
     mockScoringProvider.callApi.mockResolvedValue({
@@ -1392,18 +1520,27 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Should continue to max turns and store the LAST grader result (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
       metadata: {
         redteamGradingInputHash: expect.any(String),
         redteamGradingAssertionHash: expect.any(String),
       },
-      ...secondGraderResult,
+      ...firstGraderResult,
       assertion: { type: 'mock-grader', value: testRubric },
     });
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
+    expect(result.guardrails).toEqual({ flagged: false });
+    expect(result.metadata?.messages).toHaveLength(2);
+    expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+      getGradingInputHash(
+        result.metadata?.redteamFinalPrompt as string,
+        result.output as string,
+        result.metadata?.messages,
+        'mock',
+      ),
+    );
   });
 
   it('should include modifiers in system prompt from test metadata', async () => {

@@ -4,8 +4,10 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
+import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
 
+import type { EnvOverrides } from '../contracts/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -401,20 +403,69 @@ interface OllamaChatJsonL {
 }
 
 /**
+ * Converts `function.arguments` back to an object on outgoing messages.
+ *
+ * Responses are normalized to the OpenAI shape, where `arguments` is a JSON *string*
+ * (so `is-valid-openai-tools-call` works). Ollama's own /api/chat rejects that shape on
+ * the way back in with HTTP 400, so feeding a previous turn's tool call into a multi-turn
+ * conversation fails unless it is converted back.
+ */
+function normalizeOllamaRequestMessages(messages: unknown): unknown {
+  // parseChatPrompt returns whatever the prompt parsed to, not necessarily an array. A
+  // non-array is passed through untouched so Ollama's own validation reports it, rather
+  // than this helper throwing an opaque TypeError first.
+  if (!Array.isArray(messages)) {
+    return messages;
+  }
+  return messages.map((message) => {
+    const toolCalls = message?.tool_calls;
+    if (!Array.isArray(toolCalls)) {
+      return message;
+    }
+    return {
+      ...message,
+      tool_calls: toolCalls.map((call: any) => {
+        const args = call?.function?.arguments;
+        if (typeof args !== 'string') {
+          return call;
+        }
+        try {
+          const parsed = JSON.parse(args);
+          // Only objects are valid here; leave anything else alone so Ollama can
+          // report a meaningful error rather than us silently reshaping it.
+          if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return call;
+          }
+          return { ...call, function: { ...call.function, arguments: parsed } };
+        } catch {
+          return call;
+        }
+      }),
+    };
+  });
+}
+
+/**
  * Collects tool calls from every chunk (they arrive one per chunk before `done: true`)
  * and normalizes them to the OpenAI shape, where `arguments` is a JSON string rather
  * than an object.
  */
 function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
   return lines
-    .flatMap((chunk: OllamaChatJsonL) => chunk.message?.tool_calls ?? [])
+    .flatMap((chunk: OllamaChatJsonL) => {
+      const calls = chunk.message?.tool_calls;
+      // A malformed or proxied response can put anything here. Skip what we cannot
+      // read rather than throwing a TypeError that surfaces as an opaque parse error.
+      return Array.isArray(calls) ? calls : [];
+    })
+    .filter((call: any) => typeof call?.function?.name === 'string')
     .map((call: { function: { name: string; arguments: any } }) => ({
       function: {
         name: call.function.name,
         arguments:
           typeof call.function.arguments === 'string'
             ? call.function.arguments
-            : JSON.stringify(call.function.arguments),
+            : JSON.stringify(call.function.arguments ?? {}),
       },
     }));
 }
@@ -476,9 +527,14 @@ function applyOllamaThinking(output: unknown, thinking: string, showThinking?: b
 export class OllamaCompletionProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: OllamaCompletionOptions; env?: EnvOverrides } = {},
+  ) {
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -525,10 +581,13 @@ export class OllamaCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
-  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params = {
       model: this.modelName,
@@ -548,22 +607,22 @@ export class OllamaCompletionProvider implements ApiProvider {
 
     logger.debug('Calling Ollama API', { params });
 
+    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
+        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('OLLAMA_API_KEY')
-              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
-              : {}),
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
           },
           body: JSON.stringify(params),
         },
         getRequestTimeoutMs(),
         'text',
+        context?.bustCache ?? context?.debug,
       );
     } catch (err) {
       return {
@@ -587,10 +646,10 @@ export class OllamaCompletionProvider implements ApiProvider {
 
       let output = lines
         .map((parsed: OllamaCompletionJsonL) => {
-          if (parsed.response) {
-            return parsed.response;
-          }
-          return null;
+          // Only strings concatenate meaningfully; anything else would render as
+          // "[object Object]" in the eval output.
+          const response = parsed.response;
+          return typeof response === 'string' && response ? response : null;
         })
         .filter((s: string | null) => s !== null)
         .join('');
@@ -599,7 +658,10 @@ export class OllamaCompletionProvider implements ApiProvider {
       // Without this it is dropped, and a `num_predict` budget spent inside the thinking
       // block yields an empty output with no explanation.
       const thinking = lines
-        .map((parsed: OllamaCompletionJsonL) => parsed.thinking ?? null)
+        .map((parsed: OllamaCompletionJsonL) => {
+          const trace = parsed.thinking;
+          return typeof trace === 'string' ? trace : null;
+        })
         .filter((s: string | null) => s !== null)
         .join('');
 
@@ -629,9 +691,14 @@ export class OllamaCompletionProvider implements ApiProvider {
 export class OllamaChatProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: OllamaCompletionOptions; env?: EnvOverrides } = {},
+  ) {
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -685,7 +752,9 @@ export class OllamaChatProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const messages = normalizeOllamaRequestMessages(
+      parseChatPrompt<unknown>(prompt, [{ role: 'user', content: prompt }]),
+    );
 
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params: any = {
@@ -710,17 +779,16 @@ export class OllamaChatProvider implements ApiProvider {
 
     logger.debug('[Ollama Chat] Calling Ollama API', { params });
 
+    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
+        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('OLLAMA_API_KEY')
-              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
-              : {}),
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
           },
           body: JSON.stringify(params),
         },
@@ -759,10 +827,10 @@ export class OllamaChatProvider implements ApiProvider {
       // Collect all content chunks
       const contentParts = lines
         .map((parsed: OllamaChatJsonL) => {
-          if (parsed.message?.content) {
-            return parsed.message.content;
-          }
-          return null;
+          // Only strings concatenate meaningfully; anything else would render as
+          // "[object Object]" in the eval output.
+          const content = parsed.message?.content;
+          return typeof content === 'string' && content ? content : null;
         })
         .filter((s: string | null) => s !== null);
 
@@ -773,7 +841,10 @@ export class OllamaChatProvider implements ApiProvider {
       // with no `think` flag sent, so dropping it silently loses the entire answer
       // whenever a `num_predict` budget is spent inside the thinking block.
       const thinking = lines
-        .map((parsed: OllamaChatJsonL) => parsed.message?.thinking ?? null)
+        .map((parsed: OllamaChatJsonL) => {
+          const trace = parsed.message?.thinking;
+          return typeof trace === 'string' ? trace : null;
+        })
         .filter((s: string | null) => s !== null)
         .join('');
 
@@ -841,17 +912,16 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       prompt_eval_count?: number;
     }
 
+    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<OllamaEmbedResponse>;
     try {
       response = await fetchWithCache<OllamaEmbedResponse>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embed`,
+        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/embed`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('OLLAMA_API_KEY')
-              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
-              : {}),
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
           },
           body: JSON.stringify(params),
         },

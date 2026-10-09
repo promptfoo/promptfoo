@@ -27,7 +27,7 @@ import {
 } from '@promptfoo/redteam/riskScoring';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { Download, ScrollText } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { getSeverityColor } from '../utils/color';
 import { type TestResultStats } from './FrameworkComplianceUtils';
 import { getStrategyIdFromTest } from './shared';
