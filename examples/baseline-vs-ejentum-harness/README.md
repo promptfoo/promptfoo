@@ -9,82 +9,61 @@ cd baseline-vs-ejentum-harness
 
 ## Usage
 
-This example compares the same `gpt-5.4-mini` model under two conditions on a small set of reasoning-heavy prompts:
+This example provides a controlled comparison between an unaugmented baseline model and the same model augmented with a task-matched cognitive scaffold from the [Ejentum Logic API](https://ejentum.com):
 
-- **baseline-gpt-5.4-mini**: plain OpenAI chat completion, no augmentation
-- **ejentum-reasoning-gpt-5.4-mini**: the same model with a task-matched cognitive scaffold from the [Ejentum Logic API](https://ejentum.com) injected into the system message before the call
+- **baseline-gpt-5.4-mini**: plain OpenAI chat completion via Promptfoo's native OpenAI provider.
+- **ejentum-reasoning-gpt-5.4-mini**: pre-fetches a cognitive scaffold from Ejentum and delegates completion execution directly to Promptfoo's maintained OpenAI provider.
 
-Each row in the eval table is the same task posed to both providers, scored by the same `llm-rubric`. The rubric checks for three behaviors that the harness targets directly: naming relevant trade-offs before recommending, refusing to skip steps when the user invites skipping, and grounding the final recommendation in named criteria. The table format makes the lift (if any) visible per task.
+Both arms reuse Promptfoo's maintained OpenAI request path with identical configuration (`reasoning_effort: none`, `verbosity: low`, identical decoding parameters). This ensures strict parameter parity so that differences in evaluation scores are solely attributable to the cognitive scaffolding.
+
+### Controlled Benchmark Design
+
+Rather than using generic presentation compliance rubrics (which merely reward mentioning words like "trade-offs"), this evaluation evaluates real engineering decision-making and trap resistance across four scenario-specific benchmarks:
+
+1. **Multi-Step Database Migration (50M Rows):**
+   - *Trap / Counterexample:* Monolithic migration or unbatched `UPDATE` in a maintenance window causing severe table locks, transaction timeouts, and replication lag.
+   - *Success Criteria:* Specifically recommends an online phased migration with throttled batches and validated constraints.
+2. **Production Incident Framing (Post-Hoc Fallacy):**
+   - *Trap / Counterexample:* Hasty blind rollback of a cache disablement that risks a cold cache stampede / thundering herd while downstream databases are already saturated.
+   - *Success Criteria:* Identifies specific error signatures and downstream saturation metrics to verify before taking mitigation actions.
+3. **Resisting Confident Misdirection (False Dichotomy):**
+   - *Trap / Counterexample:* Succumbing to a user's forced choice between vertical scaling vs. sharding.
+   - *Success Criteria:* Rejects the false dichotomy, diagnoses query-level pathologies (missing indexes, sequential scans) from 92% cache hit and high CPU, and recommends slow query profiling before infrastructure changes.
+4. **Reframing Premature Tactics (First-Month Churn):**
+   - *Trap / Counterexample:* Immediately generating an onboarding email sequence to address 30% first-month SaaS churn.
+   - *Success Criteria:* Recognizes that early churn is fundamentally an in-app product activation / time-to-value failure, recommending activation telemetry over superficial email drip campaigns.
 
 ## Setup
 
-Set `OPENAI_API_KEY` (required for both providers) and `EJENTUM_API_KEY` (required only for the augmented provider), then run:
+Set `OPENAI_API_KEY` (required for both providers) and `EJENTUM_API_KEY` (required for the augmented provider):
 
 ```bash
+export OPENAI_API_KEY="your-openai-key"
+export EJENTUM_API_KEY="your-ejentum-key"
 promptfoo eval --no-cache
 ```
 
-Get an Ejentum key at <https://ejentum.com/dashboard>. Free and paid tiers are available.
+Get an Ejentum key at <https://ejentum.com/dashboard>.
 
-Without `EJENTUM_API_KEY`, the augmented half of the eval will error out, but the baseline `openai:chat:gpt-5.4-mini` provider still runs to completion — so you can preview the baseline scores even without an Ejentum account.
+### Pointing to Custom Endpoints
 
-The custom provider in this directory (`provider.mjs`) is meant as a transferable template: it shows how to pre-fetch a per-task prompt augmentation, splice it into the system message, and return the result in promptfoo's standard provider shape. You can adapt the same pattern to any prompt-augmentation service - LangChain, DSPy, a self-hosted retrieval pipeline, or your own internal API - by replacing the scaffold request in step 1.
-
-### Pointing at a different endpoint
-
-The Ejentum base URL is configurable so you can target staging or a self-hosted endpoint without editing code. The provider resolves it in this order: `config.apiUrl` in `promptfooconfig.yaml`, then `EJENTUM_API_URL` env var, then the default. For example:
+The Ejentum API endpoint defaults to `https://api.ejentum.com/logicv1/`. You can override it via `config.apiUrl` or `EJENTUM_API_URL`:
 
 ```yaml
 - id: file://provider.mjs
   label: ejentum-reasoning-gpt-5.4-mini
   config:
     mode: reasoning
-    apiUrl: https://your-endpoint.example.com/logicv1/
+    model: gpt-5.4-mini
+    apiUrl: https://api.ejentum.com/logicv1/
 ```
 
-The OpenAI completion endpoint follows the built-in provider's routing options: set `config.apiHost`, `OPENAI_API_HOST`, `config.apiBaseUrl`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL` when using an OpenAI-compatible gateway or local endpoint. Authentication configuration such as `apiKey`, `apiKeyEnvar`, `apiKeyRequired`, `organization`, and `headers` is also forwarded by the augmented provider so both comparison arms can use the same gateway or account setup.
+Because `provider.mjs` delegates execution to Promptfoo's native OpenAI provider, all standard OpenAI configuration options (`apiHost`, `apiBaseUrl`, `organization`, `headers`, `apiKeyEnvar`, etc.) work natively and identically across both providers.
 
-Because `provider.mjs` is a standalone example, its two external requests use the standard JavaScript `fetch` API rather than Promptfoo's internal cached transport. If your deployment relies on custom proxy or TLS transport settings, adapt this provider to your network client or expose compatible gateway URLs for both comparison arms.
+## How the Custom Provider Works
 
-## How the custom provider works
+`provider.mjs` is a lightweight adapter (~80 lines):
 
-`provider.mjs` is a one-class custom provider:
-
-1. On each test, it calls the Ejentum Logic API with the test's prompt and the configured `mode` (default `reasoning`).
-2. It splices the returned scaffold into the system message of an OpenAI chat completion.
-3. It returns the completion in the standard promptfoo provider shape (`output`, `tokenUsage`).
-
-Provider config options (set in `promptfooconfig.yaml`):
-
-| Option                  | Default                 | Notes                                                                                         |
-| ----------------------- | ----------------------- | --------------------------------------------------------------------------------------------- |
-| `mode`                  | `reasoning`             | One of `reasoning`, `code`, `anti-deception`, `memory`.                                       |
-| `model`                 | `gpt-5.4-mini`          | Any OpenAI chat-completion model.                                                             |
-| `reasoning_effort`      | -                       | Included only when set for reasoning or GPT-5-compatible chat models.                         |
-| `verbosity`             | -                       | Included only when set for GPT-5 chat models.                                                 |
-| `max_tokens`            | `1024` for chat models  | Matches the built-in default for non-reasoning chat models; configurable when changing model. |
-| `max_completion_tokens` | -                       | Completion cap for GPT-5 and o-series models.                                                 |
-| `temperature`           | `0` for chat models     | Matches the built-in default for non-reasoning chat models.                                   |
-| `omitDefaults`          | `false`                 | Set `true` to omit ordinary-chat token and temperature defaults.                              |
-| `apiUrl`                | Ejentum public endpoint | Override the Ejentum base URL. Falls back to `EJENTUM_API_URL`, then the default published.   |
-| `ejentumApiKey`         | `EJENTUM_API_KEY`       | Set an Ejentum key in local provider config; prefer environment variables in shared files.    |
-| `ejentumApiKeyEnvar`    | -                       | Read the Ejentum key from a named environment variable.                                       |
-| `apiHost`               | -                       | Override the OpenAI host, matching the baseline provider and `OPENAI_API_HOST`.               |
-| `apiBaseUrl`            | OpenAI public endpoint  | Override the OpenAI base URL. Falls back to `OPENAI_API_BASE_URL`, then `OPENAI_BASE_URL`.    |
-| `apiKey`                | `OPENAI_API_KEY`        | Override the OpenAI key for the augmented provider.                                           |
-| `apiKeyEnvar`           | -                       | Read the OpenAI key from a named environment override.                                        |
-| `apiKeyRequired`        | `true`                  | Set `false` for local OpenAI-compatible endpoints that do not require authentication.         |
-| `organization`          | `OPENAI_ORGANIZATION`   | Forward the OpenAI organization header.                                                       |
-| `headers`               | -                       | Forward custom request headers to the OpenAI completion endpoint.                             |
-
-To test a different harness (for example, the anti-deception mode), copy the `file://provider.mjs` provider block, change `mode: reasoning` to `mode: anti-deception`, and update the label.
-
-## Bringing your own prompts
-
-The four `tests:` entries in `promptfooconfig.yaml` are seed prompts. Replace them with prompts from your own workload to see how the harness affects results on tasks you actually run. The `defaultTest` rubric is general enough to apply across most reasoning tasks; tighten it per-test if you need stricter scoring.
-
-When your prompts are JSON or YAML chat message arrays, the augmented provider preserves their roles and inserts the scaffold as an additional system message, so the baseline and augmented arms still run the same original conversation. JSON chat prompts require no additional package; before using YAML chat prompts in a copied example, run `npm install js-yaml`.
-
-## Configuration is minimal
-
-This example is intentionally small: two providers, one rubric, four tests, one custom provider file. It can be inlined into a larger promptfoo project by copying just the `providers:` block and `provider.mjs` into your own config.
+1. Calls the Ejentum Logic API (`POST https://api.ejentum.com/logicv1/`) with the test prompt and mode (default: `reasoning`).
+2. Splices the returned scaffold into the prompt as a system message.
+3. Delegates the completion call directly to Promptfoo's maintained `loadApiProvider('openai:chat:<model>')`, passing all model and endpoint configurations without modification.

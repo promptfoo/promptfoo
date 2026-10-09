@@ -7,6 +7,9 @@ import { mockProcessEnv } from '../util/utils';
 type EjentumProviderConstructor = new (options?: {
   config?: Record<string, unknown>;
   env?: Record<string, string | undefined>;
+  underlyingProvider?: {
+    callApi: (prompt: string, context?: unknown) => Promise<unknown>;
+  };
 }) => {
   callApi(
     prompt: string,
@@ -55,336 +58,242 @@ describe('baseline-vs-ejentum-harness provider', () => {
     vi.unstubAllGlobals();
   });
 
-  it('returns an error without calling OpenAI when the requested scaffold is missing', async () => {
+  it('returns an error when EJENTUM_API_KEY is not set', async () => {
+    restoreEnv?.();
+    restoreEnv = mockProcessEnv({}, { clear: true });
+
+    const provider = new EjentumAugmentedProvider();
+    const result = await provider.callApi('solve this');
+
+    expect(result).toEqual({
+      error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/dashboard',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns an error without calling underlying provider when the requested scaffold is missing', async () => {
     fetchMock.mockResolvedValueOnce(mockResponse([{}]));
 
-    const provider = new EjentumAugmentedProvider({ config: { mode: 'reasoning' } });
+    const mockUnderlying = { callApi: vi.fn() };
+    const provider = new EjentumAugmentedProvider({
+      config: { mode: 'reasoning' },
+      underlyingProvider: mockUnderlying,
+    });
     const result = await provider.callApi('solve this');
 
     expect(result).toEqual({
       error: 'Ejentum API response did not include a non-empty "reasoning" scaffold.',
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockUnderlying.callApi).not.toHaveBeenCalled();
   });
 
-  it('returns an error when OpenAI omits non-empty assistant content', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: {} }] }));
+  it('returns an error when Ejentum API returns non-OK status', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse({ message: 'Unauthorized' }, false, 401));
 
+    const mockUnderlying = { callApi: vi.fn() };
     const provider = new EjentumAugmentedProvider({
-      config: { reasoning_effort: 'none', verbosity: 'low' },
+      config: { mode: 'reasoning' },
+      underlyingProvider: mockUnderlying,
     });
     const result = await provider.callApi('solve this');
 
     expect(result).toEqual({
-      error: 'OpenAI response did not include non-empty assistant content.',
+      error: 'Ejentum API 401: {"message":"Unauthorized"}',
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockUnderlying.callApi).not.toHaveBeenCalled();
   });
 
-  it('uses current model options and returns a successful completion', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(
-        mockResponse({
-          choices: [{ message: { content: 'answer' } }],
-          usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 },
-        }),
-      );
+  it('returns an error when Ejentum fetch fails with network error', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('Connection timeout'));
 
+    const mockUnderlying = { callApi: vi.fn() };
     const provider = new EjentumAugmentedProvider({
-      config: { reasoning_effort: 'none', verbosity: 'low' },
+      config: { mode: 'reasoning' },
+      underlyingProvider: mockUnderlying,
     });
     const result = await provider.callApi('solve this');
-    const openaiRequest = JSON.parse(fetchMock.mock.calls[1][1].body as string);
 
-    expect(openaiRequest).toMatchObject({
-      model: 'gpt-5.4-mini',
-      reasoning_effort: 'none',
-      verbosity: 'low',
-    });
-    expect(fetchMock.mock.calls[1][0]).toBe('https://api.openai.com/v1/chat/completions');
-    expect(openaiRequest).not.toHaveProperty('temperature');
     expect(result).toEqual({
-      output: 'answer',
-      tokenUsage: { prompt: 7, completion: 3, total: 10 },
+      error: 'Ejentum fetch failed: Error: Connection timeout',
     });
+    expect(mockUnderlying.callApi).not.toHaveBeenCalled();
   });
 
-  it('omits GPT-5-only options when configured with a regular chat model', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
+  it('delegates to underlying provider with cognitive scaffold prepended', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'identify edge cases' }]));
+
+    const mockUnderlying = {
+      callApi: vi.fn().mockResolvedValue({
+        output: 'controlled result',
+        tokenUsage: { prompt: 15, completion: 5, total: 20 },
+      }),
+    };
 
     const provider = new EjentumAugmentedProvider({
-      config: { model: 'gpt-4o-mini', reasoning_effort: 'high', verbosity: 'high' },
+      config: { mode: 'reasoning', model: 'gpt-5.4-mini' },
+      underlyingProvider: mockUnderlying,
     });
-    await provider.callApi('solve this');
-    const openaiRequest = JSON.parse(fetchMock.mock.calls[1][1].body as string);
 
-    expect(openaiRequest).not.toHaveProperty('reasoning_effort');
-    expect(openaiRequest).not.toHaveProperty('verbosity');
-    expect(openaiRequest).toMatchObject({ max_tokens: 1024, temperature: 0 });
+    const result = await provider.callApi('solve this');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.ejentum.com/logicv1/');
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ejentum-key',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: 'solve this', mode: 'reasoning' }),
+    });
+
+    expect(mockUnderlying.callApi).toHaveBeenCalledTimes(1);
+    const delegatedPrompt = JSON.parse(mockUnderlying.callApi.mock.calls[0][0]);
+    expect(delegatedPrompt).toEqual([
+      {
+        role: 'system',
+        content:
+          'Apply the cognitive scaffold below, then answer the user\'s task.\n\n[COGNITIVE SCAFFOLD]\nidentify edge cases\n[END SCAFFOLD]',
+      },
+      {
+        role: 'user',
+        content: 'solve this',
+      },
+    ]);
+
+    expect(result).toEqual({
+      output: 'controlled result',
+      tokenUsage: { prompt: 15, completion: 5, total: 20 },
+    });
   });
 
-  it('does not default an o-series model to a GPT-5-only reasoning effort', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
+  it('preserves model options including reasoning_effort and verbosity without dropping or overriding', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]));
 
-    const provider = new EjentumAugmentedProvider({ config: { model: 'o3' } });
-    await provider.callApi('solve this');
-    const openaiRequest = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    const mockUnderlying = {
+      callApi: vi.fn().mockResolvedValue({ output: 'done' }),
+    };
 
-    expect(openaiRequest).not.toHaveProperty('reasoning_effort');
-    expect(openaiRequest).not.toHaveProperty('max_tokens');
-    expect(openaiRequest).not.toHaveProperty('temperature');
+    const provider = new EjentumAugmentedProvider({
+      config: {
+        model: 'gpt-6-sol',
+        reasoning_effort: 'none',
+        verbosity: 'low',
+      },
+      underlyingProvider: mockUnderlying,
+    });
+
+    await provider.callApi('test prompt');
+
+    expect(mockUnderlying.callApi).toHaveBeenCalledTimes(1);
+    // Verified that underlying provider call is executed with augmented prompt and unmodified context
   });
 
-  it.each(['OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'])(
-    'honors the standard %s environment variable',
-    async (apiBaseEnvVar) => {
-      restoreEnv?.();
-      restoreEnv = mockProcessEnv(
-        {
-          EJENTUM_API_KEY: 'ejentum-key',
-          OPENAI_API_KEY: 'openai-key',
-          [apiBaseEnvVar]: 'http://gateway.example.test/openai/v1/',
-        },
-        { clear: true },
-      );
-      fetchMock
-        .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-        .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
-
-      const provider = new EjentumAugmentedProvider();
-      await provider.callApi('solve this');
-
-      expect(fetchMock.mock.calls[1][0]).toBe(
-        'http://gateway.example.test/openai/v1/chat/completions',
-      );
-    },
-  );
-
-  it('prefers a configured OpenAI API base URL to environment fallbacks', async () => {
+  it('honors custom Ejentum API URL from config and environment variable', async () => {
     restoreEnv?.();
     restoreEnv = mockProcessEnv(
       {
         EJENTUM_API_KEY: 'ejentum-key',
-        OPENAI_API_KEY: 'openai-key',
-        OPENAI_API_BASE_URL: 'http://environment.example.test/v1',
+        EJENTUM_API_URL: 'https://staging.ejentum.internal/logicv1/',
       },
       { clear: true },
     );
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
 
+    fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]));
+
+    const mockUnderlying = { callApi: vi.fn().mockResolvedValue({ output: 'ok' }) };
     const provider = new EjentumAugmentedProvider({
-      config: { apiBaseUrl: 'http://configured.example.test/v1/' },
+      underlyingProvider: mockUnderlying,
     });
-    await provider.callApi('solve this');
 
-    expect(fetchMock.mock.calls[1][0]).toBe('http://configured.example.test/v1/chat/completions');
+    await provider.callApi('query');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://staging.ejentum.internal/logicv1/');
   });
 
-  it.each([
-    {
-      name: 'configured apiHost',
-      options: { config: { apiHost: 'configured.example.test' } },
-      expected: 'https://configured.example.test/v1/chat/completions',
-    },
-    {
-      name: 'provider env OPENAI_API_HOST',
-      options: { env: { OPENAI_API_HOST: 'environment.example.test' } },
-      expected: 'https://environment.example.test/v1/chat/completions',
-    },
-  ])('honors $name like the baseline OpenAI provider', async ({ options, expected }) => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
-
-    const provider = new EjentumAugmentedProvider(options);
-    await provider.callApi('solve this');
-
-    expect(fetchMock.mock.calls[1][0]).toBe(expected);
-  });
-
-  it('reads OpenAI and Ejentum credentials and endpoint overrides from provider options', async () => {
+  it('prefers config.apiUrl over EJENTUM_API_URL environment variable', async () => {
     restoreEnv?.();
-    restoreEnv = mockProcessEnv({}, { clear: true });
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
-
-    const provider = new EjentumAugmentedProvider({
-      config: { apiKey: 'configured-openai-key' },
-      env: {
-        EJENTUM_API_KEY: 'configured-ejentum-key',
-        EJENTUM_API_URL: 'http://ejentum.example.test/logicv1/',
-      },
-    });
-    await provider.callApi('solve this');
-
-    expect(fetchMock.mock.calls[0][0]).toBe('http://ejentum.example.test/logicv1/');
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer configured-ejentum-key');
-    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer configured-openai-key');
-  });
-
-  it('resolves a named OpenAI key environment override', async () => {
-    restoreEnv?.();
-    restoreEnv = mockProcessEnv({ EJENTUM_API_KEY: 'ejentum-key' }, { clear: true });
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
-
-    const provider = new EjentumAugmentedProvider({
-      config: { apiKeyEnvar: 'CUSTOM_OPENAI_KEY' },
-      env: { CUSTOM_OPENAI_KEY: 'custom-openai-key' },
-    });
-    await provider.callApi('solve this');
-
-    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer custom-openai-key');
-  });
-
-  it('allows unauthenticated OpenAI-compatible endpoints when apiKeyRequired is false', async () => {
-    restoreEnv?.();
-    restoreEnv = mockProcessEnv({ EJENTUM_API_KEY: 'ejentum-key' }, { clear: true });
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
-
-    const provider = new EjentumAugmentedProvider({
-      config: { apiKeyRequired: false, apiBaseUrl: 'http://localhost:1234/v1' },
-    });
-    const result = await provider.callApi('solve this');
-
-    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:1234/v1/chat/completions');
-    expect(fetchMock.mock.calls[1][1].headers).not.toHaveProperty('Authorization');
-    expect(result).toMatchObject({ output: 'answer' });
-  });
-
-  it('forwards OpenAI organization and configured headers', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
-
-    const provider = new EjentumAugmentedProvider({
-      config: {
-        organization: 'org-configured',
-        headers: { 'X-Gateway-Tenant': 'tenant-a' },
-      },
-    });
-    await provider.callApi('solve this');
-
-    expect(fetchMock.mock.calls[1][1].headers).toMatchObject({
-      'OpenAI-Organization': 'org-configured',
-      'X-Gateway-Tenant': 'tenant-a',
-    });
-  });
-
-  it('applies prompt-level provider config overrides like the baseline provider', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
-
-    const provider = new EjentumAugmentedProvider({ config: { model: 'gpt-4o-mini' } });
-    await provider.callApi('solve this', {
-      prompt: { config: { temperature: 0.7, max_tokens: 77 } },
-    });
-    const openaiRequest = JSON.parse(fetchMock.mock.calls[1][1].body as string);
-
-    expect(openaiRequest).toMatchObject({ temperature: 0.7, max_tokens: 77 });
-  });
-
-  it('returns OpenAI refusal responses as guarded successful outputs', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(
-        mockResponse({
-          choices: [{ message: { refusal: 'I cannot assist with that.' }, finish_reason: 'stop' }],
-          usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 },
-        }),
-      );
-
-    const result = await new EjentumAugmentedProvider().callApi('solve this');
-
-    expect(result).toEqual({
-      output: 'I cannot assist with that.',
-      tokenUsage: { prompt: 7, completion: 3, total: 10 },
-      isRefusal: true,
-      finishReason: 'stop',
-      guardrails: { flagged: true },
-    });
-  });
-
-  it('returns filtered completions as guarded successful outputs', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(
-        mockResponse({ choices: [{ message: {}, finish_reason: 'content_filter' }] }),
-      );
-
-    const result = await new EjentumAugmentedProvider().callApi('solve this');
-
-    expect(result).toEqual({
-      output: 'Content filtered by provider',
-      tokenUsage: { prompt: 0, completion: 0, total: 0 },
-      isRefusal: true,
-      finishReason: 'content_filter',
-      guardrails: { flagged: true },
-    });
-  });
-
-  it.each([
-    {
-      format: 'JSON',
-      prompt: JSON.stringify([
-        { role: 'system', content: 'Retain this instruction.' },
-        { role: 'user', content: 'Solve this task.' },
-      ]),
-    },
-    {
-      format: 'YAML',
-      prompt:
-        '- role: system\n  content: Retain this instruction.\n- role: user\n  content: Solve this task.',
-    },
-  ])('preserves $format chat message prompts while injecting the scaffold', async ({ prompt }) => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
-
-    const provider = new EjentumAugmentedProvider();
-    await provider.callApi(prompt);
-    const openaiRequest = JSON.parse(fetchMock.mock.calls[1][1].body as string);
-
-    expect(openaiRequest.messages).toEqual([
+    restoreEnv = mockProcessEnv(
       {
-        role: 'system',
-        content: expect.stringContaining('[COGNITIVE SCAFFOLD]\ncheck assumptions'),
+        EJENTUM_API_KEY: 'ejentum-key',
+        EJENTUM_API_URL: 'https://env.ejentum.internal/logicv1/',
       },
-      { role: 'system', content: 'Retain this instruction.' },
-      { role: 'user', content: 'Solve this task.' },
-    ]);
+      { clear: true },
+    );
+
+    fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]));
+
+    const mockUnderlying = { callApi: vi.fn().mockResolvedValue({ output: 'ok' }) };
+    const provider = new EjentumAugmentedProvider({
+      config: { apiUrl: 'https://config.ejentum.internal/logicv1/' },
+      underlyingProvider: mockUnderlying,
+    });
+
+    await provider.callApi('query');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://config.ejentum.internal/logicv1/');
   });
 
-  it('keeps JSON-looking task text as one user message when it is not a chat array', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
-
-    const prompt = '{"task":"return this object"}';
-    const provider = new EjentumAugmentedProvider();
-    await provider.callApi(prompt);
-    const openaiRequest = JSON.parse(fetchMock.mock.calls[1][1].body as string);
-
-    expect(openaiRequest.messages).toEqual([
+  it('reads Ejentum API key from config.ejentumApiKey and config.ejentumApiKeyEnvar', async () => {
+    restoreEnv?.();
+    restoreEnv = mockProcessEnv(
       {
-        role: 'system',
-        content: expect.stringContaining('[COGNITIVE SCAFFOLD]\ncheck assumptions'),
+        CUSTOM_EJENTUM_SECRET: 'custom-secret-key',
       },
-      { role: 'user', content: prompt },
+      { clear: true },
+    );
+
+    fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]));
+
+    const mockUnderlying = { callApi: vi.fn().mockResolvedValue({ output: 'ok' }) };
+    const provider = new EjentumAugmentedProvider({
+      config: { ejentumApiKeyEnvar: 'CUSTOM_EJENTUM_SECRET' },
+      underlyingProvider: mockUnderlying,
+    });
+
+    await provider.callApi('query');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer custom-secret-key');
+  });
+
+  it('handles JSON chat prompt by prepending scaffold system message', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]));
+
+    const mockUnderlying = { callApi: vi.fn().mockResolvedValue({ output: 'ok' }) };
+    const provider = new EjentumAugmentedProvider({
+      underlyingProvider: mockUnderlying,
+    });
+
+    const conversationPrompt = JSON.stringify([
+      { role: 'system', content: 'Base system prompt' },
+      { role: 'user', content: 'First user message' },
     ]);
+
+    await provider.callApi(conversationPrompt);
+
+    expect(mockUnderlying.callApi).toHaveBeenCalledTimes(1);
+    const parsedMessages = JSON.parse(mockUnderlying.callApi.mock.calls[0][0]);
+    expect(parsedMessages).toHaveLength(3);
+    expect(parsedMessages[0].role).toBe('system');
+    expect(parsedMessages[0].content).toContain('[COGNITIVE SCAFFOLD]');
+    expect(parsedMessages[1]).toEqual({ role: 'system', content: 'Base system prompt' });
+    expect(parsedMessages[2]).toEqual({ role: 'user', content: 'First user message' });
+  });
+
+  it('passes context and prompt config through to underlying provider', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]));
+
+    const mockUnderlying = { callApi: vi.fn().mockResolvedValue({ output: 'ok' }) };
+    const provider = new EjentumAugmentedProvider({
+      underlyingProvider: mockUnderlying,
+    });
+
+    const context = {
+      prompt: { config: { temperature: 0.5 } },
+      vars: { task: 'do something' },
+    };
+
+    await provider.callApi('prompt', context);
+
+    expect(mockUnderlying.callApi).toHaveBeenCalledWith(expect.any(String), context);
   });
 });

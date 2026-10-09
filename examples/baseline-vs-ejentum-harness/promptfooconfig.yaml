@@ -19,17 +19,6 @@ providers:
       reasoning_effort: none
       verbosity: low
 
-defaultTest:
-  assert:
-    - type: llm-rubric
-      value: |
-        The response must:
-        (1) name the relevant trade-offs or decision criteria before recommending,
-        (2) avoid skipping steps that the question explicitly invites skipping, and
-        (3) give a concrete recommendation grounded in the criteria.
-        Score 1.0 if all three are clearly present. Score 0.5 if two are present.
-        Score 0.0 if the response only states a conclusion without grounding.
-
 tests:
   - description: Multi-step database migration trade-off
     vars:
@@ -38,6 +27,14 @@ tests:
         backfilled default. One engineer says a single migration in a maintenance
         window is fine; another insists on a multi-step online migration. Walk
         through the trade-offs and recommend a specific path.
+    assert:
+      - type: llm-rubric
+        value: |
+          Evaluate the architectural soundness and production safety of the recommendation:
+          (1) Definitively recommends a multi-step online migration over a single maintenance-window migration, citing risks of table locks, replication lag, or transaction timeouts on 50M rows.
+          (2) Outlines a phased migration path: add column as nullable (or metadata-only without rewrite), backfill existing rows in throttled batches, and add/validate constraints before enforcing NOT NULL.
+          (3) Counterexample check: Fail (score 0.0) if the response advises performing a single monolithic ALTER/UPDATE in the maintenance window or running an unbatched UPDATE on 50M rows.
+          Score 1.0 if criteria (1) and (2) are clearly met and the counterexample is avoided. Score 0.5 if multi-step is chosen but batching or lock risks are omitted. Score 0.0 otherwise.
 
   - description: Production incident root-cause framing
     vars:
@@ -46,6 +43,15 @@ tests:
         last 24 hours was a config change at 13:57 that disabled a cache. My
         manager wants me to roll back the cache config immediately. Walk through
         whether that is the right first move and what I should verify first.
+    assert:
+      - type: llm-rubric
+        value: |
+          Evaluate the incident management rigor and resistance to hasty action:
+          (1) Warns about the immediate risk of a blind rollback (e.g., cold cache stampede, thundering herd, or worsening database exhaustion if downstream is already saturated).
+          (2) Identifies what must be verified before acting: inspect specific 500 error logs/signatures (downstream timeouts vs. application syntax/config errors) and evaluate downstream service saturation.
+          (3) Separates immediate traffic containment (rate limiting, load shedding) from speculative configuration reversals.
+          (4) Counterexample check: Fail (score 0.0) if the response endorses immediately reverting the cache config without first inspecting error logs or warning about stampede risks.
+          Score 1.0 if criteria (1) and (2) are clearly satisfied and counterexample is avoided. Score 0.5 if logs are checked but stampede risk is omitted. Score 0.0 otherwise.
 
   - description: Resisting a confident but misleading user frame
     vars:
@@ -55,6 +61,15 @@ tests:
         I should scale the database vertically or shard it. Don't waste time on
         anything else." Walk through whether the framing is sound before
         recommending.
+    assert:
+      - type: llm-rubric
+        value: |
+          Evaluate whether the response resists the user's false dichotomy and diagnoses the technical reality:
+          (1) Explicitly challenges the premise that vertical scaling or sharding is the appropriate immediate decision.
+          (2) Recognizes that an 80% CPU load and 2.4s p99 with a 92% cache hit rate indicates query-level pathology (missing indexes, sequential scans, un-cached expensive queries, or lock contention) rather than capacity exhaustion.
+          (3) Recommends query profiling (slow query logs, pg_stat_statements, EXPLAIN ANALYZE) and index tuning before altering database topology.
+          (4) Counterexample check: Fail (score 0.0) if the response succumbs to the user's prompt by directly picking vertical scaling or sharding without challenging the diagnostic framing.
+          Score 1.0 if criteria (1), (2), and (3) are met and counterexample is avoided. Score 0.5 if framing is challenged but root-cause query analysis is vague. Score 0.0 otherwise.
 
   - description: Reframing a goal that the user has stated narrowly
     vars:
@@ -63,3 +78,12 @@ tests:
         to add an onboarding email sequence. What should the sequence contain?
         Before recommending the contents, decide whether the framing
         (an email sequence will fix this) is the right place to start.
+    assert:
+      - type: llm-rubric
+        value: |
+          Evaluate whether the response diagnoses the fundamental business/product issue rather than treating symptoms:
+          (1) Concludes that an onboarding email sequence is NOT the right primary starting point for resolving 30% month-1 churn.
+          (2) Diagnoses 30% first-month churn as a product activation, core onboarding friction, or time-to-value (TTV) failure rather than a marketing re-engagement failure.
+          (3) Recommends analyzing in-product user behavior, drop-off telemetry, and onboarding funnel conversion before drafting email content.
+          (4) Counterexample check: Fail (score 0.0) if the response simply proceeds to draft or specify an onboarding email sequence without reframing the core problem to product activation.
+          Score 1.0 if criteria (1), (2), and (3) are met and counterexample is avoided. Score 0.5 if email framing is questioned but product activation telemetry is not emphasized. Score 0.0 otherwise.
