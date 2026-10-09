@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { serializeProvider } from '../serialization';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -272,14 +273,7 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'hyperbolic',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'hyperbolic', () => this.apiKey);
   }
 
   async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {

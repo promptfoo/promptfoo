@@ -1,6 +1,7 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { isGpt6Model } from './openai/gpt6';
+import { serializeProvider } from './serialization';
 
 import type {
   ApiEmbeddingProvider,
@@ -206,6 +207,17 @@ function normalizeGuardrailErrorResponse(response: ProviderResponse): ProviderRe
   };
 }
 
+function getTrueFoundryProviderOptions(providerOptions: TrueFoundryProviderOptions) {
+  return {
+    ...providerOptions,
+    config: {
+      ...providerOptions.config,
+      apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
+      apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://llm-gateway.truefoundry.com',
+    },
+  };
+}
+
 /**
  * TrueFoundry AI Gateway Provider
  *
@@ -216,14 +228,7 @@ function normalizeGuardrailErrorResponse(response: ProviderResponse): ProviderRe
  */
 export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: TrueFoundryProviderOptions = {}) {
-    super(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
-        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://llm-gateway.truefoundry.com',
-      },
-    });
+    super(modelName, getTrueFoundryProviderOptions(providerOptions));
   }
 
   protected getBillingModelName(config: OpenAiCompletionOptions): string {
@@ -323,14 +328,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'truefoundry',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'truefoundry');
   }
 }
 
@@ -341,14 +339,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
  */
 export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
   constructor(modelName: string, providerOptions: TrueFoundryProviderOptions = {}) {
-    super(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
-        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://llm-gateway.truefoundry.com',
-      },
-    });
+    super(modelName, getTrueFoundryProviderOptions(providerOptions));
   }
 
   protected getBillingModelName(config: OpenAiSharedOptions): string {
@@ -400,14 +391,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'truefoundry',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'truefoundry');
   }
 }
 

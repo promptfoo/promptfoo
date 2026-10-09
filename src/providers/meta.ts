@@ -1,8 +1,9 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import { getAnthropicEnvHeaderSuppressions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { serializeProvider } from './serialization';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { EnvVarKey } from '../envars';
@@ -91,14 +92,6 @@ export const META_MODEL_PRICES: Record<
   },
 };
 
-function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
-  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
-    const value = env[key as keyof EnvOverrides];
-    return value === undefined ? undefined : String(value);
-  }
-  return undefined;
-}
-
 // Resolve the key from Meta-specific sources only — unlike the OpenAI base
 // provider we do NOT fall back to OPENAI_API_KEY, which would send an OpenAI
 // key to the Meta endpoint and 401. Provider-scoped `env:` overrides beat the
@@ -145,14 +138,7 @@ function resolveMetaOpenAiUrl(config: MetaConfig): string {
 }
 
 function metaToJSON(provider: string, modelName: string, config: MetaKeyConfig) {
-  return {
-    provider,
-    model: modelName,
-    config: {
-      ...config,
-      ...(config.apiKey && { apiKey: undefined }),
-    },
-  };
+  return serializeProvider({ modelName, config }, provider);
 }
 
 function assertSupportedReasoningEffort(effort: unknown): void {
@@ -342,6 +328,11 @@ function applyMetaCost(
   return response;
 }
 
+function resolveMetaProviderOptions(providerOptions: MetaProviderOptions) {
+  const resolvedConfig = resolveMetaOpenAiConfig(providerOptions.config);
+  return { resolvedConfig, options: { ...providerOptions, config: resolvedConfig } };
+}
+
 // The Meta Model API (dev.meta.ai) serves the Muse Spark models through an
 // OpenAI-compatible chat completions endpoint, so the standard chat provider
 // handles requests once the base URL and key resolution point at it.
@@ -350,13 +341,8 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   config: MetaConfig;
 
   constructor(modelName: string, providerOptions: MetaProviderOptions) {
-    const resolvedConfig = resolveMetaOpenAiConfig(providerOptions.config);
-
-    super(modelName, {
-      ...providerOptions,
-      config: resolvedConfig,
-    });
-
+    const { resolvedConfig, options } = resolveMetaProviderOptions(providerOptions);
+    super(modelName, options);
     this.config = resolvedConfig;
   }
 
@@ -467,13 +453,8 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
   config: MetaConfig;
 
   constructor(modelName: string, providerOptions: MetaProviderOptions) {
-    const resolvedConfig = resolveMetaOpenAiConfig(providerOptions.config);
-
-    super(modelName, {
-      ...providerOptions,
-      config: resolvedConfig,
-    });
-
+    const { resolvedConfig, options } = resolveMetaProviderOptions(providerOptions);
+    super(modelName, options);
     this.config = resolvedConfig;
   }
 

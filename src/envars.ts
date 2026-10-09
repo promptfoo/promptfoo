@@ -490,6 +490,18 @@ type EnvVars = {
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
+/** Read only own provider overrides, without falling back to process.env. */
+export function getProviderEnvString(
+  env: EnvOverrides | undefined,
+  key: EnvVarKey,
+): string | undefined {
+  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
+    const value = env[key as keyof EnvOverrides];
+    return value === undefined ? undefined : String(value);
+  }
+  return undefined;
+}
+
 /** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
 export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
   try {

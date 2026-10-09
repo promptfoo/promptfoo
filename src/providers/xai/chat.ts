@@ -2,6 +2,7 @@ import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
+import { serializeProvider } from '../serialization';
 import {
   clampCachedTokens,
   getOpenAIChatOutputLimitFromEnv,
@@ -972,14 +973,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'xai',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'xai', () => this.apiKey);
   }
 
   protected calculateResponseCost(

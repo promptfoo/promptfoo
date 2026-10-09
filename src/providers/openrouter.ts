@@ -16,6 +16,7 @@ import {
   getTokenUsage,
 } from './openai/util';
 import { calculateOpenRouterResponseCost, getOpenRouterBillingMetadata } from './openrouterBilling';
+import { serializeProvider } from './serialization';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
@@ -69,14 +70,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'openrouter',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'openrouter');
   }
 
   protected override calculateResponseCost(
