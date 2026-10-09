@@ -381,6 +381,80 @@ describe('A2AProvider', () => {
   );
 
   it.each(pdfEndpoints)(
+    'rejects default PDF messages with file companions before discovery: $protocolVersion/$agentCardUrl',
+    async (config) => {
+      for (const type of ['image', 'audio', 'video', 'docx', 'pdf'] as const) {
+        vi.mocked(fetchWithTimeout).mockReset();
+        const result = await provider(config).callApi('Compare the documents.', {
+          prompt: { raw: '{{document}}', label: 'Documents' },
+          vars: { document: 'data:application/pdf;base64,JVBERi0x', reference: 'companion-bytes' },
+          test: {
+            metadata: {
+              strategyId: 'pdf',
+              pdf: { input: 'document' },
+              pluginConfig: {
+                inputs: {
+                  document: { type: 'pdf', description: 'Main document' },
+                  reference: { type, description: 'Required reference' },
+                },
+              },
+            },
+          },
+        });
+        expect(result.error).toContain(
+          'requires config.message to include companion input "reference"',
+        );
+        expect(result.output).toBeUndefined();
+        expect(fetchWithTimeout).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each(['1.0', '0.3.0'])(
+    'sends explicitly configured PDF companion files in A2A %s',
+    async (version) => {
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'Both files received' }] } }),
+      );
+      const legacy = version === '0.3.0';
+      const filePart = (name: string, mimeType: string, value: string) =>
+        legacy
+          ? { kind: 'file', file: { name, mimeType, fileWithBytes: value } }
+          : { filename: name, mediaType: mimeType, raw: value };
+      const parts = [
+        filePart('document.pdf', 'application/pdf', '{{document}}'),
+        filePart('reference.png', 'image/png', '{{reference}}'),
+      ];
+      const result = await provider({
+        protocolVersion: version,
+        message: { role: legacy ? 'user' : 'ROLE_USER', parts },
+      }).callApi('Compare the files.', {
+        prompt: { raw: 'Compare the files.', label: 'Documents' },
+        vars: { document: 'JVBERi0x', reference: 'UE5H' },
+        test: {
+          metadata: {
+            strategyId: 'pdf',
+            pdf: { input: 'document' },
+            pluginConfig: {
+              inputs: {
+                document: { type: 'pdf', description: 'PDF' },
+                reference: { type: 'image', description: 'Image' },
+              },
+            },
+          },
+        },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Both files received');
+      const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+      expect(body.message.parts).toEqual([
+        filePart('document.pdf', 'application/pdf', 'JVBERi0x'),
+        filePart('reference.png', 'image/png', 'UE5H'),
+      ]);
+    },
+  );
+
+  it.each(pdfEndpoints)(
     'rejects invalid PDF values before discovery or delivery with $protocolVersion/$agentCardUrl',
     async (config) => {
       for (const document of [
@@ -475,7 +549,6 @@ describe('A2AProvider', () => {
     'redacts equivalent envelope files in A2A $version: $encoding',
     async ({ version, encoding }) => {
       const raw = Buffer.from('%PDF-1.7\nOriginal invoice').toString('base64');
-      const photoRaw = Buffer.from('Original receipt').toString('base64');
       const encode = (raw: string, mime: string, envelope: boolean) => {
         if ((encoding === 'raw-to-uri' && envelope) || (encoding === 'uri-to-raw' && !envelope)) {
           return raw.replace(/=+$/, '');
@@ -490,7 +563,6 @@ describe('A2AProvider', () => {
         );
         const envelope = {
           document: encode(raw, 'application/pdf', true),
-          photo: encode(photoRaw, 'image/png', true),
           question: 'What is the total?',
         };
         const literal = 'Explain data:image/png;base64,SU5MSU5F.';
@@ -502,7 +574,6 @@ describe('A2AProvider', () => {
           prompt: { raw: prompt, label: 'Serialized inputs' },
           vars: {
             document: encode(raw, 'application/pdf', false),
-            photo: encode(photoRaw, 'image/png', false),
             question: envelope.question,
             __prompt: JSON.stringify(envelope),
           },
@@ -513,7 +584,6 @@ describe('A2AProvider', () => {
               pluginConfig: {
                 inputs: {
                   document: { type: 'pdf', description: 'Invoice' },
-                  photo: { type: 'image', description: 'Receipt' },
                   question: 'Question',
                 },
               },
@@ -526,7 +596,6 @@ describe('A2AProvider', () => {
         if (authoredTask) {
           expect(JSON.parse(JSON.parse(text).task)).toEqual({
             document: '[PDF attachment]',
-            photo: '[Attachment]',
             question: envelope.question,
             instruction: literal,
           });
@@ -564,7 +633,7 @@ describe('A2AProvider', () => {
   });
 
   it.each(['1.0', '0.3.0'])(
-    'preserves declared PDF companion inputs in A2A %s without including auxiliary variables',
+    'preserves declared PDF text companion inputs in A2A %s without including auxiliary variables',
     async (version) => {
       const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
       const companionCases: Record<string, string>[] = [
@@ -581,19 +650,17 @@ describe('A2AProvider', () => {
         );
         const inputs: Inputs = {
           invoice: { type: 'pdf', description: 'An invoice' },
-          photo: { type: 'image', description: 'A receipt' },
           ...Object.fromEntries(Object.keys(companions).map((key) => [key, 'A text input'])),
         };
         const vars = {
           invoice: `data:application/pdf;base64,${raw}`,
-          photo: 'data:image/png;base64,UE5H',
           ...companions,
           question: 'Undeclared question',
           apiKey: 'Private provider credential',
           sessionContext: 'Private session context',
         };
         const prompt = JSON.stringify({
-          ...(includeInvoice ? { invoice: vars.invoice } : { photo: vars.photo }),
+          ...(includeInvoice ? { invoice: vars.invoice } : {}),
           ...companions,
           optionalInput: '',
         });
@@ -622,7 +689,6 @@ describe('A2AProvider', () => {
           vars.question,
           vars.apiKey,
           vars.sessionContext,
-          vars.photo,
           'Hidden PDF instructions',
         ]) {
           expect(JSON.stringify(body.message)).not.toContain(omitted);
@@ -746,11 +812,11 @@ describe('A2AProvider', () => {
   );
 
   it.each(['1.0', '0.3.0'])(
-    'redacts auxiliary attachments from rendered PDF tasks in A2A %s',
+    'redacts auxiliary data URI attachments from rendered PDF tasks in A2A %s',
     async (version) => {
       const raw = Buffer.from('%PDF-1.7 selected document').toString('base64');
       const document = `data:application/pdf;base64,${raw}`;
-      const scan = Buffer.from('PNG declared attachment').toString('base64');
+      const scan = Buffer.from('PNG undeclared attachment').toString('base64');
       const secret = Buffer.from('JPEG undeclared attachment').toString('base64');
       const question = 'data:application/pdf;base64,this-is-a-question';
       for (const rawScan of [false, true]) {
@@ -760,7 +826,7 @@ describe('A2AProvider', () => {
             : `\n${value.replace(/^data:[^,]+,/, (prefix) => prefix.toUpperCase())}\n`;
         const vars = {
           document: media(document),
-          scan: rawScan ? scan : media(`data:image/png;base64,${scan}`),
+          scan: media(`data:image/png;base64,${scan}`),
           secretFile: media(`data:image/jpeg;base64,${secret}`),
           question,
           referenceCode: 'A'.repeat(100),
@@ -782,7 +848,6 @@ describe('A2AProvider', () => {
                 pluginConfig: {
                   inputs: {
                     document: { type: 'pdf', description: 'Invoice' },
-                    scan: { type: 'image', description: 'Receipt' },
                     question: 'Question',
                   },
                 },

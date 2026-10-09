@@ -453,6 +453,18 @@ function getDefaultMedia(
     return undefined;
   }
   const varName = getMediaVarName(strategyId, contextVars, context);
+  if (strategyId === 'pdf') {
+    const inputs = context?.test?.metadata?.pluginConfig?.inputs as Inputs | undefined;
+    const companion = Object.entries(inputs ?? {}).find(
+      ([key, definition]) =>
+        key !== varName && normalizeInputDefinition(definition).type !== 'text',
+    );
+    if (companion) {
+      throw new Error(
+        `PDF strategy requires config.message to include companion input "${companion[0]}" as a file part`,
+      );
+    }
+  }
   const mediaValue = varName ? getContextVar(contextVars, varName) : undefined;
   if (!mediaValue) {
     if (strategyId === 'pdf') {

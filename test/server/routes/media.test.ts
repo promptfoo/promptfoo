@@ -107,7 +107,7 @@ describe('Media Routes', () => {
         mockedGetMediaStorage.mockReturnValue(provider);
         mockedMediaExists.mockImplementation((key) => provider.exists(key));
         mockedRetrieveMedia.mockImplementation((key) => provider.retrieve(key));
-        const response = await api.get(`/api/media/${ref.key}`);
+        const response = await api.get('/api/media').query({ key: ref.key });
         expect(response.status).toBe(200);
         expect(response.headers['cache-control']).toBe('private, no-cache');
       } finally {

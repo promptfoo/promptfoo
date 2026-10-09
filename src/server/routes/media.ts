@@ -5,9 +5,10 @@
  */
 
 import express from 'express';
+import { isSafeInlineBlobMimeType } from '../../blobs';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
-import { MediaSchemas } from '../../types/api/media';
+import { MediaRouteParamsSchema, MediaSchemas } from '../../types/api/media';
 import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -53,7 +54,9 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
  * Path format: /info/audio/abc123.mp3
  */
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
-  const paramsResult = MediaSchemas.Info.Params.safeParse(req.params);
+  const paramsResult = (
+    req.params.type === 'blob' ? MediaRouteParamsSchema : MediaSchemas.Info.Params
+  ).safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);
     return;
@@ -96,7 +99,9 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
  * The key is constructed from type + filename, e.g., "audio/abc123.mp3"
  */
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
-  const paramsResult = MediaSchemas.Get.Params.safeParse(req.params);
+  const paramsResult = (
+    req.params.type === 'blob' ? MediaRouteParamsSchema : MediaSchemas.Get.Params
+  ).safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);
     return;
@@ -113,6 +118,33 @@ async function serveMedia(key: string, res: Response, contentAddressed: boolean)
     const exists = await mediaExists(key);
     if (!exists) {
       res.status(404).json({ error: 'Media not found' });
+      return;
+    }
+
+    if (key.startsWith('blob/')) {
+      const storage = getMediaStorage();
+      const { data, contentType } = storage.retrieveWithMetadata
+        ? await storage.retrieveWithMetadata(key)
+        : { data: await storage.retrieve(key), contentType: undefined };
+      const mimeType =
+        typeof contentType === 'string' && /^[a-z]+\/[a-z0-9_+-]+$/i.test(contentType)
+          ? contentType
+          : 'application/octet-stream';
+      res.setHeader('Content-Type', mimeType);
+      if (!isSafeInlineBlobMimeType(mimeType)) {
+        res.setHeader('Content-Disposition', 'attachment');
+      }
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Length', data.length);
+      res.setHeader(
+        'Cache-Control',
+        mimeType === 'application/octet-stream'
+          ? 'no-store'
+          : mimeType === 'application/pdf' || !contentAddressed
+            ? 'private, no-cache'
+            : 'public, max-age=31536000, immutable',
+      );
+      res.send(data);
       return;
     }
 

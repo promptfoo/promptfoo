@@ -43,11 +43,29 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions(
+  abortSignal?: AbortSignal,
+): RateLimitExecuteOptions<ProviderResponse> {
   return {
-    getHeaders: getProviderResponseHeaders,
+    ...(abortSignal && { abortSignal }),
+    // Provider errors are values carrying output, usage and HTTP metadata.
+    // Keep that evidence when the scheduler has no retries left.
+    onRateLimitExhausted: (result, error) =>
+      result.error ? result : { ...result, error: error.message },
+    // Non-retryable rate limits must not feed the shared
+    // rate-limit state either: a billing 429 that also carries
+    // `x-ratelimit-remaining-*: 0` and a reset timestamp would otherwise
+    // park every queued and subsequent call until that reset instead of
+    // letting them fail fast.
+    getHeaders: (result: ProviderResponse | undefined) =>
+      result?.metadata?.rateLimitRetryable === false || result?.metadata?.rateLimitKind === 'quota'
+        ? undefined
+        : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
+      if (result?.metadata?.rateLimitRetryable === false) {
+        return undefined;
+      }
       const rawHeaders = getProviderResponseHeaders(result);
       if (rawHeaders) {
         // Normalize header keys to lowercase for consistent access
@@ -114,7 +132,7 @@ export function wrapProviderWithRateLimiting(
       return registry.execute(
         provider,
         () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(options?.abortSignal),
       );
     },
   };

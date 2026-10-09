@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../src/cache';
+import cliState from '../src/cliState';
 import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
 import { evaluate } from '../src/index';
@@ -109,6 +110,7 @@ describe('index.ts exports', () => {
     'getInputDescription',
     'getInputRepresentations',
     'getInputType',
+    'getModelPricing',
     'guardrails',
     'isApiProvider',
     'isGradingResult',
@@ -216,6 +218,7 @@ describe('index.ts exports', () => {
       assertions: index.assertions,
       cache: index.cache,
       evaluate: index.evaluate,
+      getModelPricing: index.getModelPricing,
       guardrails: index.guardrails,
       loadApiProvider: index.loadApiProvider,
       loadApiProviders: index.loadApiProviders,
@@ -1105,7 +1108,7 @@ describe('evaluate function', () => {
         );
       });
 
-      it('preserves suite env for deferred grading provider map entries', async () => {
+      it('keeps deferred grading provider map entries in the suite environment', async () => {
         const mockTargetProvider = createMockProvider({ id: 'echo' });
 
         loadApiProvidersSpy.mockResolvedValueOnce([mockTargetProvider]);
@@ -1147,12 +1150,8 @@ describe('evaluate function', () => {
                   text: {
                     id: 'litellm:inline-judge',
                     config: { apiKey: '{{ env.GRADER_API_KEY }}' },
-                    env: { GRADER_API_KEY: 'suite-key' },
                   },
-                  embedding: {
-                    id: 'unsupported-provider:unused-embedding',
-                    env: { GRADER_API_KEY: 'suite-key' },
-                  },
+                  embedding: 'unsupported-provider:unused-embedding',
                 },
               }),
             }),
@@ -1160,6 +1159,25 @@ describe('evaluate function', () => {
           expect.anything(),
           expect.anything(),
         );
+      });
+
+      it('preserves suite env for nested test providers', async () => {
+        loadApiProvidersSpy.mockResolvedValueOnce([createMockProvider({ id: 'echo' })]);
+        loadApiProviderSpy.mockImplementationOnce(async () => {
+          expect(cliState.env).toEqual({ OPENAI_API_KEY: 'suite-key' });
+          return createMockProvider({ id: 'openai:chat:test-model' });
+        });
+
+        await evaluate({
+          env: { OPENAI_API_KEY: 'suite-key' },
+          prompts: ['Test prompt'],
+          providers: ['echo'],
+          tests: [{ provider: 'openai:chat:test-model', vars: { input: 'hello' } }],
+        });
+
+        expect(loadApiProviderSpy).toHaveBeenCalledWith('openai:chat:test-model', {
+          basePath: process.cwd(),
+        });
       });
 
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {

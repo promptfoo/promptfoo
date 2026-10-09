@@ -83,6 +83,81 @@ describe('evaluator trace integration', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([true, false])(
+    'honors the evaluation deadline while tracing startup is blocked (late acquisition=%s)',
+    async (acquired) => {
+      vi.useFakeTimers();
+      let finishStartup!: (value: boolean) => void;
+      const startup = new Promise<boolean>((resolve) => {
+        finishStartup = resolve;
+      });
+      vi.mocked(evaluatorTracing.startOtlpReceiverIfNeeded).mockReturnValueOnce(startup);
+      vi.mocked(evaluatorTracing.stopOtlpReceiverIfNeeded).mockResolvedValue(undefined);
+      const settled = vi.fn();
+      const result = evaluate(
+        { providers: [], prompts: [], tests: [], tracing: { enabled: true } },
+        mockEval,
+        { maxEvalTimeMs: 25 },
+      )
+        .then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        )
+        .then((value) => {
+          settled(value);
+          return value;
+        });
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        expect(evaluatorTracing.startOtlpReceiverIfNeeded).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(25);
+        expect(settled).toHaveBeenCalledOnce();
+        expect(await result).toMatchObject({
+          error: expect.objectContaining({ name: 'AbortError' }),
+        });
+        expect(mockInitializeOtel).not.toHaveBeenCalled();
+        finishStartup(acquired);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(evaluatorTracing.stopOtlpReceiverIfNeeded).toHaveBeenCalledWith(
+          acquired,
+          mockEval.id,
+        );
+      } finally {
+        finishStartup(acquired);
+        await vi.runAllTimersAsync();
+        await result;
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('passes published tracing defaults to receiver startup for direct evaluator callers', async () => {
+    const provider = { id: 'tempo', endpoint: 'https://tempo.example.test' } as const;
+    const tracing = { enabled: true, otlp: { http: {} }, provider };
+    const testSuite: TestSuite = {
+      providers: [],
+      prompts: [],
+      tests: [],
+      tracing: tracing as TestSuite['tracing'],
+    };
+    const runtime: EvaluatorRuntime<Eval, EvalResult> = {
+      ...nodeEvaluatorRuntime,
+      resolveRuntimeTestSuite: (suite) => suite,
+    };
+
+    await evaluate(testSuite, mockEval, {}, runtime);
+
+    const evaluated = vi.mocked(evaluatorTracing.startOtlpReceiverIfNeeded).mock.calls[0][0];
+    expect(evaluated.tracing?.otlp?.http).toEqual({
+      enabled: true,
+      port: 4318,
+      host: '127.0.0.1',
+      acceptFormats: ['json', 'protobuf'],
+    });
+    expect(evaluated.tracing?.provider).toBe(provider);
+    expect(tracing.otlp.http).toEqual({});
+  });
+
   it('should pass traceId through to assertions when tracing is enabled', async () => {
     // Mock trace creation and retrieval
     const testTraceId = 'abcdef1234567890abcdef1234567890';

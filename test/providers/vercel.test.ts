@@ -1,6 +1,9 @@
 import { context as otelContext, propagation, trace } from '@opentelemetry/api';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import {
@@ -18,7 +21,9 @@ vi.mock('../../src/cache', async () => ({
 }));
 
 // Mock the ai SDK module
-vi.mock('ai', () => {
+vi.mock('ai', async (importOriginal) => {
+  const { NoObjectGeneratedError, NoOutputGeneratedError } =
+    await importOriginal<typeof import('ai')>();
   const createGatewayMock = vi.fn(() => {
     const gateway = Object.assign(
       vi.fn((modelName: string) => ({ modelName })),
@@ -32,7 +37,9 @@ vi.mock('ai', () => {
     createGateway: createGatewayMock,
     generateText: vi.fn(),
     streamText: vi.fn(),
-    generateObject: vi.fn(),
+    NoObjectGeneratedError,
+    NoOutputGeneratedError,
+    Output: { object: vi.fn((options: unknown) => options) },
     embed: vi.fn(),
     jsonSchema: vi.fn((schema: unknown) => schema),
   };
@@ -87,14 +94,24 @@ describe('VercelAiProvider', () => {
     vi.mocked(isCacheEnabled).mockReturnValue(false);
 
     // Reset ai module mocks
-    const { generateText, streamText, generateObject, embed } = await import('ai');
+    const { generateText, streamText, embed } = await import('ai');
     vi.mocked(generateText).mockReset();
     vi.mocked(streamText).mockReset();
-    vi.mocked(generateObject).mockReset();
     vi.mocked(embed).mockReset();
   });
 
   describe('constructor', () => {
+    it('preserves gateway initialization errors', async () => {
+      const { createGateway } = await import('ai');
+      vi.mocked(createGateway).mockImplementationOnce(() => {
+        throw new Error('invalid gateway configuration');
+      });
+
+      await expect(
+        new VercelAiProvider('openai/gpt-4o-mini').callApi('prompt'),
+      ).resolves.toMatchObject({ error: 'API call error: invalid gateway configuration' });
+    });
+
     it('should create a provider with default options', () => {
       const provider = new VercelAiProvider('openai/gpt-4o-mini');
       expect(provider.modelName).toBe('openai/gpt-4o-mini');
@@ -406,6 +423,20 @@ describe('VercelAiProvider', () => {
         error: 'Request timed out after 5000ms',
       });
     });
+
+    it('should normalize the AI SDK finish reason', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(generateText).mockResolvedValueOnce({
+        text: 'Calling get_weather',
+        usage: { inputTokens: 10, outputTokens: 5 },
+        finishReason: 'tool-calls',
+      } as any);
+
+      const provider = new VercelAiProvider('openai/gpt-4o');
+      const result = await provider.callApi('What is the weather in Paris?');
+
+      expect(result.finishReason).toBe('tool_calls');
+    });
   });
 
   describe('callApi() - streaming', () => {
@@ -705,13 +736,34 @@ describe('VercelAiProvider', () => {
         error: 'Request timed out after 10000ms',
       });
     });
+
+    it('should normalize the AI SDK finish reason when streaming', async () => {
+      const { streamText } = await import('ai');
+
+      async function* mockTextStream() {
+        yield { type: 'text-delta', text: 'I cannot help with that.' };
+      }
+
+      vi.mocked(streamText).mockReturnValueOnce({
+        fullStream: mockTextStream(),
+        usage: Promise.resolve({ inputTokens: 5, outputTokens: 7, totalTokens: 12 }),
+        finishReason: Promise.resolve('content-filter'),
+      } as any);
+
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { streaming: true },
+      });
+      const result = await provider.callApi('Hello');
+
+      expect(result.finishReason).toBe('content_filter');
+    });
   });
 
   describe('caller cancellation', () => {
     it.each(['text', 'streaming', 'structured'])(
       'cancels %s generation without caching it',
       async (mode) => {
-        const { generateText, streamText, generateObject } = await import('ai');
+        const { generateText, streamText } = await import('ai');
         const controller = new AbortController();
         vi.mocked(isCacheEnabled).mockReturnValue(true);
         const abort = (signal: AbortSignal) => {
@@ -720,9 +772,6 @@ describe('VercelAiProvider', () => {
           signal.throwIfAborted();
         };
         vi.mocked(generateText).mockImplementation(
-          async ({ abortSignal }) => abort(abortSignal!) as any,
-        );
-        vi.mocked(generateObject).mockImplementation(
           async ({ abortSignal }) => abort(abortSignal!) as any,
         );
         vi.mocked(streamText).mockImplementation(
@@ -765,6 +814,50 @@ describe('VercelAiProvider', () => {
   });
 
   describe('caching', () => {
+    it.each([
+      ['tool-calls', 'tool_calls'],
+      ['content-filter', 'content_filter'],
+    ])('normalizes legacy cached %s finish reasons', async (raw, normalized) => {
+      const { generateText } = await import('ai');
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      mockCache.get.mockResolvedValueOnce(
+        JSON.stringify({ output: '', finishReason: raw, tokenUsage: { total: 15 } }),
+      );
+
+      const provider = new VercelAiProvider('fixture/model');
+      const result = await provider.callApi('Hello');
+
+      expect(result).toMatchObject({
+        finishReason: normalized,
+        tokenUsage: { total: 15 },
+        cached: true,
+      });
+      if (normalized === 'content_filter') {
+        expect(result).toMatchObject({
+          output: 'Content filtered by provider',
+          isRefusal: true,
+          guardrails: { flagged: true },
+        });
+      } else {
+        expect(result.isRefusal).toBeUndefined();
+      }
+      expect(generateText).not.toHaveBeenCalled();
+    });
+
+    it('does not cache an SDK error finish reason', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(generateText).mockResolvedValueOnce({
+        text: 'Partial response',
+        finishReason: 'error',
+      } as any);
+
+      const result = await new VercelAiProvider('fixture/model').callApi('Hello');
+
+      expect(result.finishReason).toBe('error');
+      expect(mockCache.set).not.toHaveBeenCalled();
+    });
+
     it('bypasses legacy generation entries and reuses corrected response entries', async () => {
       const { generateText } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
@@ -1163,12 +1256,54 @@ describe('VercelAiProvider', () => {
   });
 
   describe('callApi() - structured output', () => {
+    it.each(['caller cancellation', 'timeout'])(
+      'prioritizes %s over a filtered structured-output error',
+      async (interruption) => {
+        const { generateText, NoObjectGeneratedError } = await import('ai');
+        const controller = new AbortController();
+        vi.useFakeTimers();
+        try {
+          vi.mocked(isCacheEnabled).mockReturnValue(true);
+          vi.mocked(generateText).mockImplementationOnce(async () => {
+            if (interruption === 'caller cancellation') {
+              controller.abort();
+            } else {
+              vi.advanceTimersByTime(100);
+            }
+            throw new NoObjectGeneratedError({
+              text: 'Refused',
+              finishReason: 'content-filter',
+              response: { id: 'fixture', modelId: 'fixture/model', timestamp: new Date() },
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } as any,
+            });
+          });
+          const provider = new VercelAiProvider('fixture/model', {
+            config: { responseSchema: { type: 'object' }, timeout: 100 },
+          });
+
+          const result = await provider.callApi('Hello', undefined, {
+            abortSignal: controller.signal,
+          });
+
+          expect(result).toEqual({
+            error:
+              interruption === 'caller cancellation'
+                ? 'Request aborted'
+                : 'Request timed out after 100ms',
+          });
+          expect(mockCache.set).not.toHaveBeenCalled();
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
     it('enables native SDK telemetry for traced structured output calls', async () => {
-      const { generateObject } = await import('ai');
-      vi.mocked(generateObject).mockImplementationOnce(async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(generateText).mockImplementationOnce(async () => {
         expectActiveEvaluationParent();
         return {
-          object: { value: 'result' },
+          output: { value: 'result' },
           usage: { inputTokens: 1, outputTokens: 2 },
           finishReason: 'stop',
         } as any;
@@ -1183,7 +1318,7 @@ describe('VercelAiProvider', () => {
         vars: {},
       });
 
-      expect(generateObject).toHaveBeenCalledWith(
+      expect(generateText).toHaveBeenCalledWith(
         expect.objectContaining({
           experimental_telemetry: expect.objectContaining({
             isEnabled: true,
@@ -1195,9 +1330,9 @@ describe('VercelAiProvider', () => {
     });
 
     it('should return object response with schema', async () => {
-      const { generateObject } = await import('ai');
-      vi.mocked(generateObject).mockResolvedValueOnce({
-        object: { sentiment: 'positive', confidence: 0.95 },
+      const { generateText } = await import('ai');
+      vi.mocked(generateText).mockResolvedValueOnce({
+        output: { sentiment: 'positive', confidence: 0.95 },
         usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
         finishReason: 'stop',
       } as any);
@@ -1228,10 +1363,10 @@ describe('VercelAiProvider', () => {
       });
     });
 
-    it('should pass schema to generateObject', async () => {
-      const { generateObject } = await import('ai');
-      vi.mocked(generateObject).mockResolvedValueOnce({
-        object: { name: 'Test', value: 42 },
+    it('should pass schema to generateText', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(generateText).mockResolvedValueOnce({
+        output: { name: 'Test', value: 42 },
         usage: { inputTokens: 10, outputTokens: 20 },
         finishReason: 'stop',
       } as any);
@@ -1253,11 +1388,11 @@ describe('VercelAiProvider', () => {
       });
       await provider.callApi('Generate data');
 
-      expect(vi.mocked(generateObject)).toHaveBeenCalledWith(
+      expect(vi.mocked(generateText)).toHaveBeenCalledWith(
         expect.objectContaining({
           messages: [{ role: 'user', content: 'Generate data' }],
           // OpenAI requires additionalProperties: false, so provider auto-adds it
-          schema: { ...testSchema, additionalProperties: false },
+          output: { schema: { ...testSchema, additionalProperties: false } },
           temperature: 0.5,
           maxOutputTokens: 48,
         }),
@@ -1265,8 +1400,8 @@ describe('VercelAiProvider', () => {
     });
 
     it('should handle structured output errors', async () => {
-      const { generateObject } = await import('ai');
-      vi.mocked(generateObject).mockRejectedValueOnce(new Error('Schema validation failed'));
+      const { generateText } = await import('ai');
+      vi.mocked(generateText).mockRejectedValueOnce(new Error('Schema validation failed'));
 
       const provider = new VercelAiProvider('openai/gpt-4o', {
         config: {
@@ -1284,10 +1419,10 @@ describe('VercelAiProvider', () => {
     });
 
     it('should handle structured output timeout errors', async () => {
-      const { generateObject } = await import('ai');
+      const { generateText } = await import('ai');
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
-      vi.mocked(generateObject).mockRejectedValueOnce(abortError);
+      vi.mocked(generateText).mockRejectedValueOnce(abortError);
 
       const provider = new VercelAiProvider('openai/gpt-4o', {
         config: {
@@ -1303,9 +1438,9 @@ describe('VercelAiProvider', () => {
     });
 
     it('should prioritize structured output over streaming', async () => {
-      const { generateObject, streamText } = await import('ai');
-      vi.mocked(generateObject).mockResolvedValueOnce({
-        object: { result: 'structured' },
+      const { generateText, streamText } = await import('ai');
+      vi.mocked(generateText).mockResolvedValueOnce({
+        output: { result: 'structured' },
         usage: { inputTokens: 10, outputTokens: 15 },
         finishReason: 'stop',
       } as any);
@@ -1318,9 +1453,25 @@ describe('VercelAiProvider', () => {
       });
       const result = await provider.callApi('Test');
 
-      expect(vi.mocked(generateObject)).toHaveBeenCalled();
+      expect(vi.mocked(generateText)).toHaveBeenCalled();
       expect(vi.mocked(streamText)).not.toHaveBeenCalled();
       expect(result.output).toEqual({ result: 'structured' });
+    });
+
+    it('should normalize the AI SDK finish reason for structured output', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(generateText).mockResolvedValueOnce({
+        output: {},
+        usage: { inputTokens: 15, outputTokens: 0, totalTokens: 15 },
+        finishReason: 'content-filter',
+      } as any);
+
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { responseSchema: { type: 'object', properties: {} } },
+      });
+      const result = await provider.callApi('Analyze this text');
+
+      expect(result.finishReason).toBe('content_filter');
     });
   });
 });
@@ -1381,6 +1532,43 @@ describe('VercelAiEmbeddingProvider', () => {
   });
 
   describe('callEmbeddingApi()', () => {
+    it('combines embedding cancellation with the SDK timeout and does not cache an aborted request', async () => {
+      const { embed } = await import('ai');
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      let markStarted!: (signal: AbortSignal) => void;
+      const started = new Promise<AbortSignal>((resolve) => {
+        markStarted = resolve;
+      });
+      vi.mocked(embed).mockImplementation(({ abortSignal }) => {
+        if (!abortSignal) {
+          throw new Error('Embedding SDK received no signal');
+        }
+        markStarted(abortSignal);
+        return new Promise<never>((_resolve, reject) => {
+          abortSignal.addEventListener('abort', () => reject(abortSignal.reason), { once: true });
+        });
+      });
+      const provider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small');
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
+      const controller = new AbortController();
+      const request = provider.callEmbeddingApi('prompt', undefined, {
+        abortSignal: controller.signal,
+      });
+      try {
+        const combined = await started;
+        expect(combined).not.toBe(controller.signal);
+        expect(combined.aborted).toBe(false);
+        const reason = new Error('evaluation cancelled');
+        controller.abort(reason);
+        await expect(request).rejects.toBe(reason);
+        expect(combined.reason).toBe(reason);
+        expect(mockCache.set).not.toHaveBeenCalled();
+      } finally {
+        controller.abort();
+        await Promise.allSettled([request]);
+      }
+    });
+
     it('enables native SDK telemetry for traced embedding calls', async () => {
       const { embed } = await import('ai');
       vi.mocked(embed).mockImplementationOnce(async () => {

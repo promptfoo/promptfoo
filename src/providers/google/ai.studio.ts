@@ -1,9 +1,7 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
@@ -25,6 +23,7 @@ import {
   normalizeGeminiAudio,
   normalizeGoogleServiceTier,
   normalizeSafetySettings,
+  parseConfigResponseSchema,
   removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -34,11 +33,12 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions } from './types';
+import type { CompletionOptions, GoogleProviderConfig } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -109,10 +109,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   getApiHost(): string {
     const apiHost =
       this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST') ||
+      resolveProviderEnv(this.env, ['GOOGLE_API_HOST', 'PALM_API_HOST'])?.value ||
       DEFAULT_API_HOST;
     return getNunjucksEngine().renderString(apiHost, {});
   }
@@ -121,34 +118,21 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
    * Get the base URL for Google AI Studio API.
    */
   private getApiBaseUrl(): string {
-    // Check for apiHost first (most specific override)
-    const apiHost =
-      this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST');
-    if (apiHost) {
-      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
-      return `https://${renderedHost}`;
+    if (this.config.apiHost) {
+      return `https://${getNunjucksEngine().renderString(this.config.apiHost, {})}`;
     }
-
-    // Check for apiBaseUrl (less specific override)
-    if (
-      this.config.apiBaseUrl ||
-      this.env?.GOOGLE_API_BASE_URL ||
-      getEnvString('GOOGLE_API_BASE_URL')
-    ) {
-      return (
-        this.config.apiBaseUrl ||
-        this.env?.GOOGLE_API_BASE_URL ||
-        getEnvString('GOOGLE_API_BASE_URL')!
-      );
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
     }
-
-    // Default: render the default host with Nunjucks for template variable support
-    const renderedHost = getNunjucksEngine().renderString(DEFAULT_API_HOST, {});
-    return `https://${renderedHost}`;
+    const endpoint = resolveProviderEnv(this.env, [
+      'GOOGLE_API_HOST',
+      'PALM_API_HOST',
+      'GOOGLE_API_BASE_URL',
+    ]);
+    if (endpoint?.name === 'GOOGLE_API_BASE_URL') {
+      return endpoint.value;
+    }
+    return `https://${getNunjucksEngine().renderString(endpoint?.value || DEFAULT_API_HOST, {})}`;
   }
 
   /**
@@ -317,16 +301,19 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    );
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
+      {
+        basePath:
+          promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
+        useAssistantRole: config.useAssistantRole,
+      },
     );
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
@@ -398,8 +385,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         );
       }
 
-      const schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
+      const schema = parseConfigResponseSchema(
+        config.responseSchema,
+        context?.vars,
+        promptConfig?.responseSchema === undefined ? this.config.basePath : promptBasePath,
       );
 
       body.generationConfig.response_schema = schema;
@@ -562,7 +551,17 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         },
       };
       try {
-        response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);
+        response.output = await this.executeFunctionToolCallbacks(
+          output,
+          {
+            ...config,
+            basePath:
+              promptConfig?.functionToolCallbacks === undefined
+                ? this.config.basePath
+                : promptBasePath,
+          },
+          toolsDisabled,
+        );
       } catch (error) {
         return { ...response, output: undefined, error: String(error) };
       }
@@ -592,6 +591,8 @@ export class AIStudioEmbeddingProvider
   extends AIStudioChatProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   id(): string {
     if (this.customId) {
       return this.customId();
@@ -609,7 +610,11 @@ export class AIStudioEmbeddingProvider
     };
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
@@ -651,12 +656,14 @@ export class AIStudioEmbeddingProvider
           method: 'POST',
           headers,
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`Google AI Studio embedding API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,
