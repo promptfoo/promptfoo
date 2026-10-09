@@ -10,6 +10,7 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
@@ -919,6 +920,8 @@ export class CohereChatCompletionProvider implements ApiProvider {
 }
 
 export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: any;
   env?: any;
@@ -954,7 +957,11 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
     throw new Error('Cohere API does not provide text inference.');
   }
 
-  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     if (!this.getApiKey()) {
       throw new Error('Cohere API key must be set for embedding');
     }
@@ -981,6 +988,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
               (this.env?.COHERE_CLIENT_NAME ?? getEnvString('COHERE_CLIENT_NAME')) || 'promptfoo',
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
         'json',
@@ -989,6 +997,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
         true,
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`API call error: ${err}`);
       throw err;
     }
