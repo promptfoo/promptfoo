@@ -8,7 +8,7 @@ import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { mockProcessEnv } from '../util/utils';
 
 import type { TypeSafeConfig } from '../../src/providers/typesafe';
-import type { CallApiContextParams } from '../../src/types/providers';
+import type { CallApiContextParams, ProviderResponse } from '../../src/types/providers';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -130,6 +130,72 @@ describe('TypeSafeProvider', () => {
   describe('llm-rubric grading', () => {
     const imageUrl =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfN0AAAAASUVORK5CYII=';
+
+    it.each<NonNullable<ProviderResponse['audio']>>([
+      { data: 'YXVkaW8=', format: 'wav' },
+      { data: 'YXVkaW8=', format: 'wav', transcript: 'A polite greeting' },
+      {
+        blobRef: {
+          uri: `promptfoo://blob/${'a'.repeat(64)}`,
+          hash: 'a'.repeat(64),
+          mimeType: 'audio/wav',
+          sizeBytes: 5,
+          provider: 'filesystem',
+        },
+      },
+    ])('rejects audio evidence through the rubric matcher %#', async (audio) => {
+      mockAnswer({ type: 'noul', noul: 0.99 });
+      const output = audio.data ?? '[Audio output]';
+
+      const result = await matchesLlmRubric(
+        'The speaker sounds calm',
+        output,
+        { provider: createProvider() },
+        {},
+        undefined,
+        { providerResponse: { output, audio } },
+      );
+
+      expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+      expect(result.reason).toContain('supports text output only');
+      expect(mockedFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('grades transcript-only text when no audio evidence is selected', async () => {
+      mockAnswer({ type: 'noul', noul: 0.9 });
+
+      const result = await matchesLlmRubric(
+        'The transcript contains a greeting',
+        'Hello',
+        { provider: createProvider() },
+        {},
+        undefined,
+        { providerResponse: { audio: { transcript: 'Hello' } } },
+      );
+
+      expect(result).toMatchObject({ pass: true, score: 0.9 });
+      expect(lastRequest().body.state).toBe('Hello');
+    });
+
+    it('does not reuse media evidence when grading selected text', async () => {
+      mockAnswer({ type: 'noul', noul: 0.9 });
+
+      const result = await matchesLlmRubric(
+        'Is polite',
+        'Thanks!',
+        { provider: createProvider() },
+        {},
+        undefined,
+        undefined,
+        {
+          ...rubricContext('Previous rubric', 'Previous output'),
+          gradingMedia: { hasImages: true, hasAudio: true },
+        },
+      );
+
+      expect(result).toMatchObject({ pass: true, score: 0.9 });
+      expect(lastRequest().body.state).toBe('Thanks!');
+    });
 
     it.each([imageUrl, 'A caption accompanying the image'])(
       'rejects attached image evidence before requesting a verdict for %s',

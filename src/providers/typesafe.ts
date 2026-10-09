@@ -231,8 +231,12 @@ export class TypeSafeProvider implements ApiProvider {
     // llm-rubric passes the rubric and the graded output as vars. Jev reads those directly
     // instead of the rendered grading prompt, which is written for a text-generation model.
     if (label === 'llm-rubric' && context?.vars?.rubric !== undefined) {
-      // Attachments live in the rendered prompt; vars.output can be only a placeholder.
-      if (hasMediaGradingContent(prompt)) {
+      // Text-only formatting can omit audio; vars.output can be only a transcript or placeholder.
+      if (
+        context.gradingMedia?.hasImages ||
+        context.gradingMedia?.hasAudio ||
+        hasMediaGradingContent(prompt)
+      ) {
         return {
           error:
             'TypeSafe `llm-rubric` supports text output only; media attachments are not supported.',

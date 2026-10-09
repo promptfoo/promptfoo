@@ -93,7 +93,7 @@ export function callProviderWithContext(
   prompt: string,
   label: string,
   vars: Record<string, VarValue>,
-  context?: CallApiContextParams,
+  context?: Partial<CallApiContextParams>,
   promptConfig?: Record<string, unknown>,
 ): Promise<ProviderResponse> {
   const callApiContext = {
