@@ -513,3 +513,82 @@ describe('handleTraceErrorSpans', () => {
     });
   });
 });
+
+describe('handleTraceErrorSpans inverse (not-trace-error-spans)', () => {
+  it('should fail when the underlying error-spans check passes', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: { type: 'not-trace-error-spans', value: { max_count: 0 } },
+      renderedValue: { max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'no-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [
+            { spanId: '1', name: 'op1', startTime: 0, endTime: 100, statusCode: 200 },
+            { spanId: '2', name: 'op2', startTime: 100, endTime: 200, statusCode: 201 },
+          ],
+        },
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('No errors found in 2 spans matching pattern "*"');
+  });
+
+  it('should pass when the underlying error-spans check fails', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: { type: 'not-trace-error-spans', value: { max_count: 0 } },
+      renderedValue: { max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'status-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [
+            { spanId: '1', name: 'api.call', startTime: 0, endTime: 100, statusCode: 500 },
+            { spanId: '2', name: 'api.call', startTime: 100, endTime: 200, statusCode: 403 },
+          ],
+        },
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toBe(
+      'Found 2 error spans, expected at most 0. Errors: api.call (status: 500), api.call (status: 403)',
+    );
+  });
+
+  it('should fail when no spans match the pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-error-spans',
+        value: { pattern: 'missing.*', max_count: 0 },
+      },
+      renderedValue: { pattern: 'missing.*', max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('No spans found matching pattern "missing.*"');
+  });
+});

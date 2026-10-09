@@ -1103,6 +1103,8 @@ assert:
 
 The `trace-span-count` assertion counts the number of spans in a trace that match a given pattern and checks if the count is within specified bounds. This is useful for validating that expected operations occurred in your LLM application.
 
+Use `not-trace-span-count`, `not-trace-span-duration`, or `not-trace-error-spans` to invert the constraint verdict and score. Reasons still describe the measured spans. When no spans match, duration and error constraints pass and their negated forms fail. Missing trace data remains an evaluation error.
+
 :::note
 Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
 
