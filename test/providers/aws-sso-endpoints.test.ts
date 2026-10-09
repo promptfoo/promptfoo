@@ -43,7 +43,10 @@ beforeEach(() => {
     AWS_SHARED_CREDENTIALS_FILE: path.join(directory, 'credentials'),
     AWS_ENDPOINT_URL_SSO: 'https://scoped-sso.invalid',
   };
-  restore = mockProcessEnv({ AWS_EC2_METADATA_DISABLED: 'true' }, { clear: true });
+  restore = mockProcessEnv(
+    { AWS_EC2_METADATA_DISABLED: 'true', SystemRoot: process.env.SystemRoot },
+    { clear: true },
+  );
   hosts = [];
   vi.spyOn(net.Socket.prototype, 'connect').mockImplementation(() => {
     throw new Error('Unexpected socket access');
