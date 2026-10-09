@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
@@ -33,6 +33,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -108,10 +109,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   getApiHost(): string {
     const apiHost =
       this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST') ||
+      resolveProviderEnv(this.env, ['GOOGLE_API_HOST', 'PALM_API_HOST'])?.value ||
       DEFAULT_API_HOST;
     return getNunjucksEngine().renderString(apiHost, {});
   }
@@ -120,34 +118,21 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
    * Get the base URL for Google AI Studio API.
    */
   private getApiBaseUrl(): string {
-    // Check for apiHost first (most specific override)
-    const apiHost =
-      this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST');
-    if (apiHost) {
-      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
-      return `https://${renderedHost}`;
+    if (this.config.apiHost) {
+      return `https://${getNunjucksEngine().renderString(this.config.apiHost, {})}`;
     }
-
-    // Check for apiBaseUrl (less specific override)
-    if (
-      this.config.apiBaseUrl ||
-      this.env?.GOOGLE_API_BASE_URL ||
-      getEnvString('GOOGLE_API_BASE_URL')
-    ) {
-      return (
-        this.config.apiBaseUrl ||
-        this.env?.GOOGLE_API_BASE_URL ||
-        getEnvString('GOOGLE_API_BASE_URL')!
-      );
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
     }
-
-    // Default: render the default host with Nunjucks for template variable support
-    const renderedHost = getNunjucksEngine().renderString(DEFAULT_API_HOST, {});
-    return `https://${renderedHost}`;
+    const endpoint = resolveProviderEnv(this.env, [
+      'GOOGLE_API_HOST',
+      'PALM_API_HOST',
+      'GOOGLE_API_BASE_URL',
+    ]);
+    if (endpoint?.name === 'GOOGLE_API_BASE_URL') {
+      return endpoint.value;
+    }
+    return `https://${getNunjucksEngine().renderString(endpoint?.value || DEFAULT_API_HOST, {})}`;
   }
 
   /**
@@ -606,6 +591,8 @@ export class AIStudioEmbeddingProvider
   extends AIStudioChatProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   id(): string {
     if (this.customId) {
       return this.customId();
@@ -623,7 +610,11 @@ export class AIStudioEmbeddingProvider
     };
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
@@ -665,12 +656,14 @@ export class AIStudioEmbeddingProvider
           method: 'POST',
           headers,
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`Google AI Studio embedding API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,

@@ -33,7 +33,7 @@ afterEach(async () => {
 });
 
 const withLifecycle = <T>(fn: () => Promise<T>) =>
-  providerRegistry.withScope(() => cliState.withEnv({}, fn));
+  providerRegistry.withEvaluation(() => cliState.withEnv({}, fn));
 
 const providers = [
   ['bedrock', () => new AwsBedrockCompletionProvider('fixture'), 'getBedrockInstance'],
@@ -57,7 +57,7 @@ describe('SDK client lifecycle', () => {
     ['bedrock', providers[0][1], 'getBedrockInstance', BedrockRuntime.prototype],
     ['sagemaker', providers[1][1], 'getSageMakerRuntimeInstance', SageMakerRuntimeClient.prototype],
   ] as const)(
-    'releases a %s client first created after its scope finishes',
+    'rejects new %s client acquisition after its evaluation finishes',
     async (_name, create, method, prototype) => {
       const provider = create();
       const release = createDeferred<void>();
@@ -68,81 +68,15 @@ describe('SDK client lifecycle', () => {
       });
       expect(destroy).not.toHaveBeenCalled();
       release.resolve();
-      const retired = await pending;
-      await vi.waitFor(() => expect(destroy).toHaveBeenCalledOnce());
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(destroy).not.toHaveBeenCalled();
       await withLifecycle(async () => {
-        const next = await Reflect.get(provider, method).call(provider);
-        expect(next).not.toBe(retired);
-        expect(destroy).toHaveBeenCalledOnce();
+        await Reflect.get(provider, method).call(provider);
+        expect(destroy).not.toHaveBeenCalled();
       });
-      expect(destroy).toHaveBeenCalledTimes(2);
+      expect(destroy).toHaveBeenCalledOnce();
     },
   );
-
-  it.each(['throw', 'reject'] as const)(
-    'contains a late cleanup %s without installing signal handlers',
-    async (failure) => {
-      const release = createDeferred<void>();
-      const warn = vi.spyOn((await import('../../src/logger')).default, 'warn');
-      const shutdown = vi.fn(() => {
-        if (failure === 'throw') {
-          throw new Error('late cleanup failure');
-        }
-        return Promise.reject(new Error('late cleanup failure'));
-      });
-      const counts = ['SIGINT', 'SIGTERM', 'beforeExit'].map((signal) =>
-        process.listenerCount(signal),
-      );
-      let pending!: Promise<void>;
-      await withLifecycle(async () => {
-        pending = release.promise.then(() => providerRegistry.register({ shutdown }));
-      });
-      release.resolve();
-      await pending;
-      await vi.waitFor(() => expect(shutdown).toHaveBeenCalledOnce());
-      await vi.waitFor(() =>
-        expect(warn).toHaveBeenCalledWith('Error shutting down late provider', {
-          error: expect.any(Error),
-        }),
-      );
-      expect(
-        ['SIGINT', 'SIGTERM', 'beforeExit'].map((signal) => process.listenerCount(signal)),
-      ).toEqual(counts);
-    },
-  );
-
-  it('releases late resources while earlier scope cleanup is still pending', async () => {
-    const started = createDeferred<void>();
-    const finish = createDeferred<void>();
-    const release = createDeferred<void>();
-    const shutdown = vi.fn().mockResolvedValue(undefined);
-    let pending!: Promise<void>;
-    const scope = withLifecycle(async () => {
-      providerRegistry.register(
-        {
-          async shutdown() {
-            started.resolve();
-            await finish.promise;
-          },
-        },
-        undefined,
-        false,
-      );
-      pending = release.promise.then(() =>
-        providerRegistry.register({ shutdown }, undefined, false),
-      );
-    });
-    await started.promise;
-    try {
-      release.resolve();
-      await pending;
-      await vi.waitFor(() => expect(shutdown).toHaveBeenCalledOnce());
-    } finally {
-      finish.resolve();
-      await scope;
-    }
-    expect(shutdown).toHaveBeenCalledOnce();
-  });
 
   it('does not take over SIGTERM for standalone SDK-only consumers', () => {
     const source = pathToFileURL(path.resolve('src/providers/bedrock/index.ts')).href;
@@ -206,30 +140,29 @@ describe('SDK client lifecycle', () => {
     async ({ create, method, field, value }) => {
       const provider = create();
       const getClient = () => Reflect.get(provider, method).call(provider);
+      const destroyed: ReturnType<typeof vi.spyOn>[] = [];
+      const injected = { destroy: vi.fn() };
       await withLifecycle(async () => {
         const outer = await getClient();
+        destroyed.push(vi.spyOn(outer, 'destroy'));
         await withLifecycle(async () => {
           const previous = await getClient();
-          const previousDestroy = vi.spyOn(previous, 'destroy');
           const namespace = Reflect.get(provider, 'responseCacheNamespace');
-          const injected = { destroy: vi.fn() };
+          destroyed.push(vi.spyOn(previous, 'destroy'));
           Reflect.set(provider, field, injected);
           expect(await getClient()).toBe(injected);
           Reflect.set(provider, field, value);
           expect(Reflect.get(provider, field)).toBeUndefined();
           const next = await getClient();
-          const nextDestroy = vi.spyOn(next, 'destroy');
+          destroyed.push(vi.spyOn(next, 'destroy'));
           expect(next).not.toBe(previous);
           expect(Reflect.get(provider, 'responseCacheNamespace')).toBe(namespace);
-          expect(previousDestroy).not.toHaveBeenCalled();
-          await providerRegistry.shutdownAll(providerRegistry.currentScope);
-          expect(previousDestroy).toHaveBeenCalledOnce();
-          expect(nextDestroy).toHaveBeenCalledOnce();
-          expect(injected.destroy).not.toHaveBeenCalled();
         });
         expect(await getClient()).toBe(outer);
-        await providerRegistry.shutdownAll(providerRegistry.currentScope);
+        destroyed.forEach((destroy) => expect(destroy).not.toHaveBeenCalled());
       });
+      destroyed.forEach((destroy) => expect(destroy).toHaveBeenCalledOnce());
+      expect(injected.destroy).not.toHaveBeenCalled();
     },
   );
 
@@ -253,7 +186,7 @@ describe('SDK client lifecycle', () => {
           const retiredDestroy = vi.spyOn(retired, 'destroy');
           expect(retired).not.toBe(next);
           expect(await getClient()).toBe(next);
-          await providerRegistry.shutdownAll(providerRegistry.currentScope);
+          await providerRegistry.shutdownAll();
           expect(retiredDestroy).toHaveBeenCalledOnce();
           expect(nextDestroy).toHaveBeenCalledOnce();
         } finally {
@@ -277,7 +210,7 @@ describe('SDK client lifecycle', () => {
       expect(cleanup).toHaveBeenCalledWith(previous);
       expect(state()).toBe(next);
       providerRegistry.unregister(previousOwner);
-      await providerRegistry.shutdownAll(providerRegistry.currentScope);
+      await providerRegistry.shutdownAll();
       expect(cleanup).toHaveBeenCalledTimes(2);
       expect(cleanup).toHaveBeenLastCalledWith(next);
     });
@@ -295,7 +228,7 @@ describe('SDK client lifecycle', () => {
       await expect(pending).rejects.toThrow('retired initialization');
       expect(await provider.getBedrockInstance()).toBe(next);
       const destroy = vi.spyOn(next, 'destroy');
-      await providerRegistry.shutdownAll(providerRegistry.currentScope);
+      await providerRegistry.shutdownAll();
       expect(destroy).toHaveBeenCalledOnce();
     });
   });
@@ -304,7 +237,7 @@ describe('SDK client lifecycle', () => {
     const provider = new AwsBedrockCompletionProvider('fixture');
     const destroy = vi.spyOn(BedrockRuntime.prototype, 'destroy');
     await cliState.withEnvFileOverrides({}, () =>
-      providerRegistry.withScope(async () => {
+      providerRegistry.withEvaluation(async () => {
         await cliState.withEnv({}, async () => {
           await provider.getBedrockInstance();
           await cliState.withEnv({}, () => provider.getBedrockInstance());
@@ -320,7 +253,7 @@ describe('SDK client lifecycle', () => {
     const release = createDeferred<void>();
     const python = new PythonProvider('fixture.py', { config: { pythonExecutable: 'python3' } });
     const shutdown = vi.spyOn(python, 'shutdown').mockResolvedValue();
-    const first = providerRegistry.withScope(async () => {
+    const first = providerRegistry.withEvaluation(async () => {
       // Python workers register lazily during initialization, without passing a scope.
       providerRegistry.register(python);
       ready.resolve();
@@ -329,7 +262,7 @@ describe('SDK client lifecycle', () => {
     });
     await ready.promise;
     try {
-      await providerRegistry.withScope(async () => {
+      await providerRegistry.withEvaluation(async () => {
         await new AwsBedrockCompletionProvider('fixture').getBedrockInstance();
       });
       expect(shutdown).not.toHaveBeenCalled();
@@ -345,7 +278,7 @@ describe('SDK client lifecycle', () => {
     const ready = createDeferred<void>();
     const release = createDeferred<void>();
     let firstDestroy: ReturnType<typeof vi.spyOn>;
-    const first = providerRegistry.withScope(() =>
+    const first = providerRegistry.withEvaluation(() =>
       withLifecycle(async () => {
         const client = await cliState.withEnv({}, () => provider.getBedrockInstance());
         firstDestroy = vi.spyOn(client, 'destroy');
@@ -359,7 +292,7 @@ describe('SDK client lifecycle', () => {
       let secondDestroy: ReturnType<typeof vi.spyOn>;
       try {
         await expect(
-          providerRegistry.withScope(() =>
+          providerRegistry.withEvaluation(() =>
             withLifecycle(async () => {
               const client = await provider.getBedrockInstance();
               secondDestroy = vi.spyOn(client, 'destroy');
@@ -378,19 +311,22 @@ describe('SDK client lifecycle', () => {
   });
 
   it.each([true, false])(
-    'isolates lifetimes sharing the same environment (scoped=%s)',
+    'shares nested evaluation clients and isolates later evaluations (scoped=%s)',
     async (scoped) => {
       const provider = new AwsBedrockCompletionProvider('fixture');
       const check = async () => {
-        await providerRegistry.withScope(async () => {
-          const first = await provider.getBedrockInstance();
+        let first: BedrockRuntime;
+        await providerRegistry.withEvaluation(async () => {
+          first = await provider.getBedrockInstance();
           const destroy = vi.spyOn(first, 'destroy');
-          await providerRegistry.withScope(async () => {
-            const second = await provider.getBedrockInstance();
-            expect(second).not.toBe(first);
+          await providerRegistry.withEvaluation(async () => {
+            expect(await provider.getBedrockInstance()).toBe(first);
           });
           expect(destroy).not.toHaveBeenCalled();
-          expect(await provider.getBedrockInstance()).toBe(first);
+        });
+        expect(first!.destroy).toHaveBeenCalledOnce();
+        await providerRegistry.withEvaluation(async () => {
+          expect(await provider.getBedrockInstance()).not.toBe(first);
         });
       };
       await (scoped ? cliState.withEnv({}, check) : check());
@@ -411,7 +347,7 @@ describe('SDK client lifecycle', () => {
         expect(register).not.toHaveBeenCalled();
         scoped.destroy();
       });
-      await providerRegistry.withScope(async () => {
+      await providerRegistry.withEvaluation(async () => {
         const evaluated = await getClient();
         expect(evaluated).not.toBe(client);
       });
@@ -425,42 +361,61 @@ describe('SDK client lifecycle', () => {
   );
 
   it.each(providers)(
-    'releases only the completed %s scope and supports reuse',
+    'releases only the completed %s evaluation and supports reuse',
     async (_name, create, method) => {
       const provider = create();
       const getClient = () => Reflect.get(provider, method).call(provider);
       const ready = createDeferred<void>();
-      const released = createDeferred<void>();
+      const release = createDeferred<void>();
       let firstDestroy: ReturnType<typeof vi.spyOn>;
+      let firstClient: unknown;
       const first = withLifecycle(async () => {
-        const client = await getClient();
-        firstDestroy = vi.spyOn(client, 'destroy');
+        firstClient = await getClient();
+        firstDestroy = vi.spyOn(firstClient as { destroy(): void }, 'destroy');
         ready.resolve();
-        await released.promise;
+        await release.promise;
         expect(firstDestroy).not.toHaveBeenCalled();
-        await providerRegistry.shutdownAll(providerRegistry.currentScope);
-        expect(firstDestroy).toHaveBeenCalledOnce();
-        const next = await getClient();
-        expect(next).not.toBe(client);
-        const nextDestroy = vi.spyOn(next, 'destroy');
-        await providerRegistry.shutdownAll(providerRegistry.currentScope);
-        expect(nextDestroy).toHaveBeenCalledOnce();
       });
-      const second = withLifecycle(async () => {
-        await ready.promise;
-        const client = await getClient();
-        const destroy = vi.spyOn(client, 'destroy');
-        try {
-          await providerRegistry.shutdownAll(providerRegistry.currentScope);
-          expect(destroy).toHaveBeenCalledOnce();
-          expect(firstDestroy!).not.toHaveBeenCalled();
-        } finally {
-          released.resolve();
-        }
-      });
-      await Promise.all([first, second]);
+      await ready.promise;
+      try {
+        let secondDestroy: ReturnType<typeof vi.spyOn>;
+        await withLifecycle(async () => {
+          const client = await getClient();
+          expect(client).not.toBe(firstClient);
+          secondDestroy = vi.spyOn(client, 'destroy');
+        });
+        expect(secondDestroy!).toHaveBeenCalledOnce();
+        expect(firstDestroy!).not.toHaveBeenCalled();
+      } finally {
+        release.resolve();
+        await first;
+      }
+      expect(firstDestroy!).toHaveBeenCalledOnce();
+      await withLifecycle(async () => expect(await getClient()).not.toBe(firstClient));
     },
   );
+
+  it('retains an SDK client until its physical provider call settles after evaluation closure', async () => {
+    const provider = new AwsBedrockCompletionProvider('fixture');
+    const ready = createDeferred<void>();
+    const release = createDeferred<void>();
+    let pending: Promise<void>;
+    let destroy: ReturnType<typeof vi.spyOn>;
+    await withLifecycle(async () => {
+      pending = providerRegistry.withProvider(provider, async () => {
+        const client = await provider.getBedrockInstance();
+        destroy = vi.spyOn(client, 'destroy');
+        ready.resolve();
+        await release.promise;
+        expect(destroy).not.toHaveBeenCalled();
+      });
+      await ready.promise;
+    });
+    expect(destroy!).not.toHaveBeenCalled();
+    release.resolve();
+    await pending!;
+    await vi.waitFor(() => expect(destroy!).toHaveBeenCalledOnce());
+  });
 
   const pendingClients = [
     [...providers[0], 'getBedrockAuthOptions', BedrockRuntime.prototype],
@@ -568,7 +523,7 @@ describe('SDK client lifecycle', () => {
     const destroy = vi.spyOn(BedrockRuntime.prototype, 'destroy');
     await withLifecycle(async () => {
       const pending = provider.getBedrockInstance();
-      const shutdown = providerRegistry.shutdownAll(providerRegistry.currentScope);
+      const shutdown = providerRegistry.shutdownAll();
       let stopped = false;
       void shutdown.then(() => {
         stopped = true;
@@ -626,7 +581,7 @@ describe('SDK client lifecycle', () => {
       expect(await bedrock.getBedrockInstance()).toBe(client);
       expect(await sageMaker.getSageMakerRuntimeInstance()).toBe(client);
       expect(await kb.getKnowledgeBaseClient()).toBe(client);
-      await providerRegistry.shutdownAll(providerRegistry.currentScope);
+      await providerRegistry.shutdownAll();
     });
     expect(client.destroy).not.toHaveBeenCalled();
   });
@@ -640,7 +595,7 @@ describe('SDK client lifecycle', () => {
         ['us-east-1', 'us-west-2'].map((region) => provider.getSageMakerRuntimeInstance(region)),
       );
       const destroy = clients.map((client) => vi.spyOn(client, 'destroy'));
-      await providerRegistry.shutdownAll(providerRegistry.currentScope);
+      await providerRegistry.shutdownAll();
       destroy.forEach((spy) => expect(spy).toHaveBeenCalledOnce());
     });
   });

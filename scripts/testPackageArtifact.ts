@@ -654,9 +654,9 @@ assert.equal(summary.results[0].success, false);
 assert.equal(summary.results[0].score, 0);
 assert.ok(summary.results[0].response.error.includes(mode === 'installed'
   ? 'Repository is not a directory'
-  : 'npm install promptfoo @openai/codex-security@^0.1.31'));
+  : 'npm install promptfoo @openai/codex-security@^0.2.0'));
 if (mode === 'incompatible') {
-  assert.ok(summary.results[0].response.error.includes('incompatible (0.1.28)'));
+  assert.ok(summary.results[0].response.error.includes('incompatible (0.1.31)'));
 }
 `;
   const scriptPaths = ['codex-security.mjs', 'codex-security.cjs'].map((name) =>
@@ -688,22 +688,40 @@ ${script}
     PROMPTFOO_DISABLE_UPDATE: 'true',
   };
   for (const mode of ['missing', 'incompatible', 'installed']) {
-    if (mode !== 'missing') {
+    const sdkPath = path.join(consumerDir, 'node_modules', '@openai', 'codex-security');
+    if (mode === 'incompatible') {
+      // Simulate an existing outdated optional SDK without bypassing the package's peer range.
+      const staleSdkDir = path.join(consumerDir, 'stale-codex-sdk');
+      fs.mkdirSync(staleSdkDir);
+      fs.writeFileSync(path.join(staleSdkDir, 'package.json'), JSON.stringify({ private: true }));
       installConsumerPackages(
-        mode === 'incompatible'
-          ? 'install incompatible Codex Security SDK'
-          : 'install supported Codex Security SDK',
-        [
-          mode === 'incompatible'
-            ? '@openai/codex-security@0.1.28'
-            : '@openai/codex-security@^0.1.31',
-        ],
+        'install isolated incompatible Codex Security SDK',
+        ['@openai/codex-security@0.1.31'],
+        staleSdkDir,
+        npmEnv,
+      );
+      fs.mkdirSync(path.dirname(sdkPath), { recursive: true });
+      fs.symlinkSync(
+        path.join(staleSdkDir, 'node_modules', '@openai', 'codex-security'),
+        sdkPath,
+        'junction',
+      );
+    } else if (mode === 'installed') {
+      installConsumerPackages(
+        'install supported Codex Security SDK',
+        ['@openai/codex-security@^0.2.0'],
         consumerDir,
         npmEnv,
       );
     }
-    for (const scriptPath of scriptPaths) {
-      await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+    try {
+      for (const scriptPath of scriptPaths) {
+        await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+      }
+    } finally {
+      if (mode === 'incompatible') {
+        fs.rmSync(sdkPath);
+      }
     }
   }
 }
@@ -842,6 +860,126 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
         server.close((error) => (error ? reject(error) : resolve()));
       });
     }
+  }
+}
+
+async function runInstalledCodingSdkEval(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const fixturesDir = path.join(consumerDir, 'coding-sdks');
+  fs.cpSync(path.join(ROOT, 'test/fixtures/package-artifact/coding-sdks'), fixturesDir, {
+    recursive: true,
+  });
+  // The Codex SDK sends `exec` first. Let Node load that fixture on every platform.
+  fs.copyFileSync(path.join(fixturesDir, 'codex.mjs'), path.join(consumerDir, 'exec'));
+  const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');
+  fs.writeFileSync(
+    scriptPath,
+    `import assert from 'node:assert/strict';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+const { evaluate } = process.argv[3] === 'cjs' ? createRequire(import.meta.url)('promptfoo') : await import('promptfoo');
+
+const mode = process.argv[2];
+const installed = mode === 'installed';
+if (mode === 'missing') {
+  for (const sdk of ['@openai/codex-sdk', '@anthropic-ai/claude-agent-sdk']) {
+    assert.throws(() => import.meta.resolve(sdk), { code: 'ERR_MODULE_NOT_FOUND' });
+  }
+}
+// An older SDK used elsewhere in the project must not break ordinary evaluations.
+const ordinary = await evaluate({
+  sharing: false,
+  prompts: ['hello fixture'],
+  providers: ['echo'],
+  tests: [{ vars: {}, assert: [{ type: 'equals', value: 'hello fixture' }] }],
+}, { cache: false, maxConcurrency: 1, writeLatestResults: false });
+const { results: ordinaryResults } = await ordinary.toEvaluateSummary();
+assert.equal(ordinaryResults.length, 1);
+assert.equal(ordinaryResults[0].success, true);
+const fixture = (name) => path.join(import.meta.dirname, 'coding-sdks', name);
+const record = await evaluate({
+  sharing: false,
+  prompts: ['{{input}}'],
+  providers: [
+    {
+      id: 'openai:codex-sdk',
+      config: {
+        apiKey: 'test-local-fixture',
+        codex_path_override: process.execPath,
+        working_dir: import.meta.dirname,
+        skip_git_repo_check: true,
+        persist_threads: false,
+      },
+    },
+    {
+      id: 'anthropic:claude-agent-sdk',
+      config: {
+        apiKey: 'test-local-fixture',
+        path_to_claude_code_executable: fixture('claude.mjs'),
+        working_dir: import.meta.dirname,
+      },
+    },
+  ],
+  tests: (installed ? ['hello fixture', 'fixture error'] : ['hello fixture']).map((input) => ({
+    vars: { input },
+    assert: [{ type: 'equals', value: 'local SDK fixture response' }],
+  })),
+}, { cache: false, maxConcurrency: 1, writeLatestResults: false });
+const { results } = await record.toEvaluateSummary();
+assert.equal(results.length, installed ? 4 : 2);
+for (const result of results) {
+  if (!installed) {
+    assert.equal(result.success, false);
+    assert.match(result.response.error, new RegExp('npm install promptfoo @(openai/codex-sdk|anthropic-ai/claude-agent-sdk)'));
+    if (mode === 'incompatible') {
+      assert.match(result.response.error, /found 0\\.(154\\.0|3\\.235)/);
+    }
+  } else if (result.vars.input === 'fixture error') {
+    assert.equal(result.success, false);
+    assert.match(result.response.error, /fixture request failed|error_during_execution/);
+  } else {
+    assert.equal(result.success, true);
+    assert.equal(result.score, 1);
+    assert.equal(result.response.output, 'local SDK fixture response');
+    assert.equal(result.response.tokenUsage.prompt, 3);
+    assert.equal(result.response.tokenUsage.completion, 5);
+    assert.match(result.response.sessionId, /^fixture-(thread|session)$/);
+  }
+}
+`,
+  );
+  const runChecks = async (mode: string) => {
+    for (const format of ['esm', 'cjs']) {
+      await runAsync(process.execPath, [scriptPath, mode, format], consumerDir, {
+        NODE_PATH: '',
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+      });
+    }
+  };
+  await runChecks('missing');
+  // Preserve the omit-optional profile; install real SDKs only in the default profile.
+  if (withOptionalDependencies) {
+    installConsumerPackages(
+      'install incompatible coding SDKs',
+      ['@openai/codex-sdk@0.154.0', '@anthropic-ai/claude-agent-sdk@0.3.235'],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('incompatible');
+    installConsumerPackages(
+      'install supported coding SDKs',
+      ['@openai/codex-sdk@^0.156.1', '@anthropic-ai/claude-agent-sdk@^0.3.273'],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('installed');
   }
 }
 
@@ -1038,20 +1176,17 @@ async function runOptionalWatsonXChecks(
 
   // Preserve the omit-optional profile and install the real pair only in the default profile.
   if (withOptionalDependencies) {
-    runNpm(
-      'install WatsonX SDKs',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--no-package-lock',
-        '@ibm-cloud/watsonx-ai@^1.7.16',
-        'ibm-cloud-sdk-core@^5.6.2',
-      ],
-      consumerDir,
-      npmEnv,
-    );
+    for (const args of [
+      ['@ibm-cloud/watsonx-ai@^1.7.16', 'ibm-cloud-sdk-core@5.6.2'],
+      ['--save-exact', 'ibm-cloud-sdk-core@5.6.2'],
+    ]) {
+      runNpm(
+        'install WatsonX SDKs',
+        ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', ...args],
+        consumerDir,
+        npmEnv,
+      );
+    }
     await runChecks('installed');
   }
 }
@@ -1071,20 +1206,18 @@ async function assertOptionalBrowserDependencies(
         assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
       }
     }
-    for (const [id, config] of [
-      ['browser', { steps: [] }],
-      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: false }],
-      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: true }],
-    ]) {
-      const provider = await loadApiProvider(id, { options: { config } });
-      const response = await provider.callApi('optional browser fixture', { vars: {} });
-      assert.match(response.error, incompatible
-        ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
-        : /requires the optional Playwright package/);
-      assert.match(response.error, /npm install promptfoo/);
-      assert.match(response.error, /npx playwright install chromium/);
-      await provider.cleanup?.();
-    }
+    await assert.rejects(
+      loadApiProvider('openai:chatkit:wf_fixture'),
+      /openai:chatkit provider has been removed/,
+    );
+    const provider = await loadApiProvider('browser', { options: { config: { steps: [] } } });
+    const response = await provider.callApi('optional browser fixture', { vars: {} });
+    assert.match(response.error, incompatible
+      ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
+      : /requires the optional Playwright package/);
+    assert.match(response.error, /npm install promptfoo/);
+    assert.match(response.error, /npx playwright install chromium/);
+    await provider.cleanup?.();
   `;
   for (const format of ['mjs', 'cjs']) {
     const imports =
@@ -1354,19 +1487,6 @@ async function main(): Promise<void> {
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
     const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
-    if (values.profile === 'omit-optional') {
-      assert.throws(() => packageRequire.resolve('@anthropic-ai/claude-agent-sdk'), {
-        code: 'MODULE_NOT_FOUND',
-      });
-    } else {
-      const relative = path.relative(
-        fs.realpathSync(consumerDir),
-        fs.realpathSync(packageRequire.resolve('@anthropic-ai/claude-agent-sdk')),
-      );
-      assert(
-        relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
-      );
-    }
     timePhase('inspect declaration documentation', () =>
       assertProviderTypeDocumentation(installedPackageDir),
     );
@@ -1442,6 +1562,14 @@ async function main(): Promise<void> {
         );
       }
     }
+    await timeAsyncPhase('optional coding SDKs', () =>
+      runInstalledCodingSdkEval(
+        consumerDir,
+        configDir,
+        consumerNpmEnv,
+        values.profile === 'default',
+      ),
+    );
     await timeAsyncPhase('check optional OpenAI Agents SDK', () =>
       runOptionalOpenAiAgentsChecks(consumerDir, configDir),
     );

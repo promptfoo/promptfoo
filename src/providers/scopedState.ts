@@ -9,6 +9,7 @@ export function createEnvironmentScopedState<T>(
   const lifetimes = new WeakMap<object, WeakMap<object, T>>();
   const fallbackScope = {};
   const getState = () => {
+    providerRegistry.throwIfResourceUseAborted();
     const scope = cliState.envScope ?? fallbackScope;
     const lifetime = providerRegistry.currentScope ?? scope;
     let states = lifetimes.get(lifetime);
@@ -24,19 +25,15 @@ export function createEnvironmentScopedState<T>(
       // scoped cleanup. A global registration would keep them alive indefinitely.
       if (cleanup && providerRegistry.currentScope) {
         const owned = state;
-        providerRegistry.register(
-          {
-            async shutdown() {
-              // New calls must not reuse a client whose shutdown has started.
-              if (states.get(scope) === owned) {
-                states.delete(scope);
-              }
-              await cleanup(owned);
-            },
+        providerRegistry.register({
+          async shutdown() {
+            // New calls must not reuse a client whose shutdown has started.
+            if (states.get(scope) === owned) {
+              states.delete(scope);
+            }
+            await cleanup(owned);
           },
-          lifetime,
-          false,
-        );
+        });
       }
     }
     return state;

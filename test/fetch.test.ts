@@ -2864,6 +2864,196 @@ describe('fetchWithRetries with disableTransientRetries', () => {
   });
 });
 
+describe('silent fetch diagnostics', () => {
+  const credential = 'gateway-credential-do-not-log';
+  const url = `https://example.com/${credential}`;
+  const silentHeaders = { 'x-promptfoo-silent': 'true' };
+  let restoreEnv = () => {};
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    restoreEnv = mockFetchTestEnv();
+    vi.mocked(getEnvString)
+      .mockReset()
+      .mockImplementation((_, fallback = '') => fallback);
+    vi.mocked(getEnvInt)
+      .mockReset()
+      .mockImplementation((_, fallback = 0) => fallback);
+    vi.mocked(getEnvBool)
+      .mockReset()
+      .mockImplementation((_, fallback = false) => fallback);
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
+  });
+
+  it.each(['object', 'Headers', 'tuples', 'Request'] as const)(
+    'honors case-insensitive silent headers from %s without mutating them',
+    async (kind) => {
+      const headerName = 'X-Promptfoo-Silent';
+      const headers: HeadersInit =
+        kind === 'Headers'
+          ? new Headers({ [headerName]: 'true' })
+          : kind === 'tuples'
+            ? [[headerName, 'true']]
+            : { [headerName]: 'true' };
+      Object.freeze(headers);
+      const originalHeaders = Array.from(new Headers(headers));
+      const request = new Request(url, { headers });
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(credential, { status: 429, statusText: credential }),
+      );
+
+      const error = await fetchWithRetries(
+        kind === 'Request' ? request : url,
+        kind === 'Request' ? {} : { headers },
+        1000,
+        0,
+      ).catch((error) => error);
+
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({ status: 429, body: credential });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(logger.debug).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(Array.from(new Headers(headers))).toEqual(originalHeaders);
+      expect(Array.from(request.headers)).toEqual(originalHeaders);
+    },
+  );
+
+  it('uses replacement option headers instead of inherited Request headers', async () => {
+    const request = new Request(url, { headers: silentHeaders });
+    vi.mocked(global.fetch).mockResolvedValue(new Response('', { status: 429 }));
+
+    await expect(fetchWithRetries(request, { headers: {} }, 1000, 0)).rejects.toBeInstanceOf(
+      HttpRateLimitError,
+    );
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
+    expect(request.headers.get('x-promptfoo-silent')).toBe('true');
+  });
+
+  it.each(['success', 'exhaustion'] as const)(
+    'keeps rate-limit retry behavior and numeric wait diagnostics on %s',
+    async (outcome) => {
+      const limited = new Response(JSON.stringify({ error: { message: credential } }), {
+        status: 429,
+        statusText: credential,
+        headers: { 'Retry-After': '1' },
+      });
+      const success = new Response('ok');
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(limited)
+        .mockResolvedValueOnce(outcome === 'success' ? success : limited);
+
+      const result = await fetchWithRetries(url, { headers: silentHeaders }, 1000, 1).catch(
+        (error) => error,
+      );
+
+      if (outcome === 'success') {
+        expect(result).toBe(success);
+      } else {
+        expect(result).toBeInstanceOf(HttpRateLimitError);
+        expect(result).toMatchObject({ body: { error: { message: credential } } });
+        expect(result.message).toContain(credential);
+      }
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledExactlyOnceWith(1000);
+      expect(vi.mocked(logger.debug).mock.calls).toEqual([
+        ['Rate limited, waiting 1000ms (base 1000ms + 0ms jitter) before retry'],
+      ]);
+    },
+  );
+
+  it('keeps quota fail-fast classification without logging the response code', async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: credential, type: 'billing_not_active' } }), {
+        status: 429,
+      }),
+    );
+
+    const error = await fetchWithRetries(url, { headers: silentHeaders }, 1000, 2).catch(
+      (error) => error,
+    );
+
+    expect(error).toBeInstanceOf(HttpRateLimitError);
+    expect(error).toMatchObject({ kind: 'quota', code: credential });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(logger.debug).not.toHaveBeenCalled();
+  });
+
+  it.each(['5xx', 'transport'] as const)(
+    'keeps %s retries and final errors without logging server-controlled details',
+    async (failure) => {
+      vi.mocked(getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_RETRY_5XX');
+      if (failure === '5xx') {
+        vi.mocked(global.fetch).mockResolvedValue(
+          new Response('', { status: 500, statusText: credential }),
+        );
+      } else {
+        vi.mocked(global.fetch).mockRejectedValue(new Error(credential));
+      }
+
+      await expect(fetchWithRetries(url, { headers: silentHeaders }, 1000, 1)).rejects.toThrow(
+        `Request failed after 1 retries: Error: ${failure === '5xx' ? 'Internal Server Error: 500 ' : ''}${credential}`,
+      );
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledExactlyOnceWith(5000);
+      expect(logger.debug).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps transient transport retries without logging status text', async () => {
+    const response = new Response('', {
+      status: 503,
+      statusText: `Service Unavailable ${credential}`,
+    });
+    vi.mocked(global.fetch).mockResolvedValue(response);
+
+    expect(await fetchWithProxy(url, { headers: silentHeaders })).toBe(response);
+
+    expect(global.fetch).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(sleep).mock.calls).toEqual([[1000], [2000], [4000]]);
+    expect(logger.debug).not.toHaveBeenCalled();
+  });
+
+  it.each(['clone', 'body read'] as const)(
+    'does not log credentials in rate-limit %s failures',
+    async (failure) => {
+      const response = new Response('', { status: 429 });
+      vi.spyOn(response, 'clone').mockImplementation(() => {
+        if (failure === 'clone') {
+          throw new Error(credential);
+        }
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error(credential));
+            },
+          }),
+        );
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const error = await fetchWithRetries(url, { headers: silentHeaders }, 1000, 0).catch(
+        (error) => error,
+      );
+
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({ status: 429, kind: 'rate_limit', body: undefined });
+      expect(logger.debug).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('readBoundedText', () => {
   it.each([undefined, '1', '1000000'])(
     'does not buffer a streamless body with length %s',
