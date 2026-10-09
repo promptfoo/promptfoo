@@ -14,9 +14,9 @@ describe('file prompt labels', () => {
   const docPrompt = path.join('prompts', 'doc.md');
   let directory: string;
 
-  function resolve(configPath: string) {
+  function resolve(configPath: string | string[]) {
     return cliState.withConfig(undefined, () =>
-      cliState.withBasePath(undefined, () => resolveConfigs({ config: [configPath] }, {})),
+      cliState.withBasePath(undefined, () => resolveConfigs({ config: [configPath].flat() }, {})),
     );
   }
 
@@ -119,6 +119,78 @@ describe('file prompt labels', () => {
       expect(testSuite.providerPromptMap).toEqual({ echo: [label] });
     },
   );
+
+  it.each(['txt', 'md'])(
+    'keeps config-relative %s glob IDs and labels stable',
+    async (extension) => {
+      const id = `file://prompts/*.${extension}`;
+      fs.writeFileSync(
+        path.join(directory, 'project', 'promptfooconfig.json'),
+        JSON.stringify({
+          prompts: [{ id, label: 'Group' }],
+          providers: [{ id: 'echo', prompts: [id] }],
+          tests: [{ prompts: [id], vars: { topic: 'labels' } }],
+        }),
+      );
+      process.chdir(path.join(directory, 'project'));
+      const { testSuite } = await resolve('promptfooconfig.json');
+      expect(testSuite.prompts.map((p) => p.id)).toEqual(
+        extension === 'txt'
+          ? [`${id}:prompts/multi.txt:1`, `${id}:prompts/multi.txt:2`]
+          : [`${id}:prompts/doc.md`],
+      );
+      expect(testSuite.prompts.every((p) => doesPromptRefMatch(id, p))).toBe(true);
+      expect(testSuite.prompts.map((p) => p.label)).toEqual(
+        extension === 'txt'
+          ? [`Group: ${multiPrompt}: First {{topic}}`, `Group: ${multiPrompt}: Second {{topic}}`]
+          : ['Group: prompts/doc.md'],
+      );
+    },
+  );
+
+  it.each(['md', 'txt'])(
+    'keeps %s glob identities independent of config order',
+    async (extension) => {
+      const id = `file://prompts/*.${extension}`;
+      const configs = ['a', 'b'].map((name) => {
+        const source = path.join(directory, name);
+        fs.mkdirSync(path.join(source, 'prompts'), { recursive: true });
+        fs.writeFileSync(path.join(source, 'prompts', `x.${extension}`), name);
+        const configPath = path.join(source, 'config.json');
+        fs.writeFileSync(
+          configPath,
+          JSON.stringify({
+            prompts: [{ id, label: `Group ${name}` }],
+            providers: ['echo'],
+          }),
+        );
+        return configPath;
+      });
+      process.chdir(directory);
+      const forward = (await resolve(configs)).testSuite.prompts;
+      const reverse = (await resolve([...configs].reverse())).testSuite.prompts;
+      expect(reverse).toEqual([...forward].reverse());
+      expect(forward.map((prompt) => prompt.id)).toEqual([
+        `${id}:prompts/x.${extension}`,
+        `${id}:prompts/x.${extension}`,
+      ]);
+    },
+  );
+
+  it('preserves an explicitly empty body with a file-shaped ID', async () => {
+    const configPath = path.join(directory, 'project', 'empty.json');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        prompts: [{ id: 'file://logical-empty', raw: '', label: 'Blank' }],
+        providers: ['echo'],
+      }),
+    );
+    const { testSuite } = await resolve(configPath);
+    expect(testSuite.prompts).toEqual([
+      expect.objectContaining({ id: 'file://logical-empty', raw: '', label: 'Blank' }),
+    ]);
+  });
 
   it('normalizes only the generated path in text labels with an authored prefix', async () => {
     const fileName = 'labeled.txt';
