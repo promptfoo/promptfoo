@@ -2,7 +2,9 @@
  * Generic utility functions for sanitizing objects to prevent logging of secrets and credentials
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
+import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
+import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
@@ -225,7 +227,7 @@ export const SECRET_FIELD_NAMES = new Set([
 ]);
 
 // Ambiguous names need a complete segment match: oauth/useSession/sameSiteCookie are settings.
-const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES].filter(
+const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES, 'subscriptionkey'].filter(
   (name) => !['auth', 'session', 'cookie', 'setcookie'].includes(name),
 );
 
@@ -453,23 +455,29 @@ function isSafeTracingCredentialTemplate(value: unknown): value is string {
   return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
 }
 
-function isTracingCredentialHeader(name: string, value: string): boolean {
-  const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+export function isCredentialHeader(name: string, value: string): boolean {
+  const normalizedName = name.replace(/[-_\s]/g, '').toLowerCase();
+  // These key roles identify requests, routing, or public material rather than authenticate.
+  // Exempt only name inference; credential-shaped values still take precedence below.
+  const publicKeyRole =
+    /^x?(?:(?:idempotency|cache|routing|partition|public)key|secwebsocketkey)$/.test(
+      normalizedName,
+    );
   return (
-    isSecretField(name) ||
-    /(?:^|[-_\s])(?:api[-_\s]?key|access[-_\s]?key|auth(?:orization)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
+    isSecretField(normalizedName) ||
+    (!publicKeyRole && normalizedName.endsWith('key')) ||
+    /session(?:access|id)?$/.test(normalizedName) ||
+    /(?:api|access|subscription)key|auth|token|password|passwd|secret|credential|cookie|jwt/.test(
       normalizedName,
     ) ||
-    normalizedName.replace(/[-_]/g, '') === 'xhoneycombteam' ||
+    normalizedName === 'xhoneycombteam' ||
     /^(?:bearer|basic|token|api[-_]?key)\s+\S+/i.test(value.trim()) ||
     looksLikeSecret(value.trim())
   );
 }
 
 function isNonSensitiveTracingHeader(name: string, value: string): boolean {
-  return (
-    SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()) && !isTracingCredentialHeader(name, value)
-  );
+  return SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()) && !isCredentialHeader(name, value);
 }
 
 function getTracingTemplateEnvironmentVariable(template: string): string | undefined {
@@ -688,6 +696,98 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
+/** Project direct providers and provider/type maps without changing their local configuration. */
+export function stripProviderPromptSelectors<T>(providers: T): T {
+  if (Array.isArray(providers)) {
+    return providers.map(stripProviderPromptSelectors) as T;
+  }
+  if (!providers || typeof providers !== 'object') {
+    return providers;
+  }
+  const omitSelectors = (provider: unknown) => {
+    if (!provider || typeof provider !== 'object') {
+      return provider;
+    }
+    const record = provider as Record<string, unknown>;
+    // Serialize live providers before copying so prototype serializers remain effective.
+    const projected =
+      typeof record.id === 'function' || typeof record.toJSON === 'function'
+        ? sanitizeObject(provider, {
+            context: 'provider output',
+            sanitizeUrls: true,
+            maxDepth: Number.POSITIVE_INFINITY,
+            throwOnError: true,
+          })
+        : record;
+    if (!projected || typeof projected !== 'object' || Array.isArray(projected)) {
+      return projected;
+    }
+    const { prompts: _prompts, ...rest } = projected;
+    return rest;
+  };
+  if (isProviderTypeMap(providers)) {
+    const projected: Record<string, unknown> = { ...providers };
+    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(providers, type)) {
+        projected[type] = omitSelectors(providers[type]);
+      }
+    }
+    return projected as T;
+  }
+  // Runtime serialization can remove id() and absent selectors from an options object.
+  const isOptions = [
+    'id',
+    'label',
+    'config',
+    'env',
+    'transform',
+    'delay',
+    'inputs',
+    'prompts',
+  ].some((key) => key in providers);
+  return (
+    isOptions
+      ? omitSelectors(providers)
+      : Object.fromEntries(
+          Object.entries(providers).map(([key, provider]) => [key, omitSelectors(provider)]),
+        )
+  ) as T;
+}
+
+/** Map only provider slots in a test or assertion, preserving shared assertion sets. */
+export function mapTestProviderRefs<T>(test: T, mapProvider: (provider: unknown) => unknown): T {
+  const visited = new WeakMap<object, Record<string, unknown>>();
+  const project = (value: unknown): unknown => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return value;
+    }
+    const previous = visited.get(value);
+    if (previous) {
+      return previous;
+    }
+    const record = value as Record<string, unknown>;
+    const projected = { ...record };
+    visited.set(value, projected);
+    const options = record.options as Record<string, unknown> | undefined;
+    if ('provider' in record) {
+      projected.provider = mapProvider(record.provider);
+    }
+    if (options?.provider !== undefined) {
+      projected.options = { ...options, provider: mapProvider(options.provider) };
+    }
+    if (Array.isArray(record.assert)) {
+      projected.assert = record.assert.map(project);
+    }
+    return projected;
+  };
+  return project(test) as T;
+}
+
+/** Project only provider slots in a test or assertion (including sets). */
+export function stripTestProviderPromptSelectors<T>(test: T): T {
+  return mapTestProviderRefs(test, stripProviderPromptSelectors);
+}
+
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
 export function sanitizeConfigForOutput(
   config: Partial<UnifiedConfig>,
@@ -700,6 +800,25 @@ export function sanitizeConfigForOutput(
 ): Partial<UnifiedConfig> {
   const safe = sanitizeTracingConfigForPersistence(config);
   const { basePath, ...outputConfig } = safe;
+  if (options.shouldStripPromptText) {
+    // Classify live grading maps before serialization removes their provider methods.
+    outputConfig.providers = stripProviderPromptSelectors(outputConfig.providers);
+    outputConfig.defaultTest = stripTestProviderPromptSelectors(outputConfig.defaultTest);
+    if (Array.isArray(outputConfig.tests)) {
+      outputConfig.tests = outputConfig.tests.map(stripTestProviderPromptSelectors);
+    }
+    outputConfig.scenarios = outputConfig.scenarios?.map((scenario) =>
+      typeof scenario === 'object'
+        ? {
+            ...scenario,
+            config: scenario.config?.map(stripTestProviderPromptSelectors),
+            tests: Array.isArray(scenario.tests)
+              ? scenario.tests.map(stripTestProviderPromptSelectors)
+              : scenario.tests,
+          }
+        : scenario,
+    );
+  }
   const sanitized = sanitizeObject(outputConfig, {
     context: 'output config',
     sanitizeUrls: true,
@@ -711,32 +830,57 @@ export function sanitizeConfigForOutput(
   }
   if (options.shouldStripPromptText) {
     delete sanitized.prompts;
+    Reflect.deleteProperty(sanitized, 'providerPromptMap');
   }
   const {
     shouldStripTestVars: stripVars,
     shouldStripMetadata: stripMetadata,
     shouldStripResponseOutput: stripOutput,
   } = options;
-  const tests = [
-    ...(Array.isArray(sanitized.tests) ? sanitized.tests : []),
-    sanitized.defaultTest,
-    ...(sanitized.scenarios ?? []).flatMap((scenario) =>
+  const collectTests = (value: Partial<UnifiedConfig>) => [
+    ...(Array.isArray(value.tests) ? value.tests : []),
+    value.defaultTest,
+    ...(value.scenarios ?? []).flatMap((scenario) =>
       typeof scenario === 'object'
         ? [...(scenario.config ?? []), ...(Array.isArray(scenario.tests) ? scenario.tests : [])]
         : [],
     ),
   ];
-  for (const test of tests) {
+  const sourceTests = collectTests(safe);
+  for (const [index, test] of collectTests(sanitized).entries()) {
     if (!test || typeof test !== 'object') {
       continue;
+    }
+    const sourceTest = sourceTests[index];
+    const sourceMetadata =
+      sourceTest && typeof sourceTest === 'object' && 'metadata' in sourceTest
+        ? sourceTest.metadata?.__promptfoo
+        : undefined;
+    const providerBasePath = sourceMetadata?.providerBasePath;
+    // Like the config's basePath, local provider origins are operational paths, not
+    // opaque tokens. Keep them for replay; sharing removes them from its own copy.
+    if (
+      'metadata' in test &&
+      sourceMetadata?.remote !== true &&
+      typeof providerBasePath === 'string' &&
+      /^(?:\/|[a-zA-Z]:[\\/]|\\\\)/.test(providerBasePath)
+    ) {
+      test.metadata = {
+        ...test.metadata,
+        __promptfoo: { ...test.metadata?.__promptfoo, providerBasePath },
+      };
     }
     if (stripVars && 'vars' in test) {
       delete test.vars;
     }
     if (stripMetadata && 'metadata' in test) {
-      // Keep the internal marker so exported remote rows cannot execute local file references.
+      // Remote-row safety and local replay origins are operational metadata.
       if (test.metadata?.__promptfoo?.remote === true) {
         test.metadata = { __promptfoo: { remote: true } };
+      } else if (typeof test.metadata?.__promptfoo?.providerBasePath === 'string') {
+        test.metadata = {
+          __promptfoo: { providerBasePath: test.metadata.__promptfoo.providerBasePath },
+        };
       } else {
         delete test.metadata;
       }
@@ -863,18 +1007,25 @@ type RestoreResult<T> = {
 function collectStoredAzureBlobSasTokens(
   value: unknown,
   tokensByRedactedUri = new Map<string, string>(),
+  ambiguousRedactedUris = new Set<string>(),
 ): Map<string, string> {
   if (typeof value === 'string') {
     const redacted = redactAzureBlobSasToken(value);
-    if (redacted !== value && !tokensByRedactedUri.has(redacted)) {
-      tokensByRedactedUri.set(redacted, value);
+    if (redacted !== value && !ambiguousRedactedUris.has(redacted)) {
+      const existing = tokensByRedactedUri.get(redacted);
+      if (existing === undefined) {
+        tokensByRedactedUri.set(redacted, value);
+      } else if (existing !== value) {
+        tokensByRedactedUri.delete(redacted);
+        ambiguousRedactedUris.add(redacted);
+      }
     }
     return tokensByRedactedUri;
   }
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, ambiguousRedactedUris);
     }
     return tokensByRedactedUri;
   }
@@ -884,7 +1035,7 @@ function collectStoredAzureBlobSasTokens(
   }
 
   for (const item of Object.values(value)) {
-    collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+    collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, ambiguousRedactedUris);
   }
   return tokensByRedactedUri;
 }
@@ -925,9 +1076,18 @@ function restoreAzureBlobSasTokensFromMap<T>(
     : { value, restored };
 }
 
-function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown): RestoreResult<T> {
+function restoreAzureBlobSasTokensWithResult<T>(
+  value: T,
+  storedValue: unknown,
+  ambiguousRedactedUris = new Set<string>(),
+  unchangedPosition = true,
+): RestoreResult<T> {
   if (typeof value === 'string') {
-    if (typeof storedValue === 'string' && value === redactAzureBlobSasToken(storedValue)) {
+    if (
+      typeof storedValue === 'string' &&
+      value === redactAzureBlobSasToken(storedValue) &&
+      (!ambiguousRedactedUris.has(value) || unchangedPosition)
+    ) {
       return { value: storedValue as T, restored: storedValue !== value };
     }
     return { value, restored: false };
@@ -935,10 +1095,24 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
 
   if (Array.isArray(value)) {
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
-    const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(storedItems);
+    const arrayAmbiguousUris = new Set(ambiguousRedactedUris);
+    const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(
+      storedItems,
+      new Map(),
+      arrayAmbiguousUris,
+    );
     let restored = false;
     const restoredItems = value.map((item, index) => {
-      const positional = restoreAzureBlobSasTokensWithResult(item, storedItems[index]);
+      const positional = restoreAzureBlobSasTokensWithResult(
+        item,
+        storedItems[index],
+        arrayAmbiguousUris,
+        // A changed ancestor cannot establish which duplicate signature belongs here.
+        // Unchanged entries retain their positional credentials, including nested arrays.
+        unchangedPosition &&
+          (arrayAmbiguousUris.size === 0 ||
+            deepEqual(item, redactAzureBlobSasTokens(storedItems[index]))),
+      );
 
       // Positional restore fails when array entries are reordered, inserted, or
       // edited outside the URI field. Also match by redacted URI identity so
@@ -963,7 +1137,12 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
       : {};
   let restored = false;
   const restoredEntries = Object.entries(value).map(([key, item]) => {
-    const result = restoreAzureBlobSasTokensWithResult(item, storedObject[key]);
+    const result = restoreAzureBlobSasTokensWithResult(
+      item,
+      storedObject[key],
+      ambiguousRedactedUris,
+      unchangedPosition,
+    );
     restored ||= result.restored;
     return [key, result.value];
   });
@@ -999,6 +1178,13 @@ function sanitizeJsonString(
     if (parsed && typeof parsed === 'object') {
       const sanitized = recursiveSanitize(parsed, depth, maxDepth, sanitizeUrls);
       return JSON.stringify(sanitized);
+    }
+    if (typeof parsed === 'string') {
+      // Bound string unwrapping even when object traversal has no depth limit.
+      if (depth >= maxDepth || depth >= 64) {
+        return JSON.stringify(REDACTED);
+      }
+      return JSON.stringify(sanitizeJsonString(parsed, depth + 1, maxDepth, sanitizeUrls));
     }
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
@@ -1195,7 +1381,7 @@ function sanitizePlainObject(
           name,
           isSafeTracingCredentialTemplate(item) ||
           (typeof item === 'string' &&
-            !isTracingCredentialHeader(name, item) &&
+            !isCredentialHeader(name, item) &&
             (isNonCredentialHeader(name) || SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase())))
             ? item
             : REDACTED,
@@ -1365,7 +1551,7 @@ export function sanitizeObject(
     // Can't use logger here as it would create circular dependency
     console.error(`Error sanitizing ${context}:`, error);
 
-    return obj;
+    return REDACTED;
   }
 }
 

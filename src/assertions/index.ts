@@ -270,7 +270,8 @@ const ASSERTION_HANDLERS: Record<
   meteor: async (params: AssertionParams) => {
     try {
       const { handleMeteorAssertion } = await import('./meteor.js');
-      return handleMeteorAssertion(params);
+      // Await so missing-dependency rejections reach the catch below.
+      return await handleMeteorAssertion(params);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -297,7 +298,9 @@ const ASSERTION_HANDLERS: Record<
   python: handlePython,
   regex: handleRegex,
   ruby: handleRuby,
+  'rouge-l': handleRougeScore,
   'rouge-n': handleRougeScore,
+  'rouge-s': handleRougeScore,
   'search-rubric': handleSearchRubric,
   'skill-used': handleSkillUsed,
   similar: handleSimilar,

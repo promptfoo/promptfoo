@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // runtime install to it; read the same source here so assertions track releases.
 import { version as pinnedPromptfooVersion } from '../../package.json';
 import { FileChangeStatus } from '../../src/types/codeScan';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 interface PullRequestPayload {
   repository: {
@@ -109,6 +109,7 @@ const mocks = vi.hoisted(() => {
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     mkdtempSync: vi.fn(),
+    rmSync: vi.fn(),
     realpathSync: vi.fn(),
     lstatSync: vi.fn(),
   };
@@ -147,6 +148,7 @@ vi.mock('fs', async () => {
     writeFileSync: mocks.fs.writeFileSync,
     mkdirSync: mocks.fs.mkdirSync,
     mkdtempSync: mocks.fs.mkdtempSync,
+    rmSync: mocks.fs.rmSync,
     realpathSync: mocks.fs.realpathSync,
     lstatSync: mocks.fs.lstatSync,
     // Strip O_NOFOLLOW so writeSarifFile takes the writeFileSync fallback path that the
@@ -477,6 +479,7 @@ describe('code-scan-action main', () => {
 
   afterEach(() => {
     restoreEnv();
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -523,6 +526,68 @@ describe('code-scan-action main', () => {
       const { options } = await importActionAndGetNpmInstallCall();
 
       expectSanitizedExecEnv(options);
+    });
+
+    it('mints OIDC only after a slow CLI installation completes', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      const installation = createDeferred<number>();
+      const installStarted = createDeferred<void>();
+      const defaultExec = mocks.exec.exec.getMockImplementation();
+      let tokenIssuedAt: number | undefined;
+      mocks.core.getIDToken.mockImplementation(async () => {
+        tokenIssuedAt = Date.now();
+        return 'fresh-oidc-token';
+      });
+      mocks.exec.exec.mockImplementation((...args) => {
+        if (isNpmInstallCall(args)) {
+          installStarted.resolve();
+          return installation.promise;
+        }
+        return defaultExec?.(...args);
+      });
+
+      await import('../../code-scan-action/src/main');
+      await installStarted.promise;
+      const tokenCallsDuringInstall = mocks.core.getIDToken.mock.calls.length;
+      const scanCallsDuringInstall = mocks.exec.exec.mock.calls.filter(([command, args]) =>
+        isPromptfooExecCommand(command, args),
+      ).length;
+
+      // A slow install must not consume the token's short authentication lifetime.
+      vi.setSystemTime(new Date('2026-01-01T00:06:00Z'));
+      const installCompletedAt = Date.now();
+      installation.resolve(0);
+      const { promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(tokenCallsDuringInstall).toBe(0);
+      expect(scanCallsDuringInstall).toBe(0);
+      expect(mocks.core.getIDToken).toHaveBeenCalledExactlyOnceWith('promptfoo');
+      expect(tokenIssuedAt).toBeGreaterThanOrEqual(installCompletedAt);
+      expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBe('fresh-oidc-token');
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('does not mint OIDC or start scanning when CLI installation fails', async () => {
+      const defaultExec = mocks.exec.exec.getMockImplementation();
+      mocks.exec.exec.mockImplementation((...args) => {
+        if (isNpmInstallCall(args)) {
+          throw new Error('CLI installation failed');
+        }
+        return defaultExec?.(...args);
+      });
+
+      await import('../../code-scan-action/src/main');
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledExactlyOnceWith('CLI installation failed');
+      });
+
+      expect(mocks.core.getIDToken).not.toHaveBeenCalled();
+      expect(
+        mocks.exec.exec.mock.calls.filter(([command, args]) =>
+          isPromptfooExecCommand(command, args),
+        ),
+      ).toHaveLength(0);
     });
 
     it('should pass the OIDC token only to the scan command if token minting succeeds', async () => {
@@ -781,6 +846,77 @@ describe('code-scan-action main', () => {
       const { args } = await importActionAndGetNpmInstallCall();
 
       expect(args).toEqual(expectedInstallArgs(pinnedPromptfooVersion));
+    });
+
+    it('cleans up the temporary CLI install after a successful scan', async () => {
+      await importActionAndGetPromptfooCall();
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.rmSync).toHaveBeenCalledWith(MOCK_INSTALL_DIR, {
+          recursive: true,
+          force: true,
+        });
+      });
+    });
+
+    it('cleans up the temporary CLI install when npm install fails', async () => {
+      mocks.exec.exec.mockImplementation(async (command: string, args?: string[]) => {
+        if (isNpmInstallCall([command, args])) {
+          throw new Error('npm install failed');
+        }
+        return 0;
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith('npm install failed');
+        expect(mocks.fs.rmSync).toHaveBeenCalledWith(MOCK_INSTALL_DIR, {
+          recursive: true,
+          force: true,
+        });
+      });
+    });
+
+    it('does not fail a completed scan when temporary CLI cleanup is blocked', async () => {
+      mocks.fs.rmSync.mockImplementation(() => {
+        const error = new Error('directory is busy') as NodeJS.ErrnoException;
+        error.code = 'EBUSY';
+        throw error;
+      });
+
+      await importActionAndGetPromptfooCall();
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.unlinkSync).toHaveBeenCalledWith('/tmp/test-config.yaml');
+      });
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to remove temporary Promptfoo CLI install'),
+      );
+    });
+
+    it('preserves the npm install failure when temporary CLI cleanup is blocked', async () => {
+      mocks.exec.exec.mockImplementation(async (command: string, args?: string[]) => {
+        if (isNpmInstallCall([command, args])) {
+          throw new Error('npm install failed');
+        }
+        return 0;
+      });
+      mocks.fs.rmSync.mockImplementation(() => {
+        const error = new Error('directory is not empty') as NodeJS.ErrnoException;
+        error.code = 'ENOTEMPTY';
+        throw error;
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith('npm install failed');
+      });
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to remove temporary Promptfoo CLI install'),
+      );
     });
 
     it('installs an exact promptfoo-version input override', async () => {

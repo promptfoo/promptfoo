@@ -39,7 +39,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
-| [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [cost](#cost)                                                   | Inference cost limit or zero-weight cost metric                    |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
@@ -65,7 +65,9 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
+| [rouge-l](#rouge-l)                                             | ROUGE-Lsum score is at least the threshold                         |
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
+| [rouge-s](#rouge-s)                                             | ROUGE-S skip-bigram score is at least the threshold                |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
@@ -308,6 +310,21 @@ assert:
   - type: cost
     threshold: 0.001
 ```
+
+To record the provider's cost in USD without a pass/fail limit, omit `threshold` and set a named `metric` with `weight: 0`. The measurement is reported without contributing to the aggregate quality score. Missing, negative, or non-finite costs produce an error instead of a zero measurement.
+
+```yaml
+defaultTest:
+  assert:
+    - type: cost
+      metric: inference_cost
+      weight: 0
+derivedMetrics:
+  - name: average_inference_cost
+    value: 'inference_cost / __count'
+```
+
+Threshold-based `cost` assertions, including `not-cost`, continue to report binary pass/fail scores.
 
 ### Equality
 
@@ -1318,6 +1335,52 @@ tests:
         value: '{{expected}}'
 ```
 
+### Rouge-L
+
+`rouge-l` measures summary-level longest common subsequence overlap (ROUGE-Lsum). Words must appear in order within a sentence, but other words can appear between matches. Each reference sentence is compared with every output sentence, so reordering whole sentences does not reduce the score.
+
+| Output vs `the quick brown fox` | rouge-n | rouge-l | rouge-s |
+| ------------------------------- | ------- | ------- | ------- |
+| `the quick brown fox`           | 1.00    | 1.00    | 1.00    |
+| `the very quick brown fox`      | 0.89    | 0.89    | 0.75    |
+| `brown fox quick the`           | 1.00    | 0.50    | 0.17    |
+
+All three ROUGE assertions take a string `value` and an optional `threshold` (default: `0.75`). They compare text case-insensitively and count repeated matches. Scores are F1 scores from 0 to 1; empty or whitespace-only text scores 0. The assertion passes when its score is at least the threshold. A `not-` assertion passes below the threshold and reports `1 - score`.
+
+```yaml
+assert:
+  - type: rouge-l
+    value: hello world
+
+  - type: rouge-l
+    threshold: 0.6
+    value: hello world
+
+  - type: not-rouge-l
+    threshold: 0.75
+    value: hello world
+```
+
+ROUGE-L/S split sentences before tokenizing. ROUGE-N tokenizes the whole text, which can leave a mid-text period attached to the preceding word.
+
+### Rouge-S
+
+`rouge-s` measures skip-bigram overlap: pairs of tokens in the same order, regardless of the distance between them. Pairs can span sentences. For example, `the cat sat. a dog ran.` compared with `a dog ran. the cat sat.` scores 1.00 on `rouge-l` and 0.46 on `rouge-s`.
+
+Either text having fewer than two tokens gives a score of 0, even when a single word matches itself. Punctuation counts as a token.
+
+The options, default threshold and `not-` prefix work as described above. As with `rouge-n` and `rouge-l`, `value` supports templates:
+
+```yaml
+tests:
+  - vars:
+      expected: hello world
+    assert:
+      - type: rouge-s
+        value: '{{expected}}'
+        threshold: 0.6
+```
+
 ### BLEU
 
 BLEU (Bilingual Evaluation Understudy) is a **precision-oriented** metric originally designed for evaluating machine translation. Unlike ROUGE-N which asks "is everything included?", BLEU asks "is everything correct?"
@@ -1449,7 +1512,7 @@ METEOR requires the optional `natural` package. Install it before using METEOR a
 npm install natural@^8.1.0
 ```
 
-If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
 :::
 
 #### How METEOR Works
@@ -1776,7 +1839,9 @@ The assertion detects common refusal patterns like:
 - "That would not be ethical"
 - "As an AI, I cannot..."
 - Content filter blocks
-- Empty or null responses
+- Intentional empty responses
+
+A provider that omits `output` or returns `null` or `undefined` produces an eval error. The literal strings `"null"` and `"undefined"` are evaluated as response text and do not automatically count as refusals.
 
 Example:
 
