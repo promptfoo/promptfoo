@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type { FourthwallAttributeValue, FourthwallCart, FourthwallProduct } from './types';
+import type {
+  FourthwallAttributeValue,
+  FourthwallCart,
+  FourthwallCartItem,
+  FourthwallCartRequestItem,
+  FourthwallCatalogItem,
+} from './types';
 
 // Public storefront token - this is INTENTIONALLY public and client-facing.
 // Fourthwall storefront tokens are designed to be exposed in frontend code.
@@ -80,7 +86,7 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
 // Fetch all products from a collection (handles pagination)
 export function useProducts(collectionSlug: string = 'all') {
-  const [products, setProducts] = useState<FourthwallProduct[]>([]);
+  const [products, setProducts] = useState<FourthwallCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,12 +96,12 @@ export function useProducts(collectionSlug: string = 'all') {
       setError(null);
 
       try {
-        const allProducts: FourthwallProduct[] = [];
+        const allProducts: FourthwallCatalogItem[] = [];
         let page = 0;
 
         // Fetch pages until we get an empty results array
         while (true) {
-          const response = await apiFetch<{ results: FourthwallProduct[] }>(
+          const response = await apiFetch<{ results: FourthwallCatalogItem[] }>(
             `/collections/${collectionSlug}/products?page=${page}&size=${PAGE_SIZE}`,
           );
 
@@ -154,49 +160,31 @@ export function useCart() {
     }
   }, []);
 
-  const createCart = useCallback(async (variantId: string, quantity: number = 1) => {
-    // Validate inputs
-    validateVariantId(variantId);
-    validateQuantity(quantity);
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const newCart = await apiFetch<FourthwallCart>('/carts', {
-        method: 'POST',
-        body: JSON.stringify({
-          items: [{ variantId, quantity }],
-        }),
-      });
-      storage.setItem(CART_STORAGE_KEY, newCart.id);
-      setCart(newCart);
-      return newCart;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create cart');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
+  const createCart = useCallback(async (items: FourthwallCartRequestItem[]) => {
+    const newCart = await apiFetch<FourthwallCart>('/carts', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+    storage.setItem(CART_STORAGE_KEY, newCart.id);
+    setCart(newCart);
+    return newCart;
   }, []);
 
-  const addToCart = useCallback(
-    async (variantId: string, quantity: number = 1) => {
-      // Validate inputs
-      validateVariantId(variantId);
-      validateQuantity(quantity);
-
+  const addItemsToCart = useCallback(
+    async (items: FourthwallCartRequestItem[]) => {
+      for (const item of items) {
+        validateVariantId(item.variantId);
+        validateQuantity(item.quantity);
+      }
       setIsLoading(true);
       setError(null);
       try {
         if (!cart) {
-          return createCart(variantId, quantity);
+          return await createCart(items);
         }
-
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/add`, {
           method: 'POST',
-          body: JSON.stringify({
-            items: [{ variantId, quantity }],
-          }),
+          body: JSON.stringify({ items }),
         });
         setCart(updatedCart);
         return updatedCart;
@@ -210,8 +198,66 @@ export function useCart() {
     [cart, createCart],
   );
 
+  const addToCart = useCallback(
+    (variantId: string, quantity: number = 1) => addItemsToCart([{ variantId, quantity }]),
+    [addItemsToCart],
+  );
+
+  const addBundleToCart = useCallback(
+    (bundleId: string, variantIds: string[]) => {
+      validateVariantId(bundleId);
+      if (variantIds.length === 0) {
+        throw new Error('Select a variant for each product in the bundle');
+      }
+      return addItemsToCart(variantIds.map((variantId) => ({ variantId, quantity: 1, bundleId })));
+    },
+    [addItemsToCart],
+  );
+
+  // The live /change and /remove endpoints only address ungrouped variants.
+  // Replace a bundle cart atomically, preserving every other item and bundle.
+  const replaceBundle = useCallback(
+    async (groupedId: string, quantity: number) => {
+      if (!cart) return;
+      const batches = new Map<string, FourthwallCartRequestItem[]>();
+      for (const item of cart.items) {
+        const nextQuantity = item.groupedBy?.groupedId === groupedId ? quantity : item.quantity;
+        if (nextQuantity === 0) continue;
+        const key = item.groupedBy?.groupedId ?? 'individual';
+        const items = batches.get(key) ?? [];
+        items.push({
+          variantId: item.variant.id,
+          quantity: nextQuantity,
+          ...(item.groupedBy ? { bundleId: item.groupedBy.bundleId } : {}),
+        });
+        batches.set(key, items);
+      }
+      if (batches.size === 0) {
+        storage.removeItem(CART_STORAGE_KEY);
+        setCart(null);
+        return;
+      }
+      // Each bundle configuration needs its own request. Publish the new cart ID
+      // only after every batch succeeds so a failure leaves the original intact.
+      let replacement: FourthwallCart | undefined;
+      for (const items of batches.values()) {
+        replacement = await apiFetch<FourthwallCart>(
+          replacement ? `/carts/${replacement.id}/add` : '/carts',
+          { method: 'POST', body: JSON.stringify({ items }) },
+        );
+      }
+      if (replacement) {
+        storage.setItem(CART_STORAGE_KEY, replacement.id);
+        setCart(replacement);
+      }
+      return replacement;
+    },
+    [cart],
+  );
+
   const removeFromCart = useCallback(
-    async (variantId: string) => {
+    async (item: FourthwallCartItem) => {
+      const variantId = item.variant.id;
       if (!cart) return;
 
       // Validate input
@@ -220,6 +266,9 @@ export function useCart() {
       setIsLoading(true);
       setError(null);
       try {
+        if (item.groupedBy) {
+          return await replaceBundle(item.groupedBy.groupedId, 0);
+        }
         // API expects: { items: [{ variantId }] }
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/remove`, {
           method: 'POST',
@@ -236,11 +285,12 @@ export function useCart() {
         setIsLoading(false);
       }
     },
-    [cart],
+    [cart, replaceBundle],
   );
 
   const updateQuantity = useCallback(
-    async (variantId: string, quantity: number) => {
+    async (item: FourthwallCartItem, quantity: number) => {
+      const variantId = item.variant.id;
       if (!cart) return;
 
       // Validate inputs
@@ -250,6 +300,9 @@ export function useCart() {
       setIsLoading(true);
       setError(null);
       try {
+        if (item.groupedBy) {
+          return await replaceBundle(item.groupedBy.groupedId, quantity);
+        }
         // API expects: { items: [{ variantId, quantity }] }
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/change`, {
           method: 'POST',
@@ -266,7 +319,7 @@ export function useCart() {
         setIsLoading(false);
       }
     },
-    [cart],
+    [cart, replaceBundle],
   );
 
   const clearCart = useCallback(() => {
@@ -274,7 +327,15 @@ export function useCart() {
     setCart(null);
   }, []);
 
-  const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const countedBundles = new Set<string>();
+  const itemCount =
+    cart?.items.reduce((sum, item) => {
+      if (item.groupedBy) {
+        if (countedBundles.has(item.groupedBy.groupedId)) return sum;
+        countedBundles.add(item.groupedBy.groupedId);
+      }
+      return sum + item.quantity;
+    }, 0) ?? 0;
 
   return {
     cart,
@@ -282,6 +343,7 @@ export function useCart() {
     error,
     itemCount,
     addToCart,
+    addBundleToCart,
     removeFromCart,
     updateQuantity,
     clearCart,
@@ -309,12 +371,12 @@ export function stripHtml(html: string): string {
 }
 
 // Check if variant is in stock
-export function isInStock(stock: { type: string; quantity?: number }): boolean {
+export function isInStock(stock: { type: string; quantity?: number; inStock?: number }): boolean {
   if (stock.type === 'UNLIMITED') {
     return true;
   }
-  if (stock.type === 'LIMITED' && typeof stock.quantity === 'number') {
-    return stock.quantity > 0;
+  if (stock.type === 'LIMITED') {
+    return (stock.inStock ?? stock.quantity ?? 0) > 0;
   }
   return false;
 }

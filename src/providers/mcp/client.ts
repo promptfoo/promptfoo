@@ -442,32 +442,42 @@ export class MCPClient {
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
+  async callTool(
+    name: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<MCPToolResult> {
+    signal?.throwIfAborted();
     return await withGenAIToolSpan(
       { name, arguments: sanitizeMcpToolData(args), resultFormat: 'mcp' },
-      () => this.callToolInternal(name, args),
+      () => this.callToolInternal(name, args, signal),
     );
   }
 
   private async callToolInternal(
     name: string,
     args: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<MCPToolResult> {
-    const requestOptions = getEffectiveRequestOptions(this.config);
+    const timeoutOptions = getEffectiveRequestOptions(this.config);
+    const requestOptions = signal ? { ...timeoutOptions, signal } : timeoutOptions;
     const disconnectedServers: string[] = [];
 
     // Find which server has this tool
     for (const [serverKey, serverTools] of this.tools.entries()) {
+      signal?.throwIfAborted();
       if (serverTools.some((tool) => tool.name === name)) {
         // Proactively refresh token if close to expiration (with locking)
         try {
           await this.refreshOAuthTokenIfNeeded(serverKey);
         } catch (error) {
+          signal?.throwIfAborted();
           const errorMessage = error instanceof Error ? error.message : String(error);
           logger.debug(
             `[MCP] Failed to refresh OAuth token for ${serverKey}, trying the next matching server: ${errorMessage}`,
           );
         }
+        signal?.throwIfAborted();
 
         // Get the current client (may have changed after token refresh)
         const client = this.clients.get(serverKey);
@@ -485,11 +495,13 @@ export class MCPClient {
         // one retry; all other failures return an error after the catch block.
         while (true) {
           try {
+            signal?.throwIfAborted();
             const result = await currentClient.callTool(
               { name, arguments: args },
               undefined, // use default result schema
               requestOptions,
             );
+            signal?.throwIfAborted();
 
             // Handle different content types appropriately
             let content = '';
@@ -515,6 +527,7 @@ export class MCPClient {
               raw: result,
             };
           } catch (error) {
+            signal?.throwIfAborted();
             const errorMessage = error instanceof Error ? error.message : String(error);
 
             // Check if this is an auth error and we have OAuth config for this server
@@ -531,6 +544,7 @@ export class MCPClient {
               retried = true;
               try {
                 await this.refreshOAuthToken(serverKey, oauthConfig, true);
+                signal?.throwIfAborted();
                 // Get the new client after reconnection
                 const newClient = this.clients.get(serverKey);
                 if (newClient) {
@@ -538,6 +552,7 @@ export class MCPClient {
                   continue; // Retry with new token
                 }
               } catch (refreshError) {
+                signal?.throwIfAborted();
                 const refreshErrorMsg =
                   refreshError instanceof Error ? refreshError.message : String(refreshError);
                 logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);
