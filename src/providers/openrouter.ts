@@ -368,10 +368,11 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
     if (!Array.isArray(data?.choices) || !data.choices[0]?.message) {
       // A malformed 200 must not be cached and replayed as if it were the
-      // provider's answer.
+      // provider's answer. The error stays a bounded generic string: the body
+      // can be huge or carry private fields and it lands in every eval row.
       await deleteFromCache?.();
       return {
-        error: `Malformed response data: ${JSON.stringify(data)}`,
+        error: 'Malformed response data: expected choices[0].message',
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
         // error paths can reach here with a null body; no data, no cost
@@ -401,10 +402,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     });
     if (!message) {
       // A malformed 200 must not be cached and replayed as if it were the
-      // provider's answer.
+      // provider's answer. Bounded error for the same reason as above.
       await deleteFromCache?.();
       return {
-        error: `Malformed response data: ${JSON.stringify(data)}`,
+        error: 'Malformed response data: unusable choices[0].message',
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
         cost: this.calculateResponseCost(data, config),

@@ -233,41 +233,120 @@ describe('OpenRouter', () => {
     });
 
     it.each([
-      ['a null body', null],
-      ['missing choices', {}],
-      ['null choices', { choices: null }],
-      ['non-array choices', { choices: { 0: { message: { content: 'wrong shape' } } } }],
-      ['empty choices', { choices: [] }],
-      ['a null first choice', { choices: [null] }],
-      ['a missing message', { choices: [{}] }],
-      ['a null message', { choices: [{ message: null }] }],
-      ['a primitive message', { choices: [{ message: 'wrong shape' }] }],
-      ['an array message', { choices: [{ message: [] }] }],
-      ['an empty message', { choices: [{ message: {} }] }],
-      ['object content', { choices: [{ message: { content: { private: 'secret' } } }] }],
-      ['numeric content', { choices: [{ message: { content: 42 } }] }],
-      ['true content', { choices: [{ message: { content: true } }] }],
-      ['false content', { choices: [{ message: { content: false } }] }],
-      ['zero content', { choices: [{ message: { content: 0 } }] }],
-      ['null content', { choices: [{ message: { content: null } }] }],
-      ['empty content', { choices: [{ message: { content: '' } }] }],
-      ['blank content', { choices: [{ message: { content: '   ' } }] }],
-      ['an empty content array', { choices: [{ message: { content: [] } }] }],
-      ['an invalid content array', { choices: [{ message: { content: [42] } }] }],
+      ['a null body', null, 'Malformed response data: expected choices[0].message'],
+      ['missing choices', {}, 'Malformed response data: expected choices[0].message'],
+      ['null choices', { choices: null }, 'Malformed response data: expected choices[0].message'],
+      [
+        'non-array choices',
+        { choices: { 0: { message: { content: 'wrong shape' } } } },
+        'Malformed response data: expected choices[0].message',
+      ],
+      ['empty choices', { choices: [] }, 'Malformed response data: expected choices[0].message'],
+      [
+        'a null first choice',
+        { choices: [null] },
+        'Malformed response data: expected choices[0].message',
+      ],
+      [
+        'a missing message',
+        { choices: [{}] },
+        'Malformed response data: expected choices[0].message',
+      ],
+      [
+        'a null message',
+        { choices: [{ message: null }] },
+        'Malformed response data: expected choices[0].message',
+      ],
+      [
+        'a primitive message',
+        { choices: [{ message: 'wrong shape' }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an array message',
+        { choices: [{ message: [] }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an empty message',
+        { choices: [{ message: {} }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'object content',
+        { choices: [{ message: { content: { private: 'secret' } } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'numeric content',
+        { choices: [{ message: { content: 42 } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'true content',
+        { choices: [{ message: { content: true } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'false content',
+        { choices: [{ message: { content: false } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'zero content',
+        { choices: [{ message: { content: 0 } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'null content',
+        { choices: [{ message: { content: null } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'empty content',
+        { choices: [{ message: { content: '' } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'blank content',
+        { choices: [{ message: { content: '   ' } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an empty content array',
+        { choices: [{ message: { content: [] } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
+      [
+        'an invalid content array',
+        { choices: [{ message: { content: [42] } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
       [
         'an incomplete structured content part',
         { choices: [{ message: { content: [{ type: 'text' }] } }] },
+        'Malformed response data: unusable choices[0].message',
       ],
       [
         'a malformed first choice even when a later choice is usable',
         { choices: [{ message: {} }, { message: { content: 'must not bypass first choice' } }] },
+        'Malformed response data: unusable choices[0].message',
       ],
-      ['an invalid function call', { choices: [{ message: { function_call: { name: 42 } } }] }],
+      [
+        'an invalid function call',
+        { choices: [{ message: { function_call: { name: 42 } } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
       [
         'a function call without arguments',
         { choices: [{ message: { function_call: { name: 'lookup' } } }] },
+        'Malformed response data: unusable choices[0].message',
       ],
-      ['an invalid tool call', { choices: [{ message: { tool_calls: [null] } }] }],
+      [
+        'an invalid tool call',
+        { choices: [{ message: { tool_calls: [null] } }] },
+        'Malformed response data: unusable choices[0].message',
+      ],
       [
         'a tool call without an id',
         {
@@ -279,6 +358,7 @@ describe('OpenRouter', () => {
             },
           ],
         },
+        'Malformed response data: unusable choices[0].message',
       ],
       [
         'a custom tool call without input',
@@ -291,8 +371,9 @@ describe('OpenRouter', () => {
             },
           ],
         },
+        'Malformed response data: unusable choices[0].message',
       ],
-    ])('returns a structured error for %s', async (_description, responseBody) => {
+    ])('returns a structured error for %s', async (_description, responseBody, expectedError) => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
       try {
@@ -307,7 +388,9 @@ describe('OpenRouter', () => {
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         const result = await provider.callApi('Test prompt');
-        expect(result.error).toBe(`Malformed response data: ${JSON.stringify(responseBody)}`);
+        expect(result.error).toBe(expectedError);
+        // The bounded error never echoes body fields into the eval row.
+        expect(result.error).not.toContain('secret');
         expect(result.cached).toBe(false);
         expect(result.output).toBeUndefined();
         expect(result.tokenUsage).toEqual({ numRequests: 1 });
@@ -423,16 +506,13 @@ describe('OpenRouter', () => {
 
         const malformed = await provider.callApi('Test prompt');
         expect(malformed).toEqual({
-          error: `Malformed response data: ${JSON.stringify({
-            choices: [],
-            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
-            private: 'must-not-appear',
-            padding: 'x'.repeat(10_000),
-          })}`,
+          error: 'Malformed response data: expected choices[0].message',
           tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
           cached: false,
           cost: 0.007,
         });
+        // The bounded error must not leak body fields into the eval row.
+        expect(malformed.error).not.toContain('must-not-appear');
 
         const recovered = await provider.callApi('Test prompt');
         expect(recovered.output).toBe('Recovered');
