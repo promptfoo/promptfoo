@@ -62,7 +62,7 @@ export class RateLimitRegistry extends EventEmitter {
     // Even when the scheduler is disabled, propagate the retry context so
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
     // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
-    if (!this.enabled) {
+    if (!this.enabled || options?.skipRateLimit) {
       return withFetchRetryContext(providerMaxRetries, () =>
         runProviderCallWithAbort(callFn, options?.abortSignal),
       );
@@ -136,6 +136,7 @@ export class RateLimitRegistry extends EventEmitter {
           isRateLimited: options?.isRateLimited,
           canRetry: () => !nestedCallStarted,
           getRetryAfter: options?.getRetryAfter,
+          shouldRecoverConcurrency: options?.shouldRecoverConcurrency,
           maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
         },
       );

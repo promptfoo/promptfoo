@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { checkProviderSetup } from '../../src/evaluator/providerSetup';
 import {
+  createProviderRateLimitOptions,
   isRateLimitWrapped,
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
@@ -7,7 +9,12 @@ import {
 import { createMockProvider } from '../factories/provider';
 
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
-import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../src/types/providers';
 
 describe('providerWrapper', () => {
   let mockProvider: ApiProvider;
@@ -31,6 +38,76 @@ describe('providerWrapper', () => {
   });
 
   describe('wrapProviderWithRateLimiting', () => {
+    it('preserves class setup failures with the original instance, context, and cancellation signal', async () => {
+      class LocalProvider implements ApiProvider {
+        checkSetupOnEval = true;
+        message = 'Local prerequisite missing';
+        callApi = vi.fn().mockResolvedValue({ output: 'Workload must not start' });
+        id() {
+          return 'local-provider';
+        }
+        async checkSetup(
+          _context?: CallApiContextParams,
+          options?: Pick<CallApiOptionsParams, 'abortSignal'>,
+        ) {
+          options?.abortSignal?.throwIfAborted();
+          return { success: false, message: this.message };
+        }
+      }
+      const provider = new LocalProvider();
+      const originalCheck = vi.spyOn(LocalProvider.prototype, 'checkSetup');
+      const wrapped = wrapProviderWithRateLimiting(provider, mockRegistry);
+      const wrappedCheck = vi.spyOn(wrapped, 'checkSetup');
+      const context = { vars: { local: true }, prompt: { raw: 'Read', label: 'Read' } };
+      const failure = await checkProviderSetup(wrapped, context, {
+        abortSignal: new AbortController().signal,
+      });
+      expect(failure).toMatchObject({
+        error: provider.message,
+        incurredCost: 0,
+        tokenUsage: { numRequests: 0 },
+        metadata: { providerSetup: { workloadStarted: false } },
+      });
+      expect(wrappedCheck).toHaveBeenCalledExactlyOnceWith(context, {
+        abortSignal: expect.any(AbortSignal),
+      });
+      expect(originalCheck.mock.calls[0]).toEqual(wrappedCheck.mock.calls[0]);
+      expect(originalCheck.mock.contexts[0]).toBe(provider);
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(mockExecute).not.toHaveBeenCalled();
+    });
+    it('delegates per-call exemption from class prototypes with the original context and instance', async () => {
+      class LocalProvider implements ApiProvider {
+        config = { local: true };
+        id() {
+          return 'local-provider';
+        }
+        callApi = vi.fn().mockResolvedValue({ output: 'Local result' });
+        isHistoricalReplay(context?: { vars: Record<string, unknown> }) {
+          return this.config.local && context?.vars.local === true;
+        }
+      }
+      const provider = new LocalProvider();
+      const context = { vars: { local: true }, prompt: { raw: 'Read', label: 'Read' } };
+      const classify = vi.spyOn(LocalProvider.prototype, 'isHistoricalReplay');
+      mockExecute.mockImplementation(async (_provider, callFn) => callFn());
+      const wrapped = wrapProviderWithRateLimiting(provider, mockRegistry);
+      expect(wrapped.isHistoricalReplay?.(context)).toBe(true);
+      await wrapped.callApi('Read', context);
+      expect(classify).toHaveBeenCalledWith(context);
+      expect(classify.mock.contexts.every((instance) => instance === provider)).toBe(true);
+      expect(mockExecute).toHaveBeenLastCalledWith(
+        provider,
+        expect.any(Function),
+        expect.objectContaining({ skipRateLimit: true }),
+      );
+      await wrapped.callApi('Read', { ...context, vars: { local: false } });
+      expect(mockExecute).toHaveBeenLastCalledWith(
+        provider,
+        expect.any(Function),
+        expect.objectContaining({ skipRateLimit: false }),
+      );
+    });
     it('should wrap provider callApi with registry.execute', async () => {
       mockExecute.mockImplementation(async (_provider, callFn) => callFn());
 
@@ -103,6 +180,42 @@ describe('providerWrapper', () => {
   });
 
   describe('rate limit detection callbacks', () => {
+    it('does not apply historical retry headers or delays to an opted-out response', () => {
+      const options = createProviderRateLimitOptions();
+      const response: ProviderResponse = {
+        error: 'Recorded 429 rate limit',
+        retryable: false,
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: {
+              'retry-after': '3600',
+              'x-ratelimit-remaining-requests': '0',
+              'x-ratelimit-reset-requests': '3600s',
+            },
+          },
+        },
+      };
+
+      expect(options.shouldRecoverConcurrency?.(response)).toBe(false);
+      expect(options.isRateLimited?.(response)).toBe(false);
+      expect(options.getHeaders?.(response)).toBeUndefined();
+      expect(options.getRetryAfter?.(response, new Error('retry after 3600'))).toBeUndefined();
+    });
+
+    it.each([undefined, true])(
+      'retains live and cached recovery when retryable is %s',
+      (retryable) => {
+        const options = createProviderRateLimitOptions();
+        expect(options.shouldRecoverConcurrency?.({ output: 'Live result', retryable })).toBe(true);
+        expect(
+          options.shouldRecoverConcurrency?.({ output: 'Cached result', cached: true, retryable }),
+        ).toBe(true);
+      },
+    );
+
     it('should detect rate limit from HTTP 429 status', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {

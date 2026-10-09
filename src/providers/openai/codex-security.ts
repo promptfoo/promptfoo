@@ -14,6 +14,8 @@ import {
   renderVarsInObject,
   resolvePackageEntryPoint,
 } from './codex-runtime';
+import { createCodexSecurityReplayHeader, readCodexSecurityReport } from './codex-security-report';
+import { normalizeCodexSecurityResult } from './codex-security-result';
 import type {
   CodexSecurity,
   JsonObject,
@@ -23,6 +25,7 @@ import type {
   ValidationOptions,
 } from '@openai/codex-security';
 
+import type { CodexSecurityResult } from '../../contracts/codexSecurity';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -51,6 +54,7 @@ const CodexSecurityConfigSchema = z
     provider: z.unknown().optional(),
     linkedTargetId: z.string().optional(),
     maxRetries: z.number().int().nonnegative().optional(),
+    report_file: z.string().trim().min(1).optional(),
     operation: z.enum(CODEX_SECURITY_OPERATIONS).optional(),
     model: z.string().min(1).optional(),
     model_provider: z.string().min(1).optional(),
@@ -73,9 +77,9 @@ const CodexSecurityConfigSchema = z
     max_cost_usd: z.number().positive().optional(),
     workers: z.number().int().positive().optional(),
     subagents: z.number().int().nonnegative().optional(),
-    stop_after_no_new: z.number().int().nonnegative().optional(),
+    stop_after_no_new: z.number().int().positive().optional(),
     max_discovery_runs: z.number().int().positive().optional(),
-    max_time_hours: z.number().positive().optional(),
+    max_time_hours: z.number().positive().max(96).optional(),
     auth: z.enum(['auto', 'chatgpt', 'api-key']).optional(),
     plugin_path: z.string().min(1).optional(),
     python_path: z.string().min(1).optional(),
@@ -85,6 +89,9 @@ const CodexSecurityConfigSchema = z
   })
   .strict()
   .superRefine((config, context) => {
+    if (config.report_file) {
+      return;
+    }
     if (
       config.model_reasoning_effort &&
       config.reasoning_effort &&
@@ -123,7 +130,17 @@ type CodexSecurityModule = typeof import('@openai/codex-security');
 interface ScanObservers {
   cost?: ScanCost;
   progress?: unknown;
+  outputDir?: string;
   warnings: string[];
+  notify?: (phase?: string) => void;
+}
+
+interface OperationContext {
+  importingReport: boolean;
+  reportFile?: string;
+  operation: OpenAICodexSecurityConfig['operation'];
+  phase: NonNullable<CodexSecurityResult['diagnostics']>['phase'];
+  sdkVersion?: string;
 }
 
 /**
@@ -160,6 +177,18 @@ function parseConfig(
   config: unknown = {},
   options: { stripUnknownKeys?: boolean } = {},
 ): OpenAICodexSecurityConfig {
+  // Import mode uses no native SDK settings, including their types and templates.
+  if (
+    config &&
+    typeof config === 'object' &&
+    'report_file' in config &&
+    config.report_file !== undefined
+  ) {
+    config = {
+      report_file: config.report_file,
+      basePath: 'basePath' in config ? config.basePath : undefined,
+    };
+  }
   const schema = options.stripUnknownKeys
     ? CodexSecurityMergedPromptConfigSchema
     : CodexSecurityConfigSchema;
@@ -257,10 +286,12 @@ function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage
     cost?.cachedInputTokens ??
     (typeof values.cached_input_tokens === 'number' ? values.cached_input_tokens : undefined);
   const cacheWriteTokens =
-    cost?.cacheWriteInputTokens ??
-    (typeof values.cache_write_input_tokens === 'number'
-      ? values.cache_write_input_tokens
-      : undefined);
+    (cost?.cacheWriteInputTokensReported ?? values.cache_write_input_tokens_reported) === false
+      ? undefined
+      : (cost?.cacheWriteInputTokens ??
+        (typeof values.cache_write_input_tokens === 'number'
+          ? values.cache_write_input_tokens
+          : undefined));
   const reasoningTokens =
     typeof values.reasoning_output_tokens === 'number' ? values.reasoning_output_tokens : undefined;
 
@@ -290,6 +321,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
 
   readonly config: OpenAICodexSecurityConfig;
   readonly env?: EnvOverrides;
+  readonly checkSetupOnEval = true;
+  readonly supportsProgress = true;
 
   private readonly providerId: string;
   private readonly activeClients = new Set<CodexSecurity>();
@@ -297,7 +330,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
   constructor(
     options: { id?: string; config?: OpenAICodexSecurityConfig; env?: EnvOverrides } = {},
   ) {
-    this.config = parseConfig(options.config);
+    // Preserve dormant settings for rows that explicitly switch back to native mode.
+    // resolveConfig validates them once that mode is active.
+    this.config = { ...options.config, ...parseConfig(options.config) };
     this.env = options.env;
     this.providerId = options.id ?? 'openai:codex-security';
     providerRegistry.register(this);
@@ -311,8 +346,250 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     return false;
   }
 
+  isHistoricalReplay(context?: CallApiContextParams): boolean {
+    // Even malformed import configuration fails locally without using the live service.
+    return this.operationContext(context).importingReport;
+  }
+
   toString(): string {
     return '[OpenAI Codex Security Provider]';
+  }
+
+  private environmentError(): string | undefined {
+    for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
+      if (this.env?.[key] && this.env[key] !== process.env[key]) {
+        return `Codex Security does not support provider-scoped ${key}. Set ${key} in the Promptfoo process environment before running the evaluation.`;
+      }
+    }
+    return undefined;
+  }
+
+  private createClient(module: CodexSecurityModule, config: OpenAICodexSecurityConfig) {
+    const effort = config.model_reasoning_effort ?? config.reasoning_effort;
+    const codexOverrides = {
+      ...config.codex_overrides,
+      ...(config.model ? { model: config.model } : {}),
+      ...(config.model_provider ? { model_provider: config.model_provider } : {}),
+      ...(effort ? { model_reasoning_effort: effort } : {}),
+    } as JsonObject;
+    providerRegistry.register(this);
+    return new module.CodexSecurity({
+      ...(config.plugin_path
+        ? { pluginPath: resolveConfigPath(config.plugin_path, config.basePath) }
+        : {}),
+      ...(config.python_path
+        ? { pythonPath: resolveConfigPath(config.python_path, config.basePath) }
+        : {}),
+      ...(Object.keys(codexOverrides).length > 0 ? { codexOverrides } : {}),
+    });
+  }
+
+  private operationContext(context?: CallApiContextParams): OperationContext {
+    const config = { ...this.config, ...context?.prompt?.config };
+    return {
+      importingReport: config.report_file !== undefined,
+      reportFile: typeof config.report_file === 'string' ? config.report_file : undefined,
+      // Parsing can fail before resolveConfig returns. Preserve a recognized row
+      // override in failure evidence; invalid/unresolved values remain unknown.
+      operation:
+        config.operation === undefined
+          ? 'security-scan'
+          : CODEX_SECURITY_OPERATIONS.find((operation) => operation === config.operation),
+      phase: 'configuration',
+    };
+  }
+
+  private resolveConfig(context?: CallApiContextParams): OpenAICodexSecurityConfig {
+    const mergedConfig = { ...this.config, ...context?.prompt?.config };
+    delete mergedConfig.provider;
+    // Retained native settings may reference variables absent from import-only rows.
+    const renderedConfig =
+      mergedConfig.report_file === undefined
+        ? renderVarsInObject(mergedConfig, context?.vars)
+        : renderVarsInObject(
+            { report_file: mergedConfig.report_file, basePath: mergedConfig.basePath },
+            context?.vars,
+          );
+    return parseConfig(renderedConfig, { stripUnknownKeys: true });
+  }
+
+  private repository(config: OpenAICodexSecurityConfig, context?: CallApiContextParams): string {
+    const repositoryVariable = context?.vars?.repository;
+    return (
+      resolveConfigPath(
+        config.repository ??
+          config.working_dir ??
+          (typeof repositoryVariable === 'string' ? repositoryVariable : undefined),
+        config.basePath,
+      ) ?? process.cwd()
+    );
+  }
+
+  private failureResponse(
+    message: string,
+    attempt: OperationContext,
+    observers: ScanObservers = { warnings: [] },
+    canceled = false,
+  ): ProviderResponse {
+    const observedCost = observers.cost;
+    const tokenUsage = observedCost ? getTokenUsage(undefined, observedCost) : undefined;
+    const summary = normalizeCodexSecurityResult(undefined, {
+      source: attempt.importingReport
+        ? { kind: 'saved-report', file: attempt.reportFile }
+        : { kind: 'sdk' },
+      ...(attempt.importingReport ? {} : { operation: attempt.operation }),
+      status: canceled ? 'canceled' : 'failed',
+      error: message,
+      sdkVersion: attempt.sdkVersion,
+      observedCost,
+      warnings: observers.warnings,
+      diagnostics: { phase: attempt.phase, warningAvailability: 'unknown' },
+      artifactPaths: { scanDir: observers.outputDir },
+    });
+    return {
+      error: message,
+      cached: false,
+      ...(attempt.importingReport
+        ? {
+            incurredCost: 0,
+            retryable: false,
+            tokenUsage: { incurredTokenUsage: { numRequests: 0 } },
+          }
+        : {}),
+      ...(!attempt.importingReport && observedCost ? { cost: observedCost.estimatedUsd } : {}),
+      ...(!attempt.importingReport && tokenUsage ? { tokenUsage } : {}),
+      metadata: {
+        codexSecurity: summary,
+        codexSecurityReplay: createCodexSecurityReplayHeader(null, summary),
+        ...(observers.progress ? { progress: observers.progress } : {}),
+      },
+    };
+  }
+
+  async checkSetup(
+    context?: CallApiContextParams,
+    callOptions?: Pick<CallApiOptionsParams, 'abortSignal'>,
+  ): Promise<Awaited<ReturnType<NonNullable<ApiProvider['checkSetup']>>>> {
+    const cleanupGeneration = this.cleanupGeneration;
+    let client: CodexSecurity | undefined;
+    let closePromise: Promise<void> | undefined;
+    const signal = callOptions?.abortSignal;
+    const attempt = this.operationContext(context);
+    attempt.phase = 'setup';
+    const closeClient = () => {
+      if (client && !closePromise) {
+        this.activeClients.delete(client);
+        closePromise = client.close().catch((error) => {
+          logger.warn('[CodexSecurity] Error while closing setup client', {
+            error: safeSdkDiagnostic(error),
+          });
+        });
+      }
+      return closePromise;
+    };
+    const onAbort = () => {
+      void closeClient();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      signal?.throwIfAborted();
+      // Without a row, never guess values for templated paths.
+      if (!context && /\{[{%]/.test(this.config.report_file ?? JSON.stringify(this.config))) {
+        throw new Error(
+          'Use concrete configuration values for a local setup check. Test-case variables are resolved only during evaluation.',
+        );
+      }
+      const config = this.resolveConfig(context);
+      attempt.operation = config.operation ?? 'security-scan';
+      attempt.reportFile = resolveConfigPath(config.report_file, config.basePath);
+      if (attempt.reportFile) {
+        const { summary } = await readCodexSecurityReport(attempt.reportFile, signal);
+        return {
+          success: true,
+          message:
+            'Saved report format and scan IDs checked. No SDK or model call was run. The file hash identifies its contents; it does not authenticate the report.',
+          details: { check: 'saved-report', source: summary.source },
+        };
+      }
+      const environmentError = this.environmentError();
+      if (environmentError) {
+        throw new Error(environmentError);
+      }
+      const operation = attempt.operation;
+      const repository = this.repository(config, context);
+      const module = await loadCodexSecurity();
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('Codex Security operation was interrupted by cleanup.');
+      }
+      signal?.throwIfAborted();
+      attempt.sdkVersion = module.VERSION;
+      client = this.createClient(module, config);
+      this.activeClients.add(client);
+      if (typeof client.preflight !== 'function') {
+        throw new Error(
+          'This SDK does not support local preflight. Update @openai/codex-security to check setup without running an operation.',
+        );
+      }
+      const target =
+        operation === 'validation'
+          ? { target: 'repository' as const }
+          : this.getScanTarget(module, operation, config);
+      if ('error' in target) {
+        throw new Error(target.error);
+      }
+      if (operation === 'validation' && config.finding_file) {
+        const findingPath = resolveConfigPath(config.finding_file, config.basePath)!;
+        if (!(await fs.stat(findingPath)).isFile()) {
+          throw new Error('Finding file must be a regular file.');
+        }
+      }
+      const options =
+        operation === 'validation'
+          ? {
+              ...(config.output_dir
+                ? { outputDir: resolveConfigPath(config.output_dir, config.basePath) }
+                : {}),
+              ...(config.auth ? { auth: config.auth } : {}),
+              ...(signal ? { signal } : {}),
+            }
+          : this.buildScanOptions(
+              '',
+              operation === 'deep-security-scan' ? 'deep' : 'standard',
+              target.target,
+              config,
+              { warnings: [] },
+              callOptions,
+            );
+      signal?.throwIfAborted();
+      const preflight = await client.preflight(repository, options);
+      signal?.throwIfAborted();
+      return {
+        success: true,
+        message:
+          'Local configuration and paths checked. No scan or model call was run. Python/runtime readiness, credentials, account access, and model availability have not been verified.',
+        details: {
+          check: 'local-preflight',
+          operation,
+          sdkVersion: module.VERSION,
+          repository: preflight.repository,
+          model: preflight.model,
+          reasoningEffort: preflight.reasoningEffort,
+          authentication: preflight.authentication,
+          outputDir: preflight.outputDir,
+        },
+      };
+    } catch (error) {
+      const message = `Local setup check failed: ${safeSdkDiagnostic(error)}`;
+      return {
+        success: false,
+        message,
+        error: message,
+        response: this.failureResponse(message, attempt, undefined, signal?.aborted),
+      };
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+      await closeClient();
+    }
   }
 
   async cleanup(): Promise<void> {
@@ -341,67 +618,115 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const cleanupGeneration = this.cleanupGeneration;
     const observers: ScanObservers = { warnings: [] };
-
+    const attempt = this.operationContext(context);
+    const startedAt = Date.now();
+    let progressPhase = 'configuration';
+    observers.notify = (phase) => {
+      if (phase) {
+        progressPhase = phase;
+      }
+      try {
+        const estimate = observers.cost?.estimatedUsd;
+        const notification = callOptions?.onProgress?.({
+          phase: progressPhase,
+          elapsedMs: Math.max(0, Date.now() - startedAt),
+          ...(typeof estimate === 'number' && Number.isFinite(estimate) && estimate >= 0
+            ? { estimatedCostUsd: estimate }
+            : {}),
+          ...(observers.warnings.length > 0 ? { warningCount: observers.warnings.length } : {}),
+        });
+        void Promise.resolve(notification).catch(() => undefined);
+      } catch {
+        // A progress observer must never affect the operation or its recorded evidence.
+      }
+    };
+    observers.notify();
     try {
-      const mergedConfig = { ...this.config, ...context?.prompt?.config };
-      delete mergedConfig.provider;
-      const config = parseConfig(renderVarsInObject(mergedConfig, context?.vars), {
-        stripUnknownKeys: true,
-      });
-      const operation = config.operation ?? 'security-scan';
-      const repositoryVariable = context?.vars?.repository;
-      const configuredRepository =
-        config.repository ??
-        config.working_dir ??
-        (typeof repositoryVariable === 'string' ? repositoryVariable : undefined);
-      const repository = resolveConfigPath(configuredRepository, config.basePath) ?? process.cwd();
-
+      const config = this.resolveConfig(context);
+      attempt.operation = config.operation ?? 'security-scan';
+      attempt.reportFile = resolveConfigPath(config.report_file, config.basePath);
       if (callOptions?.abortSignal?.aborted) {
-        return { error: 'Codex Security operation was aborted before it started.' };
+        throw new Error('Codex Security operation was aborted before it started.');
       }
-
-      for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
-        if (this.env?.[key] && this.env[key] !== process.env[key]) {
-          return {
-            error: `Codex Security does not support provider-scoped ${key}. Set ${key} in the Promptfoo process environment before running the evaluation.`,
-          };
-        }
+      if (attempt.reportFile) {
+        attempt.phase = 'import';
+        observers.notify('import');
+        const { raw, summary } = await readCodexSecurityReport(
+          attempt.reportFile,
+          callOptions?.abortSignal,
+        );
+        const unsuccessful = ['failed', 'canceled', 'interrupted'].includes(summary.status);
+        return {
+          ...(raw === null ? {} : { output: JSON.stringify(raw), raw, format: 'json' as const }),
+          ...(unsuccessful
+            ? { error: summary.error ?? `Recorded Codex Security operation ${summary.status}.` }
+            : {}),
+          cached: false,
+          incurredCost: 0,
+          retryable: false,
+          tokenUsage: { incurredTokenUsage: { numRequests: 0 } },
+          metadata: {
+            codexSecurity: summary,
+            codexSecurityReplay: createCodexSecurityReplayHeader(
+              raw as Record<string, unknown> | null,
+              summary,
+            ),
+          },
+        };
       }
-
+      attempt.phase = 'setup';
+      observers.notify('setup');
+      const repository = this.repository(config, context);
+      const environmentError = this.environmentError();
+      if (environmentError) {
+        throw new Error(environmentError);
+      }
       const module = await loadCodexSecurity();
       if (cleanupGeneration !== this.cleanupGeneration) {
-        return { error: 'Codex Security operation was interrupted by cleanup.' };
+        throw new Error('Codex Security operation was interrupted by cleanup.');
       }
-      const effort = config.model_reasoning_effort ?? config.reasoning_effort;
-      const codexOverrides = {
-        ...config.codex_overrides,
-        ...(config.model ? { model: config.model } : {}),
-        ...(config.model_provider ? { model_provider: config.model_provider } : {}),
-        ...(effort ? { model_reasoning_effort: effort } : {}),
-      } as JsonObject;
-      const client = new module.CodexSecurity({
-        ...(config.plugin_path
-          ? { pluginPath: resolveConfigPath(config.plugin_path, config.basePath) }
-          : {}),
-        ...(config.python_path
-          ? { pythonPath: resolveConfigPath(config.python_path, config.basePath) }
-          : {}),
-        ...(Object.keys(codexOverrides).length > 0 ? { codexOverrides } : {}),
-      });
-      providerRegistry.register(this);
+      attempt.sdkVersion = module.VERSION;
+      const client = this.createClient(module, config);
       this.activeClients.add(client);
-
       try {
-        if (operation === 'validation') {
-          return await this.runValidation(client, prompt, repository, config, context, callOptions);
+        if (attempt.operation === 'validation') {
+          attempt.phase = 'validation';
+          observers.notify('validation');
+          const result = await this.runValidation(
+            client,
+            prompt,
+            repository,
+            config,
+            context,
+            callOptions,
+          );
+          const summary = normalizeCodexSecurityResult(result.raw, {
+            source: { kind: 'sdk' },
+            operation: attempt.operation,
+            sdkVersion: attempt.sdkVersion,
+            status: 'completed',
+            diagnostics: { phase: 'validation', warningAvailability: 'unknown' },
+          });
+          return {
+            ...result,
+            metadata: {
+              ...result.metadata,
+              codexSecurity: summary,
+              codexSecurityReplay: createCodexSecurityReplayHeader(
+                result.raw as Record<string, unknown>,
+                summary,
+              ),
+            },
+          };
         }
-
+        attempt.phase = 'scan';
+        observers.notify('scan');
         return await this.runScan(
           client,
           module,
           prompt,
           repository,
-          operation,
+          attempt.operation,
           config,
           observers,
           callOptions,
@@ -418,14 +743,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         }
       }
     } catch (error) {
-      const observedCost = observers.cost;
-      const tokenUsage = observedCost ? getTokenUsage(undefined, observedCost) : undefined;
-
-      return {
-        error: `Codex Security operation failed: ${safeSdkDiagnostic(error)}`,
-        ...(observedCost ? { cost: observedCost.estimatedUsd } : {}),
-        ...(tokenUsage ? { tokenUsage } : {}),
-      };
+      const canceled = callOptions?.abortSignal?.aborted ?? false;
+      const message = `Codex Security operation ${canceled ? 'canceled' : 'failed'}: ${safeSdkDiagnostic(error)}`;
+      return this.failureResponse(message, attempt, observers, canceled);
     }
   }
 
@@ -442,7 +762,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     const mode = operation === 'deep-security-scan' ? 'deep' : 'standard';
     const targetResult = this.getScanTarget(module, operation, config);
     if ('error' in targetResult) {
-      return targetResult;
+      throw new Error(targetResult.error);
     }
 
     const options = this.buildScanOptions(
@@ -530,12 +850,28 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       ...(callOptions?.abortSignal ? { signal: callOptions.abortSignal } : {}),
       onCost: (cost) => {
         observers.cost = { ...cost };
+        observers.notify?.();
       },
       onProgress: (progress) => {
         observers.progress = progress;
+        const phases = [
+          'preflight',
+          'threat_model',
+          'discovery',
+          'validation',
+          'attack_path',
+          'reporting',
+        ];
+        if (phases.includes(progress.phase)) {
+          observers.notify?.(progress.phase);
+        }
       },
       onWarning: (warning) => {
         observers.warnings.push(safeSdkDiagnostic(warning));
+        observers.notify?.();
+      },
+      onOutputDirReady: (outputDir) => {
+        observers.outputDir = outputDir;
       },
     };
   }
@@ -575,6 +911,21 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     const findings = Array.isArray(result.findings?.findings) ? result.findings.findings : [];
     const model = result.turnResult?.model ?? cost?.model ?? config.model;
     const raw = result.toJSON();
+    const summary = normalizeCodexSecurityResult(raw, {
+      source: { kind: 'sdk' },
+      operation,
+      sdkVersion: module.VERSION,
+      pluginVersion: result.pluginVersion,
+      observedCost: cost,
+      warnings: observers.warnings,
+      diagnostics: { phase: 'scan', warningAvailability: 'unknown' },
+      artifactPaths: {
+        findingsPath: result.findingsPath,
+        coveragePath: result.coveragePath,
+        manifestPath: result.manifestPath,
+      },
+    });
+    const unsuccessful = ['failed', 'canceled', 'interrupted'].includes(summary.status);
 
     return {
       output: JSON.stringify(raw),
@@ -582,9 +933,13 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       raw,
       cached: false,
       sessionId: result.threadId,
+      ...(unsuccessful
+        ? { error: summary.error ?? `Codex Security operation ${summary.status}.` }
+        : {}),
       ...(cost ? { cost: cost.estimatedUsd } : {}),
       ...(tokenUsage ? { tokenUsage } : {}),
       metadata: {
+        // Preserve existing native assertions while exposing the versioned summary.
         operation,
         mode,
         repository,
@@ -601,8 +956,13 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         ...(result.sarifPath ? { sarifPath: result.sarifPath } : {}),
         pluginVersion: result.pluginVersion,
         sdkVersion: module.VERSION,
-        ...(observers.progress ? { progress: observers.progress } : {}),
         ...(observers.warnings.length > 0 ? { warnings: observers.warnings } : {}),
+        codexSecurity: summary,
+        codexSecurityReplay: createCodexSecurityReplayHeader(
+          raw as Record<string, unknown>,
+          summary,
+        ),
+        ...(observers.progress ? { progress: observers.progress } : {}),
         skillCalls: [{ name: operation }],
       },
     };

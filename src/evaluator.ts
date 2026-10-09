@@ -19,6 +19,8 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { createProviderProgressReporter } from './evaluator/providerProgress';
+import { checkProviderSetup } from './evaluator/providerSetup';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -918,6 +920,9 @@ async function callProviderForRunEval({
   abortSignal,
   pauseSignal,
   evalId,
+  evaluateOptions,
+  providerSetup,
+  promptIdx,
   filters,
   promptForRender,
   provider,
@@ -933,6 +938,9 @@ async function callProviderForRunEval({
   RunEvalOptions,
   | 'abortSignal'
   | 'evalId'
+  | 'evaluateOptions'
+  | 'providerSetup'
+  | 'promptIdx'
   | 'nunjucksFilters'
   | 'provider'
   | 'rateLimitRegistry'
@@ -966,6 +974,9 @@ async function callProviderForRunEval({
         abortSignal,
         pauseSignal,
         evalId,
+        evaluateOptions,
+        providerSetup,
+        promptIdx,
         filters,
         onProviderInvoked: () => {
           providerInvoked = true;
@@ -1091,6 +1102,9 @@ async function callActiveProvider({
   abortSignal,
   pauseSignal,
   evalId,
+  evaluateOptions,
+  providerSetup,
+  promptIdx,
   filters,
   onProviderInvoked,
   promptForRender,
@@ -1105,7 +1119,16 @@ async function callActiveProvider({
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
+  | 'abortSignal'
+  | 'evalId'
+  | 'evaluateOptions'
+  | 'providerSetup'
+  | 'promptIdx'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'repeatIndex'
+  | 'test'
+  | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
@@ -1135,13 +1158,38 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
+  abortSignal?.throwIfAborted();
+  const setupFailure = await providerSetup?.(activeProvider, callApiContext, {
+    abortSignal,
+    timeoutMs: evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
+  });
+  abortSignal?.throwIfAborted();
+  if (setupFailure) {
+    return setupFailure;
+  }
+  const progress = createProviderProgressReporter({
+    provider: sanitizeProviderIdForLog(activeProvider.label || activeProvider.id()),
+    testIdx: testIndex,
+    promptIdx,
+    repeatIndex,
+    callback: evaluateOptions?.providerProgressCallback,
+    silent: evaluateOptions?.silent,
+  });
+  const reportsProgress =
+    activeProvider.supportsProgress || evaluateOptions?.providerProgressCallback;
   let completedResponse: ProviderResponse | undefined;
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     // A previous response belongs only to backoff until the next attempt starts.
     completedResponse = undefined;
     const callApiOptions =
-      abortSignal || onResponseHeaders ? { abortSignal, onResponseHeaders } : undefined;
+      abortSignal || onResponseHeaders || reportsProgress
+        ? {
+            abortSignal,
+            onResponseHeaders,
+            ...(reportsProgress ? { onProgress: progress.update } : {}),
+          }
+        : undefined;
     const invoke = () =>
       providerRegistry.withProvider(
         cleanupOwner,
@@ -1179,62 +1227,66 @@ async function callActiveProvider({
           : invoke(),
     );
   };
-  let response: ProviderResponse;
   try {
-    response = rateLimitRegistry
-      ? await rateLimitRegistry.execute(
-          activeProvider,
-          callApi,
-          createProviderRateLimitOptions(abortSignal),
-        )
-      : await callApi();
-  } catch (error) {
-    if (!isCliPauseCancellation(error, abortSignal, pauseSignal)) {
-      throw error;
-    }
-    if (completedResponse) {
-      response = completedResponse;
-    } else if (completedTargets.length > 0) {
-      // A strategy may still be tracing/grading after a billable or stateful
-      // target call completes. Persist its partial work as an error, so resume
-      // cannot silently replay it. Explicit retry-errors remains available.
-      const last = completedTargets[completedTargets.length - 1].response;
-      const tokenUsage = createEmptyTokenUsage();
-      let cost: number | undefined;
-      let incurredCost: number | undefined;
-      for (const { response: target } of completedTargets) {
-        accumulateResponseTokenUsage(tokenUsage, target);
-        if (target.cost !== undefined) {
-          cost = (cost ?? 0) + target.cost;
-        }
-        const targetIncurredCost = target.incurredCost ?? (target.cached ? 0 : target.cost);
-        if (targetIncurredCost !== undefined) {
-          incurredCost = (incurredCost ?? 0) + targetIncurredCost;
-        }
+    let response: ProviderResponse;
+    try {
+      response = rateLimitRegistry
+        ? await rateLimitRegistry.execute(
+            activeProvider,
+            callApi,
+            createProviderRateLimitOptions(abortSignal, activeProvider, callApiContext),
+          )
+        : await callApi();
+    } catch (error) {
+      if (!isCliPauseCancellation(error, abortSignal, pauseSignal)) {
+        throw error;
       }
-      response = {
-        ...last,
-        error:
-          last.error ??
-          'Evaluation paused before the strategy completed. Completed target responses were retained; use --retry-errors to run this case again.',
-        tokenUsage,
-        cost,
-        incurredCost,
-        cached: completedTargets.every(({ response: target }) => target.cached === true),
-        metadata: {
-          ...last.metadata,
-          interruptedStrategy: true,
-          completedTargetResponses: completedTargets,
-        },
-      };
-    } else {
-      throw error;
+      if (completedResponse) {
+        response = completedResponse;
+      } else if (completedTargets.length > 0) {
+        // A strategy may still be tracing/grading after a billable or stateful
+        // target call completes. Persist its partial work as an error, so resume
+        // cannot silently replay it. Explicit retry-errors remains available.
+        const last = completedTargets[completedTargets.length - 1].response;
+        const tokenUsage = createEmptyTokenUsage();
+        let cost: number | undefined;
+        let incurredCost: number | undefined;
+        for (const { response: target } of completedTargets) {
+          accumulateResponseTokenUsage(tokenUsage, target);
+          if (target.cost !== undefined) {
+            cost = (cost ?? 0) + target.cost;
+          }
+          const targetIncurredCost = target.incurredCost ?? (target.cached ? 0 : target.cost);
+          if (targetIncurredCost !== undefined) {
+            incurredCost = (incurredCost ?? 0) + targetIncurredCost;
+          }
+        }
+        response = {
+          ...last,
+          error:
+            last.error ??
+            'Evaluation paused before the strategy completed. Completed target responses were retained; use --retry-errors to run this case again.',
+          tokenUsage,
+          cost,
+          incurredCost,
+          cached: completedTargets.every(({ response: target }) => target.cached === true),
+          metadata: {
+            ...last.metadata,
+            interruptedStrategy: true,
+            completedTargetResponses: completedTargets,
+          },
+        };
+      } else {
+        throw error;
+      }
     }
-  }
 
-  logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
-  logger.debug(`Provider response cached property explicitly: ${response.cached}`);
-  return response;
+    logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
+    logger.debug(`Provider response cached property explicitly: ${response.cached}`);
+    return response;
+  } finally {
+    progress.close();
+  }
 }
 
 function buildCallApiContext({
@@ -1336,7 +1388,7 @@ async function applyProviderDelayIfNeeded(
   response: ProviderResponse,
   abortSignal?: AbortSignal,
 ) {
-  if (abortSignal?.aborted) {
+  if (abortSignal?.aborted || response.metadata?.providerSetup?.workloadStarted === false) {
     return;
   }
   if (!response.cached && !provider.handlesOwnDelay && provider.delay && provider.delay > 0) {
@@ -1779,6 +1831,7 @@ async function runEvalInternal(
     evalId,
     providerCallQueue,
     rateLimitRegistry,
+    providerSetup,
   }: RunEvalOptions,
   orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
     abortSignal,
@@ -1815,6 +1868,7 @@ async function runEvalInternal(
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
+  let historicalReplay = false;
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1829,11 +1883,30 @@ async function runEvalInternal(
     setup = rendered.setup;
     if (!test.providerOutput) {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
-      workspace = await createAgentWorkspaceForConfig(
-        { ...activeProvider.config, ...rendered.setup.prompt.config },
-        state.vars,
-        abortSignal,
-      );
+      historicalReplay =
+        activeProvider.isHistoricalReplay?.(
+          buildCallApiContext({
+            evalId,
+            filters,
+            originalProvider: provider,
+            promptForRender: {
+              ...state.promptForRender,
+              config: rendered.setup.prompt.config,
+            },
+            repeatIndex,
+            test,
+            testIndex,
+            traceContext: null,
+            vars: state.vars,
+          }),
+        ) ?? false;
+      if (!historicalReplay) {
+        workspace = await createAgentWorkspaceForConfig(
+          { ...activeProvider.config, ...rendered.setup.prompt.config },
+          state.vars,
+          abortSignal,
+        );
+      }
     }
     const stepWorkspace = workspace;
 
@@ -1860,6 +1933,9 @@ async function runEvalInternal(
             abortSignal,
             pauseSignal: orchestrationOptions.pauseSignal,
             evalId,
+            evaluateOptions,
+            providerSetup,
+            promptIdx: promptIndex,
             filters,
             promptForRender: {
               ...state.promptForRender,
@@ -1899,7 +1975,9 @@ async function runEvalInternal(
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response, abortSignal);
+          if (!historicalReplay) {
+            await applyProviderDelayIfNeeded(provider, response, abortSignal);
+          }
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -3006,6 +3084,63 @@ async function applyInputTransform(
     'Transform function did not return a valid object',
   );
   testCase.vars = { ...testCase.vars, ...transformedVars };
+}
+
+async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort: () => void) {
+  let workloadGeneration = 0;
+  for (const step of runEvalOptions) {
+    checkAbort();
+    // Hooks can create or replace files without changing provider configuration.
+    // Check their resulting state for each row, inside its timeout boundary.
+    const hasExtensions = Boolean(step.testSuite?.extensions?.length);
+    let timedOutSetup: ProviderResponse | undefined;
+    const checkedGeneration = workloadGeneration;
+    step.providerSetup = async (provider, context, options) => {
+      // Preserve a consumed deadline until another row is allowed to run. Earlier
+      // workloads can prepare files or other state required by this row's setup.
+      if (timedOutSetup && workloadGeneration === checkedGeneration) {
+        return structuredClone(timedOutSetup);
+      }
+      const failure = await checkProviderSetup(provider, context, options);
+      if (!failure) {
+        workloadGeneration++;
+      }
+      return failure;
+    };
+    const activeProvider = isApiProvider(step.test.provider) ? step.test.provider : step.provider;
+    if (hasExtensions || step.test.providerOutput || !activeProvider.checkSetupOnEval) {
+      continue;
+    }
+    const runtimeVars = getEvalRuntimeVars({
+      evalId: step.evalId,
+      promptIndex: step.promptIdx,
+      repeatIndex: step.repeatIndex,
+      testIndex: step.testIdx,
+    });
+    const setupFailure = await checkProviderSetup(
+      activeProvider,
+      {
+        vars: { ...step.test.vars, ...step.registers, ...runtimeVars },
+        prompt: {
+          ...step.prompt,
+          config: mergeProviderPromptConfig(step.prompt.config, step.test.options),
+        },
+        test: step.test,
+        originalProvider: step.provider,
+        evaluationId: step.evalId,
+        testIdx: step.testIdx,
+        promptIdx: step.promptIdx,
+        repeatIndex: step.repeatIndex,
+      },
+      {
+        abortSignal: step.abortSignal,
+        timeoutMs: step.evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
+      },
+    );
+    if (setupFailure?.metadata?.providerSetup?.timedOut) {
+      timedOutSetup = setupFailure;
+    }
+  }
 }
 
 async function buildRunEvalOptions({
@@ -4631,6 +4766,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices,
     progressBarManager,
     prompts,
+    runEvalOptions,
     serialRunEvalOptions,
     shouldGroupGradingByProvider,
   }: {
@@ -4648,10 +4784,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices: Set<number>;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    runEvalOptions: RunEvalOptions[];
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
   }): Promise<TEvaluation | undefined> {
     try {
+      // Setup shares interruption/finalization with execution and keeps the original step order.
+      await prepareProviderSetup(runEvalOptions, checkAbort);
       if (shouldGroupGradingByProvider) {
         await this.runGroupedEvalSteps({
           checkAbort,
@@ -4684,6 +4823,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       checkAbort();
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
+        clearTimeout(globalTimeout);
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
         throw err;
       }
@@ -5985,6 +6125,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices,
       progressBarManager,
       prompts,
+      runEvalOptions,
       serialRunEvalOptions,
       shouldGroupGradingByProvider,
     });

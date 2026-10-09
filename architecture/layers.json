@@ -40,6 +40,8 @@
       ],
       "allowedImportPaths": [
         "src/contracts.ts",
+        "src/contracts/codexSecurity.ts",
+        "src/contracts/providers.ts",
         "src/csv.ts",
         "src/presentation/evalResults.ts",
         "src/presentation/redteamConfig.ts",
@@ -92,6 +94,7 @@
       "roots": ["src/server"],
       "allowedDependencies": [
         "cli",
+        "contracts",
         "core",
         "legacy-contracts",
         "legacy-runtime",

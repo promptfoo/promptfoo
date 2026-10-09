@@ -76,6 +76,14 @@ export const evalsTable = sqliteTable(
   }),
 );
 
+// The lookup must use this exact static predicate so SQLite can select the partial index.
+// CASE tolerates malformed legacy metadata; JSON booleans must not count as version 1.
+export const savedReportResultPredicate = sql`CASE WHEN json_valid(metadata) THEN
+  json_type(metadata, '$.codexSecurity.version') IN ('integer', 'real')
+    AND json_extract(metadata, '$.codexSecurity.version') = 1
+    AND json_extract(metadata, '$.codexSecurity.source.kind') = 'saved-report'
+  ELSE 0 END`;
+
 export const evalResultsTable = sqliteTable(
   'eval_results',
   {
@@ -117,6 +125,9 @@ export const evalResultsTable = sqliteTable(
     testIdxIdx: index('eval_result_test_idx').on(table.testIdx),
 
     evalTestIdx: index('eval_result_eval_test_idx').on(table.evalId, table.testIdx),
+    savedReportIdx: index('eval_result_saved_report_idx')
+      .on(table.evalId, table.promptIdx)
+      .where(savedReportResultPredicate),
     evalSuccessIdx: index('eval_result_eval_success_idx').on(table.evalId, table.success),
     evalFailureIdx: index('eval_result_eval_failure_idx').on(table.evalId, table.failureReason),
     evalTestSuccessIdx: index('eval_result_eval_test_success_idx').on(

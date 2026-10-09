@@ -46,9 +46,12 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  */
 export function createProviderRateLimitOptions(
   abortSignal?: AbortSignal,
+  provider?: ApiProvider,
+  context?: CallApiContextParams,
 ): RateLimitExecuteOptions<ProviderResponse> {
   return {
     ...(abortSignal && { abortSignal }),
+    skipRateLimit: provider?.isHistoricalReplay?.(context) ?? false,
     // Provider errors are values carrying output, usage and HTTP metadata.
     // Keep that evidence when the scheduler has no retries left.
     onRateLimitExhausted: (result, error) =>
@@ -59,12 +62,16 @@ export function createProviderRateLimitOptions(
     // park every queued and subsequent call until that reset instead of
     // letting them fail fast.
     getHeaders: (result: ProviderResponse | undefined) =>
-      result?.metadata?.rateLimitRetryable === false || result?.metadata?.rateLimitKind === 'quota'
+      result?.retryable === false ||
+      result?.metadata?.rateLimitRetryable === false ||
+      result?.metadata?.rateLimitKind === 'quota'
         ? undefined
         : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,
+    // Historical/local responses do not prove the upstream rate limit recovered.
+    shouldRecoverConcurrency: (result) => result.retryable !== false,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
-      if (result?.metadata?.rateLimitRetryable === false) {
+      if (result?.retryable === false || result?.metadata?.rateLimitRetryable === false) {
         return undefined;
       }
       const rawHeaders = getProviderResponseHeaders(result);
@@ -125,6 +132,10 @@ export function wrapProviderWithRateLimiting(
     ...provider,
     // Explicitly delegate id() since prototype methods aren't copied by spread
     id: () => provider.id(),
+    ...(provider.checkSetup ? { checkSetup: provider.checkSetup.bind(provider) } : {}),
+    ...(provider.isHistoricalReplay
+      ? { isHistoricalReplay: provider.isHistoricalReplay.bind(provider) }
+      : {}),
     callApi: async (
       prompt: string,
       context?: CallApiContextParams,
@@ -146,7 +157,7 @@ export function wrapProviderWithRateLimiting(
                 }
               : options,
           ),
-        createProviderRateLimitOptions(options?.abortSignal),
+        createProviderRateLimitOptions(options?.abortSignal, provider, context),
       );
     },
   };

@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -39,6 +39,14 @@ const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('Providers Routes', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
@@ -72,6 +80,8 @@ describe('Providers Routes', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   describe('GET /providers/config-status', () => {
@@ -209,6 +219,265 @@ describe('Providers Routes', () => {
         prompt: undefined,
         inputs: undefined,
       });
+    });
+
+    it.each([true, false])(
+      'shuts down a local setup provider after success=%s',
+      async (success) => {
+        const shutdown = vi.fn().mockResolvedValue(undefined);
+        const setupProvider = { ...mockProvider, checkSetup: vi.fn(), shutdown };
+        mockedLoadApiProvider.mockResolvedValue(setupProvider);
+        mockedTestProviderConnectivity.mockResolvedValue({
+          success,
+          message: 'Local setup result',
+        });
+
+        const response = await api.post('/api/providers/test').send({
+          providerOptions: { id: 'openai:codex-security', config: { repository: '/fixture' } },
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.body.testResult).toMatchObject({ success, message: 'Local setup result' });
+        expect(shutdown).toHaveBeenCalledOnce();
+        expect(shutdown.mock.contexts[0]).toBe(setupProvider);
+      },
+    );
+
+    it('removes disconnect listeners after a normal setup response without canceling it', async () => {
+      let requestObject!: IncomingMessage;
+      let responseObject!: ServerResponse;
+      const capture = (req: IncomingMessage, res: ServerResponse) => {
+        requestObject = req;
+        responseObject = res;
+        vi.spyOn(req, 'once');
+        vi.spyOn(req, 'removeListener');
+        vi.spyOn(res, 'once');
+        vi.spyOn(res, 'removeListener');
+      };
+      server.prependOnceListener('request', capture);
+      const shutdown = vi.fn().mockResolvedValue(undefined);
+      const setupProvider = { ...mockProvider, checkSetup: vi.fn(), shutdown };
+      mockedLoadApiProvider.mockResolvedValue(setupProvider);
+      mockedTestProviderConnectivity.mockResolvedValue({ success: true, message: 'Ready locally' });
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'local-setup-provider' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(mockedTestProviderConnectivity.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+      const listener = vi
+        .mocked(requestObject.once)
+        .mock.calls.find(([event]) => event === 'aborted')?.[1];
+      expect(listener).toEqual(expect.any(Function));
+      expect(responseObject.once).toHaveBeenCalledWith('close', listener);
+      expect(requestObject.removeListener).toHaveBeenCalledWith('aborted', listener);
+      expect(responseObject.removeListener).toHaveBeenCalledWith('close', listener);
+      expect(requestObject.listeners('aborted')).not.toContain(listener);
+      expect(responseObject.listeners('close')).not.toContain(listener);
+      expect(shutdown).toHaveBeenCalledOnce();
+    });
+
+    it('cancels and closes a noncooperative setup when the HTTP client disconnects', async () => {
+      const actual = await vi.importActual<typeof import('../../../src/node/testProvider')>(
+        '../../../src/node/testProvider',
+      );
+      mockedTestProviderConnectivity.mockImplementation(actual.testProviderConnectivity);
+      const entered = deferred<AbortSignal>();
+      const closed = deferred<void>();
+      const checkSetup = vi.fn<NonNullable<ApiProvider['checkSetup']>>((_context, options) => {
+        entered.resolve(options!.abortSignal!);
+        return new Promise(() => {});
+      });
+      const shutdown = vi.fn(async () => {
+        closed.resolve();
+      });
+      const setupProvider = { ...mockProvider, checkSetup, shutdown };
+      mockedLoadApiProvider.mockResolvedValue(setupProvider);
+      const httpRequest = api.post('/api/providers/test').send({
+        providerOptions: { id: 'local-setup-provider' },
+      });
+      httpRequest.end(() => {});
+      const signal = await entered.promise;
+      expect(signal.aborted).toBe(false);
+
+      httpRequest.abort();
+      await closed.promise;
+
+      expect(signal.aborted).toBe(true);
+      expect(shutdown).toHaveBeenCalledOnce();
+      expect(setupProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('closes a provider loaded after HTTP disconnect without starting setup', async () => {
+      const loading = deferred<void>();
+      const loaded = deferred<ApiProvider>();
+      const disconnected = deferred<void>();
+      const closed = deferred<void>();
+      const shutdown = vi.fn(async () => {
+        closed.resolve();
+      });
+      const setupProvider = { ...mockProvider, checkSetup: vi.fn(), shutdown };
+      mockedLoadApiProvider.mockImplementation(() => {
+        loading.resolve();
+        return loaded.promise;
+      });
+      server.prependOnceListener('request', (_req, res) => {
+        res.once('close', () => disconnected.resolve());
+      });
+      const httpRequest = api.post('/api/providers/test').send({
+        providerOptions: { id: 'local-setup-provider' },
+      });
+      httpRequest.end(() => {});
+      await loading.promise;
+
+      httpRequest.abort();
+      await disconnected.promise;
+      loaded.resolve(setupProvider);
+      await closed.promise;
+
+      expect(mockedTestProviderConnectivity).not.toHaveBeenCalled();
+      expect(setupProvider.checkSetup).not.toHaveBeenCalled();
+      expect(setupProvider.callApi).not.toHaveBeenCalled();
+      expect(shutdown).toHaveBeenCalledOnce();
+    });
+
+    it('keeps evaluator-owned cleanup for ordinary providers loaded after HTTP disconnect', async () => {
+      const loading = deferred<void>();
+      const loaded = deferred<ApiProvider>();
+      const disconnected = deferred<void>();
+      const tested = deferred<void>();
+      mockedLoadApiProvider.mockImplementation(() => {
+        loading.resolve();
+        return loaded.promise;
+      });
+      mockedTestProviderConnectivity.mockImplementation(async () => {
+        tested.resolve();
+        return { success: true, message: 'Connectivity test completed' };
+      });
+      server.prependOnceListener('request', (_req, res) => {
+        res.once('close', () => disconnected.resolve());
+      });
+      const httpRequest = api.post('/api/providers/test').send({
+        providerOptions: { id: 'ordinary-provider' },
+      });
+      httpRequest.end(() => {});
+      await loading.promise;
+
+      httpRequest.abort();
+      await disconnected.promise;
+      loaded.resolve(mockProvider);
+      await tested.promise;
+
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockProvider,
+        prompt: undefined,
+        inputs: undefined,
+      });
+    });
+
+    it('returns a local setup timeout and closes the provider when its check never settles', async () => {
+      const actual = await vi.importActual<typeof import('../../../src/node/testProvider')>(
+        '../../../src/node/testProvider',
+      );
+      mockedTestProviderConnectivity.mockImplementation((options) =>
+        actual.testProviderConnectivity({ ...options, setupTimeoutMs: 1000 }),
+      );
+      vi.useFakeTimers();
+      const entered = deferred<AbortSignal>();
+      const checkSetup = vi.fn<NonNullable<ApiProvider['checkSetup']>>((_context, options) => {
+        entered.resolve(options!.abortSignal!);
+        return new Promise(() => {});
+      });
+      const shutdown = vi.fn().mockResolvedValue(undefined);
+      const setupProvider = { ...mockProvider, checkSetup, shutdown };
+      mockedLoadApiProvider.mockResolvedValue(setupProvider);
+      const responsePromise = api
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: 'local-setup-provider' },
+        })
+        .then((response) => response);
+      const signal = await entered.promise;
+
+      await vi.advanceTimersByTimeAsync(1000);
+      const response = await responsePromise;
+
+      expect(response.status).toBe(200);
+      expect(response.body.testResult).toMatchObject({
+        success: false,
+        error: 'Provider local setup check timed out after 1000ms. No workload was started.',
+      });
+      expect(signal.aborted).toBe(true);
+      expect(shutdown).toHaveBeenCalledOnce();
+      expect(setupProvider.callApi).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('shuts down the setup provider even when the check throws', async () => {
+      const shutdown = vi.fn().mockResolvedValue(undefined);
+      const setupProvider = { ...mockProvider, checkSetup: vi.fn(), shutdown };
+      mockedLoadApiProvider.mockResolvedValue(setupProvider);
+      mockedTestProviderConnectivity.mockRejectedValue(new Error('Setup failed'));
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'openai:codex-security' },
+      });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to test provider' });
+      expect(shutdown).toHaveBeenCalledOnce();
+    });
+
+    it('preserves the setup result when shutdown fails', async () => {
+      const shutdown = vi.fn().mockRejectedValue(new Error('Close failed'));
+      const setupProvider = { ...mockProvider, checkSetup: vi.fn(), shutdown };
+      mockedLoadApiProvider.mockResolvedValue(setupProvider);
+      mockedTestProviderConnectivity.mockResolvedValue({
+        success: true,
+        message: 'Local setup result',
+      });
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'openai:codex-security' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.testResult.success).toBe(true);
+      expect(shutdown).toHaveBeenCalledOnce();
+    });
+
+    it('uses the cleanup hook for setup providers without registry shutdown', async () => {
+      const cleanup = vi.fn().mockResolvedValue(undefined);
+      mockedLoadApiProvider.mockResolvedValue({ ...mockProvider, checkSetup: vi.fn(), cleanup });
+      mockedTestProviderConnectivity.mockResolvedValue({
+        success: true,
+        message: 'Local setup result',
+      });
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'fixture-provider' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(cleanup).toHaveBeenCalledOnce();
+    });
+
+    it('leaves existing connectivity-test lifecycle handling unchanged', async () => {
+      const shutdown = vi.fn().mockResolvedValue(undefined);
+      const providerWithShutdown = { ...mockProvider, shutdown };
+      mockedLoadApiProvider.mockResolvedValue(providerWithShutdown);
+      mockedTestProviderConnectivity.mockResolvedValue({
+        success: true,
+        message: 'Connectivity result',
+      });
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'fixture-provider' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(shutdown).not.toHaveBeenCalled();
     });
 
     it('should return 400 for missing providerOptions', async () => {

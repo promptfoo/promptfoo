@@ -12,6 +12,8 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import { getTokenUsageTotal } from '@app/utils/tokenUsage';
+import { CodexSecurityResultSchema } from '@promptfoo/contracts/codexSecurity';
 import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
 import { ResultFailureReason } from '@promptfoo/types/results';
 import { diffJson, diffSentences, diffWords } from 'diff';
@@ -29,6 +31,8 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
+import { CodexSecurityQualityStatus } from './CodexSecurityQualityStatus';
+import { CodexSecurityResultSummary } from './CodexSecurityResultSummary';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
@@ -886,12 +890,14 @@ function renderCommentNode({
 function renderCellDetail({
   showStats,
   tokenUsageDisplay,
+  tokenUsageLabel = 'Tokens',
   latencyDisplay,
   tokPerSecDisplay,
   costDisplay,
 }: {
   showStats: boolean;
   tokenUsageDisplay?: React.ReactNode;
+  tokenUsageLabel?: string;
   latencyDisplay?: React.ReactNode;
   tokPerSecDisplay?: React.ReactNode;
   costDisplay?: React.ReactNode;
@@ -904,7 +910,7 @@ function renderCellDetail({
     <div className="cell-detail">
       {tokenUsageDisplay && (
         <div className="stat-item">
-          <strong>Tokens:</strong> {tokenUsageDisplay}
+          <strong>{tokenUsageLabel}:</strong> {tokenUsageDisplay}
         </div>
       )}
       {latencyDisplay && (
@@ -1025,6 +1031,7 @@ function renderResponseAudioPlayer(
 
 function renderOutputActions({
   showExtraActions,
+  showDetails,
   copied,
   linked,
   isHighlighted,
@@ -1053,6 +1060,7 @@ function renderOutputActions({
   setActionsHovered,
 }: {
   showExtraActions: boolean;
+  showDetails: boolean;
   copied: boolean;
   linked: boolean;
   isHighlighted: boolean;
@@ -1206,7 +1214,7 @@ function renderOutputActions({
         </TooltipTrigger>
         <TooltipContent>Edit comment</TooltipContent>
       </Tooltip>
-      {output.prompt && (
+      {showDetails && (
         <>
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
@@ -1229,6 +1237,7 @@ function renderOutputActions({
               provider={output.provider}
               gradingResults={getDialogGradingResults(output)}
               output={text}
+              rawOutput={output.response?.raw}
               metadata={output.metadata}
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}
@@ -1424,6 +1433,9 @@ function EvalOutputCell({
   };
 
   const text = stringifyOutputText(output.text);
+  const parsedSecurityResult = CodexSecurityResultSchema.safeParse(output.metadata?.codexSecurity);
+  const securityResult = parsedSecurityResult.success ? parsedSecurityResult.data : undefined;
+  const isSavedReport = securityResult?.source.kind === 'saved-report';
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
@@ -1438,21 +1450,24 @@ function EvalOutputCell({
     | undefined;
   const responseAudioSource = resolveAudioSource(responseAudio);
 
-  const node = renderOutputNode({
-    output,
-    firstOutput,
-    showDiffs,
-    searchText,
-    shouldHighlightSearchText,
-    text,
-    normalizedText,
-    renderMarkdown,
-    prettifyJson,
-    markdownComponents,
-    toggleLightbox,
-    outputAudioSource,
-    primaryRenderedImageSrc,
-  });
+  const node =
+    securityResult && !showDiffs
+      ? undefined
+      : renderOutputNode({
+          output,
+          firstOutput,
+          showDiffs,
+          searchText,
+          shouldHighlightSearchText,
+          text,
+          normalizedText,
+          renderMarkdown,
+          prettifyJson,
+          markdownComponents,
+          toggleLightbox,
+          outputAudioSource,
+          primaryRenderedImageSrc,
+        });
 
   const handleRating = (isPass: boolean) => {
     const newRating = activeRating === isPass ? null : isPass;
@@ -1570,6 +1585,12 @@ function EvalOutputCell({
   // Check for token usage in both output.tokenUsage and output.response?.tokenUsage.
   const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
   const tokenUsageDisplay = formatTokenUsageDisplay(tokenUsage);
+  // Imported scan usage belongs to the historical summary. Only an explicit grading
+  // breakdown can identify tokens used by assertions evaluating this saved report.
+  const gradingTokenUsage = output.tokenUsage?.assertions ?? output.gradingResult?.tokensUsed;
+  const gradingTokenUsageDisplay = formatTokenUsageDisplay(
+    gradingTokenUsage && { ...gradingTokenUsage, total: getTokenUsageTotal(gradingTokenUsage) },
+  );
   const tokPerSecDisplay = getTokensPerSecondDisplay({
     tokenUsage,
     latencyMs: output.latencyMs,
@@ -1614,14 +1635,22 @@ function EvalOutputCell({
         className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}
         style={contentStyle}
       >
-        <TruncatedText
-          text={node || normalizedText}
-          maxLength={
-            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
-              ? 0
-              : maxTextLength
-          }
-        />
+        {securityResult && !showDiffs ? (
+          <>
+            <CodexSecurityQualityStatus gradingResults={getDialogGradingResults(output)} compact />
+            <CodexSecurityResultSummary result={securityResult} compact />
+          </>
+        ) : (
+          <TruncatedText
+            text={node || normalizedText}
+            maxLength={
+              renderMarkdown &&
+              (isImageProvider(output.provider) || isVideoProvider(output.provider))
+                ? 0
+                : maxTextLength
+            }
+          />
+        )}
       </div>
       {renderCommentNode({
         commentTextToDisplay,
@@ -1629,14 +1658,14 @@ function EvalOutputCell({
         contentStyle,
       })}
       {renderCellDetail({
-        showStats,
-        tokenUsageDisplay,
-        latencyDisplay,
-        tokPerSecDisplay,
-        costDisplay,
+        showStats: showStats && (!isSavedReport || Boolean(gradingTokenUsageDisplay)),
+        ...(isSavedReport
+          ? { tokenUsageDisplay: gradingTokenUsageDisplay, tokenUsageLabel: 'Grading tokens' }
+          : { tokenUsageDisplay, latencyDisplay, tokPerSecDisplay, costDisplay }),
       })}
       {renderOutputActions({
         showExtraActions,
+        showDetails: Boolean(output.prompt || securityResult),
         copied,
         linked,
         isHighlighted: commentIsHighlighted,

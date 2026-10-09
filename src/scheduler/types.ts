@@ -12,6 +12,8 @@ import type { ProviderResponse } from '../types/providers';
  * Used by RateLimitRegistry.execute() and provider wrappers.
  */
 export interface RateLimitExecuteOptions<T> {
+  /** Execute outside the shared rate-limit queue and state. Fetch retry context is still preserved. */
+  skipRateLimit?: boolean;
   /** Cancel queue and retry waits for this caller. */
   abortSignal?: AbortSignal;
   /** Extract rate limit headers from the result */
@@ -20,6 +22,8 @@ export interface RateLimitExecuteOptions<T> {
   isRateLimited?: (result: T | undefined, error?: Error) => boolean;
   /** Extract retry-after delay from result or error */
   getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+  /** Whether this result is evidence for adaptive concurrency recovery. Defaults to true. */
+  shouldRecoverConcurrency?: (result: T) => boolean;
   /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
   onRateLimitExhausted?: (result: T, error: Error) => T;
 }
@@ -48,8 +52,9 @@ export function isProviderResponseRateLimited(
   }
   // Tool diagnostics may mention their own quota without describing the model request.
   const responseError = result?.metadata?.errorOrigin === 'tool' ? undefined : result?.error;
-  // Structured signal — never retry a hard quota.
+  // Local responses and explicit policy decisions must not trigger retries.
   if (
+    result?.retryable === false ||
     result?.metadata?.rateLimitRetryable === false ||
     result?.metadata?.rateLimitKind === 'quota'
   ) {

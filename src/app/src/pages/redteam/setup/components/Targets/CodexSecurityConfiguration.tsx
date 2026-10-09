@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Info } from 'lucide-react';
+import CodexSecuritySetupCheck from './CodexSecuritySetupCheck';
 
 import type { ProviderOptions } from '../../types';
 
@@ -40,22 +42,39 @@ export const CODEX_SECURITY_AUTH_OPTIONS = [
 const SELECT_CLASS_NAME =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background';
 
+function getBudgetInputValue(value: unknown): string | number {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))
+    ? value
+    : '';
+}
+
+function getOperation(value: unknown): string {
+  return typeof value === 'string'
+    ? (CODEX_SECURITY_OPERATION_OPTIONS.find((option) => option.value === value)?.value ?? '')
+    : 'security-scan';
+}
+
+function getModel(provider: ProviderOptions): string {
+  if (provider.id.startsWith(`${PROVIDER_PREFIX}:`)) {
+    return provider.id.slice(PROVIDER_PREFIX.length + 1);
+  }
+  return typeof provider.config?.model === 'string' ? provider.config.model : '';
+}
+
+function getReasoning(value: unknown): string {
+  return value === undefined
+    ? ''
+    : (CODEX_SECURITY_REASONING_OPTIONS.find((option) => option === value) ?? 'unsupported');
+}
+
 export default function CodexSecurityConfiguration({
   selectedTarget,
   updateCustomTarget,
 }: CodexSecurityConfigurationProps) {
   const config = selectedTarget.config ?? {};
-  const operation =
-    typeof config.operation === 'string'
-      ? CODEX_SECURITY_OPERATION_OPTIONS.some((option) => option.value === config.operation)
-        ? config.operation
-        : ''
-      : 'security-scan';
-  const model = selectedTarget.id.startsWith(`${PROVIDER_PREFIX}:`)
-    ? selectedTarget.id.slice(PROVIDER_PREFIX.length + 1)
-    : typeof config.model === 'string'
-      ? config.model
-      : '';
+  const isSavedReport = Object.prototype.hasOwnProperty.call(config, 'report_file');
+  const operation = getOperation(config.operation);
+  const model = getModel(selectedTarget);
   const isScan = ['security-scan', 'deep-security-scan', 'security-diff-scan'].includes(operation);
   const isRepositoryScan = ['security-scan', 'deep-security-scan'].includes(operation);
   const isDiffScan = operation === 'security-diff-scan';
@@ -66,10 +85,8 @@ export default function CodexSecurityConfiguration({
       : typeof config.working_dir === 'string'
         ? config.working_dir
         : '';
-  const reasoningValue = config.model_reasoning_effort ?? config.reasoning_effort ?? 'high';
-  const reasoning = CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === reasoningValue)
-    ? reasoningValue
-    : '';
+  const reasoningValue = config.model_reasoning_effort ?? config.reasoning_effort;
+  const reasoning = getReasoning(reasoningValue);
   const configuredAuth = config.auth ?? 'auto';
   const auth = CODEX_SECURITY_AUTH_OPTIONS.some((option) => option.value === configuredAuth)
     ? configuredAuth
@@ -88,6 +105,21 @@ export default function CodexSecurityConfiguration({
     lastEditedPaths.current = config.paths;
     setScopedPaths(Array.isArray(config.paths) ? config.paths.join(', ') : '');
   }, [config.paths]);
+
+  const updateSource = (source: string) => {
+    const nextConfig = { ...config };
+    if (source === 'saved-report') {
+      nextConfig.report_file = '';
+      for (const field of ['repository', 'working_dir']) {
+        if (typeof nextConfig[field] === 'string' && nextConfig[field].trim() === '') {
+          delete nextConfig[field];
+        }
+      }
+    } else {
+      delete nextConfig.report_file;
+    }
+    updateCustomTarget('config', nextConfig);
+  };
 
   const updateOperation = (nextOperation: string) => {
     const nextConfig: ProviderOptions['config'] = { ...config, operation: nextOperation };
@@ -132,6 +164,9 @@ export default function CodexSecurityConfiguration({
 
   const updateCanonicalSetting = (field: string, alias: string, value: unknown) => {
     const nextConfig: ProviderOptions['config'] = { ...config, [field]: value };
+    if (value === undefined) {
+      delete nextConfig[field];
+    }
     delete nextConfig[alias];
     updateCustomTarget('config', nextConfig);
   };
@@ -165,201 +200,280 @@ export default function CodexSecurityConfiguration({
 
   return (
     <div className="space-y-6">
-      <Alert variant="info">
-        <Info className="size-4" />
-        <AlertContent>
-          <AlertDescription>
-            <p className="font-semibold">Codex Security SDK</p>
-            <p className="mt-1">
-              Compare repository scans, finding validation, model reasoning, and estimated cost.
-              Install <code>promptfoo</code> and <code>@openai/codex-security@^0.2.0</code>{' '}
-              together, then use an existing Codex login or OpenAI API key.
-            </p>
-          </AlertDescription>
-        </AlertContent>
-      </Alert>
+      {!isSavedReport && (
+        <Alert variant="info">
+          <Info className="size-4" />
+          <AlertContent>
+            <AlertDescription>
+              <p className="font-semibold">Codex Security SDK</p>
+              <p className="mt-1">
+                Compare repository scans, finding validation, model reasoning, and estimated cost.
+                Install <code>promptfoo</code> and <code>@openai/codex-security@^0.2.0</code>{' '}
+                together on the machine running the Promptfoo server.
+              </p>
+              <p className="mt-2">
+                Sign in with Codex on that machine, or set <code>OPENAI_API_KEY</code> or{' '}
+                <code>CODEX_API_KEY</code> in the server process environment before starting it. The
+                Setup page’s API keys dialog and provider-scoped keys do not configure this SDK.
+              </p>
+            </AlertDescription>
+          </AlertContent>
+        </Alert>
+      )}
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="codex-security-operation">Security operation</Label>
-          <select
-            id="codex-security-operation"
-            className={SELECT_CLASS_NAME}
-            value={operation}
-            onChange={(event) => updateOperation(event.target.value)}
-          >
-            {operation === '' && (
-              <option value="" disabled>
-                Unsupported security operation
-              </option>
-            )}
-            {CODEX_SECURITY_OPERATION_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="codex-security-model">Model</Label>
-          <Input
-            id="codex-security-model"
-            value={model}
-            placeholder="gpt-5.6-luna"
-            onChange={(event) => {
-              const nextModel = event.target.value.trim();
-              updateCustomTarget(
-                'id',
-                nextModel ? `${PROVIDER_PREFIX}:${nextModel}` : PROVIDER_PREFIX,
-              );
-            }}
-          />
-        </div>
-
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="codex-security-repository">
-            Repository path <span className="text-destructive">*</span>
-          </Label>
+          <Label htmlFor="codex-security-label">Provider label</Label>
           <Input
-            id="codex-security-repository"
-            value={repository}
-            placeholder="/absolute/path/to/repository"
-            onChange={(event) =>
-              updateCanonicalSetting('repository', 'working_dir', event.target.value)
-            }
+            id="codex-security-label"
+            value={selectedTarget.label ?? ''}
+            placeholder="e.g., Standard scan — high reasoning"
+            onChange={(event) => updateCustomTarget('label', event.target.value)}
           />
           <p className="text-sm text-muted-foreground">
-            Use the same authorized repository for every model or scan-depth comparison.
+            Give each comparison a distinct label to identify its results.
           </p>
         </div>
 
-        {isRepositoryScan && (
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="codex-security-source">Result source</Label>
+          <select
+            id="codex-security-source"
+            className={SELECT_CLASS_NAME}
+            value={isSavedReport ? 'saved-report' : 'sdk'}
+            onChange={(event) => updateSource(event.target.value)}
+          >
+            <option value="sdk">SDK operation</option>
+            <option value="saved-report">Saved report</option>
+          </select>
+        </div>
+
+        {isSavedReport ? (
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="codex-security-paths">Scoped paths</Label>
+            <Label htmlFor="codex-security-report-file">
+              Report file <span className="text-destructive">*</span>
+            </Label>
             <Input
-              id="codex-security-paths"
-              value={scopedPaths}
-              placeholder="src/auth, src/api"
-              onChange={(event) => updateScopedPaths(event.target.value)}
+              id="codex-security-report-file"
+              value={typeof config.report_file === 'string' ? config.report_file : ''}
+              placeholder="/absolute/path/to/report.json"
+              onChange={(event) => updateCustomTarget('report_file', event.target.value)}
             />
             <p className="text-sm text-muted-foreground">
-              Optional comma-separated repository paths. Leave blank to scan the entire repository.
+              Read an existing Codex Security JSON report from the Promptfoo server. Use an absolute
+              path. No SDK operation is run; displayed settings and metrics come from the report.
             </p>
           </div>
-        )}
-
-        <div className="space-y-2">
-          <Label htmlFor="codex-security-reasoning">Reasoning effort</Label>
-          <select
-            id="codex-security-reasoning"
-            className={SELECT_CLASS_NAME}
-            value={reasoning}
-            onChange={(event) =>
-              updateCanonicalSetting(
-                'model_reasoning_effort',
-                'reasoning_effort',
-                event.target.value,
-              )
-            }
-          >
-            {reasoning === '' && (
-              <option value="" disabled>
-                Unsupported reasoning effort
-              </option>
-            )}
-            {CODEX_SECURITY_REASONING_OPTIONS.map((effort) => (
-              <option key={effort} value={effort}>
-                {effort}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="codex-security-auth">Authentication</Label>
-          <select
-            id="codex-security-auth"
-            className={SELECT_CLASS_NAME}
-            value={auth}
-            onChange={(event) => updateCustomTarget('auth', event.target.value)}
-          >
-            {auth === '' && (
-              <option value="" disabled>
-                Unsupported authentication method
-              </option>
-            )}
-            {CODEX_SECURITY_AUTH_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {isScan && (
-          <div className="space-y-2">
-            <Label htmlFor="codex-security-max-cost">Maximum cost (USD)</Label>
-            <Input
-              id="codex-security-max-cost"
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={config.max_cost_usd ?? ''}
-              placeholder="1"
-              onChange={(event) => updateOptionalNumber('max_cost_usd', event.target.value)}
-            />
-          </div>
-        )}
-
-        {isDiffScan && (
+        ) : (
           <>
-            <label className="flex items-start gap-3 text-sm sm:col-span-2">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={config.working_tree === true}
-                onChange={(event) => updateWorkingTree(event.target.checked)}
-              />
-              <span>Scan uncommitted working-tree changes.</span>
-            </label>
+            <div className="space-y-2">
+              <Label htmlFor="codex-security-operation">Security operation</Label>
+              <select
+                id="codex-security-operation"
+                className={SELECT_CLASS_NAME}
+                value={operation}
+                onChange={(event) => updateOperation(event.target.value)}
+              >
+                {operation === '' && (
+                  <option value="" disabled>
+                    Unsupported security operation
+                  </option>
+                )}
+                {CODEX_SECURITY_OPERATION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div className="space-y-2">
-              <Label htmlFor="codex-security-base-ref">Base Git reference</Label>
+              <Label htmlFor="codex-security-model">Model</Label>
               <Input
-                id="codex-security-base-ref"
-                value={typeof config.base_ref === 'string' ? config.base_ref : ''}
-                placeholder={config.working_tree ? 'HEAD' : 'origin/main'}
-                onChange={(event) => updateOptionalString('base_ref', event.target.value)}
+                id="codex-security-model"
+                value={model}
+                placeholder="gpt-5.6-luna"
+                onChange={(event) => {
+                  const nextModel = event.target.value.trim();
+                  updateCustomTarget(
+                    'id',
+                    nextModel ? `${PROVIDER_PREFIX}:${nextModel}` : PROVIDER_PREFIX,
+                  );
+                }}
               />
             </div>
 
-            {!config.working_tree && (
-              <div className="space-y-2">
-                <Label htmlFor="codex-security-head-ref">Head Git reference</Label>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="codex-security-repository">
+                Repository path <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="codex-security-repository"
+                value={repository}
+                placeholder="/absolute/path/to/repository"
+                onChange={(event) =>
+                  updateCanonicalSetting('repository', 'working_dir', event.target.value)
+                }
+              />
+              <p className="text-sm text-muted-foreground">
+                This path must exist on the machine running the Promptfoo server. Use an absolute
+                path for web evaluations. To compare repositories, set{' '}
+                <code>{'{{repository}}'}</code> here and define a <code>repository</code> variable
+                in each test case.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  updateCanonicalSetting('repository', 'working_dir', '{{repository}}')
+                }
+              >
+                Use repository from test cases
+              </Button>
+            </div>
+
+            {isRepositoryScan && (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="codex-security-paths">Scoped paths</Label>
                 <Input
-                  id="codex-security-head-ref"
-                  value={typeof config.head_ref === 'string' ? config.head_ref : ''}
-                  placeholder="HEAD"
-                  onChange={(event) => updateOptionalString('head_ref', event.target.value)}
+                  id="codex-security-paths"
+                  value={scopedPaths}
+                  placeholder="src/auth, src/api"
+                  onChange={(event) => updateScopedPaths(event.target.value)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional comma-separated repository paths. Leave blank to scan the entire
+                  repository.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="codex-security-reasoning">Reasoning effort</Label>
+              <select
+                id="codex-security-reasoning"
+                className={SELECT_CLASS_NAME}
+                value={reasoning}
+                onChange={(event) =>
+                  updateCanonicalSetting(
+                    'model_reasoning_effort',
+                    'reasoning_effort',
+                    event.target.value || undefined,
+                  )
+                }
+              >
+                <option value="">SDK default</option>
+                {reasoning === 'unsupported' && (
+                  <option value="unsupported" disabled>
+                    Unsupported reasoning effort
+                  </option>
+                )}
+                {CODEX_SECURITY_REASONING_OPTIONS.map((effort) => (
+                  <option key={effort} value={effort}>
+                    {effort}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="codex-security-auth">Authentication</Label>
+              <select
+                id="codex-security-auth"
+                className={SELECT_CLASS_NAME}
+                value={auth}
+                onChange={(event) => updateCustomTarget('auth', event.target.value)}
+              >
+                {auth === '' && (
+                  <option value="" disabled>
+                    Unsupported authentication method
+                  </option>
+                )}
+                {CODEX_SECURITY_AUTH_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {isScan && (
+              <div className="space-y-2">
+                <Label htmlFor="codex-security-max-cost">Estimated scan budget (USD)</Label>
+                <Input
+                  id="codex-security-max-cost"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={getBudgetInputValue(config.max_cost_usd)}
+                  placeholder="1"
+                  onChange={(event) => updateOptionalNumber('max_cost_usd', event.target.value)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Applies to each scan. The SDK stops when estimated spend exceeds this amount, so
+                  in-flight work can overshoot it. This is not an exact billing cap or a budget for
+                  the whole evaluation. Leave blank to use the SDK default.
+                </p>
+              </div>
+            )}
+
+            {isDiffScan && (
+              <>
+                <label className="flex items-start gap-3 text-sm sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={config.working_tree === true}
+                    onChange={(event) => updateWorkingTree(event.target.checked)}
+                  />
+                  <span>Scan uncommitted working-tree changes.</span>
+                </label>
+
+                <div className="space-y-2">
+                  <Label htmlFor="codex-security-base-ref">Base Git reference</Label>
+                  <Input
+                    id="codex-security-base-ref"
+                    value={typeof config.base_ref === 'string' ? config.base_ref : ''}
+                    placeholder={config.working_tree ? 'HEAD' : 'origin/main'}
+                    onChange={(event) => updateOptionalString('base_ref', event.target.value)}
+                  />
+                </div>
+
+                {!config.working_tree && (
+                  <div className="space-y-2">
+                    <Label htmlFor="codex-security-head-ref">Head Git reference</Label>
+                    <Input
+                      id="codex-security-head-ref"
+                      value={typeof config.head_ref === 'string' ? config.head_ref : ''}
+                      placeholder="HEAD"
+                      onChange={(event) => updateOptionalString('head_ref', event.target.value)}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {isFindingOperation && (
+              <div className="space-y-2 sm:col-span-2">
+                <p className="text-sm text-muted-foreground">
+                  Finding validation does not report reliable token usage or cost. Any saved scan
+                  budget does not apply to validation; omit cost assertions for this operation.
+                </p>
+                <Label htmlFor="codex-security-finding-file">Finding file</Label>
+                <Input
+                  id="codex-security-finding-file"
+                  value={typeof config.finding_file === 'string' ? config.finding_file : ''}
+                  placeholder="Optional; otherwise the evaluation prompt supplies the finding"
+                  onChange={(event) => updateOptionalString('finding_file', event.target.value)}
                 />
               </div>
             )}
           </>
         )}
-
-        {isFindingOperation && (
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="codex-security-finding-file">Finding file</Label>
-            <Input
-              id="codex-security-finding-file"
-              value={typeof config.finding_file === 'string' ? config.finding_file : ''}
-              placeholder="Optional; otherwise the evaluation prompt supplies the finding"
-              onChange={(event) => updateOptionalString('finding_file', event.target.value)}
-            />
-          </div>
-        )}
       </div>
+
+      <CodexSecuritySetupCheck provider={selectedTarget} />
 
       <p className="text-sm text-muted-foreground">
         Provider ID: <code>{selectedTarget.id}</code>

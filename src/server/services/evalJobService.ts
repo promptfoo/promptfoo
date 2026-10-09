@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { EvalProviderProgressSchema } from '../../contracts/providers';
+
+import type { EvalProviderProgress } from '../../contracts/providers';
 import type { Job } from '../../types/index';
 
 type ResultDirectory = { path: string; dev: number; ino: number };
@@ -179,6 +182,9 @@ function cloneJob(job: StoredJob): Job {
     ...fields,
     result: resultSnapshot === null ? null : readResult(resultSnapshot),
     logs: [...job.logs],
+    ...(job.providerProgress && {
+      providerProgress: job.providerProgress.map((progress) => ({ ...progress })),
+    }),
   };
 }
 
@@ -205,6 +211,28 @@ export class EvalJobService {
     });
   }
 
+  setProviderProgress(id: string, progress: EvalProviderProgress, completed = false): boolean {
+    const parsed = EvalProviderProgressSchema.safeParse(progress);
+    if (!parsed.success) {
+      return false;
+    }
+    return this.update(id, (job) => {
+      if (job.status !== 'in-progress') {
+        return;
+      }
+      const active = (job.providerProgress ?? []).filter(
+        (entry) =>
+          entry.testIdx !== progress.testIdx ||
+          entry.promptIdx !== progress.promptIdx ||
+          (entry.repeatIndex ?? 0) !== (progress.repeatIndex ?? 0),
+      );
+      if (!completed) {
+        active.push(parsed.data);
+      }
+      job.providerProgress = active.slice(-100);
+    });
+  }
+
   complete(id: string, result: Job['result'], evalId: string | null): boolean {
     const job = this.jobs.get(id);
     if (!job) {
@@ -214,6 +242,7 @@ export class EvalJobService {
     const resultSnapshot = result === null ? null : storeResult(result);
     const previousSnapshot = job.resultSnapshot;
     job.status = 'complete';
+    delete job.providerProgress;
     job.resultSnapshot = resultSnapshot;
     job.evalId = evalId;
     removeResult(previousSnapshot);
@@ -227,6 +256,7 @@ export class EvalJobService {
   ): boolean {
     return this.update(id, (job) => {
       job.status = 'error';
+      delete job.providerProgress;
       if (resetResult) {
         const previousSnapshot = job.resultSnapshot;
         job.resultSnapshot = null;

@@ -103,6 +103,8 @@ export class ProviderRateLimitState extends EventEmitter {
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+      /** Local responses must not recover upstream concurrency. */
+      shouldRecoverConcurrency?: (result: T) => boolean;
       /**
        * Per-call override for `maxRetries` only. Preserves the state's other
        * policy fields (backoff, jitter) so provider config cannot silently
@@ -217,7 +219,9 @@ export class ProviderRateLimitState extends EventEmitter {
           }
 
           if (!isRateLimited || (options.abortSignal?.aborted && hasRefusalResponse)) {
-            this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+            if (options.shouldRecoverConcurrency?.(result) !== false) {
+              this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+            }
             this.completedRequests++;
             return result;
           }

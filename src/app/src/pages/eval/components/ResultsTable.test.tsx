@@ -1,5 +1,6 @@
 import { act, StrictMode } from 'react';
 
+import { createCodexSecurityResult } from '@app/tests/fixtures/codexSecurity';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
@@ -177,6 +178,292 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('Total Cost:')).toBeInTheDocument();
     expect(screen.getByText('$1.23')).toBeInTheDocument();
   });
+
+  it('retains execution metrics for a column mixing live calls and imports', () => {
+    const table = {
+      ...mockTable,
+      head: {
+        ...mockTable.head,
+        prompts: [
+          {
+            ...mockTable.head.prompts[0],
+            hasSavedReportImports: true,
+            onlySavedReportImports: false,
+          },
+        ],
+      },
+    };
+    const state = useTableStore();
+    vi.mocked(useTableStore).mockImplementation(() => ({ ...state, table }));
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
+  });
+
+  it('hides empty import usage and ingestion timing while retaining live SDK statistics', () => {
+    const table = {
+      ...mockTable,
+      head: {
+        ...mockTable.head,
+        prompts: [
+          {
+            ...mockTable.head.prompts[0],
+            provider: 'Imported report',
+            hasSavedReportImports: true,
+            metrics: {
+              ...mockTable.head.prompts[0].metrics,
+              cost: 0,
+              tokenUsage: { total: 0, numRequests: 1 },
+            },
+          },
+          { ...mockTable.head.prompts[0], provider: 'Live SDK' },
+        ],
+      },
+      body: mockTable.body.map((row) => ({
+        ...row,
+        outputs: [
+          {
+            ...row.outputs[0],
+            metadata: {
+              codexSecurity: createCodexSecurityResult({
+                source: { kind: 'saved-report', mocked: false },
+              }),
+            },
+          },
+          {
+            ...row.outputs[0],
+            metadata: { codexSecurity: createCodexSecurityResult() },
+          },
+        ],
+      })),
+    };
+    const state = useTableStore();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      ...state,
+      table,
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const imported = within(screen.getByText('Imported report').closest('th')!);
+    const live = within(screen.getByText('Live SDK').closest('th')!);
+    expect(imported.queryByText('Total Cost:')).not.toBeInTheDocument();
+    expect(imported.queryByText('Total Tokens:')).not.toBeInTheDocument();
+    expect(imported.queryByText('Avg Tokens:')).not.toBeInTheDocument();
+    expect(imported.queryByText('Avg Latency:')).not.toBeInTheDocument();
+    expect(imported.queryByText('Tokens/Sec:')).not.toBeInTheDocument();
+    expect(imported.queryByText('Requests:')).not.toBeInTheDocument();
+    expect(live.getByText('Total Cost:')).toBeInTheDocument();
+    expect(live.getByText('Total Tokens:')).toBeInTheDocument();
+    expect(live.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(live.getByText('Tokens/Sec:')).toBeInTheDocument();
+  });
+
+  it('uses full-evaluation report provenance to hide ingestion metrics on an empty page', () => {
+    const state = useTableStore();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      ...state,
+      table: {
+        ...mockTable,
+        body: [],
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              provider: 'Imported report',
+              hasSavedReportImports: true,
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                cost: 0,
+                tokenUsage: { total: 0, numRequests: 1 },
+              },
+            },
+          ],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.queryByText('Total Cost:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total Tokens:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Avg Tokens:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Avg Latency:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Requests:')).not.toBeInTheDocument();
+  });
+
+  it('preserves mixed-source aggregate usage across saved-only, live-only and empty pages', () => {
+    const state = useTableStore();
+    const head = {
+      ...mockTable.head,
+      prompts: [
+        {
+          ...mockTable.head.prompts[0],
+          provider: 'Mixed provider',
+          hasSavedReportImports: true,
+          metrics: {
+            ...mockTable.head.prompts[0].metrics,
+            tokenUsage: { total: 1000, completion: 500, numRequests: 10 },
+          },
+        },
+      ],
+    };
+    const savedRow = {
+      ...mockTable.body[0],
+      outputs: [
+        {
+          ...mockTable.body[0].outputs[0],
+          metadata: {
+            codexSecurity: createCodexSecurityResult({
+              source: { kind: 'saved-report', mocked: false },
+            }),
+          },
+        },
+      ],
+    };
+    const liveRow = {
+      ...mockTable.body[0],
+      outputs: [
+        {
+          ...mockTable.body[0].outputs[0],
+          metadata: { codexSecurity: createCodexSecurityResult() },
+        },
+      ],
+    };
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      ...state,
+      table: { head, body: [savedRow] },
+    }));
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    for (const body of [[savedRow], [liveRow], []]) {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        ...state,
+        table: { head, body },
+      }));
+      rerender(<ResultsTable {...defaultProps} />);
+      expect(screen.getByText('Total Cost:').parentElement).toHaveTextContent('$1.23');
+      expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
+      expect(screen.getByText('Avg Tokens:')).toBeInTheDocument();
+      expect(screen.queryByText('Avg Latency:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tokens/Sec:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Requests:')).not.toBeInTheDocument();
+    }
+  });
+
+  it('keeps full-evaluation import provenance aligned when columns are reordered', () => {
+    const state = useTableStore();
+    const imported = {
+      ...mockTable.head.prompts[0],
+      provider: 'Imported report',
+      hasSavedReportImports: true,
+    };
+    const live = { ...mockTable.head.prompts[0], provider: 'Live SDK' };
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      ...state,
+      table: { ...mockTable, body: [], head: { ...mockTable.head, prompts: [imported, live] } },
+    }));
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    for (const prompts of [
+      [imported, live],
+      [live, imported],
+    ]) {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        ...state,
+        table: { ...mockTable, body: [], head: { ...mockTable.head, prompts } },
+      }));
+      rerender(<ResultsTable {...defaultProps} />);
+      const importedHeader = within(screen.getByText('Imported report').closest('th')!);
+      const liveHeader = within(screen.getByText('Live SDK').closest('th')!);
+      expect(importedHeader.getByText('Total Cost:')).toBeInTheDocument();
+      expect(importedHeader.getByText('Total Tokens:')).toBeInTheDocument();
+      expect(importedHeader.queryByText('Avg Latency:')).not.toBeInTheDocument();
+      expect(importedHeader.queryByText('Tokens/Sec:')).not.toBeInTheDocument();
+      expect(liveHeader.getByText('Avg Latency:')).toBeInTheDocument();
+      expect(liveHeader.getByText('Tokens/Sec:')).toBeInTheDocument();
+    }
+  });
+
+  it('retains actual grading tokens for saved reports with no provider token usage', () => {
+    const state = useTableStore();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      ...state,
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              provider: 'Imported report',
+              hasSavedReportImports: true,
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                cost: 0,
+                tokenUsage: { total: 0, numRequests: 1, assertions: { total: 75 } },
+              },
+            },
+          ],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('75');
+    expect(screen.getByText('Grading Tokens:').parentElement).toHaveTextContent('75');
+    expect(screen.queryByText('Total Cost:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Avg Latency:')).not.toBeInTheDocument();
+  });
+
+  it.each([undefined, false])(
+    'does not infer imports from config or one page without a true header marker',
+    (hasSavedReportImports) => {
+      const state = useTableStore();
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        ...state,
+        config: {
+          providers: [
+            { id: 'openai:codex-security', config: { report_file: '/local/report.json' } },
+          ],
+        },
+        table: {
+          ...mockTable,
+          body: mockTable.body.map((row) => ({
+            ...row,
+            outputs: [
+              {
+                ...row.outputs[0],
+                metadata: {
+                  codexSecurity: createCodexSecurityResult({
+                    source: { kind: 'saved-report', mocked: false },
+                  }),
+                },
+              },
+            ],
+          })),
+          head: {
+            ...mockTable.head,
+            prompts: [
+              {
+                ...mockTable.head.prompts[0],
+                provider: 'openai:codex-security',
+                hasSavedReportImports,
+              },
+            ],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText('Total Cost:')).toBeInTheDocument();
+      expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
+      expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    },
+  );
 
   it('displays total tokens with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -3611,6 +3898,16 @@ describe('ResultsTable Named Metric Totals', () => {
   afterEach(() => {
     vi.mocked(useTableStore).mockReset();
     vi.mocked(useResultsViewSettingsStore).mockReset();
+  });
+
+  it('counts a failed provider attempt as one case and retains its error indicator', () => {
+    mockTableStore([columnMetrics(0, 1)], { pageSize: 1 });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText(/0\/1 cases/)).toHaveTextContent('0.00% passing (0/1 cases)');
+    expect(screen.getByRole('button', { name: /Errors: 1/ })).toBeInTheDocument();
+    expect(screen.queryByText(/0\/0 cases/)).not.toBeInTheDocument();
   });
 
   it('uses each column’s own named metric count when the first column errored', () => {

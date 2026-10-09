@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { evaluate } from '../evaluator';
+import { waitForProviderSetup } from '../evaluator/providerSetup';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -75,6 +76,8 @@ export async function testProviderConnectivity({
   provider,
   prompt = 'Hello World!',
   inputs,
+  abortSignal,
+  setupTimeoutMs,
 }: {
   /** The provider to test */
   provider: ApiProvider;
@@ -82,7 +85,27 @@ export async function testProviderConnectivity({
   prompt?: string;
   /** Input variable definitions for multi-input configurations */
   inputs?: Inputs;
+  /** Cancels local setup checks without starting an evaluation. */
+  abortSignal?: AbortSignal;
+  /** Local setup deadline; invalid values fall back to 30 seconds. */
+  setupTimeoutMs?: number;
 }): Promise<ProviderTestResult> {
+  // Some providers represent expensive workloads rather than single completions.
+  // Their setup checks must bypass evaluation and remote response analysis entirely.
+  if (provider.checkSetup) {
+    const result = await waitForProviderSetup(
+      (signal) => provider.checkSetup!(undefined, { abortSignal: signal }),
+      { abortSignal, timeoutMs: setupTimeoutMs },
+      (message) => ({ success: false, message, error: message }),
+    );
+    return {
+      success: result.success,
+      message: result.message,
+      ...(result.error ? { error: result.error } : {}),
+      ...(result.details ? { providerResponse: { metadata: result.details } } : {}),
+    };
+  }
+
   const vars: Record<string, string> = {};
 
   // Generate a session ID for testing (works for both client sessions)

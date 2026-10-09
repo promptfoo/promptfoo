@@ -296,7 +296,7 @@ describe('EvaluateTestSuiteCreator', () => {
 
     render(<EvaluateTestSuiteCreator />);
 
-    expect(screen.getByText('Ready to run')).toBeInTheDocument();
+    expect(screen.getByText('Configuration ready')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Prompts: 1 ready' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Test Cases: 1 ready' })).toBeInTheDocument();
   });
@@ -331,7 +331,7 @@ describe('EvaluateTestSuiteCreator', () => {
 
     render(<EvaluateTestSuiteCreator />);
 
-    expect(screen.getByText('Ready to run')).toBeInTheDocument();
+    expect(screen.getByText('Configuration ready')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Review run options' }));
 
