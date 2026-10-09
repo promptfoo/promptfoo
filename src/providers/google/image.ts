@@ -1,8 +1,9 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
@@ -98,9 +99,17 @@ export class GoogleImageProvider implements ApiProvider {
     );
   }
 
+  /**
+   * Helper method to get Google client with credentials support
+   */
   private async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({ credentials });
+    const { client } = await getGoogleClient({
+      credentials,
+      googleAuthOptions: this.config.googleAuthOptions,
+      scopes: this.config.scopes,
+      keyFilename: this.config.keyFilename,
+    });
     return client;
   }
 
@@ -115,11 +124,17 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    if (determineGoogleVertexMode(this.config, this.env)) {
+    const apiKey = this.getApiKey();
+
+    // Explicit AI Studio mode must not be overridden by ambient Vertex project configuration.
+    const isVertexMode = determineGoogleVertexMode(this.config, this.env);
+
+    if (isVertexMode) {
+      // Use Vertex AI if project ID is available
       return this.callVertexApi(prompt);
     }
 
-    const apiKey = this.getApiKey();
+    // Otherwise, try Google AI Studio with API key
     if (apiKey || this.config.apiKeyRequired === false) {
       return this.callGeminiApi(prompt);
     }
@@ -136,8 +151,8 @@ export class GoogleImageProvider implements ApiProvider {
   private async callVertexApi(prompt: string): Promise<ProviderResponse> {
     const location =
       this.config.region ||
-      getEnvString('GOOGLE_LOCATION') ||
-      this.env?.GOOGLE_LOCATION ||
+      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+        ?.value ||
       'us-central1';
 
     try {
@@ -151,7 +166,11 @@ export class GoogleImageProvider implements ApiProvider {
       }
 
       const modelPath = this.getModelPath();
-      const endpoint = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${modelPath}:predict`;
+      const apiHost =
+        location === 'global'
+          ? 'aiplatform.googleapis.com'
+          : `${location}-aiplatform.googleapis.com`;
+      const endpoint = `https://${apiHost}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${modelPath}:predict`;
 
       logger.debug(`Vertex AI Image API endpoint: ${endpoint}`);
       logger.debug(`Project ID: ${projectId}, Location: ${location}, Model: ${modelPath}`);
@@ -214,7 +233,8 @@ export class GoogleImageProvider implements ApiProvider {
     }
 
     const modelPath = this.getModelPath();
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelPath}:predict`;
+    const apiHost = this.config.apiHost || 'generativelanguage.googleapis.com';
+    const endpoint = `https://${apiHost}/v1beta/models/${modelPath}:predict`;
 
     logger.debug(`Google AI Studio Image API endpoint: ${endpoint}`);
 
@@ -241,7 +261,7 @@ export class GoogleImageProvider implements ApiProvider {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        ...(apiKey && { 'x-goog-api-key': apiKey }),
+        ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
         ...(this.config.headers || {}),
       };
       const authDiscriminator = createAuthCacheDiscriminator(headers);
@@ -341,15 +361,11 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY')
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'GOOGLE_API_KEY',
+      'GOOGLE_GENERATIVE_AI_API_KEY',
+      'GEMINI_API_KEY',
+    ]);
   }
 
   private getModelPath(): string {

@@ -222,6 +222,9 @@
         "AZURE_API_BASE_URL": {
           "type": "string"
         },
+        "AZURE_AI_PROJECT_URL": {
+          "type": "string"
+        },
         "AZURE_API_HOST": {
           "type": "string"
         },
@@ -300,6 +303,9 @@
         "COMETAPI_KEY": {
           "type": "string"
         },
+        "COHERE_API_BASE_URL": {
+          "type": "string"
+        },
         "COHERE_API_KEY": {
           "type": "string"
         },
@@ -354,6 +360,9 @@
         "GOOGLE_API_HOST": {
           "type": "string"
         },
+        "GOOGLE_APPLICATION_CREDENTIALS": {
+          "type": "string"
+        },
         "GOOGLE_API_BASE_URL": {
           "type": "string"
         },
@@ -373,6 +382,9 @@
           "type": "string"
         },
         "GOOGLE_GENERATIVE_AI_API_KEY": {
+          "type": "string"
+        },
+        "GOOGLE_GENAI_USE_VERTEXAI": {
           "type": "string"
         },
         "GEMINI_API_KEY": {
@@ -534,13 +546,28 @@
         "PERPLEXITY_API_KEY": {
           "type": "string"
         },
+        "PORTKEY_API_BASE_URL": {
+          "type": "string"
+        },
         "PORTKEY_API_KEY": {
           "type": "string"
         },
         "PROMPTFOO_CA_CERT_PATH": {
           "type": "string"
         },
+        "PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS": {
+          "type": "string"
+        },
+        "PROMPTFOO_DISABLE_TEMPLATING": {
+          "type": "string"
+        },
+        "PROMPTFOO_MAX_CONCURRENCY": {
+          "type": "string"
+        },
         "PROMPTFOO_PFX_CERT_PATH": {
+          "type": "string"
+        },
+        "PROMPTFOO_TRACING_ENABLED": {
           "type": "string"
         },
         "PROMPTFOO_PFX_PASSWORD": {
@@ -556,6 +583,12 @@
           "type": "string"
         },
         "PROMPTFOO_INSECURE_SSL": {
+          "type": "string"
+        },
+        "PROMPTFOO_PYTHON": {
+          "type": "string"
+        },
+        "PROMPTFOO_PYTHON_WORKERS": {
           "type": "string"
         },
         "QUIVERAI_API_KEY": {
@@ -585,10 +618,16 @@
         "SLACK_BOT_TOKEN": {
           "type": "string"
         },
+        "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
+          "type": "string"
+        },
         "TOGETHER_API_KEY": {
           "type": "string"
         },
         "TRUEFOUNDRY_API_KEY": {
+          "type": "string"
+        },
+        "TYPESAFE_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -883,8 +922,17 @@
         "id": {},
         "callApi": {},
         "callEmbeddingApi": {},
+        "supportsEmbeddingCancellation": {
+          "type": "boolean"
+        },
         "callClassificationApi": {},
         "label": {},
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "transform": {
           "type": "string"
         },
@@ -3016,6 +3064,9 @@
           "type": "boolean"
         },
         "watch": {
+          "type": "boolean"
+        },
+        "safeMode": {
           "type": "boolean"
         },
         "filterErrorsOnly": {

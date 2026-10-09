@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -5,6 +6,7 @@ import path from 'path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
+import * as pythonUtils from '../../src/python/pythonUtils';
 import { MAX_STDERR_BUFFER_LENGTH, PythonWorker } from '../../src/python/worker';
 import { mockProcessEnv } from '../util/utils';
 
@@ -46,6 +48,58 @@ function createTestableWorker() {
     'call_api',
   ) as unknown as TestablePythonWorker;
 }
+
+describe('PythonWorker shutdown during startup or execution', () => {
+  it('does not spawn after shutdown while Python path validation is pending', async () => {
+    let finishValidation!: (value: string) => void;
+    const validation = new Promise<string>((resolve) => {
+      finishValidation = resolve;
+    });
+    const validate = vi.spyOn(pythonUtils, 'validatePythonPath').mockReturnValueOnce(validation);
+    const worker = new PythonWorker(path.join(os.tmpdir(), 'provider.py'), 'call_api');
+    const initialization = worker.initialize();
+    const rejection = expect(initialization).rejects.toThrow('Worker shutting down');
+    try {
+      expect(validate).toHaveBeenCalledOnce();
+      await worker.shutdown();
+      finishValidation(path.join(os.tmpdir(), 'nonexistent-promptfoo-python'));
+      await rejection;
+      expect(worker.isReady()).toBe(false);
+      await expect(worker.initialize()).rejects.toThrow('Worker shutting down');
+      expect(validate).toHaveBeenCalledOnce();
+    } finally {
+      finishValidation(path.join(os.tmpdir(), 'nonexistent-promptfoo-python'));
+      await Promise.allSettled([initialization]);
+      validate.mockRestore();
+    }
+  });
+
+  it.each([
+    ['initializing', false, false],
+    ['busy', true, true],
+  ])(
+    'immediately terminates a child that is %s instead of waiting for it to read shutdown',
+    async (_stage, ready, busy) => {
+      const worker = new PythonWorker(path.join(os.tmpdir(), 'provider.py'), 'call_api');
+      const processEvents = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+      const child = { kill: vi.fn(), send: vi.fn(), childProcess: processEvents };
+      Object.assign(worker, { process: child, ready, busy });
+      let finished = false;
+      const shutdown = worker.shutdown().then(() => {
+        finished = true;
+      });
+
+      expect(child.kill).toHaveBeenCalledExactlyOnceWith('SIGTERM');
+      expect(child.send).not.toHaveBeenCalled();
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      processEvents.emit('close');
+      await shutdown;
+      expect(worker.isReady()).toBe(false);
+      expect(worker.isBusy()).toBe(false);
+    },
+  );
+});
 
 describe('PythonWorker stderr parsing', () => {
   it('honors explicit INFO and DEBUG prefixes before scanning message text', () => {

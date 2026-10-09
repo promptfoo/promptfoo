@@ -39,6 +39,9 @@ beforeEach(() => {
     GOOGLE_API_KEY: undefined,
     GOOGLE_GENERATIVE_AI_API_KEY: undefined,
     GEMINI_API_KEY: undefined,
+    GOOGLE_CLOUD_LOCATION: undefined,
+    VERTEX_REGION: undefined,
+    GOOGLE_LOCATION: undefined,
   });
   auth.getClient.mockResolvedValue({ request: auth.request });
   auth.getProjectId.mockResolvedValue('adc-project');
@@ -86,7 +89,7 @@ describe('scoped Google cloud project resolution', () => {
         env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
       });
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', options);
-      // Veo resolves prompt-level authentication and ADC after preflight.
+      // Veo resolves provider authentication and ADC after preflight.
       expect(provider.requiresApiKey()).toBe(false);
 
       const result = await provider.callApi('A quiet garden');
@@ -112,13 +115,34 @@ describe('scoped Google cloud project resolution', () => {
   );
 
   it.each([
+    [GoogleImageProvider, 'imagen-4.0-generate-001'],
+    [GeminiImageProvider, 'gemini-2.5-flash-image'],
+    [GoogleVideoProvider, 'veo-3.1-generate-preview'],
+  ])('routes %p to the scoped regional endpoint', async (Provider, model) => {
+    mockProcessEnv({ VERTEX_REGION: 'us-central1', GOOGLE_CLOUD_PROJECT: 'process-project' });
+    auth.request.mockRejectedValue(new Error('Regional fixture stop'));
+    const provider = new Provider(model, {
+      config: { vertexai: true },
+      env: { GOOGLE_CLOUD_PROJECT: 'scoped-project', GOOGLE_CLOUD_LOCATION: 'europe-west4' },
+    });
+    await provider.callApi('A quiet garden');
+    expect(auth.request).toHaveBeenCalled();
+    for (const [request] of auth.request.mock.calls) {
+      expect(request.url).toContain('europe-west4-aiplatform.googleapis.com/');
+      expect(request.url).toContain('/projects/scoped-project/locations/europe-west4/');
+    }
+    expect(fetchWithCache).not.toHaveBeenCalled();
+    expect(fetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it.each([
     [{ projectId: 'configured' }, { GOOGLE_CLOUD_PROJECT: 'scoped' }, {}, 'configured'],
     [{}, { VERTEX_PROJECT_ID: 'vertex', GOOGLE_CLOUD_PROJECT: 'scoped' }, {}, 'vertex'],
-    [{}, { GOOGLE_CLOUD_PROJECT: 'scoped' }, { VERTEX_PROJECT_ID: 'vertex' }, 'vertex'],
+    [{}, { GOOGLE_CLOUD_PROJECT: 'scoped' }, { VERTEX_PROJECT_ID: 'vertex' }, 'scoped'],
     [{}, { GOOGLE_PROJECT_ID: 'google', GOOGLE_CLOUD_PROJECT: 'scoped' }, {}, 'google'],
-    [{}, { GOOGLE_CLOUD_PROJECT: 'scoped' }, { GOOGLE_PROJECT_ID: 'google' }, 'google'],
+    [{}, { GOOGLE_CLOUD_PROJECT: 'scoped' }, { GOOGLE_PROJECT_ID: 'google' }, 'scoped'],
     [{}, { GOOGLE_CLOUD_PROJECT: 'scoped' }, { GOOGLE_CLOUD_PROJECT: 'process' }, 'scoped'],
-    [{}, { GOOGLE_CLOUD_PROJECT: '' }, { GOOGLE_CLOUD_PROJECT: 'process' }, 'process'],
+    [{}, { GOOGLE_CLOUD_PROJECT: '' }, { GOOGLE_CLOUD_PROJECT: 'process' }, 'adc-project'],
     [{}, {}, {}, 'adc-project'],
   ])(
     'preserves project precedence for config=%j, scoped=%j, process=%j',
@@ -130,9 +154,9 @@ describe('scoped Google cloud project resolution', () => {
 
   it.each([
     [{ VERTEX_PROJECT_ID: 'vertex', GOOGLE_CLOUD_PROJECT: 'cloud' }, {}, 'vertex'],
-    [{ GOOGLE_CLOUD_PROJECT: 'cloud' }, { VERTEX_PROJECT_ID: 'vertex' }, 'vertex'],
+    [{ GOOGLE_CLOUD_PROJECT: 'cloud' }, { VERTEX_PROJECT_ID: 'vertex' }, 'cloud'],
     [{ GOOGLE_PROJECT_ID: 'google', GOOGLE_CLOUD_PROJECT: 'cloud' }, {}, 'google'],
-    [{ GOOGLE_CLOUD_PROJECT: 'cloud' }, { GOOGLE_PROJECT_ID: 'google' }, 'google'],
+    [{ GOOGLE_CLOUD_PROJECT: 'cloud' }, { GOOGLE_PROJECT_ID: 'google' }, 'cloud'],
   ])(
     'uses the shared project precedence for video requests (%j, %j)',
     async (env, processEnv, expected) => {
@@ -216,6 +240,7 @@ describe('scoped Google cloud project resolution', () => {
         config: {
           vertexai: false,
           apiKeyRequired,
+          apiHost: 'fixture-proxy.invalid',
           headers: { 'X-Proxy-Auth': 'fixture-proxy-key' },
         },
       });
@@ -226,6 +251,9 @@ describe('scoped Google cloud project resolution', () => {
       } else {
         expect(result.error).toBeUndefined();
         expect(fetchWithCache).toHaveBeenCalledTimes(1);
+        expect(new URL(String(vi.mocked(fetchWithCache).mock.calls[0][0])).host).toBe(
+          'fixture-proxy.invalid',
+        );
         const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers);
         expect(headers.has('x-goog-api-key')).toBe(false);
         expect(headers.get('X-Proxy-Auth')).toBe('fixture-proxy-key');

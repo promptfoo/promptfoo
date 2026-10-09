@@ -5,6 +5,7 @@ import { mockProcessEnv } from '../../util/utils';
 // Mock dependencies
 vi.mock('../../../src/envars', () => ({
   getEnvString: vi.fn(),
+  getEnvOverrides: vi.fn(),
 }));
 
 vi.mock('../../../src/logger', () => ({
@@ -353,6 +354,14 @@ describe('GoogleAuthManager', () => {
       },
     );
 
+    it('should auto-detect vertex mode from provider-scoped GOOGLE_CLOUD_PROJECT', () => {
+      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+
+      expect(
+        GoogleAuthManager.determineVertexMode({}, { GOOGLE_CLOUD_PROJECT: 'provider-project' }),
+      ).toBe(true);
+    });
+
     it('should auto-detect vertex mode from credentials config', () => {
       vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
 
@@ -378,6 +387,22 @@ describe('GoogleAuthManager', () => {
   });
 
   describe('validateAndWarn', () => {
+    it.each([undefined, ''])('preserves the provider ADC diagnostic mask %j', (adc) => {
+      vi.mocked(getEnvString).mockImplementation((key) =>
+        key === 'GOOGLE_APPLICATION_CREDENTIALS' ? 'ambient.json' : '',
+      );
+      GoogleAuthManager.validateAndWarn(
+        { vertexai: true },
+        { GOOGLE_APPLICATION_CREDENTIALS: adc },
+      );
+      const warning = expect.stringContaining('no projectId, credentials, or ADC detected');
+      if (adc === '') {
+        expect(logger.debug).toHaveBeenCalledWith(warning);
+      } else {
+        expect(logger.debug).not.toHaveBeenCalledWith(warning);
+      }
+    });
+
     it('should warn when GOOGLE_GENAI_USE_VERTEXAI conflicts with config', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
         if (key === 'GOOGLE_GENAI_USE_VERTEXAI') {
@@ -411,7 +436,7 @@ describe('GoogleAuthManager', () => {
     it.each([
       { scoped: 'config-project', processProject: 'different-project', warns: false },
       { scoped: 'different-project', processProject: 'config-project', warns: true },
-      { scoped: '', processProject: 'different-project', warns: true },
+      { scoped: '', processProject: 'different-project', warns: false },
     ])(
       'uses the effective cloud project for conflict diagnostics: $scoped / $processProject',
       ({ scoped, processProject, warns }) => {
@@ -458,6 +483,40 @@ describe('GoogleAuthManager', () => {
         ),
       ).not.toThrow();
     });
+
+    it('should use provider-scoped GOOGLE_CLOUD_PROJECT for conflict checks', () => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'GOOGLE_CLOUD_PROJECT') {
+          return 'process-project';
+        }
+        return defaultValue as string;
+      });
+
+      GoogleAuthManager.validateAndWarn(
+        { projectId: 'provider-project' },
+        { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+      );
+
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Both GOOGLE_CLOUD_PROJECT and config.projectId are set'),
+      );
+    });
+
+    it.each(['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'] as const)(
+      'should recognize provider-scoped %s as a Vertex project',
+      (projectEnvName) => {
+        vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+
+        GoogleAuthManager.validateAndWarn(
+          { vertexai: true },
+          { [projectEnvName]: 'provider-project' },
+        );
+
+        expect(logger.debug).not.toHaveBeenCalledWith(
+          expect.stringContaining('Vertex AI mode enabled but no projectId'),
+        );
+      },
+    );
 
     it('should log debug when both apiKey and credentials are set', () => {
       // When both are set, API key takes precedence (express mode is automatic)
@@ -542,6 +601,34 @@ describe('GoogleAuthManager', () => {
     });
   });
 
+  describe('resolveProjectId', () => {
+    it('should prefer provider-scoped GOOGLE_CLOUD_PROJECT over process aliases and ADC', async () => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'VERTEX_PROJECT_ID') {
+          return 'process-vertex-project';
+        }
+        if (key === 'GOOGLE_PROJECT_ID') {
+          return 'process-google-project';
+        }
+        if (key === 'GOOGLE_CLOUD_PROJECT') {
+          return 'process-cloud-project';
+        }
+        return defaultValue as string;
+      });
+      const oauthSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+        client: {},
+        projectId: 'adc-project',
+      });
+
+      await expect(
+        GoogleAuthManager.resolveProjectId({}, { GOOGLE_CLOUD_PROJECT: 'provider-cloud-project' }),
+      ).resolves.toBe('provider-cloud-project');
+      expect(oauthSpy).not.toHaveBeenCalled();
+
+      oauthSpy.mockRestore();
+    });
+  });
+
   describe('resolveRegion', () => {
     it('should prioritize config.region', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
@@ -574,6 +661,32 @@ describe('GoogleAuthManager', () => {
       });
 
       expect(GoogleAuthManager.resolveRegion({})).toBe('cloud-location');
+    });
+
+    it('should prefer a provider-scoped GOOGLE_CLOUD_LOCATION override', () => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'GOOGLE_CLOUD_LOCATION') {
+          return 'process-location';
+        }
+        return defaultValue as string;
+      });
+
+      expect(
+        GoogleAuthManager.resolveRegion({}, { GOOGLE_CLOUD_LOCATION: 'provider-location' }),
+      ).toBe('provider-location');
+    });
+
+    it('should prefer provider-scoped GOOGLE_CLOUD_LOCATION over process VERTEX_REGION', () => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'VERTEX_REGION') {
+          return 'process-vertex-region';
+        }
+        return defaultValue as string;
+      });
+
+      expect(
+        GoogleAuthManager.resolveRegion({}, { GOOGLE_CLOUD_LOCATION: 'provider-location' }),
+      ).toBe('provider-location');
     });
 
     it('should default to us-central1 when hasApiKey is undefined', () => {

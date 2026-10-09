@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test Jev questions against labeled support tickets
+
+# Jev is the provider under test: each prompt is the state, and the output is
+# Jev's answers to the questions below, keyed by question id.
+prompts:
+  - '{{ticket}}'
+
+providers:
+  - id: typesafe:jev-latest
+    config:
+      questions:
+        team:
+          type: choice
+          instructions: Which team should handle this ticket?
+          criteria:
+            billing: Payments, invoicing, refunds
+            technical: Bugs, outages, integrations
+            sales: Pricing, upgrades, new accounts
+        urgent:
+          type: noul
+          instructions: Does the customer need a response today?
+        frustration:
+          type: score
+          instructions: How frustrated is the customer?
+          criteria:
+            - Calm
+            - Frustrated
+            - Very angry
+
+tests:
+  - description: Failing payouts
+    vars:
+      ticket: Help! Payouts have been failing for three days and my vendors are furious.
+    assert:
+      - type: javascript
+        value: output.team.choice === 'billing'
+      - type: javascript
+        value: output.urgent.noul > 0.8
+      - type: javascript
+        value: output.frustration.score > 1
+
+  - description: Pricing question
+    vars:
+      ticket: Do you offer a discount for annual plans? No rush, just planning next year's budget.
+    assert:
+      - type: javascript
+        value: output.team.choice === 'sales'
+      - type: javascript
+        value: output.urgent.noul < 0.2
+      - type: javascript
+        value: output.frustration.score < 0.5
+
+  - description: Broken webhook
+    vars:
+      ticket: Your webhook retries stopped after last night's deploy. Can someone take a look this week?
+    assert:
+      - type: javascript
+        value: output.team.choice === 'technical'
+      # Assert on the full distribution, not only the top choice.
+      - type: javascript
+        value: output.team.probabilities.technical > 0.8
