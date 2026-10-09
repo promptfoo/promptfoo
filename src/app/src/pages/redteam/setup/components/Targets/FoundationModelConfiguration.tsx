@@ -39,6 +39,8 @@ const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
   { value: 'converse', label: 'Converse' },
   { value: 'chat', label: 'Chat Completions' },
   { value: 'messages', label: 'Anthropic Messages' },
+  { value: 'runtime-chat', label: 'Chat Completions (Bedrock Runtime)' },
+  { value: 'runtime-responses', label: 'Responses (Bedrock Runtime)' },
 ];
 
 const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
@@ -48,6 +50,10 @@ const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
   responses: 'Uses the OpenAI-compatible Responses API.',
   chat: 'Uses the OpenAI-compatible Chat Completions API.',
   messages: 'Uses the Anthropic Messages API.',
+  'runtime-chat':
+    'Uses OpenAI-compatible Chat Completions on Bedrock Runtime with Runtime model IDs.',
+  'runtime-responses':
+    'Uses OpenAI-compatible Responses on Bedrock Runtime. Background inference and server-side tools are unavailable.',
 };
 
 interface MCPServerConfig {
@@ -69,6 +75,9 @@ const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): strin
   // Do not guess namespaces for custom IDs, inference profiles, or ARNs.
   if (BEDROCK_GPT_SHORTHAND.test(modelId)) {
     modelId = `openai.${modelId}`;
+  }
+  if (apiMode === 'runtime-chat' || apiMode === 'runtime-responses') {
+    return `bedrock:runtime:${apiMode === 'runtime-chat' ? 'chat' : 'responses'}:${modelId}`;
   }
   if (apiMode === 'responses' || apiMode === 'chat') {
     const prefix = apiMode === 'chat' ? 'mantle' : 'responses';
@@ -137,7 +146,11 @@ const FoundationModelConfiguration = ({
   const [bedrockApiMode, setBedrockApiMode] = useState(bedrockRoute?.apiMode);
   const lastEditedTarget = useRef<{ id: string; providerType: string } | undefined>(undefined);
   const isBedrockHttpApi =
-    bedrockApiMode === 'responses' || bedrockApiMode === 'chat' || bedrockApiMode === 'messages';
+    bedrockApiMode === 'responses' ||
+    bedrockApiMode === 'runtime-responses' ||
+    bedrockApiMode === 'chat' ||
+    bedrockApiMode === 'messages' ||
+    bedrockApiMode === 'runtime-chat';
   const isBedrockNativeApi = bedrockApiMode === 'invoke' || bedrockApiMode === 'converse';
   const [modelDraft, setModelDraft] = useState({
     modelId: isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
@@ -194,8 +207,14 @@ const FoundationModelConfiguration = ({
   };
 
   const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
-    const source = bedrockApiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
-    const destination = apiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
+    const source =
+      bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
+        ? 'max_output_tokens'
+        : 'max_tokens';
+    const destination =
+      apiMode === 'responses' || apiMode === 'runtime-responses'
+        ? 'max_output_tokens'
+        : 'max_tokens';
     if (source !== destination && selectedTarget.config?.[source] !== undefined) {
       const { [source]: limit, ...config } = selectedTarget.config;
       updateCustomTarget('config', { ...config, [destination]: limit });
@@ -641,20 +660,24 @@ const FoundationModelConfiguration = ({
 
             <div className="space-y-2">
               <Label htmlFor="max-tokens">
-                {bedrockApiMode === 'responses' ? 'Max Output Tokens' : 'Max Tokens'}
+                {bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
+                  ? 'Max Output Tokens'
+                  : 'Max Tokens'}
               </Label>
               <Input
                 id="max-tokens"
                 type="number"
                 min={1}
                 value={
-                  bedrockApiMode === 'responses'
+                  bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
                     ? (selectedTarget.config?.max_output_tokens ?? '')
                     : (selectedTarget.config?.max_tokens ?? '')
                 }
                 onChange={(e) =>
                   updateCustomTarget(
-                    bedrockApiMode === 'responses' ? 'max_output_tokens' : 'max_tokens',
+                    bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
+                      ? 'max_output_tokens'
+                      : 'max_tokens',
                     parseInt(e.target.value) || undefined,
                   )
                 }

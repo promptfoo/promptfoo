@@ -25,6 +25,25 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       const textRoute = getBedrockTextRoute(providerPath);
 
+      if (modelType === 'runtime') {
+        const api = splits[2];
+        const runtimeModel = splits.slice(3).join(':');
+        if (!runtimeModel || (api !== 'chat' && api !== 'responses')) {
+          throw new Error(
+            'Use bedrock:runtime:chat:<model-id> or bedrock:runtime:responses:<model-id>.',
+          );
+        }
+        const { BedrockRuntimeChatProvider, BedrockRuntimeResponsesProvider } = await import(
+          '../bedrock/runtimeOpenai'
+        );
+        const Provider =
+          api === 'chat' ? BedrockRuntimeChatProvider : BedrockRuntimeResponsesProvider;
+        return new Provider(runtimeModel, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
+
       // Mythos 5 requires Mantle's Messages endpoint. Both 5.1 models support
       // Runtime, including an explicit Messages route with US/global profiles.
       const isLegacyType = modelType === 'converse' || modelType === 'completion';

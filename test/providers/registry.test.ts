@@ -20,6 +20,26 @@ import type { OpenAiDecisionsProvider } from '../../src/providers/openai/decisio
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
+describe('Bedrock Runtime OpenAI API routing', () => {
+  it.each([
+    ['chat', 'BedrockRuntimeChatProvider'],
+    ['responses', 'BedrockRuntimeResponsesProvider'],
+  ])('routes runtime:%s with versioned model IDs', async (api, name) => {
+    const provider = await loadApiProvider(`bedrock:runtime:${api}:openai.gpt-oss-120b-1:0`, {
+      options: { config: { region: 'us-east-1', apiKey: 'fixture' } },
+    });
+    expect(provider.constructor.name).toBe(name);
+    expect(provider.id()).toBe(`bedrock:runtime:${api}:openai.gpt-oss-120b-1:0`);
+  });
+
+  it.each(['bedrock:runtime', 'bedrock:runtime:chat', 'bedrock:runtime:invalid:model'])(
+    'rejects incomplete or unknown Runtime route %s',
+    async (id) => {
+      await expect(loadApiProvider(id)).rejects.toThrow('bedrock:runtime:chat:<model-id>');
+    },
+  );
+});
+
 vi.mock('../../src/telemetry');
 
 vi.mock('../../src/providers/pythonCompletion', async (importOriginal) => {

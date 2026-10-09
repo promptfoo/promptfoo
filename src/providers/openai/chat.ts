@@ -745,6 +745,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     };
   }
 
+  // Adapters can collect a wire-format stream before the shared response/tool parser runs.
+  protected getChatResponseFormat(_body: Record<string, any>): 'json' | 'text' {
+    return 'json';
+  }
+
+  protected parseChatResponse(data: any, _body: Record<string, any>): any {
+    return data;
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -917,7 +926,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
         },
         getRequestTimeoutMs(),
-        'json',
+        this.getChatResponseFormat(body),
         this.shouldBustCache(context),
         this.config.maxRetries,
         (response) => {
@@ -925,13 +934,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             if (response.headers && getOpenAiGatewayRateLimitKind(response.data) !== 'quota') {
               callApiOptions?.onResponseHeaders?.(response.headers);
             }
-            completedRefusal = getRefusalResponse(response);
+            completedRefusal = getRefusalResponse({
+              ...response,
+              data: this.parseChatResponse(response.data, body),
+            });
           }
         },
         callApiOptions?.onResponseHeaders
           ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
           : undefined,
       ));
+
+      data = this.parseChatResponse(data, body);
 
       const gatewayErrorFormat = this.usesGatewayErrorFormat();
       const policy = getOpenAiPolicyRefusal(data, gatewayErrorFormat);

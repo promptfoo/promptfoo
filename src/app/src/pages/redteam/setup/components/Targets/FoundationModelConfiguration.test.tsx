@@ -508,6 +508,28 @@ describe('FoundationModelConfiguration', () => {
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
   });
 
+  it.each(['chat', 'responses'] as const)(
+    'preserves Runtime %s routing when editing a model',
+    async (api) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{ id: `bedrock:runtime:${api}:us.openai.gpt-5.6-sol`, config: {} }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue(`runtime-${api}`);
+      const field = screen.getByLabelText(/Model ID/i);
+      await user.clear(field);
+      await user.type(field, 'global.openai.gpt-5.6-luna');
+      expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
+        'id',
+        `bedrock:runtime:${api}:global.openai.gpt-5.6-luna`,
+      );
+    },
+  );
+
   it.each([
     ['bedrock:amazon.nova-pro-v1:0', 'model-specific InvokeModel API on Bedrock Runtime'],
     ['bedrock:converse:amazon.nova-pro-v1:0', 'Bedrock Converse API on Bedrock Runtime'],

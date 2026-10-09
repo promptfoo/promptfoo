@@ -231,11 +231,18 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     return typeof model === 'string' ? model : this.modelName;
   }
 
+  protected usesRuntimeApi(): boolean {
+    return false;
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: BedrockOpenAiResponsesBodyContext,
     callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
   ) {
+    if (this.usesRuntimeApi()) {
+      return super.getOpenAiBody(prompt, context, callApiOptions);
+    }
     const model = this.getRequestModelName(context);
     if (
       isBedrockOpenAiResponsesModel(model) !== isBedrockOpenAiResponsesModel(this.modelName) ||

@@ -1,6 +1,13 @@
 // Pure routing helpers shared by the provider factory and browser configuration UI.
 // Keep this module free of SDK, environment, and other server-only imports.
-export type BedrockApiMode = 'invoke' | 'converse' | 'responses' | 'chat' | 'messages';
+export type BedrockApiMode =
+  | 'invoke'
+  | 'converse'
+  | 'responses'
+  | 'chat'
+  | 'messages'
+  | 'runtime-chat'
+  | 'runtime-responses';
 
 export function isRejectedPrefixedMythosId(modelName: string): boolean {
   return /^[^.]+\.(anthropic\.claude-mythos-(?:5|preview))$/.test(modelName);
@@ -79,6 +86,12 @@ export function getBedrockTextRoute(id: string):
     return undefined;
   }
   const [subtype, ...parts] = id.slice('bedrock:'.length).split(':');
+  if (subtype === 'runtime') {
+    const [api, ...model] = parts;
+    return api === 'chat' || api === 'responses'
+      ? { apiMode: api === 'chat' ? 'runtime-chat' : 'runtime-responses', modelId: model.join(':') }
+      : undefined;
+  }
   const explicitModes: Record<string, BedrockApiMode> = {
     completion: 'invoke',
     converse: 'converse',
