@@ -65,6 +65,7 @@ import {
   getGraderAssertionValue,
   getRedteamAssertion,
   getTargetResponse,
+  prepareNumericGrading,
   redteamProviderManager,
   runRedteamGrader,
   snapshotTargetMetadata,
@@ -894,16 +895,62 @@ async function runRedteamConversation({
           '[IterativeTree] Target did not return an output property',
         );
 
-        const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
+        const { getGraderById } = await import('../graders');
+        const assertToUse = getRedteamAssertion(test);
+        const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
+        const iterationTest = test ? { ...test, vars: iterationVars } : undefined;
+        const graderInput = {
+          assertion: assertToUse,
+          targetProvider,
+          prompt,
+          context,
+          targetMetadata,
+        };
+        const numericGradingContext: RedteamGradingContext = {
+          providerResponse: targetResponse,
+          outputIsText: targetResponse.outputIsText,
+        };
+        const preparedNumeric =
+          iterationTest && grader
+            ? await prepareNumericGrading(
+                graderInput,
+                finalInjectVar,
+                targetResponse.output,
+                iterationTest,
+                getGraderAssertionValue(assertToUse),
+                numericGradingContext,
+              )
+            : undefined;
+        const numericResult =
+          preparedNumeric?.numeric && iterationTest && grader
+            ? await runRedteamGrader(
+                grader,
+                { ...graderInput, preparedNumeric },
+                finalInjectVar,
+                targetResponse.output,
+                iterationTest,
+                gradingProvider,
+                getGraderAssertionValue(assertToUse),
+                additionalRubric,
+                undefined,
+                numericGradingContext,
+              )
+            : undefined;
 
-        const { score, explanation } = await evaluateResponse(
-          gradingProvider,
-          judgeSystemPrompt,
-          targetResponse.output,
-          bestResponse,
-          containsPenalizedPhrase,
-          totalTokenUsage,
-        );
+        const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
+        // A deterministic failure already meets the stopping condition; the auxiliary
+        // judge must not hide it or a reference error when the judge is unavailable.
+        const { score, explanation } =
+          numericResult?.grade.pass === false
+            ? { score: 10, explanation: numericResult.grade.reason }
+            : await evaluateResponse(
+                gradingProvider,
+                judgeSystemPrompt,
+                targetResponse.output,
+                bestResponse,
+                containsPenalizedPhrase,
+                totalTokenUsage,
+              );
 
         logger.debug(
           `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
@@ -947,19 +994,10 @@ async function runRedteamConversation({
           }
         }
 
-        const { getGraderById } = await import('../graders');
         let graderPassed: boolean | undefined;
-        const assertToUse = getRedteamAssertion(test);
 
-        if (test && assertToUse) {
-          const grader = getGraderById(assertToUse.type);
+        if (test && assertToUse && iterationTest) {
           if (grader) {
-            // Create test object with iteration-specific vars
-            const iterationTest = {
-              ...test,
-              vars: iterationVars,
-            };
-
             // Build grading context with image outputs and exfil tracking data.
             let gradingContext: RedteamGradingContext | undefined = {
               providerResponse: targetResponse,
@@ -1018,18 +1056,20 @@ async function runRedteamConversation({
               };
             }
 
-            const { grade, rubric } = await runRedteamGrader(
-              grader,
-              { assertion: assertToUse, targetProvider, prompt, context },
-              finalInjectVar,
-              targetResponse.output,
-              iterationTest,
-              gradingProvider,
-              getGraderAssertionValue(assertToUse),
-              additionalRubric,
-              undefined, // skipRefusalCheck
-              gradingContext,
-            );
+            const { grade, rubric } =
+              numericResult ??
+              (await runRedteamGrader(
+                grader,
+                { ...graderInput, preparedNumeric },
+                finalInjectVar,
+                targetResponse.output,
+                iterationTest,
+                gradingProvider,
+                getGraderAssertionValue(assertToUse),
+                additionalRubric,
+                undefined, // skipRefusalCheck
+                gradingContext,
+              ));
             storedGraderResult = accumulateGraderResult(
               storedGraderResult,
               {

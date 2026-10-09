@@ -1497,8 +1497,27 @@ async function gradeRunEvalResponse({
     // Keep generated audio available to graders after persistence replaces its
     // inline bytes with a blob reference in the saved result.
     ...(response.audio?.data ? { audio: response.audio } : {}),
+    // Numeric callbacks see the live selected turn; storage keeps the extracted copy.
+    ...(hasNumericFinancialAssertions(test.assert) &&
+      response.metadata &&
+      Object.prototype.hasOwnProperty.call(response.metadata, 'redteamTargetMetadata') && {
+        metadata: {
+          ...processedResponse.metadata,
+          redteamTargetMetadata: response.metadata.redteamTargetMetadata,
+        },
+      }),
     providerTransformedOutput,
   };
+  if (
+    ret.metadata &&
+    response.metadata &&
+    Object.prototype.hasOwnProperty.call(response.metadata, 'redteamTargetMetadata')
+  ) {
+    ret.metadata = {
+      ...ret.metadata,
+      redteamTargetMetadata: processedResponse.metadata?.redteamTargetMetadata,
+    };
+  }
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');

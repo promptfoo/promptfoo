@@ -339,6 +339,7 @@ async function externalizeDataUrls(
 async function externalizeMetadataAudio(
   metadata: ProviderResponse['metadata'],
   storeOnce: StoreOnce,
+  location = 'response.metadata',
 ): Promise<{ value: ProviderResponse['metadata']; mutated: boolean }> {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return { value: metadata, mutated: false };
@@ -361,7 +362,7 @@ async function externalizeMetadataAudio(
   const stored = await storeOnce(
     audioRecord.data,
     normalizeAudioMimeType(typeof audioRecord.format === 'string' ? audioRecord.format : undefined),
-    'response.metadata.audio.data',
+    `${location}.audio.data`,
     'audio',
   );
   if (!stored) {
@@ -571,12 +572,23 @@ export async function extractAndStoreBinaryData(
       metadata,
       storeOnce,
     );
+    // A numeric strategy captures one selected target metadata object. Apply the
+    // same audio lifecycle at that boundary, without treating deeper domain data
+    // named audio or redteamTargetMetadata as another provider response.
+    const capturedAudio = await externalizeMetadataAudio(
+      audioValue?.redteamTargetMetadata,
+      storeOnce,
+      'response.metadata.redteamTargetMetadata',
+    );
+    const capturedValue = capturedAudio.mutated
+      ? { ...audioValue, redteamTargetMetadata: capturedAudio.value }
+      : audioValue;
     const { value, mutated: dataUrlMetadataMutated } = await externalizeDataUrls(
-      audioValue,
+      capturedValue,
       storeOnce,
       'response.metadata',
     );
-    if (audioMetadataMutated || dataUrlMetadataMutated) {
+    if (audioMetadataMutated || capturedAudio.mutated || dataUrlMetadataMutated) {
       next.metadata = value as ProviderResponse['metadata'];
       mutated = true;
     }

@@ -334,6 +334,7 @@ export class CustomProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let lastTargetMetadata: TargetResponse['metadata'] | null;
     let hasTargetResponse = false;
     let lastAttemptError: string | undefined;
     let lastResponseMessages: Message[] = [];
@@ -424,7 +425,7 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug(`[Custom] Generated attack prompt: ${attackPrompt}`);
 
-        const { response, transformResult } = await this.sendPrompt(
+        const { response, targetMetadata, transformResult } = await this.sendPrompt(
           attackPrompt,
           prompt,
           vars,
@@ -442,6 +443,7 @@ export class CustomProvider implements ApiProvider {
           continue;
         }
         lastResponse = response;
+        lastTargetMetadata = targetMetadata;
         hasTargetResponse = true;
         lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
@@ -483,7 +485,13 @@ export class CustomProvider implements ApiProvider {
         const preparedNumeric =
           test && assertToUse
             ? await prepareNumericGrading(
-                { assertion: assertToUse, targetProvider: provider, prompt, context },
+                {
+                  assertion: assertToUse,
+                  targetProvider: provider,
+                  prompt,
+                  context,
+                  targetMetadata: lastTargetMetadata,
+                },
                 lastFinalAttackPrompt,
                 lastResponse.output,
                 test,
@@ -509,17 +517,20 @@ export class CustomProvider implements ApiProvider {
             `[Custom] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
           );
 
-          const { response: unblockingResponse, transformResult: unblockingTransform } =
-            await this.sendPrompt(
-              unblockingResult.unblockingPrompt,
-              prompt,
-              vars,
-              filters,
-              provider,
-              roundNum,
-              context,
-              options,
-            );
+          const {
+            response: unblockingResponse,
+            targetMetadata: unblockingTargetMetadata,
+            transformResult: unblockingTransform,
+          } = await this.sendPrompt(
+            unblockingResult.unblockingPrompt,
+            prompt,
+            vars,
+            filters,
+            provider,
+            roundNum,
+            context,
+            options,
+          );
 
           if (unblockingTransform?.error) {
             if (unblockingTransform.tokenUsage) {
@@ -536,6 +547,7 @@ export class CustomProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          lastTargetMetadata = unblockingTargetMetadata;
           lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
           lastFinalAttackPrompt =
             unblockingTransform?.prompt ||
@@ -616,7 +628,7 @@ export class CustomProvider implements ApiProvider {
               prompt: lastFinalAttackPrompt,
               output: lastResponse.output,
               outputIsText: lastResponse.outputIsText,
-              targetMetadata: snapshotTargetMetadata(lastResponse, test),
+              targetMetadata: lastTargetMetadata,
               messages: lastResponseMessages,
               guardrails: lastResponse.guardrails,
             };
@@ -763,7 +775,7 @@ export class CustomProvider implements ApiProvider {
     const reported = flaggedRound ?? {
       output: lastResponse.output,
       outputIsText: lastResponse.outputIsText,
-      targetMetadata: snapshotTargetMetadata(lastResponse, test),
+      targetMetadata: lastTargetMetadata,
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
@@ -929,7 +941,11 @@ export class CustomProvider implements ApiProvider {
     _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
+  ): Promise<{
+    response: TargetResponse;
+    targetMetadata?: TargetResponse['metadata'] | null;
+    transformResult?: TransformResult;
+  }> {
     let lastTransformResult: TransformResult | undefined;
 
     const targetVars = { ...vars, [this.config.injectVar]: attackPrompt };
@@ -1052,6 +1068,7 @@ export class CustomProvider implements ApiProvider {
       context && { ...context, vars: targetVars },
       options,
     );
+    const targetMetadata = snapshotTargetMetadata(targetResponse, context?.test);
     for (const message of pendingMessages) {
       this.memory.addMessage(this.targetConversationId, message);
     }
@@ -1073,7 +1090,7 @@ export class CustomProvider implements ApiProvider {
       content: targetResponse.output,
     });
 
-    return { response: targetResponse, transformResult: lastTransformResult };
+    return { response: targetResponse, targetMetadata, transformResult: lastTransformResult };
   }
 
   private async getRefusalScore(

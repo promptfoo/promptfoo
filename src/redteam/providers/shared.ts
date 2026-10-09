@@ -653,6 +653,8 @@ interface RedteamGraderInput {
   prompt?: CallApiContextParams['prompt'];
   context?: CallApiContextParams;
   preparedNumeric?: PreparedNumericGrading;
+  /** Original selected metadata captured before history media externalization. */
+  targetMetadata?: ProviderResponse['metadata'] | null;
 }
 
 type PreparedNumericGrading =
@@ -706,7 +708,12 @@ export async function prepareNumericGrading(
     const vars = input.context?.originalAssertionInput?.getVars() ?? test.vars ?? {};
     const assertionTest = (input.context?.test as AtomicTestCase | undefined) ?? test;
     const rawProviderResponse = gradingContext?.providerResponse ?? { output };
-    const targetMetadata = snapshotTargetMetadata(rawProviderResponse, { assert: [assertion] });
+    const targetMetadata = snapshotTargetMetadata(
+      input.targetMetadata === undefined
+        ? rawProviderResponse
+        : { metadata: input.targetMetadata ?? undefined },
+      { assert: [assertion] },
+    );
     const providerResponse = { ...rawProviderResponse, metadata: targetMetadata ?? undefined };
     const transformPrompt = input.context?.originalAssertionInput?.transformPrompt ??
       input.prompt ?? { raw: prompt, label: prompt };

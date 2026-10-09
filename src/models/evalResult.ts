@@ -808,6 +808,21 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } as T;
 }
 
+/** Project the duplicated target snapshot using the same media lifecycle as response metadata. */
+async function externalizeCapturedResultMetadata(
+  metadata: EvaluateResult['metadata'],
+  context: Parameters<typeof extractAndStoreBinaryData>[1],
+): Promise<EvaluateResult['metadata']> {
+  if (!metadata || !Object.prototype.hasOwnProperty.call(metadata, 'redteamTargetMetadata')) {
+    return metadata;
+  }
+  const extracted = await extractAndStoreBinaryData(
+    { metadata: { redteamTargetMetadata: metadata.redteamTargetMetadata } },
+    context,
+  );
+  return { ...metadata, redteamTargetMetadata: extracted?.metadata?.redteamTargetMetadata };
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -834,7 +849,15 @@ export default class EvalResult {
 
     // Persist trace linkage inside a private metadata namespace so it survives
     // EvalResult round-trips without a Drizzle schema migration.
-    const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
+    const persistedMetadata = persistTraceMetadata(
+      await externalizeCapturedResultMetadata(metadata, {
+        evalId,
+        testIdx: result.testIdx,
+        promptIdx: result.promptIdx,
+      }),
+      traceId,
+      evaluationId,
+    );
 
     // Normalize provider for storage and extract blobs from responses.
     const preSanitizeTestCase = {
@@ -907,7 +930,15 @@ export default class EvalResult {
             promptIdx: result.promptIdx,
           })
         : result.response;
-      processedResults.push({ ...result, response: processedResponse ?? undefined });
+      processedResults.push({
+        ...result,
+        response: processedResponse ?? undefined,
+        metadata: await externalizeCapturedResultMetadata(result.metadata, {
+          evalId,
+          testIdx: result.testIdx,
+          promptIdx: result.promptIdx,
+        }),
+      });
     }
 
     await db.transaction(async (tx) => {
@@ -1143,11 +1174,21 @@ export default class EvalResult {
     // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
     // explicitly keeps the write payload aligned with the schema.
     const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
+    const blobContext = { evalId: this.evalId, testIdx: this.testIdx, promptIdx: this.promptIdx };
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
+      response:
+        this.response?.metadata &&
+        Object.prototype.hasOwnProperty.call(this.response.metadata, 'redteamTargetMetadata')
+          ? await extractAndStoreBinaryData(this.response, blobContext)
+          : this.response,
       gradingResult: sanitizeGradingResultForDb(this.gradingResult),
-      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+      metadata: persistTraceMetadata(
+        await externalizeCapturedResultMetadata(this.metadata, blobContext),
+        this.traceId,
+        this.evaluationId,
+      ),
     };
     //check if this exists in the db
     if (this.persisted) {

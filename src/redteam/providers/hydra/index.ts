@@ -357,6 +357,7 @@ export class HydraProvider implements ApiProvider {
     let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
+    let lastTargetMetadata: TargetResponse['metadata'] | null;
     let lastResponseMessages: Message[] = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
@@ -685,6 +686,7 @@ export class HydraProvider implements ApiProvider {
         targetContext,
         options,
       );
+      lastTargetMetadata = snapshotTargetMetadata(targetResponse, test);
       lastTargetResponse = targetResponse;
       lastResponseMessages = [
         ...this.conversationHistory,
@@ -822,7 +824,13 @@ export class HydraProvider implements ApiProvider {
       const preparedNumeric =
         test && assertToUse
           ? await prepareNumericGrading(
-              { assertion: assertToUse, targetProvider, prompt, context },
+              {
+                assertion: assertToUse,
+                targetProvider,
+                prompt,
+                context,
+                targetMetadata: lastTargetMetadata,
+              },
               lastFinalAttackPrompt || nextMessage,
               targetResponse.output,
               test,
@@ -1085,7 +1093,7 @@ export class HydraProvider implements ApiProvider {
           : {}),
       metadata: {
         redteamOutputIsText: lastTargetResponse?.outputIsText,
-        redteamTargetMetadata: snapshotTargetMetadata(lastTargetResponse, test),
+        redteamTargetMetadata: lastTargetMetadata,
         sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
         messages,
         ...strategyMetadata,

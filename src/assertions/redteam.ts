@@ -262,6 +262,8 @@ export const handleRedteam = async (
     evaluatorOutputIsText !== false &&
     typeof output === 'string' &&
     typeof providerResponse.output === 'string' &&
+    // Replays can retain a wrapper's negative marker without its provider identity.
+    (providerId !== undefined || providerResponse.metadata?.redteamOutputIsText !== false) &&
     (!isRedteamProvider || strategyOutputIsText === true);
   const grader = getGraderById(assertion.type);
   // Numeric checks require source text even when a matching stored grade exists.

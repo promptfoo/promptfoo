@@ -340,6 +340,7 @@ export class CrescendoProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let lastTargetMetadata: TargetResponse['metadata'] | null;
     let hasTargetResponse = false;
     let lastAttemptError: string | undefined;
     let lastResponseMessages: Message[] = [];
@@ -464,6 +465,7 @@ export class CrescendoProvider implements ApiProvider {
 
         const {
           response,
+          targetMetadata,
           transformResult,
           inputVars: currentInputVars,
         } = await this.sendPrompt(
@@ -488,6 +490,7 @@ export class CrescendoProvider implements ApiProvider {
           continue;
         }
         lastResponse = response;
+        lastTargetMetadata = targetMetadata;
         hasTargetResponse = true;
         lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
@@ -537,7 +540,13 @@ export class CrescendoProvider implements ApiProvider {
         const preparedNumeric =
           test && assertToUse
             ? await prepareNumericGrading(
-                { assertion: assertToUse, targetProvider: provider, prompt, context },
+                {
+                  assertion: assertToUse,
+                  targetProvider: provider,
+                  prompt,
+                  context,
+                  targetMetadata: lastTargetMetadata,
+                },
                 lastFinalAttackPrompt ||
                   getLastMessageContent(lastResponseMessages, 'user') ||
                   attackPrompt,
@@ -565,20 +574,23 @@ export class CrescendoProvider implements ApiProvider {
             `[Crescendo] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
           );
 
-          const { response: unblockingResponse, transformResult: unblockingTransform } =
-            await this.sendPrompt(
-              unblockingResult.unblockingPrompt,
-              prompt,
-              vars,
-              filters,
-              provider,
-              roundNum,
-              context,
-              options,
-              tracingOptions,
-              shouldFetchTrace,
-              traceSnapshots,
-            );
+          const {
+            response: unblockingResponse,
+            targetMetadata: unblockingTargetMetadata,
+            transformResult: unblockingTransform,
+          } = await this.sendPrompt(
+            unblockingResult.unblockingPrompt,
+            prompt,
+            vars,
+            filters,
+            provider,
+            roundNum,
+            context,
+            options,
+            tracingOptions,
+            shouldFetchTrace,
+            traceSnapshots,
+          );
 
           if (unblockingTransform?.error) {
             if (unblockingTransform.tokenUsage) {
@@ -595,6 +607,7 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          lastTargetMetadata = unblockingTargetMetadata;
           lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
           lastFinalAttackPrompt =
             unblockingTransform?.prompt ||
@@ -743,7 +756,7 @@ export class CrescendoProvider implements ApiProvider {
                 attackPrompt,
               output: lastResponse.output,
               outputIsText: lastResponse.outputIsText,
-              targetMetadata: snapshotTargetMetadata(lastResponse, test),
+              targetMetadata: lastTargetMetadata,
               messages: lastResponseMessages,
               guardrails: lastResponse.guardrails,
               transformDisplayVars: lastTransformDisplayVars,
@@ -878,7 +891,7 @@ export class CrescendoProvider implements ApiProvider {
     const reported = flaggedRound ?? {
       output: lastResponse.output,
       outputIsText: lastResponse.outputIsText,
-      targetMetadata: snapshotTargetMetadata(lastResponse, test),
+      targetMetadata: lastTargetMetadata,
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
@@ -1100,6 +1113,7 @@ export class CrescendoProvider implements ApiProvider {
     >,
   ): Promise<{
     response: TargetResponse;
+    targetMetadata?: TargetResponse['metadata'] | null;
     transformResult?: TransformResult;
     inputVars?: Record<string, string>;
   }> {
@@ -1319,6 +1333,7 @@ export class CrescendoProvider implements ApiProvider {
       targetContext,
       options,
     );
+    const targetMetadata = snapshotTargetMetadata(targetResponse, context?.test);
     for (const message of pendingMessages) {
       this.memory.addMessage(this.targetConversationId, message);
     }
@@ -1376,6 +1391,7 @@ export class CrescendoProvider implements ApiProvider {
 
     return {
       response: targetResponse,
+      targetMetadata,
       transformResult: lastTransformResult,
       inputVars: currentRenderInputVars,
     };
