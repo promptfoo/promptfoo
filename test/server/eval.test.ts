@@ -20,15 +20,20 @@ vi.mock('../../src/database/signal', async () => {
 
 describe('eval routes', () => {
   let api: ReturnType<typeof request.agent>;
+  let app: ReturnType<typeof createApp>;
+  const jsonSettings = ['json replacer', 'json spaces', 'json escape'];
+  const originalJsonSettings = new Map<string, unknown>();
   let server: Server;
   const testEvalIds = new Set<string>();
 
   beforeAll(async () => {
     await runDbMigrations();
+    app = createApp();
+    for (const setting of jsonSettings) {
+      originalJsonSettings.set(setting, app.get(setting));
+    }
     await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
+      server = app.listen(0, '127.0.0.1', (error?: Error) => (error ? reject(error) : resolve()));
     });
     api = request.agent(server);
   });
@@ -44,6 +49,9 @@ describe('eval routes', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    for (const setting of jsonSettings) {
+      app.set(setting, originalJsonSettings.get(setting));
+    }
 
     // More robust cleanup with proper error handling
     const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
@@ -64,23 +72,37 @@ describe('eval routes', () => {
     vi.resetAllMocks();
   });
 
-  function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
+  // Exercise serialization failures without allocating large payloads.
+  function mockJsonStringifyError(
+    matches: (value: unknown) => boolean,
+    shouldThrow: (attempt: number) => boolean = () => true,
+    error: Error = new RangeError('Invalid string length'),
+  ) {
     const originalStringify = JSON.stringify;
-    let tablePayloadAttempts = 0;
+    let matchingAttempts = 0;
 
     return vi
       .spyOn(JSON, 'stringify')
       .mockImplementation((...args: Parameters<typeof JSON.stringify>) => {
-        const value = args[0];
-        if (value && typeof value === 'object' && 'table' in value && 'totalCount' in value) {
-          tablePayloadAttempts += 1;
-          if (shouldThrow(tablePayloadAttempts)) {
-            throw new RangeError('Invalid string length');
+        if (matches(args[0])) {
+          matchingAttempts += 1;
+          if (shouldThrow(matchingAttempts)) {
+            throw error;
           }
         }
         return originalStringify.apply(JSON, args);
       });
   }
+
+  const isTablePayload = (value: unknown): boolean =>
+    !!value && typeof value === 'object' && 'table' in value && 'totalCount' in value;
+
+  const isJsonExportPayload = (value: unknown): boolean =>
+    !!value &&
+    typeof value === 'object' &&
+    'head' in value &&
+    'body' in value &&
+    !('table' in value);
 
   async function setResultPromptRaws(eval_: Eval, raws: string[]) {
     const results = await eval_.getResults();
@@ -449,7 +471,7 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
       await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
-      mockTablePayloadRangeError((attempt) => attempt === 1);
+      mockJsonStringifyError(isTablePayload, (attempt) => attempt === 1);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -472,7 +494,7 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
       await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
-      mockTablePayloadRangeError((attempt) => attempt <= 2);
+      mockJsonStringifyError(isTablePayload, (attempt) => attempt <= 2);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -492,7 +514,7 @@ describe('eval routes', () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
-      mockTablePayloadRangeError(() => true);
+      mockJsonStringifyError(isTablePayload);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -500,6 +522,108 @@ describe('eval routes', () => {
       expect(res.body).toEqual({
         error: 'Eval too large to display. Try reducing the page size.',
       });
+    });
+
+    it('returns the full JSON export for a normal eval', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+      testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['json export prompt one', 'json export prompt two']);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-disposition']).toBe(`attachment; filename="${eval_.id}.json"`);
+      expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+      expect(res.body).toHaveProperty('head');
+      expect(res.body).toHaveProperty('body');
+      const prompts: Array<string | undefined> = res.body.body.flatMap(
+        (row: { outputs: Array<{ prompt?: string }> }) =>
+          row.outputs.map((output) => output?.prompt),
+      );
+      expect(prompts).toHaveLength(2);
+      expect(prompts).toEqual(
+        expect.arrayContaining(['json export prompt one', 'json export prompt two']),
+      );
+    });
+
+    it('honors the Express JSON replacer for JSON exports', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['prompt omitted by the configured replacer']);
+      app.set('json replacer', (key: string, value: unknown) =>
+        key === 'prompt' ? undefined : value,
+      );
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.body).toHaveLength(1);
+      expect(res.body.body[0].outputs[0]).not.toHaveProperty('prompt');
+      expect(res.text).not.toContain('prompt omitted by the configured replacer');
+    });
+
+    it('honors the Express JSON indentation for JSON exports', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      testEvalIds.add(eval_.id);
+      app.set('json spaces', 4);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(200);
+      expect(res.text).toBe(JSON.stringify(res.body, null, 4));
+      expect(res.text).toContain('\n    "head": {');
+    });
+
+    it('honors Express JSON escaping without changing exported values', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['<example>&']);
+      app.set('json escape', true);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.body[0].outputs[0].prompt).toBe('<example>&');
+      expect(res.text).toContain('\\u003cexample\\u003e\\u0026');
+      expect(res.text).not.toContain('<example>&');
+    });
+
+    it.each([
+      'Invalid string length',
+      'Cannot create a string longer than the runtime limit',
+      'ERR_STRING_TOO_LONG',
+      'Maximum call stack size exceeded',
+    ])('returns 413 for the JSON serialization limit: %s', async (message) => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      testEvalIds.add(eval_.id);
+      mockJsonStringifyError(isJsonExportPayload, undefined, new RangeError(message));
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(413);
+      expect(res.body).toEqual({ error: 'Eval JSON export is too large to serialize.' });
+      for (const header of ['content-disposition', 'cache-control', 'pragma', 'expires']) {
+        expect(res.headers[header]).toBeUndefined();
+      }
+      expect(res.headers['content-type']).toContain('application/json');
+    });
+
+    it.each([
+      new RangeError('Unrelated serialization fixture error'),
+      new Error('Invalid string length'),
+    ])('propagates non-limit JSON serialization failures: %s', async (error) => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      testEvalIds.add(eval_.id);
+      mockJsonStringifyError(isJsonExportPayload, undefined, error);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(500);
+      expect(res.headers['content-type']).toContain('text/html');
+      expect(res.text).toContain(error.message);
+      for (const header of ['content-disposition', 'cache-control', 'pragma', 'expires']) {
+        expect(res.headers[header]).toBeUndefined();
+      }
     });
   });
 

@@ -411,8 +411,25 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   if (format === 'json') {
     const jsonData = evalTableToJson(returnTable);
 
-    setDownloadHeaders(res, `${id}.json`, 'application/json');
-    res.json(jsonData);
+    try {
+      setDownloadHeaders(res, `${id}.json`, 'application/json');
+      res.json(jsonData);
+    } catch (error) {
+      // Serialization can fail after download headers are set, before any bytes are sent.
+      ['Content-Type', 'Content-Disposition', 'Cache-Control', 'Pragma', 'Expires'].forEach(
+        (header) => res.removeHeader(header),
+      );
+      if (
+        !(error instanceof RangeError) ||
+        !/Invalid string length|Cannot create a string longer than|ERR_STRING_TOO_LONG|Maximum call stack size exceeded/i.test(
+          error.message,
+        )
+      ) {
+        throw error;
+      }
+      logger.warn('[GET /:id/table] JSON export hit a serialization limit', { evalId: id, error });
+      sendError(res, 413, 'Eval JSON export is too large to serialize.');
+    }
     return;
   }
 
