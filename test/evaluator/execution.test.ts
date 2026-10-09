@@ -1410,6 +1410,64 @@ describeEvaluator('evaluator execution control', () => {
     },
   );
 
+  it.each(['select-best', 'max-score'] as const)(
+    'does not repeat completed %s grading beside terminal target errors on resume',
+    async (type) => {
+      const judge: ApiProvider = {
+        id: () => 'mixed-result-judge',
+        callApi: vi.fn(async () => ({ output: '0' })),
+      };
+      const target: ApiProvider = {
+        id: () => 'mixed-result-target',
+        callApi: vi.fn(async (prompt) =>
+          prompt === 'broken' ? { error: 'Target request failed' } : { output: prompt },
+        ),
+      };
+      const suite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('first'), toPrompt('second'), toPrompt('broken')],
+        tests: [
+          {
+            assert: [
+              { type: 'contains', value: 'first' },
+              {
+                type,
+                ...(type === 'select-best' ? { value: 'Choose first', provider: judge } : {}),
+              },
+            ],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency: 2 });
+      const before = await record.toEvaluateSummary();
+      expect(before.stats.errors).toBe(1);
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 2 });
+      await evaluate(suite, record, { maxConcurrency: 2 });
+      expect(target.callApi).toHaveBeenCalledTimes(3);
+      expect(judge.callApi).toHaveBeenCalledTimes(type === 'select-best' ? 1 : 0);
+      const after = await record.toEvaluateSummary();
+      expect(after.stats).toMatchObject({
+        successes: before.stats.successes,
+        failures: before.stats.failures,
+        errors: 1,
+        tokenUsage: before.stats.tokenUsage,
+      });
+      for (const row of after.results) {
+        if (row.failureReason === ResultFailureReason.ERROR) {
+          expect(row.error).toContain('Target request failed');
+          continue;
+        }
+        expect(
+          row.gradingResult?.componentResults?.filter(
+            (component) => component.assertion?.type === type,
+          ),
+        ).toHaveLength(1);
+      }
+    },
+  );
+
   it.each(['caller', 'deadline'] as const)(
     'resumes interrupted select-best and max-score rows after %s cancellation',
     async (cancellation) => {

@@ -63,9 +63,7 @@ describe('Ruby utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();
-    rubyUtils.state.cachedRubyPath = null;
-    rubyUtils.state.validationPromise = null;
-    rubyUtils.state.validatingPath = null;
+
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(fs.readFile).mockResolvedValue(
       JSON.stringify({ type: 'final_result', data: 'secret-result' }),
@@ -119,6 +117,7 @@ describe('Ruby utilities', () => {
 
   it('cancels the Ruby subprocess and removes its request files', async () => {
     const controller = new AbortController();
+    const reason = new Error('embedding cancelled');
     const child = Object.assign(new EventEmitter(), {
       kill: vi.fn(() => {
         expect(removeSecureTempDirectory).not.toHaveBeenCalled();
@@ -131,14 +130,14 @@ describe('Ruby utilities', () => {
       .mockResolvedValueOnce({ stdout: 'ruby 3.3.0\n', stderr: '' })
       .mockImplementationOnce((_file, _args, options) => {
         expect(options.signal).toBe(controller.signal);
-        controller.abort(new Error('embedding cancelled'));
+        controller.abort(reason);
         return Object.assign(Promise.reject(controller.signal.reason), { child });
       });
     await expect(
       rubyUtils.runRuby('/path/to/script.rb', 'call_embedding_api', [], {
         abortSignal: controller.signal,
       }),
-    ).rejects.toThrow('embedding cancelled');
+    ).rejects.toBe(reason);
     expect(child.kill).toHaveBeenCalledWith('SIGKILL');
     expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/promptfoo-ruby-test');
     expect(fs.readFile).not.toHaveBeenCalled();

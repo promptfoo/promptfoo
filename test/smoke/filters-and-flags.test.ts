@@ -434,6 +434,68 @@ describe('Metadata Filter Tests', () => {
     expect(parsed.results.results[0].response.output).toContain('Alice');
   });
 
+  it('1.8.3.4b - comma-separated --filter-metadata values use OR logic within one key', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-or-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata',
+        'category=auth,profile',
+        '--filter-metadata',
+        'priority=high,medium',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    const results: {
+      response: { output: string };
+      success: boolean;
+      score: number;
+      error?: string;
+    }[] = parsed.results.results;
+
+    // Alice and Bob match both filters. Charlie and Eve fail category;
+    // Diana matches category but fails priority.
+    expect(results.map((result) => result.response.output).sort()).toEqual([
+      'Hello Alice, you are a admin',
+      'Hello Bob, you are a user',
+    ]);
+    for (const result of results) {
+      expect(result).toMatchObject({ success: true, score: 1 });
+      expect(result.error).toBeFalsy();
+    }
+  });
+
+  it.each(['category=,auth', 'category=auth,', 'category=auth,,profile'])(
+    '--filter-metadata rejects an empty alternative in %s',
+    (filter) => {
+      const { exitCode, stdout, stderr } = runCli([
+        'eval',
+        '-c',
+        path.join(CONFIGS_DIR, 'multi-test.yaml'),
+        '--no-cache',
+        '--filter-metadata',
+        filter,
+      ]);
+
+      expect(exitCode).not.toBe(0);
+      expect(`${stdout}${stderr}`).toContain('--filter-metadata has an empty value');
+      expect(`${stdout}${stderr}`).toContain(filter);
+    },
+  );
+
   it('1.8.3.5 - multiple --filter-metadata returns empty when no tests match all conditions', () => {
     const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'metadata-nomatch-output.json');
