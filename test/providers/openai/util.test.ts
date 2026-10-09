@@ -559,6 +559,18 @@ describe('validateChatCompletionMessage', () => {
     );
   });
 
+  it('treats an audio payload as usable only when the caller allows it', () => {
+    const audio = { id: 'audio-1', data: 'UklGRg==', transcript: 'Hi' };
+
+    expect(validateChatCompletionMessage({ content: null, audio })).toBeUndefined();
+    expect(
+      validateChatCompletionMessage({ content: null, audio }, { allowAudio: true })?.audio,
+    ).toEqual(audio);
+    expect(
+      validateChatCompletionMessage({ content: null, audio: {} }, { allowAudio: true }),
+    ).toBeUndefined();
+  });
+
   it('validates required fields for structured content parts', () => {
     expect(
       validateChatCompletionMessage(

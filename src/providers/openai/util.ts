@@ -1554,6 +1554,7 @@ export function getTokenUsageWithRequestCount(data: any, cached: boolean): Parti
 }
 
 export interface ValidatedChatCompletionMessage {
+  audio: Record<string, unknown> | undefined;
   content: string | null | undefined;
   functionCall: Record<string, unknown> | undefined;
   reasoning: string | undefined;
@@ -1613,7 +1614,7 @@ function isStructuredContentPart(value: unknown): value is Record<string, unknow
  */
 export function validateChatCompletionMessage(
   value: unknown,
-  options: { allowStructuredContent?: boolean; finishReason?: string } = {},
+  options: { allowAudio?: boolean; allowStructuredContent?: boolean; finishReason?: string } = {},
 ): ValidatedChatCompletionMessage | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -1646,6 +1647,15 @@ export function validateChatCompletionMessage(
     return undefined;
   }
 
+  // Audio models answer with `content: null` plus an audio payload; accept it
+  // only where the caller knows how to surface it.
+  const audio =
+    options.allowAudio &&
+    isRecord(value.audio) &&
+    (typeof value.audio.transcript === 'string' || typeof value.audio.data === 'string')
+      ? value.audio
+      : undefined;
+
   const reasoning =
     typeof value.reasoning === 'string' && value.reasoning.trim() ? value.reasoning : undefined;
   const hasUsableContent =
@@ -1659,6 +1669,7 @@ export function validateChatCompletionMessage(
     !functionCall &&
     !toolCalls &&
     !hasUsableContent &&
+    audio === undefined &&
     reasoning === undefined &&
     !refusal &&
     options.finishReason !== 'content_filter'
@@ -1667,6 +1678,7 @@ export function validateChatCompletionMessage(
   }
 
   return {
+    audio,
     content,
     functionCall,
     reasoning,

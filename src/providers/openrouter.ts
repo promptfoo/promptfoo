@@ -36,6 +36,42 @@ import type {
 import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
+// OpenRouter's canonical error_type vocabulary (see
+// https://openrouter.ai/docs/api_reference/errors-and-debugging). The
+// availability types recover on their own; the permanent set describes a
+// request that fails identically on retry, so the scheduler must not replay
+// it with backoff.
+const TRANSIENT_ERROR_TYPES = new Set([
+  'provider_overloaded',
+  'provider_unavailable',
+  'timeout',
+  'server',
+]);
+
+const PERMANENT_ERROR_TYPES = new Set([
+  'authentication',
+  'permission_denied',
+  'payment_required',
+  'invalid_request',
+  'invalid_prompt',
+  'not_found',
+  'precondition_failed',
+  'payload_too_large',
+  'unprocessable',
+  'content_policy_violation',
+  'refusal',
+  'context_length_exceeded',
+  'max_tokens_exceeded',
+  'token_limit_exceeded',
+  'string_too_long',
+  'invalid_image',
+  'image_too_large',
+  'image_too_small',
+  'unsupported_image_format',
+  'image_not_found',
+  'image_download_failed',
+]);
+
 /**
  * Classify a choice-level error code arriving in a 200 envelope. The
  * gateway-level classifiers only see the transport status; a 429 or 5xx
@@ -53,10 +89,15 @@ function getChoiceErrorKind(
       : undefined;
   const errorType = typeof metadata?.error_type === 'string' ? metadata.error_type : undefined;
   if (errorType && errorType !== 'rate_limit_exceeded') {
-    // A documented provider-side failure that is not a rate limit (e.g.
-    // provider_unavailable): not a rate limit even when the code says 429,
-    // but retryable as a transient upstream hiccup.
-    return { retryableErrorKind: 'transient_availability' };
+    if (TRANSIENT_ERROR_TYPES.has(errorType)) {
+      // A documented provider-side availability failure: not a rate limit even
+      // when the code says 429, but retryable as a transient upstream hiccup.
+      return { retryableErrorKind: 'transient_availability' };
+    }
+    if (PERMANENT_ERROR_TYPES.has(errorType)) {
+      return undefined;
+    }
+    // Unknown or newly added error_type: fall through to the status code.
   }
   const code = record?.code;
   const status =
@@ -401,6 +442,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       };
     }
     const message = validateChatCompletionMessage(data.choices[0].message, {
+      allowAudio: true,
       allowStructuredContent: true,
       finishReason,
     });
@@ -419,15 +461,42 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     }
     if (message.refusal || finishReason === FINISH_REASON_MAP.content_filter) {
       return {
-        output: message.content
-          ? getOpenAiPartialOutput(message.content, config.response_format?.type === 'json_schema')
-          : message.refusal || 'Content filtered by the model provider.',
+        // A filtered or refused choice can still carry usable partial output;
+        // keep structured parts intact the same way the normal path does.
+        output: message.structuredContent?.length
+          ? message.structuredContent
+          : message.content
+            ? getOpenAiPartialOutput(
+                message.content,
+                config.response_format?.type === 'json_schema',
+              )
+            : message.refusal || 'Content filtered by the model provider.',
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
         cost: this.calculateResponseCost(data, config),
         isRefusal: true,
         guardrails: { flagged: true },
         raw: data,
+        metadata: getOpenRouterBillingMetadata(data),
+        ...(finishReason && { finishReason }),
+      };
+    }
+    if (message.audio) {
+      // Audio models answer with `content: null` and the payload on
+      // `message.audio`; mirror the base OpenAI provider's normalization.
+      const audio = message.audio;
+      return {
+        output: typeof audio.transcript === 'string' ? audio.transcript : '',
+        audio: {
+          id: typeof audio.id === 'string' ? audio.id : undefined,
+          expiresAt: typeof audio.expires_at === 'number' ? audio.expires_at : undefined,
+          data: typeof audio.data === 'string' ? audio.data : undefined,
+          transcript: typeof audio.transcript === 'string' ? audio.transcript : undefined,
+          format: typeof audio.format === 'string' ? audio.format : 'wav',
+        },
+        tokenUsage: getTokenUsageWithRequestCount(data, cached),
+        cached,
+        cost: this.calculateResponseCost(data, config),
         metadata: getOpenRouterBillingMetadata(data),
         ...(finishReason && { finishReason }),
       };
