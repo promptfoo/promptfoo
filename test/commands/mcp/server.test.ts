@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { csrfProtection } from '../../../src/server/middleware/csrfProtection';
 import { mockProcessEnv } from '../../util/utils';
+import type { Request, Response } from 'express';
 
 const { mockRandomUUID } = vi.hoisted(() => ({
   mockRandomUUID: vi.fn(() => 'secure-mcp-session-id'),
@@ -19,7 +21,7 @@ vi.mock('@hono/node-server', () => ({
 
 const expressMocks = vi.hoisted(() => {
   const close = vi.fn((callback: (error?: Error) => void) => callback());
-  const listen = vi.fn((_port: number, callback: () => void) => {
+  const listen = vi.fn((_port: number, _host: string, callback: () => void) => {
     callback();
     return { close };
   });
@@ -29,7 +31,7 @@ const expressMocks = vi.hoisted(() => {
     get: vi.fn(),
     listen,
   };
-  const json = vi.fn();
+  const json = vi.fn(() => 'json-middleware');
   const express = Object.assign(
     vi.fn(() => app),
     { json },
@@ -303,8 +305,55 @@ describe('MCP Server', () => {
     });
   });
 
+  describe('mcpHostProtection', () => {
+    const buildContext = (host?: string) => {
+      const req = { headers: host === undefined ? {} : { host }, method: 'POST', path: '/mcp' };
+      const res = { json: vi.fn(), status: vi.fn().mockReturnThis() };
+      const next = vi.fn();
+      return { req, res, next };
+    };
+
+    it.each([
+      '127.0.0.1',
+      '127.0.0.1:3100',
+      'localhost',
+      'localhost:3100',
+      'LOCALHOST:3100',
+      '[::1]',
+      '[::1]:3100',
+    ])('allows loopback Host header %s', async (host) => {
+      const { mcpHostProtection } = await import('../../../src/commands/mcp/server');
+      const { req, res, next } = buildContext(host);
+
+      mcpHostProtection(req as Request, res as unknown as Response, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'attacker.example',
+      'attacker.example:3100',
+      '127.0.0.1.attacker.example',
+      '169.254.169.254',
+      'evil.localhost.attacker.example',
+      undefined,
+    ])('rejects non-local Host header %s', async (host) => {
+      const { mcpHostProtection } = await import('../../../src/commands/mcp/server');
+      const { req, res, next } = buildContext(host);
+
+      mcpHostProtection(req as Request, res as unknown as Response, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'MCP HTTP requests require a local Host header',
+      });
+    });
+  });
+
   describe('startHttpMcpServer', () => {
-    it('creates cryptographically random session identifiers', async () => {
+    it('binds locally with request guards and random session identifiers', async () => {
       const restoreEnv = mockProcessEnv({ MCP_TRANSPORT: undefined });
       let shutdown: (() => void) | undefined;
       vi.spyOn(process, 'once').mockImplementation(((event: string, listener: () => void) => {
@@ -316,13 +365,20 @@ describe('MCP Server', () => {
 
       let serverPromise: Promise<void> | undefined;
       try {
-        const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
+        const { startHttpMcpServer, mcpHostProtection } = await import(
+          '../../../src/commands/mcp/server'
+        );
         serverPromise = startHttpMcpServer(3100);
 
         await vi.waitFor(() => {
-          expect(streamableHttpMocks.constructor).toHaveBeenCalledOnce();
+          expect(expressMocks.listen).toHaveBeenCalledWith(3100, '127.0.0.1', expect.any(Function));
         });
 
+        expect(expressMocks.app.use.mock.calls).toEqual([
+          [mcpHostProtection],
+          [csrfProtection],
+          ['json-middleware'],
+        ]);
         const transportOptions = streamableHttpMocks.constructor.mock.calls[0][0] as {
           sessionIdGenerator: () => string;
         };

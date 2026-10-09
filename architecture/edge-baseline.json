@@ -11,7 +11,7 @@
   "cli -> node": 126,
   "cli -> providers": 3,
   "cli -> redteam": 10,
-  "cli -> view-server": 5,
+  "cli -> view-server": 6,
   "core -> contracts": 1,
   "core -> legacy-contracts": 95,
   "core -> legacy-runtime": 47,
