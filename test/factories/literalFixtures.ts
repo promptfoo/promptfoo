@@ -22,6 +22,11 @@ export const createRequiredTestSchema = () => ({
   additionalProperties: false as const,
 });
 
+export const createMcpServerOptions = (command = 'npm', args = 'start') => ({
+  enabled: true,
+  server: createMcpServerConfig(command, args),
+});
+
 export const createChatCompletion = (
   content = 'Test output',
   total_tokens = 10,
@@ -47,6 +52,12 @@ export const createChatUsage = (prompt_tokens = 10, completion_tokens = 20, tota
   prompt_tokens,
   completion_tokens,
   total_tokens,
+});
+
+export const createPassingGrade = (score = 0.8, reason = 'test reason') => ({
+  pass: true,
+  score,
+  reason,
 });
 
 export const createStreamingOptions = () => ({
@@ -128,6 +139,10 @@ export const createGeminiUsageCounts = (
   candidatesTokenCount,
 });
 
+export const createTypeConfig = <TType extends string>(type: TType) => ({
+  type,
+});
+
 export const createStatusResponse = (status = 500, statusText = 'Internal Server Error') => ({
   status,
   statusText,
@@ -157,6 +172,11 @@ export const createChatMessage = (role: string, content: string) => ({
 export const createInputOutputUsage = (input_tokens: number, output_tokens: number) => ({
   input_tokens,
   output_tokens,
+});
+
+const createMcpServerConfig = (command = 'npm', arg = 'start') => ({
+  command,
+  args: [arg],
 });
 
 export const createGoogleSearchTool = () => ({

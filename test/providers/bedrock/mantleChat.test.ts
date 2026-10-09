@@ -8,6 +8,11 @@ import {
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
+
+const createBedrockKeyConfig = () => ({
+  config: { apiKey: 'bedrock-key' },
+});
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
@@ -503,9 +508,7 @@ describe('bedrock mantle Chat Completions provider', () => {
     });
 
     it('identifies the actual Bedrock provider in telemetry', () => {
-      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
-        config: { apiKey: 'bedrock-key' },
-      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', createBedrockKeyConfig());
 
       expect((provider as any).getGenAISystem()).toBe('bedrock');
     });
@@ -533,15 +536,12 @@ describe('bedrock mantle Chat Completions provider', () => {
     });
 
     it('calls the mantle chat endpoint and tracks token usage', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Mantle output' }, finish_reason: 'stop' }],
           usage: { total_tokens: 7, prompt_tokens: 4, completion_tokens: 3 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
       const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
         config: { region: 'us-west-2', apiKey: 'bedrock-key' },
       });
@@ -572,9 +572,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         status: 500,
         statusText: 'Internal Server Error',
       });
-      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
-        config: { apiKey: 'bedrock-key' },
-      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', createBedrockKeyConfig());
 
       const result = await provider.callApi('hello');
 
@@ -585,9 +583,7 @@ describe('bedrock mantle Chat Completions provider', () => {
       vi.mocked(fetchWithCache).mockRejectedValue(
         new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded' }),
       );
-      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
-        config: { apiKey: 'bedrock-key' },
-      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', createBedrockKeyConfig());
 
       const result = await provider.callApi('hello');
 
@@ -596,9 +592,7 @@ describe('bedrock mantle Chat Completions provider', () => {
 
     it('surfaces mantle chat request timeout failures', async () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('Request timed out'));
-      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
-        config: { apiKey: 'bedrock-key' },
-      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', createBedrockKeyConfig());
 
       const result = await provider.callApi('hello');
 
