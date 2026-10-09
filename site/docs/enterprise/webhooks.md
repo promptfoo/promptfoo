@@ -30,22 +30,24 @@ The following webhook event types are available:
 
 ## Managing Webhooks
 
-On-prem administrators can manage webhooks under **Organization → Webhooks** or through the API. Management requires organization-admin access; team-scoped API tokens are rejected, so use your signed-in administrator session.
+On-prem administrators can manage webhooks under **Organization → Webhooks** or through the API. Management requires organization-admin access. Use your signed-in administrator session or an administrator [service-account API key](./service-accounts.md); team-scoped user API tokens are rejected.
 
 Each webhook subscribes to selected events for one team. When creating a webhook through the API, set `teamId` to that team's UUID. If omitted, the webhook belongs to the organization's default team, including webhooks created through the UI. It does not receive events from other teams.
 
 ### Creating a Webhook
 
-With an authenticated administrator session, send:
+Using an administrator service-account API key, send the following request, replacing the example `teamId` with the intended team's UUID. With an authenticated administrator session, omit the `Authorization` header.
 
 ```http
 POST /api/v1/webhooks
 Content-Type: application/json
+Authorization: Bearer YOUR_SERVICE_ACCOUNT_API_KEY
 
 {
   "url": "https://your-webhook-endpoint.com/callback",
   "name": "My SIEM Integration",
   "events": ["issue.created", "issue.status_changed"],
+  "teamId": "123e4567-e89b-42d3-a456-426614174000",
   "enabled": true
 }
 ```
@@ -114,7 +116,7 @@ For `remediation.created`, `data` contains `issueId` and `remediation`. Eval eve
 
 To verify that a webhook is coming from Promptfoo Enterprise, the payload is signed using HMAC SHA-256. The hex-encoded signature is included in the `X-Promptfoo-Signature` header. Verify the raw request body before parsing JSON; reserializing parsed JSON can change the signed bytes.
 
-Here's an example of how to verify signatures in Node.js:
+Here's an example of how to verify signatures in Node.js. Its `5mb` body limit is an example receiver limit, not a Promptfoo payload limit. Size this limit and any reverse-proxy limits for your largest expected payload, including eval configurations.
 
 ```js
 import crypto from 'node:crypto';
@@ -141,17 +143,21 @@ function verifyWebhookSignature(rawBody, signature, secret) {
 }
 
 // Register this route before any app.use(express.json()) middleware.
-app.post('/webhook-endpoint', express.raw({ type: 'application/json' }), (req, res) => {
-  if (!verifyWebhookSignature(req.body, req.get('X-Promptfoo-Signature'), webhookSecret)) {
-    return res.status(401).send('Invalid signature');
-  }
+app.post(
+  '/webhook-endpoint',
+  express.raw({ type: 'application/json', limit: '5mb' }),
+  (req, res) => {
+    if (!verifyWebhookSignature(req.body, req.get('X-Promptfoo-Signature'), webhookSecret)) {
+      return res.status(401).send('Invalid signature');
+    }
 
-  const payload = JSON.parse(req.body.toString('utf8'));
-  // Process the webhook
-  console.log(`Received ${payload.event} event`);
+    const payload = JSON.parse(req.body.toString('utf8'));
+    // Process the webhook
+    console.log(`Received ${payload.event} event`);
 
-  res.status(200).send('Webhook received');
-});
+    res.status(200).send('Webhook received');
+  },
+);
 ```
 
 ## Delivery and troubleshooting
