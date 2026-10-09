@@ -348,7 +348,7 @@ describe('OpenAiImageProvider', () => {
       expect(result.error).toContain('Internal Server Error');
     });
 
-    it('should handle deleteFromCache when response parsing fails', async () => {
+    it('should report a response with no image payload without evicting the cache entry', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },
       });
@@ -356,7 +356,7 @@ describe('OpenAiImageProvider', () => {
       const mockDeleteFn = vi.fn();
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
-          // Invalid data structure that will cause parsing to fail
+          // A 200 response whose `data` array is missing entirely.
           deleteFromCache: mockDeleteFn,
         },
         cached: false,
@@ -364,8 +364,15 @@ describe('OpenAiImageProvider', () => {
         statusText: 'OK',
       });
 
-      await provider.callApi('test prompt');
-      expect(mockDeleteFn).toHaveBeenCalledTimes(1);
+      const result = await provider.callApi('test prompt');
+
+      // This used to throw an opaque TypeError, which the catch block reported as
+      // `API error: TypeError...` and treated as a parse failure worth evicting.
+      // It is now reported as the descriptive missing-image error instead, matching
+      // how the other OpenAI providers handle a well-formed body with no payload.
+      // Eviction on a genuine parse failure is still covered in image.functions.test.ts.
+      expect(result.error).toContain('No image URL found in response');
+      expect(mockDeleteFn).not.toHaveBeenCalled();
     });
   });
 
