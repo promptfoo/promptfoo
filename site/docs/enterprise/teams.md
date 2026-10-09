@@ -28,6 +28,10 @@ Only system admins can create service accounts.
 
 ## Team Secrets (On-Prem)
 
+Before creating team secrets, a deployment administrator must configure `TEAM_SECRET_ENCRYPTION_KEY` in the Promptfoo server environment. Use the same persistent value for every server instance and preserve it with deployment backups. Without it, secret encryption and decryption fail.
+
+This deployment key is separate from the provider credentials stored in team secrets. Replacing or losing it makes existing encrypted values unreadable; do not change it when rotating a provider API key.
+
 Team secrets store encrypted provider credentials that can be reused within a team. Open the team's settings, select **Secrets**, and click **Create Secret**. Enter a name, value, and optional description. Names must be unique within the team.
 
 In a provider's API Key field, use the key button to choose a team secret. This saves a reference such as `%__PF_SECRET.OPENAI_API_KEY__%` instead of copying the credential into the provider configuration. Team Red Team Provider overrides can also use these references.
