@@ -18,13 +18,18 @@ Use the [AWS model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/m
 | Model-specific text generation               | `bedrock:<model-or-profile-id>` or `bedrock:completion:<id>` | InvokeModel for supported native model families                    |
 | Unified chat and multimodal input            | `bedrock:converse:<id>`                                      | Converse / ConverseStream                                          |
 | Anthropic-compatible messages                | `bedrock:messages:<id>`                                      | Messages on Runtime or Mantle, according to the model and endpoint |
-| OpenAI-compatible responses                  | `bedrock:responses:<id>`                                     | Responses on the endpoint supported by the model                   |
+| Mantle responses                             | `bedrock:responses:<id>`                                     | Responses on Mantle                                                |
+| Runtime chat completions                     | `bedrock:runtime:chat:<id>`                                  | Chat Completions on Runtime                                        |
+| Runtime responses                            | `bedrock:runtime:responses:<id>`                             | Responses on Runtime                                               |
 | Mantle chat completions                      | `bedrock:mantle:<id>`                                        | Chat Completions on Mantle                                         |
 | Text embeddings                              | `bedrock:embedding:<id>`                                     | Model-specific InvokeModel embedding request                       |
+| Knowledge Base retrieval and RAG             | `bedrock:kb:<id>`                                            | Retrieve, RetrieveAndGenerate / RetrieveAndGenerateStream          |
+| Deployed Agents                              | `bedrock-agent:<agent-id>`                                   | InvokeAgent                                                        |
+| Complete native requests and responses       | `bedrock:api:<Operation>`                                    | Inference and job-status APIs, including Flows and reranking       |
 | Nova Sonic speech                            | `bedrock:<sonic-model-id>`                                   | InvokeModelWithBidirectionalStream                                 |
 | Luma / historical Nova Reel video generation | `bedrock:video:<id>`                                         | StartAsyncInvoke and GetAsyncInvoke                                |
 
-Some bare model IDs select a specialized provider automatically. Use the explicit selectors above when choosing an API, and consult the model-specific sections below for supported IDs. Specialized image-generation, reranking, and Pegasus video-understanding APIs do not have a built-in adapter here; use a [custom provider](./custom-api.md) for those APIs.
+Some bare model IDs select a specialized provider automatically. Use the explicit selectors above when choosing an API, and consult the model-specific sections below for supported IDs. Use `bedrock:api:<Operation>` for complete native SDK payloads, including image generation or video understanding through `InvokeModel`, standalone guardrails, reranking, and Flows. Native responses retain the AWS schema; use an `outputTransform` or a [custom provider](./custom-api.md) when your evaluation needs normalized output. API support, modalities, and parameters still depend on the selected model and AWS service.
 
 ### Discover current IDs and lifecycle state
 
