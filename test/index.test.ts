@@ -1258,6 +1258,59 @@ describe('evaluate with external defaultTest', () => {
     loadApiProviderSpy.mockRestore();
   });
 
+  it.each(['defaultTest', 'tests', 'scenario config', 'scenario tests'])(
+    'rejects credential-bearing feedback in %s before persistence or execution',
+    async (location) => {
+      const test = { feedback: { pass: 'https://reviews.example.com/?api_key=secret' } };
+      const testSuite: Parameters<typeof evaluate>[0] = {
+        prompts: ['hello'],
+        providers: [],
+        writeLatestResults: true,
+      };
+      if (location === 'defaultTest') {
+        testSuite.defaultTest = test;
+      } else if (location === 'tests') {
+        testSuite.tests = [test];
+      } else {
+        testSuite.scenarios = [
+          {
+            config: location === 'scenario config' ? [test] : [],
+            tests: location === 'scenario tests' ? [test] : [],
+          },
+        ];
+      }
+      const createSpy = vi.spyOn(Eval, 'create');
+      try {
+        await expect(evaluate(testSuite)).rejects.toThrow('credential parameters');
+        expect(createSpy).not.toHaveBeenCalled();
+        expect(doEvaluate).not.toHaveBeenCalled();
+      } finally {
+        createSpy.mockRestore();
+      }
+    },
+  );
+
+  it('rejects credential-bearing feedback loaded from a defaultTest file before persistence', async () => {
+    maybeLoadFromExternalFileSpy.mockResolvedValueOnce({
+      feedback: { fail: 'https://reviews.example.com/#token=secret' },
+    });
+    const createSpy = vi.spyOn(Eval, 'create');
+    try {
+      await expect(
+        evaluate({
+          prompts: ['hello'],
+          providers: [],
+          defaultTest: 'file://default.yaml',
+          writeLatestResults: true,
+        }),
+      ).rejects.toThrow('credential parameters');
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(doEvaluate).not.toHaveBeenCalled();
+    } finally {
+      createSpy.mockRestore();
+    }
+  });
+
   it('should load defaultTest from external file when using file:// syntax', async () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals' as const, value: 'test' }],

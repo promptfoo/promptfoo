@@ -96,6 +96,33 @@ describe('config-schema.json', () => {
     }
   });
 
+  describe('rating feedback validation', () => {
+    const feedbackCases: Array<[string, Record<string, string>, boolean]> = [
+      ['pass link', { pass: 'https://reviews.example.com/{{resultId}}?rating={{rating}}' }, true],
+      ['fail link', { fail: 'https://reviews.example.com/{{evalId}}#{{testCaseId}}' }, true],
+      ['empty links', {}, false],
+      ['HTTP', { pass: 'http://reviews.example.com/' }, false],
+      ['userinfo', { pass: 'https://user:password@reviews.example.com/' }, false],
+      ['unknown placeholder', { pass: 'https://reviews.example.com/{{unknown}}' }, false],
+      ['incomplete placeholder', { pass: 'https://reviews.example.com/{{resultId}' }, false],
+      ['dynamic host', { pass: 'https://{{evalId}}.example.com/' }, false],
+      ['query credentials', { pass: 'https://reviews.example.com/?API_Key=secret' }, false],
+      ['fragment credentials', { pass: 'https://reviews.example.com/#access-token=secret' }, false],
+      ['encoded credential name', { pass: 'https://reviews.example.com/?%61pi_key=secret' }, false],
+      ['excessive length', { pass: 'https://reviews.example.com/' + 'x'.repeat(8192) }, false],
+    ];
+
+    it.each(feedbackCases)(
+      'agrees between runtime and editor validation: %s',
+      (_name, feedback, valid) => {
+        const config = { prompts: ['hello'], providers: ['echo'], tests: [{ feedback }] };
+        expect(UnifiedConfigSchema.safeParse(config).success).toBe(valid);
+        const validate = ajv.compile(schema);
+        expect(validate(config), JSON.stringify(validate.errors)).toBe(valid);
+      },
+    );
+  });
+
   describe('redteam plugin enums', () => {
     it('should not have duplicate entries in plugin enums', () => {
       const findPluginEnums = (

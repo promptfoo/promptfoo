@@ -40,6 +40,7 @@ const dispatchClick = (element: Element) => {
 };
 
 const defaultResultsViewSettings = {
+  inComparisonMode: false,
   prettifyJson: false,
   renderMarkdown: true,
   showPassFail: true,
@@ -2844,6 +2845,34 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
       '_blank',
       'noopener,noreferrer',
     );
+    openSpy.mockRestore();
+  });
+
+  it('saves ratings without opening links in comparison mode', async () => {
+    mockResultsViewSettings.inComparisonMode = true;
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const props = createPropsForToggleTest();
+    props.output.testCase = {
+      feedback: { pass: 'https://reviews.example.com/{{evalId}}/{{testCaseId}}' },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    await userEvent.click(screen.getByLabelText('Mark test passed'));
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Initial comment');
+    openSpy.mockRestore();
+  });
+
+  it('saves ratings when an imported identifier cannot be URL-encoded', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const props = createPropsForToggleTest();
+    props.testCaseId = '\ud800';
+    props.output.testCase = {
+      feedback: { pass: 'https://reviews.example.com/{{testCaseId}}' },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    await userEvent.click(screen.getByLabelText('Mark test passed'));
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Initial comment');
     openSpy.mockRestore();
   });
 

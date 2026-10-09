@@ -19,6 +19,7 @@ import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { isApiProvider } from '../types/providers';
+import { RatingFeedbackSchema } from '../validators/ratingFeedback';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
@@ -586,6 +587,9 @@ async function readTestWithEnv(
     }
   }
 
+  if (testCase.feedback !== undefined) {
+    testCase.feedback = RatingFeedbackSchema.parse(testCase.feedback);
+  }
   if (!isDefaultTest) {
     validateTestCase(testCase);
   }
@@ -604,11 +608,12 @@ function validateTestCase(testCase: TestCase): void {
     !testCase.metadata &&
     !testCase.provider &&
     !testCase.providerOutput &&
+    !testCase.feedback &&
     !isDescriptionOnly &&
     typeof testCase.threshold !== 'number'
   ) {
     throw new Error(
-      `Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.\n\nInstead got:\n${JSON.stringify(
+      `Test case must contain assert, vars, options, metadata, provider, providerOutput, feedback, threshold, or only a description.\n\nInstead got:\n${JSON.stringify(
         testCase,
         null,
         2,

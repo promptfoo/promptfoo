@@ -14,6 +14,7 @@ import {
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
 import { ResultFailureReason } from '@promptfoo/types/results';
+import { RatingFeedbackUrlSchema } from '@promptfoo/validators/ratingFeedback';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -75,8 +76,6 @@ function stringifyOutputText(text: unknown): string {
 }
 
 const RATING_FEEDBACK_PLACEHOLDER_PATTERN = /\{\{(evalId|resultId|testCaseId|rating)\}\}/g;
-const RATING_FEEDBACK_ANY_PLACEHOLDER_PATTERN = /\{\{([^{}]+)\}\}/g;
-const RATING_FEEDBACK_PLACEHOLDER_NAMES = new Set(['evalId', 'resultId', 'testCaseId', 'rating']);
 
 export function buildRatingFeedbackUrl(
   template: string | undefined,
@@ -87,25 +86,16 @@ export function buildRatingFeedbackUrl(
     rating: 'pass' | 'fail';
   },
 ): string | undefined {
-  if (!template) {
+  const parsed = RatingFeedbackUrlSchema.safeParse(template);
+  if (!parsed.success) {
     return undefined;
   }
-  if (
-    Array.from(template.matchAll(RATING_FEEDBACK_ANY_PLACEHOLDER_PATTERN)).some(
-      (placeholder) => !placeholder[1] || !RATING_FEEDBACK_PLACEHOLDER_NAMES.has(placeholder[1]),
-    )
-  ) {
-    return undefined;
-  }
-
-  const urlString = template.replace(
-    RATING_FEEDBACK_PLACEHOLDER_PATTERN,
-    (_, name: keyof typeof values) => encodeURIComponent(values[name] ?? ''),
-  );
-
   try {
-    const url = new URL(urlString);
-    return url.protocol === 'https:' && !url.username && !url.password ? url.href : undefined;
+    const urlString = parsed.data.replace(
+      RATING_FEEDBACK_PLACEHOLDER_PATTERN,
+      (_, name: keyof typeof values) => encodeURIComponent(values[name] ?? ''),
+    );
+    return new URL(urlString).href;
   } catch {
     return undefined;
   }
@@ -1344,6 +1334,7 @@ function EvalOutputCell({
     showPassFail,
     showMetricPills,
     showPassReasons,
+    inComparisonMode,
     maxImageWidth,
     maxImageHeight,
   } = useResultsViewSettingsStore();
@@ -1495,7 +1486,7 @@ function EvalOutputCell({
     const newRating = activeRating === isPass ? null : isPass;
     setActiveRating(newRating);
     const feedbackUrl =
-      newRating === null
+      newRating === null || inComparisonMode
         ? undefined
         : buildRatingFeedbackUrl(output.testCase.feedback?.[isPass ? 'pass' : 'fail'], {
             evalId: evaluationId,
