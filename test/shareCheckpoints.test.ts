@@ -140,6 +140,41 @@ describe('sharing interrupted checkpoints', () => {
       vi.spyOn(cloudConfig, 'isEnabled').mockReturnValue(cloud);
     });
 
+    it.each([false, true])('strips malformed output while stripPrompt=%s', async (stripPrompt) => {
+      const { record, row } = await createCheckpoint('both', {
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt),
+      });
+      const output = await storeBlob(firstBytes, 'image/png', { evalId: record.id, kind: 'image' });
+      const input = await storeBlob(lastBytes, 'image/png', { evalId: record.id, kind: 'image' });
+      const metadata = {
+        interruptedStrategy: true,
+        completedTargetResponses: [
+          { prompt: 'legacy prompt', response: output.ref.uri },
+          { prompt: input.ref.uri, response: { output: 'valid response' } },
+        ],
+      };
+      row.response = { output: 'text', metadata };
+      row.metadata = metadata;
+      await row.save();
+      const original = structuredClone(row.response);
+      const storage = await getBlobStorageProvider();
+      const reads = vi.spyOn(storage, 'getByHash');
+      await createShareableUrl(record, { silent: true });
+      const sent = sentRow();
+      expect(JSON.stringify(sent)).not.toContain(output.ref.uri);
+      expect(JSON.stringify(sent)).not.toContain(firstBytes.toString('base64'));
+      expect(reads.mock.calls.some(([value]) => value === output.ref.hash)).toBe(false);
+      expect(reads.mock.calls.some(([value]) => value === input.ref.hash)).toBe(!stripPrompt);
+      if (cloud) {
+        expect(uploads().map(({ hash }) => hash)).toEqual(stripPrompt ? [] : [input.ref.hash]);
+      } else {
+        expect(JSON.stringify(sent).includes(lastBytes.toString('base64'))).toBe(!stripPrompt);
+      }
+      expect(row.response).toEqual(original);
+      expect(unexpectedUrls).toEqual([]);
+    });
+
     it.each(['both', 'response-only', 'result-only'] as const)(
       'preserves distinct earlier-turn audio with %s checkpoint copies',
       async (copies) => {

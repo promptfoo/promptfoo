@@ -155,11 +155,14 @@ type StoreOnce = (
   minSizeBytes?: number,
 ) => Promise<BlobRef | null>;
 
+type StoragePolicy = boolean | (() => Promise<boolean>);
+
 function createStoreOnce(
   blobContext: BlobContext,
-  storageEnabled = isBlobStorageEnabled(),
+  storageEnabled: StoragePolicy = isBlobStorageEnabled(),
 ): StoreOnce {
   const cache = new Map<string, Promise<BlobRef | null>>();
+  let resolvedPolicy: Promise<boolean> | undefined;
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     // Canonicalize the cache key on the parsed bytes (not the raw input string)
     // so a `data:image/png;base64,XYZ` URL and the bare `XYZ` base64 hit the
@@ -175,15 +178,23 @@ function createStoreOnce(
       return existing;
     }
 
-    const pendingStore = maybeStore(
-      base64OrDataUrl,
-      defaultMimeType,
-      blobContext,
-      location,
-      kind,
-      storageEnabled,
-      minSizeBytes,
-    );
+    const pendingStore = (async () => {
+      // Resolve only for eligible bytes, once per extraction even when disabled
+      // or rejected. Deferring the callback lets the payload cache reserve first.
+      const enabled =
+        typeof storageEnabled === 'function'
+          ? await (resolvedPolicy ??= Promise.resolve().then(storageEnabled))
+          : storageEnabled;
+      return maybeStore(
+        base64OrDataUrl,
+        defaultMimeType,
+        blobContext,
+        location,
+        kind,
+        enabled,
+        minSizeBytes,
+      );
+    })();
     cache.set(cacheKey, pendingStore);
 
     try {
@@ -656,11 +667,12 @@ export async function extractAndStoreBinaryData(
 /**
  * Persist response media and the independent result-level checkpoint copy together.
  * Both copies share a store-once cache; unrelated result metadata stays untouched.
+ * A policy callback runs once per extraction, only if eligible media needs storage.
  */
 export async function extractAndStoreResultMedia<T>(
   fields: { response: ProviderResponse | null | undefined; metadata: T },
   context: BlobContext,
-  storageEnabled = isBlobStorageEnabled(),
+  storageEnabled: StoragePolicy = isBlobStorageEnabled(),
 ): Promise<{ response: ProviderResponse | null | undefined; metadata: T }> {
   const storeOnce = createStoreOnce(context, storageEnabled);
   const response = await extractResponseBinaryData(fields.response, context, storeOnce, 'response');

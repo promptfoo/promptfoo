@@ -298,6 +298,107 @@ describe('Local blob extraction', () => {
     }
   });
 
+  it.each([true, false])(
+    'resolves a pending media policy once when enabled=%s',
+    async (enabled) => {
+      const first = { data: Buffer.alloc(2048, 81).toString('base64'), format: 'wav' };
+      const second = { data: Buffer.alloc(2048, 82).toString('base64'), format: 'wav' };
+      const metadata = {
+        interruptedStrategy: true,
+        completedTargetResponses: [first, second, first].map((audio) => ({ response: { audio } })),
+      };
+      const fields = { response: { metadata }, metadata };
+      const original = structuredClone(fields);
+      let enter!: () => void;
+      let release!: (value: boolean) => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const gate = new Promise<boolean>((resolve) => {
+        release = resolve;
+      });
+      const policy = vi.fn(() => {
+        enter();
+        return gate;
+      });
+      const pending = extractAndStoreResultMedia(fields, {}, policy);
+      await entered;
+      const storesBeforeRelease = mockStoreBlob.mock.calls.length;
+      release(enabled);
+      const processed = await pending;
+      expect(storesBeforeRelease).toBe(0);
+      expect(policy).toHaveBeenCalledOnce();
+      expect(mockStoreBlob).toHaveBeenCalledTimes(enabled ? 2 : 0);
+      for (const copy of [processed.response!.metadata!, processed.metadata]) {
+        expect(Boolean(copy.completedTargetResponses[0].response.audio.blobRef)).toBe(enabled);
+      }
+      expect(fields).toEqual(original);
+    },
+  );
+
+  it('shares policy rejection and resolves a fresh policy on the next extraction', async () => {
+    const metadata = {
+      interruptedStrategy: true,
+      completedTargetResponses: [81, 82, 81].map((byte) => ({
+        response: { audio: { data: Buffer.alloc(2048, byte).toString('base64'), format: 'wav' } },
+      })),
+    };
+    const fields = { response: { metadata }, metadata };
+    const error = new Error('Synthetic media policy failure');
+    const policy = vi.fn<() => Promise<boolean>>().mockRejectedValue(error);
+    await expect(extractAndStoreResultMedia(fields, {}, policy)).rejects.toBe(error);
+    expect(policy).toHaveBeenCalledOnce();
+    expect(mockStoreBlob).not.toHaveBeenCalled();
+    policy.mockResolvedValue(true);
+    await extractAndStoreResultMedia(fields, {}, policy);
+    expect(policy).toHaveBeenCalledTimes(2);
+    expect(mockStoreBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { output: 'ordinary text' },
+    { audio: { data: Buffer.alloc(8).toString('base64'), format: 'wav' } },
+    {
+      audio: {
+        blobRef: {
+          hash: 'a'.repeat(64),
+          uri: `promptfoo://blob/${'a'.repeat(64)}`,
+          mimeType: 'audio/wav',
+          sizeBytes: 2048,
+          provider: 'filesystem',
+        },
+      },
+    },
+  ])('does not resolve policy without eligible bytes: %j', async (response) => {
+    const policy = vi.fn().mockResolvedValue(true);
+    const fields = { response, metadata: {} };
+    expect(
+      await extractAndStoreResultMedia(fields, { evalId: 'existing-ref-eval' }, policy),
+    ).toEqual(fields);
+    expect(policy).not.toHaveBeenCalled();
+    expect(mockStoreBlob).not.toHaveBeenCalled();
+    if (response.audio?.blobRef) {
+      const { recordBlobReference } = await import('../../src/blobs/index');
+      expect(recordBlobReference).toHaveBeenCalledWith('a'.repeat(64), {
+        evalId: 'existing-ref-eval',
+        location: 'response.audio.blobRef',
+      });
+    }
+  });
+
+  it.each([
+    { output: '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>' },
+    { output: JSON.stringify({ data: [{ b64_json: Buffer.alloc(2048).toString('base64') }] }) },
+    { images: [{ data: `data:image/png;base64,${Buffer.alloc(2048).toString('base64')}` }] },
+    { metadata: { preview: `data:image/png;base64,${Buffer.alloc(2048).toString('base64')}` } },
+  ])('honors lazy disabled policy across media encodings: %#', async (response) => {
+    const policy = vi.fn().mockResolvedValue(false);
+    const fields = { response, metadata: {} };
+    expect(await extractAndStoreResultMedia(fields, {}, policy)).toEqual(fields);
+    expect(policy).toHaveBeenCalledOnce();
+    expect(mockStoreBlob).not.toHaveBeenCalled();
+  });
+
   it('leaves unmarked and malformed checkpoint metadata unchanged', async () => {
     const entry = {
       prompt: 'prompt',

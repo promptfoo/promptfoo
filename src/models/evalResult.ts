@@ -94,12 +94,16 @@ function projectOutputMetadata<T>(
       }),
     ) as T;
   }
-  return mapCompletedTargetResponses(sanitizeCompletedTargetResponses(projected), (entry) => ({
-    ...entry,
-    ...('prompt' in entry && options.stripPromptText ? { prompt: '[prompt stripped]' } : {}),
-    // Old stored rows and non-persisted JSON/JSONL exports also cross this boundary.
-    response: projectProviderResponse(entry.response, options)!,
-  }));
+  return mapCompletedTargetResponses(
+    sanitizeCompletedTargetResponses(projected),
+    (entry) => ({
+      ...entry,
+      ...('prompt' in entry && options.stripPromptText ? { prompt: '[prompt stripped]' } : {}),
+      // Old stored rows and non-persisted JSON/JSONL exports also cross this boundary.
+      response: projectProviderResponse(entry.response, options)!,
+    }),
+    options.stripOutput ? (value) => stripMediaReferences(sanitizeForDb(value)) : undefined,
+  );
 }
 
 interface ResponseProjectionOptions {
@@ -153,8 +157,14 @@ function projectProviderResponse(
   if (Array.isArray(projectedResponse.turns)) {
     projectedResponse.turns = projectedResponse.turns.map((turn) => {
       const record = asRecord(turn);
-      return record ? projectProviderResponse(record, options) : turn;
+      return record
+        ? projectProviderResponse(record, options)
+        : options.stripOutput
+          ? stripMediaReferences(sanitizeForDb(turn))
+          : turn;
     });
+  } else if (options.stripOutput && projectedResponse.turns !== undefined) {
+    projectedResponse.turns = stripMediaReferences(sanitizeForDb(projectedResponse.turns));
   }
 
   return projectedResponse;
@@ -711,17 +721,30 @@ function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
 function mapCompletedTargetResponses<T>(
   metadata: T,
   project: (entry: Record<string, unknown> & { response: ProviderResponse }) => unknown,
+  projectUnsupported?: (value: unknown) => unknown,
 ): T {
   const record = asRecord(metadata);
-  if (record?.interruptedStrategy !== true || !Array.isArray(record.completedTargetResponses)) {
+  if (record?.interruptedStrategy !== true) {
     return metadata;
+  }
+  if (!Array.isArray(record.completedTargetResponses)) {
+    return projectUnsupported && 'completedTargetResponses' in record
+      ? ({
+          ...record,
+          completedTargetResponses: projectUnsupported(record.completedTargetResponses),
+        } as T)
+      : metadata;
   }
   return {
     ...record,
     completedTargetResponses: record.completedTargetResponses.map((entry) => {
       const target = asRecord(entry);
       const response = asRecord(target?.response);
-      return target && response ? project({ ...target, response }) : entry;
+      return target && response
+        ? project({ ...target, response })
+        : projectUnsupported
+          ? projectUnsupported(entry)
+          : entry;
     }),
   } as T;
 }
@@ -1326,24 +1349,6 @@ export default class EvalResult {
 
   async save() {
     const db = await getDb();
-    // Ratings and other later updates run outside the evaluation's scoped env.
-    // Preserve its saved media policy without changing process-wide settings.
-    const savedPolicy = await db
-      .select({
-        // Avoid deserializing the full config and its inline tests for each result.
-        inlineMedia: sql<string | null>`CASE WHEN json_valid(${evalsTable.config})
-          THEN ${evalsTable.config} -> '$.env.PROMPTFOO_INLINE_MEDIA' END`,
-      })
-      .from(evalsTable)
-      .where(eq(evalsTable.id, this.evalId))
-      .get();
-    // SQL NULL means absent; JSON null and other explicit values keep their types.
-    const inlineMedia =
-      savedPolicy?.inlineMedia == null ? undefined : JSON.parse(savedPolicy.inlineMedia);
-    const storageEnabled =
-      inlineMedia === undefined
-        ? isBlobStorageEnabled()
-        : !parseEnvBool(String(inlineMedia), false);
     // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
     // testCase metadata in the constructor, and trace linkage travels inside the metadata
     // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
@@ -1362,7 +1367,24 @@ export default class EvalResult {
         ),
       },
       { evalId: this.evalId, testIdx: this.testIdx, promptIdx: this.promptIdx },
-      storageEnabled,
+      async () => {
+        // Later updates run outside the evaluation's scoped env. Read its current
+        // policy only when the extractor finds media eligible for externalization.
+        const savedPolicy = await db
+          .select({
+            inlineMedia: sql<string | null>`CASE WHEN json_valid(${evalsTable.config})
+              THEN ${evalsTable.config} -> '$.env.PROMPTFOO_INLINE_MEDIA' END`,
+          })
+          .from(evalsTable)
+          .where(eq(evalsTable.id, this.evalId))
+          .get();
+        // SQL NULL means absent; JSON null and other explicit values keep their types.
+        const inlineMedia =
+          savedPolicy?.inlineMedia == null ? undefined : JSON.parse(savedPolicy.inlineMedia);
+        return inlineMedia === undefined
+          ? isBlobStorageEnabled()
+          : !parseEnvBool(String(inlineMedia), false);
+      },
     );
     const persistedValues = {
       ...rest,

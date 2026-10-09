@@ -5,9 +5,10 @@ import path from 'node:path';
 
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { storeBlob } from '../../src/blobs';
 import cliState from '../../src/cliState';
 import { R_ENDPOINT } from '../../src/constants';
-import { getDb } from '../../src/database/index';
+import { DrizzleLogWriter, getDb } from '../../src/database/index';
 import { evalsTable } from '../../src/database/tables';
 import { evaluate as evaluateInternal } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
@@ -328,6 +329,57 @@ describe('interrupted strategy checkpoints', () => {
       [true, false],
       [true, true],
     ])(
+      'strips malformed media with stripPrompt=%s and responseCopy=%s',
+      async (stripPrompt, responseCopy) => {
+        const outputMedia = `data:image/png;base64,${Buffer.alloc(2048, 70).toString('base64')}`;
+        const inputMedia = `data:image/png;base64,${Buffer.alloc(2048, 71).toString('base64')}`;
+        const valid = { prompt: inputMedia, response: { output: 'ordinary output' } };
+        for (const entries of [
+          [{ response: { turns: [outputMedia] } }, valid],
+          [{ response: { turns: outputMedia } }, valid],
+          [{ response: outputMedia }, valid],
+          outputMedia,
+          { response: outputMedia },
+          [outputMedia],
+          [{ response: [outputMedia] }, valid],
+        ]) {
+          const metadata = { interruptedStrategy: true, completedTargetResponses: entries };
+          const input = createEvaluateResult({
+            response: { output: 'text', metadata: responseCopy ? metadata : {} },
+            metadata,
+          });
+          const original = structuredClone(input);
+          const row = await EvalResult.createFromEvaluateResult(randomUUID(), input, {
+            persist: false,
+          });
+          for (const stripOutput of [false, true]) {
+            const flags = {
+              ...getStripFlags(),
+              shouldStripPromptText: stripPrompt,
+              shouldStripResponseOutput: stripOutput,
+            };
+            const projected =
+              boundary === 'model'
+                ? row.toEvaluateResult(flags)
+                : sanitizeResultForJsonlArtifact(input, flags);
+            expect(JSON.stringify(projected).includes(outputMedia)).toBe(!stripOutput);
+            if (Array.isArray(entries) && entries.some((entry) => entry === valid)) {
+              expect(projected.metadata!.completedTargetResponses[1].prompt).toBe(
+                stripPrompt ? '[prompt stripped]' : inputMedia,
+              );
+            }
+          }
+          expect(input).toEqual(original);
+        }
+      },
+    );
+
+    it.each([
+      [false, false],
+      [false, true],
+      [true, false],
+      [true, true],
+    ])(
       'applies stripPrompt=%s and stripOutput=%s independently to both copies',
       async (stripPrompt, stripOutput) => {
         const input = checkpointFixture();
@@ -499,25 +551,39 @@ describe('interrupted strategy checkpoints', () => {
     );
   });
 
-  it('does not deserialize inline test configs during repeated text result saves', async () => {
-    const input = createEvaluateResult({ response: { output: 'text only' }, cost: 0.25 });
-    const record = await Eval.create(
-      { tests: Array.from({ length: 20 }, () => ({ vars: { context: 'x'.repeat(2048) } })) },
-      [input.prompt],
-      { id: randomUUID() },
-    );
-    const row = await EvalResult.createFromEvaluateResult(record.id, input);
-    const decodeConfig = vi.spyOn(evalsTable.config, 'mapFromDriverValue');
-    for (const score of [0, 0.5, 1]) {
-      row.score = score;
-      await row.save();
-    }
-    expect(decodeConfig).not.toHaveBeenCalled();
-    const saved = await EvalResult.findById(row.id);
-    expect(saved!.score).toBe(1);
-    expect(saved!.response!.output).toBe('text only');
-    expect(saved!.cost).toBe(0.25);
-  });
+  it.each(['text', 'existing blob', 'undersized audio'])(
+    'does not read inline test configs during repeated %s result saves',
+    async (media) => {
+      const input = createEvaluateResult({ response: { output: 'text only' }, cost: 0.25 });
+      const record = await Eval.create(
+        { tests: Array.from({ length: 20 }, () => ({ vars: { context: 'x'.repeat(2048) } })) },
+        [input.prompt],
+        { id: randomUUID() },
+      );
+      if (media === 'existing blob') {
+        const { ref } = await storeBlob(Buffer.alloc(2048, 81), 'audio/wav', {
+          evalId: record.id,
+          kind: 'audio',
+        });
+        input.response!.audio = { blobRef: ref };
+      } else if (media === 'undersized audio') {
+        input.response!.audio = { data: Buffer.alloc(8, 81).toString('base64'), format: 'wav' };
+      }
+      const row = await EvalResult.createFromEvaluateResult(record.id, input);
+      const decodeConfig = vi.spyOn(evalsTable.config, 'mapFromDriverValue');
+      const queries = vi.spyOn(DrizzleLogWriter.prototype, 'write');
+      for (const score of [0, 0.5, 1]) {
+        row.score = score;
+        await row.save();
+      }
+      expect(decodeConfig).not.toHaveBeenCalled();
+      expect(queries.mock.calls.filter(([query]) => query.includes('from "evals"'))).toEqual([]);
+      const saved = await EvalResult.findById(row.id);
+      expect(saved!.score).toBe(1);
+      expect(saved!.response!.output).toBe('text only');
+      expect(saved!.cost).toBe(0.25);
+    },
+  );
 
   describe.each([true, false])('malformed saved config with ambient inline=%s', (ambientInline) => {
     it.each(['{', 'null', '[]', '"legacy"', '{"env":"legacy"}', '{"env":null}'])(
