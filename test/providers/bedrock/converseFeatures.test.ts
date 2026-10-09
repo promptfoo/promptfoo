@@ -3,17 +3,21 @@ import {
   ConverseCommand,
   ConverseStreamCommand,
 } from '@aws-sdk/client-bedrock-runtime';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AwsBedrockConverseProvider,
   type BedrockConverseOptions,
   parseConverseMessages,
 } from '../../../src/providers/bedrock/converse';
+import * as genaiTracer from '../../../src/tracing/genaiTracer';
 
+import type { CallApiContextParams } from '../../../src/types/providers';
+
+const cache = vi.hoisted(() => ({ enabled: false, get: vi.fn(), set: vi.fn() }));
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
-  isCacheEnabled: () => false,
-  getCache: async () => ({}),
+  isCacheEnabled: () => cache.enabled,
+  getCache: async () => cache,
 }));
 
 const model = 'us.amazon.nova-2-lite-v1:0';
@@ -40,9 +44,110 @@ function stream(events: unknown[]) {
   };
 }
 
+beforeEach(() => {
+  cache.enabled = false;
+  cache.get.mockReset();
+  cache.set.mockReset();
+});
 afterEach(() => vi.restoreAllMocks());
 
 describe('Converse native request features', () => {
+  it.each(['none', 'auto'])(
+    'lets prompt-native tool choice override provider %s',
+    async (toolChoice) => {
+      const { provider, send } = fixture({ tool_choice: toolChoice as 'none' | 'auto' });
+      const toolConfig = {
+        tools: [{ toolSpec: { name: 'lookup', inputSchema: { json: { type: 'object' } } } }],
+        toolChoice: { any: {} },
+      };
+      const result = await provider.callApi('hello', {
+        prompt: { raw: 'hello', label: 'hello', config: { toolConfig } },
+        vars: {},
+      });
+      expect(result.error).toBeUndefined();
+      expect(send.mock.calls[0][0].input.toolConfig).toEqual(toolConfig);
+    },
+  );
+
+  it('normalizes thinking with native output effort', async () => {
+    const { provider, send } = fixture(
+      { thinking: { type: 'disabled' }, outputConfig: { effort: 'max' } },
+      'us.anthropic.claude-opus-5',
+    );
+    expect((await provider.callApi('hello')).error).toBeUndefined();
+    expect(send.mock.calls[0][0].input.additionalModelRequestFields?.thinking).toBeUndefined();
+  });
+
+  it('coerces native guardrail values loaded as YAML numbers', async () => {
+    const { provider, send } = fixture({
+      guardrailConfig: {
+        guardrailIdentifier: 123 as unknown as string,
+        guardrailVersion: 2 as unknown as string,
+      },
+    });
+    expect((await provider.callApi('hello')).error).toBeUndefined();
+    expect(send.mock.calls[0][0].input.guardrailConfig).toEqual({
+      guardrailIdentifier: '123',
+      guardrailVersion: '2',
+    });
+  });
+
+  it('renders managed prompt variables separately for each test and permits an MCP executor', async () => {
+    const { provider, send } = fixture(
+      { promptVariables: { question: { text: '{{question}}' } } },
+      'arn:aws:bedrock:us-east-1:123456789012:prompt/ABCDEFGHIJ:1',
+    );
+    Object.assign(provider, { mcpClient: { getAllTools: () => [] } });
+    for (const question of ['first', 'second']) {
+      expect(
+        (await provider.callApi('', { prompt: { raw: '', label: '' }, vars: { question } })).error,
+      ).toBeUndefined();
+    }
+    expect(send.mock.calls.map(([command]) => command.input.promptVariables.question.text)).toEqual(
+      ['first', 'second'],
+    );
+    expect(send.mock.calls[0][0].input).not.toHaveProperty('toolConfig');
+  });
+
+  it('traces the native inference configuration sent to AWS', async () => {
+    const span = vi.spyOn(genaiTracer, 'withGenAISpan');
+    const { provider } = fixture({
+      inferenceConfig: { maxTokens: 12, temperature: 0.1, topP: 0.9, stopSequences: ['END'] },
+    });
+    await provider.callApi('hello');
+    expect(span.mock.calls[0][0]).toMatchObject({
+      maxTokens: 12,
+      temperature: 0.1,
+      topP: 0.9,
+      stopSequences: ['END'],
+    });
+  });
+
+  it.each([false, true])(
+    'decodes native system guard images from config=%s',
+    async (fromConfig) => {
+      const system = [
+        {
+          guardContent: {
+            image: { format: 'png' as const, source: { bytes: 'YWJj' as unknown as Uint8Array } },
+          },
+        },
+      ];
+      const { provider, send } = fixture(fromConfig ? { system } : {});
+      await provider.callApi(
+        fromConfig
+          ? 'hello'
+          : JSON.stringify([
+              { role: 'system', content: system },
+              { role: 'user', content: 'hello' },
+            ]),
+      );
+      expect(send.mock.calls[0][0].input.system[0].guardContent.image.source.bytes).toEqual(
+        Buffer.from('abc'),
+      );
+      expect(system[0].guardContent.image.source.bytes).toBe('YWJj');
+    },
+  );
   it.each([false, true])('forwards native options with streaming=%s', async (streaming) => {
     const config: BedrockConverseOptions = {
       streaming,
@@ -251,6 +356,45 @@ describe('Converse native request features', () => {
 });
 
 describe('ConverseStream response parity', () => {
+  it('caches complete streams and preserves replay usage', async () => {
+    cache.enabled = true;
+    const { provider, send } = fixture({ streaming: true });
+    send.mockResolvedValue(
+      stream([
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'READY' } } },
+        { messageStop: { stopReason: 'end_turn' } },
+        { metadata: { usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 } } },
+      ]),
+    );
+    const first = await provider.callApi('hello');
+    expect(first.output).toBe('READY');
+    expect(cache.set).toHaveBeenCalledOnce();
+    cache.get.mockResolvedValue(cache.set.mock.calls[0][1]);
+    const second = await provider.callApi('hello');
+    expect(second.cached).toBe(true);
+    expect(second.tokenUsage).toMatchObject({
+      prompt: 3,
+      completion: 2,
+      total: 5,
+      cached: 5,
+      numRequests: 0,
+    });
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it.each([false, true])('honors cache busting with streaming=%s', async (streaming) => {
+    cache.enabled = true;
+    const { provider, send } = fixture({ streaming });
+    if (streaming) {
+      send.mockResolvedValue(stream([{ messageStop: { stopReason: 'end_turn' } }]));
+    }
+    expect(
+      (await provider.callApi('hello', { bustCache: true } as CallApiContextParams)).error,
+    ).toBeUndefined();
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
   it('collects generated image bytes and server tool results', async () => {
     const { provider, send } = fixture({ streaming: true });
     send.mockResolvedValue(

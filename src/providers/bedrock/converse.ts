@@ -21,6 +21,7 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { renderVarsInObject } from '../../util/render';
 import {
   getClaudeModelWarningName,
   isAlwaysOnAdaptiveThinkingClaudeModel,
@@ -37,7 +38,13 @@ import {
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
-import { isOpenAIToolChoice, type OpenAIToolChoice, openaiToolChoiceToBedrock } from '../shared';
+import {
+  isOpenAIToolChoice,
+  type OpenAIToolChoice,
+  openaiToolChoiceToBedrock,
+  shouldBustProviderCache,
+  withResponseCacheMetadata,
+} from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { collectConverseStream } from './converseStream';
 import { calculateBedrockCost } from './pricing';
@@ -350,7 +357,10 @@ function convertToolChoiceToConverseFormat(toolChoice: unknown): ToolChoice | un
   }
 
   // Handle native Bedrock format
-  if (toolChoice === 'any') {
+  if (
+    toolChoice === 'any' ||
+    (toolChoice && typeof toolChoice === 'object' && 'any' in toolChoice)
+  ) {
     return { any: {} };
   }
   if (isNamedConverseToolChoice(toolChoice)) {
@@ -450,7 +460,9 @@ export function parseConverseMessages(prompt: string): {
           if (Array.isArray(msg.content)) {
             systemMessages.push(
               ...msg.content.map((block: SystemContentBlock | string) =>
-                typeof block === 'string' ? { text: block } : block,
+                typeof block === 'string'
+                  ? { text: block }
+                  : (normalizeNativeContentBlock(block as ContentBlock) as SystemContentBlock),
               ),
             );
           } else {
@@ -1057,8 +1069,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     return (
       promptConfig?.tool_choice ??
       promptConfig?.toolChoice ??
+      promptConfig?.toolConfig?.toolChoice ??
       this.config.tool_choice ??
-      this.config.toolChoice
+      this.config.toolChoice ??
+      this.config.toolConfig?.toolChoice
     );
   }
 
@@ -1068,7 +1082,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private buildGuardrailConfig(): GuardrailConfiguration | undefined {
     if (this.config.guardrailConfig) {
       const { guardrailIdentifier, guardrailVersion, trace } = this.config.guardrailConfig;
-      return { guardrailIdentifier, guardrailVersion, ...(trace ? { trace } : {}) };
+      return {
+        ...(guardrailIdentifier === undefined
+          ? {}
+          : { guardrailIdentifier: String(guardrailIdentifier) }),
+        ...(guardrailVersion === undefined ? {} : { guardrailVersion: String(guardrailVersion) }),
+        ...(trace ? { trace } : {}),
+      };
     }
     if (!this.config.guardrailIdentifier) {
       return undefined;
@@ -1092,7 +1112,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // Converse has no typed effort option, but `output_config.effort` is a supported escape
     // hatch through these raw fields, so read it back out for the effort-capped thinking rules
     // (turning thinking off at `xhigh`/`max` is a 400 on Opus 5 and Sonnet 5.5).
-    const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
+    const effort =
+      (this.config.outputConfig?.effort as ClaudeEffort | undefined) ??
+      (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
     // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
     // sampling-deprecated Claude model (Claude 5, Opus 4.7/4.8) rejects temperature/top_p/top_k,
     // so strip them from the raw fields too; normalizeClaudeThinkingConfig then converts enabled
@@ -1160,6 +1182,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
   }
 
+  private getEffectiveInferenceConfig(): InferenceConfiguration | undefined {
+    if (/^arn:[^:]+:bedrock:[^:]+:[^:]+:prompt\//.test(this.modelName)) {
+      return undefined;
+    }
+    return this.config.inferenceConfig ?? this.buildInferenceConfig();
+  }
+
   private async buildRequest(
     prompt: string,
     context?: CallApiContextParams,
@@ -1174,7 +1203,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       performanceConfig: this.buildPerformanceConfig(),
       serviceTier: this.buildServiceTier(),
       outputConfig: this.config.outputConfig,
-      promptVariables: this.config.promptVariables,
+      promptVariables: renderVarsInObject(this.config.promptVariables, context?.vars),
       requestMetadata: this.config.requestMetadata,
     };
     if (managedPrompt) {
@@ -1198,8 +1227,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         system ||
         conflicting.some((key) => this.config[key] !== undefined) ||
         context?.prompt?.config?.tools ||
-        context?.prompt?.config?.toolConfig ||
-        this.mcpClient
+        context?.prompt?.config?.toolConfig
       ) {
         throw new Error(
           'Managed Bedrock prompts define system, inferenceConfig, toolConfig, and additionalModelRequestFields in Prompt management; remove these overrides',
@@ -1209,8 +1237,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
     return {
       ...input,
-      system: this.config.system ?? system,
-      inferenceConfig: this.config.inferenceConfig ?? this.buildInferenceConfig(),
+      system:
+        this.config.system?.map(
+          (block) =>
+            normalizeNativeContentBlock(
+              structuredClone(block) as ContentBlock,
+            ) as SystemContentBlock,
+        ) ?? system,
+      inferenceConfig: this.getEffectiveInferenceConfig(),
       toolConfig: await this.buildToolConfig(
         context?.vars,
         context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
@@ -1232,7 +1266,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       return initErrorResponse;
     }
 
-    const inferenceConfig = this.buildInferenceConfig();
+    const inferenceConfig = this.getEffectiveInferenceConfig();
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
@@ -1295,8 +1329,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    streaming = false,
   ): Promise<ProviderResponse> {
-    const converseInput = await this.buildRequest(prompt, context);
+    const converseInput: ConverseStreamCommandInput = await this.buildRequest(prompt, context);
+    if (
+      streaming &&
+      converseInput.guardrailConfig &&
+      this.config.guardrailConfig?.streamProcessingMode
+    ) {
+      converseInput.guardrailConfig.streamProcessingMode =
+        this.config.guardrailConfig.streamProcessingMode;
+    }
     const toolsDisabled = this.isRequestToolsDisabled(context);
     const betweenToolsThinking =
       (converseInput.additionalModelRequestFields as { thinking?: { type?: string } } | undefined)
@@ -1305,19 +1348,27 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // Check cache
     const cache = await getCache();
     const region = this.getRegion();
-    const cacheKey = `bedrock:converse:${this.modelName}:${region}:${createBedrockCacheKeyHash({
-      config: this.config,
-      params: converseInput,
-      region,
-    })}`;
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
+    const cacheKey = `bedrock:${streaming ? 'converse-stream' : 'converse'}:${this.modelName}:${region}:${createBedrockCacheKeyHash(
+      {
+        config: this.config,
+        params: converseInput,
+        region,
+      },
+    )}`;
 
-    if (isCacheEnabled()) {
+    if (useCache) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed, toolsDisabled, betweenToolsThinking);
-        return { ...result, cached: true };
+        const result = await this.parseResponse(
+          parsed,
+          toolsDisabled,
+          betweenToolsThinking,
+          streaming,
+        );
+        return withResponseCacheMetadata(result, true);
       }
     }
 
@@ -1327,9 +1378,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const bedrockInstance = await this.getBedrockInstance();
 
       // Import and use ConverseCommand
-      const { ConverseCommand } = await import('@aws-sdk/client-bedrock-runtime');
-      const command = new ConverseCommand(converseInput);
-      response = await bedrockInstance.send(command);
+      const { ConverseCommand, ConverseStreamCommand } = await import(
+        '@aws-sdk/client-bedrock-runtime'
+      );
+      response = streaming
+        ? await collectConverseStream(
+            await bedrockInstance.send(new ConverseStreamCommand(converseInput)),
+          )
+        : await bedrockInstance.send(new ConverseCommand(converseInput));
     } catch (err: any) {
       const errorMessage = err?.message || String(err);
       logger.error('Bedrock Converse API error', { error: errorMessage });
@@ -1347,12 +1403,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
 
       return {
-        error: `Bedrock Converse API error: ${errorMessage}`,
+        error: `Bedrock ${streaming ? 'ConverseStream' : 'Converse'} API error: ${errorMessage}`,
       };
     }
 
     // Cache the response
-    if (isCacheEnabled()) {
+    if (useCache) {
       try {
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
@@ -1366,7 +1422,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response, toolsDisabled, betweenToolsThinking);
+    return await this.parseResponse(response, toolsDisabled, betweenToolsThinking, streaming);
   }
 
   /**
@@ -1700,17 +1756,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       return initErrorResponse;
     }
     try {
-      const input: ConverseStreamCommandInput = await this.buildRequest(prompt, context);
-      if (input.guardrailConfig && this.config.guardrailConfig?.streamProcessingMode) {
-        input.guardrailConfig.streamProcessingMode =
-          this.config.guardrailConfig.streamProcessingMode;
-      }
-      const client = await this.getBedrockInstance();
-      const { ConverseStreamCommand } = await import('@aws-sdk/client-bedrock-runtime');
-      const response = await collectConverseStream(
-        await client.send(new ConverseStreamCommand(input)),
-      );
-      return await this.parseResponse(response, this.isRequestToolsDisabled(context), false, true);
+      return await this.callApiInternal(prompt, context, true);
     } catch (err) {
       return { error: `Bedrock ConverseStream API error: ${errorMessage(err)}` };
     }

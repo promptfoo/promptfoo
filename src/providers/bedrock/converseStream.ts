@@ -119,7 +119,7 @@ export async function collectConverseStream(
         for (const part of delta.toolResult) {
           if (part.text !== undefined) {
             const content = block.toolResult.content ?? (block.toolResult.content = []);
-            const last = content.at(-1);
+            const last = content[content.length - 1];
             if (last?.text === undefined) {
               content.push({ text: part.text });
             } else {
