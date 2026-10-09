@@ -21,6 +21,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -28,7 +29,6 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
-import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
@@ -294,11 +294,8 @@ async function doEvalWithEnv(
   envFileOverrides: EnvOverrides | undefined,
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
-
-  let config: Partial<UnifiedConfig> | undefined = undefined;
-  let testSuite: TestSuite | undefined = undefined;
-  let _basePath: string | undefined = undefined;
-  let commandLineOptions: Record<string, any> | undefined = undefined;
+  const inputCommand = cmdObj;
+  const initialEnvFileOverrides = envFileOverrides && { ...envFileOverrides };
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -338,14 +335,25 @@ async function doEvalWithEnv(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
+  const runEvaluationWithEnv = async (
+    runEnv: EnvOverrides,
+    envFileOverrides: EnvOverrides | undefined,
+    cmdObj: Partial<CommandLineOptions & Command>,
+    defaultConfig: Partial<UnifiedConfig>,
+    evaluateOptions: InternalEvaluateOptions,
+    initialization?: boolean,
+  ) => {
     const startTime = Date.now();
+    let config: Partial<UnifiedConfig>;
+    let testSuite: TestSuite;
+    let _basePath: string | undefined;
+    let commandLineOptions: Record<string, any> | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(Boolean(config?.redteam) && { isRedteam: true }),
+      ...(Boolean(defaultConfig.redteam) && { isRedteam: true }),
     });
 
     if (cmdObj.write) {
@@ -397,6 +405,9 @@ async function doEvalWithEnv(
         );
       }
       cmdObj.config = resolvedConfigPaths;
+      if (initialization) {
+        inputCommand.config = resolvedConfigPaths;
+      }
     }
 
     // Check for conflicting options
@@ -531,9 +542,14 @@ async function doEvalWithEnv(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
+    // Clean up the providers this run loaded once no evaluation is using them.
+    await providerRegistry.cleanupWhenIdle(testSuite.providers, evaluateOptions.abortSignal);
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
     cliState.basePath = _basePath;
+    if (commandLineOptions?.safeMode) {
+      cliState.safeMode = true;
+    }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';
@@ -1225,9 +1241,11 @@ async function doEvalWithEnv(
         const cliTests = cmdObj.tests || cmdObj.vars;
         const varPaths: string[] = [];
         if (cliTests) {
-          // resolveConfigs loads `--tests` with no base path, so it resolves against the
-          // working directory rather than the directory holding the config file.
-          varPaths.push(...resolveTestsWatchPaths(cliTests, process.cwd()));
+          // Preserve the released path bases: --tests uses CWD, while --vars uses
+          // the config directory. --tests takes precedence when both are supplied.
+          varPaths.push(
+            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
+          );
         } else {
           varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
           for (const source of testSources ?? []) {
@@ -1269,11 +1287,12 @@ async function doEvalWithEnv(
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
-      if (
-        isCliInvocation &&
-        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)
-      ) {
-        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+      const belowThreshold =
+        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
+      // An eval stopped because its target is unavailable did not run every test, so it
+      // fails whatever the tests before the stop did.
+      if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
+        if (belowThreshold && getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
           logger.info(
             chalk.white(
               `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
@@ -1281,35 +1300,51 @@ async function doEvalWithEnv(
           );
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
+        // A run that failed its tests returns here, as it always has. A run stopped by its
+        // target goes on to clean up its providers, as it did when it still exited with 0.
+        if (targetErrorStatus == null) {
+          return ret;
+        }
       }
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
-    // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
-      }
-    }
-
     return ret;
   };
 
   const runEvaluation = (initialization?: boolean) => {
-    // Each watch run starts clean and retains its resolved env through output and cleanup.
+    // Each watch run keeps its inputs, resolved environment and providers through cleanup.
     const runEnv: EnvOverrides = {};
-    return cliState.withConfig(undefined, () =>
-      cliState.withBasePath(undefined, () =>
-        cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
-      ),
+    const runEnvFileOverrides =
+      initialization || !initialEnvFileOverrides
+        ? envFileOverrides
+        : { ...initialEnvFileOverrides };
+    const runCommand = { ...cmdObj };
+    const runDefaults = { ...defaultConfig };
+    const runOptions = { ...evaluateOptions };
+    return cliState.withSafeMode(
+      Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
+      () =>
+        cliState.withConfig(undefined, () =>
+          cliState.withBasePath(undefined, () =>
+            cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
+              cliState.withEnv(runEnv, () =>
+                providerRegistry.withEvaluation(() =>
+                  runEvaluationWithEnv(
+                    runEnv,
+                    runEnvFileOverrides,
+                    runCommand,
+                    runDefaults,
+                    runOptions,
+                    initialization,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
     );
   };
 

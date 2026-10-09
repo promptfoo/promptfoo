@@ -232,7 +232,9 @@ export class CustomProvider implements ApiProvider {
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
+      // Remote task handlers only know the built-in default. An explicit
+      // redteamProvider must stay local.
+      if (shouldGenerateRemote() && !this.config.redteamProvider) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: true,
@@ -252,7 +254,7 @@ export class CustomProvider implements ApiProvider {
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      if (shouldGenerateRemote()) {
+      if (shouldGenerateRemote() && !this.config.redteamProvider) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: false,
@@ -336,7 +338,6 @@ export class CustomProvider implements ApiProvider {
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
-    let lastTargetError: string | undefined = undefined;
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
@@ -464,12 +465,10 @@ export class CustomProvider implements ApiProvider {
           break;
         }
         if (lastResponse.error) {
-          lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
-          logger.info(
-            `[Custom] ROUND ${roundNum} - Target error: ${lastResponse.error}. Full response: ${JSON.stringify(
-              lastResponse,
-            )}`,
-          );
+          logger.info(`[Custom] ROUND ${roundNum} - Target error`, {
+            error: lastResponse.error,
+            response: lastResponse,
+          });
           continue;
         }
 
@@ -542,7 +541,6 @@ export class CustomProvider implements ApiProvider {
           }
 
           if (lastResponse.error) {
-            lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
             logger.info(
               `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}.`,
               { lastResponse },
@@ -748,8 +746,10 @@ export class CustomProvider implements ApiProvider {
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
     };
+    const targetError =
+      lastResponse.error && (typeof lastResponse.error === 'string' ? lastResponse.error : 'Error');
     const error =
-      lastTargetError ||
+      targetError ||
       (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
     return {
       output: reported.output,

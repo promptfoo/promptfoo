@@ -18,6 +18,7 @@ import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import { redactAzureBlobSasTokens } from '../../src/util/sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -219,6 +220,19 @@ describe('evaluator', () => {
       });
       expect(findResults).not.toHaveBeenCalled();
     });
+  });
+
+  it('preserves duplicate SAS signatures when saving an unchanged redacted config', async () => {
+    const config = {
+      tests: [
+        { vars: { label: 'first', file: 'az://account/container/a.yaml?sig=secret-a' } },
+        { vars: { label: 'second', file: 'az://account/container/a.yaml?sig=secret-b' } },
+      ],
+    };
+    const eval_ = await Eval.create(config, []);
+    await updateResult(eval_.id, redactAzureBlobSasTokens(config));
+    const loaded = await Eval.findById(eval_.id);
+    expect(loaded?.config).toEqual(config);
   });
 
   it('reloads summaries after appending to an evaluation with loaded results', async () => {

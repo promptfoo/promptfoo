@@ -57,7 +57,7 @@ targets:
   - {{ provider }}
   {% else -%}
   - id: {{ provider.id }}
-    label: {{ provider.label }}
+    label: {{ provider.label | dump }}
     config:
       {% for k, v in provider.config -%}
       {{ k }}: {{ v | dump }}
@@ -116,7 +116,7 @@ import urllib.parse
 import json
 
 def call_api(prompt, options, context):
-    parsed_url = urllib.parse.urlparse('https://example.com/api/chat)
+    parsed_url = urllib.parse.urlparse('https://example.com/api/chat')
     conn = http.client.HTTPSConnection(parsed_url.netloc)
 
     headers = {'Content-Type': 'application/json'}
@@ -306,8 +306,8 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
-      { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
-      { name: 'openai:gpt-5', value: 'openai:gpt-5' },
+      { name: 'openai:gpt-5.6', value: 'openai:gpt-5.6' },
+      { name: 'openai:gpt-5.4-mini', value: 'openai:gpt-5.4-mini' },
       {
         name: 'anthropic:claude-fable-5-1',
         value: 'anthropic:messages:claude-fable-5-1',
@@ -369,7 +369,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-5-mini', label }];
+      providers = [{ id: 'openai:gpt-5.6', label }];
     } else {
       providers = [
         {
