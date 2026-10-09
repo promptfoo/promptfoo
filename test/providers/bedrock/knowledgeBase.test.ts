@@ -111,13 +111,21 @@ function buildKnowledgeBaseCacheKey({
     modelName,
     ...Object.fromEntries(
       Object.entries(kbConfig).filter(
-        ([key]) => !['accessKeyId', 'secretAccessKey', 'sessionToken'].includes(key),
+        ([key]) => !['accessKeyId', 'secretAccessKey', 'sessionToken', 'apiKey'].includes(key),
       ),
     ),
   };
-  const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
+  const configStr = JSON.stringify(cacheConfig, (_key, value) =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.keys(value)
+            .sort()
+            .map((key) => [key, value[key]]),
+        )
+      : value,
+  );
 
-  return `bedrock-kb:v2:${knowledgeBaseId}:${modelArn}:${region}:${sha256(
+  return `bedrock-kb:v3:${knowledgeBaseId}:${modelArn}:${region}:${sha256(
     JSON.stringify({
       configStr,
       prompt,
@@ -598,7 +606,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   it('does not replay legacy results that ignored generation settings', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
     mockGet.mockImplementation(async (key: string) =>
-      key.startsWith('bedrock-kb:v2:')
+      key.startsWith('bedrock-kb:v3:')
         ? null
         : JSON.stringify({ output: 'legacy response', citations: [] }),
     );
@@ -774,7 +782,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
   });
 
-  it('should hash prompt and config values in the cache key', async () => {
+  it('should bypass the cache for API keys and keep private content out of logs', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
@@ -799,29 +807,13 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.callApi('SECRET_PROMPT_VALUE');
 
-    const cacheKey = mockGet.mock.calls[0][0];
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
     const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
 
-    expect(cacheKey).not.toContain('SECRET_PROMPT_VALUE');
-    expect(cacheKey).not.toContain('SECRET_API_KEY');
     expect(debugLogs).not.toContain('SECRET_PROMPT_VALUE');
     expect(debugLogs).not.toContain('SECRET_RESPONSE_VALUE');
     expect(debugLogs).not.toContain('SECRET_CITATION_VALUE');
-    expect(cacheKey).toBe(
-      buildKnowledgeBaseCacheKey({
-        knowledgeBaseId: 'kb-123',
-        modelArn: 'custom:model:arn',
-        modelName: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        prompt: 'SECRET_PROMPT_VALUE',
-        region: 'us-east-1',
-        kbConfig: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          apiKey: 'SECRET_API_KEY',
-          modelArn: 'custom:model:arn',
-        },
-      }),
-    );
 
     mockIsCacheEnabled.mockReturnValue(false);
   });

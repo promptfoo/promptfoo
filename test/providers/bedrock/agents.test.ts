@@ -79,7 +79,7 @@ function buildAgentCacheKey({
   sessionId?: string;
   sessionState?: Record<string, unknown>;
 }) {
-  return `bedrock-agent:v2:${agentId}:${agentAliasId}:${region}:${sha256(
+  return `bedrock-agent:v3:${agentId}:${agentAliasId}:${region}:${sha256(
     JSON.stringify({
       prompt,
       actionGroups,
@@ -234,7 +234,7 @@ describe('AwsBedrockAgentsProvider', () => {
   it('does not replay legacy cached guardrail claims', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
     mockGet.mockImplementation(async (key: string) =>
-      key.startsWith('bedrock-agent:v2:')
+      key.startsWith('bedrock-agent:v3:')
         ? null
         : JSON.stringify({
             output: 'legacy response',
