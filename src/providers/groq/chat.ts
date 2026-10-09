@@ -1,5 +1,6 @@
 import { getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { registerOpenAiRequestType } from '../requestAttribution';
 import { serializeProvider } from '../serialization';
 import {
   assertGroqChatServiceTier,
@@ -111,3 +112,5 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return serializeProvider(this, 'groq', () => this.apiKey);
   }
 }
+
+registerOpenAiRequestType(GroqProvider.prototype, 'chat');

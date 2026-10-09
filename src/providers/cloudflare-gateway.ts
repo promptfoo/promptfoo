@@ -19,6 +19,7 @@ import invariant from '../util/invariant';
 import { buildIsolatedAnthropicClientOptions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { registerOpenAiRequestType } from './requestAttribution';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { EnvOverrides } from '../types/env';
@@ -362,6 +363,8 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
     };
   }
 }
+
+registerOpenAiRequestType(CloudflareGatewayOpenAiProvider.prototype, 'chat');
 
 /**
  * Extract Anthropic-compatible options from the gateway config

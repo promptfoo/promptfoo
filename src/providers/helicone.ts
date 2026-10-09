@@ -1,5 +1,6 @@
 import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -77,3 +78,5 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
     return `[Helicone AI Gateway ${baseUrl}]`;
   }
 }
+
+registerOpenAiRequestType(HeliconeGatewayProvider.prototype, 'chat');

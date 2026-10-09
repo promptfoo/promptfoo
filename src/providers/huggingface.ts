@@ -3,6 +3,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { registerOpenAiRequestType } from './requestAttribution';
 import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../contracts/env';
@@ -132,6 +133,8 @@ export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvi
     ]);
   }
 }
+
+registerOpenAiRequestType(HuggingfaceChatCompletionProvider.prototype, 'chat');
 
 export class HuggingfaceTextGenerationProvider implements ApiProvider {
   modelName: string;

@@ -4,6 +4,7 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { hasOpenAiGatewayCredentials } from './openai/util';
+import { registerOpenAiRequestType } from './requestAttribution';
 
 import type {
   ApiEmbeddingProvider,
@@ -131,6 +132,8 @@ class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
   }
 }
 
+registerOpenAiRequestType(LiteLLMCompletionProvider.prototype, 'completion');
+
 /**
  * LiteLLM Embedding Provider
  */
@@ -159,6 +162,8 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
 
 // For backward compatibility, export the chat provider as LiteLLMProvider
 export class LiteLLMProvider extends LiteLLMChatProvider {}
+
+registerOpenAiRequestType(LiteLLMProvider.prototype, 'chat');
 
 /**
  * Creates a LiteLLM provider using OpenAI-compatible endpoints

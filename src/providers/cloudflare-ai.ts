@@ -4,6 +4,7 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { splitLocalOptions } from './openai/localOptions';
+import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -126,6 +127,8 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
   }
 }
 
+registerOpenAiRequestType(CloudflareAiChatCompletionProvider.prototype, 'chat');
+
 export class CloudflareAiCompletionProvider extends OpenAiCompletionProvider {
   private cloudflareConfig: CloudflareAiConfig;
   private modelType = 'completion';
@@ -153,6 +156,8 @@ export class CloudflareAiCompletionProvider extends OpenAiCompletionProvider {
     return cloudflareToJSON(this, () => this.modelType);
   }
 }
+
+registerOpenAiRequestType(CloudflareAiCompletionProvider.prototype, 'completion');
 
 export class CloudflareAiEmbeddingProvider extends OpenAiEmbeddingProvider {
   private cloudflareConfig: CloudflareAiConfig;

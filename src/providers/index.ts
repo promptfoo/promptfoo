@@ -24,6 +24,7 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { getProviderFactories, mergeProviderEnv } from './registry';
+import { getOpenAiRequestType } from './requestAttribution';
 import { normalizeResponsesInput } from './responses/input';
 
 import type { EnvOverrides } from '../types/env';
@@ -50,17 +51,21 @@ export function getProviderRequestTemplates(
   parsesPrompt?: boolean;
   reservedVariables?: string[];
 } {
-  // IDs and URL-shaped config are not implementation evidence. Custom providers
-  // and subclasses can replace the request, so they need response.prompt evidence.
+  // Only concrete implementations whose request path is known qualify. Unknown
+  // providers and subclasses still need explicit response.prompt evidence.
   const prototype = Object.getPrototypeOf(provider);
+  const requestType =
+    getOpenAiRequestType(prototype) ??
+    (prototype === OpenAiChatCompletionProvider.prototype
+      ? 'chat'
+      : prototype === OpenAiResponsesProvider.prototype
+        ? 'responses'
+        : prototype === OpenAiCompletionProvider.prototype
+          ? 'completion'
+          : undefined);
   const config = provider.config ?? {};
   if (
-    [
-      HttpProvider.prototype,
-      OpenAiChatCompletionProvider.prototype,
-      OpenAiResponsesProvider.prototype,
-      OpenAiCompletionProvider.prototype,
-    ].includes(prototype) &&
+    (prototype === HttpProvider.prototype || requestType !== undefined) &&
     response?.metadata?.http?.redirected !== false
   ) {
     // Native fetch does not expose the redirect hops or final method. A followed
@@ -104,16 +109,16 @@ export function getProviderRequestTemplates(
     };
   }
   const override =
-    prototype === OpenAiChatCompletionProvider.prototype
+    requestType === 'chat'
       ? 'messages'
-      : prototype === OpenAiResponsesProvider.prototype
+      : requestType === 'responses'
         ? 'input'
-        : prototype === OpenAiCompletionProvider.prototype
+        : requestType === 'completion'
           ? 'prompt'
           : undefined;
   const effectiveConfig = { ...config, ...context?.prompt?.config };
-  let parsesPrompt = prototype === OpenAiChatCompletionProvider.prototype;
-  if (prototype === OpenAiResponsesProvider.prototype) {
+  let parsesPrompt = requestType === 'chat';
+  if (requestType === 'responses') {
     try {
       const parsed = JSON.parse(renderedPrompt);
       parsesPrompt = Array.isArray(parsed);

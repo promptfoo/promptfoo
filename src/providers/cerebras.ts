@@ -2,6 +2,7 @@ import { resolveProviderCreatorInput } from './creator';
 import { calculateCustomUsageCost, extractOpenAIBillingUsage } from './openai/billing';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
 import { splitLocalOptions } from './openai/localOptions';
+import { registerOpenAiRequestType } from './requestAttribution';
 import { calculateCost } from './shared';
 
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../types/index';
@@ -111,6 +112,8 @@ class CerebrasProvider extends OpenAiChatCompletionProvider {
       : undefined;
   }
 }
+
+registerOpenAiRequestType(CerebrasProvider.prototype, 'chat');
 
 /**
  * Creates a Cerebras provider using OpenAI-compatible chat endpoints

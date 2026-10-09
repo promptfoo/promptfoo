@@ -1,6 +1,7 @@
 import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { hasHeaderOverride } from './openai/index';
+import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -199,3 +200,5 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
     return 'Portkey API key is not set. Set the PORTKEY_API_KEY environment variable or add `portkeyApiKey` to the provider config.';
   }
 }
+
+registerOpenAiRequestType(PortkeyChatCompletionProvider.prototype, 'chat');

@@ -1,4 +1,5 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { registerOpenAiRequestType } from '../requestAttribution';
 import { FireworksEmbeddingProvider } from './embedding';
 import {
   buildFireworksProviderConfig,
@@ -143,6 +144,8 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
     return response;
   }
 }
+
+registerOpenAiRequestType(FireworksProvider.prototype, 'chat');
 
 // Fireworks's chat-completions endpoint exposes prompt-cache hits two different
 // ways depending on how the request was made: as the `fireworks-cached-prompt-tokens`
