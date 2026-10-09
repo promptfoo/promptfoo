@@ -7,6 +7,7 @@ import {
   isOpenAIToolArray,
   isOpenAIToolChoice,
   isPromptfooSampleTarget,
+  modelNameFromProviderPath,
   openaiToolChoiceToAnthropic,
   openaiToolChoiceToBedrock,
   openaiToolChoiceToGoogle,
@@ -19,11 +20,11 @@ import {
   transformTools,
   warmLivePricing,
 } from '../../src/providers/shared';
-import { fetchWithTimeout } from '../../src/util/fetch';
+import { fetchWithProxy } from '../../src/util/fetch';
 import { createMockProvider } from '../factories/provider';
 
 vi.mock('../../src/envars');
-vi.mock('../../src/util/fetch', () => ({ fetchWithTimeout: vi.fn() }));
+vi.mock('../../src/util/fetch', () => ({ fetchWithProxy: vi.fn() }));
 
 describe('Shared Provider Functions', () => {
   beforeEach(() => {
@@ -34,6 +35,35 @@ describe('Shared Provider Functions', () => {
     });
     vi.mocked(getEnvInt).mockImplementation(function (_key, defaultValue) {
       return defaultValue ?? 0;
+    });
+  });
+
+  describe('modelNameFromProviderPath', () => {
+    it('keeps colons that belong to the model id', () => {
+      expect(
+        modelNameFromProviderPath(
+          'anthropic:messages:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          2,
+        ),
+      ).toBe('anthropic.claude-3-5-sonnet-20241022-v2:0');
+    });
+
+    it('reads a two segment path', () => {
+      expect(modelNameFromProviderPath('voyage:voyage-3-large', 1)).toBe('voyage-3-large');
+    });
+
+    it('keeps colons in a two segment path', () => {
+      expect(modelNameFromProviderPath('voyage:some:model:v2', 1)).toBe('some:model:v2');
+    });
+
+    it('returns an empty string when there is no model name', () => {
+      expect(modelNameFromProviderPath('anthropic:messages', 2)).toBe('');
+      expect(modelNameFromProviderPath('voyage', 1)).toBe('');
+      expect(modelNameFromProviderPath('anthropic:messages:', 2)).toBe('');
+    });
+
+    it('keeps an empty trailing segment rather than dropping it', () => {
+      expect(modelNameFromProviderPath('anthropic:messages:model:', 2)).toBe('model:');
     });
   });
 
@@ -705,17 +735,19 @@ describe('Shared Provider Functions', () => {
     it('delegates to the live pricing cache refresh', async () => {
       vi.mocked(getEnvBool).mockReturnValueOnce(true);
       await warmLivePricing();
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
+      expect(fetchWithProxy).toHaveBeenCalledWith(
         'https://openrouter.ai/api/v1/models',
-        { headers: { Accept: 'application/json' } },
-        10_000,
+        expect.objectContaining({
+          headers: { Accept: 'application/json' },
+          signal: expect.any(AbortSignal),
+        }),
       );
     });
 
     it('resolves without fetching when live pricing is disabled', async () => {
       vi.mocked(getEnvBool).mockReturnValue(false);
       await expect(warmLivePricing()).resolves.toBeUndefined();
-      expect(fetchWithTimeout).not.toHaveBeenCalled();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
     });
   });
 });

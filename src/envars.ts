@@ -1,9 +1,9 @@
-import dotenv from 'dotenv';
-import { getEnvOverrides } from './envOverrides';
+import { getEnvOverridesProvider } from './envOverrides';
+import { loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
 
-dotenv.config({ quiet: true });
+loadEnvFiles();
 
 // Define the supported environment variables and their types
 type EnvVars = {
@@ -70,6 +70,11 @@ type EnvVars = {
   PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
   PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
+  /**
+   * Disables dynamic inline JavaScript execution in transforms and assertions.
+   * Requires pointing to dedicated script files instead (file://...).
+   */
+  PROMPTFOO_SAFE_MODE?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
   PROMPTFOO_STRIP_GRADING_RESULT?: boolean;
@@ -224,16 +229,17 @@ type EnvVars = {
   // Continuous Integration
   //=========================================================================
   APPVEYOR?: boolean;
-  BITBUCKET_COMMIT?: boolean;
+  BITBUCKET_COMMIT?: string;
   BUDDY?: boolean;
   BUILDKITE?: boolean;
   CI?: boolean;
   CIRCLECI?: boolean;
-  CODEBUILD_BUILD_ID?: boolean;
+  CODEBUILD_BUILD_ID?: string;
   GITHUB_ACTIONS?: boolean;
   GITLAB_CI?: boolean;
   JENKINS?: boolean;
-  TEAMCITY_VERSION?: boolean;
+  JENKINS_URL?: string;
+  TEAMCITY_VERSION?: string;
   TF_BUILD?: boolean;
   TRAVIS?: boolean;
 
@@ -457,6 +463,9 @@ type EnvVars = {
   // TrueFoundry
   TRUEFOUNDRY_API_KEY?: string;
 
+  // TypeSafe
+  TYPESAFE_API_KEY?: string;
+
   // Vertex AI
   VERTEX_API_VERSION?: string;
 
@@ -483,6 +492,27 @@ type EnvVars = {
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
+/** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
+export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
+  try {
+    return getEnvOverridesProvider()?.(layer);
+  } catch {
+    // All environment reads must still fall back normally when registration fails.
+    return undefined;
+  }
+}
+
+/** Environment inherited by child processes, including invocation-local file values. */
+export function getProcessEnv(): NodeJS.ProcessEnv {
+  const fileEnv = getEnvOverrides('file');
+  return fileEnv
+    ? {
+        ...process.env,
+        ...Object.fromEntries(Object.entries(fileEnv).filter(([, value]) => value !== undefined)),
+      }
+    : process.env;
+}
+
 /**
  * Get an environment variable.
  * @param key The name of the environment variable.
@@ -500,8 +530,7 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
     }
   }
 
-  // Fallback to process.env
-  const value = process.env[key as string];
+  const value = getEnvOverrides('file')?.[key as string] ?? process.env[key as string];
   if (value === undefined) {
     return defaultValue;
   }
@@ -515,7 +544,11 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
-  const value = getEnvString(key) || defaultValue;
+  return parseEnvBool(getEnvString(key), defaultValue);
+}
+
+export function parseEnvBool(input: string | undefined, defaultValue?: boolean): boolean {
+  const value = input || defaultValue;
   if (typeof value === 'boolean') {
     return value;
   }
@@ -523,6 +556,17 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
     return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
   }
   return Boolean(defaultValue);
+}
+
+/** Suite flags can restrict template access to process.env, but cannot lift operator restrictions. */
+export function isTemplateProcessEnvDisabled(): boolean {
+  const disabled = (env: Record<string, string | undefined>) =>
+    parseEnvBool(env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS, parseEnvBool(env.PROMPTFOO_SELF_HOSTED));
+  return (
+    disabled(process.env) ||
+    disabled(getEnvOverrides('file') ?? {}) ||
+    disabled(getEnvOverrides() ?? {})
+  );
 }
 
 /**
@@ -590,20 +634,26 @@ export function getMaxEvalTimeMs(defaultValue: number = 0): number {
  * @returns True if running in a CI environment, false otherwise.
  */
 export function isCI() {
+  const hasIdentifier = (key: EnvVarKey) => {
+    const value = getEnvString(key);
+    // Keep explicit false/0 opt-outs while accepting build IDs, versions and URLs.
+    return Boolean(value && !['false', '0'].includes(value.toLowerCase()));
+  };
   return (
     getEnvBool('CI') ||
     getEnvBool('GITHUB_ACTIONS') ||
     getEnvBool('TRAVIS') ||
     getEnvBool('CIRCLECI') ||
     getEnvBool('JENKINS') ||
+    hasIdentifier('JENKINS_URL') ||
     getEnvBool('GITLAB_CI') ||
     getEnvBool('APPVEYOR') ||
-    getEnvBool('CODEBUILD_BUILD_ID') ||
+    hasIdentifier('CODEBUILD_BUILD_ID') ||
     getEnvBool('TF_BUILD') ||
-    getEnvBool('BITBUCKET_COMMIT') ||
+    hasIdentifier('BITBUCKET_COMMIT') ||
     getEnvBool('BUDDY') ||
     getEnvBool('BUILDKITE') ||
-    getEnvBool('TEAMCITY_VERSION')
+    hasIdentifier('TEAMCITY_VERSION')
   );
 }
 

@@ -5,9 +5,7 @@ description: 'Execute LLM evaluations directly in browsers using WebGPU accelera
 
 # Browser Provider
 
-The Browser Provider enables automated web browser interactions for testing complex web applications and JavaScript-heavy websites where simpler providers are not sufficient.
-
-This provider uses [Playwright](https://playwright.dev/) to control headless browsers, allowing you to navigate pages, interact with elements, and extract data from dynamic websites. Playwright supports Chromium (Chrome, Edge), Firefox, and WebKit (Safari engine) browsers.
+The Browser Provider uses [Playwright](https://playwright.dev/) to navigate pages, interact with elements, and extract data from web applications. It supports Chromium (Chrome and Edge), Firefox, and WebKit (the Safari engine).
 
 ## When to Use the Browser Provider
 
@@ -31,20 +29,23 @@ When using browser automation:
 
 1. **Rate Limiting**: Always implement delays between requests to avoid overwhelming servers
 2. **Anti-Bot Detection**: Many websites employ anti-bot measures that can detect and block automated browsers
-3. **Resource Usage**: Browser automation is 10-100x slower than direct API calls and consumes significant CPU/memory
+3. **Resource Usage**: Browser automation uses more CPU and memory than direct API calls and adds page loading time
 4. **Legal Compliance**: Always check the website's Terms of Service and robots.txt before automating
 
 ## Prerequisites
 
-The browser provider requires Playwright and the stealth plugin. Install these packages in the project where you run promptfoo:
+Browser automation is an optional feature. Install Promptfoo, Playwright, and the stealth plugin together in your project, then install the matching Chromium binary:
 
 ```bash
-npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
+npm install promptfoo "playwright@^1.63.0" "playwright-extra@^4.3.6" "puppeteer-extra-plugin-stealth@^2.11.2"
+npx playwright install chromium
 ```
+
+For a global CLI, install the same packages with `npm install -g` and run `playwright install chromium`.
 
 Playwright 1.63 and later no longer support Ubuntu 20.04. Check [Playwright's system requirements](https://playwright.dev/docs/intro#system-requirements) before installing the browser on Linux.
 
-Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
+The browser provider supports Chromium-based browsers, including Chrome and Edge.
 
 ## Configuration
 
@@ -340,7 +341,7 @@ Note: All string values in the config support Nunjucks templating. This means yo
 
 ### Browser Support
 
-While Playwright supports multiple browsers (Chromium, Firefox, and WebKit), promptfoo's browser provider currently only implements Chromium support. This includes:
+While Playwright supports multiple browsers (Chromium, Firefox, and WebKit), promptfoo's browser provider only implements Chromium support. This includes:
 
 - **Chrome** - Google's browser
 - **Edge** - Microsoft's Chromium-based browser
@@ -394,7 +395,7 @@ The easiest way to create browser automation scripts is to record your interacti
 
 #### Chrome Extension (Recommended)
 
-The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc) is particularly helpful for quickly generating selectors:
+The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/detail/playwright-recorder/pbbgjmghmjcpeelnheiphabndacpdfbc) is helpful for quickly generating selectors:
 
 1. Install the extension from the Chrome Web Store
 2. Navigate to your target website
@@ -403,7 +404,7 @@ The [Playwright Recorder Chrome Extension](https://chrome.google.com/webstore/de
 5. Stop recording and copy the generated selectors/code
 6. Adapt the code for promptfoo's browser provider format
 
-This extension is especially useful because it:
+This extension is useful because it:
 
 - Shows selectors in real-time as you hover over elements
 - Generates multiple selector options (CSS, text, XPath)
@@ -568,7 +569,7 @@ providers:
 
 ## Example: Testing a Login Flow
 
-Here's a complete example testing a login workflow:
+Here's a template for testing a login workflow against your own application:
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -609,19 +610,15 @@ providers:
             selector: '.welcome-message'
           name: welcomeText
 
-      transformResponse: |
-        return {
-          output: extracted.welcomeText,
-          success: extracted.welcomeText.includes('Welcome')
-        };
+      transformResponse: '({ output: extracted.welcomeText })'
 
 tests:
   - vars:
       username: 'testuser'
       password: 'testpass123'
     assert:
-      - type: javascript
-        value: output.success === true
+      - type: contains
+        value: 'Welcome'
 ```
 
 ## Troubleshooting
@@ -667,9 +664,9 @@ providers:
 
 - [Playwright Documentation](https://playwright.dev/docs/intro) - Official Playwright docs
 - [Playwright Browsers Guide](https://playwright.dev/docs/browsers) - Detailed information about supported browsers
-- [Playwright Selectors Guide](https://playwright.dev/docs/selectors) - Learn about CSS, text, and other selector strategies
+- [Playwright Locators Guide](https://playwright.dev/docs/locators) - Learn about CSS, text, and other selector strategies
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices) - Tips for reliable automation
-- [Playwright Inspector](https://playwright.dev/docs/inspector) - Interactive tool for authoring and debugging tests
+- [Playwright Debugging Guide](https://playwright.dev/docs/debug) - Playwright Inspector and other tools for authoring and debugging tests
 - [Chrome DevTools Guide](https://developer.chrome.com/docs/devtools/) - For inspecting elements and finding selectors
 
 ---

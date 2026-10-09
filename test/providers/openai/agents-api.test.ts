@@ -20,9 +20,29 @@ const usage = {
   input_tokens: 100,
   output_tokens: 20,
   total_tokens: 120,
-  input_tokens_details: { cached_tokens: 40 },
+  input_tokens_details: { cached_tokens: 40, cache_write_tokens: 0 },
   output_tokens_details: { reasoning_tokens: 5 },
 };
+const usageCountFields = [
+  'input_tokens',
+  'output_tokens',
+  'total_tokens',
+  'cached_tokens',
+  'reasoning_tokens',
+] as const;
+/** Replace one count, including the cached and reasoning counts nested in usage details. */
+const usageWith = (
+  field: (typeof usageCountFields)[number],
+  count: unknown,
+  base: object = usage,
+) => ({
+  ...base,
+  ...(field === 'cached_tokens'
+    ? { input_tokens_details: { cached_tokens: count } }
+    : field === 'reasoning_tokens'
+      ? { output_tokens_details: { reasoning_tokens: count } }
+      : { [field]: count }),
+});
 const session = { id: 'sess_test', status: 'idle', agent: { model: 'gpt-6-astra' }, usage };
 const turn = { id: 'turn_test', status: 'completed', subagent_id: null, usage };
 const message = {
@@ -2243,6 +2263,34 @@ describe('OpenAiAgentsApiProvider', () => {
     );
   });
 
+  it.each([undefined, 0, 7])(
+    'prices Astra only with an explicit cache-write count (%s)',
+    async (cacheWriteTokens) => {
+      const sessionUsage = {
+        ...usage,
+        input_tokens_details: { cached_tokens: 40, cache_write_tokens: cacheWriteTokens },
+      };
+      mockApi((pathname) =>
+        pathname.endsWith('/sessions') || pathname.endsWith('/sess_test')
+          ? json({ ...session, usage: sessionUsage })
+          : undefined,
+      );
+
+      const result = await provider().callApi('hi');
+      expect(result.output).toBe('42');
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, cached: 40 });
+      if (cacheWriteTokens === undefined) {
+        expect(result.cost).toBeUndefined();
+      } else {
+        expect(result.cost).toBeCloseTo(
+          ((60 - cacheWriteTokens) * 10 + 40 + cacheWriteTokens * 12.5 + 20 * 50) / 1e6,
+          10,
+        );
+      }
+    },
+  );
+
   it('uses the configured service tier when the final session omits it', async () => {
     const standard = await provider().callApi('hi');
     const priority = await provider({
@@ -2264,6 +2312,84 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.error).toBeUndefined();
     expect(result.tokenUsage).toBeUndefined();
     expect(result.cost).toBeUndefined();
+  });
+
+  it('rejects non-finite session usage and falls back to the root turn', async () => {
+    mockApi((pathname, method) => {
+      if (method === 'POST' && pathname.endsWith('/sessions')) {
+        return new Response(
+          '{"id":"sess_test","status":"idle","agent":{"model":"gpt-6-astra"},"usage":{"input_tokens":1e999,"output_tokens":20,"total_tokens":120}}',
+        );
+      }
+      return undefined;
+    });
+
+    const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+
+    expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+    expect(result.metadata).not.toHaveProperty('usageUnavailable');
+  });
+
+  it.each(
+    usageCountFields.flatMap((field) =>
+      [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, '20'].map((count) => ({ field, count })),
+    ),
+  )('rejects $field $count and falls back to valid root-turn usage', async ({ field, count }) => {
+    const invalid = usageWith(field, count);
+    let rootUsage: object = usage;
+    mockApi((pathname, method) => {
+      if (method === 'DELETE') {
+        return undefined;
+      }
+      if (pathname.endsWith('/turns')) {
+        return json(page([{ ...turn, usage: rootUsage }]));
+      }
+      return pathname.endsWith('/sessions') || pathname.endsWith('/sess_test')
+        ? json({ ...session, usage: invalid })
+        : undefined;
+    });
+
+    const fallback = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    expect(fallback.tokenUsage).toEqual({
+      prompt: 100,
+      completion: 20,
+      total: 120,
+      cached: 40,
+      completionDetails: { reasoning: 5 },
+    });
+    expect(fallback.cost).toBeGreaterThan(0);
+
+    rootUsage = invalid;
+    const unavailable = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    expect(unavailable).toMatchObject({ output: '42', metadata: { usageUnavailable: true } });
+    expect(unavailable.tokenUsage).toBeUndefined();
+    expect(unavailable.cost).toBeUndefined();
+  });
+
+  it('accepts zero, the largest safe count, and null optional counts', async () => {
+    mockApi((pathname, method) =>
+      method !== 'DELETE' && (pathname.endsWith('/sessions') || pathname.endsWith('/sess_test'))
+        ? json({
+            ...session,
+            usage: {
+              input_tokens: 0,
+              output_tokens: Number.MAX_SAFE_INTEGER,
+              total_tokens: Number.MAX_SAFE_INTEGER,
+              input_tokens_details: { cached_tokens: null },
+              output_tokens_details: { reasoning_tokens: null },
+            },
+          })
+        : undefined,
+    );
+    const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    // Null optional counts are reported as absent, never as null.
+    expect(result.tokenUsage).toEqual({
+      prompt: 0,
+      completion: Number.MAX_SAFE_INTEGER,
+      total: Number.MAX_SAFE_INTEGER,
+      completionDetails: {},
+    });
+    expect(result.metadata).not.toHaveProperty('usageUnavailable');
   });
 
   it.each([false, true])(
@@ -2442,11 +2568,33 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(result.metadata).not.toHaveProperty('usageFromRootTurn');
     });
 
+    it.each(usageCountFields)(
+      'omits subagent usage when the sum of %s is not a safe integer',
+      async (field) => {
+        const zero = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+        mockSubagentTurns((id) => {
+          const count = id === 'subagent_a' ? Number.MAX_SAFE_INTEGER : 1;
+          return json(page([{ ...subagentTurn(id, 0, 0), usage: usageWith(field, count, zero) }]));
+        });
+        const result = await provider().callApi('hi');
+        expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+        expect(result.metadata).toMatchObject({ usageMayExcludeSubagents: true });
+        expect(result.metadata).not.toHaveProperty('subagentUsage');
+      },
+    );
+
     it.each([
       { reason: 'a failed turns read', respond: () => apiError(403, 'missing api.agents.read') },
       {
+        // The valid turn would otherwise be reported as a partial sum.
         reason: 'a turn without usage',
-        respond: () => json(page([{ ...subagentTurn('turn_a1', 1, 1), usage: null }])),
+        respond: () =>
+          json(
+            page([
+              subagentTurn('turn_a1', 1, 1),
+              { ...subagentTurn('turn_a2', 1, 1), usage: null },
+            ]),
+          ),
       },
     ])(
       'keeps marked session totals and omits subagent usage after $reason',
