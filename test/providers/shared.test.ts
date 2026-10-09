@@ -253,9 +253,6 @@ describe('Shared Provider Functions', () => {
     });
 
     it('should honor a manual inputCost/outputCost override for a model not in the known list', () => {
-      // A model released after this promptfoo version shipped has no built-in pricing entry.
-      // Without an override there's simply no way to get cost tracking for it until an update
-      // bakes in the new pricing - see https://github.com/promptfoo/promptfoo/issues/10501.
       const cost = calculateCost(
         'brand-new-unreleased-model',
         { inputCost: 0.000002, outputCost: 0.00001 },

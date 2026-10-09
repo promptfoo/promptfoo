@@ -179,12 +179,7 @@ export function calculateCost(
 
   const model = models.find((m) => m.id === modelName);
 
-  // A model promptfoo doesn't recognize yet (a model released after this version shipped, for
-  // example) has no built-in pricing to fall back on. Previously that meant cost tracking was
-  // simply unavailable until a promptfoo update baked in the new model's pricing table entry.
-  // If the caller supplied both an input and output rate, honor them directly instead of
-  // requiring a matching built-in model - this is the only way to get cost tracking for a model
-  // this version of promptfoo hasn't shipped pricing for.
+  // Manual rates can price a model before it appears in the built-in catalog.
   if (!model || !model.cost) {
     const manualInputCost = config.inputCost ?? config.cost;
     const manualOutputCost = config.outputCost ?? config.cost;
