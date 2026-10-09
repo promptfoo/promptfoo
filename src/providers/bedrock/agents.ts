@@ -214,7 +214,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
-        const credentials = await this.getCredentials();
+        const credentials = await this.getCredentials(false);
 
         this.agentRuntimeClient = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
@@ -522,24 +522,34 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
     // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
     const cacheKey = `bedrock-agent:v3:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
-      JSON.stringify({
-        prompt,
-        actionGroups: this.config.actionGroups,
-        enableTrace: this.config.enableTrace,
-        endSession: this.config.endSession,
-        guardrailConfiguration: this.config.guardrailConfiguration,
-        inferenceConfig,
-        inputDataConfig: this.config.inputDataConfig,
-        knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
-        memoryId: this.config.memoryId,
-        promptOverrideConfiguration: this.config.promptOverrideConfiguration,
-        sessionId: this.config.sessionId,
-        sessionState: this.config.sessionState,
-        bedrockModelConfigurations: this.config.bedrockModelConfigurations,
-        streamingConfigurations: this.config.streamingConfigurations,
-        promptCreationConfigurations: this.config.promptCreationConfigurations,
-        sourceArn: this.config.sourceArn,
-      }),
+      JSON.stringify(
+        {
+          prompt,
+          actionGroups: this.config.actionGroups,
+          enableTrace: this.config.enableTrace,
+          endSession: this.config.endSession,
+          guardrailConfiguration: this.config.guardrailConfiguration,
+          inferenceConfig,
+          inputDataConfig: this.config.inputDataConfig,
+          knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
+          memoryId: this.config.memoryId,
+          promptOverrideConfiguration: this.config.promptOverrideConfiguration,
+          sessionId: this.config.sessionId,
+          sessionState: this.config.sessionState,
+          bedrockModelConfigurations: this.config.bedrockModelConfigurations,
+          streamingConfigurations: this.config.streamingConfigurations,
+          promptCreationConfigurations: this.config.promptCreationConfigurations,
+          sourceArn: this.config.sourceArn,
+        },
+        (_key, value) =>
+          value && typeof value === 'object' && !Array.isArray(value)
+            ? Object.fromEntries(
+                Object.keys(value)
+                  .sort()
+                  .map((key) => [key, value[key]]),
+              )
+            : value,
+      ),
     )}`;
 
     // Check cache

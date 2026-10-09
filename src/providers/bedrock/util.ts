@@ -24,7 +24,7 @@ export function hasProxyEnv(): boolean {
  * This function forces HTTP/1.1 via NodeHttpHandler.
  *
  * For @aws-sdk/client-bedrock-agent-runtime (which already defaults to HTTP/1.1),
- * this is only needed when proxy or API key authentication is required.
+ * this is only needed for proxy support; Agent Runtime does not support API keys.
  */
 export async function createBedrockRequestHandler(options?: {
   apiKey?: string;

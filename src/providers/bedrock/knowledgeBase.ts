@@ -100,14 +100,12 @@ export class AwsBedrockKnowledgeBaseProvider
   async getKnowledgeBaseClient() {
     if (!this.knowledgeBaseClient) {
       // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
-      // need a custom handler for proxy or API key authentication.
-      const apiKey = this.getApiKey();
-      const handler =
-        hasProxyEnv() || apiKey ? await createBedrockRequestHandler({ apiKey }) : undefined;
+      // need a custom handler for proxy support. Agent Runtime requires SigV4.
+      const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
-        const credentials = await this.getCredentials();
+        const credentials = await this.getCredentials(false);
         const client = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
@@ -165,6 +163,15 @@ export class AwsBedrockKnowledgeBaseProvider
     const native = this.kbConfig.retrievalConfiguration;
     if (this.kbConfig.numberOfResults === undefined) {
       return native;
+    }
+    if (native?.managedSearchConfiguration) {
+      return {
+        ...native,
+        managedSearchConfiguration: {
+          ...native.managedSearchConfiguration,
+          numberOfResults: this.kbConfig.numberOfResults,
+        },
+      };
     }
     return {
       ...native,

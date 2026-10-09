@@ -153,9 +153,9 @@ export abstract class AwsBedrockGenericProvider {
     return this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
   }
 
-  async getCredentials(): Promise<
-    AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
-  > {
+  async getCredentials(
+    useApiKey = true,
+  ): Promise<AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined> {
     // 1. Explicit credentials have ABSOLUTE highest priority (as documented)
     if (this.config.accessKeyId && this.config.secretAccessKey) {
       logger.debug(`Using credentials from config file`);
@@ -167,7 +167,7 @@ export abstract class AwsBedrockGenericProvider {
     }
 
     // 2. API key authentication as second priority
-    const apiKey = this.getApiKey();
+    const apiKey = useApiKey ? this.getApiKey() : undefined;
     if (apiKey) {
       logger.debug(`Using Bedrock API key authentication`);
       // For Bedrock API keys, we don't need traditional AWS credentials

@@ -80,20 +80,30 @@ function buildAgentCacheKey({
   sessionState?: Record<string, unknown>;
 }) {
   return `bedrock-agent:v3:${agentId}:${agentAliasId}:${region}:${sha256(
-    JSON.stringify({
-      prompt,
-      actionGroups,
-      enableTrace,
-      endSession,
-      guardrailConfiguration,
-      inferenceConfig,
-      inputDataConfig,
-      knowledgeBaseConfigurations,
-      memoryId,
-      promptOverrideConfiguration,
-      sessionId,
-      sessionState,
-    }),
+    JSON.stringify(
+      {
+        prompt,
+        actionGroups,
+        enableTrace,
+        endSession,
+        guardrailConfiguration,
+        inferenceConfig,
+        inputDataConfig,
+        knowledgeBaseConfigurations,
+        memoryId,
+        promptOverrideConfiguration,
+        sessionId,
+        sessionState,
+      },
+      (_key, value) =>
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? Object.fromEntries(
+              Object.keys(value)
+                .sort()
+                .map((key) => [key, value[key]]),
+            )
+          : value,
+    ),
   )}`;
 }
 

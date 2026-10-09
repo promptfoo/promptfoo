@@ -203,7 +203,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     await provider.getKnowledgeBaseClient();
 
     // client-bedrock-agent-runtime already defaults to HTTP/1.1,
-    // so no custom handler is needed without proxy or apiKey
+    // so no custom handler is needed without a proxy
     expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
@@ -818,7 +818,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
   });
 
-  it('should create knowledge base client with API key authentication from config', async () => {
+  it('should ignore unsupported API keys from config for Agent Runtime', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
       {
@@ -836,11 +836,10 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
     });
   });
 
-  it('should create knowledge base client with API key authentication from environment', async () => {
+  it('should ignore unsupported API keys from the environment for Agent Runtime', async () => {
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
@@ -854,7 +853,6 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
     });
 
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
@@ -886,7 +884,6 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         secretAccessKey: 'test-secret-key',
         sessionToken: undefined,
       },
-      requestHandler: expect.any(Object), // Still has handler for API key scenario
     });
   });
 });

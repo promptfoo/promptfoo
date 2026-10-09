@@ -65,6 +65,34 @@ afterEach(() => {
 });
 
 describe('Knowledge Base runtime features', () => {
+  it.each(['retrieve', 'retrieveAndGenerate'] as const)(
+    'overrides result counts in managed search for %s',
+    async (operation) => {
+      const { provider, send } = kb({
+        operation,
+        numberOfResults: 7,
+        retrievalConfiguration: {
+          managedSearchConfiguration: {
+            numberOfResults: 3,
+            filter: { equals: { key: 'tenant', value: 'fixture' } },
+          },
+        },
+      });
+      await provider.callApi('question');
+      const input = send.mock.calls[0][0].input;
+      const retrieval =
+        operation === 'retrieve'
+          ? input.retrievalConfiguration
+          : input.retrieveAndGenerateConfiguration.knowledgeBaseConfiguration
+              .retrievalConfiguration;
+      expect(retrieval).toEqual({
+        managedSearchConfiguration: {
+          numberOfResults: 7,
+          filter: { equals: { key: 'tenant', value: 'fixture' } },
+        },
+      });
+    },
+  );
   it.each(['retrieve', 'retrieveAndGenerate', 'native'] as const)(
     'rejects malformed %s filters before reaching AWS',
     async (operation) => {
@@ -323,6 +351,31 @@ describe('Knowledge Base runtime features', () => {
     expect(cache.get).not.toHaveBeenCalled();
     expect(cache.set).not.toHaveBeenCalled();
   });
+});
+
+it('uses the same Agent cache key for equivalent nested configuration order', async () => {
+  cache.enabled = true;
+  const first = agent({
+    promptCreationConfigurations: {
+      excludePreviousThinkingSteps: true,
+      previousConversationTurnsToInclude: 2,
+    },
+  });
+  const second = agent({
+    promptCreationConfigurations: {
+      previousConversationTurnsToInclude: 2,
+      excludePreviousThinkingSteps: true,
+    },
+  });
+  first.send.mockResolvedValue({
+    completion: events([{ chunk: { bytes: Buffer.from('answer') } }]),
+  });
+  second.send.mockResolvedValue({
+    completion: events([{ chunk: { bytes: Buffer.from('answer') } }]),
+  });
+  expect((await first.provider.callApi('question')).error).toBeUndefined();
+  expect((await second.provider.callApi('question')).error).toBeUndefined();
+  expect(cache.get.mock.calls[0][0]).toBe(cache.get.mock.calls[1][0]);
 });
 
 describe('Agent runtime features', () => {
