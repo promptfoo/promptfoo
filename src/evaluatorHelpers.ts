@@ -113,7 +113,7 @@ export function getRenderedInputVariables(
   const forwardsPrompt =
     // parseChatPrompt interprets this prefix as YAML, which can discard input
     // comments and scalars. Its textual inputs are not safe attribution evidence.
-    !renderedPrompt?.trimStart().startsWith('- role:') &&
+    !(request.parsesPrompt && renderedPrompt?.trimStart().startsWith('- role:')) &&
     (request.forwardsPrompt ||
       referencesInput(body, 'prompt', undefined, true) ||
       (!reserved.includes(injectVar) && referencesInput(body, injectVar, undefined, true)));

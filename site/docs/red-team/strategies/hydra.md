@@ -64,6 +64,8 @@ Grading history records attack contributions and observed replies. Stateful inpu
 
 Generated inputs remain literal during prompt rendering. JSON-looking text stays unchanged unless the target request path parses that complete value; then grading retains only the parsed value. JSON strings inside a parsed object remain literal, and input contents never redefine message roles.
 
+YAML-looking text is retained when the target sends it literally. YAML chat parsing remains unattributed because it can discard comments. Static HTTP method spellings normalized by Fetch, such as `post` or `PuT`, are supported; `PATCH` remains case-sensitive.
+
 Verified earlier turns remain available when a later input is blank or cannot be attributed, including inputs from failed target requests. Disabling target-prompt templating does not disable this grading history.
 
 Saved runs without verified history continue to grade only the current turn. Histories recorded before transport verification are also excluded, and their stored verdicts are recomputed during regrading. Rerun these tests to record verified history for later regrading.

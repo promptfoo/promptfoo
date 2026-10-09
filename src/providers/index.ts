@@ -68,8 +68,11 @@ export function getProviderRequestTemplates(
     return { forwardsPrompt: false };
   }
   if (prototype === HttpProvider.prototype) {
+    // Fetch canonicalizes these standard methods; PATCH and other method tokens
+    // keep their original case. Dynamic methods remain unverified here.
+    const method = typeof config.method === 'string' ? config.method : '';
     if (
-      !['POST', 'PUT', 'PATCH', 'DELETE'].includes(config.method) ||
+      (method !== 'PATCH' && !['POST', 'PUT', 'DELETE'].includes(method.toUpperCase())) ||
       config.body === undefined ||
       config.request ||
       config.multipart ||

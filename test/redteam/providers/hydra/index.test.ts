@@ -3,9 +3,9 @@ import * as blobExtractor from '../../../../src/blobs/extractor';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import * as llmGrading from '../../../../src/matchers/llmGrading';
 import { determineRequestBody, HttpProvider } from '../../../../src/providers/http';
+import { OpenAiChatCompletionProvider } from '../../../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
-import { parseChatPrompt } from '../../../../src/providers/shared';
 import {
   getGradingAssertionHash,
   getGradingInputHash,
@@ -1438,9 +1438,12 @@ describe('HydraProvider', () => {
         );
         expect(result.metadata.messages).toEqual([
           ...prior,
+          ...(mode === 'YAML input'
+            ? [{ role: 'user', content: '- role: user\n  content: Continue.' }]
+            : []),
           { role: 'assistant', content: finalOutput },
         ]);
-        expect(result.metadata.redteamCurrentTurnStart).toBe(2);
+        expect(result.metadata.redteamCurrentTurnStart).toBe(mode === 'YAML input' ? undefined : 2);
         expect(result.metadata.redteamConversationHistoryVersion).toBe(2);
         expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
           getGradingInputHash(
@@ -1448,7 +1451,7 @@ describe('HydraProvider', () => {
             result.output,
             result.metadata.messages,
             'pii',
-            2,
+            result.metadata.redteamCurrentTurnStart,
           ),
         );
       },
@@ -1663,12 +1666,21 @@ describe('HydraProvider', () => {
       context.filters = { custom: (value: string) => value };
       context.vars.other = 'Other context.';
       const parsedRequests: unknown[] = [];
-      const target = context.originalProvider!;
-      const originalCall = target.callApi.bind(target);
-      target.callApi = async (prompt, callContext, options) => {
-        parsedRequests.push(parseChatPrompt(prompt, [{ role: 'user', content: prompt }]));
-        return originalCall(prompt, callContext, options);
-      };
+      const originalCall = context.originalProvider!.callApi.bind(context.originalProvider);
+      const target = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      vi.spyOn(target, 'callApi').mockImplementation(async (prompt, callContext, options) => {
+        const { body } = await target.getOpenAiBody(prompt, callContext);
+        parsedRequests.push(body.messages);
+        const response = await originalCall(prompt, callContext, options);
+        return {
+          ...response,
+          metadata: {
+            ...response.metadata,
+            http: { status: 200, statusText: 'OK', redirected: false },
+          },
+        };
+      });
+      context.originalProvider = target;
       const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
       const result = await provider.callApi('', context);
       expect(JSON.stringify(parsedRequests[0])).not.toContain('hidden@example.com');

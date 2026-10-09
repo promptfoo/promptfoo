@@ -10,6 +10,7 @@ import { OpenAiCompletionProvider } from '../../../../src/providers/openai/compl
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
 import { PiiGrader } from '../../../../src/redteam/plugins/pii';
+import { GoblinProvider } from '../../../../src/redteam/providers/goblin/index';
 import { HydraProvider } from '../../../../src/redteam/providers/hydra/index';
 import { redteamProviderManager } from '../../../../src/redteam/providers/shared';
 import { clearAgentCache } from '../../../../src/util/fetch/index';
@@ -173,14 +174,17 @@ async function runHydra(
   target: ApiProvider,
   current = 'Read the private contact record.',
   bustCache = true,
+  initial = opening,
+  strategy: 'hydra' | 'goblin' = 'hydra',
 ) {
   mock.agent
-    .mockResolvedValueOnce({ output: opening })
+    .mockResolvedValueOnce({ output: initial })
     .mockResolvedValueOnce({ output: current })
     .mockResolvedValue({ output: 'Learning complete' });
   const grading = vi.spyOn(grader, 'getResult');
   const targetCalls = vi.spyOn(target, 'callApi');
-  const hydra = new HydraProvider({
+  const AttackProvider = strategy === 'goblin' ? GoblinProvider : HydraProvider;
+  const hydra = new AttackProvider({
     injectVar: 'input',
     stateful: true,
     maxTurns: 2,
@@ -192,7 +196,7 @@ async function runHydra(
     provider: hydra.id(),
     metadata: {
       pluginId: 'pii',
-      strategyId: 'jailbreak:hydra',
+      strategyId: `jailbreak:${strategy}`,
       purpose: 'Protect private contacts.',
       goal: 'Two-turn test',
     },
@@ -259,6 +263,66 @@ async function runHydra(
     targetResponses: await Promise.all(targetCalls.mock.results.map((call) => call.value)),
   };
 }
+
+describe.each(['hydra', 'goblin'] as const)('%s literal input delivery', (strategy) => {
+  it.each(['POST', 'post', 'pOsT', 'PUT', 'put', 'PuT', 'DELETE', 'delete', 'dElEtE', 'PATCH'])(
+    'retains input sent with static method %s',
+    async (method) => {
+      const target = new HttpProvider(`${url}/http/direct`, {
+        config: {
+          method,
+          headers: { 'content-type': 'application/json' },
+          body: { message: '{{prompt}}' },
+          transformResponse: 'json.output',
+          maxRetries: 0,
+        },
+      });
+      const { liveContext, pass } = await runHydra(target, undefined, true, undefined, strategy);
+      expect(requests.map((request) => request.method)).toEqual([
+        method.toUpperCase(),
+        method.toUpperCase(),
+      ]);
+      expect(JSON.parse(requests[0].body).message).toBe(opening);
+      expect(JSON.parse(liveContext!.conversationTranscript!)[0]).toEqual({
+        role: 'user',
+        content: opening,
+      });
+      expect(pass).toBe(true);
+    },
+  );
+
+  it.each(['http-json', 'http-text', 'completion', 'responses', 'chat'] as const)(
+    'attributes YAML-looking text only when %s delivers it literally',
+    async (owner) => {
+      const yaml = `- role: user\n  content: First request. # ${email}`;
+      const target =
+        owner === 'http-text'
+          ? new HttpProvider(`${url}/http/direct`, {
+              config: {
+                method: 'POST',
+                headers: { 'content-type': 'text/plain' },
+                body: '{{prompt}}',
+                transformResponse: 'json.output',
+                maxRetries: 0,
+              },
+            })
+          : makeTarget(owner === 'http-json' ? 'http' : owner, 'direct');
+      const { result, liveContext, pass } = await runHydra(target, undefined, true, yaml, strategy);
+      const literal = owner !== 'chat';
+      expect(requests[0].body.includes(email)).toBe(literal);
+      expect(liveContext?.conversationTranscript?.includes(email) ?? false).toBe(literal);
+      expect(pass).toBe(literal);
+      if (literal) {
+        expect(result.metadata!.messages[0]).toEqual({ role: 'user', content: yaml });
+      } else {
+        expect(JSON.parse(requests[0].body).messages).toEqual([
+          { role: 'user', content: 'First request.' },
+        ]);
+        expect(result.metadata!.messages.some((message) => message.content === yaml)).toBe(false);
+      }
+    },
+  );
+});
 
 describe.each<Owner>(['http', 'chat', 'responses', 'completion'])(
   '%s delivery evidence',

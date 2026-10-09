@@ -2213,13 +2213,32 @@ describe('rendered input serialization boundaries', () => {
       getRenderedInputVariables(
         { input },
         'input',
-        { forwardsPrompt: true },
+        { forwardsPrompt: true, parsesPrompt: true },
         prompt,
         undefined,
         rendered,
       ),
     ).toEqual({ vars: {}, forwardsPrompt: false });
   });
+
+  it.each([false, undefined])(
+    'retains literal YAML when chat parsing is %s',
+    async (parsesPrompt) => {
+      const prompt = { raw: '{{input}}', label: 'literal YAML' };
+      const input = '- role: user\n  content: Hello. # supplied@example.test';
+      const rendered = await renderPrompt(prompt, { input }, undefined, undefined, ['input']);
+      expect(
+        getRenderedInputVariables(
+          { input },
+          'input',
+          { forwardsPrompt: true, parsesPrompt },
+          prompt,
+          undefined,
+          rendered,
+        ),
+      ).toEqual({ vars: { input }, forwardsPrompt: true });
+    },
+  );
 
   it('does not credit a JSON interpolation when a malformed sibling leaves it unrendered', async () => {
     const prompt = {

@@ -2633,6 +2633,10 @@ describe('getProviderRequestTemplates', () => {
     {},
     { method: 'GET' },
     { method: 'HEAD' },
+    { method: 'get' },
+    { method: 'patch' },
+    { method: 'PaTcH' },
+    { method: ' POST ' },
     { method: '{{verb}}' },
     { method: 'POST', transformRequest: '"fixed"' },
     {
@@ -2647,6 +2651,17 @@ describe('getProviderRequestTemplates', () => {
     });
     expect(requestTemplates(provider, 'User input')).toEqual({ forwardsPrompt: false });
   });
+
+  it.each(['POST', 'post', 'pOsT', 'PUT', 'put', 'PuT', 'DELETE', 'delete', 'dElEtE', 'PATCH'])(
+    'recognizes static HTTP body delivery for native method %s',
+    (method) => {
+      const body = { input: '{{prompt}}' };
+      const provider = new HttpProvider('https://example.test', {
+        config: { method, headers: { 'content-type': 'application/json' }, body },
+      });
+      expect(requestTemplates(provider, 'User input').body).toEqual(body);
+    },
+  );
 
   it('recognizes only the built-in implementation, not URL or model-shaped IDs', () => {
     for (const id of ['https://example.com/chat', 'openai:chat:test']) {
