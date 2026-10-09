@@ -22,16 +22,16 @@ For AWS S3, allow `s3:GetObject`, `s3:PutObject`, and `s3:DeleteObject`, plus an
 ## Configure a provider
 
 1. Open **Organization → Media Storage** as an organization administrator.
-2. Enable **Store generated media externally**.
+2. Enable **Enable external media storage**.
 3. Select a **Provider** and enter its settings:
 
-| Provider                       | Required fields                                                                                                              | Optional fields                              |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| **S3-Compatible Storage**      | **Bucket Name**, **Region**, **Access Key ID**, **Secret Access Key**                                                        | **Custom Endpoint**, **Storage Path Prefix** |
-| **Google Cloud Storage (GCS)** | **Bucket Name**, **Project ID**, and either a **Service Account Key File Path** or both **Client Email** and **Private Key** | **Storage Path Prefix**                      |
-| **Azure Blob Storage**         | **Container Name**, **Account Name**, and either **Connection String** or **Account Key**                                    | **Storage Path Prefix**                      |
+| Provider                       | Required fields                                                                                                          | Optional fields                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| **S3-Compatible Storage**      | **Bucket Name**, **Region**, **Access Key ID**, **Secret Access Key**                                                    | **Custom Endpoint**, **Key Prefix** |
+| **Google Cloud Storage (GCS)** | **Bucket Name**, **Project ID**, and either a **Service Account JSON Path** or both **Client Email** and **Private Key** | **Key Prefix**                      |
+| **Azure Blob Storage**         | **Container Name**, **Account Name**, and either **Connection String** or **Account Key**                                | **Key Prefix**                      |
 
-4. Set **Storage Path Prefix** if you need a different path. The default is `media/`; Promptfoo adds organization and team directories beneath it.
+4. Set **Key Prefix** if you need a different path. The default is `media/`; Promptfoo adds organization and team directories beneath it.
 5. Click **Save Settings**.
 
 For AWS S3, leave **Custom Endpoint** empty. For S3-compatible services such as MinIO, enter the service endpoint; the UI enables path-style requests when a custom endpoint is set.
@@ -44,7 +44,7 @@ For Azure, **Connection String** takes precedence over **Account Key** when both
 
 Saving stores the configuration; it does not test the connection. **Storage Status** reflects the saved settings, not a successful upload.
 
-1. After saving, confirm that **Storage Status** says **New generated media files are stored in external storage**.
+1. After saving, confirm that **Storage Status** says **External storage is configured**.
 2. Run a small eval that generates a new image, audio clip, or video.
 3. Confirm that an object appears beneath the configured prefix in your bucket or container.
 4. Reopen the eval result and view or play the media to verify read access as well as upload access.
