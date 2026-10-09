@@ -24,6 +24,7 @@ import { AzureModerationProvider } from './azure/moderation';
 import { AzureRealtimeProvider } from './azure/realtime';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
+import { getBedrockTextRoute } from './bedrock/routing';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -130,12 +131,141 @@ import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
+const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
+
+/** Aliases read together by these providers must keep their original scope priority. */
+function getProviderEnvAliasGroups(
+  providerPath: string,
+  config?: ProviderOptions['config'],
+): readonly (readonly string[])[] {
+  if (
+    config?.vertexai === true &&
+    /^(?:google|palm):(?:(?:interactions:)?gemini-omni-flash-preview$|(?:image:)?[^:]*-image)/.test(
+      providerPath,
+    )
+  ) {
+    return [
+      ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+      providerPath.includes('-image')
+        ? ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION']
+        : ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
+    ];
+  }
+  if (CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
+    return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
+  }
+  if (/^(?:openclaw|clawdbot)(?::|$)/.test(providerPath)) {
+    return [
+      [
+        'OPENCLAW_GATEWAY_TOKEN',
+        'CLAWDBOT_GATEWAY_TOKEN',
+        'OPENCLAW_GATEWAY_PASSWORD',
+        'CLAWDBOT_GATEWAY_PASSWORD',
+      ],
+    ];
+  }
+  if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
+    return [['HF_TOKEN', 'HF_API_TOKEN']];
+  }
+  if (providerPath.startsWith('replicate:')) {
+    return [['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN']];
+  }
+  if (providerPath.startsWith('nscale:')) {
+    return [['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']];
+  }
+  if (providerPath.startsWith('sagemaker:')) {
+    return [['AWS_REGION', 'AWS_DEFAULT_REGION']];
+  }
+  if (providerPath.startsWith('bedrock:')) {
+    const mode = getBedrockTextRoute(providerPath)?.apiMode;
+    return mode === 'chat' || mode === 'messages' || mode === 'responses'
+      ? [['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
+      : [];
+  }
+  if (/^(?:google|palm):live:/.test(providerPath)) {
+    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY']];
+  }
+  if (/^(?:google|palm):(?:image:|[^:]*-image)/.test(providerPath)) {
+    return [
+      ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+      ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'],
+    ];
+  }
+  if (/^(?:google|palm):video:/.test(providerPath)) {
+    return [
+      ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+      ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'],
+    ];
+  }
+  if (providerPath.startsWith('vertex:')) {
+    return [
+      ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+      providerPath.startsWith('vertex:video:')
+        ? ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION']
+        : ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
+    ];
+  }
+  if (
+    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash|gemini-robotics-er-2-preview)$/.test(
+      providerPath,
+    )
+  ) {
+    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY']];
+  }
+  if (/^(?:google|palm):/.test(providerPath)) {
+    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY']];
+  }
+  if (/^(?:azure|azureopenai):/.test(providerPath)) {
+    return [
+      providerPath.split(':')[1] === 'moderation'
+        ? ['AZURE_CONTENT_SAFETY_API_KEY', 'AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']
+        : ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'],
+      [
+        'AZURE_API_HOST',
+        'AZURE_OPENAI_API_HOST',
+        'AZURE_API_BASE_URL',
+        'AZURE_OPENAI_API_BASE_URL',
+        'AZURE_OPENAI_BASE_URL',
+      ],
+    ];
+  }
+  return [];
+}
+
+function getProviderEndpointAliases(providerPath: string): readonly string[] {
+  if (providerPath.startsWith('openai:') && !CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
+    return ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'];
+  }
+  if (providerPath.startsWith('mistral:')) {
+    return ['MISTRAL_API_HOST', 'MISTRAL_API_BASE_URL'];
+  }
+  if (/^(?:google|palm):/.test(providerPath)) {
+    return ['GOOGLE_API_HOST', 'PALM_API_HOST', 'GOOGLE_API_BASE_URL'];
+  }
+  if (/^(?:openclaw|clawdbot)(?::|$)/.test(providerPath)) {
+    return ['OPENCLAW_GATEWAY_URL', 'CLAWDBOT_GATEWAY_URL'];
+  }
+  return [];
+}
+
 /** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
 export function mergeProviderEnv(
-  providerPath: string,
+  provider: string | { id: string; config?: ProviderOptions['config']; preserveAliases?: boolean },
   ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
 ): NonNullable<ProviderOptions['env']> | undefined {
-  const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  const providerPath = typeof provider === 'string' ? provider : provider.id;
+  const config = typeof provider === 'string' ? undefined : provider.config;
+  const aliasGroups =
+    typeof provider !== 'string' && provider.preserveAliases
+      ? []
+      : [
+          ...getProviderEnvAliasGroups(providerPath, config),
+          getProviderEndpointAliases(providerPath),
+        ];
   const isWindowsOpenCode = os.platform() === 'win32' && /^opencode(?::|$)/.test(providerPath);
   let merged: NonNullable<ProviderOptions['env']> | undefined;
   for (const layer of layers) {
@@ -143,9 +273,14 @@ export function mergeProviderEnv(
       continue;
     }
     merged ??= {};
-    if (isCodexSDK && (layer.OPENAI_API_KEY || layer.CODEX_API_KEY)) {
-      delete merged.OPENAI_API_KEY;
-      delete merged.CODEX_API_KEY;
+    for (const aliases of aliasGroups) {
+      // Empty entries retain their existing per-variable meaning; a non-empty
+      // alias selects this scope without retaining a conflicting lower alias.
+      if (aliases.some((key) => layer[key])) {
+        for (const key of aliases) {
+          delete merged[key];
+        }
+      }
     }
     for (const [key, value] of Object.entries(layer)) {
       if (value === undefined) {
@@ -622,20 +757,13 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('cohere:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new CohereEmbeddingProvider(modelName, providerOptions.config, {
-          ...context.env,
-          ...providerOptions.env,
-        });
+        return new CohereEmbeddingProvider(modelName, providerOptions.config, providerOptions.env);
       }
       if (modelType === 'chat' || modelType === undefined) {
         return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
@@ -1154,10 +1282,7 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: {
-            ...context.env,
-            ...providerOptions.env,
-          },
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
 
@@ -1563,15 +1688,11 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('voyage:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
       return new VoyageEmbeddingProvider(
         modelNameFromProviderPath(providerPath, 1),
         providerOptions.config,
-        mergeProviderEnv(providerPath, context.env, providerOptions.env),
+        providerOptions.env,
       );
     },
   },
