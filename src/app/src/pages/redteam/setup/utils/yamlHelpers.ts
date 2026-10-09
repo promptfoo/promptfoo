@@ -1,6 +1,7 @@
 import { subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import * as yaml from 'js-yaml';
+import { normalizeLocalProviders } from '../components/Targets/helpers';
 import type { RedteamFileConfig } from '@promptfoo/types';
 
 import type { Config } from '../types';
@@ -59,8 +60,16 @@ const orderKeys = (obj: Record<string, unknown>): Record<string, unknown> => {
   return orderedObj;
 };
 
+export function getRuntimeRedteamConfig(config: Config) {
+  return getUnifiedConfig({
+    ...config,
+    target: normalizeLocalProviders(config.target, { forRuntime: true }),
+    provider: normalizeLocalProviders(config.provider, { forRuntime: true }),
+  });
+}
+
 export function generateOrderedYaml(config: Config): string {
-  const yamlConfig = getUnifiedConfig(config);
+  const yamlConfig = getRuntimeRedteamConfig(config);
 
   if (config.purpose) {
     yamlConfig.redteam.purpose = config.purpose;
