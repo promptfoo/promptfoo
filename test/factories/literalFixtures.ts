@@ -27,6 +27,11 @@ export const createMcpServerOptions = (command = 'npm', args = 'start') => ({
   server: createMcpServerConfig(command, args),
 });
 
+export const createBasePathOptions = () => ({
+  id: 'testId',
+  config: { basePath: '/base' },
+});
+
 export const createChatCompletion = (
   content = 'Test output',
   total_tokens = 10,
