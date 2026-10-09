@@ -140,9 +140,13 @@ export function findMissingRootTypeScriptFiles(repositoryRoot = repoRoot): strin
       // Standard source and tooling directories keep the root compiler requirement.
       if (
         projectPrefix.startsWith('packages/') ||
-        configuredRoots.some(
-          (root) => root.startsWith(projectPrefix) || projectPrefix.startsWith(`${root}/`),
-        )
+        (!hasPrefix(projectPrefix, rootOwnedPrefixes) &&
+          configuredRoots.some(
+            (root) =>
+              root === '.' ||
+              root.startsWith(projectPrefix) ||
+              projectPrefix.startsWith(`${root}/`),
+          ))
       ) {
         const ownedFiles = productProjectFiles.get(projectPrefix) ?? new Set<string>();
         for (const filePath of getProjectFiles(
