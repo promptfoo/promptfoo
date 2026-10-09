@@ -295,8 +295,10 @@ defaultTest:
   `search-rubric` use capability-specific provider selection and are not affected.
   **Red-team runs (`promptfoo redteam run`):** `RedteamProviderManager` selects `defaultTest.provider`
   _before_ `defaultTest.options.provider`, so setting `defaultTest.options.provider` alone does not
-  override the judge. The reliable pattern is to move the target to the top-level `providers` list
-  and reserve `defaultTest.options.provider` for the judge:
+  override the judge. Move the target to the top-level `providers` list and set
+  `defaultTest.options.provider` for the judge. If `redteam.provider` is omitted, attack generation
+  also falls back to `defaultTest.options.provider`; set `redteam.provider` explicitly to choose
+  the attack generator separately:
 
 ```yaml
 providers:
@@ -304,6 +306,8 @@ providers:
 defaultTest:
   options:
     provider: openai:gpt-6-sol # judge — now effective in both standard and red-team grading
+redteam:
+  provider: openai:gpt-6-sol # attack generator — choose independently of the judge
 ```
 
 :::
