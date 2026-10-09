@@ -612,6 +612,8 @@ including a new model field or an operation outside the text and embedding adapt
 The prompt must be a JSON object matching the operation's AWS SDK input. Model IDs,
 profiles, ARNs, transport controls, and nested model parameters are supplied there.
 The adapter uses the existing Bedrock credential, Region, proxy, and endpoint settings.
+Agent Runtime operations require AWS credentials (SigV4); Bedrock API keys are ignored
+for these operations because AWS does not support bearer authentication on Agent Runtime.
 
 | Operation                                                           | Native response                                                      |
 | ------------------------------------------------------------------- | -------------------------------------------------------------------- |
