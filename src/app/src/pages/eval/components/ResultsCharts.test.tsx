@@ -572,6 +572,35 @@ describe('ResultsCharts', () => {
     });
   });
 
+  it('includes runtime errors in full-eval pass rates while preserving legacy counters', () => {
+    const counts = [
+      { testPassCount: 1, testFailCount: 0, testErrorCount: 1 },
+      { testPassCount: 0, testFailCount: 0, testErrorCount: 2 },
+      { testPassCount: 1, testFailCount: 1 },
+      {},
+      { testPassCount: 1, testFailCount: -1, testErrorCount: 1 },
+    ];
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        head: {
+          prompts: counts.map((metrics, index) => ({ provider: `provider-${index}`, metrics })),
+          vars: [],
+        },
+        body: [{ outputs: counts.map(() => ({ score: 1, pass: true })), vars: [] }],
+      },
+      filteredMetrics: counts.map(() => ({ testPassCount: 1, testFailCount: 0 })),
+    });
+    render(<ResultsCharts scores={[1]} />);
+    const config = vi.mocked(Chart).mock.calls[0][1];
+    expect(config.data.datasets.map((dataset) => dataset.data)).toEqual([
+      [50],
+      [0],
+      [50],
+      [0],
+      [100],
+    ]);
+  });
+
   describe('Metric meaning and chart scope', () => {
     function renderMetrics(namedScores: Record<string, number>[], scores = [0, 1]) {
       vi.mocked(useTableStore).mockReturnValue({

@@ -23,7 +23,6 @@ import {
   type TooltipItem,
 } from 'chart.js';
 import { ErrorBoundary } from 'react-error-boundary';
-import { usePassRates } from './hooks';
 import { useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
 
@@ -170,11 +169,9 @@ function HistogramChart({ table }: ChartProps) {
 }
 
 function PassRateChart({ table }: ChartProps) {
-  const passRates = usePassRates();
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (!passRateCanvasRef.current) {
       return;
@@ -184,11 +181,16 @@ function PassRateChart({ table }: ChartProps) {
       passRateChartInstance.current.destroy();
     }
 
-    const datasets = table.head.prompts.map((prompt, promptIdx) => ({
-      label: prompt.provider,
-      data: [passRates[promptIdx]?.total ?? 0],
-      backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
-    }));
+    const datasets = table.head.prompts.map((prompt, promptIdx) => {
+      const passes = prompt.metrics?.testPassCount ?? 0;
+      const runs =
+        passes + (prompt.metrics?.testFailCount ?? 0) + (prompt.metrics?.testErrorCount ?? 0);
+      return {
+        label: prompt.provider,
+        data: [runs > 0 ? (passes / runs) * 100 : 0],
+        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
+      };
+    });
 
     passRateChartInstance.current = new Chart(passRateCanvasRef.current, {
       type: 'bar',
