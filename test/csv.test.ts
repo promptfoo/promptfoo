@@ -606,11 +606,8 @@ describe('assertionFromString', () => {
     expect(result.value).toEqual(['alpha', 'beta']);
   });
 
-  // csv.ts intentionally keeps a private copy of the contains-assertion value
-  // parser (it cannot import the assertion handlers without bundling backend code
-  // into the frontend; see the comment in src/csv.ts). This drift guard covers
-  // representative valid and malformed inputs so changes to either implementation
-  // have to preserve the same behavior.
+  // Keep the CSV integration and exported assertion parser aligned for valid
+  // and malformed values, including their error messages.
   it.each([
     '"hello, world",foo',
     String.raw`"say \"hi\"",b`,
@@ -911,7 +908,9 @@ describe('assertionFromString', () => {
       'levenshtein',
       'perplexity-score',
       'perplexity',
+      'rouge-l',
       'rouge-n',
+      'rouge-s',
       'starts-with',
     ];
 

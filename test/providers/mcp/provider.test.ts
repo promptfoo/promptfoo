@@ -33,6 +33,14 @@ function createContext(payload: Record<string, unknown>) {
   } as any;
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('MCPProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,6 +48,22 @@ describe('MCPProvider', () => {
     mcpClientMock.getAllTools.mockReset().mockReturnValue([]);
     mcpClientMock.callTool.mockReset();
     mcpClientMock.cleanup.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('reads connected servers before a tool call and clears the accessor after cleanup', async () => {
+    const initializing = deferred();
+    mcpClientMock.initialize.mockReturnValueOnce(initializing.promise);
+    const provider = new MCPProvider({ config: { enabled: true } });
+    try {
+      expect(provider.getConnectedServers()).toEqual(['test-server']);
+      initializing.resolve();
+      await initializing.promise;
+      expect(provider.getConnectedServers()).toEqual(['test-server']);
+    } finally {
+      initializing.resolve();
+      await provider.cleanup();
+    }
+    expect(provider.getConnectedServers()).toEqual([]);
   });
 
   it('should preserve existing output behavior without a response transform', async () => {
@@ -61,6 +85,60 @@ describe('MCPProvider', () => {
         originalPayload: payload,
       },
     });
+  });
+
+  it.each(['callApi', 'callTool'] as const)(
+    'does not dispatch %s after cancellation during initialization',
+    async (method) => {
+      const initialization = deferred();
+      mcpClientMock.initialize.mockReturnValue(initialization.promise);
+      const provider = new MCPProvider({ config: { enabled: true } });
+      const abort = new AbortController();
+      const reason = new Error('initialization cancelled');
+      const pending =
+        method === 'callApi'
+          ? provider.callApi(JSON.stringify({ tool: 'ping' }), undefined, {
+              abortSignal: abort.signal,
+            })
+          : provider.callTool('ping', {}, abort.signal);
+      void pending.catch(() => {});
+      try {
+        abort.abort(reason);
+        initialization.resolve();
+        await expect(pending).rejects.toBe(reason);
+        expect(mcpClientMock.callTool).not.toHaveBeenCalled();
+      } finally {
+        initialization.resolve();
+        await Promise.allSettled([pending]);
+      }
+    },
+  );
+
+  it('passes cancellation through an active MCP tool call and preserves its cause', async () => {
+    const started = deferred();
+    mcpClientMock.callTool.mockImplementation(
+      (_name, _args, signal: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          started.resolve();
+        }),
+    );
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const abort = new AbortController();
+    const reason = new Error('active request cancelled');
+    const pending = provider.callApi(JSON.stringify({ tool: 'ping' }), undefined, {
+      abortSignal: abort.signal,
+    });
+    void pending.catch(() => {});
+    try {
+      await started.promise;
+      expect(mcpClientMock.callTool).toHaveBeenCalledExactlyOnceWith('ping', {}, abort.signal);
+      abort.abort(reason);
+      await expect(pending).rejects.toBe(reason);
+    } finally {
+      abort.abort(reason);
+      await Promise.allSettled([pending]);
+    }
   });
 
   it('merges config.defaultArgs into tool calls, with per-call args winning', async () => {

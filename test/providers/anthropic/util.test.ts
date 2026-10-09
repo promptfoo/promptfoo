@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  ANTHROPIC_MODELS,
   calculateAnthropicCost,
   clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
@@ -2856,4 +2857,9 @@ describe('Anthropic utilities', () => {
       ).toBeCloseTo(0.007, 10);
     });
   });
+});
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = ANTHROPIC_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
 });

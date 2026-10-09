@@ -4,9 +4,8 @@ import {
   applyQueryParams,
   getAuthHeaders,
   getAuthQueryParams,
-  getOAuthToken,
+  getOAuthTokenWithExpiry,
   renderAuthVars,
-  requiresAsyncAuth,
 } from './util';
 import type { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -28,6 +27,9 @@ import type {
 export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
   return tools.map((tool) => {
     const schema: MCPToolInputSchema = tool.inputSchema;
+    // Default to empty properties for missing or invalid schemas.
+    // Also handle schemas that don't have a properties field.
+    // This shouldn't normally happen with MCP SDK, but handle it gracefully.
     let properties: Record<string, any> = {};
     let required: string[] | undefined = undefined;
     let additionalProperties: boolean | Record<string, any> | undefined = undefined;
@@ -41,13 +43,6 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
       if ('additionalProperties' in schema) {
         additionalProperties = schema.additionalProperties;
       }
-    } else if (schema && typeof schema === 'object') {
-      // Schema exists but doesn't have properties field
-      // This shouldn't normally happen with MCP SDK, but handle it gracefully
-      properties = {};
-    } else {
-      // No schema or invalid schema
-      properties = {};
     }
 
     return {
@@ -152,10 +147,7 @@ export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed 
     return config;
   }
 
-  const hasUnsupportedExclusions =
-    config.exclude_tools !== undefined &&
-    (!Array.isArray(config.exclude_tools) || config.exclude_tools.length > 0);
-  if (config.tools !== undefined || hasUnsupportedExclusions) {
+  if (config.tools !== undefined || config.exclude_tools?.length) {
     throw new Error(
       'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
     );
@@ -190,13 +182,16 @@ async function transformMCPServerConfigToClaudeCode(
     // Render environment variables in auth config
     const renderedConfig = renderAuthVars(config);
 
-    // Handle OAuth token fetching if needed
-    let oauthToken: string | undefined;
-    if (requiresAsyncAuth(renderedConfig) && renderedConfig.auth?.type === 'oauth') {
-      oauthToken = await getOAuthToken(
-        renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
-      );
-    }
+    // The Claude Agent SDK takes static headers, so fetch one OAuth token up front
+    const oauthToken =
+      renderedConfig.auth?.type === 'oauth'
+        ? (
+            await getOAuthTokenWithExpiry(
+              renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+              config.url,
+            )
+          ).accessToken
+        : undefined;
 
     // Apply query params for api_key with query placement
     const queryParams = getAuthQueryParams(renderedConfig);
