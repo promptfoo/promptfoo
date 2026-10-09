@@ -49,8 +49,16 @@ export const createChatUsage = (prompt_tokens = 10, completion_tokens = 20, tota
   total_tokens,
 });
 
+export const createStreamingOptions = () => ({
+  config: { apiKey: 'test-key', stream: true },
+});
+
 export const createTemperatureOptions = () => ({
   config: { temperature: 0.7 },
+});
+
+export const createLocationProperties = () => ({
+  location: { type: 'string' },
 });
 
 const createStringAssertion = <TType extends string>(type: TType, value: string) => ({
@@ -67,6 +75,18 @@ export const createResponseMessage = (text: string) => ({
       text,
     },
   ],
+});
+
+export const createCompletedResponse = (
+  text: string,
+  input_tokens: number,
+  total_tokens: number,
+) => ({
+  id: 'resp_abc123',
+  status: 'completed',
+  model: 'gpt-4o',
+  output: [createResponseMessage(text)],
+  usage: { input_tokens, output_tokens: 10, total_tokens },
 });
 
 export const createSingleAssertionTest = <TType extends string>(type: TType, value: string) => ({
@@ -119,6 +139,11 @@ export const createImageUsageCounts = (candidatesTokenCount: number, totalTokenC
   totalTokenCount,
 });
 
+export const createContentTypeResponse = (Content_Type = 'application/json') => ({
+  status: 200,
+  headers: { 'Content-Type': Content_Type },
+});
+
 export const createTextParts = (text: string, role: string) => ({
   parts: [{ text }],
   role,
@@ -136,4 +161,11 @@ export const createInputOutputUsage = (input_tokens: number, output_tokens: numb
 
 export const createGoogleSearchTool = () => ({
   googleSearch: {},
+});
+
+export const createUnsetOpenAiGenerationEnv = () => ({
+  OPENAI_MAX_TOKENS: undefined,
+  OPENAI_MAX_COMPLETION_TOKENS: undefined,
+  OPENAI_TEMPERATURE: undefined,
+  OPENAI_TOP_P: undefined,
 });
