@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleRedteam } from '../../../../src/assertions/redteam';
-import { clearCache, enableCache } from '../../../../src/cache';
+import { clearCache, enableCache, getCache } from '../../../../src/cache';
 import { HttpProvider } from '../../../../src/providers/http';
 import { OpenAiChatCompletionProvider } from '../../../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../../../src/providers/openai/completion';
@@ -14,6 +14,7 @@ import { GoblinProvider } from '../../../../src/redteam/providers/goblin/index';
 import { HydraProvider } from '../../../../src/redteam/providers/hydra/index';
 import { redteamProviderManager } from '../../../../src/redteam/providers/shared';
 import { clearAgentCache } from '../../../../src/util/fetch/index';
+import { createDeferred } from '../../../util/utils';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../../../src/types/index';
 
@@ -266,6 +267,133 @@ async function runHydra(
     targetResponses: await Promise.all(targetCalls.mock.results.map((call) => call.value)),
   };
 }
+
+describe.each(['refusal', 'content_filter'] as const)('Chat prepared %s evidence', (kind) => {
+  const refusal = 'Cannot comply with this request.';
+
+  function serveDiagnostic(redirected: boolean) {
+    backgroundRequestHandler = (req, res) => {
+      if (redirected && req.url?.startsWith('/chat/')) {
+        res.writeHead(302, { location: '/final/chat' });
+        res.end();
+        return;
+      }
+      const first = ++targetTurns === 1;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: first ? (kind === 'refusal' ? null : refusal) : finalOutput,
+                ...(first && kind === 'refusal' ? { refusal } : {}),
+              },
+              finish_reason: first && kind === 'content_filter' ? 'content_filter' : 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+      );
+    };
+  }
+
+  it.each([
+    { strategy: 'hydra', redirected: false },
+    { strategy: 'hydra', redirected: true },
+    { strategy: 'goblin', redirected: false },
+    { strategy: 'goblin', redirected: true },
+  ] as const)(
+    'keeps $strategy grading and cached refusal delivery consistent with redirect=$redirected',
+    async ({ strategy, redirected }) => {
+      serveDiagnostic(redirected);
+      const target = makeTarget('chat', redirected ? 'redirect-302' : 'direct');
+      const { targetResponses, firstTargetCall, liveContext, pass } = await runHydra(
+        target,
+        undefined,
+        false,
+        undefined,
+        strategy,
+      );
+      expect(targetResponses[0]).toMatchObject({
+        output: refusal,
+        isRefusal: true,
+        metadata: { http: { redirected } },
+      });
+      const delivered = requests.filter((request) => request.url?.startsWith('/final/'));
+      if (redirected) {
+        expect(delivered.map(({ method, body }) => ({ method, body }))).toEqual([
+          { method: 'GET', body: '' },
+          { method: 'GET', body: '' },
+        ]);
+      } else {
+        expect(JSON.parse(requests[0].body).messages).toEqual([{ role: 'user', content: opening }]);
+      }
+      expect(liveContext?.conversationTranscript?.includes(email) ?? false).toBe(!redirected);
+      expect(pass).toBe(!redirected);
+      const requestCount = requests.length;
+      const cached = await target.callApi(...firstTargetCall);
+      expect(cached).toMatchObject({
+        cached: true,
+        output: refusal,
+        isRefusal: true,
+        metadata: { http: { redirected } },
+      });
+      expect(requests).toHaveLength(requestCount);
+    },
+  );
+
+  it.each([false, true])(
+    'retains native redirect=%s for coalesced refusals canceled during publication and the cache hit',
+    async (redirected) => {
+      serveDiagnostic(redirected);
+      const target = makeTarget('chat', redirected ? 'redirect-302' : 'direct');
+      const cache = getCache();
+      const set = cache.set.bind(cache);
+      const publishing = createDeferred<void>();
+      const release = createDeferred<void>();
+      let publication: Promise<unknown> | undefined;
+      vi.spyOn(cache, 'set').mockImplementationOnce((key, value, ttl) => {
+        expect(JSON.parse(value as string).redirected).toBe(redirected);
+        publishing.resolve();
+        publication = release.promise.then(() => set(key, value, ttl));
+        return publication;
+      });
+      const controller = new AbortController();
+      const options = { abortSignal: controller.signal };
+      const first = target.callApi(opening, undefined, options);
+      const second = target.callApi(opening, undefined, options);
+      try {
+        await publishing.promise;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        controller.abort(new DOMException('caller deadline during publication', 'AbortError'));
+        const results = await Promise.all([first, second]);
+        for (const result of results) {
+          expect(result).toMatchObject({
+            output: refusal,
+            cached: false,
+            isRefusal: true,
+            metadata: { http: { redirected } },
+          });
+        }
+        expect(targetTurns).toBe(1);
+        expect(requests).toHaveLength(redirected ? 2 : 1);
+        release.resolve();
+        await publication;
+        expect(await target.callApi(opening)).toMatchObject({
+          output: refusal,
+          cached: true,
+          isRefusal: true,
+          metadata: { http: { redirected } },
+        });
+        expect(targetTurns).toBe(1);
+      } finally {
+        release.resolve();
+        await Promise.allSettled([first, second, publication]);
+      }
+    },
+  );
+});
 
 describe.each(['hydra', 'goblin'] as const)('%s literal input delivery', (strategy) => {
   it.each(['POST', 'post', 'pOsT', 'PUT', 'put', 'PuT', 'DELETE', 'delete', 'dElEtE', 'PATCH'])(

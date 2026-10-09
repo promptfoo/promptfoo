@@ -1346,7 +1346,7 @@ export function calculateOpenAICost(
   audioPromptTokens?: number,
   audioCompletionTokens?: number,
 ): number | undefined {
-  if (!audioPromptTokens && !audioCompletionTokens) {
+  if (audioPromptTokens === undefined && audioCompletionTokens === undefined) {
     return calculateCost(modelName, config, promptTokens, completionTokens, OPENAI_BILLING_MODELS);
   }
 
@@ -1369,11 +1369,17 @@ export function calculateOpenAICost(
     return undefined;
   }
 
-  let totalCost = 0;
-
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  totalCost += inputCost * promptTokens + outputCost * completionTokens;
+  const textCost = calculateCost(
+    modelName,
+    config,
+    promptTokens,
+    completionTokens,
+    OPENAI_BILLING_MODELS,
+  );
+  if (textCost === undefined) {
+    return undefined;
+  }
+  let totalCost = textCost;
 
   if ('audioInput' in model.cost || 'audioOutput' in model.cost) {
     const modelAudioInputCost: number =
@@ -1522,6 +1528,24 @@ export function validateFunctionCall(
       `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
     );
   }
+}
+
+/** A completed provider error without a competing nonempty choice. */
+export function isOpenAiErrorOnlyResponse(data: unknown): data is { error: { message: string } } {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    'error' in data &&
+    data.error !== null &&
+    typeof data.error === 'object' &&
+    !Array.isArray(data.error) &&
+    'message' in data.error &&
+    typeof data.error.message === 'string' &&
+    (!('choices' in data) ||
+      data.choices == null ||
+      (Array.isArray(data.choices) && data.choices.length === 0))
+  );
 }
 
 export function formatOpenAiError(data: {

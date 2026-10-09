@@ -32,13 +32,13 @@ vi.mock('child_process', () => ({
 }));
 vi.mock('python-shell', async () => {
   const { EventEmitter } = await import('node:events');
-  const { Writable } = await import('node:stream');
+  const { Writable, PassThrough } = await import('node:stream');
   return {
     PythonShell: class extends EventEmitter {
       childProcess = this;
       exitCode = null;
       signalCode = null;
-      stderr = new EventEmitter();
+      stderr = new PassThrough();
       stdin = new Writable({
         write(_chunk, _encoding, callback) {
           callback();
@@ -55,10 +55,16 @@ vi.mock('python-shell', async () => {
         }
       }
       send() {
-        queueMicrotask(() => this.emit('close'));
+        queueMicrotask(() => {
+          this.emit('exit');
+          this.emit('close');
+        });
       }
       kill() {
-        queueMicrotask(() => this.emit('close'));
+        queueMicrotask(() => {
+          this.emit('exit');
+          this.emit('close');
+        });
       }
     },
   };
@@ -140,12 +146,18 @@ describe('Python pool executable validation', () => {
       await setImmediate();
       expect(shells).toHaveLength(2);
       const peerSend = vi.spyOn(shells[1], 'send');
+      const peerKill = vi.spyOn(shells[1], 'kill');
       if (peerState === 'ready') {
         shells[1].emit('message', 'READY');
       }
       shells[0].emit('close');
       expect(await initialized).toEqual(new Error('Worker exited before becoming ready'));
-      expect(peerSend).toHaveBeenCalledWith('SHUTDOWN');
+      if (peerState === 'ready') {
+        expect(peerSend).toHaveBeenCalledWith('SHUTDOWN');
+      } else {
+        expect(peerSend).not.toHaveBeenCalled();
+        expect(peerKill).toHaveBeenCalledWith('SIGTERM');
+      }
       expect(pool.getWorkerCount()).toBe(0);
 
       signals.autoReady = true;
@@ -181,7 +193,7 @@ describe('Python pool executable validation', () => {
       shells[0].emit('close');
 
       expect(await initialized).toEqual(new Error('Worker exited before becoming ready'));
-      expect(killed).toHaveBeenCalledWith('SIGKILL');
+      expect(killed).toHaveBeenCalledWith(state === 'ready' ? 'SIGKILL' : 'SIGTERM');
       expect(peer.stdin.destroyed).toBe(true);
       expect(peer.stdin.listenerCount('error')).toBe(0);
       expect(pool.getWorkerCount()).toBe(0);

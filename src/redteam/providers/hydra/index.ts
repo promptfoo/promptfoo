@@ -52,6 +52,7 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
+  preserveSelectedError,
   runRedteamGrader,
   type TargetResponse,
   type TurnBacktrackingStopReason,
@@ -700,6 +701,9 @@ export class HydraProvider implements ApiProvider {
       if (targetResponse.error && targetResponse.tokenUsage?.numRequests === 0) {
         // A local rejection never reached the target and cannot supply context.
         this.conversationHistory.pop();
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
         continue;
       }
       const requestTemplates = await getTargetRequestTemplates(
@@ -767,6 +771,9 @@ export class HydraProvider implements ApiProvider {
         ...gradingMessages,
         { role: 'assistant', content: targetResponse.output || '' },
       ];
+      if (targetResponse.error && options?.abortSignal?.aborted) {
+        break;
+      }
 
       // Fetch trace context if tracing is enabled
       let traceContext: TraceContextData | null = null;
@@ -1088,7 +1095,7 @@ export class HydraProvider implements ApiProvider {
     }
 
     // Update scan learnings
-    if (scanId) {
+    if (scanId && !options?.abortSignal?.aborted) {
       try {
         const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
         const learningRequest = {
@@ -1148,37 +1155,40 @@ export class HydraProvider implements ApiProvider {
             hydraResult: vulnerabilityAchieved,
           };
 
-    return {
-      output: lastTargetResponse?.output || '',
-      ...(failClosedError
-        ? { error: failClosedError }
-        : lastTargetResponse?.error
-          ? { error: lastTargetResponse.error }
-          : {}),
-      metadata: {
-        sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
-        messages,
-        redteamConversationHistoryVersion: ATTRIBUTED_CONVERSATION_VERSION,
-        ...strategyMetadata,
-        stopReason,
-        successfulAttacks,
-        totalSuccessfulAttacks: successfulAttacks.length,
-        storedGraderResult,
-        redteamHistory,
-        sessionIds,
-        traceSnapshots:
-          traceSnapshots.length > 0
-            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-            : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-        redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
-        ...(lastCurrentTurnStart === undefined
-          ? {}
-          : { redteamCurrentTurnStart: lastCurrentTurnStart }),
+    return preserveSelectedError<HydraResponse>(
+      {
+        output: lastTargetResponse?.output || '',
+        ...(failClosedError
+          ? { error: failClosedError }
+          : lastTargetResponse?.error
+            ? { error: lastTargetResponse.error }
+            : {}),
+        metadata: {
+          sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+          messages,
+          redteamConversationHistoryVersion: ATTRIBUTED_CONVERSATION_VERSION,
+          ...strategyMetadata,
+          stopReason,
+          successfulAttacks,
+          totalSuccessfulAttacks: successfulAttacks.length,
+          storedGraderResult,
+          redteamHistory,
+          sessionIds,
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+              : undefined,
+          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+          redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+          ...(lastCurrentTurnStart === undefined
+            ? {}
+            : { redteamCurrentTurnStart: lastCurrentTurnStart }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: lastTargetResponse?.guardrails,
       },
-      tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
-    };
+      failClosedError ? undefined : lastTargetResponse,
+    );
   }
 }
 
