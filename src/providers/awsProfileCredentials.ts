@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { getEnvString, getMergedEnvOverrides } from '../envars';
 import { memoizeAwsCredentials } from './awsCredentialRefresh';
 import { getScopedAwsEndpointOptions } from './awsEndpointConfig';
+import { createScopedSsoProvider, hasScopedSsoSettings } from './awsSsoCredentials';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider, Logger } from '@smithy/types';
 
 import type { EnvOverrides } from '../contracts/env';
@@ -155,14 +156,15 @@ function loadProfileSdk() {
             'fromInstanceMetadata',
           )(options)();
         },
-        fromSSO(options: ProfileOptions) {
-          const { fromSSO } = iniRequire('@aws-sdk/credential-provider-sso') as {
-            fromSSO?: CredentialFactory;
+        fromSSO(options: ProfileOptions, scoped: EnvOverrides) {
+          const ssoProviderPath = iniRequire.resolve('@aws-sdk/credential-provider-sso');
+          const { fromSSO } = iniRequire(ssoProviderPath) as {
+            fromSSO?: typeof import('@aws-sdk/credential-provider-sso').fromSSO;
           };
           if (typeof fromSSO !== 'function') {
             throw new Error('Reinstall the AWS SDK: its SSO credential provider is unavailable.');
           }
-          return fromSSO(options);
+          return createScopedSsoProvider(fromSSO, options, scoped, ssoProviderPath);
         },
         roleAssumer(options: Record<string, unknown>) {
           const { getDefaultRoleAssumer } = iniRequire('@aws-sdk/nested-clients/sts') as {
@@ -355,7 +357,7 @@ export async function getScopedAwsProfileCredentials(
       return hasScopedEnvironment;
     }
     return (
-      scopedFiles &&
+      (scopedFiles || hasScopedSsoSettings(scoped)) &&
       ['sso_start_url', 'sso_account_id', 'sso_session', 'sso_region', 'sso_role_name'].some(
         (key) => typeof data[key] === 'string',
       )
@@ -415,7 +417,7 @@ export async function getScopedAwsProfileCredentials(
       }));
     const resolveLeaf = (name: string) =>
       profiles[name].credential_process === undefined
-        ? sdk.fromSSO({ ...options, profile: name })(properties)
+        ? sdk.fromSSO({ ...options, profile: name }, scoped)(properties)
         : resolveProcess(profiles, name, true);
     const resolve = async (name: string, recursive = false): Promise<AwsCredentialIdentity> => {
       const data = profiles[name];

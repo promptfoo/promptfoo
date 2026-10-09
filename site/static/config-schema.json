@@ -17,58 +17,58 @@
           "$ref": "#/definitions/__schema2"
         },
         "prompts": {
-          "$ref": "#/definitions/__schema198"
+          "$ref": "#/definitions/__schema212"
         },
         "tests": {
-          "$ref": "#/definitions/__schema199"
+          "$ref": "#/definitions/__schema213"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema216"
+          "$ref": "#/definitions/__schema230"
         },
         "defaultTest": {
-          "$ref": "#/definitions/__schema217"
+          "$ref": "#/definitions/__schema231"
         },
         "outputPath": {
-          "$ref": "#/definitions/__schema218"
+          "$ref": "#/definitions/__schema232"
         },
         "sharing": {
-          "$ref": "#/definitions/__schema219"
+          "$ref": "#/definitions/__schema233"
         },
         "nunjucksFilters": {
-          "$ref": "#/definitions/__schema220"
+          "$ref": "#/definitions/__schema234"
         },
         "env": {
-          "$ref": "#/definitions/__schema221"
+          "$ref": "#/definitions/__schema235"
         },
         "derivedMetrics": {
-          "$ref": "#/definitions/__schema223"
+          "$ref": "#/definitions/__schema237"
         },
         "extensions": {
-          "$ref": "#/definitions/__schema224"
+          "$ref": "#/definitions/__schema238"
         },
         "metadata": {
-          "$ref": "#/definitions/__schema225"
+          "$ref": "#/definitions/__schema239"
         },
         "redteam": {
-          "$ref": "#/definitions/__schema226"
+          "$ref": "#/definitions/__schema240"
         },
         "writeLatestResults": {
-          "$ref": "#/definitions/__schema256"
+          "$ref": "#/definitions/__schema270"
         },
         "tracing": {
-          "$ref": "#/definitions/__schema257"
+          "$ref": "#/definitions/__schema271"
         },
         "basePath": {
-          "$ref": "#/definitions/__schema262"
+          "$ref": "#/definitions/__schema276"
         },
         "evaluateOptions": {
-          "$ref": "#/definitions/__schema263"
+          "$ref": "#/definitions/__schema277"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema265"
+          "$ref": "#/definitions/__schema279"
         },
         "targets": {
-          "$ref": "#/definitions/__schema266"
+          "$ref": "#/definitions/__schema280"
         }
       },
       "required": ["prompts"],
@@ -656,66 +656,108 @@
             "AZURE_CONTENT_SAFETY_API_VERSION": {
               "$ref": "#/definitions/__schema174"
             },
-            "AWS_SHARED_CREDENTIALS_FILE": {
+            "AWS_ENDPOINT_URL": {
               "$ref": "#/definitions/__schema175"
             },
-            "AWS_CONFIG_FILE": {
+            "AWS_ENDPOINT_URL_BEDROCK_RUNTIME": {
               "$ref": "#/definitions/__schema176"
             },
-            "AWS_WEB_IDENTITY_TOKEN_FILE": {
+            "AWS_ENDPOINT_URL_BEDROCK_AGENT_RUNTIME": {
               "$ref": "#/definitions/__schema177"
             },
-            "AWS_ROLE_ARN": {
+            "AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME": {
               "$ref": "#/definitions/__schema178"
             },
-            "AWS_ROLE_SESSION_NAME": {
+            "AWS_ENDPOINT_URL_S3": {
               "$ref": "#/definitions/__schema179"
             },
-            "AZURE_CLIENT_CERTIFICATE_PATH": {
+            "AWS_ENDPOINT_URL_STS": {
               "$ref": "#/definitions/__schema180"
             },
-            "AZURE_CLIENT_CERTIFICATE_PASSWORD": {
+            "AWS_ENDPOINT_URL_SSO": {
               "$ref": "#/definitions/__schema181"
             },
-            "AZURE_CLIENT_SEND_CERTIFICATE_CHAIN": {
+            "AWS_ENDPOINT_URL_SSO_OIDC": {
               "$ref": "#/definitions/__schema182"
             },
-            "AZURE_FEDERATED_TOKEN_FILE": {
+            "AWS_USE_FIPS_ENDPOINT": {
               "$ref": "#/definitions/__schema183"
             },
-            "AZURE_USERNAME": {
+            "AWS_USE_DUALSTACK_ENDPOINT": {
               "$ref": "#/definitions/__schema184"
             },
-            "AZURE_PASSWORD": {
+            "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS": {
               "$ref": "#/definitions/__schema185"
             },
-            "AWS_REGION": {
+            "AWS_CREDENTIAL_EXPIRATION": {
               "$ref": "#/definitions/__schema186"
             },
-            "AWS_DEFAULT_REGION": {
+            "AWS_CREDENTIAL_SCOPE": {
               "$ref": "#/definitions/__schema187"
             },
-            "AWS_SAGEMAKER_MAX_TOKENS": {
+            "AWS_ACCOUNT_ID": {
               "$ref": "#/definitions/__schema188"
             },
-            "AWS_SAGEMAKER_TEMPERATURE": {
+            "AWS_SHARED_CREDENTIALS_FILE": {
               "$ref": "#/definitions/__schema189"
             },
-            "AWS_SAGEMAKER_TOP_P": {
+            "AWS_CONFIG_FILE": {
               "$ref": "#/definitions/__schema190"
             },
-            "AWS_SAGEMAKER_MAX_RETRIES": {
+            "AWS_WEB_IDENTITY_TOKEN_FILE": {
               "$ref": "#/definitions/__schema191"
             },
-            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+            "AWS_ROLE_ARN": {
               "$ref": "#/definitions/__schema192"
+            },
+            "AWS_ROLE_SESSION_NAME": {
+              "$ref": "#/definitions/__schema193"
+            },
+            "AZURE_CLIENT_CERTIFICATE_PATH": {
+              "$ref": "#/definitions/__schema194"
+            },
+            "AZURE_CLIENT_CERTIFICATE_PASSWORD": {
+              "$ref": "#/definitions/__schema195"
+            },
+            "AZURE_CLIENT_SEND_CERTIFICATE_CHAIN": {
+              "$ref": "#/definitions/__schema196"
+            },
+            "AZURE_FEDERATED_TOKEN_FILE": {
+              "$ref": "#/definitions/__schema197"
+            },
+            "AZURE_USERNAME": {
+              "$ref": "#/definitions/__schema198"
+            },
+            "AZURE_PASSWORD": {
+              "$ref": "#/definitions/__schema199"
+            },
+            "AWS_REGION": {
+              "$ref": "#/definitions/__schema200"
+            },
+            "AWS_DEFAULT_REGION": {
+              "$ref": "#/definitions/__schema201"
+            },
+            "AWS_SAGEMAKER_MAX_TOKENS": {
+              "$ref": "#/definitions/__schema202"
+            },
+            "AWS_SAGEMAKER_TEMPERATURE": {
+              "$ref": "#/definitions/__schema203"
+            },
+            "AWS_SAGEMAKER_TOP_P": {
+              "$ref": "#/definitions/__schema204"
+            },
+            "AWS_SAGEMAKER_MAX_RETRIES": {
+              "$ref": "#/definitions/__schema205"
+            },
+            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+              "$ref": "#/definitions/__schema206"
             }
           }
         },
         "inputs": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema193"
+              "$ref": "#/definitions/__schema207"
             }
           ]
         }
@@ -1283,6 +1325,48 @@
       "type": "string"
     },
     "__schema193": {
+      "type": "string"
+    },
+    "__schema194": {
+      "type": "string"
+    },
+    "__schema195": {
+      "type": "string"
+    },
+    "__schema196": {
+      "type": "string"
+    },
+    "__schema197": {
+      "type": "string"
+    },
+    "__schema198": {
+      "type": "string"
+    },
+    "__schema199": {
+      "type": "string"
+    },
+    "__schema200": {
+      "type": "string"
+    },
+    "__schema201": {
+      "type": "string"
+    },
+    "__schema202": {
+      "type": "string"
+    },
+    "__schema203": {
+      "type": "string"
+    },
+    "__schema204": {
+      "type": "string"
+    },
+    "__schema205": {
+      "type": "string"
+    },
+    "__schema206": {
+      "type": "string"
+    },
+    "__schema207": {
       "type": "object",
       "propertyNames": {
         "type": "string",
@@ -1298,13 +1382,13 @@
             "type": "object",
             "properties": {
               "config": {
-                "$ref": "#/definitions/__schema194"
+                "$ref": "#/definitions/__schema208"
               },
               "description": {
-                "$ref": "#/definitions/__schema196"
+                "$ref": "#/definitions/__schema210"
               },
               "type": {
-                "$ref": "#/definitions/__schema197"
+                "$ref": "#/definitions/__schema211"
               }
             },
             "required": ["description"]
@@ -1312,7 +1396,7 @@
         ]
       }
     },
-    "__schema194": {
+    "__schema208": {
       "type": "object",
       "properties": {
         "benign": {
@@ -1326,24 +1410,24 @@
           "minItems": 1,
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema195"
+            "$ref": "#/definitions/__schema209"
           }
         }
       }
     },
-    "__schema195": {
+    "__schema209": {
       "type": "string",
       "minLength": 1
     },
-    "__schema196": {
+    "__schema210": {
       "type": "string",
       "minLength": 1
     },
-    "__schema197": {
+    "__schema211": {
       "type": "string",
       "enum": ["text", "pdf", "docx", "image"]
     },
-    "__schema198": {
+    "__schema212": {
       "anyOf": [
         {
           "type": "string"
@@ -1407,7 +1491,7 @@
         }
       ]
     },
-    "__schema199": {
+    "__schema213": {
       "anyOf": [
         {
           "type": "string"
@@ -1420,62 +1504,62 @@
                 "type": "string"
               },
               {
-                "$ref": "#/definitions/__schema200"
+                "$ref": "#/definitions/__schema214"
               },
               {
-                "$ref": "#/definitions/__schema215"
+                "$ref": "#/definitions/__schema229"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema215"
+          "$ref": "#/definitions/__schema229"
         }
       ]
     },
-    "__schema200": {
+    "__schema214": {
       "type": "object",
       "properties": {
         "description": {
-          "$ref": "#/definitions/__schema201"
+          "$ref": "#/definitions/__schema215"
         },
         "vars": {
-          "$ref": "#/definitions/__schema202"
+          "$ref": "#/definitions/__schema216"
         },
         "provider": {
-          "$ref": "#/definitions/__schema203"
+          "$ref": "#/definitions/__schema217"
         },
         "providers": {
-          "$ref": "#/definitions/__schema205"
+          "$ref": "#/definitions/__schema219"
         },
         "prompts": {
-          "$ref": "#/definitions/__schema206"
+          "$ref": "#/definitions/__schema220"
         },
         "providerOutput": {
-          "$ref": "#/definitions/__schema207"
+          "$ref": "#/definitions/__schema221"
         },
         "assert": {
-          "$ref": "#/definitions/__schema208"
+          "$ref": "#/definitions/__schema222"
         },
         "assertScoringFunction": {
-          "$ref": "#/definitions/__schema211"
+          "$ref": "#/definitions/__schema225"
         },
         "options": {
-          "$ref": "#/definitions/__schema212"
+          "$ref": "#/definitions/__schema226"
         },
         "threshold": {
-          "$ref": "#/definitions/__schema213"
+          "$ref": "#/definitions/__schema227"
         },
         "metadata": {
-          "$ref": "#/definitions/__schema214"
+          "$ref": "#/definitions/__schema228"
         }
       }
     },
-    "__schema201": {
+    "__schema215": {
       "type": "string"
     },
-    "__schema202": {},
-    "__schema203": {
+    "__schema216": {},
+    "__schema217": {
       "anyOf": [
         {
           "type": "string"
@@ -1484,11 +1568,11 @@
           "$ref": "#/definitions/__schema5"
         },
         {
-          "$ref": "#/definitions/__schema204"
+          "$ref": "#/definitions/__schema218"
         }
       ]
     },
-    "__schema204": {
+    "__schema218": {
       "type": "object",
       "properties": {
         "id": {},
@@ -1515,26 +1599,26 @@
         "inputs": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema193"
+              "$ref": "#/definitions/__schema207"
             }
           ]
         }
       },
       "required": ["id", "callApi"]
     },
-    "__schema205": {
+    "__schema219": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema206": {
+    "__schema220": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema207": {
+    "__schema221": {
       "anyOf": [
         {
           "type": "string"
@@ -1548,7 +1632,7 @@
         }
       ]
     },
-    "__schema208": {
+    "__schema222": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1564,7 +1648,7 @@
                 "items": {
                   "allOf": [
                     {
-                      "$ref": "#/definitions/__schema209"
+                      "$ref": "#/definitions/__schema223"
                     }
                   ]
                 }
@@ -1589,23 +1673,23 @@
             "required": ["type", "assert"]
           },
           {
-            "$ref": "#/definitions/__schema209"
+            "$ref": "#/definitions/__schema223"
           }
         ]
       }
     },
-    "__schema209": {
+    "__schema223": {
       "type": "object",
       "properties": {
         "type": {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema210"
+              "$ref": "#/definitions/__schema224"
             },
             {
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema210"
+                  "$ref": "#/definitions/__schema224"
                 }
               ]
             },
@@ -1644,7 +1728,7 @@
       },
       "required": ["type"]
     },
-    "__schema210": {
+    "__schema224": {
       "type": "string",
       "enum": [
         "agent-rubric",
@@ -1715,7 +1799,7 @@
         "word-count"
       ]
     },
-    "__schema211": {
+    "__schema225": {
       "anyOf": [
         {
           "type": "string",
@@ -1724,7 +1808,7 @@
         {}
       ]
     },
-    "__schema212": {
+    "__schema226": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1835,10 +1919,10 @@
       },
       "additionalProperties": {}
     },
-    "__schema213": {
+    "__schema227": {
       "type": "number"
     },
-    "__schema214": {
+    "__schema228": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1846,7 +1930,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema215": {
+    "__schema229": {
       "type": "object",
       "properties": {
         "path": {
@@ -1888,7 +1972,7 @@
       },
       "required": ["path"]
     },
-    "__schema216": {
+    "__schema230": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1909,77 +1993,77 @@
                     "description": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema201"
+                          "$ref": "#/definitions/__schema215"
                         }
                       ]
                     },
                     "vars": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema202"
+                          "$ref": "#/definitions/__schema216"
                         }
                       ]
                     },
                     "provider": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema203"
+                          "$ref": "#/definitions/__schema217"
                         }
                       ]
                     },
                     "providers": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema205"
+                          "$ref": "#/definitions/__schema219"
                         }
                       ]
                     },
                     "prompts": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema206"
+                          "$ref": "#/definitions/__schema220"
                         }
                       ]
                     },
                     "providerOutput": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema207"
+                          "$ref": "#/definitions/__schema221"
                         }
                       ]
                     },
                     "assert": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema208"
+                          "$ref": "#/definitions/__schema222"
                         }
                       ]
                     },
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema211"
+                          "$ref": "#/definitions/__schema225"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema212"
+                          "$ref": "#/definitions/__schema226"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema213"
+                          "$ref": "#/definitions/__schema227"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema214"
+                          "$ref": "#/definitions/__schema228"
                         }
                       ]
                     }
@@ -1989,7 +2073,7 @@
               "tests": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/definitions/__schema200"
+                  "$ref": "#/definitions/__schema214"
                 }
               }
             },
@@ -1998,7 +2082,7 @@
         ]
       }
     },
-    "__schema217": {
+    "__schema231": {
       "anyOf": [
         {
           "type": "string"
@@ -2007,40 +2091,40 @@
           "type": "object",
           "properties": {
             "vars": {
-              "$ref": "#/definitions/__schema202"
+              "$ref": "#/definitions/__schema216"
             },
             "provider": {
-              "$ref": "#/definitions/__schema203"
+              "$ref": "#/definitions/__schema217"
             },
             "providers": {
-              "$ref": "#/definitions/__schema205"
+              "$ref": "#/definitions/__schema219"
             },
             "prompts": {
-              "$ref": "#/definitions/__schema206"
+              "$ref": "#/definitions/__schema220"
             },
             "providerOutput": {
-              "$ref": "#/definitions/__schema207"
+              "$ref": "#/definitions/__schema221"
             },
             "assert": {
-              "$ref": "#/definitions/__schema208"
+              "$ref": "#/definitions/__schema222"
             },
             "assertScoringFunction": {
-              "$ref": "#/definitions/__schema211"
+              "$ref": "#/definitions/__schema225"
             },
             "options": {
-              "$ref": "#/definitions/__schema212"
+              "$ref": "#/definitions/__schema226"
             },
             "threshold": {
-              "$ref": "#/definitions/__schema213"
+              "$ref": "#/definitions/__schema227"
             },
             "metadata": {
-              "$ref": "#/definitions/__schema214"
+              "$ref": "#/definitions/__schema228"
             }
           }
         }
       ]
     },
-    "__schema218": {
+    "__schema232": {
       "anyOf": [
         {
           "type": "string"
@@ -2053,7 +2137,7 @@
         }
       ]
     },
-    "__schema219": {
+    "__schema233": {
       "anyOf": [
         {
           "type": "boolean"
@@ -2071,7 +2155,7 @@
         }
       ]
     },
-    "__schema220": {
+    "__schema234": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -2080,7 +2164,7 @@
         "type": "string"
       }
     },
-    "__schema221": {
+    "__schema235": {
       "anyOf": [
         {
           "type": "object",
@@ -2598,98 +2682,140 @@
             "AZURE_CONTENT_SAFETY_API_VERSION": {
               "$ref": "#/definitions/__schema174"
             },
-            "AWS_SHARED_CREDENTIALS_FILE": {
+            "AWS_ENDPOINT_URL": {
               "$ref": "#/definitions/__schema175"
             },
-            "AWS_CONFIG_FILE": {
+            "AWS_ENDPOINT_URL_BEDROCK_RUNTIME": {
               "$ref": "#/definitions/__schema176"
             },
-            "AWS_WEB_IDENTITY_TOKEN_FILE": {
+            "AWS_ENDPOINT_URL_BEDROCK_AGENT_RUNTIME": {
               "$ref": "#/definitions/__schema177"
             },
-            "AWS_ROLE_ARN": {
+            "AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME": {
               "$ref": "#/definitions/__schema178"
             },
-            "AWS_ROLE_SESSION_NAME": {
+            "AWS_ENDPOINT_URL_S3": {
               "$ref": "#/definitions/__schema179"
             },
-            "AZURE_CLIENT_CERTIFICATE_PATH": {
+            "AWS_ENDPOINT_URL_STS": {
               "$ref": "#/definitions/__schema180"
             },
-            "AZURE_CLIENT_CERTIFICATE_PASSWORD": {
+            "AWS_ENDPOINT_URL_SSO": {
               "$ref": "#/definitions/__schema181"
             },
-            "AZURE_CLIENT_SEND_CERTIFICATE_CHAIN": {
+            "AWS_ENDPOINT_URL_SSO_OIDC": {
               "$ref": "#/definitions/__schema182"
             },
-            "AZURE_FEDERATED_TOKEN_FILE": {
+            "AWS_USE_FIPS_ENDPOINT": {
               "$ref": "#/definitions/__schema183"
             },
-            "AZURE_USERNAME": {
+            "AWS_USE_DUALSTACK_ENDPOINT": {
               "$ref": "#/definitions/__schema184"
             },
-            "AZURE_PASSWORD": {
+            "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS": {
               "$ref": "#/definitions/__schema185"
             },
-            "AWS_REGION": {
+            "AWS_CREDENTIAL_EXPIRATION": {
               "$ref": "#/definitions/__schema186"
             },
-            "AWS_DEFAULT_REGION": {
+            "AWS_CREDENTIAL_SCOPE": {
               "$ref": "#/definitions/__schema187"
             },
-            "AWS_SAGEMAKER_MAX_TOKENS": {
+            "AWS_ACCOUNT_ID": {
               "$ref": "#/definitions/__schema188"
             },
-            "AWS_SAGEMAKER_TEMPERATURE": {
+            "AWS_SHARED_CREDENTIALS_FILE": {
               "$ref": "#/definitions/__schema189"
             },
-            "AWS_SAGEMAKER_TOP_P": {
+            "AWS_CONFIG_FILE": {
               "$ref": "#/definitions/__schema190"
             },
-            "AWS_SAGEMAKER_MAX_RETRIES": {
+            "AWS_WEB_IDENTITY_TOKEN_FILE": {
               "$ref": "#/definitions/__schema191"
             },
-            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+            "AWS_ROLE_ARN": {
               "$ref": "#/definitions/__schema192"
             },
+            "AWS_ROLE_SESSION_NAME": {
+              "$ref": "#/definitions/__schema193"
+            },
+            "AZURE_CLIENT_CERTIFICATE_PATH": {
+              "$ref": "#/definitions/__schema194"
+            },
+            "AZURE_CLIENT_CERTIFICATE_PASSWORD": {
+              "$ref": "#/definitions/__schema195"
+            },
+            "AZURE_CLIENT_SEND_CERTIFICATE_CHAIN": {
+              "$ref": "#/definitions/__schema196"
+            },
+            "AZURE_FEDERATED_TOKEN_FILE": {
+              "$ref": "#/definitions/__schema197"
+            },
+            "AZURE_USERNAME": {
+              "$ref": "#/definitions/__schema198"
+            },
+            "AZURE_PASSWORD": {
+              "$ref": "#/definitions/__schema199"
+            },
+            "AWS_REGION": {
+              "$ref": "#/definitions/__schema200"
+            },
+            "AWS_DEFAULT_REGION": {
+              "$ref": "#/definitions/__schema201"
+            },
+            "AWS_SAGEMAKER_MAX_TOKENS": {
+              "$ref": "#/definitions/__schema202"
+            },
+            "AWS_SAGEMAKER_TEMPERATURE": {
+              "$ref": "#/definitions/__schema203"
+            },
+            "AWS_SAGEMAKER_TOP_P": {
+              "$ref": "#/definitions/__schema204"
+            },
+            "AWS_SAGEMAKER_MAX_RETRIES": {
+              "$ref": "#/definitions/__schema205"
+            },
+            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+              "$ref": "#/definitions/__schema206"
+            },
             "PROMPTFOO_FETCH_CONNECTIONS": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             },
             "REQUEST_TIMEOUT_MS": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             },
             "ALL_PROXY": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             },
             "all_proxy": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             },
             "HTTP_PROXY": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             },
             "http_proxy": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             },
             "HTTPS_PROXY": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             },
             "https_proxy": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             },
             "NO_PROXY": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             },
             "no_proxy": {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema236"
             }
           }
         }
       ]
     },
-    "__schema222": {
+    "__schema236": {
       "type": ["string", "number", "boolean"]
     },
-    "__schema223": {
+    "__schema237": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2709,7 +2835,7 @@
         "required": ["name", "value"]
       }
     },
-    "__schema224": {
+    "__schema238": {
       "anyOf": [
         {
           "type": "array",
@@ -2722,21 +2848,21 @@
         }
       ]
     },
-    "__schema225": {
+    "__schema239": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema226": {
+    "__schema240": {
       "type": "object",
       "properties": {
         "injectVar": {
           "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema227"
+              "$ref": "#/definitions/__schema241"
             }
           ]
         },
@@ -2744,7 +2870,7 @@
           "description": "Purpose override string - describes the prompt templates",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema228"
+              "$ref": "#/definitions/__schema242"
             }
           ]
         },
@@ -2752,7 +2878,7 @@
           "description": "Additional instructions for test generation applied to each plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema229"
+              "$ref": "#/definitions/__schema243"
             }
           ]
         },
@@ -2760,7 +2886,7 @@
           "description": "Provider used for generating adversarial inputs",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema230"
+              "$ref": "#/definitions/__schema244"
             }
           ]
         },
@@ -2768,7 +2894,7 @@
           "description": "Number of tests to generate",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema231"
+              "$ref": "#/definitions/__schema245"
             }
           ]
         },
@@ -2776,7 +2902,7 @@
           "description": "Language(s) of tests to generate for this plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema232"
+              "$ref": "#/definitions/__schema246"
             }
           ]
         },
@@ -2784,7 +2910,7 @@
           "description": "Compliance frameworks to include across reports and commands",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema233"
+              "$ref": "#/definitions/__schema247"
             }
           ]
         },
@@ -2792,7 +2918,7 @@
           "description": "Names of people, brands, or organizations related to your LLM application",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema235"
+              "$ref": "#/definitions/__schema249"
             }
           ]
         },
@@ -2800,7 +2926,7 @@
           "description": "Security contexts for testing multiple states - each context has its own purpose",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema236"
+              "$ref": "#/definitions/__schema250"
             }
           ]
         },
@@ -2808,7 +2934,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema239"
+            "$ref": "#/definitions/__schema253"
           },
           "description": "Plugins to use for redteam generation"
         },
@@ -2816,7 +2942,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema247"
+            "$ref": "#/definitions/__schema261"
           },
           "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
@@ -2824,7 +2950,7 @@
           "description": "Maximum number of concurrent API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema250"
+              "$ref": "#/definitions/__schema264"
             }
           ]
         },
@@ -2832,7 +2958,7 @@
           "description": "Maximum number of characters allowed per generated user message",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema251"
+              "$ref": "#/definitions/__schema265"
             }
           ]
         },
@@ -2840,7 +2966,7 @@
           "description": "Delay in milliseconds between plugin API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema252"
+              "$ref": "#/definitions/__schema266"
             }
           ]
         },
@@ -2848,7 +2974,7 @@
           "description": "Whether to exclude target output from the agentific attack generation process",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema253"
+              "$ref": "#/definitions/__schema267"
             }
           ]
         },
@@ -2856,7 +2982,7 @@
           "description": "Tracing defaults applied to all strategies unless overridden",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema254"
+              "$ref": "#/definitions/__schema268"
             }
           ]
         },
@@ -2864,40 +2990,40 @@
           "description": "Global grading examples that apply to all plugins",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema255"
+              "$ref": "#/definitions/__schema269"
             }
           ]
         }
       }
     },
-    "__schema227": {
+    "__schema241": {
       "type": "string"
     },
-    "__schema228": {
+    "__schema242": {
       "type": "string"
     },
-    "__schema229": {
+    "__schema243": {
       "type": "string"
     },
-    "__schema230": {
+    "__schema244": {
       "anyOf": [
         {
           "type": "string"
         },
         {
-          "$ref": "#/definitions/__schema204"
+          "$ref": "#/definitions/__schema218"
         },
         {
           "$ref": "#/definitions/__schema5"
         }
       ]
     },
-    "__schema231": {
+    "__schema245": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema232": {
+    "__schema246": {
       "anyOf": [
         {
           "type": "string"
@@ -2910,14 +3036,14 @@
         }
       ]
     },
-    "__schema233": {
+    "__schema247": {
       "minItems": 1,
       "type": "array",
       "items": {
-        "$ref": "#/definitions/__schema234"
+        "$ref": "#/definitions/__schema248"
       }
     },
-    "__schema234": {
+    "__schema248": {
       "type": "string",
       "enum": [
         "mitre:atlas",
@@ -2931,13 +3057,13 @@
         "dod:ai:ethics"
       ]
     },
-    "__schema235": {
+    "__schema249": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema236": {
+    "__schema250": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2950,7 +3076,7 @@
             "description": "Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema237"
+                "$ref": "#/definitions/__schema251"
               }
             ]
           },
@@ -2958,7 +3084,7 @@
             "description": "Variables passed to provider (e.g., context_file, user_role)",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema238"
+                "$ref": "#/definitions/__schema252"
               }
             ]
           }
@@ -2966,10 +3092,10 @@
         "required": ["id"]
       }
     },
-    "__schema237": {
+    "__schema251": {
       "type": "string"
     },
-    "__schema238": {
+    "__schema252": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -2978,15 +3104,15 @@
         "type": "string"
       }
     },
-    "__schema239": {
+    "__schema253": {
       "anyOf": [
         {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema240"
+              "$ref": "#/definitions/__schema254"
             },
             {
-              "$ref": "#/definitions/__schema241"
+              "$ref": "#/definitions/__schema255"
             }
           ],
           "description": "Name of the plugin or path to custom plugin"
@@ -2997,10 +3123,10 @@
             "id": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/__schema242"
+                  "$ref": "#/definitions/__schema256"
                 },
                 {
-                  "$ref": "#/definitions/__schema243"
+                  "$ref": "#/definitions/__schema257"
                 }
               ],
               "description": "Name of the plugin"
@@ -3009,7 +3135,7 @@
               "description": "Number of tests to generate for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema244"
+                  "$ref": "#/definitions/__schema258"
                 }
               ]
             },
@@ -3017,7 +3143,7 @@
               "description": "Plugin-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema245"
+                  "$ref": "#/definitions/__schema259"
                 }
               ]
             },
@@ -3025,7 +3151,7 @@
               "description": "Severity level for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema246"
+                  "$ref": "#/definitions/__schema260"
                 }
               ]
             }
@@ -3034,7 +3160,7 @@
         }
       ]
     },
-    "__schema240": {
+    "__schema254": {
       "type": "string",
       "enum": [
         "aegis",
@@ -3330,10 +3456,10 @@
         "xstest"
       ]
     },
-    "__schema241": {
+    "__schema255": {
       "type": "string"
     },
-    "__schema242": {
+    "__schema256": {
       "type": "string",
       "enum": [
         "aegis",
@@ -3629,41 +3755,41 @@
         "xstest"
       ]
     },
-    "__schema243": {
+    "__schema257": {
       "type": "string"
     },
-    "__schema244": {
+    "__schema258": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema245": {
+    "__schema259": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema246": {
+    "__schema260": {
       "type": "string",
       "enum": ["critical", "high", "medium", "low", "informational"]
     },
-    "__schema247": {
+    "__schema261": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema248"
+          "$ref": "#/definitions/__schema262"
         },
         {
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/definitions/__schema248"
+              "$ref": "#/definitions/__schema262"
             },
             "config": {
               "description": "Strategy-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema249"
+                  "$ref": "#/definitions/__schema263"
                 }
               ]
             }
@@ -3672,7 +3798,7 @@
         }
       ]
     },
-    "__schema248": {
+    "__schema262": {
       "anyOf": [
         {
           "type": "string",
@@ -3724,32 +3850,32 @@
         }
       ]
     },
-    "__schema249": {
+    "__schema263": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema250": {
+    "__schema264": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema251": {
+    "__schema265": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema252": {
+    "__schema266": {
       "type": "integer",
       "minimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema253": {
+    "__schema267": {
       "type": "boolean"
     },
-    "__schema254": {
+    "__schema268": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3801,14 +3927,14 @@
           "additionalProperties": {
             "allOf": [
               {
-                "$ref": "#/definitions/__schema254"
+                "$ref": "#/definitions/__schema268"
               }
             ]
           }
         }
       }
     },
-    "__schema255": {
+    "__schema269": {
       "type": "array",
       "items": {
         "type": "object",
@@ -3829,10 +3955,10 @@
         "required": ["output", "pass", "score", "reason"]
       }
     },
-    "__schema256": {
+    "__schema270": {
       "type": "boolean"
     },
-    "__schema257": {
+    "__schema271": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3943,19 +4069,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema258"
+                  "$ref": "#/definitions/__schema272"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema259"
+                      "$ref": "#/definitions/__schema273"
                     },
                     "username": {
-                      "$ref": "#/definitions/__schema260"
+                      "$ref": "#/definitions/__schema274"
                     },
                     "password": {
-                      "$ref": "#/definitions/__schema261"
+                      "$ref": "#/definitions/__schema275"
                     }
                   }
                 },
@@ -3984,7 +4110,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema258"
+                  "$ref": "#/definitions/__schema272"
                 },
                 "projectId": {
                   "type": "string",
@@ -4026,7 +4152,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema258"
+                  "$ref": "#/definitions/__schema272"
                 },
                 "auth": {
                   "type": "object",
@@ -4072,26 +4198,26 @@
         }
       }
     },
-    "__schema258": {
+    "__schema272": {
       "type": "string",
       "format": "uri"
     },
-    "__schema259": {
+    "__schema273": {
       "type": "string",
       "minLength": 1
     },
-    "__schema260": {
+    "__schema274": {
       "type": "string",
       "minLength": 1
     },
-    "__schema261": {
+    "__schema275": {
       "type": "string",
       "minLength": 1
     },
-    "__schema262": {
+    "__schema276": {
       "type": "string"
     },
-    "__schema263": {
+    "__schema277": {
       "type": "object",
       "properties": {
         "cache": {
@@ -4134,14 +4260,14 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema264"
+          "$ref": "#/definitions/__schema278"
         }
       }
     },
-    "__schema264": {
+    "__schema278": {
       "type": "string"
     },
-    "__schema265": {
+    "__schema279": {
       "type": "object",
       "properties": {
         "description": {
@@ -4273,7 +4399,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema264"
+              "$ref": "#/definitions/__schema278"
             }
           ]
         },
@@ -4346,7 +4472,7 @@
         }
       }
     },
-    "__schema266": {
+    "__schema280": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

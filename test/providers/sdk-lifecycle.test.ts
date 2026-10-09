@@ -17,6 +17,8 @@ import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import { createEnvironmentScopedState } from '../../src/providers/scopedState';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
+
 let restore: () => void;
 beforeEach(() => {
   restore = mockProcessEnv({
@@ -95,6 +97,7 @@ describe('SDK client lifecycle', () => {
           `
           import assert from 'node:assert/strict';
           import { writeSync } from 'node:fs';
+          globalThis.fetch = async () => { throw new Error('Unexpected network access'); };
           const signals = ['SIGTERM', 'SIGINT'];
           const counts = () => signals.map(signal => process.listenerCount(signal));
           const before = counts();

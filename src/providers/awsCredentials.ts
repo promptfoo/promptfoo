@@ -4,6 +4,7 @@ import path from 'node:path';
 import { getEnvString, getMergedEnvOverrides } from '../envars';
 import { memoizeAwsEnvironmentCredentials } from './awsCredentialRefresh';
 import { getScopedAwsProfileCredentials } from './awsProfileCredentials';
+import { createScopedSsoProvider } from './awsSsoCredentials';
 import { getCredentialCacheNamespace, getOpaqueCredentialCacheNamespace } from './credentialCache';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
 
@@ -229,7 +230,11 @@ export async function resolveAwsCredentials(
         'AWS SSO profiles require @aws-sdk/credential-provider-sso. Please install it with: npm install @aws-sdk/credential-provider-sso',
       );
     });
-    return fromSSO({ ...getAwsCredentialProviderOptions(env), profile });
+    return createScopedSsoProvider(
+      fromSSO,
+      { ...getAwsCredentialProviderOptions(env), profile },
+      getMergedEnvOverrides(env),
+    );
   }
   return getScopedAwsProfileCredentials({ ...getAwsCredentialProviderOptions(env), profile }, env);
 }

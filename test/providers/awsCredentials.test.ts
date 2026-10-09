@@ -18,16 +18,19 @@ describe('explicit AWS SSO profiles', () => {
     vi.doMock('@aws-sdk/credential-provider-sso', () => ({ fromSSO }));
     const { resolveAwsCredentials } = await import('../../src/providers/awsCredentials');
     const { default: scopedCliState } = await import('../../src/cliState');
-    await scopedCliState.withEnvFileOverrides(
+    const provider = await scopedCliState.withEnvFileOverrides(
       { AWS_CONFIG_FILE: '/fixture/config', AWS_SHARED_CREDENTIALS_FILE: '/fixture/credentials' },
       () => resolveAwsCredentials({ profile: 'fixture' }),
     );
-    expect(fromSSO).toHaveBeenCalledWith({
-      profile: 'fixture',
-      configFilepath: '/fixture/config',
-      filepath: '/fixture/credentials',
-      ignoreCache: true,
-    });
+    await (provider as AwsCredentialIdentityProvider)();
+    expect(fromSSO).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: 'fixture',
+        configFilepath: '/fixture/config',
+        filepath: '/fixture/credentials',
+        ignoreCache: true,
+      }),
+    );
   });
 
   it('explains how to install the optional SSO provider when importing it fails', async () => {

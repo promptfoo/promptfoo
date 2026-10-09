@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getMergedEnvOverrides } from '../../src/envars';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
+import { TestProviderRequestSchema } from '../../src/types/api/providers';
 import { readConfig } from '../../src/util/config/load';
+import { ProviderOptionsSchema } from '../../src/validators/providers';
 import { mockProcessEnv } from '../util/utils';
 
 import type { EnvOverrides } from '../../src/contracts/env';
@@ -38,6 +40,41 @@ afterEach(() => {
   vi.restoreAllMocks();
   restore();
   fs.rmSync(directory, { recursive: true, force: true });
+});
+
+describe('parsed provider SDK environments', () => {
+  it.each(['saved-provider', 'test-provider-api'] as const)(
+    'retains SDK routing settings through %s validation',
+    async (kind) => {
+      const input = {
+        id: 'bedrock:fixture',
+        env: {
+          AWS_CONFIG_FILE: path.join(directory, 'config'),
+          AWS_SHARED_CREDENTIALS_FILE: path.join(directory, 'credentials'),
+          AWS_ENDPOINT_URL_BEDROCK_RUNTIME: 'https://scoped-bedrock.invalid',
+          AWS_USE_FIPS_ENDPOINT: 'false',
+          AWS_USE_DUALSTACK_ENDPOINT: 'false',
+          AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: 'false',
+        },
+      };
+      const parsed =
+        kind === 'saved-provider'
+          ? ProviderOptionsSchema.parse(input)
+          : TestProviderRequestSchema.parse({ providerOptions: input }).providerOptions;
+      expect(parsed.env).toEqual(input.env);
+      const provider = new AwsBedrockCompletionProvider('fixture', { env: parsed.env });
+      const client = await provider.getBedrockInstance();
+      try {
+        expect(await client.config.endpoint!()).toMatchObject({
+          hostname: 'scoped-bedrock.invalid',
+        });
+        expect(await client.config.useFipsEndpoint()).toBe(false);
+        expect(await client.config.useDualstackEndpoint()).toBe(false);
+      } finally {
+        client.destroy();
+      }
+    },
+  );
 });
 
 describe('primitive invocation environment values', () => {

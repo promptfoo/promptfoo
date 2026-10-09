@@ -2,6 +2,7 @@
  * Generic utility functions for sanitizing objects to prevent logging of secrets and credentials
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
+import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
 import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from './gradingProvider';
 
@@ -1006,18 +1007,25 @@ type RestoreResult<T> = {
 function collectStoredAzureBlobSasTokens(
   value: unknown,
   tokensByRedactedUri = new Map<string, string>(),
+  ambiguousRedactedUris = new Set<string>(),
 ): Map<string, string> {
   if (typeof value === 'string') {
     const redacted = redactAzureBlobSasToken(value);
-    if (redacted !== value && !tokensByRedactedUri.has(redacted)) {
-      tokensByRedactedUri.set(redacted, value);
+    if (redacted !== value && !ambiguousRedactedUris.has(redacted)) {
+      const existing = tokensByRedactedUri.get(redacted);
+      if (existing === undefined) {
+        tokensByRedactedUri.set(redacted, value);
+      } else if (existing !== value) {
+        tokensByRedactedUri.delete(redacted);
+        ambiguousRedactedUris.add(redacted);
+      }
     }
     return tokensByRedactedUri;
   }
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, ambiguousRedactedUris);
     }
     return tokensByRedactedUri;
   }
@@ -1027,7 +1035,7 @@ function collectStoredAzureBlobSasTokens(
   }
 
   for (const item of Object.values(value)) {
-    collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+    collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, ambiguousRedactedUris);
   }
   return tokensByRedactedUri;
 }
@@ -1068,9 +1076,18 @@ function restoreAzureBlobSasTokensFromMap<T>(
     : { value, restored };
 }
 
-function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown): RestoreResult<T> {
+function restoreAzureBlobSasTokensWithResult<T>(
+  value: T,
+  storedValue: unknown,
+  ambiguousRedactedUris = new Set<string>(),
+  unchangedPosition = true,
+): RestoreResult<T> {
   if (typeof value === 'string') {
-    if (typeof storedValue === 'string' && value === redactAzureBlobSasToken(storedValue)) {
+    if (
+      typeof storedValue === 'string' &&
+      value === redactAzureBlobSasToken(storedValue) &&
+      (!ambiguousRedactedUris.has(value) || unchangedPosition)
+    ) {
       return { value: storedValue as T, restored: storedValue !== value };
     }
     return { value, restored: false };
@@ -1078,10 +1095,24 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
 
   if (Array.isArray(value)) {
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
-    const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(storedItems);
+    const arrayAmbiguousUris = new Set(ambiguousRedactedUris);
+    const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(
+      storedItems,
+      new Map(),
+      arrayAmbiguousUris,
+    );
     let restored = false;
     const restoredItems = value.map((item, index) => {
-      const positional = restoreAzureBlobSasTokensWithResult(item, storedItems[index]);
+      const positional = restoreAzureBlobSasTokensWithResult(
+        item,
+        storedItems[index],
+        arrayAmbiguousUris,
+        // A changed ancestor cannot establish which duplicate signature belongs here.
+        // Unchanged entries retain their positional credentials, including nested arrays.
+        unchangedPosition &&
+          (arrayAmbiguousUris.size === 0 ||
+            deepEqual(item, redactAzureBlobSasTokens(storedItems[index]))),
+      );
 
       // Positional restore fails when array entries are reordered, inserted, or
       // edited outside the URI field. Also match by redacted URI identity so
@@ -1106,7 +1137,12 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
       : {};
   let restored = false;
   const restoredEntries = Object.entries(value).map(([key, item]) => {
-    const result = restoreAzureBlobSasTokensWithResult(item, storedObject[key]);
+    const result = restoreAzureBlobSasTokensWithResult(
+      item,
+      storedObject[key],
+      ambiguousRedactedUris,
+      unchangedPosition,
+    );
     restored ||= result.restored;
     return [key, result.value];
   });
@@ -1142,6 +1178,13 @@ function sanitizeJsonString(
     if (parsed && typeof parsed === 'object') {
       const sanitized = recursiveSanitize(parsed, depth, maxDepth, sanitizeUrls);
       return JSON.stringify(sanitized);
+    }
+    if (typeof parsed === 'string') {
+      // Bound string unwrapping even when object traversal has no depth limit.
+      if (depth >= maxDepth || depth >= 64) {
+        return JSON.stringify(REDACTED);
+      }
+      return JSON.stringify(sanitizeJsonString(parsed, depth + 1, maxDepth, sanitizeUrls));
     }
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
@@ -1510,7 +1553,7 @@ export function sanitizeObject(
     // Can't use logger here as it would create circular dependency
     console.error(`Error sanitizing ${context}:`, error);
 
-    return obj;
+    return REDACTED;
   }
 }
 
