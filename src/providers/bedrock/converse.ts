@@ -37,14 +37,9 @@ import {
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
-import {
-  isOpenAIToolArray,
-  isOpenAIToolChoice,
-  type OpenAIToolChoice,
-  openaiToolChoiceToBedrock,
-  openaiToolsToBedrock,
-} from '../shared';
+import { isOpenAIToolChoice, type OpenAIToolChoice, openaiToolChoiceToBedrock } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
+import { collectConverseStream } from './converseStream';
 import { calculateBedrockCost } from './pricing';
 import type {
   ContentBlock,
@@ -52,6 +47,7 @@ import type {
   ConverseCommandOutput,
   ConverseStreamCommandInput,
   GuardrailConfiguration,
+  GuardrailStreamConfiguration,
   GuardrailTrace,
   InferenceConfiguration,
   Message,
@@ -128,6 +124,15 @@ export interface BedrockConverseOptions extends BedrockOptions {
   additionalModelRequestFields?: Record<string, unknown>;
   additionalModelResponseFieldPaths?: string[];
 
+  // Native Converse request fields. These are explicitly selected when building the request.
+  system?: ConverseCommandInput['system'];
+  inferenceConfig?: ConverseCommandInput['inferenceConfig'];
+  toolConfig?: ConverseCommandInput['toolConfig'];
+  guardrailConfig?: GuardrailStreamConfiguration;
+  outputConfig?: ConverseCommandInput['outputConfig'];
+  promptVariables?: ConverseCommandInput['promptVariables'];
+  requestMetadata?: ConverseCommandInput['requestMetadata'];
+
   // Streaming
   streaming?: boolean;
 }
@@ -136,7 +141,10 @@ export interface BedrockConverseOptions extends BedrockOptions {
  * Tool configuration for Converse API
  */
 export interface BedrockConverseToolConfig {
+  cachePoint?: Tool['cachePoint'];
+  systemTool?: Tool['systemTool'];
   toolSpec?: {
+    strict?: boolean;
     name: string;
     description?: string;
     inputSchema?: {
@@ -146,6 +154,7 @@ export interface BedrockConverseToolConfig {
   // Support for OpenAI-compatible format
   type?: 'function';
   function?: {
+    strict?: boolean;
     name: string;
     description?: string;
     parameters?: Record<string, unknown>;
@@ -161,12 +170,13 @@ export interface BedrockConverseToolConfig {
  * Supports OpenAI, Anthropic, and native Bedrock formats.
  */
 function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[] {
-  // Check if entire array is OpenAI format
-  if (isOpenAIToolArray(tools)) {
-    return openaiToolsToBedrock(tools) as Tool[];
-  }
-
   return tools.map((tool): Tool => {
+    if (tool.cachePoint) {
+      return { cachePoint: tool.cachePoint };
+    }
+    if (tool.systemTool) {
+      return { systemTool: tool.systemTool };
+    }
     // Already in Converse format - cast to expected type
     if (tool.toolSpec) {
       return { toolSpec: tool.toolSpec } as Tool;
@@ -177,9 +187,10 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
       return {
         toolSpec: {
           name: tool.function.name,
+          ...(tool.function.strict === undefined ? {} : { strict: tool.function.strict }),
           description: tool.function.description,
           inputSchema: {
-            json: (tool.function.parameters || {}) as DocumentType,
+            json: (tool.function.parameters || { type: 'object', properties: {} }) as DocumentType,
           },
         },
       } as Tool;
@@ -317,38 +328,6 @@ function formatMcpToolError(name: string, message: string): string {
   return `MCP Tool Error (${name}): ${message}`;
 }
 
-interface StreamingToolUseBlock {
-  toolUseId?: string;
-  name?: string;
-  input: string;
-}
-
-/**
- * Parses streaming tool_use input that arrived as concatenated JSON deltas.
- * Always returns a plain object (the only shape `MCPClient.callTool` accepts);
- * `failed` is `true` when the raw text was non-empty but not valid JSON, so
- * callers can surface the parse error rather than silently calling MCP with
- * `{}`.
- */
-function parseStreamingToolInput(raw: string): {
-  value: Record<string, unknown>;
-  failed: boolean;
-} {
-  if (!raw) {
-    return { value: {}, failed: false };
-  }
-  try {
-    return { value: parseToolInput(JSON.parse(raw)), failed: false };
-  } catch (err) {
-    logger.warn(
-      `[Bedrock Converse] Streaming tool_use input was not valid JSON: ${errorMessage(err)}`,
-    );
-    // Don't pass the broken string downstream; tracking the parse failure
-    // here lets us surface it as an error on the response.
-    return { value: {}, failed: true };
-  }
-}
-
 /**
  * Convert tool choice to Converse API format.
  * Supports OpenAI tool choice format and native Bedrock format.
@@ -384,6 +363,73 @@ function isDisabledToolChoice(toolChoice: unknown): boolean {
   return toolChoice === 'none';
 }
 
+const nativeContentKeys = [
+  'text',
+  'image',
+  'document',
+  'video',
+  'audio',
+  'toolUse',
+  'toolResult',
+  'guardContent',
+  'reasoningContent',
+  'cachePoint',
+  'citationsContent',
+  'searchResult',
+  'toolAddition',
+  'toolRemoval',
+];
+
+function decodeNativeBytes(bytes: unknown): Uint8Array {
+  if (typeof bytes === 'string') {
+    return Buffer.from(bytes.replace(/^data:[^;]+;base64,/, ''), 'base64');
+  }
+  if (
+    bytes &&
+    typeof bytes === 'object' &&
+    'type' in bytes &&
+    bytes.type === 'Buffer' &&
+    'data' in bytes &&
+    Array.isArray(bytes.data)
+  ) {
+    return Buffer.from(bytes.data);
+  }
+  return bytes as Uint8Array;
+}
+
+function normalizeNativeContentBlock(block: ContentBlock): ContentBlock {
+  for (const key of ['image', 'document', 'video', 'audio'] as const) {
+    const media = block[key];
+    if (media?.source?.bytes !== undefined) {
+      if (key === 'image' && block.image) {
+        const match = String(media.source.bytes).match(/^data:image\/([^;]+);base64,/);
+        if (match) {
+          block.image.format = (match[1] === 'jpg' ? 'jpeg' : match[1]) as NonNullable<
+            ContentBlock['image']
+          >['format'];
+        }
+      }
+      media.source.bytes = decodeNativeBytes(media.source.bytes);
+    }
+  }
+  if (block.reasoningContent?.redactedContent) {
+    block.reasoningContent.redactedContent = decodeNativeBytes(
+      block.reasoningContent.redactedContent,
+    );
+  }
+  if (block.toolResult?.content) {
+    block.toolResult.content = block.toolResult.content.map(
+      (part) => normalizeNativeContentBlock(part as ContentBlock) as typeof part,
+    );
+  }
+  if (block.guardContent?.image?.source?.bytes) {
+    block.guardContent.image.source.bytes = decodeNativeBytes(
+      block.guardContent.image.source.bytes,
+    );
+  }
+  return block;
+}
+
 /**
  * Parse prompt into Converse API message format
  */
@@ -401,9 +447,17 @@ export function parseConverseMessages(prompt: string): {
       for (const msg of parsed) {
         if (msg.role === 'system') {
           // System messages go to the system field
-          const content =
-            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          systemMessages.push({ text: content });
+          if (Array.isArray(msg.content)) {
+            systemMessages.push(
+              ...msg.content.map((block: SystemContentBlock | string) =>
+                typeof block === 'string' ? { text: block } : block,
+              ),
+            );
+          } else {
+            systemMessages.push({
+              text: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+            });
+          }
         } else if (msg.role === 'user' || msg.role === 'assistant') {
           // Convert content to ContentBlock format
           const contentBlocks: ContentBlock[] = [];
@@ -414,6 +468,8 @@ export function parseConverseMessages(prompt: string): {
             for (const block of msg.content) {
               if (typeof block === 'string') {
                 contentBlocks.push({ text: block });
+              } else if (block && !block.type && nativeContentKeys.some((key) => key in block)) {
+                contentBlocks.push(normalizeNativeContentBlock(block));
               } else if (block.type === 'text') {
                 contentBlocks.push({ text: block.text });
               } else if (block.type === 'image' || block.image) {
@@ -649,6 +705,10 @@ function extractTextFromContentBlocks(
   for (const block of content) {
     if ('text' in block && block.text) {
       parts.push(block.text);
+    } else if (block.citationsContent) {
+      parts.push(...(block.citationsContent.content ?? []).map((part) => part.text ?? ''));
+    } else if (block.toolResult || block.image || block.audio || block.video) {
+      parts.push(JSON.stringify(block));
     } else if ('reasoningContent' in block && block.reasoningContent) {
       // Handle extended thinking content
       const reasoning = block.reasoningContent;
@@ -932,7 +992,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       : [];
 
     // Merge prompt.config.tools with this.config.tools (prompt.config takes precedence)
-    const configTools = promptConfig?.tools ?? this.config.tools;
+    const nativeToolConfig = promptConfig?.toolConfig ?? this.config.toolConfig;
+    const configTools =
+      promptConfig?.tools ??
+      promptConfig?.toolConfig?.tools ??
+      this.config.tools ??
+      nativeToolConfig?.tools;
     if (mcpTools.length === 0 && (!configTools || configTools.length === 0)) {
       return undefined;
     }
@@ -965,7 +1030,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const converseTools = convertToolsToConverseFormat([...mcpTools, ...dedupedConfigTools]);
     const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
-      : undefined;
+      : nativeToolConfig?.toolChoice;
     const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
     const dropForcedToolChoice =
       (modelRejectsForcedToolChoice || isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName)) &&
@@ -1001,6 +1066,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * Build the guardrail configuration
    */
   private buildGuardrailConfig(): GuardrailConfiguration | undefined {
+    if (this.config.guardrailConfig) {
+      const { guardrailIdentifier, guardrailVersion, trace } = this.config.guardrailConfig;
+      return { guardrailIdentifier, guardrailVersion, ...(trace ? { trace } : {}) };
+    }
     if (!this.config.guardrailIdentifier) {
       return undefined;
     }
@@ -1091,6 +1160,65 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
   }
 
+  private async buildRequest(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ConverseCommandInput> {
+    const { messages, system } = parseConverseMessages(prompt);
+    const managedPrompt = /^arn:[^:]+:bedrock:[^:]+:[^:]+:prompt\//.test(this.modelName);
+    const input: ConverseCommandInput = {
+      modelId: this.modelName,
+      ...(managedPrompt && !prompt.trim() ? {} : { messages }),
+      guardrailConfig: this.buildGuardrailConfig(),
+      additionalModelResponseFieldPaths: this.config.additionalModelResponseFieldPaths,
+      performanceConfig: this.buildPerformanceConfig(),
+      serviceTier: this.buildServiceTier(),
+      outputConfig: this.config.outputConfig,
+      promptVariables: this.config.promptVariables,
+      requestMetadata: this.config.requestMetadata,
+    };
+    if (managedPrompt) {
+      const conflicting = [
+        'inferenceConfig',
+        'maxTokens',
+        'max_tokens',
+        'temperature',
+        'topP',
+        'top_p',
+        'stopSequences',
+        'stop',
+        'system',
+        'tools',
+        'toolConfig',
+        'thinking',
+        'reasoningConfig',
+        'additionalModelRequestFields',
+      ] as const;
+      if (
+        system ||
+        conflicting.some((key) => this.config[key] !== undefined) ||
+        context?.prompt?.config?.tools ||
+        context?.prompt?.config?.toolConfig ||
+        this.mcpClient
+      ) {
+        throw new Error(
+          'Managed Bedrock prompts define system, inferenceConfig, toolConfig, and additionalModelRequestFields in Prompt management; remove these overrides',
+        );
+      }
+      return input;
+    }
+    return {
+      ...input,
+      system: this.config.system ?? system,
+      inferenceConfig: this.config.inferenceConfig ?? this.buildInferenceConfig(),
+      toolConfig: await this.buildToolConfig(
+        context?.vars,
+        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+      ),
+      additionalModelRequestFields: this.buildAdditionalModelRequestFields(),
+    };
+  }
+
   /**
    * Main API call using Converse API
    */
@@ -1146,7 +1274,19 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
 
     // Wrap the API call in a span
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      async () => {
+        try {
+          return await (this.config.streaming
+            ? this.callApiStreaming(prompt, context)
+            : this.callApiInternal(prompt, context));
+        } catch (err) {
+          return { error: `Bedrock Converse API error: ${errorMessage(err)}` };
+        }
+      },
+      resultExtractor,
+    );
   }
 
   /**
@@ -1156,46 +1296,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
-    // Parse the prompt into messages
-    const { messages, system } = parseConverseMessages(prompt);
-
-    // Build the request
-    const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(
-      context?.vars,
-      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-    );
+    const converseInput = await this.buildRequest(prompt, context);
     const toolsDisabled = this.isRequestToolsDisabled(context);
-    const guardrailConfig = this.buildGuardrailConfig();
-    const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const betweenToolsThinking =
-      (additionalModelRequestFields as { thinking?: { type?: string } } | undefined)?.thinking
-        ?.type === 'between_tools';
-    const performanceConfig = this.buildPerformanceConfig();
-    const serviceTier = this.buildServiceTier();
-
-    const converseInput: ConverseCommandInput = {
-      modelId: this.modelName,
-      messages,
-      ...(system ? { system } : {}),
-      ...(inferenceConfig ? { inferenceConfig } : {}),
-      ...(toolConfig ? { toolConfig } : {}),
-      ...(guardrailConfig ? { guardrailConfig } : {}),
-      ...(additionalModelRequestFields ? { additionalModelRequestFields } : {}),
-      ...(this.config.additionalModelResponseFieldPaths
-        ? { additionalModelResponseFieldPaths: this.config.additionalModelResponseFieldPaths }
-        : {}),
-      ...(performanceConfig ? { performanceConfig } : {}),
-      ...(serviceTier ? { serviceTier } : {}),
-    };
-
-    logger.debug('Calling AWS Bedrock Converse API', {
-      modelId: this.modelName,
-      messageCount: messages.length,
-      hasSystem: !!system,
-      hasTools: !!toolConfig,
-      hasThinking: !!this.config.thinking,
-    });
+      (converseInput.additionalModelRequestFields as { thinking?: { type?: string } } | undefined)
+        ?.thinking?.type === 'between_tools';
 
     // Check cache
     const cache = await getCache();
@@ -1327,55 +1432,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   }
 
   /**
-   * Format streaming tool_use blocks for output. Routes blocks to MCP when
-   * MCP is enabled and a matching tool exists; otherwise falls back to
-   * default tool_use JSON serialization.
-   */
-  private async formatStreamingToolUseBlocks(
-    blocks: StreamingToolUseBlock[],
-    toolsDisabled: boolean,
-  ): Promise<{ toolUseParts: string[]; mcpErrors: string[] }> {
-    const toolUseParts: string[] = [];
-    const mcpErrors: string[] = [];
-    const mcpTools = this.mcpClient?.getAllTools() ?? [];
-
-    for (const toolBlock of blocks) {
-      if (!toolBlock.name) {
-        continue;
-      }
-      const { value: parsedInput, failed: parseFailed } = parseStreamingToolInput(toolBlock.input);
-      const matchedMcpTool = mcpTools.find((tool) => tool.name === toolBlock.name);
-
-      if (toolsDisabled || !this.mcpClient || !matchedMcpTool) {
-        toolUseParts.push(
-          JSON.stringify({
-            type: 'tool_use',
-            id: toolBlock.toolUseId,
-            name: toolBlock.name,
-            input: parsedInput,
-          }),
-        );
-        continue;
-      }
-
-      if (parseFailed) {
-        const msg = formatMcpToolError(toolBlock.name, 'model emitted invalid JSON arguments');
-        toolUseParts.push(msg);
-        mcpErrors.push(msg);
-        continue;
-      }
-
-      const { output, error } = await this.dispatchMcpToolCall(toolBlock.name, parsedInput);
-      toolUseParts.push(output);
-      if (error) {
-        mcpErrors.push(error);
-      }
-    }
-
-    return { toolUseParts, mcpErrors };
-  }
-
-  /**
    * Execute MCP tool calls for the given tool_use blocks. Blocks whose name
    * doesn't match a discovered MCP tool are skipped silently; the caller is
    * responsible for deciding what to do with them. Returns formatted result
@@ -1413,6 +1469,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     response: ConverseCommandOutput,
     toolsDisabled = false,
     betweenToolsThinking = false,
+    preserveText = false,
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
@@ -1433,6 +1490,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       completion: completionTokens,
       total: totalTokens || (promptTokens || 0) + (completionTokens || 0),
       numRequests: 1,
+      ...(cacheReadTokens === undefined ? {} : { cached: cacheReadTokens }),
     };
 
     // Calculate cost
@@ -1443,15 +1501,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       cacheReadTokens,
       cacheWriteTokens,
       this.getRegion(),
-      this.config.serviceTier,
+      response.serviceTier?.type ? { type: response.serviceTier.type } : this.config.serviceTier,
       cacheWrite1hTokens,
     );
 
     // Build metadata
-    const metadata: Record<string, unknown> = {};
+    const metadata: Record<string, unknown> = { content };
 
     // Add latency
-    if (response.metrics?.latencyMs) {
+    if (response.metrics?.latencyMs !== undefined) {
       metadata.latencyMs = response.metrics.latencyMs;
     }
 
@@ -1593,9 +1651,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     if (dispatchResults.length > 0) {
-      if (betweenToolsThinking) {
+      if (betweenToolsThinking || preserveText) {
         const progress = extractTextFromContentBlocks(
-          content.filter((block) => block.reasoningContent),
+          content.filter((block) => (preserveText ? !block.toolUse : block.reasoningContent)),
           showThinking,
         );
         if (progress) {
@@ -1632,206 +1690,29 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
   }
 
-  /**
-   * Streaming API call using ConverseStream.
-   *
-   * Tool handling in streaming mode:
-   * - **MCP tools** ARE executed automatically when an MCP server is
-   *   configured and the model emits a `tool_use` block matching a discovered
-   *   MCP tool. Results (or error strings) are inlined in the response output.
-   * - **`functionToolCallbacks`** are NOT executed in streaming mode. Local
-   *   callback dispatch only runs in non-streaming `callApi`. Streaming
-   *   `tool_use` blocks for non-MCP tools fall through to the default
-   *   `{ "type": "tool_use", ... }` JSON serialization.
-   *
-   * Use non-streaming mode if you need automatic local callback execution.
-   */
+  /** Aggregate ConverseStream with the same metadata, guardrails, and tool dispatch as Converse. */
   async callApiStreaming(
     prompt: string,
     context?: CallApiContextParams,
-  ): Promise<ProviderResponse & { stream?: AsyncIterable<string> }> {
-    // Same MCP-init gating as `callApi`: tool-disabled requests must not stall
-    // on a slow or failed MCP transport.
+  ): Promise<ProviderResponse> {
     const initErrorResponse = await this.awaitMcpReadyForRequest(context);
     if (initErrorResponse) {
       return initErrorResponse;
     }
-
-    // Parse the prompt into messages
-    const { messages, system } = parseConverseMessages(prompt);
-
-    // Build the request (same as non-streaming)
-    const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(
-      context?.vars,
-      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-    );
-    const toolsDisabled = this.isRequestToolsDisabled(context);
-    const guardrailConfig = this.buildGuardrailConfig();
-    const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
-    const performanceConfig = this.buildPerformanceConfig();
-    const serviceTier = this.buildServiceTier();
-
-    const converseStreamInput: ConverseStreamCommandInput = {
-      modelId: this.modelName,
-      messages,
-      ...(system ? { system } : {}),
-      ...(inferenceConfig ? { inferenceConfig } : {}),
-      ...(toolConfig ? { toolConfig } : {}),
-      ...(guardrailConfig ? { guardrailConfig } : {}),
-      ...(additionalModelRequestFields ? { additionalModelRequestFields } : {}),
-      ...(performanceConfig ? { performanceConfig } : {}),
-      ...(serviceTier ? { serviceTier } : {}),
-    };
-
-    logger.debug('Calling AWS Bedrock ConverseStream API', {
-      modelId: this.modelName,
-      messageCount: messages.length,
-    });
-
     try {
-      const bedrockInstance = await this.getBedrockInstance();
+      const input: ConverseStreamCommandInput = await this.buildRequest(prompt, context);
+      if (input.guardrailConfig && this.config.guardrailConfig?.streamProcessingMode) {
+        input.guardrailConfig.streamProcessingMode =
+          this.config.guardrailConfig.streamProcessingMode;
+      }
+      const client = await this.getBedrockInstance();
       const { ConverseStreamCommand } = await import('@aws-sdk/client-bedrock-runtime');
-      const command = new ConverseStreamCommand(converseStreamInput);
-      const response = await bedrockInstance.send(command);
-
-      // Collect the full response while also providing a stream
-      let output = '';
-      let reasoning = '';
-      let stopReason: string | undefined;
-      let usage: {
-        inputTokens?: number;
-        outputTokens?: number;
-        totalTokens?: number;
-        cacheReadInputTokens?: number;
-        cacheWriteInputTokens?: number;
-        cacheDetails?: Array<{
-          ttl?: string;
-          inputTokens?: number;
-        }>;
-      } = {};
-
-      // Track tool use blocks being streamed
-      const toolUseBlocks = new Map<number, StreamingToolUseBlock>();
-
-      const showThinking = this.config.showThinking !== false;
-
-      // Process the stream
-      if (response.stream) {
-        for await (const event of response.stream) {
-          // Handle content block start - includes tool use and image initialization
-          if ('contentBlockStart' in event && event.contentBlockStart) {
-            const blockIndex = event.contentBlockStart.contentBlockIndex ?? 0;
-            const start = event.contentBlockStart.start;
-            if (start && 'toolUse' in start && start.toolUse) {
-              toolUseBlocks.set(blockIndex, {
-                toolUseId: start.toolUse.toolUseId,
-                name: start.toolUse.name,
-                input: '',
-              });
-            }
-          }
-
-          if ('contentBlockDelta' in event && event.contentBlockDelta?.delta) {
-            const delta = event.contentBlockDelta.delta;
-            const blockIndex = event.contentBlockDelta.contentBlockIndex ?? 0;
-
-            if ('text' in delta && delta.text) {
-              output += delta.text;
-            }
-            if ('reasoningContent' in delta && delta.reasoningContent && showThinking) {
-              const rc = delta.reasoningContent as { text?: string };
-              if (rc.text) {
-                reasoning += rc.text;
-              }
-            }
-            // Handle streaming tool use input
-            if ('toolUse' in delta && delta.toolUse) {
-              const toolBlock = toolUseBlocks.get(blockIndex);
-              if (toolBlock && delta.toolUse.input) {
-                toolBlock.input += delta.toolUse.input;
-              }
-            }
-          }
-          if ('messageStop' in event && event.messageStop) {
-            stopReason = event.messageStop.stopReason;
-          }
-          if ('metadata' in event && event.metadata?.usage) {
-            usage = event.metadata.usage;
-          }
-        }
-      }
-
-      // Format tool use blocks for output (same as non-streaming)
-      const { toolUseParts, mcpErrors } = await this.formatStreamingToolUseBlocks(
-        Array.from(toolUseBlocks.values()),
-        toolsDisabled,
+      const response = await collectConverseStream(
+        await client.send(new ConverseStreamCommand(input)),
       );
-
-      // Combine reasoning, output, and tool use. Skip whitespace-only
-      // reasoning — omitted-display adaptive thinking streams empty deltas.
-      const parts: string[] = [];
-      if (reasoning.trim()) {
-        parts.push(`<thinking>\n${reasoning}\n</thinking>`);
-      }
-      if (output) {
-        parts.push(output);
-      }
-      if (toolUseParts.length > 0) {
-        parts.push(...toolUseParts);
-      }
-      const finalOutput = parts.join('\n\n');
-
-      // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
-      let malformedError: string | undefined;
-      const metadata: Record<string, unknown> = {};
-      if (stopReason) {
-        metadata.stopReason = stopReason;
-      }
-      if (stopReason === 'malformed_model_output') {
-        malformedError =
-          'Model produced invalid output. The response could not be parsed correctly.';
-        metadata.isModelError = true;
-      } else if (stopReason === 'malformed_tool_use') {
-        malformedError =
-          'Model produced a malformed tool use request. Check tool configuration and input schema.';
-        metadata.isModelError = true;
-      }
-
-      const tokenUsage: Partial<TokenUsage> = {
-        prompt: usage.inputTokens,
-        completion: usage.outputTokens,
-        total: usage.totalTokens || (usage.inputTokens || 0) + (usage.outputTokens || 0),
-        numRequests: 1,
-      };
-
-      const cost = calculateBedrockCost(
-        this.modelName,
-        usage.inputTokens,
-        usage.outputTokens,
-        usage.cacheReadInputTokens,
-        usage.cacheWriteInputTokens,
-        this.getRegion(),
-        this.config.serviceTier,
-        getOneHourCacheWriteTokens(usage.cacheDetails),
-      );
-
-      // Surface MCP failures via the response `error` field. If the model also
-      // produced a malformed-output stop reason, that takes precedence since it
-      // is a model-level failure rather than a tool-level one.
-      const error = malformedError ?? joinMcpErrors(mcpErrors);
-
-      return {
-        output: finalOutput,
-        tokenUsage,
-        ...(cost === undefined ? {} : { cost }),
-        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-        ...(error ? { error } : {}),
-      };
-    } catch (err: any) {
-      return {
-        error: `Bedrock ConverseStream API error: ${err?.message || String(err)}`,
-      };
+      return await this.parseResponse(response, this.isRequestToolsDisabled(context), false, true);
+    } catch (err) {
+      return { error: `Bedrock ConverseStream API error: ${errorMessage(err)}` };
     }
   }
 }
