@@ -1,78 +1,64 @@
 ---
 sidebar_label: OrcaReplay
-description: Record a promptfoo eval once, then re-run it offline with no model called and no tokens spent
+description: Record and replay OpenAI-compatible provider calls in a promptfoo evaluation
 ---
 
 # OrcaReplay integration
 
-[OrcaReplay](https://github.com/Continuum-AI-Corp/OrcaReplay) records the HTTP exchange
-between a process and its model provider, then replays it later with no provider
-contacted. Running it around `promptfoo eval` lets you re-run the same eval as many times
-as you like without paying for it again.
-
-It is not a hosted service and needs no account: it is an Apache-2.0 CLI (Node 20+) that
-writes a local trace and serves it back.
+[OrcaReplay](https://github.com/Continuum-AI-Corp/OrcaReplay) can record HTTP requests from a
+promptfoo evaluation and serve the recorded responses during a later run. This is useful
+for checking local evaluation changes against fixed provider responses.
 
 ## Setup
 
-```bash
-npm i -g orcareplay
-```
-
-Record one real eval, then replay it:
+Install promptfoo and OrcaReplay in an environment that meets [promptfoo's requirements](/docs/installation/):
 
 ```bash
-orca record generic-openai -- promptfoo eval   # real run, recorded
-orca replay last                               # same run, no model called
+npm install -g promptfoo orcareplay
 ```
 
-Nothing in `promptfooconfig.yaml` changes. `orca record generic-openai` sets
-`OPENAI_BASE_URL` for the child process and proxies that origin.
-
-:::note Use `OPENAI_BASE_URL`, not `OPENAI_API_BASE`
-
-Measured on promptfoo 0.123.0 against a local endpoint:
-
-- `OPENAI_BASE_URL=http://127.0.0.1:9977/v1` — the `openai:chat:*` provider sends
-  `POST /v1/chat/completions` to that endpoint and the eval passes.
-- `OPENAI_API_BASE=http://127.0.0.1:9977/v1` — **not** honoured; the request goes to the
-  real API.
-
-Both spellings are common across the ecosystem, so it is worth pointing the right one at
-whatever proxy or gateway you use. Pointing the wrong one gives you a run that quietly
-went to production.
-
-:::
-
-Disable the cache while recording so every call actually reaches the provider and ends up
-in the trace:
+For an evaluation using `openai:chat:*`, record a run with caching disabled:
 
 ```bash
-PROMPTFOO_CACHE_ENABLED=false orca record generic-openai -- promptfoo eval
+orca record generic-openai -- promptfoo eval --no-cache
 ```
 
-## Comparing models against a fixed prefix
-
-Because the recording holds the whole exchange, a run can be resumed on a different model
-from any step:
+Recording sends real provider requests and can incur API charges. Then, from the same
+directory, replay the recorded command:
 
 ```bash
-orca replay last --from 4 --model claude-haiku-4-5
+orca replay last
 ```
 
-Everything before step 4 is byte-identical to the recorded run, so the model is the only
-variable.
+The recorded command retains `--no-cache`, so the replay exercises OrcaReplay instead of
+returning responses from promptfoo's cache. Check OrcaReplay's capture and replay summaries
+to confirm that the expected requests were recorded and matched.
+
+## Route requests through the recorder
+
+The `generic-openai` adapter sets `OPENAI_BASE_URL` for the child process. Promptfoo's
+OpenAI providers support this variable, but an explicit `config.apiHost` or
+`config.apiBaseUrl` takes precedence. `OPENAI_API_HOST` and `OPENAI_API_BASE_URL` also take
+precedence over `OPENAI_BASE_URL`.
+
+Remove those conflicting settings from the configuration used for recording and replay.
+If you need a custom upstream gateway, configure it through OrcaReplay and verify the
+captured request count. Setting only `OPENAI_API_BASE` does not change promptfoo's OpenAI
+endpoint.
 
 ## Limits
 
-- **A matching replay is not a determinism result.** It proves the recorded exchange
-  reproduces, not that the provider is deterministic, and not that a fresh eval would
-  produce the same outputs.
-- **Replay blocks model-provider egress only. It is not a sandbox.** Anything else your
-  eval does — a custom provider that calls your own API, a Python assertion that hits the
-  network — still runs for real.
-- **Embedding calls are not captured by the default adapter**, so `similar`-style
-  assertions will not be served from the recording.
-- Graded assertions that call a model are themselves provider calls: they are recorded
-  and replayed like any other, which is usually what you want, but it means a replayed
-  eval is only as current as the recording.
+- A replay uses recorded provider responses. It does not demonstrate that a model is
+  deterministic or that a fresh evaluation would produce the same output.
+- Capture depends on the provider, endpoint, and OrcaReplay adapter. Verify coverage for
+  every request used by your evaluation, including model-graded assertions and embeddings.
+- Replay is not a sandbox. Custom providers, assertions, hooks, and other evaluation code
+  can still access the network or change local state. Provider calls that bypass the
+  recorder are outside this workflow.
+- Model-graded assertions that replay recorded responses do not obtain a fresh model judgment.
+- OrcaReplay's `--from` and `--model` options create a live continuation. They can send new
+  model requests and incur charges; they are not an offline replay.
+
+The basic record/replay workflow was checked with promptfoo 0.124.1 and OrcaReplay 0.5.0
+against a local OpenAI-compatible fixture. After recording one successful evaluation,
+the same command replayed successfully with the upstream fixture stopped.
