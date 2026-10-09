@@ -55,7 +55,7 @@ To stop a running server scan, open its details and select **Stop**. With permis
 
 For programmatic runs, the **Jobs** section of the [API reference](/docs/api-reference/) documents **Start job**, **Get job**, **Stream job logs**, and **Stop job**, including the request fields for canceling a run or publishing a partial report.
 
-To execute from your machine, select **Run via CLI** and use the generated command, or use **Export Config** to download the YAML configuration. [Authenticate](./authentication.md) to the correct deployment and team before running the command.
+To execute from your machine, select **Run via CLI** and use the generated command, or use **Export Config** to download the YAML configuration. [Authenticate](./authentication.md) to the correct deployment before running the command. Commands referencing a saved scan configuration retain that configuration's team; see [CLI team selection](./authentication.md#checking-current-team).
 
 `promptfoo redteam run` generates adversarial probes and runs them against your target. When sharing is enabled, it uploads the results to your configured Promptfoo Enterprise instance. Review them through the report link in the terminal or the Enterprise UI; see [Findings and Reports](./findings.md).
 
