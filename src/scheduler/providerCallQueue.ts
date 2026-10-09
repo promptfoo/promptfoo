@@ -57,18 +57,8 @@ export class ProviderGroupedCallQueue implements ProviderCallQueue {
       preferredProviderId && this.jobs.some((job) => job.providerId === preferredProviderId)
         ? preferredProviderId
         : this.jobs[0].providerId;
-    const group: QueuedProviderCall<unknown>[] = [];
-    const remaining: QueuedProviderCall<unknown>[] = [];
-
-    for (const job of this.jobs) {
-      if (job.providerId === providerId) {
-        group.push(job);
-      } else {
-        remaining.push(job);
-      }
-    }
-
-    this.jobs = remaining;
+    const group = this.jobs.filter((job) => job.providerId === providerId);
+    this.jobs = this.jobs.filter((job) => job.providerId !== providerId);
     return group;
   }
 
