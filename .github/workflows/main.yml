@@ -509,28 +509,33 @@ jobs:
     name: Shell Format Check
     timeout-minutes: 5
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Install pinned shfmt
-        shell: bash
+      - name: Install shfmt
         run: |
-          # Match the formatter from the previous checker without pulling a Docker image.
-          curl --fail --silent --show-error --location --retry 3 \
+          curl --fail --location --retry 3 --connect-timeout 15 --max-time 60 \
             https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64 \
             --output "$RUNNER_TEMP/shfmt"
-          echo "d9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea  $RUNNER_TEMP/shfmt" | sha256sum --check --strict
+          printf '%s  %s\n' 'd9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea' "$RUNNER_TEMP/shfmt" | sha256sum --check
           chmod +x "$RUNNER_TEMP/shfmt"
-      - *checkout-source-read-only
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
       - name: Check shell formatting
-        shell: bash
         env:
           NO_COLOR: '1'
         run: |
           # shfmt 3.12.0 cannot disable EditorConfig ignore rules during discovery.
           find . -name .git -prune -o -name .editorconfig -exec rm -f -- {} +
           printf 'root = true\n' > .editorconfig
-          "$RUNNER_TEMP/shfmt" -f=0 . > "$RUNNER_TEMP/shfmt-files"
-          mapfile -d '' -t shell_files < "$RUNNER_TEMP/shfmt-files"
-          printf 'Checking %s shell scripts\n' "${#shell_files[@]}"
+          "$RUNNER_TEMP/shfmt" -f=0 . > "$RUNNER_TEMP/shell-files.txt"
+          shell_files=()
+          while IFS= read -r -d '' file; do
+            shell_files+=("$file")
+          done < "$RUNNER_TEMP/shell-files.txt"
           if (( ${#shell_files[@]} > 0 )); then
             "$RUNNER_TEMP/shfmt" -i 2 -d -- "${shell_files[@]/#/./}"
           fi
