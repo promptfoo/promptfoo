@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import {
@@ -65,7 +65,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
 
   async callEmbeddingApi(
     text: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     // Validate API key first (like chat provider)
@@ -111,7 +111,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        false,
+        shouldBustProviderCache(context),
         this.config.maxRetries,
       );
       ({ data, cached, status, statusText, latencyMs, deleteFromCache } = response as any);
@@ -140,14 +140,15 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
       const billingModelName = this.getBillingModelName(this.config);
       const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
-      return {
-        embedding: typeof embedding === 'string' ? decodeBase64Embedding(embedding) : embedding,
-        latencyMs,
-        tokenUsage: getTokenUsage(data, cached),
-        cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
-          cachedResponse: cached,
-        }),
-      };
+      return withResponseCacheMetadata(
+        {
+          embedding: typeof embedding === 'string' ? decodeBase64Embedding(embedding) : embedding,
+          latencyMs,
+          tokenUsage: getTokenUsage(data, false),
+          cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage),
+        },
+        cached,
+      );
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);
       await deleteFromCache?.();

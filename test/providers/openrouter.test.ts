@@ -2,17 +2,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, isCacheEnabled, withCacheEnabled } from '../../src/cache';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 import * as fetchModule from '../../src/util/fetch/index';
+import { createChatCompletion } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
+import { createInvalidRequestResponse } from './mockProviderResponses';
+
+const { createFileUtilitiesFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
+
+const createFinishedChatResponse = () => ({
+  choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+  usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+});
+
+const createWeatherFunctionCall = () => ({
+  name: 'get_current_weather',
+  arguments: '{"location": "New York, NY", "unit": "fahrenheit"}',
+});
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 
-vi.mock('../../src/util', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    maybeLoadFromExternalFile: vi.fn((x) => x),
-    renderVarsInObject: vi.fn((x) => x),
-  };
-});
+vi.mock('../../src/util', createFileUtilitiesFactory());
 
 vi.mock('../../src/util/fetch/index');
 
@@ -173,17 +181,11 @@ describe('OpenRouter', () => {
           },
         });
 
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
+        const response = new Response(JSON.stringify(createFinishedChatResponse()), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         await provider.callApi('Test prompt');
@@ -255,17 +257,11 @@ describe('OpenRouter', () => {
             },
           });
 
-          const response = new Response(
-            JSON.stringify({
-              choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
-              usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-            }),
-            {
-              status: 200,
-              statusText: 'OK',
-              headers: new Headers({ 'Content-Type': 'application/json' }),
-            },
-          );
+          const response = new Response(JSON.stringify(createFinishedChatResponse()), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          });
           mockedFetchWithRetries.mockResolvedValueOnce(response);
 
           await provider.callApi('Test prompt');
@@ -292,17 +288,11 @@ describe('OpenRouter', () => {
           },
         });
 
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
+        const response = new Response(JSON.stringify(createFinishedChatResponse()), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         await provider.callApi('Test prompt');
@@ -1164,10 +1154,7 @@ describe('OpenRouter', () => {
         const mockToolCall = {
           id: 'call_abc123',
           type: 'function',
-          function: {
-            name: 'get_current_weather',
-            arguments: '{"location": "New York, NY", "unit": "fahrenheit"}',
-          },
+          function: createWeatherFunctionCall(),
         };
 
         const mockResponse = {
@@ -1205,10 +1192,7 @@ describe('OpenRouter', () => {
         const mockToolCall = {
           id: 'call_def456',
           type: 'function',
-          function: {
-            name: 'get_current_weather',
-            arguments: '{"location": "New York, NY", "unit": "fahrenheit"}',
-          },
+          function: createWeatherFunctionCall(),
         };
 
         const mockResponse = {
@@ -1491,18 +1475,7 @@ describe('OpenRouter', () => {
       });
 
       it('should handle API errors', async () => {
-        const errorResponse = {
-          error: {
-            message: 'API Error',
-            type: 'invalid_request_error',
-          },
-        };
-
-        const response = new Response(JSON.stringify(errorResponse), {
-          status: 400,
-          statusText: 'Bad Request',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        });
+        const response = createInvalidRequestResponse();
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         const result = await provider.callApi('Test prompt');
@@ -1576,16 +1549,7 @@ describe('OpenRouter', () => {
           },
         });
 
-        const mockResponse = {
-          choices: [
-            {
-              message: {
-                content: '{"name": "John Doe", "age": 30}',
-              },
-            },
-          ],
-          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
-        };
+        const mockResponse = createChatCompletion('{"name": "John Doe", "age": 30}', 50, 20, 30);
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -1660,16 +1624,7 @@ describe('OpenRouter', () => {
       it('should not parse JSON when response_format.type is not json_schema', async () => {
         const regularProvider = new OpenRouterProvider('google/gemini-2.5-pro', {});
 
-        const mockResponse = {
-          choices: [
-            {
-              message: {
-                content: '{"name": "John Doe", "age": 30}',
-              },
-            },
-          ],
-          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
-        };
+        const mockResponse = createChatCompletion('{"name": "John Doe", "age": 30}', 50, 20, 30);
 
         const response = new Response(JSON.stringify(mockResponse), {
           status: 200,
