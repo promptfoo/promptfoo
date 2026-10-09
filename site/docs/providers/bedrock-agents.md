@@ -1,6 +1,6 @@
 ---
 title: AWS Bedrock Agents
-description: Evaluate existing Amazon Bedrock Agents Classic deployments with AWS authentication, ordered conversations, memory identifiers, knowledge-base overrides, and native traces.
+description: Evaluate Amazon Bedrock Agents Classic with AWS authentication, ordered conversations, memory identifiers, knowledge-base overrides, and native agent traces.
 sidebar_label: AWS Bedrock Agents
 ---
 
