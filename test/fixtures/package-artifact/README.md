@@ -32,6 +32,11 @@ each SDK incompatible, in ESM and CommonJS. The default profile installs both SD
 and exercises real text/chat requests against a local bearer-token server, plus
 IAM authenticator construction without external token requests.
 
+Both profiles verify that Claude Agent and Codex SDKs are absent by default, in
+ESM and CommonJS. The default profile installs incompatible and supported real
+SDK versions, then exercises success and failure through local subprocess
+protocol fixtures without model-service requests.
+
 The default profile checks both CLI aliases and evaluates compressed HTTP responses
 from a local server. It also checks the Transformers provider with an offline model
 fixture when the optional SDK is absent, incompatible, and installed.

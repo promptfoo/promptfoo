@@ -26,7 +26,7 @@ Use Node.js 22.22.0 or later. In your eval project, install Promptfoo and the SD
 npm install --save-dev promptfoo @openai/codex-sdk@^0.156.1
 ```
 
-The SDK includes the Codex CLI. Promptfoo lists it as an optional dependency, but this provider requires it.
+The SDK includes the Codex CLI. Neither is included in the default Promptfoo install. The provider checks SDK compatibility when called; automatic grader selection uses Codex only when a compatible SDK is available.
 
 <Link id="setup" />
 <Link id="option-1-use-your-chatgpt-login" />
@@ -517,17 +517,20 @@ Set `maxRetries` on the provider itself. The scheduler reads it from the provide
 
 ### Runtime and credentials
 
-| Field                 | Default                                      | Purpose                                                                                  |
-| --------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `apiKey`              | Environment, then Codex login                | Explicit API key; prefer an environment variable or secret manager                       |
-| `base_url`            | Codex configuration                          | Custom API base URL                                                                      |
-| `model_provider`      | Codex configuration                          | Backend such as `openai` or `amazon-bedrock`                                             |
-| `cli_env`             | Minimal environment and provider credentials | Extra CLI environment variables; strings, numbers, and booleans are converted to strings |
-| `inherit_process_env` | `false`                                      | Include the full process environment before applying `cli_env`                           |
-| `codex_path_override` | SDK's bundled CLI                            | Path to a custom Codex executable                                                        |
-| `cli_config`          | None                                         | Codex configuration overrides, serialized as dotted TOML keys                            |
+| Field                      | Default                                      | Purpose                                                                                  |
+| -------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `apiKey`                   | Environment, then Codex login                | Explicit API key; prefer an environment variable or secret manager                       |
+| `base_url`                 | Codex configuration                          | Custom API base URL                                                                      |
+| `model_provider`           | Codex configuration                          | Backend such as `openai` or `amazon-bedrock`                                             |
+| `cli_env`                  | Minimal environment and provider credentials | Extra CLI environment variables; strings, numbers, and booleans are converted to strings |
+| `inherit_process_env`      | `false`                                      | Include the full process environment before applying `cli_env`                           |
+| `codex_path_override`      | SDK's bundled CLI                            | Path to a custom Codex executable                                                        |
+| `skip_codex_version_check` | `false`                                      | Skip version compatibility checks for an intentionally divergent custom Codex executable |
+| `cli_config`               | None                                         | Codex configuration overrides, serialized as dotted TOML keys                            |
 
 Use `cli_config` for supported [Codex configuration options](https://learn.chatgpt.com/docs/config-file/config-reference), including MCP servers and feature flags. Promptfoo forwards these overrides; it does not implement the features itself. SDK constructor options such as `configOverrides` are not exposed as provider fields.
+
+A custom `codex_path_override` must report the exact CLI version pinned by the installed SDK. Before each turn, Promptfoo checks the binary's JSON event mode with a 10-second timeout, using the prepared environment with API credentials and per-turn tracing identifiers removed. Missing, invalid, or mismatched versions fail before the turn starts. Set `skip_codex_version_check: true` only for a custom binary whose event schema you have verified against the installed SDK; it accepts that compatibility risk and does not change the binary. Checks are repeated for each turn, including after a wrapper or executable changes.
 
 <Link id="collaboration-mode-beta" />
 
@@ -557,7 +560,7 @@ The legacy `collaboration_mode` field accepts `coding` or `plan` and forwards it
 
 Reasoning and cache-write counts are included in token details when Codex reports them. Cached input tokens are already part of the input total.
 
-If the requested model is omitted or unknown to the pricing table, `cost` is undefined. The SDK turn does not report the backend-resolved model, so Promptfoo cannot infer it for pricing. Cost estimates do not represent ChatGPT subscription usage or automatically account for Fast, Flex, or Batch pricing. See [OpenAI cost estimates](/docs/providers/openai#cost-estimates) for supported models. Missing cache-write counts can understate costs. Codex's instructions, tool definitions, and conversation history can make input usage much larger than the visible prompt.
+If the requested model is omitted or unknown to the pricing table, `cost` is undefined. The SDK turn does not report the backend-resolved model, so Promptfoo cannot infer it for pricing. Cost estimates do not represent ChatGPT subscription usage or automatically account for Fast, Flex, or Batch pricing. See [OpenAI cost estimates](/docs/providers/openai#cost-estimates) for supported models. Missing cache-write counts can understate costs. With a custom binary and a GPT-5.6 model, the estimate is omitted unless the response includes a positive cache-write count. Codex's instructions, tool definitions, and conversation history can make input usage much larger than the visible prompt.
 
 ## Troubleshooting
 

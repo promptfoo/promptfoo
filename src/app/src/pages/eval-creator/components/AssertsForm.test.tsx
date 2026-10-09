@@ -106,6 +106,24 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains', value: 'initial value' }]);
   });
 
+  it.each(['rouge-l', 'rouge-s', 'not-rouge-l', 'not-rouge-s'] as const)(
+    'lets users select %s without losing the reference',
+    async (type) => {
+      const user = userEvent.setup();
+      renderComponent(
+        <AssertsForm
+          onAdd={onAdd}
+          initialValues={[{ type: 'equals', value: 'expected output', threshold: 0.6 }]}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox', { name: 'Type' }));
+      await user.click(await screen.findByRole('option', { name: type }));
+
+      expect(onAdd).toHaveBeenCalledWith([{ type, value: 'expected output', threshold: 0.6 }]);
+    },
+  );
+
   it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', async () => {
     const user = userEvent.setup();
     initialValues = [

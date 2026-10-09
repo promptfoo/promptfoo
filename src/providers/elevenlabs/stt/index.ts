@@ -13,8 +13,8 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../../cache';
-import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
+import { getElevenLabsApiKey } from '../auth';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import { calculateWER } from './wer';
@@ -94,13 +94,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
    * Priority: config.apiKey > apiKeyEnvar in env > apiKeyEnvar in process.env > ELEVENLABS_API_KEY in env > ELEVENLABS_API_KEY in process.env
    */
   private getApiKey(): string {
-    const apiKey =
-      this.config.apiKey ||
-      (this.config.apiKeyEnvar && this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]) ||
-      (this.config.apiKeyEnvar && getEnvString(this.config.apiKeyEnvar as any)) ||
-      this.env?.ELEVENLABS_API_KEY ||
-      getEnvString('ELEVENLABS_API_KEY') ||
-      '';
+    const apiKey = getElevenLabsApiKey(this, () => this.env) || '';
 
     if (!apiKey) {
       throw new Error(
