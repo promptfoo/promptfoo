@@ -51,6 +51,7 @@ import {
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
   callGradingProvider,
+  captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
@@ -61,6 +62,7 @@ import {
   messagesToRedteamHistory,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
+  resolveStoredGraderResult,
   runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
@@ -89,7 +91,7 @@ import type {
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
-import type { Message } from '../shared';
+import type { FlaggedTurn, Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -111,6 +113,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   traceSnapshots?: Record<string, unknown>[];
+  transformDisplayVars?: Record<string, string>;
 }
 
 /**
@@ -338,7 +341,8 @@ export class CrescendoProvider implements ApiProvider {
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
-    let storedGraderResult: any = undefined;
+    let storedGraderResult: GradingResult | undefined;
+    let flaggedRound: FlaggedTurn | undefined;
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
@@ -527,6 +531,10 @@ export class CrescendoProvider implements ApiProvider {
           break;
         }
 
+        if (lastResponse.error) {
+          continue;
+        }
+
         // Check if the target is asking a blocking question that needs an answer to proceed
         const unblockingResult = await tryUnblocking({
           messages: this.memory.getConversation(this.targetConversationId),
@@ -593,6 +601,10 @@ export class CrescendoProvider implements ApiProvider {
               context.vars['sessionId'] = lastResponse.sessionId;
             }
           }
+        }
+
+        if (lastResponse.error) {
+          continue;
         }
 
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
@@ -712,12 +724,20 @@ export class CrescendoProvider implements ApiProvider {
               ),
             };
 
-            const { grade, rubric } = await runRedteamGrader(
-              grader,
-              lastFinalAttackPrompt ||
+            const gradedTurn = {
+              prompt:
+                lastFinalAttackPrompt ||
                 getLastMessageContent(lastResponseMessages, 'user') ||
                 attackPrompt,
-              lastResponse.output,
+              output: lastResponse.output,
+              messages: lastResponseMessages,
+              guardrails: lastResponse.guardrails,
+              transformDisplayVars: lastTransformDisplayVars,
+            };
+            const { grade, rubric } = await runRedteamGrader(
+              grader,
+              gradedTurn.prompt,
+              gradedTurn.output,
               test,
               provider,
               getGraderAssertionValue(assertToUse),
@@ -734,19 +754,12 @@ export class CrescendoProvider implements ApiProvider {
                 assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
               },
               {
-                prompt:
-                  lastFinalAttackPrompt ||
-                  getLastMessageContent(
-                    this.memory.getConversation(this.targetConversationId),
-                    'user',
-                  ) ||
-                  attackPrompt,
-                output: lastResponse.output,
-                messages: lastResponseMessages,
+                ...gradedTurn,
                 pluginId: test.metadata?.pluginId,
                 assertion: assertToUse,
               },
             );
+            flaggedRound ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
           }
         }
 
@@ -838,21 +851,26 @@ export class CrescendoProvider implements ApiProvider {
       // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
-    const messages = lastResponseMessages;
-    const finalPrompt = getLastMessageContent(messages, 'user');
-    return {
+    const reported = flaggedRound ?? {
       output: lastResponse.output,
-      ...(lastResponse.error
-        ? { error: lastResponse.error }
-        : hasTargetResponse
-          ? {}
-          : { error: lastAttemptError || 'No target request was completed.' }),
+      prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
+      messages: lastResponseMessages,
+      guardrails: lastResponse.guardrails,
+      transformDisplayVars: lastTransformDisplayVars,
+    };
+    const finalPrompt = getLastMessageContent(reported.messages, 'user');
+    const error =
+      lastResponse.error ||
+      (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
+    return {
+      output: reported.output,
+      ...(!flaggedRound && error ? { error } : {}),
       prompt: finalPrompt,
       metadata: {
         sessionId: getSessionId(lastResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
+        redteamFinalPrompt: reported.prompt,
+        messages: reported.messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
@@ -861,15 +879,20 @@ export class CrescendoProvider implements ApiProvider {
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
+        storedGraderResult: resolveStoredGraderResult(
+          flaggedRound?.graderResult,
+          storedGraderResult,
+        ),
         traceSnapshots:
           traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        ...(reported.transformDisplayVars && {
+          transformDisplayVars: reported.transformDisplayVars,
+        }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
+      guardrails: reported.guardrails,
     };
   }
 
@@ -1276,7 +1299,7 @@ export class CrescendoProvider implements ApiProvider {
       testIdx: context?.testIdx,
       promptIdx: context?.promptIdx,
     });
-    logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
+    logger.debug('[Crescendo] Target response', { response: targetResponse });
 
     invariant(
       Object.prototype.hasOwnProperty.call(targetResponse, 'output'),

@@ -20,20 +20,25 @@ Basic configuration example:
 providers:
   - id: deepseek:deepseek-flash
     config:
-      temperature: 0.7
       max_tokens: 4000
       passthrough:
         thinking: { type: disabled }
 
   - id: deepseek:deepseek-v4-pro
     config:
-      max_tokens: 8000
+      max_tokens: 8192
+      showThinking: true
+      passthrough:
+        thinking:
+          type: enabled
+        reasoning_effort: high
 ```
 
 ### Configuration Options
 
 - `temperature`
 - `max_tokens`
+- `reasoning_effort` - `none` disables thinking; `low`, `high`, and `max` enable it. DeepSeek defaults to `high`. When neither `max_tokens` nor `OPENAI_MAX_TOKENS` is set, Promptfoo uses DeepSeek's output budget.
 - `cost`, `inputCost`, `outputCost`, `cacheReadCost` - Set cost estimates in USD per token. `inputCost` and `outputCost` take precedence over `cost`; `cacheReadCost` sets a separate cached-input rate.
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to thinking-capable models)
@@ -48,17 +53,17 @@ DeepSeek lists `deepseek-flash` and `deepseek-v4-pro` in its [model catalog](htt
 
 ### deepseek-flash
 
-Use `deepseek:deepseek-flash` for V4.1 Flash, which supports text and image inputs. The older `deepseek-v4-flash` ID temporarily routes to the same model. It supports a 1M-token context window and up to 384K output tokens.
+Use `deepseek:deepseek-flash` for V4.1 Flash, which supports text and image inputs. The older `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` IDs route to the same model. It supports a 1M-token context window and up to 384K output tokens.
 
 ### deepseek-v4-pro
 
 V4 Pro supports text input, thinking and non-thinking modes, a 1M-token context window, and up to 384K output tokens.
 
-DeepSeek charges different peak and off-peak rates. Promptfoo has no built-in estimate for `deepseek-flash`, and its stored rates for older IDs do not track that schedule. Set `inputCost`, `outputCost`, and optionally `cacheReadCost` for an estimate using the [current rates](https://api-docs.deepseek.com/quick_start/pricing/). If a response uses tokens for which no rate is known, Promptfoo leaves the estimate unset.
+DeepSeek charges different peak and off-peak rates. Promptfoo estimates current models at peak rates: Flash costs $0.30 input, $0.006 cached input, and $1.20 output per million tokens; Pro costs $1.32, $0.044, and $3.96 respectively. Off-peak rates are half these amounts. Set `inputCost`, `outputCost`, and `cacheReadCost` in USD per token to override the estimate using the [current rates](https://api-docs.deepseek.com/quick_start/pricing/). Promptfoo does not infer the billing period or Chinese public holidays.
 
 :::warning
 
-Thinking mode does not support `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, or `top_logprobs` parameters. Setting these parameters will not trigger an error but will have no effect.
+Sampling support differs by mode. `temperature` has no effect in thinking mode. `top_p` only affects thinking mode and values below `0.95` are treated as `0.95`. See the [Chat Completions reference](https://api-docs.deepseek.com/api/create-chat-completion/) for parameter limits.
 
 :::
 
@@ -66,7 +71,8 @@ Thinking mode does not support `temperature`, `top_p`, `presence_penalty`, `freq
 
 Compare DeepSeek with OpenAI on a reasoning task:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: deepseek:deepseek-v4-pro
     config:
@@ -93,6 +99,9 @@ providers:
   - id: deepseek:deepseek-v4-pro
     config:
       showThinking: false # Hide reasoning content from output
+      passthrough:
+        thinking:
+          type: enabled
 ```
 
 With `showThinking: true` (the default), the output includes reasoning when DeepSeek returns it:

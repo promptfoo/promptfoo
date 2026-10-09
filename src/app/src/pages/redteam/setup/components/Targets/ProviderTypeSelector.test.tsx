@@ -20,6 +20,65 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it('prevents changing providers when model selection is disabled', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'openai:gpt-6-sol', config: {} }}
+        providerType="openai"
+        setProvider={setProvider}
+        disableModelSelection
+      />,
+    );
+
+    const providerCard = screen.getByText('Anthropic', { exact: true }).closest('[role="button"]')!;
+    await user.click(providerCard);
+    expect(providerCard).toHaveFocus();
+    await user.keyboard('{Enter} ');
+
+    expect(setProvider).not.toHaveBeenCalled();
+    expect(providerCard).toHaveAttribute('aria-disabled', 'true');
+    expect(providerCard).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByLabelText('Search providers')).toBeDisabled();
+  });
+
+  it('selects a registered Bedrock Agent provider ID', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'Agent' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(
+      screen.getByText('AWS Bedrock Agents', { exact: true }).closest('[role="button"]')!,
+    );
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'bedrock-agent:your-agent-id', config: {}, label: 'Agent' },
+      'bedrock-agent',
+    );
+  });
+
+  it.each([
+    ['OpenAI', 'openai', 'openai:gpt-6-sol'],
+    ['Anthropic', 'anthropic', 'anthropic:messages:claude-sonnet-5'],
+    ['DeepSeek', 'deepseek', 'deepseek:deepseek-flash'],
+    ['X.AI (Grok)', 'xai', 'xai:grok-4.7'],
+  ])('selects the current %s model for new targets', async (label, type, id) => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'New target' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(screen.getByText(label, { exact: true }).closest('[role="button"]')!);
+    expect(setProvider).toHaveBeenCalledWith({ id, config: {}, label: 'New target' }, type);
+  });
+
   it('defaults newly selected OpenRouter targets to OpenAI GPT-6 Sol', async () => {
     const user = userEvent.setup();
     const setProvider = vi.fn();
@@ -448,7 +507,7 @@ describe('ProviderTypeSelector', () => {
     );
   });
 
-  it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
+  it('marks the providerType prop as selected', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'file:///path/to/your/script.go',
@@ -487,7 +546,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-6 Luna, Sol, and Astra; GPT-5.6 Terra')).toBeVisible();
+    expect(screen.getByText('GPT-6.1 Sol, GPT-6 Luna and Astra, and GPT-5.6 Terra')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {
@@ -708,8 +767,6 @@ describe('ProviderTypeSelector', () => {
       provider_tag: 'agents',
     });
   });
-
-  // Test removed - collapsed view and Change button no longer exist
 
   it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', async () => {
     const user = userEvent.setup();

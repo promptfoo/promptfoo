@@ -8,15 +8,17 @@ prompts:
     {{question}}
 
 providers:
-  - id: cheaperinference:claude-sonnet-5
+  - id: openai:chat:claude-sonnet-5
     label: 'Claude Sonnet 5 via Cheaper Inference'
     config:
-      temperature: 0.7
+      apiBaseUrl: https://api.cheaperinference.com/v1
+      apiKeyEnvar: CHEAPERINFERENCE_API_KEY
       max_tokens: 500
-  - id: cheaperinference:gemini-3.7-flash
+  - id: openai:chat:gemini-3.7-flash
     label: 'Gemini 3.7 Flash via Cheaper Inference'
     config:
-      temperature: 0.7
+      apiBaseUrl: https://api.cheaperinference.com/v1
+      apiKeyEnvar: CHEAPERINFERENCE_API_KEY
       max_tokens: 500
 
 tests:

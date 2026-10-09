@@ -211,37 +211,23 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 
   const { id } = paramsResult.data;
-  const job = evalJobService.get(id);
-  if (!job) {
-    res.status(404).json({ error: 'Job not found' });
-    return;
-  }
+  try {
+    const job = evalJobService.get(id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
 
-  if (job.status === 'complete') {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'complete',
-        result: job.result,
-        evalId: job.evalId,
-        logs: job.logs,
-      }),
-    );
-  } else if (job.status === 'error') {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'error',
-        logs: job.logs,
-      }),
-    );
-  } else {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'in-progress',
-        progress: job.progress,
-        total: job.total,
-        logs: job.logs,
-      }),
-    );
+    res.json(EvalSchemas.GetJob.Response.parse(job));
+  } catch (error) {
+    const category =
+      error instanceof z.ZodError
+        ? 'invalid-result'
+        : error instanceof SyntaxError
+          ? 'invalid-json'
+          : 'unavailable';
+    // Logs are shared with active jobs; omit snapshot contents and filesystem details.
+    sendError(res, 500, 'Failed to load eval job', { category });
   }
 });
 

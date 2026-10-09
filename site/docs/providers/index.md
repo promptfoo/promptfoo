@@ -13,7 +13,7 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-opus-4-6
+  - anthropic:messages:claude-opus-5
   - openai:gpt-5
   - openai:gpt-5-mini
   - google:gemini-3.6-flash
@@ -26,8 +26,8 @@ providers:
 
 | API Providers                                           | Description                                                      | Syntax & Example                                                                                                      |
 | ------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [OpenAI](./openai.md)                                   | GPT models including GPT-5.1 and reasoning models                | `openai:gpt-5.1` or `openai:o4-mini`                                                                                  |
-| [Anthropic](./anthropic.md)                             | Claude models                                                    | `anthropic:messages:claude-opus-4-6`                                                                                  |
+| [OpenAI](./openai.md)                                   | GPT-6 Luna, Sol, Astra, and other OpenAI models                  | `openai:gpt-6-luna` or `openai:gpt-6-sol`                                                                             |
+| [Anthropic](./anthropic.md)                             | Claude models                                                    | `anthropic:messages:claude-opus-5-5`                                                                                  |
 | [Claude Agent SDK](./claude-agent-sdk.md)               | Claude Agent SDK                                                 | `anthropic:claude-agent-sdk`                                                                                          |
 | [HTTP](./http.md)                                       | Generic HTTP-based providers                                     | `https://api.example.com/v1/chat/completions`                                                                         |
 | [A2A](./a2a.md)                                         | Agent2Agent HTTP+JSON agents                                     | `a2a:https://agent.example.com/a2a/v1`                                                                                |
@@ -35,12 +35,12 @@ providers:
 | [Python](./python.md)                                   | Custom - Python file                                             | `file://path/to/custom_provider.py`                                                                                   |
 | [Ruby](./ruby.md)                                       | Custom - Ruby file                                               | `file://path/to/custom_provider.rb`                                                                                   |
 | [Shell Command](./custom-script.md)                     | Custom - script-based providers                                  | `exec: python chain.py`                                                                                               |
-| [OpenAI ChatKit](./openai-chatkit.md)                   | ChatKit workflows; Agent Builder retires November 30, 2026       | `openai:chatkit:wf_xxxxx`                                                                                             |
 | [OpenAI Agents](./openai-agents.md)                     | OpenAI Agents SDK agents and handoffs                            | `openai:agents:my-agent`                                                                                              |
 | [OpenAI Agents API](./openai-agents-api.md)             | Managed Codex sessions and hosted sandboxes                      | `openai:agents-api:gpt-6-astra`                                                                                       |
 | [OpenAI Codex App Server](./openai-codex-app-server.md) | Experimental Codex app-server provider for streamed agent events | `openai:codex-app-server`                                                                                             |
 | [OpenAI Codex SDK](./openai-codex-sdk.md)               | OpenAI Codex SDK for code generation and analysis                | `openai:codex-sdk`                                                                                                    |
 | [OpenAI Codex Security SDK](./openai-codex-security.md) | Security scans, finding validation, coverage, and cost evals     | `openai:codex-security`                                                                                               |
+| [OpenAI Decisions API](./openai-decisions.md)           | Structured predicates, classifications, and ordered scores       | `openai:decisions:gpt-6-luna`                                                                                         |
 | [OpenAI GPT-Live](./openai-live.md)                     | Full-duplex voice with backend delegation                        | `openai:live:gpt-live-1`                                                                                              |
 | [Open Interpreter](./openinterpreter.md)                | Open Interpreter coding agent with sandbox and approval controls | `openinterpreter:gpt-5.4`                                                                                             |
 | [Abliteration](./abliteration.md)                       | OpenAI-compatible chat and multimodal models                     | `abliteration:abliterated-model-large-v2`                                                                             |
@@ -48,29 +48,29 @@ providers:
 | [AI/ML API](./aimlapi.md)                               | Tap into 300+ cutting-edge AI models with a single API           | `aimlapi:chat:deepseek-r1`                                                                                            |
 | [Alibaba Cloud (Qwen)](./alibaba.md)                    | Alibaba Cloud's Qwen models                                      | `alibaba:qwen-max` or `qwen-plus`                                                                                     |
 | [Atlas Cloud](./atlascloud.md)                          | OpenAI-compatible AI model aggregation platform                  | `atlascloud:deepseek-v3`                                                                                              |
-| [AWS Bedrock](./aws-bedrock.md)                         | AWS-hosted models from various providers                         | `bedrock:us.anthropic.claude-opus-4-6-v1`                                                                             |
+| [AWS Bedrock](./aws-bedrock.md)                         | AWS-hosted models from various providers                         | `bedrock:us.anthropic.claude-opus-5`                                                                                  |
 | [AWS Bedrock Agents](./bedrock-agents.md)               | Amazon Bedrock Agents for orchestrating AI workflows             | `bedrock-agent:YOUR_AGENT_ID`                                                                                         |
 | [Amazon SageMaker](./sagemaker.md)                      | Models deployed on SageMaker endpoints                           | `sagemaker:custom:my-endpoint-name`                                                                                   |
 | [Azure OpenAI](./azure.md)                              | Azure-hosted OpenAI models                                       | `azure:chat:my-deployment-name`                                                                                       |
 | [Cerebras](./cerebras.md)                               | High-performance inference API for Llama models                  | `cerebras:llama-4-scout-17b-16e-instruct`                                                                             |
-| [Cheaper Inference](./cheaperinference.md)              | OpenAI-compatible discount gateway for several makers' models    | `cheaperinference:claude-sonnet-5`                                                                                    |
 | [Cloudflare AI](./cloudflare-ai.md)                     | Cloudflare's OpenAI-compatible AI platform                       | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`                                                          |
 | [Cloudflare AI Gateway](./cloudflare-gateway.md)        | Route requests through Cloudflare AI Gateway                     | `cloudflare-gateway:openai:gpt-5.2`                                                                                   |
 | [Cloudera](./cloudera.md)                               | Cloudera AI Inference Service                                    | `cloudera:llama-2-13b-chat`                                                                                           |
 | [CometAPI](./cometapi.md)                               | 500+ AI models from multiple providers via unified API           | `cometapi:chat:gpt-5-mini` or `cometapi:image:dall-e-3`                                                               |
 | [Cohere](./cohere.md)                                   | Cohere's language models                                         | `cohere:command-a-03-2025`                                                                                            |
 | [Databricks](./databricks.md)                           | Databricks Foundation Model APIs                                 | `databricks:databricks-meta-llama-3-3-70b-instruct`                                                                   |
-| [DeepSeek](./deepseek.md)                               | DeepSeek's language models                                       | `deepseek:deepseek-r1`                                                                                                |
+| [DeepSeek](./deepseek.md)                               | DeepSeek's language models                                       | `deepseek:deepseek-flash`                                                                                             |
 | [Docker Model Runner](./docker.md)                      | Evaluate with local models                                       | `docker:ai/llama3.2:3B-Q4_K_M`                                                                                        |
 | [Envoy AI Gateway](./envoy.md)                          | OpenAI-compatible AI Gateway proxy                               | `envoy:my-model`                                                                                                      |
 | [ElevenLabs](./elevenlabs.md)                           | Speech, transcription, agents, and audio utilities               | `elevenlabs:tts`, `elevenlabs:stt`, `elevenlabs:agents`                                                               |
 | [F5](./f5.md)                                           | OpenAI-compatible AI Gateway interface                           | `f5:path-name`                                                                                                        |
 | [fal.ai](./fal.md)                                      | Image Generation Provider                                        | `fal:image:fal-ai/fast-sdxl`                                                                                          |
 | [Fireworks AI](./fireworks.md)                          | Various hosted models                                            | `fireworks:accounts/fireworks/models/gpt-oss-120b`                                                                    |
+| [FlexAI](./flexai.md)                                   | OpenAI-compatible chat and embedding models                      | `openai:chat:DeepSeek-V4-Flash-0731`                                                                                  |
 | [Google AI Studio](./google.md)                         | Gemini models, Live API, image generation, and Veo video         | `google:gemini-3.8-flash`, `google:gemini-3.1-flash-image`, `google:video:veo-3.1-generate-preview`                   |
 | [Google Vertex AI](./vertex.md)                         | Google Cloud models, Live API, and Veo video                     | `vertex:gemini-3.8-flash`, `vertex:live:gemini-live-2.5-flash-native-audio`, `vertex:video:veo-3.1-generate-001`      |
 | [Groq](./groq.md)                                       | High-performance inference API                                   | `groq:openai/gpt-oss-120b`                                                                                            |
-| [Helicone AI Gateway](./helicone.md)                    | Self-hosted AI gateway for unified provider access               | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                                                         |
+| [Helicone AI Gateway](./helicone.md)                    | Self-hosted AI gateway for unified provider access               | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-5`                                                         |
 | [Hyperbolic](./hyperbolic.md)                           | OpenAI-compatible Llama 3 provider                               | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                                                        |
 | [Hugging Face](./huggingface.md)                        | Access thousands of models                                       | `huggingface:chat:meta-llama/Llama-3.3-70B-Instruct`                                                                  |
 | [JFrog ML](./jfrog.md)                                  | JFrog's LLM Model Library                                        | `jfrog:llama_3_8b_instruct`                                                                                           |
@@ -88,7 +88,7 @@ providers:
 | [OpenClaw](./openclaw.md)                               | Personal AI assistant framework with agent tools                 | `openclaw`                                                                                                            |
 | [OpenCode SDK](./opencode-sdk.md)                       | OpenCode agent using its configured model                        | `opencode:sdk`                                                                                                        |
 | [OpenLLM](./openllm.md)                                 | BentoML's model serving framework                                | Compatible with OpenAI syntax                                                                                         |
-| [OpenRouter](./openrouter.md)                           | Unified API for multiple providers                               | `openrouter:openai/gpt-5.4`                                                                                           |
+| [OpenRouter](./openrouter.md)                           | Unified API for multiple providers                               | `openrouter:openai/gpt-5.6-sol`                                                                                       |
 | [OrcaRouter](./orcarouter.md)                           | Adaptive multi-provider router with workload-aware routing       | `orcarouter:openai/gpt-5.5`, `orcarouter:orcarouter/auto`                                                             |
 | [Perplexity AI](./perplexity.md)                        | Search-augmented chat with citations                             | `perplexity:sonar-pro`                                                                                                |
 | [Portkey](../integrations/portkey.md)                   | OpenAI-compatible gateway with Portkey configuration headers     | `portkey:<model>`                                                                                                     |
@@ -97,8 +97,9 @@ providers:
 | [Slack](./slack.md)                                     | Human feedback via Slack channels/DMs                            | `slack:C0123ABCDEF` or `slack:channel:C0123ABCDEF`                                                                    |
 | [Snowflake Cortex](./snowflake.md)                      | Snowflake's AI platform with Claude, GPT, and Llama models       | `snowflake:mistral-large2`                                                                                            |
 | [Together AI](./togetherai.md)                          | Various hosted models                                            | Compatible with OpenAI syntax                                                                                         |
-| [TrueFoundry](./truefoundry.md)                         | Enterprise AI Gateway (LLM, MCP, and Agent Gateway)              | `truefoundry:openai-main/gpt-5`, `truefoundry:anthropic-main/claude-sonnet-4.5`                                       |
-| [Vercel AI Gateway](./vercel.md)                        | Unified AI Gateway with 0% markup and built-in failover          | `vercel:openai/gpt-4o-mini`, `vercel:anthropic/claude-sonnet-4.5`                                                     |
+| [TrueFoundry](./truefoundry.md)                         | Enterprise AI Gateway (LLM, MCP, and Agent Gateway)              | `truefoundry:openai-main/gpt-5`, `truefoundry:anthropic-main/claude-sonnet-5`                                         |
+| [TypeSafe](./typesafe.md)                               | Jev System One model for fast grading and classification         | `typesafe:jev-latest`, `typesafe:jev-1.13.0`                                                                          |
+| [Vercel AI Gateway](./vercel.md)                        | Unified AI Gateway with 0% markup and built-in failover          | `vercel:openai/gpt-4o-mini`, `vercel:anthropic/claude-sonnet-5`                                                       |
 | [Voyage AI](./voyage.md)                                | Specialized embedding models                                     | `voyage:voyage-3`                                                                                                     |
 | [vLLM](./vllm.md)                                       | Local OpenAI-compatible serving and self-hosted judges           | `openai:chat:<served-model-name>` with `apiBaseUrl`                                                                   |
 | [Ollama](./ollama.md)                                   | Local                                                            | `ollama:chat:llama3.3`                                                                                                |
@@ -118,7 +119,9 @@ providers:
 | [Sequence](./sequence.md)                               | Custom - Multi-prompt sequencing                                 | `sequence` with config.inputs array                                                                                   |
 | [Simulated User](./simulated-user.md)                   | Custom - Conversation simulator                                  | `promptfoo:simulated-user`                                                                                            |
 | [WatsonX](./watsonx.md)                                 | IBM's WatsonX                                                    | `watsonx:ibm/granite-4-h-small`                                                                                       |
-| [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-1.0` |
+| [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-2.0` |
+
+Cheaper Inference can be configured through the generic OpenAI-compatible provider; see the [integration guide](./cheaperinference.md).
 
 ## Provider Syntax
 
@@ -130,7 +133,7 @@ Providers are specified using various syntax options:
    provider_name:model_name
    ```
 
-   Example: `openai:gpt-5` or `anthropic:claude-opus-4-6`
+   Example: `openai:gpt-5` or `anthropic:claude-opus-5`
 
 2. Object format with configuration:
 
@@ -146,8 +149,7 @@ Providers are specified using various syntax options:
    ```yaml
    - id: openai:gpt-5
      config:
-       temperature: 0.7
-       max_tokens: 150
+       max_completion_tokens: 150
    ```
 
 3. File-based configuration:
@@ -156,8 +158,6 @@ Providers are specified using various syntax options:
 
    ```yaml title="provider.yaml"
    id: openai:chat:gpt-5
-   config:
-     temperature: 0.7
    ```
 
    Or multiple providers:
@@ -166,7 +166,7 @@ Providers are specified using various syntax options:
    - id: openai:gpt-5
      config:
        temperature: 0.7
-   - id: anthropic:messages:claude-opus-4-6
+   - id: anthropic:messages:claude-opus-5
      config:
        max_tokens: 1000
    ```
@@ -196,6 +196,10 @@ providers:
     config:
       apiKey: your_api_key_here
 ```
+
+For providers that support `env` overrides, values are resolved in this order:
+provider `env`, evaluation `env`, `--env-file`, then shell variables. Explicit provider
+`config` values take priority. See each provider's documentation for supported settings.
 
 ### Overriding Pricing
 
@@ -272,6 +276,7 @@ Many providers support these common configuration options:
 
 - `temperature`: Controls randomness (0.0 to 1.0)
 - `max_tokens`: Maximum number of tokens to generate
+- `max_completion_tokens`: Output token cap for OpenAI reasoning models such as GPT-5
 - `top_p`: Nucleus sampling parameter
 - `frequency_penalty`: Penalizes frequent tokens
 - `presence_penalty`: Penalizes new tokens based on presence in text
@@ -283,8 +288,7 @@ Example:
 providers:
   - id: openai:gpt-5
     config:
-      temperature: 0.7
-      max_tokens: 150
+      max_completion_tokens: 150
       top_p: 0.9
       frequency_penalty: 0.5
       presence_penalty: 0.5
@@ -303,7 +307,6 @@ Enable MCP for a provider by adding the `mcp` block to your provider's configura
 providers:
   - id: openai:gpt-5
     config:
-      temperature: 0.7
       mcp:
         enabled: true
         server:
