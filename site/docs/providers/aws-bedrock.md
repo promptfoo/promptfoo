@@ -1195,6 +1195,8 @@ providers:
       store: false
 ```
 
+Responses providers require `service_tier`; the Converse-style `serviceTier` field is rejected.
+
 Ultrafast costs six times Standard. On Mantle, its short-context rates are $13.20 input,
 $0.66 cache read, $16.50 cache write, and $66 output per million tokens, including the
 regional premium. Priority and Flex are unsupported. See the
@@ -1218,7 +1220,8 @@ model ID, and returns the clean final answer. When no Region is configured, prom
 `us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6-sol`, `openai.gpt-6.1-sol`, and `openai.gpt-6-luna`,
 and `us-east-2` for other frontier models. A configured Region is always used; if Mantle does not
 serve the model there, it returns HTTP 404 ("model does not exist") and promptfoo adds the
-Regions that list the model to the error.
+Regions that list the model to the error. Mantle can also reject `service_tier` with HTTP 400
+before checking model availability; promptfoo adds the same Region guidance to that error.
 
 Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
 
