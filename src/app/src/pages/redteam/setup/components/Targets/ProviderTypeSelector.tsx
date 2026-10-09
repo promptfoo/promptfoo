@@ -5,6 +5,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, HelpCircle, Search, X } from 'lucide-react';
+import {
+  hasCustomOpenAiBaseUrl,
+  isLocalOpenAiProviderType,
+  isOpenAiChatProviderId,
+  withLocalProviderType,
+} from './helpers';
 import { allProviderOptions, createDefaultProvider } from './providerCatalog';
 import { hasSpecificDocumentation } from './providerDocumentationMap';
 
@@ -77,7 +83,23 @@ export default function ProviderTypeSelector({
       provider_tag: selectedOption?.tag,
     });
 
-    setProvider(createDefaultProvider(value, currentLabel), value);
+    if (
+      isLocalOpenAiProviderType(value) &&
+      provider &&
+      isOpenAiChatProviderId(provider.id) &&
+      (providerType === value ||
+        (!isLocalOpenAiProviderType(providerType) && hasCustomOpenAiBaseUrl(provider.config)))
+    ) {
+      setProvider(
+        { ...provider, config: withLocalProviderType(provider.id, provider.config, value) },
+        value,
+      );
+      return;
+    }
+    setProvider(
+      provider && providerType === value ? provider : createDefaultProvider(value, currentLabel),
+      value,
+    );
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by tag
