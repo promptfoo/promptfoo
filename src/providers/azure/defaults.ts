@@ -188,42 +188,31 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // gpt-5.5 / gpt-5.2 / gpt-5.3 — Global Standard rates verified against the Azure Retail Prices
   // API (prices.azure.com, serviceFamily 'AI + Machine Learning'). gpt-5.5 long-context is 10/45
   // above the threshold. gpt-5.2/5.3 chat and codex share 1.75/14.
-  {
-    id: 'gpt-5.5',
-    cost: {
-      input: 5 / 1000000,
-      output: 30 / 1000000,
-      longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
-        input: 10 / 1000000,
-        output: 45 / 1000000,
-      },
-    },
-  },
-  {
-    id: 'gpt-5.5-2026-04-23',
-    cost: {
-      input: 5 / 1000000,
-      output: 30 / 1000000,
-      longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
-        input: 10 / 1000000,
-        output: 45 / 1000000,
-      },
-    },
-  },
-  ...['gpt-5.5-pro', 'gpt-5.5-pro-2026-04-23'].map((id) => ({
+  ...['gpt-5.5', 'gpt-5.5-2026-04-24'].map((id) => ({
     id,
     cost: {
-      input: 30 / 1000000,
-      output: 180 / 1000000,
-      cacheRead: 3 / 1000000,
+      input: 5 / 1000000,
+      output: 30 / 1000000,
       longContext: {
         threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
-        input: 60 / 1000000,
-        output: 270 / 1000000,
-        cacheRead: 6 / 1000000,
+        input: 10 / 1000000,
+        output: 45 / 1000000,
       },
+    },
+  })),
+  // Azure's product name is `gpt-chat-latest`, distinct from OpenAI's `chat-latest`
+  // API alias. Versioned deployment names use the same Global Standard rates.
+  ...[
+    'gpt-chat-latest',
+    'gpt-chat-latest-2026-08-06',
+    'gpt-chat-latest-2026-06-24',
+    'gpt-chat-latest-2026-05-28',
+    'gpt-chat-latest-2026-05-05',
+  ].map((id) => ({
+    id,
+    cost: {
+      input: 5 / 1000000,
+      output: 30 / 1000000,
     },
   })),
   {
@@ -234,30 +223,22 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'gpt-5.2-2025-12-11',
     cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
-  ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((id) => ({
+  ...['gpt-5.2-chat', 'gpt-5.2-chat-2025-12-11', 'gpt-5.2-chat-2026-02-10'].map((id) => ({
     id,
-    cost: { input: 21 / 1000000, output: 168 / 1000000 },
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   })),
-  {
-    id: 'gpt-5.2-chat',
+  ...['gpt-5.2-codex', 'gpt-5.2-codex-2026-01-14'].map((id) => ({
+    id,
     cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
-  },
-  {
-    id: 'gpt-5.2-chat-2025-12-11',
+  })),
+  ...['gpt-5.3-chat', 'gpt-5.3-chat-2026-03-03'].map((id) => ({
+    id,
     cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
-  },
-  {
-    id: 'gpt-5.2-codex',
+  })),
+  ...['gpt-5.3-codex', 'gpt-5.3-codex-2026-02-24'].map((id) => ({
+    id,
     cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
-  },
-  {
-    id: 'gpt-5.3-chat',
-    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
-  },
-  {
-    id: 'gpt-5.3-codex',
-    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
-  },
+  })),
   {
     id: 'gpt-5.1-codex-max',
     cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
@@ -280,10 +261,6 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-5-chat',
-    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
-  },
-  {
-    id: 'gpt-5-chat-latest',
     cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
@@ -923,13 +900,21 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'claude-mythos-5-1',
     cost: { input: 10 / 1000000, output: 50 / 1000000, cacheRead: 0.25 / 1000000 },
   },
-  {
-    id: 'claude-fable-5',
+  ...['claude-fable-5', 'claude-mythos-5'].map((id) => ({
+    id,
     cost: { input: 10 / 1000000, output: 50 / 1000000 },
+  })),
+  {
+    id: 'claude-mythos-preview',
+    cost: { input: 25 / 1000000, output: 125 / 1000000 },
   },
   {
     id: 'claude-opus-5-5',
     cost: { input: 4 / 1000000, output: 20 / 1000000, cacheRead: 0.2 / 1000000 },
+  },
+  {
+    id: 'claude-sonnet-5-5',
+    cost: { input: 2 / 1000000, output: 10 / 1000000, cacheRead: 0.2 / 1000000 },
   },
   {
     id: 'claude-opus-5',
@@ -944,8 +929,9 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 5 / 1000000, output: 25 / 1000000 },
   },
   {
+    // Foundry bills Claude at Anthropic's API rates (see ANTHROPIC_MODELS).
     id: 'claude-sonnet-5',
-    cost: { input: 3 / 1000000, output: 15 / 1000000 },
+    cost: { input: 2 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'claude-sonnet-4-6',
@@ -1079,6 +1065,8 @@ export const AZURE_MODELS: AzureModelCost[] = [
 
   // =============================================================================
   // MoonshotAI Kimi Models (via Azure AI Foundry) — Global Standard (prices.azure.com)
+  // Kimi-K2.7-Code is a current Preview model, but is intentionally omitted from this pricing
+  // table until the Azure Retail Prices API exposes an unambiguous matching meter.
   // =============================================================================
   {
     id: 'Kimi-K2-Thinking',
@@ -1095,34 +1083,17 @@ export const AZURE_MODELS: AzureModelCost[] = [
 
   // =============================================================================
   // xAI Grok Models (via Azure AI Foundry)
+  // Current models; grok-4.3 is Preview. grok-4-20 reasoning variants are intentionally omitted
+  // because Azure's Retail Prices API does not expose an unambiguous matching meter.
   // =============================================================================
   {
     id: 'grok-4',
     cost: { input: 3 / 1000000, output: 15 / 1000000 },
   },
   {
-    id: 'grok-4-fast-reasoning',
-    cost: { input: 3 / 1000000, output: 15 / 1000000 },
-  },
-  {
-    id: 'grok-4-fast-non-reasoning',
-    cost: { input: 3 / 1000000, output: 15 / 1000000 },
-  },
-  {
-    id: 'grok-3',
-    cost: { input: 3 / 1000000, output: 15 / 1000000 },
-  },
-  {
-    id: 'grok-3-mini',
-    cost: { input: 0.3 / 1000000, output: 0.5 / 1000000 },
-  },
-  {
     id: 'grok-code-fast-1',
     cost: { input: 0.2 / 1000000, output: 1.5 / 1000000 },
   },
-  // Newer Grok on Azure — Global Standard from the Azure Retail Prices API (prices.azure.com).
-  // (grok-4-20 is intentionally omitted: its catalog id maps ambiguously to either the "Grok 4.2"
-  // meter ($1.25/$2.50) or base "Grok-4" ($3/$15), so it is left unpriced rather than guessed.)
   {
     id: 'grok-4.3',
     cost: { input: 1.25 / 1000000, output: 2.5 / 1000000 },
@@ -1134,6 +1105,24 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'grok-4-1-fast-non-reasoning',
     cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
+  },
+  // Retired May 1, 2026. Retained only so historical deployments still report their published
+  // Global Standard cost; use the replacement IDs above for new deployments.
+  {
+    id: 'grok-4-fast-reasoning',
+    cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
+  },
+  {
+    id: 'grok-4-fast-non-reasoning',
+    cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
+  },
+  {
+    id: 'grok-3',
+    cost: { input: 3 / 1000000, output: 15 / 1000000 },
+  },
+  {
+    id: 'grok-3-mini',
+    cost: { input: 0.25 / 1000000, output: 1.27 / 1000000 },
   },
 
   // =============================================================================
@@ -1216,6 +1205,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 0.5 / 1000000, output: 1.5 / 1000000 },
   },
   {
+    id: 'mistral-medium-3-5',
+    cost: { input: 1.5 / 1000000, output: 7.5 / 1000000 },
+  },
+  {
     id: 'Mistral-Large-2411',
     cost: { input: 2 / 1000000, output: 6 / 1000000 },
   },
@@ -1263,6 +1256,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'cohere-command-a',
     cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
   },
+  {
+    id: 'Cohere-command-a-plus-05-2026',
+    cost: { input: 0.8 / 1000000, output: 3.2 / 1000000 },
+  },
+  // Retired May 12, 2026. Retained for historical deployment cost recognition.
   {
     id: 'Cohere-command-r-plus',
     cost: { input: 2.5 / 1000000, output: 10 / 1000000 },

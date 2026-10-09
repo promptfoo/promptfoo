@@ -1,6 +1,9 @@
 import { context as otelContext, propagation, trace } from '@opentelemetry/api';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import {
@@ -98,6 +101,17 @@ describe('VercelAiProvider', () => {
   });
 
   describe('constructor', () => {
+    it('preserves gateway initialization errors', async () => {
+      const { createGateway } = await import('ai');
+      vi.mocked(createGateway).mockImplementationOnce(() => {
+        throw new Error('invalid gateway configuration');
+      });
+
+      await expect(
+        new VercelAiProvider('openai/gpt-4o-mini').callApi('prompt'),
+      ).resolves.toMatchObject({ error: 'API call error: invalid gateway configuration' });
+    });
+
     it('should create a provider with default options', () => {
       const provider = new VercelAiProvider('openai/gpt-4o-mini');
       expect(provider.modelName).toBe('openai/gpt-4o-mini');
@@ -1518,6 +1532,43 @@ describe('VercelAiEmbeddingProvider', () => {
   });
 
   describe('callEmbeddingApi()', () => {
+    it('combines embedding cancellation with the SDK timeout and does not cache an aborted request', async () => {
+      const { embed } = await import('ai');
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      let markStarted!: (signal: AbortSignal) => void;
+      const started = new Promise<AbortSignal>((resolve) => {
+        markStarted = resolve;
+      });
+      vi.mocked(embed).mockImplementation(({ abortSignal }) => {
+        if (!abortSignal) {
+          throw new Error('Embedding SDK received no signal');
+        }
+        markStarted(abortSignal);
+        return new Promise<never>((_resolve, reject) => {
+          abortSignal.addEventListener('abort', () => reject(abortSignal.reason), { once: true });
+        });
+      });
+      const provider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small');
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
+      const controller = new AbortController();
+      const request = provider.callEmbeddingApi('prompt', undefined, {
+        abortSignal: controller.signal,
+      });
+      try {
+        const combined = await started;
+        expect(combined).not.toBe(controller.signal);
+        expect(combined.aborted).toBe(false);
+        const reason = new Error('evaluation cancelled');
+        controller.abort(reason);
+        await expect(request).rejects.toBe(reason);
+        expect(combined.reason).toBe(reason);
+        expect(mockCache.set).not.toHaveBeenCalled();
+      } finally {
+        controller.abort();
+        await Promise.allSettled([request]);
+      }
+    });
+
     it('enables native SDK telemetry for traced embedding calls', async () => {
       const { embed } = await import('ai');
       vi.mocked(embed).mockImplementationOnce(async () => {

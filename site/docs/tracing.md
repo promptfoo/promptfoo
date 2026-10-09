@@ -146,9 +146,8 @@ Promptfoo passes a W3C trace context to providers via the `traceparent` field. U
 
 ```javascript
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { NodeTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 
 // Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
@@ -697,7 +696,7 @@ span.setAttributes({
 Reduce overhead in high-volume scenarios:
 
 ```javascript
-const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-base');
+const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-node');
 
 const provider = new NodeTracerProvider({
   sampler: new TraceIdRatioBasedSampler(0.1), // Sample 10% of traces
@@ -764,24 +763,27 @@ OTEL_LOG_LEVEL=debug promptfoo eval
 ### RAG Pipeline Tracing
 
 ```javascript
+const { context: otelContext, trace, SpanStatusCode } = require('@opentelemetry/api');
+
 async function ragPipeline(query, context) {
   const span = tracer.startSpan('rag.pipeline');
+  const parentCtx = trace.setSpan(otelContext.active(), span);
 
   try {
     // Retrieval phase
-    const retrieveSpan = tracer.startSpan('rag.retrieve', { parent: span });
+    const retrieveSpan = tracer.startSpan('rag.retrieve', {}, parentCtx);
     const documents = await vectorSearch(query);
     retrieveSpan.setAttribute('documents.count', documents.length);
     retrieveSpan.end();
 
     // Reranking phase
-    const rerankSpan = tracer.startSpan('rag.rerank', { parent: span });
+    const rerankSpan = tracer.startSpan('rag.rerank', {}, parentCtx);
     const ranked = await rerank(query, documents);
     rerankSpan.setAttribute('documents.reranked', ranked.length);
     rerankSpan.end();
 
     // Generation phase
-    const generateSpan = tracer.startSpan('llm.generate', { parent: span });
+    const generateSpan = tracer.startSpan('llm.generate', {}, parentCtx);
     const response = await llm.generate(query, ranked);
     generateSpan.setAttribute('response.tokens', response.tokenCount);
     generateSpan.end();
@@ -801,25 +803,30 @@ async function ragPipeline(query, context) {
 ### Multi-Model Comparison
 
 ```javascript
+const { context: otelContext, trace } = require('@opentelemetry/api');
+
 async function compareModels(prompt, context) {
   const span = tracer.startSpan('compare.models');
+  const parentCtx = trace.setSpan(otelContext.active(), span);
 
-  const models = ['gpt-4', 'claude-3', 'llama-3'];
-  const promises = models.map(async (model) => {
-    const modelSpan = tracer.startSpan(`model.${model}`, { parent: span });
-    try {
-      const result = await callModel(model, prompt);
-      modelSpan.setAttribute('model.name', model);
-      modelSpan.setAttribute('response.latency', result.latency);
-      return result;
-    } finally {
-      modelSpan.end();
-    }
-  });
+  try {
+    const models = ['gpt-4', 'claude-3', 'llama-3'];
+    const promises = models.map(async (model) => {
+      const modelSpan = tracer.startSpan(`model.${model}`, undefined, parentCtx);
+      try {
+        const result = await callModel(model, prompt);
+        modelSpan.setAttribute('model.name', model);
+        modelSpan.setAttribute('response.latency', result.latency);
+        return result;
+      } finally {
+        modelSpan.end();
+      }
+    });
 
-  const results = await Promise.all(promises);
-  span.end();
-  return results;
+    return await Promise.all(promises);
+  } finally {
+    span.end();
+  }
 }
 ```
 

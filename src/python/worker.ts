@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
@@ -59,6 +60,7 @@ export class PythonWorker {
     reject: (error: Error) => void;
   } | null = null;
   private requestTimeout: NodeJS.Timeout | null = null;
+  private shutdownPromise: Promise<void> | null = null;
 
   /**
    * @param onStateChange Called when the worker becomes ready or permanently dead, so a
@@ -72,18 +74,20 @@ export class PythonWorker {
     private onStateChange?: () => void,
   ) {}
 
-  async initialize(): Promise<void> {
-    return this.startWorker();
+  async initialize(validatedPythonPath?: string): Promise<void> {
+    return this.startWorker(validatedPythonPath);
   }
 
-  private async startWorker(): Promise<void> {
+  private async startWorker(validatedPythonPath?: string): Promise<void> {
+    if (this.shuttingDown || this.dead) {
+      throw new Error(this.shuttingDown ? 'Worker shutting down' : 'Worker has failed');
+    }
     const wrapperPath = path.join(getWrapperDir('python'), 'persistent_wrapper.py');
 
     // Validate and resolve Python path using smart detection (tries python3, then python)
-    const resolvedPythonPath = await validatePythonPath(
-      this.pythonPath || 'python',
-      typeof this.pythonPath === 'string',
-    );
+    const resolvedPythonPath =
+      validatedPythonPath ??
+      (await validatePythonPath(this.pythonPath || 'python', typeof this.pythonPath === 'string'));
 
     // shutdown() may have run while the Python path was being validated.
     if (this.shuttingDown) {
@@ -108,16 +112,23 @@ export class PythonWorker {
 
     // Writing to a process that has already exited fails with EPIPE on stdin. Its exit is
     // handled by the close event, so don't let the stream error escape as uncaught.
-    pythonProcess.stdin?.on('error', (err) => {
+    const onStdinError = (err: Error) => {
       logger.debug(`Python worker stdin error: ${err}`);
-    });
+      if (this.shuttingDown) {
+        void this.stopProcess(pythonProcess);
+      }
+    };
+    pythonProcess.stdin?.on('error', onStdinError);
 
     // Listen for READY signal
     return new Promise((resolve, reject) => {
       let becameReady = false;
       let closed = false;
+      let startupError: Error | undefined;
+      let drainTimer: NodeJS.Timeout | undefined;
 
       const readyTimeout = setTimeout(() => {
+        startupError = new Error('Worker failed to become ready within timeout');
         // Stop the process so it isn't orphaned, and fail this start only once it has
         // exited so a retry doesn't overlap with it. stopProcess detaches it first, so
         // its close is not treated as a crash.
@@ -144,18 +155,25 @@ export class PythonWorker {
       });
 
       pythonProcess.on('error', (err) => {
+        if (startupError) {
+          return;
+        }
         clearTimeout(readyTimeout);
         if (becameReady) {
           logger.error(`Python worker process error: ${err}`);
           return;
         }
-        // A spawn failure (for example a missing interpreter) emits 'error' without 'close'.
-        if (this.process === pythonProcess) {
-          this.process = null;
+        startupError = err;
+        if (pythonProcess.childProcess.pid === undefined) {
+          if (this.process === pythonProcess) {
+            this.process = null;
+          }
+          closed = true;
+          markClosed();
+          reject(err);
+        } else {
+          void this.stopProcess(pythonProcess).then(() => reject(err));
         }
-        closed = true;
-        markClosed();
-        reject(err);
       });
 
       const handleClose = () => {
@@ -164,6 +182,8 @@ export class PythonWorker {
         }
         closed = true;
         clearTimeout(readyTimeout);
+        clearTimeout(drainTimer);
+        pythonProcess.stdin?.off('error', onStdinError);
         this.flushStderr();
         markClosed();
         // stopProcess() and shutdown() detach a process before ending it, so only the
@@ -174,6 +194,10 @@ export class PythonWorker {
         }
 
         if (!becameReady) {
+          if (startupError) {
+            reject(startupError);
+            return;
+          }
           // The script exited before signalling READY, typically an import error. Fail
           // this start now rather than at the ready timeout. The Python traceback has
           // already been logged from stderr. A process stopped on purpose is failed by
@@ -205,7 +229,7 @@ export class PythonWorker {
         if (this.process === pythonProcess) {
           this.ready = false;
         }
-        setTimeout(() => {
+        drainTimer = setTimeout(() => {
           if (!closed) {
             pythonProcess.stdout?.destroy();
             pythonProcess.stderr?.destroy();
@@ -242,16 +266,31 @@ export class PythonWorker {
     }
 
     this.busy = true;
-    // Bind the request to this process: if it crashes, times out, or is shut down, the
-    // request must never be sent to a replacement.
     const pythonProcess = this.process;
-
+    const request = new AbortController();
+    const execution = this.executeCall(functionName, args, pythonProcess, request.signal);
     try {
-      return await Promise.race([
-        this.executeCall(functionName, args, pythonProcess),
-        this.createTimeout(pythonProcess),
-      ]);
+      return await Promise.race([execution, this.createTimeout(pythonProcess)]);
     } finally {
+      request.abort();
+      const pending = this.pendingRequest;
+      const replace =
+        pending !== null && this.process === pythonProcess && !hasExited(pythonProcess);
+      if (replace) {
+        // Keep the request's files until the process can no longer write them.
+        this.pendingRequest = null;
+        await this.stopProcess(pythonProcess);
+        if (!this.shuttingDown && !this.dead) {
+          this.restart();
+        }
+        pending.reject(request.signal.reason);
+      }
+      await Promise.all(this.pendingStops);
+      if (pending) {
+        await execution.catch(() => {});
+      } else {
+        void execution.catch(() => {});
+      }
       this.busy = false;
       if (this.requestTimeout) {
         clearTimeout(this.requestTimeout);
@@ -264,6 +303,7 @@ export class PythonWorker {
     functionName: string,
     args: unknown[],
     pythonProcess: PythonShell,
+    signal: AbortSignal,
   ): Promise<unknown> {
     let tempDirectory: string | undefined;
 
@@ -278,14 +318,15 @@ export class PythonWorker {
 
       // The process may have crashed, timed out, or been shut down while the request
       // files were being written.
-      if (this.process !== pythonProcess) {
+      signal.throwIfAborted();
+      if (this.process !== pythonProcess || !this.ready || hasExited(pythonProcess)) {
         if (this.shuttingDown) {
           throw new Error('Worker shutting down');
         }
         throw new Error(
           hasExited(pythonProcess)
             ? `Worker crashed (${describeExit(pythonProcess)})`
-            : 'Worker crashed',
+            : 'Worker changed while preparing request',
         );
       }
 
@@ -293,11 +334,9 @@ export class PythonWorker {
       // Note: PythonShell.send() adds newline automatically in 'text' mode
       // Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:)
       const command = `CALL|${functionName}|${requestFile}|${responseFile}`;
-      pythonProcess.send(command);
-
-      // Wait for DONE
       await new Promise<unknown>((resolve, reject) => {
         this.pendingRequest = { responseFile, resolve, reject };
+        pythonProcess.send(command);
       });
 
       // Read response with exponential backoff retry.
@@ -309,7 +348,7 @@ export class PythonWorker {
       // Total max wait: ~18 seconds (handles severe filesystem delays)
       for (let attempt = 0, delay = 1; attempt < 16; attempt++, delay = Math.min(delay * 2, 5000)) {
         try {
-          responseData = await fs.readFile(responseFile, 'utf-8');
+          responseData = await fs.readFile(responseFile, { encoding: 'utf-8', signal });
           if (attempt > 0) {
             logger.debug(`Response file read succeeded on attempt ${attempt + 1}`);
           }
@@ -318,7 +357,7 @@ export class PythonWorker {
           lastError = error;
           if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
             // File doesn't exist yet, wait and retry with exponential backoff.
-            await new Promise((resolve) => setTimeout(resolve, delay));
+            await sleep(delay, undefined, { signal });
             continue;
           }
           // Non-ENOENT error, don't retry.
@@ -374,28 +413,9 @@ export class PythonWorker {
         }
         const error = new Error(`Python worker timed out after ${this.timeout}ms`);
         reject(error);
-        // The Python function is still running, so the next request would wait behind it.
-        // Replace the process this request was sent to, unless a crash already replaced it
-        // or the worker is shutting down or dead.
-        if (this.process === pythonProcess && !this.shuttingDown && !this.dead) {
-          this.rejectPendingRequest(error);
-          this.replaceTimedOutProcess(pythonProcess);
-        }
       }, this.timeout);
       // Prevent timeout from keeping Node.js event loop alive
       this.requestTimeout.unref();
-    });
-  }
-
-  /** A timeout is not a crash, so it does not count toward maxCrashes. */
-  private replaceTimedOutProcess(pythonProcess: PythonShell): void {
-    logger.warn(`Python worker timed out after ${this.timeout}ms, restarting ${this.scriptPath}`);
-    // Wait for the old process to exit before starting its replacement, so both don't
-    // hold resources such as a loaded model at the same time.
-    void this.stopProcess(pythonProcess).then(() => {
-      if (!this.shuttingDown && !this.dead) {
-        this.restart();
-      }
     });
   }
 
@@ -444,6 +464,7 @@ export class PythonWorker {
     }
 
     await closed;
+    pythonProcess.stdin?.destroy();
   }
 
   /**
@@ -457,7 +478,7 @@ export class PythonWorker {
       return;
     }
 
-    execFile('taskkill', ['/pid', String(pid), '/t', '/f'], (error) => {
+    execFile('taskkill', ['/pid', String(pid), '/t', '/f'], { timeout: STOP_GRACE_MS }, (error) => {
       if (error && !hasExited(pythonProcess)) {
         logger.warn(`Python worker taskkill failed for ${this.scriptPath}: ${error}`);
         pythonProcess.kill('SIGKILL');
@@ -477,12 +498,7 @@ export class PythonWorker {
     if (this.pendingRequest?.responseFile === normalizedResponseFile) {
       this.pendingRequest.resolve(undefined);
       this.pendingRequest = null;
-      // Python finished the call, so the timeout no longer applies (reading the response
-      // file has its own bounded retry) and earlier crashes were not a crash loop.
-      if (this.requestTimeout) {
-        clearTimeout(this.requestTimeout);
-        this.requestTimeout = null;
-      }
+      // A completed call resets the crash streak; its response-file read keeps the deadline.
       this.crashCount = 0;
       return;
     }
@@ -549,48 +565,40 @@ export class PythonWorker {
   }
 
   /** True once the worker has given up restarting and will never serve requests again. */
-  isDead(): boolean {
+  hasFailed(): boolean {
     return this.dead;
   }
 
   async shutdown(): Promise<void> {
+    this.shutdownPromise ??= this.shutdownWorker();
+    return this.shutdownPromise;
+  }
+
+  private async shutdownWorker(): Promise<void> {
+    const wasBusy = this.busy;
+    const wasReady = this.ready;
     this.shuttingDown = true;
     this.ready = false;
-    const callInFlight = this.busy;
-    // Reject any in-flight request promptly
-    this.rejectPendingRequest(new Error('Worker shutting down'));
-
-    // Detach the process so its close event is not treated as a crash.
     const pythonProcess = this.process;
     this.process = null;
-    if (!pythonProcess) {
-      // A process replaced after a request timeout may still be stopping.
-      await Promise.all(this.pendingStops);
-      this.busy = false;
-      return;
-    }
-
-    try {
-      // An idle wrapper exits on SHUTDOWN. One running a call won't read it until the call
-      // finishes, so stop that process straight away instead.
-      if (!callInFlight) {
-        // Note: PythonShell.send() adds newline automatically in 'text' mode
-        pythonProcess.send('SHUTDOWN');
-
-        // Wait for exit (5s timeout)
-        await Promise.race([
-          this.processClosed.get(pythonProcess),
-          new Promise<void>((resolve) => setTimeout(resolve, 5000).unref()),
-        ]);
+    if (pythonProcess) {
+      try {
+        if (!wasBusy && wasReady && !hasExited(pythonProcess)) {
+          pythonProcess.send('SHUTDOWN');
+          await Promise.race([
+            this.processClosed.get(pythonProcess),
+            new Promise<void>((resolve) => setTimeout(resolve, 5000).unref()),
+          ]);
+        }
+      } catch (error) {
+        logger.error(`Error during worker shutdown: ${error}`);
+      } finally {
+        await this.stopProcess(pythonProcess);
       }
-    } catch (error) {
-      logger.error(`Error during worker shutdown: ${error}`);
-    } finally {
-      // Force-stops the process if it is still running; resolves at once if it already exited.
-      // Also waits for any earlier stop, such as a timed-out process being replaced.
-      await this.stopProcess(pythonProcess);
-      await Promise.all(this.pendingStops);
-      this.busy = false;
     }
+    await Promise.all(this.pendingStops);
+    // Only release request temp files after Python can no longer write them.
+    this.rejectPendingRequest(new Error('Worker shutting down'));
+    this.busy = false;
   }
 }

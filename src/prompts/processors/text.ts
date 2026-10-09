@@ -10,7 +10,11 @@ import type { Prompt } from '../../types/index';
  * @param prompt - The raw prompt data.
  * @returns Array of prompts extracted from the file.
  */
-export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Prompt[] {
+export function processTxtFile(
+  filePath: string,
+  { label, config }: Partial<Prompt>,
+  labelPath: string = filePath,
+): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
 
   const lines = fileContent.split(/\r?\n/);
@@ -22,8 +26,8 @@ export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Pr
     if (raw.length > 0) {
       prompts.push({
         raw,
-        label: label ? `${label}: ${filePath}: ${raw}` : `${filePath}: ${raw}`,
-        // no config
+        label: label ? `${label}: ${labelPath}: ${raw}` : `${labelPath}: ${raw}`,
+        config,
       });
     }
     buffer = [];

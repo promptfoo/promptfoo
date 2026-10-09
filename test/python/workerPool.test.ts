@@ -476,7 +476,7 @@ describe('PythonWorkerPool worker failures', () => {
   const createFakeWorker = (state: FakeWorkerState) => ({
     isReady: () => state.ready,
     isBusy: () => state.busy,
-    isDead: () => state.dead,
+    hasFailed: () => state.dead,
     call: vi.fn().mockResolvedValue({ output: 'served' }),
     shutdown: vi.fn().mockResolvedValue(undefined),
   });

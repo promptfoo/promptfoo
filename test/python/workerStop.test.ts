@@ -41,7 +41,7 @@ describe('PythonWorker process termination', () => {
     const end = vi.fn();
     const pythonProcess = {
       childProcess: { pid: 4242, exitCode: null, signalCode: null },
-      stdin: { end },
+      stdin: { end, destroy: vi.fn() },
       kill,
     };
     const testable = worker as unknown as TestableWorker;
@@ -72,6 +72,7 @@ describe('PythonWorker process termination', () => {
     expect(execFile).toHaveBeenCalledWith(
       'taskkill',
       ['/pid', '4242', '/t', '/f'],
+      { timeout: 2000 },
       expect.any(Function),
     );
     expect(kill).not.toHaveBeenCalled();
@@ -82,6 +83,7 @@ describe('PythonWorker process termination', () => {
     vi.mocked(execFile).mockImplementation(((
       _command: string,
       _args: string[],
+      _options: unknown,
       callback: (error: Error | null) => void,
     ) => {
       callback(new Error('taskkill is not available'));
