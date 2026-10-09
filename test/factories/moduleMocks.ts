@@ -42,6 +42,37 @@ export const createDisabledCloudConfigFactory = (): MockModuleFactory => async (
   };
 };
 
+export const createNodeHttpHandlerFactory = (): MockModuleFactory => () => ({
+  __esModule: true,
+  NodeHttpHandler: vi.fn().mockImplementation(function () {
+    return {
+      handle: vi.fn(),
+    };
+  }),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      handle: vi.fn(),
+    };
+  }),
+});
+
+export const createBedrockCacheFactory =
+  (mockGet: Mock, mockSet: Mock, getMockIsCacheEnabled: () => Mock): MockModuleFactory =>
+  async (importOriginal) => {
+    return {
+      ...(await importOriginal()),
+
+      getCache: vi.fn().mockImplementation(function () {
+        return {
+          get: mockGet,
+          set: mockSet,
+        };
+      }),
+
+      isCacheEnabled: () => getMockIsCacheEnabled()(),
+    };
+  };
+
 export const createEmptyGlobFactory = (): MockModuleFactory => async (importOriginal) => {
   return {
     ...(await importOriginal()),
