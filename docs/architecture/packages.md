@@ -9,6 +9,7 @@ model the internal boundaries that would support a future multi-package split.
 | ------------------ | ---------------------------------------------------------------- | ----------------------------------------------- |
 | `facade`           | `src/index.ts`                                                   | Public compatibility surface                    |
 | `contracts`        | `src/contracts`, `src/contracts.ts`                              | Leaf-safe shared contracts and schemas          |
+| `validation`       | `src/validation`                                                 | Portable extension and range validation helpers |
 | `legacy-contracts` | `src/types`, `src/validators`                                    | Transitional mixed runtime types and validators |
 | `core`             | assertions, matchers, prompts, scheduler, test-case logic        | Evaluation domain logic                         |
 | `node`             | database, models, config, storage, `src/evaluate.ts`, `src/node` | Node runtime adapters                           |
@@ -61,6 +62,12 @@ nor quietly pick up a new npm dependency or Node builtin such as `node:fs`. A
 `node:` prefix is ignored when matching, so `"fs"` and `"node:fs"` are equivalent.
 
 ## Layer Dependency Ratchet
+
+`src/validation` contains the file-extension and filter-range helpers used by
+configuration schemas, with no Node or package dependencies. The original
+`src/util/fileExtensions` and `src/util/filterRange` paths re-export the same
+functions and extension array. Range warnings stay in
+`src/util/filterRangeWarn.ts`.
 
 Each private layer declares its currently allowed dependencies in
 `architecture/layers.json`. The current graph still has transitional edges, so
@@ -115,6 +122,13 @@ not refresh the baseline merely to make a newly introduced dependency pass.
 
 ## Browser Import Ratchet
 
+Browser consumers import result failure reasons from `src/types/results.ts` and
+the evaluation page limit from `src/types/evalConstants.ts`. Their legacy barrel
+exports remain compatible. History uses the `src/types/standaloneEval.ts` DTO,
+and trace views use the existing `TraceSpan` type from `src/types/tracing.ts`,
+without importing database or cache implementations. These type-only changes
+narrow the source graph; they do not by themselves measure bundle-size savings.
+
 The `app` layer has an additional internal-path allowlist. It pins the existing
 browser-to-runtime imports while DTOs and presentation helpers move into a
 browser-safe package surface. A new app import from root runtime code fails the
@@ -152,3 +166,33 @@ to move dependencies into future packages without guessing at ownership.
 It includes direct, optional, and peer dependency declarations. Peers marked
 optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
 as `peer`. These labels describe the package contract, not what is installed.
+
+## Architecture Reports
+
+The checker can report references, cycles, and files reachable from an entrypoint:
+
+```bash
+npm run architecture:check -- --report
+npx tsx scripts/checkArchitectureBoundaries.ts --json > architecture-report.json
+npx tsx scripts/checkArchitectureBoundaries.ts --json --entrypoint=src/contracts.ts
+```
+
+JSON goes to stdout and check diagnostics go to stderr. Failed checks still return
+a nonzero exit status. Reports preserve the existing boundary limits: enforcement
+counts all literal references together and excludes imports from the public facade.
+
+Reports separate explicit type references, value references, dynamic imports, and
+`require.resolve` calls. Mixed imports count as value references. Entrypoint reports
+include the facade and compare all references, value references alone, and value
+references plus dynamic imports. External specifiers name direct source references.
+
+Unresolved internal references, computed loaders, and references to ignored or
+declaration files include source locations. Implementation files take precedence
+over declaration fallbacks. The scanner recognizes single-argument `require()` and
+`require.resolve()` calls, including calls inside functions. It does not follow
+aliased loaders, computed member access, resolution options, or runtime bindings.
+
+These source graphs do not account for compiler import removal, Vite substitutions,
+tree shaking, or transitive installed dependencies. Layer cycles and file cycles
+are reported separately. Back-edges show violations of the configured layer order;
+they do not measure the work needed to remove cycles.
