@@ -109,6 +109,8 @@ interface FilteredBasicMetricsRow {
   total_score: number;
   total_latency: number;
   total_cost: number;
+  incurred_cost: number;
+  has_incurred_cost: number;
   total_tokens: number | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
@@ -237,22 +239,8 @@ function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tok
 }
 
 /**
- * Calculates metrics for filtered results using optimized SQL aggregation.
- * Uses a SINGLE GROUP BY query to aggregate all prompts at once.
- *
- * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
- * The whereSql parameter is a SQL fragment, not a raw string, ensuring all
- * user-provided values are properly escaped.
- *
- * This is the core performance optimization - instead of making 2-3 queries
- * per prompt (which would be 30 queries for 10 prompts), we make 3-4 total queries:
- * 1. Count check (OOM protection)
- * 2. Basic metrics + token usage (GROUP BY prompt_idx)
- * 3. Named scores (GROUP BY prompt_idx, metric_name)
- * 4. Assertions (GROUP BY prompt_idx)
- *
- * @param opts - Options including WHERE clause SQL fragment
- * @returns Array of PromptMetrics, one per prompt
+ * Aggregate filtered rows across all prompts. The count limit bounds the query;
+ * three grouped queries collect row metrics, named scores, and assertion counts.
  */
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
@@ -269,10 +257,9 @@ export async function calculateFilteredMetrics(
       throw new Error(`Result count ${countResult} exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
     }
 
-    // Calculate metrics using optimized approach
     return await calculateWithOptimizedQuery(opts);
   } catch (error) {
-    logger.error('Failed to calculate filtered metrics with optimized query', { error });
+    logger.error('Failed to calculate filtered metrics', { error });
 
     // Fallback: Return empty metrics
     return createEmptyMetricsArray(numPrompts);
@@ -296,12 +283,7 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
   return result?.count || 0;
 }
 
-/**
- * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
- * This is the key performance improvement from the audit.
- *
- * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
- */
+/** Aggregate all prompts together using parameterized SQL. */
 async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
   const db = await getDb();
@@ -350,6 +332,10 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
+      SUM(CASE WHEN json_extract(response, '$.incurredCost') IS NOT NULL
+        OR json_extract(response, '$.cached') = 1 THEN 1 ELSE 0 END) as has_incurred_cost,
+      SUM(COALESCE(json_extract(response, '$.incurredCost'),
+        CASE WHEN json_extract(response, '$.cached') = 1 THEN 0 ELSE cost END, 0)) as incurred_cost,
       -- Token usage aggregation (token usage is inside response JSON)
       SUM(${jsonUsageTotal(response, targetPath)}) as total_tokens,
       SUM(${jsonUsageNumber(response, targetPath, 'prompt')}) as prompt_tokens,
@@ -439,6 +425,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       testErrorCount: row.error_count || 0,
       totalLatencyMs: row.total_latency || 0,
       cost: row.total_cost || 0,
+      ...(row.has_incurred_cost ? { incurredCost: row.incurred_cost || 0 } : {}),
       tokenUsage: getFilteredTokenUsage(row),
       namedScores: {},
       namedScoresCount: {},

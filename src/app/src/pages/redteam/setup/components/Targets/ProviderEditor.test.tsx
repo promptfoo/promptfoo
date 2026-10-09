@@ -135,7 +135,7 @@ describe('ProviderEditor', () => {
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     const expectedNewProvider: ProviderOptions = {
-      id: 'openai:gpt-5.5',
+      id: 'openai:gpt-6-sol',
       config: {},
       label: 'My Test Provider',
     };
@@ -146,6 +146,23 @@ describe('ProviderEditor', () => {
       'data-providertype',
       'openai',
     );
+  });
+
+  it('passes the model selection lock to the provider selector', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithProviders(
+      <ProviderEditor
+        provider={defaultHttpTarget()}
+        setProvider={setProvider}
+        opts={{ disableModelSelection: true }}
+      />,
+    );
+
+    await user.click(screen.getByText('OpenAI').closest('[role="button"]')!);
+
+    expect(setProvider).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Search providers')).toBeDisabled();
   });
 
   it('should call onActionButtonClick when the action button is clicked and validation passes', async () => {

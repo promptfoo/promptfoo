@@ -89,6 +89,27 @@ afterAll(() => {
 });
 
 describe('OpenAiTranscriptionProvider', () => {
+  it.each(['gpt-live-transcribe', 'gpt-5.3-codex-spark'])(
+    'rejects unsupported first-party model %s before a direct request',
+    (modelName) => {
+      expect(
+        () =>
+          new OpenAiTranscriptionProvider(modelName, {
+            config: { apiKey: 'test-key' },
+          }),
+      ).toThrow();
+    },
+  );
+
+  it('rejects a retired first-party model before a direct request', () => {
+    expect(
+      () =>
+        new OpenAiTranscriptionProvider('text-moderation-latest', {
+          config: { apiKey: 'test-key' },
+        }),
+    ).toThrow('has been retired');
+  });
+
   const mockTranscriptionResponse = {
     data: {
       task: 'transcribe',
@@ -164,6 +185,201 @@ describe('OpenAiTranscriptionProvider', () => {
     vi.mocked(fetchWithCache).mockResolvedValue(mockTranscriptionResponse);
   });
 
+  describe('GPT Transcribe', () => {
+    it('uploads context hints and preserves detected languages with duration-based cost', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...mockTranscriptionResponse,
+        data: {
+          text: 'Bonjour, AC-42.',
+          languages: [{ code: 'fr' }, { code: 'en' }],
+          usage: { type: 'duration', seconds: 60 },
+        },
+      });
+      const provider = new OpenAiTranscriptionProvider('gpt-transcribe', {
+        config: {
+          apiKey: 'test-key',
+          languages: [' en ', 'fr', 'eng', 'zh-cn'],
+          keywords: [' AC-42 '],
+          prompt: 'A support call.',
+        },
+      });
+
+      const result = await provider.callApi('/path/to/audio.wav');
+      const form = vi.mocked(fetchWithCache).mock.calls[0][1]!.body as unknown as MockFormData;
+
+      expect(form.get('model')).toBe('gpt-transcribe');
+      expect(form.getAll('languages[]')).toEqual(['en', 'fr', 'eng', 'zh-cn']);
+      expect(form.getAll('keywords[]')).toEqual(['AC-42']);
+      expect(form.get('prompt')).toBe('A support call.');
+      expect(form.has('language')).toBe(false);
+      expect(form.has('response_format')).toBe(false);
+      expect(result).toMatchObject({
+        output: 'Bonjour, AC-42.',
+        cached: false,
+        cost: 0.0045,
+        metadata: { duration: 60, languages: [{ code: 'fr' }, { code: 'en' }] },
+      });
+    });
+
+    it('keeps unknown language detection and missing duration explicit', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...mockTranscriptionResponse,
+        data: { text: '', languages: [] },
+      });
+      const provider = new OpenAiTranscriptionProvider('gpt-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('/path/to/audio.wav');
+
+      expect(result).toMatchObject({ output: '', metadata: { languages: [] } });
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('reports zero cost on a cache hit', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({ ...mockTranscriptionResponse, cached: true });
+      const provider = new OpenAiTranscriptionProvider('gpt-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(await provider.callApi('/path/to/audio.wav')).toMatchObject({ cached: true, cost: 0 });
+    });
+
+    it('applies prompt-level hints over provider settings', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-transcribe', {
+        config: { apiKey: 'test-key', languages: ['en'], keywords: ['original'] },
+      });
+
+      await provider.callApi('/path/to/audio.wav', {
+        prompt: {
+          raw: 'audio',
+          label: 'audio',
+          config: { languages: ['fr'], keywords: ['AC-42'] },
+        },
+        vars: {},
+      });
+      const form = vi.mocked(fetchWithCache).mock.calls[0][1]!.body as unknown as MockFormData;
+      expect(form.getAll('languages[]')).toEqual(['fr']);
+      expect(form.getAll('keywords[]')).toEqual(['AC-42']);
+    });
+
+    it.each([
+      { language: 'english' },
+      { language: null },
+      { language: '' },
+      { language: 'en', languages: ['en'] },
+      { languages: 'en' },
+      { languages: [null] },
+      { languages: ['en\nfr'] },
+      { languages: ['<en>'] },
+      { languages: ['english'] },
+      { keywords: 'AC-42' },
+      { keywords: ['first\nsecond'] },
+      { keywords: ['first\rsecond'] },
+      { keywords: ['<term>'] },
+      { keywords: [''] },
+    ])('rejects invalid hints before reading or uploading audio: %j', async (config) => {
+      const provider = new OpenAiTranscriptionProvider('gpt-transcribe', {
+        config: { apiKey: 'test-key', ...config } as any,
+      });
+
+      expect((await provider.callApi('/path/to/audio.wav')).error).toBeDefined();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('rejects modern hints on legacy transcription models', async () => {
+      const provider = new OpenAiTranscriptionProvider('whisper-1', {
+        config: { apiKey: 'test-key', languages: ['en'] },
+      });
+
+      expect((await provider.callApi('/path/to/audio.wav')).error).toContain(
+        'require the gpt-transcribe',
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('maps the legacy singular language option to gpt-transcribe languages[]', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-transcribe', {
+        config: {
+          apiKey: 'test-key',
+          language: ' en ',
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { text: 'Hello.', usage: { type: 'duration', seconds: 1 } },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('/path/to/audio.mp3');
+
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
+      expect(formData.has('language')).toBe(false);
+      expect(formData.getAll('languages[]')).toEqual(['en']);
+    });
+
+    it.each([
+      {
+        providerConfig: { language: 'en' },
+        promptConfig: { languages: ['es', 'fr'] },
+        expectedLanguages: ['es', 'fr'],
+      },
+      {
+        providerConfig: { languages: ['en'] },
+        promptConfig: { language: 'es' },
+        expectedLanguages: ['es'],
+      },
+    ])(
+      'lets prompt-level language options replace the provider-level alternative',
+      async ({ providerConfig, promptConfig, expectedLanguages }) => {
+        const provider = new OpenAiTranscriptionProvider('gpt-transcribe', {
+          config: {
+            apiKey: 'test-key',
+            ...providerConfig,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { text: 'Hello.', usage: { type: 'duration', seconds: 1 } },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await provider.callApi('/path/to/audio.mp3', {
+          prompt: {
+            raw: '/path/to/audio.mp3',
+            label: 'test',
+            config: promptConfig,
+          },
+          vars: {},
+        });
+
+        const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!
+          .body as unknown as MockFormData;
+        expect(result.error).toBeUndefined();
+        expect(formData.has('language')).toBe(false);
+        expect(formData.getAll('languages[]')).toEqual(expectedLanguages);
+      },
+    );
+
+    it('rejects mutually exclusive language and languages options', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-transcribe', {
+        config: {
+          apiKey: 'test-key',
+          language: 'en',
+          languages: ['en', 'es'],
+        },
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      expect(result.error).toContain('either config.language or config.languages');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Basic functionality', () => {
     it('should pass the configured retry limit to the shared fetch helper', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
@@ -219,6 +435,28 @@ describe('OpenAiTranscriptionProvider', () => {
           avgNoSpeechProb: 0.015, // Average of 0.01 and 0.02
         },
       });
+    });
+
+    it('averages each segment quality metric over only segments with that metric', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...mockTranscriptionResponse,
+        data: {
+          ...mockTranscriptionResponse.data,
+          segments: [
+            { avg_logprob: -0.4 },
+            { compression_ratio: 1.2, no_speech_prob: 0 },
+            { avg_logprob: -0.2, no_speech_prob: 0.3 },
+          ],
+        },
+      });
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+      expect(result.metadata?.avgLogprob).toBeCloseTo(-0.3);
+      expect(result.metadata?.avgCompressionRatio).toBe(1.2);
+      expect(result.metadata?.avgNoSpeechProb).toBeCloseTo(0.15);
     });
 
     it('should strip case-insensitive Content-Type overrides from transcription uploads', async () => {
@@ -1009,6 +1247,7 @@ describe('OpenAiTranscriptionProvider', () => {
   describe('Model validation', () => {
     it('should accept known transcription models', () => {
       const models = [
+        'gpt-transcribe',
         'gpt-4o-transcribe',
         'gpt-4o-mini-transcribe',
         'gpt-4o-mini-transcribe-2025-03-20',

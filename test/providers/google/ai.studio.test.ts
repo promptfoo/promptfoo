@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
@@ -569,6 +570,27 @@ describe('AIStudioChatProvider', () => {
       expect(response.error).toContain('No output found in response');
     });
 
+    it('rejects MAX_TOKENS responses that contain only an empty text part', async () => {
+      const provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'MAX_TOKENS' }],
+          usageMetadata: { promptTokenCount: 7, totalTokenCount: 19, thoughtsTokenCount: 12 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toContain('No output found in response');
+      expect(response.output).toBeUndefined();
+    });
+
     it('should handle responses blocked with promptFeedback', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
@@ -1099,38 +1121,41 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
-    it('should use v1beta API for Gemini 3 models', async () => {
-      // Regression: all Gemini 3.x models use v1beta, including dash-named
-      // gemini-3-* preview IDs that were previously forced onto v1alpha.
-      provider = new AIStudioChatProvider('gemini-3-flash-preview', {
-        config: { apiKey: 'test-key' },
-      });
-      const mockResponse = {
-        data: {
-          candidates: [{ content: { parts: [{ text: 'gemini 3 response' }] } }],
-        },
-        cached: false,
-      };
-
-      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
-        return {
-          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-          coerced: false,
-          systemInstruction: undefined,
+    it.each(['gemini-3-flash-preview', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should use v1beta API for %s',
+      async (modelId) => {
+        // Regression: all Gemini 3.x models use v1beta, including dash-named
+        // gemini-3-* preview IDs that were previously forced onto v1alpha.
+        provider = new AIStudioChatProvider(modelId, {
+          config: { apiKey: 'test-key' },
+        });
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'gemini 3 response' }] } }],
+          },
+          cached: false,
         };
-      });
 
-      await provider.callGemini('test prompt');
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+          return {
+            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+            coerced: false,
+            systemInstruction: undefined,
+          };
+        });
 
-      expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('v1beta/models/gemini-3-flash-preview:generateContent'),
-        expect.any(Object),
-        expect.any(Number),
-        'json',
-        false,
-      );
-    });
+        await provider.callGemini('test prompt');
+
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.stringContaining(`v1beta/models/${modelId}:generateContent`),
+          expect.any(Object),
+          expect.any(Number),
+          'json',
+          false,
+        );
+      },
+    );
 
     it('should handle API call errors', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
@@ -1201,6 +1226,101 @@ describe('AIStudioChatProvider', () => {
         false,
       );
     });
+
+    it('preserves template syntax introduced by inline response schema variables in the request', async () => {
+      const actualTemplates = await vi.importActual<typeof templates>(
+        '../../../src/util/templates',
+      );
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(actualTemplates.getNunjucksEngine);
+      mockMaybeLoadFromExternalFile.mockImplementation((input) => input);
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          responseSchema: '{"type":"string","enum":["{{label}}"]}',
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: { candidates: [{ content: { parts: [{ text: '"{{name}}"' }] } }] },
+        cached: false,
+      } as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      await provider.callGemini('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test' },
+        vars: { label: '{{name}}' },
+      });
+
+      const requestBody = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(requestBody.generationConfig.response_schema).toEqual({
+        type: 'string',
+        enum: ['{{name}}'],
+      });
+    });
+
+    const providerSchemaBasePath = path.resolve('provider', 'base');
+    const promptSchemaBasePath = path.resolve('prompt', 'base');
+
+    it.each([
+      {
+        owner: 'provider',
+        promptConfig: { basePath: promptSchemaBasePath },
+        expectedReference: `file://${path.resolve(providerSchemaBasePath, 'schema.json')}`,
+      },
+      {
+        owner: 'prompt',
+        promptConfig: {
+          basePath: promptSchemaBasePath,
+          responseSchema: 'file://schema.json',
+        },
+        expectedReference: `file://${path.resolve(promptSchemaBasePath, 'schema.json')}`,
+      },
+    ])(
+      'resolves $owner-owned responseSchema against its AI Studio basePath',
+      async ({ promptConfig, expectedReference }) => {
+        const responseSchema = {
+          type: 'object',
+          properties: { answer: { type: 'string' } },
+        };
+        mockMaybeLoadFromExternalFile.mockImplementation((input) =>
+          input === expectedReference ? JSON.stringify(responseSchema) : input,
+        );
+        provider = new AIStudioChatProvider('gemini-pro', {
+          config: {
+            apiKey: 'test-key',
+            basePath: providerSchemaBasePath,
+            responseSchema: 'file://schema.json',
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: '{"answer":"ok"}' }] } }],
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        await provider.callGemini('test prompt', {
+          prompt: { raw: 'test prompt', label: 'test', config: promptConfig },
+          vars: {},
+        });
+
+        expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith(expectedReference);
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.generationConfig.response_schema).toEqual(responseSchema);
+      },
+    );
 
     it('should handle safety ratings', async () => {
       const mockResponse = {
@@ -1377,6 +1497,355 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should omit deprecated sampling parameters for %s',
+      async (modelId) => {
+        provider = new AIStudioChatProvider(modelId, {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.2,
+            topP: 0.3,
+            topK: 10,
+            generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
+            passthrough: {
+              generationConfig: {
+                temperature: 0.6,
+                topP: 0.7,
+                topK: 30,
+                top_p: 0.8,
+                top_k: 40,
+                candidateCount: 2,
+                candidate_count: 3,
+                presencePenalty: 0.5,
+                presence_penalty: 0.5,
+                frequencyPenalty: 0.5,
+                frequency_penalty: 0.5,
+                maxOutputTokens: 200,
+              },
+            },
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: { candidates: [{ content: { parts: [{ text: 'response text' }] } }] },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        await provider.callGemini('test prompt');
+
+        const body = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(body.generationConfig).toEqual({ maxOutputTokens: 200 });
+      },
+    );
+
+    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should forward Maps retrieval config for %s',
+      async (modelId) => {
+        provider = new AIStudioChatProvider(modelId, {
+          config: {
+            apiKey: 'test-key',
+            tools: [{ googleMaps: { enableWidget: true } }],
+            toolConfig: {
+              retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+              includeServerSideToolInvocations: true,
+            },
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: { candidates: [{ content: { parts: [{ text: 'response text' }] } }] },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        await provider.callGemini('test prompt');
+
+        const body = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(body.tools).toEqual([{ googleMaps: { enableWidget: true } }]);
+        expect(body.toolConfig).toEqual({
+          retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+          includeServerSideToolInvocations: true,
+        });
+      },
+    );
+
+    it.each([false, true])(
+      'preserves response accounting when a callback fails (cached=%s)',
+      async (cached) => {
+        const succeed = vi.fn().mockResolvedValue('completed');
+        const fail = vi.fn().mockRejectedValue(new Error('callback failed'));
+        const provider = new AIStudioChatProvider('gemini-3.8-flash', {
+          config: { apiKey: 'test-key', functionToolCallbacks: { succeed, fail } },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { functionCall: { name: 'succeed', args: {} }, thoughtSignature: 'signature' },
+                    { functionCall: { name: 'fail', args: {} } },
+                  ],
+                },
+              },
+            ],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+          cached,
+          status: 200,
+          statusText: 'OK',
+        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.error).toContain(
+          "Function callback 'fail' failed after 1 completed callback(s)",
+        );
+        expect(response.error).toContain('Check for side effects before retrying');
+        expect(response.output).toBeUndefined();
+        expect(response.cached).toBe(cached);
+        expect(response.tokenUsage).toMatchObject({
+          total: 15,
+          ...(cached ? { cached: 15 } : { prompt: 10, completion: 5 }),
+        });
+        expect(response.cost).toEqual(cached ? undefined : expect.any(Number));
+        expect(response.metadata?.thoughtSignatures).toEqual(['signature']);
+        expect(response.raw).toMatchObject({ usageMetadata: { totalTokenCount: 15 } });
+        expect(succeed).toHaveBeenCalledExactlyOnceWith('{}');
+        expect(fail).toHaveBeenCalledExactlyOnceWith('{}');
+      },
+    );
+
+    it('should execute callbacks from a fresh Gemini function-call response', async () => {
+      const callback = vi.fn().mockResolvedValue('Sunny, 25°C');
+      provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { location: { type: 'STRING' } },
+                    required: ['location'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: {
+                      id: 'call-1',
+                      name: 'get_weather',
+                      args: { location: 'Boston' },
+                    },
+                    thoughtSignature: 'signed-thought',
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+      } as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(callback).toHaveBeenCalledWith('{"location":"Boston"}');
+      expect(response.output).toBe('Sunny, 25°C');
+      expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
+    });
+
+    it('executes an explicitly mapped JSON callback from a text part', async () => {
+      const callback = vi.fn().mockResolvedValue('mapped result');
+      const text = JSON.stringify({ functionCall: { name: 'get_weather', args: {} } });
+      provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: { apiKey: 'test-key', functionToolCallbacks: { get_weather: callback } },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: { candidates: [{ content: { parts: [{ text }] } }] },
+        cached: false,
+      } as any);
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.output).toBe('mapped result');
+      expect(callback).toHaveBeenCalledExactlyOnceWith('{}');
+    });
+
+    it.each([false, true])(
+      'returns an error before callbacks for unexpected argument fragments (cached: %s)',
+      async (cached) => {
+        const callback = vi.fn().mockResolvedValue('should not run');
+        provider = new AIStudioChatProvider('gemini-3.6-flash', {
+          config: { apiKey: 'test-key', functionToolCallbacks: { get_weather: callback } },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { functionCall: { name: 'get_weather', args: { location: 'Boston' } } },
+                    {
+                      functionCall: {
+                        name: 'get_weather',
+                        partialArgs: [{ jsonPath: '$.location', stringValue: 'Seattle' }],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          cached,
+        } as any);
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.error).toContain(
+          'Streamed function-call arguments require streaming: true and toolConfig.functionCallingConfig.streamFunctionCallArguments: true.',
+        );
+        expect(response.output).toBeUndefined();
+        expect(callback).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should not execute callbacks when passthrough disables function calling', async () => {
+      const callback = vi.fn().mockResolvedValue('should not run');
+      provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: {
+          apiKey: 'test-key',
+          passthrough: {
+            toolConfig: {
+              functionCallingConfig: { mode: 'NONE' },
+            },
+          },
+          tools: 'file://tools.js:getTools' as any,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      const functionCall = {
+        functionCall: {
+          id: 'call-1',
+          name: 'get_weather',
+          args: { location: 'Boston' },
+        },
+      };
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          candidates: [{ content: { parts: [functionCall] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+      } as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(mockMaybeLoadToolsFromExternalFile).not.toHaveBeenCalled();
+      expect(response.output).toEqual([functionCall]);
+    });
+
+    it('should honor per-prompt callback replacements with the same function name', async () => {
+      const firstCallback = vi.fn().mockResolvedValue('First callback');
+      const secondCallback = vi.fn().mockResolvedValue('Second callback');
+      provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { location: { type: 'STRING' } },
+                    required: ['location'],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: { name: 'get_weather', args: { location: 'Boston' } },
+                    thoughtSignature: 'signed-thought',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        cached: false,
+      } as any);
+
+      const first = await provider.callGemini('first prompt', {
+        prompt: {
+          raw: 'first prompt',
+          label: 'first prompt',
+          config: { functionToolCallbacks: { get_weather: firstCallback } },
+        },
+      } as any);
+      const second = await provider.callGemini('second prompt', {
+        prompt: {
+          raw: 'second prompt',
+          label: 'second prompt',
+          config: { functionToolCallbacks: { get_weather: secondCallback } },
+        },
+      } as any);
+
+      expect(first.output).toBe('First callback');
+      expect(second.output).toBe('Second callback');
+      expect(firstCallback).toHaveBeenCalledTimes(1);
+      expect(secondCallback).toHaveBeenCalledTimes(1);
+    });
+
     it('should handle API version selection', async () => {
       const v1alphaProvider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', {
         config: { apiKey: 'test-key' },
@@ -1467,6 +1936,43 @@ describe('AIStudioChatProvider', () => {
         expect.any(Boolean),
       );
     });
+
+    it.each([true, false])(
+      'deduplicates declarations across REST tools (canonical first: %s)',
+      async (canonicalFirst) => {
+        const canonical = {
+          name: 'lookup',
+          parameters: {
+            type: 'OBJECT' as const,
+            properties: { code: { type: 'STRING' as const } },
+            required: ['code'],
+          },
+        };
+        const camelTool = { functionDeclarations: [canonical] };
+        const snakeTool = { function_declarations: [{ name: 'lookup' }] };
+        provider = new AIStudioChatProvider('gemini-3.6-flash', {
+          config: {
+            apiKey: 'test-key',
+            tools: canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool],
+          },
+        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+          contents: [{ role: 'user', parts: [{ text: 'Look up the code' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: { candidates: [{ content: { parts: [{ text: 'Done' }] } }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        expect((await provider.callGemini('Look up the code')).error).toBeUndefined();
+        const body = JSON.parse(vi.mocked(cache.fetchWithCache).mock.calls[0][1]?.body as string);
+        expect(body.tools).toEqual([{ functionDeclarations: [canonical] }]);
+      },
+    );
 
     it('should handle function calling configuration', async () => {
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
@@ -1797,6 +2303,42 @@ describe('AIStudioChatProvider', () => {
       expect(body.tools).toEqual([{ codeExecution: {} }]);
     });
 
+    it('lets the winning passthrough toolConfig re-enable configured tools', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return { renderString: vi.fn((str) => str) } as any;
+      });
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          tools: [{ functionDeclarations: [{ name: 'get_weather' }] }],
+          passthrough: { toolConfig: { functionCallingConfig: { mode: 'ANY' } } },
+        } as any,
+      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'ANY' } });
+      expect(body.tools).toEqual([{ functionDeclarations: [{ name: 'get_weather' }] }]);
+    });
+
     it('merges a single-object passthrough tool with config tools instead of dropping them', async () => {
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return { renderString: vi.fn((str) => str) } as any;
@@ -1980,6 +2522,36 @@ describe('AIStudioChatProvider', () => {
       expect(body.tools).toBeUndefined();
     });
 
+    it('disables inherited passthrough function declarations for a prompt-level tool choice', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return { renderString: vi.fn((str) => str) } as any;
+      });
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ functionDeclarations: [{ name: 'lookup' }] }],
+          passthrough: {
+            toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+            tools: [{ functionDeclarations: [{ name: 'other' }] }, { googleSearch: {} }],
+          },
+        } as any,
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+      } as any);
+
+      await provider.callGemini('hi', {
+        prompt: { raw: 'hi', label: 'hi', config: { tool_choice: 'none' } },
+      } as any);
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
     it('should handle Google Search as a tool', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
@@ -2079,7 +2651,7 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
-    it('should handle Google Search retrieval for Gemini 1.5 models', async () => {
+    it('should handle Google Search retrieval for Gemini 2.5 models', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
@@ -2375,6 +2947,87 @@ describe('AIStudioChatProvider', () => {
       expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://system-instruction.txt');
     });
 
+    const providerSystemInstructionBasePath = path.resolve('provider', 'base');
+    const promptSystemInstructionBasePath = path.resolve('prompt', 'base');
+
+    it.each([
+      {
+        owner: 'provider',
+        promptConfig: { basePath: promptSystemInstructionBasePath },
+        expectedBasePath: providerSystemInstructionBasePath,
+      },
+      {
+        owner: 'prompt',
+        promptConfig: {
+          basePath: promptSystemInstructionBasePath,
+          systemInstruction: 'file://system-instruction.txt',
+          responseSchema: 'file://schema.json',
+        },
+        expectedBasePath: promptSystemInstructionBasePath,
+      },
+    ])(
+      'preserves explicit audio MIME with $owner-owned instruction and schema files',
+      async ({ promptConfig, expectedBasePath }) => {
+        const media = Buffer.from('....ftypisom........').toString('base64');
+        const audio = `data:audio/mp4;base64,${media}`;
+        const expectedInstructionReference = `file://${path.resolve(
+          expectedBasePath,
+          'system-instruction.txt',
+        )}`;
+        const expectedSchemaReference = `file://${path.resolve(expectedBasePath, 'schema.json')}`;
+        const mockSystemInstruction = 'Instruction loaded from the owning base path.';
+        const responseSchema = {
+          type: 'object',
+          properties: { transcript: { type: 'string' } },
+        };
+        mockMaybeLoadFromExternalFile.mockImplementation((input) => {
+          if (input === expectedInstructionReference) {
+            return mockSystemInstruction;
+          }
+          if (input === expectedSchemaReference) {
+            return JSON.stringify(responseSchema);
+          }
+          return input;
+        });
+        provider = new AIStudioChatProvider('gemini-pro', {
+          config: {
+            apiKey: 'test-key',
+            basePath: providerSystemInstructionBasePath,
+            systemInstruction: 'file://system-instruction.txt',
+            responseSchema: 'file://schema.json',
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          },
+          cached: false,
+        } as any);
+        const response = await provider.callGemini(audio, {
+          prompt: { raw: '{{audio}}', label: 'Audio', config: promptConfig },
+          vars: { audio },
+          test: { vars: { audio: 'file://recording.m4a' } },
+        });
+
+        expect(mockMaybeLoadFromExternalFile.mock.calls.map(([input]) => input)).toEqual([
+          expectedInstructionReference,
+          expectedSchemaReference,
+        ]);
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.contents[0].parts).toEqual([
+          { inlineData: { mimeType: 'audio/mp4', data: media } },
+        ]);
+        expect(requestBody.system_instruction).toEqual({
+          parts: [{ text: mockSystemInstruction }],
+        });
+        expect(requestBody.generationConfig.response_schema).toEqual(responseSchema);
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('response text');
+      },
+    );
+
     describe('thinking token tracking', () => {
       it('should track thinking tokens when present in response', async () => {
         const provider = new AIStudioChatProvider('gemini-2.5-flash', {
@@ -2563,6 +3216,37 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            toolUsePromptTokenCount: 400,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1_900,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const result = await provider.callGemini('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 1_400, completion: 500, total: 1_900 });
+      expect(result.cost).toBeCloseTo((1_400 * 0.3 + 500 * 2.5) / 1e6, 12);
+    });
+
     describe('thinking token cost calculation', () => {
       it('should include thinking tokens in cost calculation', async () => {
         const provider = new AIStudioChatProvider('gemini-2.5-flash', {
@@ -2637,14 +3321,37 @@ describe('AIStudioChatProvider', () => {
 
         expect(response.tokenUsage).toMatchObject({ prompt: 1_000, completion: 500, cached: 500 });
         expect(response.cost).toBeCloseTo(
-          (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+          (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1.5 + 300 * 0.15 + 500 * 9)) / 1e6,
           12,
         );
         const requestBody = JSON.parse(
           vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
         );
-        expect(requestBody.serviceTier).toBe('priority');
-        expect(requestBody.service_tier).toBeUndefined();
+        expect(requestBody.service_tier).toBe('priority');
+        expect(requestBody.serviceTier).toBeUndefined();
+      });
+
+      it('prices downgraded priority responses at the actual standard tier', async () => {
+        const provider = new AIStudioChatProvider('gemini-3.5-flash-lite', {
+          config: { apiKey: 'test-key', service_tier: 'priority' },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 1_000,
+              candidatesTokenCount: 100,
+              totalTokenCount: 1_100,
+            },
+          },
+          cached: false,
+          headers: { 'x-gemini-service-tier': 'standard' },
+        } as any);
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.cost).toBeCloseTo(0.00055, 12);
+        expect(response.metadata).toMatchObject({ serviceTier: 'standard' });
       });
 
       it('should not include thinking tokens in cost when response is cached', async () => {
@@ -2771,7 +3478,7 @@ describe('AIStudioEmbeddingProvider', () => {
   it('reports cost for priced embedding models', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2], 10_000) as any);
 
-    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const provider = new AIStudioEmbeddingProvider('embedding-2-preview');
     const response = await provider.callEmbeddingApi('hello world');
 
     // $0.20 per 1M input tokens
@@ -2787,7 +3494,7 @@ describe('AIStudioEmbeddingProvider', () => {
       cached: true,
     } as any);
 
-    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const provider = new AIStudioEmbeddingProvider('embedding-2-preview');
     const response = await provider.callEmbeddingApi('hello world');
 
     expect(response.cached).toBe(true);
@@ -2797,7 +3504,7 @@ describe('AIStudioEmbeddingProvider', () => {
   it('omits cost when the response has no usage metadata', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2]) as any);
 
-    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const provider = new AIStudioEmbeddingProvider('embedding-2-preview');
     const response = await provider.callEmbeddingApi('hello world');
 
     expect(response.cost).toBeUndefined();

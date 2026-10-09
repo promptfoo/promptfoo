@@ -1,7 +1,13 @@
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
+import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../src/cache';
 import * as envarsModule from '../../src/envars';
 import logger from '../../src/logger';
 import {
@@ -11,6 +17,18 @@ import {
   WatsonXProvider,
 } from '../../src/providers/watsonx';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+
+const mockListFoundationModelSpecs = vi.fn();
+
+function mockClient(client: object) {
+  vi.mocked(WatsonXAI.newInstance).mockReturnValue(
+    Object.assign(client, { listFoundationModelSpecs: mockListFoundationModelSpecs }),
+  );
+}
+
+beforeEach(() => {
+  mockListFoundationModelSpecs.mockReset().mockResolvedValue({ result: { resources: [] } });
+});
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -45,29 +63,6 @@ vi.mock('../../src/cache', async (importOriginal) => {
     ...(await importOriginal()),
     getCache: vi.fn(),
     isCacheEnabled: vi.fn(),
-
-    fetchWithCache: vi.fn().mockImplementation(async function () {
-      return {
-        data: {
-          resources: [
-            {
-              model_id: 'meta-llama/llama-3-2-1b-instruct',
-              input_tier: 'class_c1',
-              output_tier: 'class_c1',
-              label: 'llama-3-2-1b-instruct',
-              provider: 'Meta',
-              source: 'Hugging Face',
-              model_limits: {
-                max_sequence_length: 131072,
-                max_output_tokens: 8192,
-              },
-            },
-          ],
-        },
-
-        cached: false,
-      };
-    }),
   };
 });
 
@@ -104,9 +99,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.modelName).toBe(modelName);
@@ -121,9 +114,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.id()).toBe(`watsonx:${modelName}`);
@@ -135,9 +126,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.id()).toBe(`watsonx:${modelName}`);
@@ -149,9 +138,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.toString()).toBe(`[Watsonx Provider ${modelName}]`);
@@ -159,13 +146,26 @@ describe('WatsonXProvider', () => {
   });
 
   describe('getClient', () => {
+    it('preserves authenticator constructor errors and allows initialization to retry', async () => {
+      const error = new Error('Authenticator construction failed');
+      vi.mocked(IamAuthenticator).mockImplementationOnce(function () {
+        throw error;
+      });
+      const mockedWatsonXAIClient = { generateText: vi.fn() };
+      mockClient(mockedWatsonXAIClient);
+      const provider = new WatsonXProvider(modelName, { config });
+
+      await expect(provider.getClient()).rejects.toBe(error);
+      expect(WatsonXAI.newInstance).not.toHaveBeenCalled();
+      await expect(provider.getClient()).resolves.toBe(mockedWatsonXAIClient);
+      expect(WatsonXAI.newInstance).toHaveBeenCalledTimes(1);
+    });
+
     it('should initialize WatsonXAI client with correct parameters', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, { config });
       const client = await provider.getClient();
@@ -203,9 +203,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, { config: bearerTokenConfig });
       await provider.getClient();
@@ -223,9 +221,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, { config: dualAuthConfig });
       await provider.getClient();
@@ -243,9 +239,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, {
         config: dualAuthConfig,
@@ -272,9 +266,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, {
         config: dualAuthConfig,
@@ -297,9 +289,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, {
         config: dualAuthConfig,
@@ -335,9 +325,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -384,7 +372,7 @@ describe('WatsonXProvider', () => {
       const cacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
       expect(cacheKey).toMatch(
         new RegExp(
-          `^watsonx:v2:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+          `^watsonx:v3:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
         ),
       );
       expect(cacheKey).not.toContain(prompt);
@@ -430,9 +418,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache = {
         get: vi.fn(),
@@ -471,9 +457,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -522,9 +506,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -578,9 +560,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -643,9 +623,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -691,9 +669,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -751,9 +727,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       vi.mocked(getCache).mockImplementation(() => null as any);
       vi.mocked(isCacheEnabled).mockImplementation(() => false);
@@ -811,9 +785,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const provider = new WatsonXProvider(modelName, { config });
       const generateTextSpy = vi.spyOn(await provider.getClient(), 'generateText');
@@ -822,7 +794,7 @@ describe('WatsonXProvider', () => {
       const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
       expect(cacheKey).toMatch(
         new RegExp(
-          `^watsonx:v2:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+          `^watsonx:v3:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
         ),
       );
       expect(cacheKey).not.toContain(prompt);
@@ -838,9 +810,7 @@ describe('WatsonXProvider', () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn().mockRejectedValue(new Error('API error')),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
         set: vi.fn(),
@@ -877,9 +847,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache = {
         get: vi.fn().mockResolvedValue(null),
@@ -910,9 +878,9 @@ describe('WatsonXProvider', () => {
     beforeEach(() => {
       vi.clearAllMocks();
       clearModelSpecsCache();
-      vi.mocked(fetchWithCache).mockImplementation(async function () {
+      mockListFoundationModelSpecs.mockImplementation(async function () {
         return {
-          data: {
+          result: {
             resources: [
               {
                 model_id: MODEL_ID,
@@ -955,9 +923,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -1033,9 +999,7 @@ describe('WatsonXProvider', () => {
             },
           }),
         };
-        vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-          return mockedWatsonXAIClient as any;
-        });
+        mockClient(mockedWatsonXAIClient);
 
         const cache = {
           get: vi.fn().mockResolvedValue(null),
@@ -1054,7 +1018,7 @@ describe('WatsonXProvider', () => {
 
         if (expectedCost === undefined) {
           expect(response.cost).toBeUndefined();
-          expect(fetchWithCache).not.toHaveBeenCalled();
+          expect(mockListFoundationModelSpecs).not.toHaveBeenCalled();
         } else {
           expect(response.cost).toBeCloseTo(expectedCost, 10);
         }
@@ -1066,9 +1030,9 @@ describe('WatsonXProvider', () => {
       const configWithClass9ModelId = { ...config, modelId };
 
       clearModelSpecsCache();
-      vi.mocked(fetchWithCache).mockImplementation(async function () {
+      mockListFoundationModelSpecs.mockImplementation(async function () {
         return {
-          data: {
+          result: {
             resources: [
               {
                 model_id: modelId,
@@ -1111,9 +1075,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -1145,9 +1107,9 @@ describe('WatsonXProvider', () => {
       const configWithGraniteModelId = { ...config, modelId };
 
       clearModelSpecsCache();
-      vi.mocked(fetchWithCache).mockImplementation(async function () {
+      mockListFoundationModelSpecs.mockImplementation(async function () {
         return {
-          data: {
+          result: {
             resources: [
               {
                 model_id: modelId,
@@ -1190,9 +1152,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -1222,9 +1182,9 @@ describe('WatsonXProvider', () => {
       const configWithMistralModelId = { ...config, modelId };
 
       clearModelSpecsCache();
-      vi.mocked(fetchWithCache).mockImplementation(async function () {
+      mockListFoundationModelSpecs.mockImplementation(async function () {
         return {
-          data: {
+          result: {
             resources: [
               {
                 model_id: modelId,
@@ -1267,9 +1227,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -1320,9 +1278,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -1371,9 +1327,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -1428,9 +1382,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -1485,9 +1437,7 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+      mockClient(mockedWatsonXAIClient);
 
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(null),
@@ -1545,6 +1495,157 @@ describe('WatsonXChatProvider', () => {
     clearModelSpecsCache();
   });
 
+  describe('GenAI tracing', () => {
+    const exporter = new InMemorySpanExporter();
+    const tracerProvider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
+    const textChat = vi.fn();
+
+    beforeAll(() => {
+      tracerProvider.register();
+    });
+
+    beforeEach(() => {
+      exporter.reset();
+      textChat.mockReset().mockResolvedValue({
+        result: {
+          choices: [{ message: { role: 'assistant', content: 'Traced chat reply' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 8, total_tokens: 18 },
+        },
+      });
+      mockClient({ textChat });
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
+    });
+
+    afterEach(() => {
+      textChat.mockReset();
+    });
+
+    afterAll(async () => {
+      try {
+        await tracerProvider.shutdown();
+      } finally {
+        trace.disable();
+        context.disable();
+        propagation.disable();
+      }
+    });
+
+    it.each([false, true])(
+      'records chat usage and evaluation context (cached: %s)',
+      async (cached) => {
+        const cachedResponse = {
+          output: 'Traced chat reply',
+          tokenUsage: { prompt: 10, completion: 8, total: 18 },
+        };
+        vi.mocked(isCacheEnabled).mockReturnValue(cached);
+        vi.mocked(getCache).mockReturnValue({
+          get: vi.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
+          set: vi.fn(),
+        } as unknown as ReturnType<typeof getCache>);
+        const provider = new WatsonXChatProvider(modelName, { config });
+        const response = await provider.callApi(prompt, {
+          vars: {},
+          prompt: { raw: prompt, label: 'traced-prompt' },
+          testIdx: 3,
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        });
+        await tracerProvider.forceFlush();
+
+        expect(response).toMatchObject(cachedResponse);
+        expect(textChat).toHaveBeenCalledTimes(cached ? 0 : 1);
+        const spans = exporter.getFinishedSpans();
+        expect(spans).toHaveLength(1);
+        expect(spans[0].name).toBe(`chat ${modelName}`);
+        expect(spans[0].spanContext().traceId).toBe('0123456789abcdef0123456789abcdef');
+        expect(spans[0].parentSpanContext?.spanId).toBe('0123456789abcdef');
+        expect(spans[0].attributes).toMatchObject({
+          'gen_ai.provider.name': 'ibm.watsonx.ai',
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.request.model': modelName,
+          'gen_ai.request.max_tokens': config.maxNewTokens,
+          'promptfoo.provider.id': provider.id(),
+          'promptfoo.test.index': 3,
+          'promptfoo.prompt.label': 'traced-prompt',
+          'gen_ai.usage.input_tokens': 10,
+          'gen_ai.usage.output_tokens': 8,
+          'promptfoo.usage.total_tokens': 18,
+        });
+        if (cached) {
+          expect(spans[0].attributes['promptfoo.cache_hit']).toBe(true);
+        }
+        expect(spans[0].status.code).toBe(SpanStatusCode.OK);
+      },
+    );
+
+    it.each([7, undefined, null])(
+      'traces the effective prompt-level chat maxNewTokens override (%s)',
+      async (maxNewTokens) => {
+        const provider = new WatsonXChatProvider(modelName, { config });
+
+        await provider.callApi(prompt, {
+          vars: {},
+          prompt: { raw: prompt, label: 'override-prompt', config: { maxNewTokens } },
+        });
+        await tracerProvider.forceFlush();
+
+        expect(textChat).toHaveBeenCalledTimes(1);
+        const [params] = textChat.mock.calls[0];
+        if (maxNewTokens === undefined) {
+          expect(params).not.toHaveProperty('maxTokens');
+        } else {
+          expect(params).toHaveProperty('maxTokens', maxNewTokens);
+        }
+        const spans = exporter.getFinishedSpans();
+        expect(spans).toHaveLength(1);
+        if (typeof maxNewTokens === 'number') {
+          expect(spans[0].attributes['gen_ai.request.max_tokens']).toBe(maxNewTokens);
+        } else {
+          expect(spans[0].attributes).not.toHaveProperty('gen_ai.request.max_tokens');
+        }
+      },
+    );
+
+    it('records returned chat errors without changing the response', async () => {
+      textChat.mockRejectedValue(new Error('Chat API error'));
+      const provider = new WatsonXChatProvider(modelName, { config });
+
+      const response = await provider.callApi(prompt);
+      await tracerProvider.forceFlush();
+
+      expect(response).toEqual({
+        error: 'API call error: Error: Chat API error',
+        output: '',
+        tokenUsage: createEmptyTokenUsage(),
+      });
+      const spans = exporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
+      expect(spans[0].attributes['error.type']).toBe('provider_error');
+    });
+
+    it('records cancellation without initializing the chat client', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const provider = new WatsonXChatProvider(modelName, { config });
+
+      await expect(
+        provider.callApi(prompt, undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'Request aborted' });
+      await tracerProvider.forceFlush();
+
+      expect(WatsonXAI.newInstance).not.toHaveBeenCalled();
+      expect(textChat).not.toHaveBeenCalled();
+      const spans = exporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].status).toEqual({
+        code: SpanStatusCode.ERROR,
+        message: 'Request aborted',
+      });
+    });
+  });
+
   it('should parse JSON chat messages and call textChat', async () => {
     const chatPrompt = JSON.stringify([
       { role: 'system', content: 'You are helpful' },
@@ -1572,9 +1673,7 @@ describe('WatsonXChatProvider', () => {
         },
       }),
     };
-    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-      return mockedWatsonXAIClient as any;
-    });
+    mockClient(mockedWatsonXAIClient);
 
     const cache: Partial<any> = {
       get: vi.fn().mockResolvedValue(null),
@@ -1630,9 +1729,7 @@ describe('WatsonXChatProvider', () => {
         },
       }),
     };
-    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-      return mockedWatsonXAIClient as any;
-    });
+    mockClient(mockedWatsonXAIClient);
 
     const cache: Partial<any> = {
       get: vi.fn().mockResolvedValue(null),
@@ -1658,7 +1755,7 @@ describe('WatsonXChatProvider', () => {
     const cacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
     expect(cacheKey).toMatch(
       new RegExp(
-        `^watsonx:chat:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+        `^watsonx:chat:v3:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
       ),
     );
     expect(cacheKey).not.toContain(chatPrompt);
@@ -1687,9 +1784,7 @@ describe('WatsonXChatProvider', () => {
         },
       }),
     };
-    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-      return mockedWatsonXAIClient as any;
-    });
+    mockClient(mockedWatsonXAIClient);
 
     const cache: Partial<any> = {
       get: vi.fn().mockResolvedValue(null),
@@ -1730,9 +1825,7 @@ describe('WatsonXChatProvider', () => {
       generateText: vi.fn(),
       textChat: vi.fn().mockRejectedValue(new Error('Chat API error')),
     };
-    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-      return mockedWatsonXAIClient as any;
-    });
+    mockClient(mockedWatsonXAIClient);
 
     const cache: Partial<any> = {
       get: vi.fn().mockResolvedValue(null),
@@ -1788,9 +1881,7 @@ describe('WatsonXChatProvider', () => {
         },
       }),
     };
-    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-      return mockedWatsonXAIClient as any;
-    });
+    mockClient(mockedWatsonXAIClient);
 
     const cache: Partial<any> = {
       get: vi.fn().mockResolvedValue(null),

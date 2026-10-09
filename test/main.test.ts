@@ -12,6 +12,7 @@ const mockSetLogLevel = vi.hoisted(() => vi.fn());
 const mockTelemetryRecord = vi.hoisted(() => vi.fn());
 const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockProviderShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
 const mockDispatcherDestroy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -42,6 +43,10 @@ vi.mock('../src/telemetry', () => ({
   },
 }));
 
+vi.mock('../src/providers/providerRegistry', () => ({
+  providerRegistry: { shutdownForProcess: mockProviderShutdown },
+}));
+
 vi.mock('../src/database/index', () => ({
   closeDbIfOpen: mockCloseDbIfOpen,
 }));
@@ -51,7 +56,7 @@ vi.mock('undici', async () => ({
   getGlobalDispatcher: mockGetGlobalDispatcher,
 }));
 
-// Mock code scan commands to avoid ESM import issues with execa
+// Keep code scan command initialization isolated from these CLI lifecycle tests.
 vi.mock('../src/codeScan', () => ({
   codeScansCommand: vi.fn(),
 }));
@@ -505,6 +510,7 @@ describe('shutdownGracefully', () => {
     mockSetupEnv.mockReset();
     mockSetLogLevel.mockReset();
     mockTelemetryShutdown.mockReset().mockResolvedValue(undefined);
+    mockProviderShutdown.mockReset().mockResolvedValue(undefined);
     mockCloseLogger.mockReset().mockResolvedValue(undefined);
     mockCloseDbIfOpen.mockReset();
     mockDispatcherDestroy.mockReset().mockResolvedValue(undefined);
@@ -525,10 +531,57 @@ describe('shutdownGracefully', () => {
 
     await shutdownPromise;
 
+    expect(mockProviderShutdown).toHaveBeenCalledOnce();
     expect(mockTelemetryShutdown).toHaveBeenCalled();
     expect(mockCloseLogger).toHaveBeenCalled();
     expect(mockCloseDbIfOpen).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCloseLogger.mock.invocationCallOrder[0],
+    );
     expect(mockDispatcherDestroy).toHaveBeenCalled();
+  });
+
+  it('starts provider shutdown immediately and waits for it before the explicit exit', async () => {
+    let releaseProviders!: () => void;
+    mockProviderShutdown.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseProviders = resolve;
+        }),
+    );
+    mockTelemetryShutdown.mockImplementation(() => new Promise(() => {}));
+
+    const shutdownPromise = shutdownGracefully();
+    expect(mockProviderShutdown).toHaveBeenCalledOnce();
+    expect(mockProviderShutdown.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTelemetryShutdown.mock.invocationCallOrder[0],
+    );
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(process.exit).not.toHaveBeenCalled();
+    releaseProviders();
+    await vi.advanceTimersByTimeAsync(500);
+    await shutdownPromise;
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(process.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('bounds provider shutdown so a hung child cannot block the explicit exit', async () => {
+    mockProviderShutdown.mockImplementation(() => new Promise(() => {}));
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(process.exit).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await shutdownPromise;
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(process.exit).toHaveBeenCalledWith(0);
+    expect(mockProviderShutdown).toHaveBeenCalledOnce();
   });
 
   it('should handle telemetry shutdown timeout', async () => {
@@ -565,6 +618,38 @@ describe('shutdownGracefully', () => {
     expect(mockTelemetryShutdown).toHaveBeenCalled();
     expect(mockCloseDbIfOpen).toHaveBeenCalled();
     expect(mockDispatcherDestroy).toHaveBeenCalled();
+  });
+
+  it('should continue cleanup when database close times out', async () => {
+    let resolveDbClose!: () => void;
+    const markDbCloseResolved = vi.fn();
+    mockCloseDbIfOpen.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDbClose = resolve;
+        }),
+    );
+
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(mockDispatcherDestroy).toHaveBeenCalled();
+    expect(mockCloseLogger).not.toHaveBeenCalled();
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(500);
+    markDbCloseResolved();
+    resolveDbClose();
+    await shutdownPromise;
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(markDbCloseResolved.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCloseLogger.mock.invocationCallOrder[0],
+    );
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(process.exit).toHaveBeenCalledWith(0);
   });
 
   it('should handle dispatcher.destroy() timeout', async () => {

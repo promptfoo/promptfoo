@@ -1,13 +1,75 @@
 import { getEnvBool, getEnvInt } from '../envars';
+import { getCallerAbortError } from '../util/fetch/requestSignal';
 import { loadYaml } from '../util/yamlLoad';
 
 import type { ApiProvider } from '../types/index';
+
+export function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) {
+    throw getCallerAbortError(signal);
+  }
+}
+
+/** Stop only this caller's wait; shared work keeps running and its rejection is observed. */
+export function waitForPromiseWithAbort<T>(
+  promise: PromiseLike<T>,
+  signal?: AbortSignal | null,
+): Promise<T> {
+  if (!signal) {
+    return Promise.resolve(promise);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(getCallerAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+}
+
+/** Returns the complete model suffix after the given number of provider/type segments. */
+export function modelNameFromProviderPath(providerPath: string, segments: number): string {
+  return providerPath.split(':').slice(segments).join(':');
+}
 
 /**
  * The default timeout for API requests in milliseconds.
  */
 export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+}
+
+/** Read a simple eval variable without evaluating template expressions. */
+export function resolveDirectTestVariable(value: unknown, vars?: Record<string, unknown>): unknown {
+  if (typeof value !== 'string' || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return value;
+  }
+  const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
+  return variable && vars && Object.prototype.hasOwnProperty.call(vars, variable)
+    ? vars[variable]
+    : value;
+}
+
+/** Match OpenAI-compatible output-limit environment precedence. */
+export function getOpenAIChatOutputLimitFromEnv(): number | undefined {
+  return getOpenAICompletionTokenLimitFromEnv() ?? getEnvInt('OPENAI_MAX_TOKENS');
+}
+
+export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
+  return getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
 }
 
 /**

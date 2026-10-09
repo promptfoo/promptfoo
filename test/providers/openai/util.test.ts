@@ -1,20 +1,131 @@
 import OpenAI from 'openai';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  assertOpenAiApiModel,
   calculateOpenAICost,
   failApiCall,
   formatOpenAiError,
+  getOpenAiEffectiveServiceTier,
   getTokenUsage,
+  normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
   OPENAI_CODEX_ONLY_MODELS,
   OPENAI_COMPLETION_MODELS,
+  OPENAI_DEEP_RESEARCH_MODELS,
   OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
   OPENAI_TTS_MODELS,
+  RETIRED_OPENAI_MODEL_IDS,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
 vi.mock('../../../src/cache');
+
+describe('getOpenAiEffectiveServiceTier', () => {
+  it('preserves layer precedence when prompt passthrough replaces provider passthrough', () => {
+    const providerConfig = {
+      service_tier: 'default',
+      passthrough: { service_tier: 'priority' },
+    } as const;
+
+    expect(getOpenAiEffectiveServiceTier(providerConfig)).toBe('priority');
+    expect(getOpenAiEffectiveServiceTier(providerConfig, { service_tier: 'flex' })).toBe('flex');
+    expect(
+      getOpenAiEffectiveServiceTier(providerConfig, {
+        service_tier: 'flex',
+        passthrough: { service_tier: 'fast' },
+      }),
+    ).toBe('fast');
+    expect(
+      getOpenAiEffectiveServiceTier(providerConfig, {
+        passthrough: { model: 'gpt-5.6-luna' },
+      }),
+    ).toBe('default');
+  });
+});
+
+describe('normalizeOpenAiServiceTierForWire', () => {
+  it('maps semantic fast only for first-party OpenAI endpoints', () => {
+    expect(normalizeOpenAiServiceTierForWire('fast')).toBe('priority');
+    for (const hostname of [
+      'api.openai.com',
+      'us.api.openai.com',
+      'eu.api.openai.com',
+      'au.api.openai.com',
+      'ca.api.openai.com',
+      'jp.api.openai.com',
+      'in.api.openai.com',
+      'sg.api.openai.com',
+      'kr.api.openai.com',
+      'gb.api.openai.com',
+      'ae.api.openai.com',
+    ]) {
+      expect(normalizeOpenAiServiceTierForWire('fast', `https://${hostname}/v1`)).toBe('priority');
+    }
+    expect(normalizeOpenAiServiceTierForWire('fast', 'https://gateway.example/v1')).toBe('fast');
+    expect(normalizeOpenAiServiceTierForWire('priority')).toBe('priority');
+    expect(normalizeOpenAiServiceTierForWire('flex')).toBe('flex');
+    expect(normalizeOpenAiServiceTierForWire(null)).toBeNull();
+    expect(normalizeOpenAiServiceTierForWire(undefined)).toBeUndefined();
+  });
+});
+
+const retiredChatModelIds = [
+  'chatgpt-4o-latest',
+  'o1-preview',
+  'o1-preview-2024-09-12',
+  'o1-mini',
+  'o1-mini-2024-09-12',
+  'gpt-4-0314',
+  'gpt-4-32k',
+  'gpt-4-32k-0314',
+  'gpt-4-32k-0613',
+  'gpt-4-turbo-preview',
+  'gpt-4-0125-preview',
+  'gpt-4-1106-vision-preview',
+  'gpt-4-vision-preview',
+  'gpt-3.5-turbo-0301',
+  'gpt-3.5-turbo-0613',
+  'gpt-3.5-turbo-16k',
+  'gpt-3.5-turbo-16k-0613',
+  'gpt-4o-search-preview-2025-03-11',
+  'gpt-4o-mini-search-preview-2025-03-11',
+  'gpt-4o-audio-preview',
+  'gpt-4o-audio-preview-2024-10-01',
+  'gpt-4o-audio-preview-2024-12-17',
+  'gpt-4o-audio-preview-2025-06-03',
+  'gpt-4o-mini-audio-preview',
+  'gpt-5-chat-latest',
+  'codex-mini-latest',
+  'gpt-5.1-chat-latest',
+  'gpt-audio-mini-2025-10-06',
+] as const;
+
+const retiredResponsesModelIds = [
+  'computer-use-preview',
+  'computer-use-preview-2025-03-11',
+  'gpt-5-codex',
+  'gpt-5.1-codex',
+  'gpt-5.1-codex-max',
+  'gpt-5.1-codex-mini',
+  'gpt-5.2-codex',
+  'o3-deep-research',
+  'o3-deep-research-2025-06-26',
+  'o4-mini-deep-research',
+  'o4-mini-deep-research-2025-06-26',
+] as const;
+
+const otherRetiredModelIds = [
+  'gpt-4o-realtime-preview',
+  'gpt-4o-realtime-preview-2024-10-01',
+  'gpt-4o-realtime-preview-2024-12-17',
+  'gpt-4o-realtime-preview-2025-06-03',
+  'gpt-4o-mini-realtime-preview',
+  'gpt-realtime-mini-2025-10-06',
+  'text-moderation-007',
+  'text-moderation-latest',
+  'text-moderation-stable',
+] as const;
 
 describe('failApiCall', () => {
   it('should format OpenAI API errors', () => {
@@ -204,7 +315,21 @@ describe('getTokenUsage', () => {
 });
 
 describe('calculateOpenAICost', () => {
-  it.each(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15', 'gpt-4o-mini-tts-2025-03-20'])(
+  it('rejects incomplete audio usage even when one token count is zero', () => {
+    expect(calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, 0)).toBeUndefined();
+    expect(
+      calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, undefined, 0),
+    ).toBeUndefined();
+  });
+
+  it('uses long-context text rates when audio usage is present', () => {
+    const tokens = 300_000;
+    const model = 'gpt-6-astra';
+    const textCost = calculateOpenAICost(model, {}, tokens, 500);
+    expect(calculateOpenAICost(model, {}, tokens, 500, 1, 0)).toBe(textCost);
+  });
+
+  it.each(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15'])(
     'should recognize and price TTS model %s without treating it as a chat model',
     (model) => {
       expect(OPENAI_TTS_MODELS.some((candidate) => candidate.id === model)).toBe(true);
@@ -221,6 +346,7 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
     expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeCloseTo((1000 * 0.5 + 500 * 2) / 1e6, 6);
   });
 
   it('does not classify the Codex-surface-only Spark model as an API model', () => {
@@ -395,8 +521,9 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
-    ['gpt-5.6', 5, 30],
-    ['gpt-5.6-sol', 5, 30],
+    ['gpt-6.1-sol', 2, 10],
+    ['gpt-5.6', 4, 20],
+    ['gpt-5.6-sol', 4, 20],
     ['gpt-5.6-terra', 2, 12],
     ['gpt-5.6-luna', 0.2, 1.2],
   ])('should calculate cost correctly for %s', (model, inputRate, outputRate) => {
@@ -405,8 +532,9 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
-    ['gpt-5.6', 5, 30, 10, 45],
-    ['gpt-5.6-sol', 5, 30, 10, 45],
+    ['gpt-6.1-sol', 2, 10, 4, 15],
+    ['gpt-5.6', 4, 20, 8, 30],
+    ['gpt-5.6-sol', 4, 20, 8, 30],
     ['gpt-5.6-terra', 2, 12, 4, 18],
     ['gpt-5.6-luna', 0.2, 1.2, 0.4, 1.8],
   ])(
@@ -532,6 +660,11 @@ describe('calculateOpenAICost', () => {
     }
   });
 
+  it('should recognize GPT-6.1 Sol for Chat Completions and Responses', () => {
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-6.1-sol')).toBe(true);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-6.1-sol')).toBe(false);
+  });
+
   it('should keep GPT-5.4 and GPT-5.5 Pro out of Chat Completions routing', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro')).toBe(false);
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro-2026-03-05')).toBe(false);
@@ -544,13 +677,8 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
-    'gpt-5-codex',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
-    'gpt-5.2-codex',
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     'gpt-5.3-codex',
@@ -558,16 +686,13 @@ describe('calculateOpenAICost', () => {
     'o1-pro-2025-03-19',
     'o3-pro',
     'o3-pro-2025-06-10',
-    'computer-use-preview',
-    'computer-use-preview-2025-03-11',
   ])('should keep active Responses-only model %s out of Chat Completions routing', (model) => {
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
   });
 
-  it('should exclude retired preview audio and realtime models from current routing registries', () => {
+  it('keeps current audio and realtime models routable until their January 20, 2027 shutdown', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
-    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-audio-preview')).toBe(false);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-2')).toBe(true);
     expect(
@@ -575,8 +700,126 @@ describe('calculateOpenAICost', () => {
         (model) => model.id === 'gpt-4o-mini-realtime-preview-2024-12-17',
       ),
     ).toBe(true);
-    expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview')).toBe(
+  });
+
+  it('excludes retired audio and realtime previews while retaining historical billing', () => {
+    for (const model of retiredChatModelIds.filter((model) => model.includes('audio-preview'))) {
+      expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+      expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
+    }
+    for (const model of otherRetiredModelIds.filter((model) =>
+      model.includes('realtime-preview'),
+    )) {
+      expect(OPENAI_REALTIME_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+      expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
+    }
+  });
+
+  it.each([
+    'gpt-4o-mini-audio-preview-2024-12-17',
+    'gpt-4o-mini-search-preview',
+    'gpt-4o-search-preview',
+    'gpt-5-chat',
+  ])('keeps legacy discovery exclusion %s separate from confirmed shutdowns', (model) => {
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(RETIRED_OPENAI_MODEL_IDS.has(model)).toBe(false);
+    expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
+  });
+
+  it('excludes July 23 shutdowns from current model registries while retaining billing', () => {
+    for (const model of [
+      'gpt-4o-search-preview-2025-03-11',
+      'gpt-4o-mini-search-preview-2025-03-11',
+      'gpt-5-chat-latest',
+      'gpt-5.1-chat-latest',
+      'gpt-audio-mini-2025-10-06',
+    ]) {
+      expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+      expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
+    }
+
+    expect(OPENAI_TTS_MODELS.some(({ id }) => id === 'gpt-4o-mini-tts-2025-03-20')).toBe(true);
+    expect(calculateOpenAICost('gpt-4o-mini-tts-2025-03-20', {}, 1_000, 0, 0, 500)).toBeTypeOf(
+      'number',
+    );
+    expect(OPENAI_REALTIME_MODELS.some(({ id }) => id === 'gpt-realtime-mini-2025-10-06')).toBe(
       false,
+    );
+
+    for (const model of [
+      'computer-use-preview',
+      'computer-use-preview-2025-03-11',
+      'gpt-5-codex',
+      'gpt-5.1-codex',
+      'gpt-5.1-codex-max',
+      'gpt-5.1-codex-mini',
+      'gpt-5.2-codex',
+    ]) {
+      expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+      expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
+    }
+
+    for (const model of [
+      'o3-deep-research',
+      'o3-deep-research-2025-06-26',
+      'o4-mini-deep-research',
+      'o4-mini-deep-research-2025-06-26',
+    ]) {
+      expect(OPENAI_DEEP_RESEARCH_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+      expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+      expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
+    }
+  });
+
+  it('excludes every already-shut-down model from current routing registries', () => {
+    for (const model of retiredChatModelIds) {
+      expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    }
+    for (const model of retiredResponsesModelIds) {
+      expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    }
+    expect(OPENAI_TTS_MODELS.some(({ id }) => id === 'gpt-4o-mini-tts-2025-03-20')).toBe(true);
+    expect(OPENAI_REALTIME_MODELS.some(({ id }) => id === 'gpt-realtime-mini-2025-10-06')).toBe(
+      false,
+    );
+  });
+
+  it('rejects retired models only when calling the first-party OpenAI API', () => {
+    for (const model of [
+      ...retiredChatModelIds,
+      ...retiredResponsesModelIds,
+      ...otherRetiredModelIds,
+    ]) {
+      expect(RETIRED_OPENAI_MODEL_IDS.has(model)).toBe(true);
+      expect(() => assertOpenAiApiModel(model, 'https://api.openai.com/v1')).toThrow(
+        `${model} has been retired`,
+      );
+      expect(() => assertOpenAiApiModel(model, 'https://gateway.example/v1')).not.toThrow();
+    }
+  });
+
+  it.each(['gpt-transcribe', 'vendor/gpt-transcribe', 'gpt-live-transcribe'])(
+    'allows custom OpenAI-compatible endpoints to use their own %s model',
+    (model) => {
+      expect(() => assertOpenAiApiModel(model, 'https://gateway.example/v1')).not.toThrow();
+    },
+  );
+
+  it.each([
+    'https://us.api.openai.com/v1',
+    'https://eu.api.openai.com/v1',
+    'https://au.api.openai.com/v1',
+    'https://ca.api.openai.com/v1',
+    'https://jp.api.openai.com/v1',
+    'https://in.api.openai.com/v1',
+    'https://sg.api.openai.com/v1',
+    'https://kr.api.openai.com/v1',
+    'https://gb.api.openai.com/v1',
+    'https://ae.api.openai.com/v1',
+  ])('rejects retired models on the regional first-party endpoint %s', (apiUrl) => {
+    expect(() => assertOpenAiApiModel('gpt-5-chat-latest', apiUrl)).toThrow(
+      'gpt-5-chat-latest has been retired',
     );
   });
 
@@ -808,7 +1051,7 @@ describe('calculateOpenAICost', () => {
   });
 
   it('should use custom audioCost from config when provided', () => {
-    const audioCost = 0.05; // per 1M tokens
+    const audioCost = 0.05; // per token
 
     const promptTokens = 1000;
     const completionTokens = 500;
@@ -834,7 +1077,7 @@ describe('calculateOpenAICost', () => {
     const audioOutputCostCustom = audioCost * audioCompletionTokens;
 
     const expectedTotalCost =
-      (baseInputCost + baseOutputCost + audioInputCostCustom + audioOutputCostCustom) / 1;
+      baseInputCost + baseOutputCost + audioInputCostCustom + audioOutputCostCustom;
 
     const cost = calculateOpenAICost(
       'gpt-4o-audio-preview',
@@ -996,5 +1239,97 @@ describe('formatOpenAiError', () => {
     expect(result).toContain('API error: Error message');
     expect(result).not.toContain('Type:');
     expect(result).not.toContain('Code:');
+  });
+});
+
+describe('OpenAI model catalogs', () => {
+  const activeModels = [
+    ...OPENAI_CHAT_MODELS,
+    ...OPENAI_RESPONSES_ONLY_MODELS,
+    ...OPENAI_REALTIME_MODELS,
+    ...OPENAI_COMPLETION_MODELS,
+  ].map((candidate) => candidate.id);
+
+  it('retains the deep-research compatibility export for historical billing only', () => {
+    expect(OPENAI_DEEP_RESEARCH_MODELS.map((model) => model.id)).toEqual([
+      'o3-deep-research',
+      'o3-deep-research-2025-06-26',
+      'o4-mini-deep-research',
+      'o4-mini-deep-research-2025-06-26',
+    ]);
+    for (const model of OPENAI_DEEP_RESEARCH_MODELS) {
+      expect(activeModels).not.toContain(model.id);
+      expect(calculateOpenAICost(model.id, {}, 1000, 500)).toBeGreaterThan(0);
+    }
+  });
+
+  // Confirmed shutdowns and legacy discovery exclusions retained from the current-main catalog.
+  it.each([
+    'chatgpt-4o-latest',
+    'codex-mini-latest',
+    'computer-use-preview',
+    'computer-use-preview-2025-03-11',
+    'gpt-3.5-turbo-0301',
+    'gpt-3.5-turbo-0613',
+    'gpt-3.5-turbo-16k-0613',
+    'gpt-4-0125-preview',
+    'gpt-4-0314',
+    'gpt-4-1106-vision-preview',
+    'gpt-4-32k',
+    'gpt-4-32k-0314',
+    'gpt-4-32k-0613',
+    'gpt-4-turbo-preview',
+    'gpt-4-vision-preview',
+    'gpt-4o-mini-search-preview',
+    'gpt-4o-mini-search-preview-2025-03-11',
+    'gpt-4o-search-preview',
+    'gpt-4o-search-preview-2025-03-11',
+    'gpt-5-chat',
+    'gpt-5-chat-latest',
+    'gpt-5-codex',
+    'gpt-5.1-chat-latest',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'gpt-5.2-chat-latest',
+    'gpt-5.2-codex',
+    'gpt-5.3-chat-latest',
+    'gpt-audio-mini-2025-10-06',
+    'gpt-realtime-mini-2025-10-06',
+    'o1-mini',
+    'o1-mini-2024-09-12',
+    'o1-preview',
+    'o1-preview-2024-09-12',
+    'o3-deep-research',
+    'o3-deep-research-2025-06-26',
+    'o4-mini-deep-research',
+    'o4-mini-deep-research-2025-06-26',
+  ])('does not advertise retired or legacy model %s', (model) => {
+    expect(activeModels).not.toContain(model);
+    // Removing suggestions must not erase historical cost estimates.
+    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeGreaterThan(0);
+  });
+
+  it.each([
+    'gpt-3.5-turbo',
+    'gpt-3.5-turbo-1106',
+    'gpt-3.5-turbo-instruct',
+    'babbage-002',
+    'davinci-002',
+    'gpt-4',
+    'gpt-4-turbo',
+    'gpt-4.1-nano',
+    'gpt-4o-2024-05-13',
+    'o1',
+    'o1-pro',
+    'o3-mini',
+    'o4-mini',
+    'gpt-5-2025-08-07',
+    'gpt-audio-mini',
+    'gpt-audio-mini-2025-12-15',
+    'gpt-realtime-mini',
+    'gpt-realtime-mini-2025-12-15',
+  ])('retains model %s before its announced shutdown', (model) => {
+    expect(activeModels).toContain(model);
   });
 });

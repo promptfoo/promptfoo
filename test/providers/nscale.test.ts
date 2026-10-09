@@ -88,50 +88,10 @@ describe('createNscaleProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-oss-120b', {
       config: {
         apiBaseUrl: 'https://inference.api.nscale.com/v1',
-        apiKey: undefined, // No API key or service token set
         passthrough: {},
       },
       id: 'custom-id',
     });
-  });
-
-  it('should prefer service tokens over API keys', () => {
-    (getEnvString as Mock).mockReturnValue(undefined);
-    const options = {
-      env: {
-        NSCALE_SERVICE_TOKEN: 'service-token-123',
-        NSCALE_API_KEY: 'api-key-456',
-      },
-    };
-    createNscaleProvider('nscale:chat:openai/gpt-oss-120b', options);
-
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'openai/gpt-oss-120b',
-      expect.objectContaining({
-        config: expect.objectContaining({
-          apiKey: 'service-token-123',
-        }),
-      }),
-    );
-  });
-
-  it('should fall back to API key if no service token is provided', () => {
-    (getEnvString as Mock).mockReturnValue(undefined);
-    const options = {
-      env: {
-        NSCALE_API_KEY: 'api-key-456',
-      },
-    };
-    createNscaleProvider('nscale:chat:openai/gpt-oss-120b', options);
-
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'openai/gpt-oss-120b',
-      expect.objectContaining({
-        config: expect.objectContaining({
-          apiKey: 'api-key-456',
-        }),
-      }),
-    );
   });
 
   it('should use explicit config apiKey over environment variables', () => {
@@ -196,7 +156,6 @@ describe('createNscaleProvider', () => {
         expect.objectContaining({
           config: expect.objectContaining({
             apiBaseUrl: 'https://inference.api.nscale.com/v1',
-            apiKey: undefined, // No API key or service token set
             passthrough: expect.objectContaining({
               max_tokens: 4096,
               temperature: 0.7,
@@ -227,7 +186,6 @@ describe('createNscaleProvider', () => {
         expect.objectContaining({
           config: expect.objectContaining({
             apiBaseUrl: 'https://inference.api.nscale.com/v1',
-            apiKey: undefined, // No API key or service token set
             passthrough: expect.objectContaining({
               stop: ['END', 'STOP'],
               frequency_penalty: 0.1,
@@ -266,7 +224,6 @@ describe('createNscaleProvider', () => {
         expect.objectContaining({
           config: expect.objectContaining({
             apiBaseUrl: 'https://inference.api.nscale.com/v1',
-            apiKey: 'test-service-token',
           }),
         }),
       );

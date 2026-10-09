@@ -1,11 +1,29 @@
-import { getEnvString } from '../envars';
+import { resolveProviderApiKey } from './credentials';
 import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { OpenAiSharedOptions } from './openai/types';
+
+function withNscaleCredentials(
+  provider: OpenAiChatCompletionProvider | OpenAiCompletionProvider | OpenAiEmbeddingProvider,
+): ApiProvider {
+  return Object.assign(provider, {
+    getApiKey(config: OpenAiSharedOptions = provider.config): string | undefined {
+      return resolveProviderApiKey(config, provider.env, [
+        'NSCALE_SERVICE_TOKEN',
+        'NSCALE_API_KEY',
+      ]);
+    },
+    getMissingApiKeyErrorMessage(config: OpenAiSharedOptions = provider.config): string {
+      return `API key is not set. Set the ${config.apiKeyEnvar || 'NSCALE_SERVICE_TOKEN'} environment variable or add \`apiKey\` to the provider config.`;
+    },
+  });
+}
 
 /**
  * Creates an Nscale provider using OpenAI-compatible endpoints
@@ -15,33 +33,6 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  *
  * Documentation: https://docs.nscale.com/
  */
-/**
- * Config keys promptfoo consumes itself rather than forwarding to the model.
- *
- * `passthrough` is serialized verbatim into the request body, so anything spread
- * into it is sent to Nscale as a model parameter. Spreading the whole user config
- * put `apiKey` — the raw service token — into the JSON body, and diverted
- * `headers` there too so custom headers never became HTTP headers.
- *
- * Mirrors `OpenAiSharedOptions` in `./openai/types`.
- */
-const NSCALE_PROVIDER_LEVEL_OPTIONS = new Set([
-  'apiKey',
-  'apiKeyEnvar',
-  'apiKeyRequired',
-  'apiHost',
-  'apiBaseUrl',
-  'organization',
-  'headers',
-  'maxRetries',
-  'cost',
-  'inputCost',
-  'outputCost',
-  'audioCost',
-  'audioInputCost',
-  'audioOutputCost',
-]);
-
 export function createNscaleProvider(
   providerPath: string,
   options: {
@@ -53,65 +44,37 @@ export function createNscaleProvider(
   const splits = providerPath.split(':');
 
   const config = options.config?.config || {};
-
-  // Split the user's config into settings promptfoo handles (auth, routing,
-  // headers, cost overrides) and genuine model parameters, so only the latter
-  // reach the request body.
-  const { passthrough: explicitPassthrough, ...configOptions } = config;
-  const providerLevelOptions: Record<string, any> = {};
-  const modelParameters: Record<string, any> = {};
-  for (const [key, value] of Object.entries(configOptions)) {
-    if (NSCALE_PROVIDER_LEVEL_OPTIONS.has(key)) {
-      providerLevelOptions[key] = value;
-    } else {
-      modelParameters[key] = value;
-    }
-  }
-
-  // Prefer service tokens over API keys (API keys deprecated Oct 30, 2025)
-  const getApiKey = () => {
-    return (
-      config.apiKey ||
-      options.env?.NSCALE_SERVICE_TOKEN ||
-      getEnvString('NSCALE_SERVICE_TOKEN') ||
-      options.env?.NSCALE_API_KEY ||
-      getEnvString('NSCALE_API_KEY')
-    );
-  };
+  const { localOptions, modelParameters } = splitLocalOptions(config);
 
   const nscaleConfig = {
     ...options,
     config: {
-      ...providerLevelOptions,
+      ...localOptions,
       // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
       // of silently ignoring it while still shipping it in the request body.
-      apiBaseUrl: providerLevelOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
-      apiKey: getApiKey(),
-      passthrough: {
-        ...modelParameters,
-        ...explicitPassthrough,
-      },
+      apiBaseUrl: localOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
+      passthrough: { ...modelParameters, ...config.passthrough },
     },
   };
 
   if (splits[1] === 'chat') {
     const modelName = splits.slice(2).join(':');
-    return new OpenAiChatCompletionProvider(modelName, nscaleConfig);
+    return withNscaleCredentials(new OpenAiChatCompletionProvider(modelName, nscaleConfig));
   } else if (splits[1] === 'completion') {
     const modelName = splits.slice(2).join(':');
-    return new OpenAiCompletionProvider(modelName, nscaleConfig);
+    return withNscaleCredentials(new OpenAiCompletionProvider(modelName, nscaleConfig));
   } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
     const modelName = splits.slice(2).join(':');
-    return new OpenAiEmbeddingProvider(modelName, nscaleConfig);
+    return withNscaleCredentials(new OpenAiEmbeddingProvider(modelName, nscaleConfig));
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
-      config: options.config as any, // Allow flexible config type for Nscale image options
+      config,
       id: options.id,
       env: options.env,
     });
   } else {
     // If no specific type is provided, default to chat
     const modelName = splits.slice(1).join(':');
-    return new OpenAiChatCompletionProvider(modelName, nscaleConfig);
+    return withNscaleCredentials(new OpenAiChatCompletionProvider(modelName, nscaleConfig));
   }
 }

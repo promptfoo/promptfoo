@@ -41,7 +41,7 @@ import {
   Save,
   Settings,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
@@ -289,8 +289,6 @@ export default function RedTeamSetupPage() {
         'error',
       );
     }
-
-    setHasUnsavedChanges(false);
   };
 
   const loadConfigs = async () => {

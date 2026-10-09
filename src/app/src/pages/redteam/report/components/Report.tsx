@@ -35,6 +35,7 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
+import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -45,9 +46,8 @@ import {
   type ResultsFile,
   type SharedResults,
 } from '@promptfoo/types';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import Overview from './Overview';

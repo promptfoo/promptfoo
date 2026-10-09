@@ -33,19 +33,19 @@
       ],
       "ignoreFiles": [],
       "ignoreDependencies": [
+        // Yarn injects pnpapi as a runtime builtin; the filesystem MCP launcher resolves its loader.
+        "pnpapi",
         // Imported by test/code-scan-action/*.test.ts; declared in
         // code-scan-action/package.json rather than the root manifest.
         "@actions/*",
-        "@octokit/rest",
-        // Types for a dynamically-imported dependency.
-        "@types/pdf-parse",
+        // Optional peer loaded lazily only by Transformers providers. Consumers opt
+        // in; unit tests mock it and the package artifact test installs the real SDK.
+        "@huggingface/transformers",
         // Install-side-effect git-hook tool; never imported.
         "block-no-verify",
         // Transitive pin for google-auth-library behavior (see comments in
         // src/providers/google/auth.ts); never imported directly.
-        "gcp-metadata",
-        // Transitive pin; never imported directly.
-        "langium"
+        "gcp-metadata"
       ],
       "paths": {
         "@promptfoo/*": ["./src/*"]
@@ -54,11 +54,8 @@
     "src/app": {
       "entry": ["index.html"],
       "project": ["src/**/*.{js,ts,tsx}"],
-      "ignoreFiles": ["src/polyfills/scroll-timeline.d.ts"],
       "ignoreDependencies": [
-        // Build-tool/CSS deps invisible to import analysis (Tailwind v4 pipeline).
-        "@kurkle/color",
-        "lightningcss",
+        // Tailwind v4 is loaded through the CSS/PostCSS pipeline.
         "tailwindcss"
       ],
       "paths": {
@@ -77,17 +74,9 @@
       "ignoreFiles": ["docs/_shared/**/*.{js,ts,tsx}", "static/js/scripts.js"],
       "ignoreDependencies": [
         // Docusaurus aliasing/preset conventions resolved at build time.
-        "@docusaurus/types",
-        "@docusaurus/theme-common",
         "@theme/*",
         "@mui/*",
-        "@generated/*",
-        "@docusaurus/plugin-content-blog",
-        "@swc/core",
-        "@swc/jest",
-        // Transitive pins for the Docusaurus build; never imported directly.
-        "dompurify",
-        "langium"
+        "@generated/*"
       ]
     },
     "code-scan-action": {
@@ -95,19 +84,25 @@
     }
   },
   "ignoreBinaries": [
-    // System tools invoked via child_process, plus the npm bin script.
+    // System tools invoked by package scripts and subprocesses.
     "act",
-    "dist/src/entrypoint.js",
     "ffmpeg",
-    "gh",
     "go",
+    // POSIX utility used by workspace FIFO regression tests.
+    "mkfifo",
     "modelaudit",
-    "python3",
+    // POSIX process-tree discovery for package fixture cleanup.
+    "ps",
     "ruby",
-    "security"
+    "security",
+    // Windows system utility used to terminate install-profile subprocess descendants.
+    "taskkill"
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
+    // Cloud-consumed: server/src/worker/redteamRun imports withCloudProviderResolver
+    // from @promptfoo/util/cloud to supply prepared saved providers during a run.
+    "src/util/cloud.ts": ["exports"],
     // Internal intentional alias/duplicate-export patterns.
     "src/contracts/api/user.ts": ["duplicates"],
     // Cloud-consumed: server/src/task/hydra.ts and server/src/task/h4rm3l

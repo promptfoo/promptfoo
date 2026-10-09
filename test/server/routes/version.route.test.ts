@@ -1,6 +1,19 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { currentVersionMock } = vi.hoisted(() => ({
+  currentVersionMock: { value: undefined as string | undefined },
+}));
+
+vi.mock('../../../src/constants', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/constants')>();
+  return {
+    ...actual,
+    get VERSION() {
+      return currentVersionMock.value ?? actual.VERSION;
+    },
+  };
+});
 vi.mock('../../../src/updates');
 vi.mock('../../../src/updates/updateCommands');
 vi.mock('../../../src/util/promptfooCommand');
@@ -20,6 +33,7 @@ describe('Version Route', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    currentVersionMock.value = undefined;
     mockedIsRunningUnderNpx.mockReturnValue(false);
     mockedGetUpdateCommands.mockReturnValue({
       primary: 'npm install -g promptfoo@latest',
@@ -30,6 +44,7 @@ describe('Version Route', () => {
   });
 
   afterEach(() => {
+    currentVersionMock.value = undefined;
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.resetAllMocks();
@@ -67,6 +82,45 @@ describe('Version Route', () => {
     expect(typeof response.body.currentVersion).toBe('string');
     expect(typeof response.body.latestVersion).toBe('string');
     expect(typeof response.body.updateAvailable).toBe('boolean');
+  });
+
+  it.each([
+    ['does not offer an update to a lower version', '1.0.0', '0.9.0', false, 1],
+    ['does not offer an update to an equal version', '1.0.0', '1.0.0', false, 9],
+    ['offers a stable release to a beta build', '1.0.0-beta.1', '1.0.0', true, 2],
+    [
+      'does not offer a lower stable release to a newer release candidate',
+      '1.0.1-rc.1',
+      '1.0.0',
+      false,
+      3,
+    ],
+    ['does not offer updates to development builds', '0.0.0-development', '99.0.0', false, 4],
+    ['does not offer updates to the zero version', '0.0.0', '99.0.0', false, 5],
+    ['resolves a null upstream version to the current version', '1.0.0', null, false, 6],
+    ['offers an update when invalid versions differ', 'custom-build', 'custom-release', true, 7],
+    [
+      'does not offer an update when invalid versions are equal',
+      'custom-build',
+      'custom-build',
+      false,
+      8,
+    ],
+  ] as const)('%s', async (_name, currentVersion, latestVersion, updateAvailable, day) => {
+    currentVersionMock.value = currentVersion;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(`2200-01-${String(day).padStart(2, '0')}T00:00:00.000Z`));
+    mockedGetLatestVersion.mockResolvedValueOnce(latestVersion as string);
+
+    const response = await request(app).get('/api/version');
+
+    expect(response.status).toBe(200);
+    expect(mockedGetLatestVersion).toHaveBeenCalledOnce();
+    expect(response.body).toMatchObject({
+      currentVersion,
+      latestVersion: latestVersion ?? currentVersion,
+      updateAvailable,
+    });
   });
 
   it('should not return 500 when fetch fails (graceful fallback)', async () => {

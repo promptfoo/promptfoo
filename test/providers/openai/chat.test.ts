@@ -2,13 +2,20 @@ import path from 'path';
 
 import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { handleIsRefusal } from '../../../src/assertions/refusal';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
+import { CloudflareGatewayOpenAiProvider } from '../../../src/providers/cloudflare-gateway';
+import { createLiteLLMProvider } from '../../../src/providers/litellm';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { OpenRouterProvider } from '../../../src/providers/openrouter';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
+
+import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -39,6 +46,29 @@ const mockImportModule = vi.mocked(importModule);
 const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
 const originalDeepseekApiKey = process.env.DEEPSEEK_API_KEY;
 
+function gradeProviderRefusal(response: ProviderResponse, inverse = false) {
+  const output = response.output ?? '';
+  const test = {} as AtomicTestCase;
+  return handleIsRefusal({
+    assertion: { type: 'is-refusal' },
+    baseType: 'is-refusal',
+    output,
+    outputString: typeof output === 'string' ? output : JSON.stringify(output),
+    inverse,
+    providerResponse: response,
+    test,
+    assertionValueContext: {
+      prompt: undefined,
+      vars: {},
+      test,
+      logProbs: undefined,
+      config: {},
+      provider: undefined,
+      providerResponse: response,
+    },
+  });
+}
+
 describe('OpenAI Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -64,6 +94,212 @@ describe('OpenAI Provider', () => {
   describe('OpenAiChatCompletionProvider', () => {
     beforeEach(() => {
       vi.clearAllMocks();
+    });
+
+    describe('custom audio response costs', () => {
+      it.each([
+        {
+          name: 'audio input',
+          audioInput: 750,
+          audioOutput: 0,
+          config: { cost: 2 / 1e6, audioInputCost: 10 / 1e6 },
+          expected: 0.009,
+        },
+        {
+          name: 'audio output',
+          audioInput: 0,
+          audioOutput: 400,
+          config: { cost: 2 / 1e6, audioOutputCost: 20 / 1e6 },
+          expected: 0.0102,
+        },
+        {
+          name: 'zero audio input',
+          audioInput: 750,
+          audioOutput: 0,
+          config: { cost: 2 / 1e6, audioInputCost: 0 },
+          expected: 0.0015,
+        },
+        {
+          name: 'zero text and audio input',
+          audioInput: 750,
+          audioOutput: 0,
+          config: { cost: 0, audioInputCost: 0 },
+          expected: 0,
+        },
+        {
+          name: 'missing audio input',
+          audioInput: 750,
+          audioOutput: 0,
+          config: { cost: 2 / 1e6, audioOutputCost: 20 / 1e6 },
+          expected: undefined,
+        },
+        {
+          name: 'missing audio output',
+          audioInput: 0,
+          audioOutput: 400,
+          config: { cost: 2 / 1e6, audioInputCost: 10 / 1e6 },
+          expected: undefined,
+        },
+      ])(
+        'returns the correct cost for $name',
+        async ({ audioInput, audioOutput, config, expected }) => {
+          mockFetchWithCache.mockResolvedValueOnce({
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+            data: {
+              choices: [{ message: { content: 'PONG' } }],
+              usage: {
+                prompt_tokens: 1000,
+                completion_tokens: 500,
+                total_tokens: 1500,
+                prompt_tokens_details: { text_tokens: 1000 - audioInput, audio_tokens: audioInput },
+                completion_tokens_details: {
+                  text_tokens: 500 - audioOutput,
+                  audio_tokens: audioOutput,
+                },
+              },
+            },
+          });
+          const provider = new OpenAiChatCompletionProvider('gateway/custom-audio', { config });
+          const response = await provider.callApi('Ordinary billing fixture');
+          expect(response.error).toBeUndefined();
+          expect(response.output).toBe('PONG');
+          expect(response.tokenUsage).toMatchObject({
+            prompt: 1000,
+            completion: 500,
+            total: 1500,
+            numRequests: 1,
+          });
+          expect(response.cached).toBe(false);
+          if (expected === undefined) {
+            expect(response.cost).toBeUndefined();
+          } else {
+            expect(response.cost).toBeCloseTo(expected, 12);
+          }
+          expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+          const [, options] = mockFetchWithCache.mock.calls[0];
+          expect(JSON.parse(options?.body as string)).toMatchObject({
+            model: 'gateway/custom-audio',
+            messages: [{ role: 'user', content: 'Ordinary billing fixture' }],
+          });
+        },
+      );
+
+      it('uses the prompt audio-rate override without requiring unused audio output', async () => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: {
+            choices: [{ message: { content: 'PONG' } }],
+            usage: {
+              prompt_tokens: 1000,
+              completion_tokens: 500,
+              total_tokens: 1500,
+              prompt_tokens_details: { text_tokens: 250, audio_tokens: 750 },
+              completion_tokens_details: { text_tokens: 500, audio_tokens: 0 },
+            },
+          },
+        });
+        const provider = new OpenAiChatCompletionProvider('gateway/custom-audio', {
+          config: { cost: 3 / 1e6, audioInputCost: 20 / 1e6 },
+        });
+        const response = await provider.callApi('Ordinary billing fixture', {
+          vars: {},
+          prompt: {
+            raw: 'Ordinary billing fixture',
+            label: 'fixture',
+            config: { cost: 2 / 1e6, audioInputCost: 10 / 1e6 },
+          },
+        });
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('PONG');
+        expect(response.cost).toBeCloseTo(0.009, 12);
+        expect(provider.config).toMatchObject({ cost: 3 / 1e6, audioInputCost: 20 / 1e6 });
+      });
+    });
+
+    it.each([
+      { reported: 'ultrafast', cost: undefined },
+      { reported: undefined, cost: undefined },
+      { reported: 'default', cost: 0.003 },
+    ])(
+      'forwards Ultrafast and bills the actual tier $reported for GPT-6.1 Sol',
+      async ({ reported, cost }) => {
+        mockFetchWithCache.mockResolvedValue({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: {
+            model: 'gpt-6.1-sol',
+            service_tier: reported,
+            choices: [{ message: { role: 'assistant', content: 'Ready.' } }],
+            usage: {
+              prompt_tokens: 1000,
+              completion_tokens: 100,
+              total_tokens: 1100,
+              prompt_tokens_details: { cache_write_tokens: 0 },
+            },
+          },
+        });
+        const result = await new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+          config: { service_tier: 'ultrafast', reasoning_effort: 'high' },
+        }).callApi('Say ready.');
+
+        const [, options] = mockFetchWithCache.mock.calls[0];
+        expect(JSON.parse(options?.body as string)).toMatchObject({
+          model: 'gpt-6.1-sol',
+          service_tier: 'ultrafast',
+          reasoning_effort: 'high',
+        });
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Ready.');
+        if (cost === undefined) {
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.cost).toBeCloseTo(cost, 10);
+        }
+      },
+    );
+
+    it('surfaces a model or account rejection of Ultrafast from Chat Completions', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+        data: {
+          error: {
+            message: 'Ultrafast is unavailable for this model or account.',
+            type: 'invalid_request_error',
+            code: 'unsupported_value',
+            param: 'service_tier',
+          },
+        },
+      });
+      const result = await new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+        config: { service_tier: 'ultrafast' },
+      }).callApi('Say ready.');
+      expect(result.error).toContain('Ultrafast is unavailable for this model or account.');
+      expect(result.output).toBeUndefined();
+    });
+
+    it.each([
+      'gpt-live-transcribe',
+      'gpt-live-transcribe-2026-09-01',
+      'gpt-live-1',
+      'gpt-live-1-2026-09-01',
+    ])('rejects prompt-scoped voice model %s before making a Chat request', async (model) => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+      await expect(
+        provider.callApi('Hi', {
+          vars: {},
+          prompt: { raw: 'Hi', label: 'Hi', config: { passthrough: { model } } },
+        }),
+      ).rejects.toThrow(
+        model.startsWith('gpt-live-transcribe') ? /Realtime.*session/ : 'openai:live:',
+      );
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
     });
 
     it('keeps OpenAI provider identity when a custom ID omits a provider prefix', () => {
@@ -166,6 +402,796 @@ describe('OpenAI Provider', () => {
         getTracerSpy.mockRestore();
       }
     });
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'sends LiteLLM token budgets and records the effective native Chat token cap for %s',
+      async (model) => {
+        mockFetchWithCache.mockResolvedValue({
+          data: { choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const attributes: Record<string, unknown>[] = [];
+        const tracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+          startActiveSpan: (
+            _name: string,
+            options: { attributes?: Record<string, unknown> },
+            _context: unknown,
+            callback: any,
+          ) => {
+            const span = { ...options.attributes };
+            attributes.push(span);
+            return callback({
+              setAttribute: (key: string, value: unknown) => {
+                span[key] = value;
+              },
+              setStatus: vi.fn(),
+              recordException: vi.fn(),
+              end: vi.fn(),
+            });
+          },
+        } as any);
+        try {
+          const sampling = { reasoning_effort: 'none' as const, temperature: 0.4, top_p: 0.8 };
+          const providers = [
+            new OpenAiChatCompletionProvider(model, {
+              config: { max_completion_tokens: 50, ...sampling },
+            }),
+            createLiteLLMProvider(`litellm:${model}`, {
+              config: {
+                config: {
+                  apiKey: 'test-key',
+                  apiBaseUrl: 'https://proxy.example/v1',
+                  max_tokens: 50,
+                  ...sampling,
+                },
+              },
+            }),
+            new OpenRouterProvider(`openai/${model}`, {
+              config: { apiKey: 'test-key', max_completion_tokens: 50, ...sampling },
+            }),
+          ];
+          const prompt = { raw: 'Say ready.', label: 'ready' };
+          for (const provider of providers) {
+            for (const [override, expected] of [
+              [undefined, 50],
+              [{ max_tokens: 23 }, 23],
+              [{ passthrough: { max_completion_tokens: 37 } }, 37],
+              [{ passthrough: { max_tokens: null } }, undefined],
+            ] as const) {
+              const result = await provider.callApi(
+                'Say ready.',
+                override
+                  ? {
+                      vars: {},
+                      prompt: { ...prompt, config: override },
+                    }
+                  : undefined,
+              );
+              expect(result.error).toBeUndefined();
+              const last = mockFetchWithCache.mock.calls.at(-1)!;
+              const request = JSON.parse(last[1]?.body as string);
+              expect(request.max_completion_tokens).toBe(expected);
+              expect(request).not.toHaveProperty('max_tokens');
+              expect(attributes.at(-1)?.['gen_ai.request.max_tokens']).toBe(expected);
+            }
+            for (const reasoning_effort of ['none', 'high'] as const) {
+              await provider.callApi(prompt.raw, {
+                vars: {},
+                prompt: { ...prompt, config: { reasoning_effort } },
+              });
+              const request = JSON.parse(mockFetchWithCache.mock.calls.at(-1)![1]?.body as string);
+              const expectedTemperature = reasoning_effort === 'none' ? 0.4 : undefined;
+              const expectedTopP = reasoning_effort === 'none' ? 0.8 : undefined;
+              expect(request.temperature).toBe(expectedTemperature);
+              expect(request.top_p).toBe(expectedTopP);
+              expect(attributes.at(-1)?.['gen_ai.request.temperature']).toBe(expectedTemperature);
+              expect(attributes.at(-1)?.['gen_ai.request.top_p']).toBe(expectedTopP);
+            }
+          }
+        } finally {
+          tracer.mockRestore();
+        }
+      },
+    );
+
+    it('traces the token field actually sent for earlier OpenAI Chat models', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: { choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const attributes: Record<string, unknown>[] = [];
+      const tracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+        startActiveSpan: (
+          _name: string,
+          options: { attributes?: Record<string, unknown> },
+          _context: unknown,
+          callback: any,
+        ) => {
+          const span = { ...options.attributes };
+          attributes.push(span);
+          return callback({
+            setAttribute: (key: string, value: unknown) => {
+              span[key] = value;
+            },
+            setStatus: vi.fn(),
+            recordException: vi.fn(),
+            end: vi.fn(),
+          });
+        },
+      } as any);
+      try {
+        const prompt = { raw: 'Say ready.', label: 'ready' };
+        for (const { model, providerConfig, promptConfig, wireField, expected } of [
+          {
+            model: 'gpt-4o',
+            providerConfig: { max_tokens: 50, max_completion_tokens: 100 },
+            promptConfig: undefined,
+            wireField: 'max_tokens',
+            expected: 50,
+          },
+          {
+            model: 'gpt-5.6-sol',
+            providerConfig: { max_completion_tokens: 4096 },
+            promptConfig: { max_tokens: 50 },
+            wireField: 'max_completion_tokens',
+            expected: 4096,
+          },
+          {
+            model: 'gpt-4o',
+            providerConfig: { max_tokens: 50 },
+            promptConfig: { passthrough: { max_tokens: 23 } },
+            wireField: 'max_tokens',
+            expected: 23,
+          },
+          {
+            model: 'gpt-5.6-sol',
+            providerConfig: { max_completion_tokens: 4096 },
+            promptConfig: { passthrough: { max_completion_tokens: null } },
+            wireField: 'max_completion_tokens',
+            expected: undefined,
+          },
+        ]) {
+          const provider = new OpenAiChatCompletionProvider(model, { config: providerConfig });
+          const result = await provider.callApi(
+            prompt.raw,
+            promptConfig ? { vars: {}, prompt: { ...prompt, config: promptConfig } } : undefined,
+          );
+          expect(result.error).toBeUndefined();
+          const request = JSON.parse(mockFetchWithCache.mock.calls.at(-1)![1]?.body as string);
+          expect(request[wireField] ?? undefined).toBe(expected);
+          expect(attributes.at(-1)?.['gen_ai.request.max_tokens']).toBe(expected);
+        }
+      } finally {
+        tracer.mockRestore();
+      }
+    });
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'keeps marked GPT-6 OpenRouter refusals distinct from native policy and authorization errors for %s',
+      async (model) => {
+        const message = 'This content was flagged for possible biological risk.';
+        for (const policyCode of ['bio_policy', 'cyber_policy']) {
+          for (const [provider, body] of [
+            [
+              new OpenAiChatCompletionProvider(`openai/${model}`, {
+                config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+              }),
+              {
+                error: {
+                  code: 403,
+                  message,
+                  metadata: { error_type: 'refusal', provider_code: policyCode },
+                },
+              },
+            ],
+            [
+              new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
+              {
+                error: {
+                  code: 403,
+                  message,
+                  metadata: { error_type: 'refusal', provider_code: policyCode },
+                },
+              },
+            ],
+          ] as const) {
+            mockFetchWithCache.mockResolvedValueOnce({
+              data: body,
+              cached: false,
+              status: 403,
+              statusText: 'Forbidden',
+              headers: { 'x-request-id': 'test' },
+            });
+            const result = await provider.callApi('A test prompt');
+            expect(result.error).toBeUndefined();
+            expect(result).toMatchObject({
+              output: message,
+              isRefusal: true,
+              guardrails: { flagged: true, flaggedInput: true, reason: message },
+              metadata: {
+                providerPolicy: { code: policyCode },
+                http: { status: 403, headers: { 'x-request-id': 'test' } },
+              },
+            });
+            expect(gradeProviderRefusal(result)).toMatchObject({ pass: true, score: 1 });
+            expect(gradeProviderRefusal(result, true)).toMatchObject({ pass: false, score: 0 });
+          }
+
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: { error: { code: policyCode, message } },
+            cached: false,
+            status: 403,
+            statusText: 'Forbidden',
+          });
+          const native = await new OpenAiChatCompletionProvider(model).callApi('A benign prompt');
+          expect(native.error).toContain(policyCode);
+          expect(native.isRefusal).toBeUndefined();
+          expect(native.guardrails).toBeUndefined();
+        }
+
+        const dedicated = new OpenRouterProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key' },
+        });
+        for (const provider of [
+          new OpenAiChatCompletionProvider(model),
+          new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+          }),
+          dedicated,
+        ]) {
+          const revocation =
+            'Your organization’s access to these models has been temporarily revoked.';
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: {
+              error: {
+                code: 'cyber_policy',
+                message: revocation,
+                metadata: { error_type: 'refusal', provider_code: 'cyber_policy' },
+              },
+            },
+            cached: false,
+            status: 403,
+            statusText: 'Forbidden',
+          });
+          const result = await provider.callApi('A benign prompt');
+          expect(result.error).toContain(revocation);
+          expect(result.isRefusal).toBeUndefined();
+          expect(result.guardrails).toBeUndefined();
+        }
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            error: {
+              code: 403,
+              message: 'Unauthorized',
+              metadata: { error_type: 'authentication', provider_code: 'invalid_api_key' },
+            },
+          },
+          cached: false,
+          status: 403,
+          statusText: 'Forbidden',
+        });
+        const denied = await dedicated.callApi('A test prompt');
+        expect(denied.error).toContain('Unauthorized');
+        expect(denied.isRefusal).toBeUndefined();
+
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [
+              {
+                message: { content: null, refusal: 'I cannot help with that.' },
+                finish_reason: 'content_filter',
+              },
+            ],
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const modelRefusal = await dedicated.callApi('A test prompt');
+        expect(modelRefusal).toMatchObject({
+          output: 'I cannot help with that.',
+          isRefusal: true,
+          guardrails: { flagged: true },
+        });
+        expect(modelRefusal.error).toBeUndefined();
+
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: { choices: [{ message: { content: null }, finish_reason: 'content_filter' }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const textless = await dedicated.callApi('A test prompt');
+        expect(textless).toMatchObject({ isRefusal: true, guardrails: { flagged: true } });
+        expect(gradeProviderRefusal(textless)).toMatchObject({ pass: true, score: 1 });
+        expect(gradeProviderRefusal(textless, true)).toMatchObject({ pass: false, score: 0 });
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'preserves partial OpenRouter Chat output when the completed message also refuses for %s',
+      async (model) => {
+        const partial = 'The answer starts here: 42.';
+        const refusal = 'The gateway declined to complete the response.';
+        const provider = new OpenRouterProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key' },
+        });
+        const completed = {
+          choices: [{ message: { content: partial, refusal }, finish_reason: 'content_filter' }],
+        };
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: completed,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const completedResult = await provider.callApi('A test prompt');
+        expect(completedResult).toMatchObject({
+          output: partial,
+          raw: completed,
+          isRefusal: true,
+        });
+        expect(gradeProviderRefusal(completedResult)).toMatchObject({ pass: true, score: 1 });
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'recognizes OpenRouter refusals within partial Chat choices and preserves technical errors for %s',
+      async (model) => {
+        const providers = [
+          new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+          }),
+          new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
+        ];
+        const partial = 'The answer starts here: 42.';
+        const declined = 'The provider declined to complete the response.';
+        const usage = { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13, cost: 0.004 };
+        const selected = (content: unknown, message: string, errorType: string) => ({
+          message: { role: 'assistant', content },
+          finish_reason: 'error',
+          error: {
+            code: 403,
+            message,
+            metadata: { error_type: errorType, provider_code: 'cyber_policy' },
+          },
+        });
+        for (const provider of providers) {
+          for (const content of [partial, '', null]) {
+            const data = { choices: [selected(content, declined, 'refusal')], usage };
+            mockFetchWithCache.mockResolvedValueOnce({
+              data,
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
+            const result = await provider.callApi('A test prompt');
+            expect(result).toMatchObject({
+              output: content || declined,
+              raw: data,
+              isRefusal: true,
+              tokenUsage: { total: 13 },
+              metadata: { providerPolicy: { code: 'cyber_policy' } },
+            });
+            expect(result.guardrails).toEqual({ flagged: true, reason: declined });
+            expect(result.error).toBeUndefined();
+            expect(result.cost).toBeCloseTo(0.004, 10);
+            expect(gradeProviderRefusal(result)).toMatchObject({ pass: true, score: 1 });
+            expect(gradeProviderRefusal(result, true)).toMatchObject({ pass: false, score: 0 });
+          }
+          for (const [message, errorType] of [
+            ['The provider disconnected.', 'provider_unavailable'],
+            ['Your organization access was revoked.', 'refusal'],
+          ]) {
+            const data = { choices: [selected(partial, message, errorType)], usage };
+            mockFetchWithCache.mockResolvedValueOnce({
+              data,
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
+            const result = await provider.callApi('A test prompt');
+            expect(result.error).toContain(message);
+            expect(result.raw).toEqual(data);
+            expect(result.isRefusal).toBeUndefined();
+            expect(result.guardrails).toBeUndefined();
+          }
+          const normal = {
+            choices: [
+              { message: { role: 'assistant', content: partial }, finish_reason: 'stop' },
+              selected('Other choice', declined, 'refusal'),
+            ],
+            usage,
+          };
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: normal,
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const result = await provider.callApi('A test prompt');
+          expect(result.output).toBe(partial);
+          expect(result.isRefusal).not.toBe(true);
+        }
+
+        const unrelated = { choices: [selected(partial, declined, 'refusal')], usage };
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: unrelated,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const native = await new OpenAiChatCompletionProvider(model).callApi('A test prompt');
+        expect(native.output).toBe(partial);
+        expect(native.isRefusal).not.toBe(true);
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'keeps rate-limit retry metadata and structured JSON in OpenRouter Chat results for %s',
+      async (model) => {
+        const responseFormat = {
+          type: 'json_schema' as const,
+          json_schema: {
+            name: 'result',
+            strict: true,
+            schema: {
+              type: 'object' as const,
+              properties: { answer: { type: 'string' } },
+              required: ['answer'],
+              additionalProperties: false as const,
+            },
+          },
+        };
+        const generic = new OpenAiChatCompletionProvider(`openai/${model}`, {
+          config: { apiBaseUrl: 'https://openrouter.ai/api/v1', response_format: responseFormat },
+        });
+        const dedicated = new OpenRouterProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key', response_format: responseFormat },
+        });
+        const choiceError = (
+          message: string,
+          errorType: string,
+          providerCode?: string,
+          content?: string,
+        ) => ({
+          choices: [
+            {
+              message: { content },
+              finish_reason: 'error',
+              error: {
+                code: 429,
+                message,
+                metadata: { error_type: errorType, provider_code: providerCode },
+              },
+            },
+          ],
+        });
+        for (const provider of [generic, dedicated]) {
+          for (const [errorType, providerCode, expected] of [
+            ['rate_limit_exceeded', 'rate_limited', 'rate_limit'],
+            ['rate_limit_exceeded', 'credit_balance_exhausted', 'quota'],
+            ['provider_unavailable', 'upstream_disconnected', undefined],
+          ] as const) {
+            mockFetchWithCache.mockResolvedValueOnce({
+              data: choiceError('Too many requests', errorType, providerCode),
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+              headers: { 'retry-after': '2' },
+            });
+            const result = await provider.callApi('A benign test prompt');
+            expect(result.metadata?.rateLimitKind).toBe(expected);
+            expect(result.metadata?.http).toMatchObject({
+              status: 200,
+              headers: { 'retry-after': '2' },
+            });
+            expect(isProviderResponseRateLimited(result, undefined)).toBe(
+              expected === 'rate_limit',
+            );
+          }
+
+          for (const [providerCode, expected] of [
+            ['rate_limited', 'rate_limit'],
+            ['credit_balance_exhausted', 'quota'],
+          ] as const) {
+            mockFetchWithCache.mockResolvedValueOnce({
+              data: {
+                error: {
+                  message: 'Too many requests',
+                  metadata: { error_type: 'rate_limit_exceeded', provider_code: providerCode },
+                },
+              },
+              cached: false,
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: { 'retry-after': '2' },
+            });
+            const result = await provider.callApi('A benign test prompt');
+            expect(result.metadata?.rateLimitKind).toBe(expected);
+            expect(result.metadata?.http).toMatchObject({ status: 429 });
+            expect(isProviderResponseRateLimited(result, undefined)).toBe(
+              expected === 'rate_limit',
+            );
+          }
+
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: {
+              error: {
+                message: 'Insufficient credits',
+                metadata: { provider_code: 'credit_balance_exhausted' },
+              },
+            },
+            cached: false,
+            status: 429,
+            statusText: 'Too Many Requests',
+          });
+          const quotaWithoutMarker = await provider.callApi('A benign test prompt');
+          expect(quotaWithoutMarker.metadata?.rateLimitKind).toBe('quota');
+          expect(isProviderResponseRateLimited(quotaWithoutMarker, undefined)).toBe(false);
+
+          for (const [content, expected] of [
+            ['{"answer":"visible"}', { answer: 'visible' }],
+            ['{"answer":', '{"answer":'],
+          ] as const) {
+            const data = choiceError('The response was declined.', 'refusal', undefined, content);
+            mockFetchWithCache.mockResolvedValueOnce({
+              data,
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
+            const result = await provider.callApi('A benign test prompt');
+            expect(result.output).toEqual(expected);
+            expect(result.isRefusal).toBe(true);
+            expect(result.raw).toEqual(data);
+
+            if (provider === dedicated) {
+              const completed = {
+                choices: [
+                  {
+                    message: { content, refusal: 'The response was declined.' },
+                    finish_reason: 'content_filter',
+                  },
+                ],
+              };
+              mockFetchWithCache.mockResolvedValueOnce({
+                data: completed,
+                cached: false,
+                status: 200,
+                statusText: 'OK',
+              });
+              const finished = await provider.callApi('A benign test prompt');
+              expect(finished.output).toEqual(expected);
+              expect(finished.isRefusal).toBe(true);
+              expect(finished.raw).toEqual(completed);
+            }
+          }
+        }
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'evicts OpenRouter Chat choice outages so the next identical request can recover for %s',
+      async (model) => {
+        for (const provider of [
+          new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+          }),
+          new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
+        ]) {
+          const broken = {
+            choices: [
+              {
+                message: { content: 'partial' },
+                finish_reason: 'error',
+                error: {
+                  message: 'Temporary outage',
+                  metadata: { error_type: 'provider_unavailable' },
+                },
+              },
+            ],
+          };
+          const healthy = {
+            choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }],
+          };
+          let cacheValue: typeof broken | typeof healthy | undefined;
+          let networkCalls = 0;
+          const deleteFromCache = vi.fn(async () => {
+            cacheValue = undefined;
+          });
+          mockFetchWithCache.mockImplementation(async () => {
+            const cached = cacheValue !== undefined;
+            if (!cacheValue) {
+              networkCalls++;
+              cacheValue = networkCalls === 1 ? broken : healthy;
+            }
+            return { data: cacheValue, cached, status: 200, statusText: 'OK', deleteFromCache };
+          });
+          const first = await provider.callApi('Same prompt');
+          const second = await provider.callApi('Same prompt');
+          expect(first.error).toContain('Temporary outage');
+          expect(second).toMatchObject({ output: 'Recovered', cached: false });
+          expect(second.error).toBeUndefined();
+          expect(networkCalls).toBe(2);
+          expect(deleteFromCache).toHaveBeenCalledTimes(1);
+          mockFetchWithCache.mockReset();
+        }
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'grades explicit OpenRouter content blocks and distinguishes account revocation from refusal text for %s',
+      async (model) => {
+        const providers = [
+          new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+          }),
+          new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
+        ];
+        const partial = 'Partial text';
+        const descriptions = [
+          'I cannot help you gain access to disabled user accounts.',
+          'I cannot assist with restoring permissions on a suspended account.',
+          'Your access to the requested private data is restricted; I cannot help obtain it.',
+          'I cannot assist with access if your account is suspended.',
+          'If your API key has been disabled, I cannot provide the requested private data.',
+        ];
+        const accountErrors = [
+          'Your organization’s access to these models has been temporarily revoked.',
+          'Access for your organization has been temporarily revoked.',
+          'Your organization access was revoked.',
+          'We have revoked your account’s access to these models.',
+          'Your API key has been disabled.',
+          'Access for this user has been temporarily revoked.',
+          'Your access to these models has been temporarily revoked.',
+          'Error: Access for this safety identifier has been temporarily revoked.',
+          "Access for safety identifier 'sample.user' has been permanently restricted.",
+        ];
+        for (const provider of providers) {
+          for (const location of ['outer', 'choice']) {
+            for (const [marker, description, refused] of [
+              ...descriptions.map((description) => ['refusal', description, true] as const),
+              ['content_policy_violation', 'The content filter stopped generation.', true] as const,
+              ...accountErrors.map((description) => ['refusal', description, false] as const),
+            ]) {
+              const error = {
+                code: 403,
+                message: description,
+                metadata: { error_type: marker, provider_code: 'cyber_policy' },
+              };
+              const data =
+                location === 'outer'
+                  ? { error }
+                  : { choices: [{ message: { content: partial }, finish_reason: 'error', error }] };
+              const deleteFromCache = vi.fn(async () => {});
+              mockFetchWithCache.mockResolvedValueOnce({
+                data,
+                cached: false,
+                status: location === 'outer' ? 403 : 200,
+                statusText: '',
+                deleteFromCache,
+              });
+              const result = await provider.callApi('A benign test prompt');
+              if (refused) {
+                expect(result.error).toBeUndefined();
+                expect(result.output).toBe(location === 'choice' ? partial : description);
+                expect(result.isRefusal).toBe(true);
+                expect(result.guardrails?.flagged).toBe(true);
+                if (marker === 'content_policy_violation' || location === 'choice') {
+                  expect(result.guardrails?.flaggedInput).toBeUndefined();
+                }
+                expect(gradeProviderRefusal(result)).toMatchObject({ pass: true, score: 1 });
+                expect(deleteFromCache).not.toHaveBeenCalled();
+              } else {
+                expect(result.error).toContain(description);
+                expect(result.isRefusal).toBeUndefined();
+              }
+            }
+          }
+        }
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'preserves gateway HTTP status for null JSON and documented Chat error classifications for %s',
+      async (model) => {
+        const generic = new OpenAiChatCompletionProvider(`openai/${model}`, {
+          config: { apiBaseUrl: 'https://proxy.example.test/openrouter/api/v1' },
+        });
+        const dedicated = new OpenRouterProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key' },
+        });
+        for (const provider of [generic, dedicated]) {
+          for (const [status, errorType, refused] of [
+            [400, 'invalid_request', false],
+            [400, 'context_length_exceeded', false],
+            [403, 'refusal', true],
+          ] as const) {
+            mockFetchWithCache.mockResolvedValueOnce({
+              data: {
+                error: {
+                  code: status,
+                  message: 'Request rejected by the gateway.',
+                  metadata: { error_type: errorType },
+                },
+              },
+              cached: false,
+              status,
+              statusText: 'Request rejected',
+            });
+            const result = await provider.callApi('A benign test prompt');
+            expect(result.isRefusal).toBe(refused ? true : undefined);
+            if (refused) {
+              expect(result.error).toBeUndefined();
+              expect(gradeProviderRefusal(result)).toMatchObject({ pass: true, score: 1 });
+            } else {
+              expect(result.error).toContain('Request rejected');
+            }
+          }
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: null,
+            cached: false,
+            status: 401,
+            statusText: 'Unauthorized',
+          });
+          const unauthorized = await provider.callApi('A benign test prompt');
+          expect(unauthorized.error).toContain('401 Unauthorized');
+          expect(unauthorized.isRefusal).toBeUndefined();
+        }
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: null,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const malformed = await dedicated.callApi('A benign test prompt');
+        expect(malformed.error).toContain('Malformed response data: null');
+        expect(malformed.isRefusal).toBeUndefined();
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'leaves Cloudflare-routed Azure Chat pricing unknown without supplied rates for %s',
+      async (model) => {
+        const data = {
+          choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 },
+        };
+        for (const [rates, expected] of [
+          [{}, undefined],
+          [{ inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, 0.0023],
+        ] as const) {
+          mockFetchWithCache.mockResolvedValueOnce({
+            data,
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const provider = new CloudflareGatewayOpenAiProvider('azure-openai', model, {
+            config: {
+              apiKey: 'test-key',
+              accountId: 'account',
+              gatewayId: 'gateway',
+              resourceName: 'resource',
+              deploymentName: 'deployment',
+              ...rates,
+            },
+          });
+          const result = await provider.callApi('A test prompt');
+          expect(result.error).toBeUndefined();
+          if (expected === undefined) {
+            expect(result.cost).toBeUndefined();
+          } else {
+            expect(result.cost).toBeCloseTo(expected, 10);
+          }
+        }
+      },
+    );
 
     it('should send a case-variant originator override on the wire instead of the default', async () => {
       const mockResponse = {
@@ -287,6 +1313,22 @@ describe('OpenAI Provider', () => {
       expect(result.error).toContain('Retries will not help');
       expect(result.metadata?.rateLimitKind).toBe('quota');
       expect(result.metadata?.http?.status).toBe(429);
+    });
+
+    it('preserves structured quota errors in the dedicated OpenRouter provider', async () => {
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      mockFetchWithCache.mockRejectedValueOnce(
+        new HttpRateLimitError({ status: 429, code: 'credit_balance_exhausted' }),
+      );
+
+      const result = await new OpenRouterProvider('openai/gpt-6-luna', {
+        config: { apiKey: 'test-key' },
+      }).callApi('Say ready.');
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+      expect(result.metadata?.http?.status).toBe(429);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
     });
 
     it('should include HTTP metadata in error response', async () => {
@@ -475,7 +1517,7 @@ describe('OpenAI Provider', () => {
       ['openai/gpt-5-search-api-2025-10-14', 0.0100625],
       ['github/openai/gpt-4o-mini-search-preview-2025-03-11', 0.0250045],
     ])(
-      'should include token rates and the Chat Completions search fee for routed model %s',
+      'should include qualified token rates and the Chat Completions search fee for routed model %s',
       async (model, cost) => {
         mockFetchWithCache.mockResolvedValueOnce({
           data: {
@@ -492,6 +1534,82 @@ describe('OpenAI Provider', () => {
         }).callApi('What happened today?');
 
         expect(result.cost).toBeCloseTo(cost, 10);
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'uses gateway charges and preserves BYOK uncertainty for %s on the exact OpenRouter host',
+      async (model) => {
+        for (const row of [
+          { gateway: { cost: 0.03, is_byok: false }, cached: false, config: {}, expected: 0.03 },
+          { gateway: { cost: 0, is_byok: false }, cached: false, config: {}, expected: 0 },
+          { gateway: { cost: 0.03, is_byok: false }, cached: true, config: {}, expected: 0.03 },
+          {
+            gateway: { cost: 0.03, is_byok: true },
+            cached: false,
+            config: {},
+            expected: undefined,
+          },
+          { gateway: {}, cached: false, config: {}, expected: undefined },
+          {
+            gateway: { cost: 0.03, is_byok: true },
+            cached: false,
+            config: { inputCost: 0.00002, outputCost: 0.00003 },
+            expected: 0.05,
+          },
+          {
+            gateway: { cost: 0.03, is_byok: false },
+            cached: false,
+            config: { inputCost: 0.00002 },
+            expected: undefined,
+          },
+        ]) {
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: {
+              choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
+              usage: {
+                prompt_tokens: 1_000,
+                completion_tokens: 1_000,
+                total_tokens: 2_000,
+                cost_details: { upstream_inference_cost: 0.02 },
+                ...row.gateway,
+              },
+            },
+            cached: row.cached,
+            status: 200,
+            statusText: 'OK',
+          });
+          const result = await new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1', ...row.config },
+          }).callApi('Say ready.');
+          expect(result.output).toBe('Ready');
+          expect(result.cost).toBe(row.expected);
+          expect(result.metadata?.openrouter).toEqual({
+            ...('cost' in row.gateway ? { accountCharge: row.gateway.cost } : {}),
+            ...('is_byok' in row.gateway ? { isByok: row.gateway.is_byok } : {}),
+            reportedUpstreamInferenceCost: 0.02,
+          });
+        }
+
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
+            usage: {
+              prompt_tokens: 1_000,
+              completion_tokens: 1_000,
+              total_tokens: 2_000,
+              cost: 9,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const similarHost = await new OpenAiChatCompletionProvider(`openai/${model}`, {
+          config: { apiBaseUrl: 'https://openrouter.ai.example/api/v1' },
+        }).callApi('Say ready.');
+        expect(similarHost.cost).not.toBe(9);
+        expect(similarHost.metadata).not.toHaveProperty('openrouter');
       },
     );
 
@@ -538,6 +1656,98 @@ describe('OpenAI Provider', () => {
       const result = await provider.callApi('What happened today?');
 
       expect(result.cost).toBeCloseTo(0.02125, 10);
+    });
+
+    it.each(['vendor/gpt-5-search-api', 'vendor/openai/gpt-4o-mini-search-preview'])(
+      'should not apply OpenAI Chat search fees to another gateway namespace: %s',
+      async (model) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [{ message: { content: 'Vendor answer' }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await new OpenAiChatCompletionProvider(model, {
+          config: { apiBaseUrl: 'https://gateway.example/v1' },
+        }).callApi('What happened today?');
+
+        expect(result.cost).toBeUndefined();
+      },
+    );
+
+    it('should send the configured fast tier as priority while retaining fast billing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Fast answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 100, total_tokens: 1_100 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: { service_tier: 'fast' },
+      });
+
+      const result = await provider.callApi('Answer quickly');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should bill the effective passthrough service tier when the response omits it', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Priority answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 100, total_tokens: 1_100 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: {
+          service_tier: 'flex',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer with priority');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should prefer a per-prompt direct service tier over provider passthrough', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Flex answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 100, total_tokens: 1_100 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: {
+          service_tier: 'default',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer flexibly', {
+        prompt: { config: { service_tier: 'flex' } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('flex');
+      expect(result.cost).toBeCloseTo((1_000 * 0.125 + 100 * 1) / 1e6, 10);
     });
 
     it('should price a fine-tuned Chat Completions model from the API usage ledger', async () => {
@@ -1072,9 +2282,11 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         const result = await provider.callApi('Read the file');
 
-        expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
-          path: '../../../etc/passwd',
-        });
+        expect(mcpClient.callTool).toHaveBeenCalledWith(
+          'read_file',
+          { path: '../../../etc/passwd' },
+          undefined,
+        );
         expect(result.output).toBe(expectedOutput);
       },
     );
@@ -2127,11 +3339,45 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       enableCache();
     });
 
+    it.each([
+      { configuredModel: 'gpt-4.1', effectiveModel: 'o3', reasoning: true },
+      { configuredModel: 'o3', effectiveModel: 'gpt-4.1', reasoning: false },
+    ])(
+      'uses $effectiveModel capabilities when overriding $configuredModel',
+      async ({ configuredModel, effectiveModel, reasoning }) => {
+        const provider = new OpenAiChatCompletionProvider(configuredModel, {
+          config: {
+            passthrough: { model: effectiveModel },
+            reasoning_effort: 'high',
+            max_completion_tokens: 4096,
+            max_tokens: 2048,
+            temperature: 0.6,
+          },
+        });
+
+        const { body } = await provider.getOpenAiBody('Test prompt');
+
+        expect(body.model).toBe(effectiveModel);
+        expect(provider.modelName).toBe(configuredModel);
+        if (reasoning) {
+          expect(body.reasoning_effort).toBe('high');
+          expect(body.max_completion_tokens).toBe(4096);
+          expect(body).not.toHaveProperty('max_tokens');
+          expect(body).not.toHaveProperty('temperature');
+        } else {
+          expect(body.max_tokens).toBe(2048);
+          expect(body.temperature).toBe(0.6);
+          expect(body).not.toHaveProperty('max_completion_tokens');
+          expect(body).not.toHaveProperty('reasoning_effort');
+        }
+      },
+    );
+
     it('should identify reasoning models correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
+      const o1Provider = new OpenAiChatCompletionProvider('o1');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
-      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1');
       const o3StandardProvider = new OpenAiChatCompletionProvider('o3');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
 
@@ -2182,7 +3428,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should identify reasoning models with prefixed names (GitHub Models)', async () => {
       // Prefixed reasoning models
-      const prefixedO1Provider = new OpenAiChatCompletionProvider('openai/o1-mini');
+      const prefixedO1Provider = new OpenAiChatCompletionProvider('openai/o1');
       const prefixedO3Provider = new OpenAiChatCompletionProvider('openai/o3-mini');
       const prefixedO4Provider = new OpenAiChatCompletionProvider('openai/o4-mini');
       const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
@@ -2207,9 +3453,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should handle temperature support correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
+      const o1Provider = new OpenAiChatCompletionProvider('o1');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
-      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
       const gpt41Provider = new OpenAiChatCompletionProvider('gpt-4.1');
       const gpt54MiniProvider = new OpenAiChatCompletionProvider('gpt-5.4-mini');
@@ -2257,7 +3503,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Test O1 model (should omit temperature)
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { temperature: 0.7 },
       });
       await o1Provider.callApi('Test prompt');
@@ -2341,7 +3587,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Test O1 model with max_completion_tokens
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { max_completion_tokens: 200 },
       });
       await o1Provider.callApi('Test prompt');
@@ -2502,7 +3748,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test O1 model with reasoning_effort
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { reasoning_effort: 'high' } as any,
       });
       await o1Provider.callApi('Test prompt');
@@ -2604,7 +3850,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       };
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: {
           reasoning: {
             effort: 'high',
@@ -2734,6 +3980,37 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
       expect(result.tokenUsage).toEqual({ total: 18, prompt: 12, completion: 6, numRequests: 1 });
     });
+
+    it.each([false, true])(
+      'preserves the effective requested audio format (cached=%s)',
+      async (cached) => {
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            choices: [
+              { message: { audio: { id: 'audio-mp3', data: 'SUQz', transcript: 'Hello.' } } },
+            ],
+          },
+          cached,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5', {
+          config: { audio: { voice: 'alloy', format: 'wav' } },
+        });
+        const result = await provider.callApi('Say hello', {
+          prompt: {
+            raw: 'Say hello',
+            label: 'audio',
+            config: { audio: { voice: 'alloy', format: 'mp3' } },
+          },
+          vars: {},
+        });
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]!.body as string);
+        expect(body.audio.format).toBe('mp3');
+        expect(result.audio).toMatchObject({ data: 'SUQz', format: 'mp3' });
+        expect(result.cached).toBe(cached);
+      },
+    );
 
     it('should handle cached audio responses correctly', async () => {
       const mockAudioResponse = {

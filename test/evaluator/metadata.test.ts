@@ -304,7 +304,7 @@ describeEvaluator('evaluator metadata', () => {
       1,
       expect.stringContaining('User: Question 1A'),
       expect.anything(),
-      undefined,
+      expect.any(Object),
     );
 
     // First conversation, second question (should include history)
@@ -312,7 +312,7 @@ describeEvaluator('evaluator metadata', () => {
       2,
       expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
       expect.anything(),
-      undefined,
+      expect.any(Object),
     );
 
     // Second conversation, first question (should NOT include first conversation)
@@ -320,7 +320,7 @@ describeEvaluator('evaluator metadata', () => {
       3,
       expect.stringContaining('User: Question 2A'),
       expect.anything(),
-      undefined,
+      expect.any(Object),
     );
 
     // Second conversation, second question (should only include second conversation history)
@@ -328,7 +328,7 @@ describeEvaluator('evaluator metadata', () => {
       4,
       expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
       expect.anything(),
-      undefined,
+      expect.any(Object),
     );
   });
 
@@ -415,7 +415,7 @@ describeEvaluator('evaluator metadata', () => {
     expect(capturedContext.result.metadata.sessionId).toBeUndefined();
   });
 
-  it('should persist afterEach hook namedScores, metadata, and response.metadata into result and metrics', async () => {
+  it.each([true, false])('retains afterEach results (persisted: %s)', async (persisted) => {
     const mockExtension = 'file://test-extension.js:afterEach';
 
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
@@ -459,14 +459,16 @@ describeEvaluator('evaluator metadata', () => {
       extensions: [mockExtension],
     };
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = persisted
+      ? await Eval.create({}, testSuite.prompts, { id: randomUUID() })
+      : new Eval({});
     await evaluate(testSuite, evalRecord, {});
     const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
 
     // Verify hook's namedScores flowed into prompt metrics
     expect(summary.prompts[0].metrics?.namedScores).toHaveProperty('hook_metric', 42);
 
-    // Verify hook's metadata and namedScores are in the persisted result
+    // Verify hook's metadata and namedScores are in the result
     const result = summary.results[0];
     expect(result.metadata).toHaveProperty('hook_key', 'hook_value');
     expect(result.namedScores).toHaveProperty('hook_metric', 42);
