@@ -317,10 +317,11 @@ describe('HydraProvider', () => {
         expect(mockGrader.getResult.mock.calls[0][1]).toBe(result.output);
         expect(result.metadata?.storedGraderResult?.metadata).toMatchObject({
           redteamGradingInputHash: getGradingInputHash(
-            result.metadata?.redteamFinalPrompt as string,
+            mockGrader.getResult.mock.calls[0][0],
             result.output as string,
             result.metadata.messages,
             'pii:social',
+            result.metadata.redteamCurrentTurnStart,
           ),
           redteamGradingAssertionHash: getGradingAssertionHash(assertion),
         });
@@ -1869,7 +1870,7 @@ describe('HydraProvider', () => {
         expect(result.metadata.redteamConversationHistoryVersion).toBe(3);
         expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
           getGradingInputHash(
-            result.metadata.redteamFinalPrompt!,
+            mockGrader.getResult.mock.calls[1][0],
             result.output,
             result.metadata.messages,
             'pii',
@@ -2023,7 +2024,7 @@ describe('HydraProvider', () => {
         expect(result.metadata.messages.slice(0, 2)).toEqual(history);
         expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
           getGradingInputHash(
-            result.metadata.redteamFinalPrompt!,
+            mockGrader.getResult.mock.calls[1][0],
             result.output,
             result.metadata.messages,
             'pii',
@@ -2112,7 +2113,7 @@ describe('HydraProvider', () => {
       expect(JSON.stringify(result.metadata.messages)).not.toContain('hidden@example.com');
       expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
         getGradingInputHash(
-          result.metadata.redteamFinalPrompt!,
+          mockGrader.getResult.mock.calls[1][0],
           result.output,
           result.metadata.messages,
           'pii',
@@ -2267,7 +2268,7 @@ describe('HydraProvider', () => {
         expect(JSON.stringify(result.metadata.messages).includes(supplied)).toBe(supported);
         expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
           getGradingInputHash(
-            result.metadata.redteamFinalPrompt!,
+            mockGrader.getResult.mock.calls[1][0],
             result.output,
             result.metadata.messages,
             'pii',
@@ -2460,7 +2461,7 @@ describe('HydraProvider', () => {
       expect(JSON.stringify(result.metadata.messages)).not.toContain('discarded@example.com');
       expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
         getGradingInputHash(
-          result.metadata.redteamFinalPrompt!,
+          mockGrader.getResult.mock.calls[1][0],
           result.output,
           result.metadata.messages,
           'pii',
@@ -2755,7 +2756,7 @@ describe('HydraProvider', () => {
 
       expect(mockGetGraderById).toHaveBeenCalledWith('harmful:violent-crime');
       expect(mockGrader.getResult).toHaveBeenCalledWith(
-        'Attack message',
+        '',
         'Target response',
         expect.anything(),
         mockTargetProvider,
@@ -3857,9 +3858,7 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      expect(mockGetGraderById.mock.results[0].value.getResult.mock.calls[0][0]).toBe(
-        'transformed attack',
-      );
+      expect(mockGetGraderById.mock.results[0].value.getResult.mock.calls[0][0]).toBe('');
       expect(result.metadata?.redteamFinalPrompt).toBe('transformed attack');
       // Verify redteamHistory is populated
       expect(result.metadata?.redteamHistory).toBeDefined();

@@ -782,10 +782,8 @@ export class HydraProvider implements ApiProvider {
           : this.stateful
             ? statefulGradingHistory.length
             : undefined;
-      const { conversationTranscript } = getTargetConversation(
-        gradingMessages,
-        lastCurrentTurnStart,
-      );
+      const { lastUserPrompt: attributedCurrentPrompt = '', conversationTranscript } =
+        getTargetConversation(gradingMessages, lastCurrentTurnStart);
       lastResponseMessages = [
         ...gradingMessages,
         { role: 'assistant', content: targetResponse.output || '' },
@@ -1047,7 +1045,7 @@ export class HydraProvider implements ApiProvider {
 
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            lastFinalAttackPrompt || nextMessage,
+            attributedCurrentPrompt,
             targetResponse.output,
             test,
             targetProvider,
@@ -1064,7 +1062,7 @@ export class HydraProvider implements ApiProvider {
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             },
             {
-              prompt: lastFinalAttackPrompt || nextMessage,
+              prompt: attributedCurrentPrompt,
               output: targetResponse.output,
               messages: lastResponseMessages,
               currentTurnStart: lastCurrentTurnStart,

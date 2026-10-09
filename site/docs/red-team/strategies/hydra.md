@@ -72,6 +72,8 @@ YAML-looking text is retained when the target sends it literally. YAML chat pars
 
 Verified earlier turns remain available when a later input is blank or cannot be attributed, including inputs from failed target requests. Disabling target-prompt templating does not disable this grading history.
 
+The grader's current user input also contains only attributed text. It is empty when no current input can be established, while the original attack remains available in the result for inspection. Live grading, saved-verdict checks, and regrading use the same current input; previously saved verdicts are recomputed when that input differs.
+
 Saved runs without verified history continue to grade only the current turn. Older history formats without complete rendering or transport verification are also excluded, and their stored verdicts are recomputed during regrading. Rerun these tests to record verified history for later regrading.
 
 COPPA, FERPA, and wordplay verdicts saved before conversation context was forwarded to their graders are recomputed using the existing verified history. Inputs already omitted from a saved history require a new run to capture them.

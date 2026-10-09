@@ -218,7 +218,7 @@ async function runHydra(
   const stored = metadata.storedGraderResult!;
   expect(metadata.redteamConversationHistoryVersion).toBe(3);
   const inputHash = getGradingInputHash(
-    metadata.redteamFinalPrompt!,
+    grading.mock.calls[1][0],
     String(result.output),
     metadata.messages,
     'pii',
@@ -252,6 +252,7 @@ async function runHydra(
   delete fresh.metadata!.storedGraderResult;
   const regraded = await handleRedteam({ ...params, providerResponse: fresh });
   expect(grading).toHaveBeenCalledTimes(3);
+  expect(grading.mock.calls[2][0]).toBe(grading.mock.calls[1][0]);
   expect(grading.mock.calls[2][7]?.conversationTranscript).toBe(
     liveContext?.conversationTranscript,
   );

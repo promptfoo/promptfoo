@@ -229,7 +229,7 @@ async function runConversation({
   const stored = result.metadata!.storedGraderResult!;
   expect(stored.metadata!.redteamGradingInputHash).toBe(
     getGradingInputHash(
-      result.metadata!.redteamFinalPrompt!,
+      grading.mock.calls[1][0],
       String(result.output),
       result.metadata!.messages,
       plugin,
@@ -260,13 +260,13 @@ async function runConversation({
   }
   const beforeSaved = grading.mock.calls.length;
   expect((await handleRedteam(params())).pass).toBe(stored.pass);
-  // Blank final prompts use the existing configured-prompt fallback and regrade.
-  expect(grading.mock.calls.length - beforeSaved).toBe(second?.trim() === '' ? 1 : 0);
+  expect(grading.mock.calls.length - beforeSaved).toBe(0);
   const fresh = structuredClone(result);
   delete fresh.metadata!.storedGraderResult;
   const beforeFresh = grading.mock.calls.length;
   expect((await handleRedteam(params(fresh))).pass).toBe(stored.pass);
   expect(grading.mock.calls.length - beforeFresh).toBe(1);
+  expect(grading.mock.calls.at(-1)![0]).toBe(grading.mock.calls[1][0]);
   expect(grading.mock.calls.at(-1)![7]?.conversationTranscript).toBe(
     liveContext?.conversationTranscript,
   );

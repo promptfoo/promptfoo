@@ -228,8 +228,25 @@ export const handleRedteam = async (
     gradingMessages = undefined;
   }
   const { lastUserPrompt, conversationTranscript, currentTurnStart } = conversation;
-  const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
-  invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
+  const usesAttributedPrompt =
+    hasAttributedHistory &&
+    conversation === savedConversation &&
+    Array.isArray(gradingMessages) &&
+    gradingMessages.every(
+      (message) =>
+        (message?.role === 'user' || message?.role === 'assistant') &&
+        typeof message.content === 'string',
+    );
+  let effectivePrompt: string;
+  if (usesAttributedPrompt) {
+    // The raw attack remains useful for display, but cannot establish that the
+    // target received it. An absent attributed current input is deliberately empty.
+    effectivePrompt = lastUserPrompt ?? '';
+  } else {
+    const reportedPrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
+    invariant(reportedPrompt, `Grader ${baseType} must have a prompt`);
+    effectivePrompt = reportedPrompt;
+  }
 
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
