@@ -12,7 +12,7 @@ The provider runs Codex with an explicit working directory, sandbox policy, appr
 
 :::note
 
-Promptfoo declares `@openai/codex-sdk` as an optional dependency. If your installation omits optional packages or you are running from a source checkout before `npm ci`, install the SDK package manually.
+The Codex SDK and its native CLI are not included in the default Promptfoo install. Install them explicitly using the instructions below.
 
 :::
 
@@ -30,7 +30,7 @@ You can reference this provider using either base ID, and you can inline the mod
 | Final assistant text               | Yes        | Returned in `response.output` as a string.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Text + local image prompt inputs   | Partial    | Pass plain text as usual, or pass a JSON array of `{"type":"text","text":"..."}` and `{"type":"local_image","path":"/abs/file.png"}` entries. Other JSON prompt shapes are treated as plain text.                                                                                                                                                                                                                                                 |
 | JSON schema output                 | Yes        | Pass `output_schema`; use `is-json` and `JSON.parse(output)` in JS assertions because the provider does not auto-parse the final text.                                                                                                                                                                                                                                                                                                            |
-| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when the SDK reports usage, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Standard API cost is estimated when `config.model` is known to promptfoo's pricing table, including GPT-6 Astra. Missing cache-write counts can understate costs. Codex's own instruction preamble and tool schemas are included in prompt tokens, so tiny prompts can still report high `input_tokens`. |
+| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when available, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Standard API cost is estimated when `config.model` is known to promptfoo's pricing table, including GPT-6 Astra, Sol, and Luna. Missing cache-write counts can understate costs. Codex's instruction preamble and tool schemas are included in prompt tokens, so small prompts can still report high `input_tokens`. |
 | Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                                                                                                                                                                                         |
 | Shell/MCP/search/file trajectories | Yes        | Enable `enable_streaming` for provider-level spans. Enable `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                                                                                                                                                                                                                                                   |
 | Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of direct `SKILL.md` command reads, not a first-class SDK skill event.                                                                                                                                                                                                                                                                                                                                 |
@@ -41,17 +41,17 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Promptfoo includes the Codex SDK as an optional dependency. If optional dependencies are omitted, install it manually. GPT-6 Astra requires version 0.153.1 or later:
+Install Promptfoo and the Codex SDK together in your eval project. Use Codex SDK `^0.156.1` (at least `0.156.1`, below `0.157.0`). [Codex 0.156.1](https://github.com/openai/codex/releases/tag/rust-v0.156.1) bundles GPT-6 Sol, Luna, and Astra model metadata, including Sol's Ultra setting:
 
 ```bash
-npm install @openai/codex-sdk@^0.153.2
+npm install promptfoo @openai/codex-sdk@^0.156.1
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
 
 :::note
 
-This package is optional and only needed for the OpenAI Codex SDK provider. The published `@openai/codex-sdk` and `@openai/codex` packages currently declare the Apache-2.0 license.
+The provider checks SDK compatibility when called. Automatic grader selection uses Codex only when the same compatible SDK is available. The published `@openai/codex-sdk` and `@openai/codex` packages currently declare the Apache-2.0 license.
 
 :::
 
@@ -93,7 +93,7 @@ export CODEX_API_KEY=your_api_key_here
 
 :::note
 
-ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now use that provider automatically for default text grading and synthesis when Codex is signed in and no higher-priority API credentials are set. Explicit `openai:chat`, `openai:responses`, embedding, and moderation providers still use Platform API credentials, and [ChatGPT subscriptions are billed separately from API usage](https://help.openai.com/en/articles/8156019).
+ChatGPT login support is specific to the Codex SDK provider. Promptfoo can use that provider automatically for default text grading and synthesis when Codex is signed in and no higher-priority API credentials are set. Explicit `openai:chat`, `openai:responses`, embedding, and moderation providers still use Platform API credentials, and [ChatGPT subscriptions are billed separately from API usage](https://help.openai.com/en/articles/8156019).
 
 :::
 
@@ -102,6 +102,7 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now u
 Codex can run OpenAI's frontier models hosted on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models) instead of the OpenAI Platform. Set `model_provider: amazon-bedrock`, use the Bedrock model id (the `openai.`-prefixed form), and provide AWS credentials and a Region to the Codex CLI through `cli_env`:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -121,9 +122,10 @@ prompts:
 Notes:
 
 - **Model ids are Bedrock ids**: use `openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, or `openai.gpt-5.6-luna`, not a bare `gpt-5.6` alias. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible Responses endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), which is separate from the classic `bedrock-runtime` `InvokeModel` API.
-- **Region matters**: Sol is available in `us-east-1` and `us-east-2`; Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
+- **Region matters**: GPT-5.6 Sol is available in `us-east-1` and `us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
 - **Use a current Codex CLI**: GPT-5.6 Bedrock catalog support and `max` reasoning require Codex 0.144.0 or later. Codex `ultra` is a multi-agent mode for supported models, not a Responses API reasoning-effort value.
-- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. For direct inference, `bedrock:openai.gpt-5.x` uses a Bedrock API key; the AWS SDK credential chain applies to `InvokeModel` models such as `gpt-oss`.
+- **GPT-6 on Bedrock**: AWS serves Sol and Luna on Mantle in `us-east-1`, but the [Codex 0.156.1 Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) does not list them. Use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) to evaluate these models without the Codex agent runtime.
+- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. For direct inference, the [Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) accepts a Bedrock API key or AWS credentials.
 
 :::warning
 
@@ -138,6 +140,7 @@ Credentials placed in `cli_env` are exposed to the Codex agent's shell environme
 By default, the Codex SDK runs in the current working directory and requires that directory to be inside a Git repository unless you disable the check. When you set `working_dir`, relative values are resolved from the directory containing the config file. For pure code-generation evals that should not touch the filesystem, use `sandbox_mode: read-only`.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -151,11 +154,12 @@ The provider creates an ephemeral thread for each eval test case.
 
 ### With Custom Model
 
-Specify a model such as GPT-5.6 Terra to balance capability and cost for code generation:
+Specify a model such as GPT-6 Sol for code generation:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - openai:codex:gpt-5.6-terra
+  - openai:codex:gpt-6-sol
 
 prompts:
   - 'Write a TypeScript function that validates email addresses'
@@ -167,7 +171,7 @@ If you need additional Codex settings, you can still set the model via `config.m
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.6-terra
+      model: gpt-6-sol
 ```
 
 ### With Working Directory
@@ -175,6 +179,7 @@ providers:
 Specify a custom working directory for the Codex SDK to operate in. The directory can be a repository subdirectory as long as one of its parent directories contains `.git`:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -191,6 +196,7 @@ This allows you to prepare a directory with files before running your tests.
 If you need to run in a non-Git directory, you can bypass the Git repository requirement:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -211,33 +217,35 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 The provider validates top-level provider config strictly. If you mistype a provider field such as `sandboxMode` instead of `sandbox_mode`, provider loading can fail before any rows run. Prompt-level config is parsed more leniently because promptfoo merges generic test options into `prompt.config`; unrelated keys are ignored there, while invalid values for known Codex fields still return a row-level provider error. Put extra Codex CLI settings that are not listed below under `cli_config`.
 
-| Parameter                | Type     | Description                                                                                          | Default              |
-| ------------------------ | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
-| `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
-| `base_url`               | string   | Custom API base URL                                                                                  | None                 |
-| `maxRetries`             | number   | Maximum scheduler retries for retryable SDK rate-limit failures                                      | 3                    |
-| `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
-| `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
-| `model`                  | string   | Model to use                                                                                         | SDK default          |
-| `model_provider`         | string   | Codex model provider to route through (e.g. `amazon-bedrock`). Maps to `cli_config.model_provider`.  | `openai`             |
-| `sandbox_mode`           | string   | Sandbox access level (see below)                                                                     | `workspace-write`    |
-| `model_reasoning_effort` | string   | Reasoning intensity (see below)                                                                      | SDK default          |
-| `network_access_enabled` | boolean  | Allow network requests                                                                               | false                |
-| `web_search_enabled`     | boolean  | Allow web search                                                                                     | false                |
-| `web_search_mode`        | string   | Web search mode: `disabled`, `cached`, or `live`                                                     | SDK default          |
-| `collaboration_mode`     | string   | Multi-agent preset mapped to `cli_config.collaboration_mode`                                         | None                 |
-| `approval_policy`        | string   | When to require approval (see below)                                                                 | SDK default          |
-| `cli_config`             | object   | Additional Codex CLI config overrides                                                                | None                 |
-| `skip_git_repo_check`    | boolean  | Skip Git repository validation                                                                       | false                |
-| `codex_path_override`    | string   | Custom path to codex binary                                                                          | None                 |
-| `thread_id`              | string   | Resume existing thread from ~/.codex/sessions                                                        | None (creates new)   |
-| `persist_threads`        | boolean  | Keep threads alive between calls                                                                     | false                |
-| `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)                                                        | 1                    |
-| `output_schema`          | object   | JSON schema for structured responses                                                                 | None                 |
-| `cli_env`                | object   | Custom environment variables for Codex CLI                                                           | Minimal shell env    |
-| `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
-| `enable_streaming`       | boolean  | Enable streaming events                                                                              | false                |
-| `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
+| Parameter                  | Type     | Description                                                                                          | Default              |
+| -------------------------- | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
+| `apiKey`                   | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
+| `base_url`                 | string   | Custom API base URL                                                                                  | None                 |
+| `maxRetries`               | number   | Maximum scheduler retries for retryable SDK rate-limit failures                                      | 3                    |
+| `working_dir`              | string   | Directory for Codex to operate in                                                                    | Current directory    |
+| `copy_working_dir`         | boolean  | Fresh copy of `working_dir` per eval step: `true`, `'git'`, `'copy'` ([more][isolated-workspaces])   | false                |
+| `additional_directories`   | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
+| `model`                    | string   | Model to use                                                                                         | SDK default          |
+| `model_provider`           | string   | Codex model provider to route through (e.g. `amazon-bedrock`). Maps to `cli_config.model_provider`.  | `openai`             |
+| `sandbox_mode`             | string   | Sandbox access level (see below)                                                                     | `workspace-write`    |
+| `model_reasoning_effort`   | string   | Reasoning intensity (see below)                                                                      | SDK default          |
+| `network_access_enabled`   | boolean  | Allow network requests                                                                               | false                |
+| `web_search_enabled`       | boolean  | Allow web search                                                                                     | false                |
+| `web_search_mode`          | string   | Web search mode: `disabled`, `cached`, or `live`                                                     | SDK default          |
+| `collaboration_mode`       | string   | Multi-agent preset mapped to `cli_config.collaboration_mode`                                         | None                 |
+| `approval_policy`          | string   | When to require approval (see below)                                                                 | SDK default          |
+| `cli_config`               | object   | Additional Codex CLI config overrides                                                                | None                 |
+| `skip_git_repo_check`      | boolean  | Skip Git repository validation                                                                       | false                |
+| `codex_path_override`      | string   | Custom path to codex binary                                                                          | None                 |
+| `skip_codex_version_check` | boolean  | Allow an intentionally divergent custom Codex binary without checking its SDK/event-schema version.  | `false`              |
+| `thread_id`                | string   | Resume existing thread from ~/.codex/sessions                                                        | None (creates new)   |
+| `persist_threads`          | boolean  | Keep threads alive between calls                                                                     | false                |
+| `thread_pool_size`         | number   | Max concurrent threads (when persist_threads)                                                        | 1                    |
+| `output_schema`            | object   | JSON schema for structured responses                                                                 | None                 |
+| `cli_env`                  | object   | Custom environment variables for Codex CLI                                                           | Minimal shell env    |
+| `inherit_process_env`      | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
+| `enable_streaming`         | boolean  | Enable streaming events                                                                              | false                |
+| `deep_tracing`             | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
 
 During evaluations, Codex SDK TPM/RPM or `429` throttles participate in promptfoo's adaptive rate-limit scheduler. Promptfoo honors a delay included in SDK errors such as `Please try again in 1.25s.` before retrying, and waits 60 seconds when a transient SDK throttle gives no reset hint. In streaming mode, intermediate SDK error events remain inside the active turn; if the stream does not subsequently complete, Promptfoo returns the last SDK error. Billing or hard-quota errors are returned without retrying.
 
@@ -262,38 +270,37 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-Use `gpt-6-astra` with [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. For GPT-5.6, select a concrete tier such as `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna` when you want to specify that choice. Available aliases depend on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
+Select a model available to your account and sign-in method. See [installation](#installation) for the required Codex version and [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models) for availability.
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-6-astra
+      model: gpt-6-sol
       model_reasoning_effort: max
 ```
 
-For new evals, choose from the current models in [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Availability depends on the sign-in method and account:
+Choose a model based on your eval's needs:
 
 - **GPT-6 Astra** (`gpt-6-astra`) - Use for the most demanding reasoning and coding tasks, when your account has access.
-- **GPT-5.6 Sol** (`gpt-5.6-sol`) - Use for complex professional and coding workflows.
-- **GPT-5.6 Terra** (`gpt-5.6-terra`) - Start here to balance capability and cost.
-- **GPT-5.6 Luna** (`gpt-5.6-luna`) - Use for cost-sensitive, high-volume evals.
+- **GPT-6 Sol** (`gpt-6-sol`) - Use for complex professional and coding workflows.
+- **GPT-6 Luna** (`gpt-6-luna`) - Use for cost-sensitive, high-volume evals.
 
-With ChatGPT sign-in, `gpt-5.4` and `gpt-5.4-mini` retired from Codex on August 31, 2026; `gpt-5.2` and `gpt-5.3-codex` are also deprecated for that sign-in method. Use `gpt-5.6-terra` or `gpt-5.6-luna` in new saved configurations. API-key authentication follows the separate [OpenAI API model lifecycle](https://developers.openai.com/api/docs/deprecations), so this Codex sign-in retirement does not invalidate API-key configurations or Promptfoo's native API grading pins. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
+With ChatGPT sign-in, `gpt-5.4` and `gpt-5.4-mini` retired from Codex on August 31, 2026; `gpt-5.2` and `gpt-5.3-codex` are also deprecated for that sign-in method. Use `gpt-6-sol` or `gpt-6-luna` in new saved configurations when available. API-key authentication follows the separate [OpenAI API model lifecycle](https://developers.openai.com/api/docs/deprecations), so this Codex sign-in retirement does not invalidate API-key configurations or Promptfoo's native API grading pins. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
-GPT-6 Astra, GPT-5.6, and GPT-5.5 receive Standard API cost estimates from the token usage reported by Codex. Missing cache-write counts can understate costs. Batch, Flex, and Fast mode are not automatically inferred from Codex runtime settings. Provider availability and pricing are separate; see [Astra hosting availability](/docs/providers/openai#gpt-6-astra).
+GPT-6 Astra, Sol, and Luna, GPT-5.6, and GPT-5.5 receive Standard API cost estimates from the token usage reported by Codex. Missing cache-write counts can understate costs. Batch, Flex, and Fast mode are not automatically inferred from Codex runtime settings. See the [OpenAI provider cost estimates](/docs/providers/openai#cost-estimates).
 
 ### Mini Models
 
-For lower-cost evals, use the current GPT-5.6 Luna model:
+For lower-cost evals, use GPT-6 Luna when available:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.6-luna
+      model: gpt-6-luna
 ```
 
 ## Thread Management
@@ -346,6 +353,7 @@ providers:
 The Codex SDK supports JSON schema output. Specify an `output_schema` to get structured responses:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -413,7 +421,7 @@ The Codex SDK provider supports two levels of tracing:
 
 Enable `enable_streaming` to capture Codex operations as OpenTelemetry spans:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tracing:
   enabled: true
   otlp:
@@ -518,6 +526,10 @@ providers:
       skip_git_repo_check: true
 ```
 
+With `copy_working_dir`, each eval step runs in a workspace that promptfoo creates from `working_dir`. A clean git repository is cloned, so the check passes. Other directories are copied, and a copy without its own `.git` directory, such as a copy of a subdirectory of a repository, needs `skip_git_repo_check: true`. See [isolated workspaces][isolated-workspaces].
+
+[isolated-workspaces]: /docs/guides/evaluate-coding-agents#isolated-workspaces
+
 ## Sandbox Mode
 
 Control the level of filesystem access for the agent:
@@ -597,7 +609,7 @@ Codex gates optional capabilities behind [feature flags](https://developers.open
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       cli_config:
         features:
@@ -620,22 +632,22 @@ providers:
 
 Available levels vary by model:
 
-| Level     | Description                                     | Supported Models                                                                                                          |
-| --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                                 |
-| `low`     | Light reasoning, faster responses               | All models                                                                                                                |
-| `medium`  | Balanced (default for GPT-5.6 Terra and Luna)   | All models                                                                                                                |
-| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                |
-| `xhigh`   | Extra-high reasoning depth                      | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2 |
-| `max`     | Deepest single-agent reasoning                  | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                     |
-| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra                                                                                   |
+| Level     | Description                                     | Supported Models                                                                                                                                 |
+| --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                                                        |
+| `low`     | Light reasoning, faster responses               | All models                                                                                                                                       |
+| `medium`  | Balanced; check your model's runtime default    | All models                                                                                                                                       |
+| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                                       |
+| `xhigh`   | Extra-high reasoning depth                      | gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2 |
+| `max`     | Deepest single-agent reasoning                  | gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                     |
+| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-6-sol, gpt-5.6-sol, gpt-5.6-terra                                                                                               |
 
 Promptfoo validates the allowed enum values, but model-specific support is ultimately enforced by the Codex SDK/runtime. If a value is not supported by the selected model, the provider returns a normal provider error row.
 
-`ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value.
+`ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value. GPT-6 Luna does not support `ultra` in Codex.
 
 :::note GPT-5.6 requires Codex 0.144.0 or later
-Use `@openai/codex-sdk` 0.144.0 or later. If optional dependencies are omitted, install that version explicitly. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:responses:gpt-5.6-sol`.
+Install `@openai/codex-sdk@^0.156.1` using the setup above. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:gpt-5.6-sol`.
 :::
 
 ## Additional Directories
@@ -679,7 +691,7 @@ providers:
         PFQA_SECRET_ENV_READ: '{{secretEnvValue}}'
 ```
 
-By default, promptfoo now passes a minimal shell environment (`PATH`, `HOME`, `SHELL`, temp vars, locale vars, and similar OS basics), merges `cli_env`, and injects only the provider's resolved Codex/OpenAI API key from promptfoo-level env overrides. Other config-level `env:` keys are not forwarded to the Codex subprocess; pass those explicitly through `cli_env`. The provider emits a one-time warning if it sees non-auth promptfoo env overrides that are not present in `cli_env`. This keeps Codex agent commands isolated from unrelated process secrets while still leaving a usable shell path.
+By default, promptfoo passes a minimal shell environment (`PATH`, `HOME`, `SHELL`, temp vars, locale vars, and similar OS basics), merges `cli_env`, and injects only the provider's resolved Codex/OpenAI API key from promptfoo-level env overrides. Other config-level `env:` keys are not forwarded to the Codex subprocess; pass those explicitly through `cli_env`. The provider emits a one-time warning if it sees non-auth promptfoo env overrides that are not present in `cli_env`. This keeps Codex agent commands isolated from unrelated process secrets while still leaving a usable shell path.
 
 Common Codex home and certificate process variables such as `CODEX_HOME` and `SSL_CERT_FILE` are also omitted from that minimal default unless you set them in `cli_env` or enable `inherit_process_env: true`. If those variables are present in the parent process and not forwarded, the provider emits a one-time warning so custom-home or TLS-sensitive evals do not fail silently. SSH agent variables such as `SSH_AUTH_SOCK` and `GIT_SSH_COMMAND` are only included in that warning when network access or live web search is enabled.
 
@@ -707,6 +719,7 @@ Promptfoo exposes inferred skill usage in `response.metadata.skillCalls`. Each e
 | `source` | string | Evidence source. For Codex this is always `heuristic` |
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Codex skill eval
 
 prompts:
@@ -715,7 +728,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.6-terra
+      model: gpt-6-sol
       working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
       skip_git_repo_check: true
       enable_streaming: true
@@ -749,6 +762,7 @@ Promptfoo also enriches traced Codex command spans with `promptfoo.skill.*` attr
 To trace what Codex does inside a skill, enable `deep_tracing` on the provider and root-level OTLP tracing in your config. That lets you assert on traced shell commands, MCP tool calls, search steps, and reasoning with the standard trace and trajectory assertions:
 
 ```yaml title="promptfooconfig.tracing.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Codex skill trace eval
 
 prompts:
@@ -757,7 +771,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.6-terra
+      model: gpt-6-sol
       working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
       skip_git_repo_check: true
       enable_streaming: true
@@ -800,6 +814,26 @@ providers:
       codex_path_override: /custom/path/to/codex
 ```
 
+Before each turn, promptfoo runs the custom binary as `exec --experimental-json --version` with a 10-second hard timeout. The probe receives the same prepared `cli_env` and inherited process environment as the real SDK spawn, except API credentials and per-turn tracing identifiers are removed. Its reported version must exactly match the CLI version pinned by `node_modules/@openai/codex-sdk/package.json` in `dependencies["@openai/codex"]`.
+
+If you intentionally use a schema-compatible fork or a different CLI version, you can accept that compatibility risk explicitly:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      codex_path_override: /custom/path/to/codex
+      skip_codex_version_check: true
+```
+
+Compatibility failures report one of these conditions before a Codex turn starts:
+
+- the SDK manifest is missing or does not pin an exact `@openai/codex` version;
+- the custom binary cannot run JSON event mode within the timeout; or
+- the custom binary reports a different or invalid version.
+
+Successful checks are not cached across turns. This avoids retaining identifiers derived from inherited environment secrets and ensures PATH-resolved wrappers or replaced binaries are rechecked.
+
 ## Caching Behavior
 
 This provider automatically caches responses based on:
@@ -836,6 +870,7 @@ tests:
 Review multiple files in a codebase with enhanced reasoning:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -862,6 +897,7 @@ tests:
 Generate structured bug reports from code:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
@@ -901,6 +937,7 @@ prompts:
 Use persistent threads for multi-turn conversations:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-sdk
     config:
