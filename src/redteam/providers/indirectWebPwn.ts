@@ -11,6 +11,7 @@ import {
 } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { WebPageTrackingIdsSchema } from '../types/webPage';
 import { getTargetResponse } from './shared';
 
 import type {
@@ -173,9 +174,29 @@ export default class IndirectWebPwnProvider implements ApiProvider {
   /**
    * Check if the web page was fetched via the task API.
    */
-  private async checkPageFetched(uuid: string, evalId?: string): Promise<WebPageTrackingResponse> {
+  private async checkPageFetched(
+    uuid: unknown,
+    evalId: string | undefined,
+    webPageUrl: unknown,
+  ): Promise<WebPageTrackingResponse | null> {
+    // callApi already normalized the context ID before page creation. Preserve
+    // that canonical ID here, including an eval- prefix that belongs to the ID.
+    let trackingIds = WebPageTrackingIdsSchema.safeParse({ uuid, evalId });
+    if (!trackingIds.success && typeof webPageUrl === 'string' && typeof uuid === 'string') {
+      const pagePath = webPageUrl.match(/\/dynamic-pages\/([^/]+)\/([^/?#]+)/);
+      if (pagePath && pagePath[2].toLowerCase() === uuid.toLowerCase()) {
+        trackingIds = WebPageTrackingIdsSchema.safeParse({ uuid, evalId: pagePath[1] });
+      }
+    }
+    if (!trackingIds.success) {
+      logger.debug('[IndirectWebPwn] Page tracking unavailable: invalid identifiers', {
+        fields: trackingIds.error.issues.map((issue) => issue.path.join('.')),
+      });
+      return null;
+    }
+
     const url = getRemoteGenerationUrl();
-    logger.debug('[IndirectWebPwn] Checking page fetch status', { url, uuid, evalId });
+    logger.debug('[IndirectWebPwn] Checking page fetch status', { url, ...trackingIds.data });
 
     const response = await fetchWithRetries(
       url,
@@ -184,8 +205,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'get-web-page-tracking',
-          uuid,
-          evalId,
+          ...trackingIds.data,
           email: getUserEmail(),
           ...remoteGenerationContextPayload(this.config.targetId),
         }),
@@ -258,6 +278,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     const redteamHistory: Array<{ prompt: string; output: string }> = [];
 
     let lastOutput = '';
+    let targetError: string | undefined;
     let stopReason: IndirectWebPwnMetadata['stopReason'] = 'Max fetch attempts reached';
     let webPageUuid: string | undefined;
     let webPageUrl: string | undefined;
@@ -313,6 +334,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         }
 
         if (targetResponse.error) {
+          targetError = targetResponse.error;
           logger.error('[IndirectWebPwn] Target error', { error: targetResponse.error });
           stopReason = 'Error';
           break;
@@ -335,7 +357,13 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         lastOutput = responseOutput;
 
         // 3. Check if page was fetched
-        const tracking = await this.checkPageFetched(webPage.uuid, evalId);
+        const tracking = await this.checkPageFetched(webPage.uuid, evalId, webPage.fullUrl);
+        if (!tracking) {
+          // Another target probe cannot repair missing identifiers. Keep the
+          // last response for grading without claiming the page was fetched.
+          stopReason = 'Error';
+          break;
+        }
 
         logger.debug('[IndirectWebPwn] Tracking check', {
           uuid: webPage.uuid,
@@ -377,6 +405,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
 
     return {
       output: lastOutput,
+      ...(targetError ? { error: targetError } : {}),
       metadata: {
         redteamFinalPrompt: messages[messages.length - 2]?.content || '',
         messages: messages as unknown as Record<string, unknown>[],

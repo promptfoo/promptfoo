@@ -88,50 +88,10 @@ describe('createNscaleProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-oss-120b', {
       config: {
         apiBaseUrl: 'https://inference.api.nscale.com/v1',
-        apiKeyEnvar: 'NSCALE_SERVICE_TOKEN',
         passthrough: {},
       },
       id: 'custom-id',
     });
-  });
-
-  it('should prefer service tokens over API keys', () => {
-    (getEnvString as Mock).mockReturnValue(undefined);
-    const options = {
-      env: {
-        NSCALE_SERVICE_TOKEN: 'service-token-123',
-        NSCALE_API_KEY: 'api-key-456',
-      },
-    };
-    createNscaleProvider('nscale:chat:openai/gpt-oss-120b', options);
-
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'openai/gpt-oss-120b',
-      expect.objectContaining({
-        config: expect.objectContaining({
-          apiKeyEnvar: 'NSCALE_SERVICE_TOKEN',
-        }),
-      }),
-    );
-  });
-
-  it('should fall back to API key if no service token is provided', () => {
-    (getEnvString as Mock).mockReturnValue(undefined);
-    const options = {
-      env: {
-        NSCALE_API_KEY: 'api-key-456',
-      },
-    };
-    createNscaleProvider('nscale:chat:openai/gpt-oss-120b', options);
-
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'openai/gpt-oss-120b',
-      expect.objectContaining({
-        config: expect.objectContaining({
-          apiKeyEnvar: 'NSCALE_API_KEY',
-        }),
-      }),
-    );
   });
 
   it('should use explicit config apiKey over environment variables', () => {
@@ -264,7 +224,6 @@ describe('createNscaleProvider', () => {
         expect.objectContaining({
           config: expect.objectContaining({
             apiBaseUrl: 'https://inference.api.nscale.com/v1',
-            apiKeyEnvar: 'NSCALE_SERVICE_TOKEN',
           }),
         }),
       );
