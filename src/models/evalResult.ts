@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreResultMedia, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -1328,16 +1328,18 @@ export default class EvalResult {
     const db = await getDb();
     // Ratings and other later updates run outside the evaluation's scoped env.
     // Preserve its saved media policy without changing process-wide settings.
-    const parentEval = await db
-      .select({ config: evalsTable.config })
+    const savedPolicy = await db
+      .select({
+        // Avoid deserializing the full config and its inline tests for each result.
+        inlineMedia: sql<string | null>`CASE WHEN json_valid(${evalsTable.config})
+          THEN ${evalsTable.config} -> '$.env.PROMPTFOO_INLINE_MEDIA' END`,
+      })
       .from(evalsTable)
       .where(eq(evalsTable.id, this.evalId))
       .get();
-    const savedEnv = parentEval?.config?.env;
+    // SQL NULL means absent; JSON null and other explicit values keep their types.
     const inlineMedia =
-      savedEnv && 'PROMPTFOO_INLINE_MEDIA' in savedEnv
-        ? savedEnv.PROMPTFOO_INLINE_MEDIA
-        : undefined;
+      savedPolicy?.inlineMedia == null ? undefined : JSON.parse(savedPolicy.inlineMedia);
     const storageEnabled =
       inlineMedia === undefined
         ? isBlobStorageEnabled()

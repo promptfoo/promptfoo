@@ -3,9 +3,12 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { R_ENDPOINT } from '../../src/constants';
+import { getDb } from '../../src/database/index';
+import { evalsTable } from '../../src/database/tables';
 import { evaluate as evaluateInternal } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -22,6 +25,15 @@ import { createEvaluateResult } from '../factories/eval';
 const audio = Buffer.alloc(2048, 81).toString('base64');
 const credential = 'synthetic-checkpoint-credential';
 const userMetadata = { nested: { http: { headers: { authorization: 'ordinary user value' } } } };
+
+async function setStoredConfig(evalId: string, configJson: string) {
+  const db = await getDb();
+  await db
+    .update(evalsTable)
+    .set({ config: sql`${configJson}` })
+    .where(eq(evalsTable.id, evalId))
+    .run();
+}
 
 function checkpointFixture(): EvaluateResult {
   const completedTargetResponses = ['first', 'second'].map((name, index) => ({
@@ -437,16 +449,26 @@ describe('interrupted strategy checkpoints', () => {
     it.each([
       ['true', false, true],
       ['false', true, false],
+      [true, false, true],
+      [false, true, false],
+      [null, true, false],
+      [1, false, true],
+      [0, true, false],
+      ['YePpErS', false, true],
+      ['unrecognized', true, false],
+      [['true'], false, true],
+      [{ legacy: true }, true, false],
       [undefined, true, true],
       [undefined, false, false],
     ] as const)(
       'honors saved inline=%s over ambient inline=%s',
       async (savedInline, ambientInline, expectedInline) => {
         const input = checkpointFixture();
-        const record = await Eval.create(
-          { env: savedInline === undefined ? {} : { PROMPTFOO_INLINE_MEDIA: savedInline } },
-          [input.prompt],
-          { id: randomUUID() },
+        const record = await Eval.create({}, [input.prompt], { id: randomUUID() });
+        // Legacy rows can contain typed settings that modern config validation rejects.
+        await setStoredConfig(
+          record.id,
+          JSON.stringify({ env: { PROMPTFOO_INLINE_MEDIA: savedInline } }),
         );
         const row = await cliState.withEnv({ PROMPTFOO_INLINE_MEDIA: 'true' }, () =>
           EvalResult.createFromEvaluateResult(record.id, input, { persist: mode === 'update' }),
@@ -475,6 +497,65 @@ describe('interrupted strategy checkpoints', () => {
         expect(row.response).toEqual(originalResponse);
       },
     );
+  });
+
+  it('does not deserialize inline test configs during repeated text result saves', async () => {
+    const input = createEvaluateResult({ response: { output: 'text only' }, cost: 0.25 });
+    const record = await Eval.create(
+      { tests: Array.from({ length: 20 }, () => ({ vars: { context: 'x'.repeat(2048) } })) },
+      [input.prompt],
+      { id: randomUUID() },
+    );
+    const row = await EvalResult.createFromEvaluateResult(record.id, input);
+    const decodeConfig = vi.spyOn(evalsTable.config, 'mapFromDriverValue');
+    for (const score of [0, 0.5, 1]) {
+      row.score = score;
+      await row.save();
+    }
+    expect(decodeConfig).not.toHaveBeenCalled();
+    const saved = await EvalResult.findById(row.id);
+    expect(saved!.score).toBe(1);
+    expect(saved!.response!.output).toBe('text only');
+    expect(saved!.cost).toBe(0.25);
+  });
+
+  describe.each([true, false])('malformed saved config with ambient inline=%s', (ambientInline) => {
+    it.each(['{', 'null', '[]', '"legacy"', '{"env":"legacy"}', '{"env":null}'])(
+      'falls back to the ambient media policy for %s',
+      async (configJson) => {
+        const input = checkpointFixture();
+        const record = await Eval.create({}, [input.prompt], { id: randomUUID() });
+        const row = await EvalResult.createFromEvaluateResult(record.id, input, { persist: false });
+        await setStoredConfig(record.id, configJson);
+        vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(ambientInline));
+        await row.save();
+        const saved = await EvalResult.findById(row.id);
+        for (const metadata of [saved!.response!.metadata!, saved!.metadata]) {
+          const response = metadata.completedTargetResponses[0].response;
+          expect(response.audio.data).toBe(ambientInline ? audio : undefined);
+          expect(Boolean(response.audio.blobRef)).toBe(!ambientInline);
+          expect(response.metadata.http.requestHeaders.Authorization).toBe('[REDACTED]');
+        }
+      },
+    );
+  });
+
+  it('reads edited and removed saved media settings on subsequent saves', async () => {
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'true');
+    const input = checkpointFixture();
+    const record = await Eval.create({}, [input.prompt], { id: randomUUID() });
+    const row = await EvalResult.createFromEvaluateResult(record.id, input);
+    for (const inline of ['true', 'false', undefined]) {
+      record.config.env = inline === undefined ? {} : { PROMPTFOO_INLINE_MEDIA: inline };
+      await record.save();
+      await row.save();
+      const saved = await EvalResult.findById(row.id);
+      for (const metadata of [saved!.response!.metadata!, saved!.metadata]) {
+        const response = metadata.completedTargetResponses[0].response;
+        expect(response.audio.data).toBe(inline === 'false' ? undefined : audio);
+        expect(Boolean(response.audio.blobRef)).toBe(inline === 'false');
+      }
+    }
   });
 
   it('keeps opposite ordinary-audio save policies isolated during concurrent rating updates', async () => {
