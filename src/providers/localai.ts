@@ -7,6 +7,7 @@ import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types/index';
@@ -98,7 +99,13 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
 }
 
 export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  readonly supportsEmbeddingCancellation = true;
+
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const body = {
       input: text,
       model: this.modelName,
@@ -113,10 +120,12 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
       };

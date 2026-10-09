@@ -254,6 +254,31 @@ describe('RubyProvider', () => {
       expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
     });
 
+    it('cancels an embedding invocation without changing its script arguments', async () => {
+      const provider = new RubyProvider('script.rb');
+      const controller = new AbortController();
+      mockRunRuby.mockImplementation(async (_script, _method, args, options) => {
+        expect(args).toEqual(['test prompt', { config: {} }]);
+        expect(options?.abortSignal).toBe(controller.signal);
+        controller.abort(new Error('embedding cancelled'));
+        options?.abortSignal?.throwIfAborted();
+        return { embedding: [1] };
+      });
+      await expect(
+        provider.callEmbeddingApi('test prompt', undefined, { abortSignal: controller.signal }),
+      ).rejects.toThrow('embedding cancelled');
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
+    });
+
+    it('does not invoke a Ruby embedding after cancellation', async () => {
+      const provider = new RubyProvider('script.rb');
+      const signal = AbortSignal.abort(new Error('already cancelled'));
+      await expect(
+        provider.callEmbeddingApi('test', undefined, { abortSignal: signal }),
+      ).rejects.toThrow('already cancelled');
+      expect(mockRunRuby).not.toHaveBeenCalled();
+    });
+
     it('should throw an error if Ruby script returns invalid result', async () => {
       const provider = new RubyProvider('script.rb');
       mockRunRuby.mockResolvedValue({ invalidKey: 'invalid value' });
