@@ -639,6 +639,53 @@ describe('SlotQueue', () => {
       },
     );
 
+    it.each([
+      ['requests', undefined],
+      ['tokens', undefined],
+      ['requests', 30000],
+      ['tokens', 30000],
+    ] as const)('honors reset-only %s headers with Retry-After %s', (dimension, retryAfter) => {
+      const now = Date.now();
+      queue.updateRateLimitState(
+        parseRateLimitHeaders({
+          [`x-ratelimit-reset-${dimension}`]: '2m',
+        }),
+      );
+      queue.markRateLimited(retryAfter);
+      trackAcquire(queue.acquire('reset-only-429'));
+      expect(queue.getResetAt()).toBe(now + 120000);
+      vi.advanceTimersByTime(119999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it('uses an explicit reset-only deadline instead of the generic 60-second fallback', () => {
+      const now = Date.now();
+      queue.updateRateLimitState(parseRateLimitHeaders({ 'x-ratelimit-reset-tokens': '20s' }));
+      queue.markRateLimited();
+      trackAcquire(queue.acquire('short-reset-only-429'));
+      expect(queue.getResetAt()).toBe(now + 20000);
+      vi.advanceTimersByTime(19999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it('reports the longest active exhausted quota deadline', () => {
+      const now = Date.now();
+      queue.updateRateLimitState(
+        parseRateLimitHeaders({
+          'x-ratelimit-remaining-requests': '0',
+          'x-ratelimit-reset-requests': '1s',
+          'x-ratelimit-remaining-tokens': '0',
+          'x-ratelimit-reset-tokens': '60s',
+        }),
+      );
+      queue.markRateLimited(30000);
+      expect(queue.getResetAt()).toBe(now + 60000);
+    });
+
     it('keeps Retry-After active when an in-flight successful response updates quota headers', () => {
       queue.markRateLimited(30000);
       queue.updateRateLimitState({

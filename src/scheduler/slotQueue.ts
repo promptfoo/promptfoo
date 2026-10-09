@@ -156,7 +156,13 @@ export class SlotQueue {
     this.clearExpiredQuotaState(now);
     const quotaResets = this.getQuotaResetTimes();
     // A generic reset has no dimension and remains a conservative backoff boundary.
-    // Dimension-specific resets only block when their own quota is exhausted.
+    // A reset-only 429 leaves exhaustion unknown, so preserve that explicit
+    // deadline without treating a known-positive quota as exhausted.
+    const unknownQuotaResets = [
+      this.remainingRequests === null ? this.resetAtRequests : null,
+      this.remainingTokens === null ? this.resetAtTokens : null,
+    ].filter((resetAt): resetAt is number => resetAt !== null);
+    quotaResets.push(...unknownQuotaResets);
     const genericReset =
       this.resetAtRequests === null && this.resetAtTokens === null ? this.resetAt : null;
     const deadline =
@@ -165,7 +171,12 @@ export class SlotQueue {
         : (this.rateLimitedUntil ??
           (quotaResets.length > 0 ? Math.max(...quotaResets) : genericReset) ??
           now + 60000);
-    this.rateLimitedUntil = Math.max(this.rateLimitedUntil ?? 0, genericReset ?? 0, deadline);
+    this.rateLimitedUntil = Math.max(
+      this.rateLimitedUntil ?? 0,
+      genericReset ?? 0,
+      ...unknownQuotaResets,
+      deadline,
+    );
     this.scheduleResetProcessing();
   }
 
@@ -191,9 +202,10 @@ export class SlotQueue {
   }
 
   getResetAt(): number | null {
-    return this.resetAt === null && this.rateLimitedUntil === null
-      ? null
-      : Math.max(this.resetAt ?? 0, this.rateLimitedUntil ?? 0);
+    const deadlines = [this.resetAt, this.rateLimitedUntil, ...this.getQuotaResetTimes()].filter(
+      (deadline): deadline is number => deadline !== null,
+    );
+    return deadlines.length > 0 ? Math.max(...deadlines) : null;
   }
 
   /**
