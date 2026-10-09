@@ -1,19 +1,24 @@
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkCodexCliCompatibility } from '../../../src/providers/openai/codexCliCompatibility';
 
-const mockExecFile = vi.hoisted(() => vi.fn());
+const mockSpawn = vi.hoisted(() => vi.fn());
 
-vi.mock('node:child_process', () => ({ execFile: mockExecFile }));
+vi.mock('node:child_process', () => ({ spawn: mockSpawn, execFile: vi.fn() }));
 
 describe('checkCodexCliCompatibility', () => {
   let sdkRoot: string;
   let sdkEntryPoint: string;
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  const initialization: string[] = [];
 
   beforeEach(() => {
+    initialization.length = 0;
     sdkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-sdk-'));
     sdkEntryPoint = path.join(sdkRoot, 'dist', 'index.js');
     fs.mkdirSync(path.dirname(sdkEntryPoint));
@@ -28,13 +33,51 @@ describe('checkCodexCliCompatibility', () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(process, 'platform', originalPlatform);
     vi.resetAllMocks();
     fs.rmSync(sdkRoot, { recursive: true, force: true });
   });
 
-  function mockVersion(stdout: string, error: Error | null = null) {
-    mockExecFile.mockImplementation((_file, _args, _options, callback) => {
-      callback(error, { stdout, stderr: '' });
+  function mockVersion(
+    stdout: string,
+    error: Error | null = null,
+    stderr = '',
+    exitCode = 0,
+    statusOverride?: string,
+  ) {
+    mockSpawn.mockImplementation(() => {
+      const stdin = new PassThrough();
+      const output = new PassThrough();
+      const errors = new PassThrough();
+      const status = new PassThrough();
+      stdin.on('data', (chunk) => initialization.push(chunk.toString()));
+      const child = Object.assign(new EventEmitter(), {
+        stdin,
+        stdout: output,
+        stderr: errors,
+        stdio: [stdin, output, errors, status],
+        pid: undefined,
+      });
+      queueMicrotask(() => {
+        const supervised = process.platform !== 'win32';
+        if (error && !supervised) {
+          child.emit('error', error);
+        } else {
+          child.stdout.end(stdout);
+          child.stderr.end(stderr);
+        }
+        if (supervised) {
+          status.end(
+            statusOverride ??
+              JSON.stringify(error ? { error: error.message } : { code: exitCode, signal: null }),
+          );
+        }
+        // Actual ChildProcess close follows the captured/status pipes ending.
+        setImmediate(() =>
+          child.emit('close', supervised ? null : exitCode, supervised ? 'SIGKILL' : null),
+        );
+      });
+      return child;
     });
   }
 
@@ -50,12 +93,99 @@ describe('checkCodexCliCompatibility', () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(mockExecFile).toHaveBeenCalledWith(
-      '/custom/codex',
-      ['exec', '--experimental-json', '--version'],
-      expect.objectContaining({ env, timeout: 10_000, killSignal: 'SIGKILL' }),
-      expect.any(Function),
-    );
+    if (process.platform === 'win32') {
+      expect(mockSpawn).toHaveBeenCalledWith(
+        '/custom/codex',
+        ['exec', '--experimental-json', '--version'],
+        expect.objectContaining({ env, windowsHide: true }),
+      );
+    } else {
+      expect(mockSpawn).toHaveBeenCalledWith(
+        process.execPath,
+        ['--input-type=commonjs', '--eval', expect.any(String)],
+        expect.objectContaining({
+          env: {},
+          detached: true,
+          stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+        }),
+      );
+      expect(JSON.parse(initialization.join(''))).toEqual({
+        command: '/custom/codex',
+        env,
+        ownerPid: process.pid,
+        deadlineAt: expect.any(Number),
+      });
+    }
+  });
+
+  it.each([
+    '',
+    '{"code":0',
+    '{}',
+    '{"code":"0","signal":null}',
+    '{"code":0,"signal":1}',
+    '{"code":0,"signal":null,"error":""}',
+  ])('fails closed on a missing or invalid private status frame (%s)', async (status) => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    mockVersion('codex-cli 0.130.0', null, '', 0, status);
+    await expect(
+      checkCodexCliCompatibility({ sdkEntryPoint, codexPathOverride: '/custom/codex', env: {} }),
+    ).rejects.toThrow('supervisor exited without a valid command status');
+  });
+
+  it('bounds the private status frame independently of command output', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    mockVersion('codex-cli 0.130.0', null, '', 0, 'x'.repeat(8193));
+    await expect(
+      checkCodexCliCompatibility({ sdkEntryPoint, codexPathOverride: '/custom/codex', env: {} }),
+    ).rejects.toThrow('status exceeded the maximum buffer length');
+  });
+
+  it('does not include a malformed private frame in an error', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    mockVersion('codex-cli 0.130.0', null, '', 0, '{"error":"SYNTHETIC_PRIVATE_VALUE');
+    const error = await checkCodexCliCompatibility({
+      sdkEntryPoint,
+      codexPathOverride: '/custom/codex',
+      env: {},
+    }).catch((value) => value as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toHaveProperty('message', expect.not.stringContaining('SYNTHETIC_PRIVATE_VALUE'));
+  });
+
+  it('accepts a matching version reported on stderr', async () => {
+    mockVersion('', null, 'codex-cli 0.130.0');
+    await expect(
+      checkCodexCliCompatibility({ sdkEntryPoint, codexPathOverride: '/custom/codex', env: {} }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects a matching version when the process exits unsuccessfully', async () => {
+    mockVersion('codex-cli 0.130.0', null, 'version command failed', 2);
+    await expect(
+      checkCodexCliCompatibility({ sdkEntryPoint, codexPathOverride: '/custom/codex', env: {} }),
+    ).rejects.toThrow('Codex CLI version check exited with 2: version command failed');
+  });
+
+  it('does not spawn a pre-aborted probe', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      checkCodexCliCompatibility({
+        sdkEntryPoint,
+        codexPathOverride: '/custom/codex',
+        env: {},
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it('bounds stderr capture as well as stdout', async () => {
+    mockVersion('', null, 'x'.repeat(1024 * 1024 + 1));
+    await expect(
+      checkCodexCliCompatibility({ sdkEntryPoint, codexPathOverride: '/custom/codex', env: {} }),
+    ).rejects.toThrow('stderr exceeded the maximum buffer length');
   });
 
   it('rechecks successful probes on each call', async () => {
@@ -72,7 +202,7 @@ describe('checkCodexCliCompatibility', () => {
       env: { ...options.env },
     });
 
-    expect(mockExecFile).toHaveBeenCalledTimes(2);
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
   });
 
   it('rechecks when the probe environment changes', async () => {
@@ -89,7 +219,7 @@ describe('checkCodexCliCompatibility', () => {
       env: { PATH: '/bin', WRAPPER_MODE: 'second' },
     });
 
-    expect(mockExecFile).toHaveBeenCalledTimes(2);
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
   });
 
   it('rechecks when the custom binary changes in place', async () => {
@@ -102,7 +232,7 @@ describe('checkCodexCliCompatibility', () => {
     fs.appendFileSync(codexPathOverride, '-replacement');
     await checkCodexCliCompatibility(options);
 
-    expect(mockExecFile).toHaveBeenCalledTimes(2);
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
   });
 
   it('rechecks a PATH-resolved command after replacement', async () => {
@@ -118,7 +248,7 @@ describe('checkCodexCliCompatibility', () => {
     await expect(checkCodexCliCompatibility(options)).rejects.toThrow(
       'codex-custom reports 0.131.0',
     );
-    expect(mockExecFile).toHaveBeenCalledTimes(2);
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
   });
 
   it('rejects the r7 SDK and CLI mismatch', async () => {
@@ -168,7 +298,7 @@ describe('checkCodexCliCompatibility', () => {
         env: {},
       }),
     ).resolves.toBeUndefined();
-    expect(mockExecFile).toHaveBeenCalledTimes(2);
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
   });
 
   it('fails closed on unrecognized version output', async () => {
