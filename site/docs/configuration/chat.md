@@ -231,8 +231,9 @@ same conversation history run sequentially. Different `conversationId` values ca
 in parallel up to your configured max concurrency.
 Each repeat index has a separate history, so repeated runs do not continue one another
 and may also run in parallel.
-Providers that maintain their own persistent session or thread state continue to run globally
-serially so that provider-managed context is not interleaved.
+Recognized persistent-session and thread configurations continue to run globally
+serially so that provider-managed context is not interleaved. For custom providers
+that share mutable state between calls, set `maxConcurrency: 1` explicitly.
 
 A step with `options.disableConversationVar: true` does not receive the history variable,
 but its response remains part of the conversation for later turns.
