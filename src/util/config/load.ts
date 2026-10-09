@@ -47,7 +47,6 @@ import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
   isRemoteTestsReference,
-  mapVarFileReferences,
   readTest,
   readTestConfig,
   readTestConfigs,
@@ -58,6 +57,7 @@ import {
   validateTestPromptReferences,
 } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { mapVarFileReferences, pinVarFileReference } from '../varFileReferences';
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
@@ -756,7 +756,12 @@ async function prepareCombinedConfig(
     const prepareReference =
       path.resolve(basePath) === suiteBasePath
         ? renderReference
-        : (reference: string) => resolveConfigPath(basePath, reference);
+        : (reference: string) => {
+            const rendered = renderReference(reference);
+            return rendered.startsWith('file://') && !rendered.includes('{{')
+              ? pinVarFileReference(rendered, basePath)
+              : resolveReferenceFromDirectory(basePath, rendered);
+          };
     // Keep grader IDs unchanged so references can reuse configured providers.
     return {
       ...source,

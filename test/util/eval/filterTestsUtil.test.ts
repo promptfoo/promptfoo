@@ -1,10 +1,20 @@
+import * as path from 'node:path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
 import { filterTestsByResults } from '../../../src/util/eval/filterTestsUtil';
 import * as util from '../../../src/util/index';
+import { createEvaluateResult } from '../../factories/eval';
 
-import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
+import type {
+  EvaluateResult,
+  Prompt,
+  ProviderResponse,
+  TestCase,
+  TestSuite,
+} from '../../../src/types/index';
 
 vi.mock('../../../src/models/eval', () => ({
   default: {
@@ -474,6 +484,44 @@ describe('filterTestsUtil', () => {
   });
 
   describe('runtime variable filtering integration', () => {
+    it.each(['suite', 'suite [acme]'])(
+      'uses current assertions when filtering legacy absolute file vars in %s',
+      async (name) => {
+        const actual =
+          await vi.importActual<typeof import('../../../src/util/index')>(
+            '../../../src/util/index',
+          );
+        vi.mocked(util.resultIsForTestCase).mockImplementation(actual.resultIsForTestCase);
+        const base = path.join(process.cwd(), name);
+        const current: TestCase = {
+          vars: { doc: 'file://doc.txt' },
+          assert: [{ type: 'equals', value: 'corrected' }],
+        };
+        const saved: TestCase = {
+          vars: { doc: `file://${path.join(base, 'doc.txt')}` },
+          assert: [{ type: 'equals', value: 'obsolete' }],
+        };
+        vi.mocked(util.readOutput).mockResolvedValue({
+          results: {
+            results: [createEvaluateResult({ vars: saved.vars, testCase: saved, success: false })],
+          },
+        } as Awaited<ReturnType<typeof util.readOutput>>);
+
+        const filtered = await cliState.withBasePath(base, () =>
+          filterTestsByResults(
+            { prompts: [], providers: [], tests: [current] },
+            'results.json',
+            (result) => !result.success,
+          ),
+        );
+
+        expect(filtered).toEqual([current]);
+        expect(filtered[0]).toBe(current);
+        expect(current.vars?.doc).toBe('file://doc.txt');
+        expect(saved.vars?.doc).toBe(`file://${path.join(base, 'doc.txt')}`);
+      },
+    );
+
     /**
      * These tests verify that resultIsForTestCase properly filters runtime variables
      * when matching test cases. They use the real resultIsForTestCase without mocking.

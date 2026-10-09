@@ -1972,30 +1972,6 @@ export function formatVarsForDisplay(
   }
 }
 
-/** Expands a glob in a `file://` var. Matches are relative to `cwd` unless the pattern is absolute. */
-function expandVarFilePattern(pattern: string, cwd: string): string[] {
-  if (!path.isAbsolute(pattern)) {
-    return globSync(pattern, { cwd, windowsPathsNoEscape: true }) || [];
-  }
-  // An absolute pattern was pinned to the directory its row was authored in. Its leading
-  // directories exist, so they are literal even when a name contains glob syntax, such as
-  // "client [acme]". Only the remainder is a pattern.
-  let directory = path.parse(pattern).root;
-  const segments = pattern.slice(directory.length).split(/[\\/]/);
-  while (segments.length > 1) {
-    const next = path.join(directory, segments[0]);
-    if (!fs.existsSync(next) || !fs.statSync(next).isDirectory()) {
-      break;
-    }
-    directory = next;
-    segments.shift();
-  }
-  return (
-    globSync(segments.join('/'), { cwd: directory, absolute: true, windowsPathsNoEscape: true }) ||
-    []
-  );
-}
-
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
 ): Record<string, VarValue>[] {
@@ -2014,7 +1990,7 @@ export function generateVarCombinations(
       // characters such as brackets.
       const filePaths = fs.existsSync(path.resolve(basePath || process.cwd(), filePath))
         ? [filePath]
-        : expandVarFilePattern(filePath, basePath || process.cwd());
+        : globSync(filePath, { cwd: basePath || process.cwd(), windowsPathsNoEscape: true }) || [];
 
       values = filePaths.map((matchedPath: string) => `file://${matchedPath}`);
       if (values.length === 0) {

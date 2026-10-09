@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { escape as escapeGlob } from 'glob';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import cliState from '../../../src/cliState';
 import { generateVarCombinations } from '../../../src/evaluator';
@@ -457,14 +458,68 @@ describe('file:// var references in loaded configs', () => {
     const project = writeProject('client [acme] evals', {});
     fs.writeFileSync(path.join(project, 'docs', 'b.txt'), 'second doc\n');
 
-    // A row pinned to its own config directory carries an absolute pattern.
+    const [test] = await readTestConfigs(
+      [{ vars: { doc: 'file://docs/*.txt' } }],
+      project,
+      {},
+      directory,
+    );
+    // Pinning keeps the injected source directory literal and the authored suffix a glob.
     const combinations = cliState.withBasePath(directory, () =>
-      generateVarCombinations({ doc: `file://${path.join(project, 'docs', '*.txt')}` }),
+      generateVarCombinations(test.vars ?? {}),
     );
 
     expect(combinations.map((combination) => combination.doc).sort()).toEqual([
       `file://${path.join(project, 'docs', 'a.txt')}`,
       `file://${path.join(project, 'docs', 'b.txt')}`,
+    ]);
+  });
+
+  it.each(['second', 'second [acme]'])(
+    'preserves authored directory patterns when pinning vars from %s',
+    async (name) => {
+      const first = writeProject('first', { tests: [] });
+      const second = writeProject(name, { tests: [{ vars: { doc: 'file://sets/[ab]/*.txt' } }] });
+      for (const set of ['a', 'b', '[ab]']) {
+        const source = path.join(second, 'sets', set);
+        fs.mkdirSync(source, { recursive: true });
+        fs.writeFileSync(path.join(source, 'doc.txt'), set);
+      }
+
+      const { testSuite } = await resolve({
+        config: [
+          path.join(first, 'promptfooconfig.json'),
+          escapeGlob(path.join(second, 'promptfooconfig.json'), { windowsPathsNoEscape: true }),
+        ],
+      });
+      const [test] = testSuite.tests as TestCase[];
+      const combinations = cliState.withBasePath(first, () =>
+        generateVarCombinations(test.vars ?? {}),
+      );
+
+      expect(combinations.map((row) => row.doc).sort()).toEqual([
+        `file://${path.join(second, 'sets', 'a', 'doc.txt')}`,
+        `file://${path.join(second, 'sets', 'b', 'doc.txt')}`,
+      ]);
+    },
+  );
+
+  it('keeps existing literal var filenames when pinning from a bracketed directory', async () => {
+    const first = writeProject('first', { tests: [] });
+    const second = writeProject('second [acme]', {
+      tests: [{ vars: { doc: 'file://docs/doc[12].txt' } }],
+    });
+    fs.writeFileSync(path.join(second, 'docs', 'doc[12].txt'), 'literal');
+    fs.writeFileSync(path.join(second, 'docs', 'doc1.txt'), 'glob sibling');
+    const { testSuite } = await resolve({
+      config: [
+        path.join(first, 'promptfooconfig.json'),
+        escapeGlob(path.join(second, 'promptfooconfig.json'), { windowsPathsNoEscape: true }),
+      ],
+    });
+    const [test] = testSuite.tests as TestCase[];
+    expect(cliState.withBasePath(first, () => generateVarCombinations(test.vars ?? {}))).toEqual([
+      { doc: `file://${path.join(second, 'docs', 'doc[12].txt')}` },
     ]);
   });
 

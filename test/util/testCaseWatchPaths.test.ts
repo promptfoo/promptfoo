@@ -3,7 +3,11 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { readTestConfigs, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
+import {
+  readTestConfigs,
+  readTestFiles,
+  resolveTestsWatchPaths,
+} from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
@@ -345,6 +349,16 @@ describe('resolveTestsWatchPaths', () => {
     fs.writeFileSync(path.join(base, 'varsdir/one.yaml'), '');
     const watched = resolve([{ vars: 'varsdir/*.yaml' }] as unknown as TestSuiteConfig['tests']);
     expect(watched).toContain(path.join(base, 'varsdir/one.yaml'));
+  });
+
+  it('matches the bare-vars loader glob precedence when a literal sibling exists', async () => {
+    fs.writeFileSync(path.join(base, 'vars[12].yaml'), 'doc: literal\n');
+    fs.writeFileSync(path.join(base, 'vars1.yaml'), 'doc: glob match\n');
+
+    expect(await readTestFiles('vars[12].yaml', base)).toEqual({ doc: 'glob match' });
+    expect(resolve([{ vars: 'vars[12].yaml' }] as unknown as TestSuiteConfig['tests'])).toEqual([
+      path.join(base, 'vars1.yaml'),
+    ]);
   });
 
   it('resolves every entry of a vars-file array', () => {

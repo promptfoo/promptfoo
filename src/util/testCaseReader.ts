@@ -23,6 +23,7 @@ import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } fr
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { renderEnvOnlyInObject } from './render';
+import { mapVarFileReferences, pinVarFileReference } from './varFileReferences';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
@@ -759,38 +760,6 @@ export async function readTests(
 }
 
 /**
- * Maps the file references in a row's vars without changing nested data.
- *
- * Only top-level strings and the members of top-level arrays are file references; strings
- * nested inside objects are data and stay as written. Returns the original vars object when
- * no reference changes, so callers can preserve unchanged test rows too.
- */
-export function mapVarFileReferences(
-  vars: TestCase['vars'],
-  mapReference: (reference: string) => string,
-): TestCase['vars'] {
-  if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
-    return vars;
-  }
-  let changed = false;
-  const prepare = (value: unknown): unknown => {
-    if (typeof value !== 'string' || !value.startsWith('file://')) {
-      return value;
-    }
-    const prepared = mapReference(value);
-    changed ||= prepared !== value;
-    return prepared;
-  };
-  const prepared = Object.fromEntries(
-    Object.entries(vars).map(([name, value]) => [
-      name,
-      Array.isArray(value) ? value.map(prepare) : prepare(value),
-    ]),
-  );
-  return changed ? (prepared as TestCase['vars']) : vars;
-}
-
-/**
  * Parse source files once and retain declarative rows for persistence and replay.
  *
  * `file://` vars are resolved from `suiteBasePath` when the evaluation runs. Rows read from
@@ -817,9 +786,7 @@ export async function readTestConfigs(
         }
         const vars = mapVarFileReferences(row.vars, (value) => {
           const reference = renderEnvOnlyInObject(value);
-          return pinTo === undefined
-            ? reference
-            : `file://${path.resolve(pinTo, reference.slice(7))}`;
+          return pinTo === undefined ? reference : pinVarFileReference(reference, pinTo);
         });
         const providerId = typeof row.provider === 'string' ? row.provider : row.provider?.id;
         // Provider construction happens later from the suite directory, so retain this
@@ -1041,7 +1008,11 @@ function toTestsGlob(basePath: string, reference: string): string {
  * watching a pattern's parent directory instead would rerun the evaluation on every
  * unrelated edit beneath it, including the run's own output file.
  */
-function resolveTestsFileReference(reference: string, basePath: string): string[] {
+function resolveTestsFileReference(
+  reference: string,
+  basePath: string,
+  literalFirst = true,
+): string[] {
   reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
@@ -1049,7 +1020,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
   }
 
   const resolved = path.resolve(basePath, withoutScheme);
-  if (!fs.existsSync(resolved) && hasGlobMagic(withoutScheme)) {
+  if ((!literalFirst || !fs.existsSync(resolved)) && hasGlobMagic(withoutScheme)) {
     const matches = globSync(toTestsGlob(basePath, withoutScheme), { windowsPathsNoEscape: true });
     if (matches.length > 0) {
       return matches.map((match) => stripSheetSelector(match));
@@ -1206,7 +1177,8 @@ export function resolveTestsWatchPaths(
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
-          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+          // Bare vars paths are always globbed by readTestFiles, even when a literal exists.
+          typeof value === 'string' ? resolveTestsFileReference(value, basePath, false) : [],
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
