@@ -875,10 +875,6 @@ async function doEvalWithEnv(
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
-    const previousAbortSignal = evaluateOptions.abortSignal;
-    evaluateOptions.abortSignal = previousAbortSignal
-      ? AbortSignal.any([previousAbortSignal, abortController.signal])
-      : abortController.signal;
 
     let paused = false;
     let sigintHandler: NodeJS.SignalsListener | undefined;
@@ -893,8 +889,6 @@ async function doEvalWithEnv(
         clearTimeout(forceExitTimeout);
         forceExitTimeout = undefined;
       }
-      // Restore original abort signal for watch mode
-      evaluateOptions.abortSignal = previousAbortSignal;
     };
 
     // Pause/resume SIGINT behavior is CLI policy. Reusable callers should own cancellation.
@@ -943,6 +937,7 @@ async function doEvalWithEnv(
         restorePromptColumns: Boolean(resumeEval),
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
+        pauseSignal: isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,
         isRedteam: Boolean(config.redteam),
       };
       ret = await withCacheEnabled(cache === false ? false : undefined, () =>

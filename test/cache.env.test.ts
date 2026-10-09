@@ -415,6 +415,51 @@ describe('invocation-scoped cache settings', () => {
     });
   });
 
+  it('cancels a fetch waiting for a clear without interrupting the clear or later callers', async () => {
+    await cliState.withEnv(memory, async () => {
+      const store = cache.getCache().stores[0];
+      const clear = store.clear.bind(store);
+      const entered = createDeferred<void>();
+      const release = createDeferred<void>();
+      vi.spyOn(store, 'clear').mockImplementationOnce(async () => {
+        entered.resolve();
+        await release.promise;
+        return clear();
+      });
+      vi.mocked(fetchWithRetries).mockImplementation(async () => Response.json('fresh'));
+      const clearing = cache.getCache().clear();
+      await entered.promise;
+      const controller = new AbortController();
+      const reason = new DOMException('cancelled while clearing', 'AbortError');
+      let settled = false;
+      const waiting = cache
+        .fetchWithCache('https://cache-fixture.invalid/clear-cancellation', {
+          signal: controller.signal,
+        })
+        .catch((error) => {
+          settled = true;
+          return error;
+        });
+      try {
+        controller.abort(reason);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(settled).toBe(true);
+        expect(fetchWithRetries).not.toHaveBeenCalled();
+      } finally {
+        release.resolve();
+        await Promise.all([clearing, waiting]);
+      }
+      expect(await waiting).toBe(reason);
+      expect(
+        await cache.fetchWithCache('https://cache-fixture.invalid/clear-cancellation'),
+      ).toMatchObject({ data: 'fresh', cached: false });
+      expect(
+        await cache.fetchWithCache('https://cache-fixture.invalid/clear-cancellation'),
+      ).toMatchObject({ data: 'fresh', cached: true });
+      expect(fetchWithRetries).toHaveBeenCalledOnce();
+    });
+  });
+
   it('does not return a stale hit while the store is clearing', async () => {
     await cliState.withEnv(memory, async () => {
       vi.mocked(fetchWithRetries)
