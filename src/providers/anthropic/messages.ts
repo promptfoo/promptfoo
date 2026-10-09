@@ -6,7 +6,7 @@ import {
   getScopedCacheKey,
   isCacheEnabled,
 } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvInt, getEnvString, parseEnvFloat } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -90,14 +90,6 @@ async function finalMessageWithStreamedStopDetails(
   return finalMessage.stop_details == null && streamedStopDetails != null
     ? { ...finalMessage, stop_details: streamedStopDetails }
     : finalMessage;
-}
-
-function parseEnvFloat(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  const parsed = Number.parseFloat(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
 }
 
 function normalizeHeadersForCacheKey(headers: Record<string, string>) {
@@ -992,13 +984,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    const envTemperature = parseEnvFloat(
+      this.env?.ANTHROPIC_TEMPERATURE ?? getEnvString('ANTHROPIC_TEMPERATURE'),
+    );
     // The rules Claude enforces for temperature, top_p, top_k, and thinking live in one helper
     // shared with the Vertex and Bedrock paths.
     const { sampling, warnings: samplingWarnings } = resolveClaudeSamplingParams(config, {
       thinkingEnabled,
       samplingParamsDeprecated,
-      defaultTemperature:
-        parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ?? getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
+      defaultTemperature: envTemperature ?? 0,
     });
     for (const warning of samplingWarnings) {
       logger.warn(warning);
@@ -1015,8 +1009,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       config.temperature != null ||
       config.top_p != null ||
       config.top_k != null ||
-      parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) != null ||
-      parseEnvFloat(process.env.ANTHROPIC_TEMPERATURE) != null;
+      envTemperature != null;
     if (
       samplingParamsDeprecated &&
       explicitSamplingParam &&
