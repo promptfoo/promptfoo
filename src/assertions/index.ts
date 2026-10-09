@@ -695,6 +695,7 @@ export async function runAssertions({
   prompt,
   provider,
   providerResponse,
+  numericGradingInput,
   outputIsText,
   test,
   vars,
@@ -705,6 +706,8 @@ export async function runAssertions({
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
+  /** Evaluator-owned pre-media view for numeric leaves only; never persisted. */
+  numericGradingInput?: { providerResponse: ProviderResponse; outputIsText: boolean };
   outputIsText?: boolean;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
@@ -792,11 +795,12 @@ export async function runAssertions({
       return;
     }
 
+    const numericInput = isNumericFinancialAssertion(assertion) ? numericGradingInput : undefined;
     const result = await runAssertion({
       prompt,
       provider,
-      providerResponse,
-      outputIsText,
+      providerResponse: numericInput?.providerResponse ?? providerResponse,
+      outputIsText: numericInput?.outputIsText ?? outputIsText,
       assertion,
       test,
       vars,

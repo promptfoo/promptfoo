@@ -655,6 +655,8 @@ interface RedteamGraderInput {
   preparedNumeric?: PreparedNumericGrading;
   /** Original selected metadata captured before history media externalization. */
   targetMetadata?: ProviderResponse['metadata'] | null;
+  /** Original output before history media extraction, for live numeric preparation only. */
+  targetOutput?: string;
 }
 
 type PreparedNumericGrading =
@@ -717,7 +719,7 @@ export async function prepareNumericGrading(
     const providerResponse = { ...rawProviderResponse, metadata: targetMetadata ?? undefined };
     const transformPrompt = input.context?.originalAssertionInput?.transformPrompt ??
       input.prompt ?? { raw: prompt, label: prompt };
-    let preparedOutput: ProviderResponse['output'] = output;
+    let preparedOutput: ProviderResponse['output'] = input.targetOutput ?? output;
     let outputIsText = gradingContext?.outputIsText === true;
     if (input.targetProvider?.transform) {
       preparedOutput = await transform(input.targetProvider.transform, preparedOutput, {
@@ -977,6 +979,8 @@ export function getForwardedTargetMetadata(
 
 export interface FlaggedTurn {
   outputIsText?: boolean;
+  /** Raw numeric source paired with this selected turn; never stored as a separate field. */
+  numericOutput?: string;
   targetMetadata?: ProviderResponse['metadata'] | null;
   graderResult: GradingResult;
   output: string;
@@ -1176,12 +1180,37 @@ export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max tur
 export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
   response: T,
   context?: { evalId?: string; testIdx?: number; promptIdx?: number },
+  numericOutput?: string,
 ): Promise<T> {
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;
   }
   const blobbed = await extractAndStoreBinaryData(response, context);
-  return (blobbed as T) || response;
+  if (!blobbed) {
+    return response;
+  }
+  // Only an extraction that changes output can invalidate its source evidence.
+  // Retained numeric text keeps the original flag, including false or unknown;
+  // display placeholders for empty responses must not affect that evidence.
+  const sourceRetained = numericOutput !== undefined && Object.is(numericOutput, response.output);
+  return (
+    Object.is(blobbed.output, response.output) || sourceRetained
+      ? blobbed
+      : { ...blobbed, outputIsText: false }
+  ) as T;
+}
+
+/** Keep error responses normalized: the evaluator returns them without grading or extraction. */
+export function restoreNumericSourceOutput<T extends ProviderResponse>(
+  response: T,
+  numericOutput?: string,
+): T {
+  if (numericOutput === undefined || Object.is(response.output, numericOutput)) {
+    return response;
+  }
+  return response.error
+    ? { ...response, metadata: { ...response.metadata, redteamOutputIsText: false } }
+    : { ...response, output: numericOutput };
 }
 
 /**

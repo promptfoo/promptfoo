@@ -57,6 +57,7 @@ import {
   getTargetResponse,
   redteamProviderManager,
   resolveStoredGraderResult,
+  restoreNumericSourceOutput,
   runRedteamGrader,
   snapshotTargetMetadata,
   type TargetResponse,
@@ -220,6 +221,7 @@ export async function runRedteamConversation({
 
   let highestScore = 0;
   let bestResponse = '';
+  let bestTargetOutput: string | undefined;
   let bestResponseIsText: boolean | undefined;
   let bestTargetMetadata: ProviderResponse['metadata'] | null | undefined;
   let finalIteration = numIterations;
@@ -253,6 +255,7 @@ export async function runRedteamConversation({
   }[] = [];
 
   let lastResponse: TargetResponse | undefined = undefined;
+  let lastTargetOutput: string | undefined;
   let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
 
   const tracingOptions = resolveTracingOptions({
@@ -469,13 +472,19 @@ export async function runRedteamConversation({
       options,
     );
     const targetMetadata = snapshotTargetMetadata(targetResponse, test);
+    const targetOutput = targetMetadata === undefined ? undefined : targetResponse.output;
     // Externalize blobs before they hit history/prompts
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    targetResponse = await externalizeResponseForRedteamHistory(
+      targetResponse,
+      {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      },
+      targetOutput,
+    );
     lastResponse = targetResponse;
+    lastTargetOutput = targetOutput;
     lastTargetMetadata = targetMetadata;
     lastInjectVar = finalInjectVar;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
@@ -638,7 +647,7 @@ export async function runRedteamConversation({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
-          { assertion: assertToUse, targetProvider, prompt, context, targetMetadata },
+          { assertion: assertToUse, targetProvider, prompt, context, targetMetadata, targetOutput },
           finalInjectVar,
           targetResponse.output,
           iterationTest,
@@ -704,6 +713,7 @@ export async function runRedteamConversation({
       stopReason = 'Grader failed';
       finalIteration = i + 1;
       bestResponse = targetResponse.output;
+      bestTargetOutput = targetOutput;
       bestResponseIsText = targetResponse.outputIsText;
       bestTargetMetadata = targetMetadata;
       bestInjectVar = finalInjectVar;
@@ -803,6 +813,7 @@ export async function runRedteamConversation({
       if (currentScore > highestScore) {
         highestScore = currentScore;
         bestResponse = targetResponse.output;
+        bestTargetOutput = targetOutput;
         bestResponseIsText = targetResponse.outputIsText;
         bestTargetMetadata = targetMetadata;
         bestInjectVar = finalInjectVar;
@@ -875,28 +886,32 @@ export async function runRedteamConversation({
     }
   }
 
-  return {
-    output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-    prompt: bestInjectVar ?? lastInjectVar,
-    metadata: {
-      redteamTargetMetadata: bestInjectVar === undefined ? lastTargetMetadata : bestTargetMetadata,
-      redteamOutputIsText:
-        bestInjectVar === undefined ? lastResponse?.outputIsText : bestResponseIsText,
-      finalIteration,
-      highestScore,
-      redteamHistory: previousOutputs,
-      redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
-      storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
-      stopReason: stopReason,
-      sessionIds,
-      traceSnapshots:
-        traceSnapshots.length > 0
-          ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
-          : undefined,
+  return restoreNumericSourceOutput(
+    {
+      output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
+      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+      prompt: bestInjectVar ?? lastInjectVar,
+      metadata: {
+        redteamTargetMetadata:
+          bestInjectVar === undefined ? lastTargetMetadata : bestTargetMetadata,
+        redteamOutputIsText:
+          bestInjectVar === undefined ? lastResponse?.outputIsText : bestResponseIsText,
+        finalIteration,
+        highestScore,
+        redteamHistory: previousOutputs,
+        redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
+        storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
+        stopReason: stopReason,
+        sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+            : undefined,
+      },
+      tokenUsage: totalTokenUsage,
     },
-    tokenUsage: totalTokenUsage,
-  };
+    bestInjectVar === undefined ? lastTargetOutput : bestTargetOutput,
+  );
 }
 
 class RedteamIterativeProvider implements ApiProvider {

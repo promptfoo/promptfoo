@@ -67,6 +67,7 @@ import {
   getTargetResponse,
   prepareNumericGrading,
   redteamProviderManager,
+  restoreNumericSourceOutput,
   runRedteamGrader,
   snapshotTargetMetadata,
 } from './shared';
@@ -631,6 +632,7 @@ async function runRedteamConversation({
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
   let bestResponse = '';
+  let bestTargetOutput: string | undefined;
   let bestResponseIsText: boolean | undefined;
   let bestTargetMetadata: ProviderResponse['metadata'] | null | undefined;
 
@@ -696,24 +698,28 @@ async function runRedteamConversation({
           }
 
           logger.error('[IterativeTree] Attacker request failed', { error });
-          return {
-            output: bestResponse,
-            prompt: bestNode.prompt,
-            error: error.message,
-            metadata: {
-              redteamOutputIsText: bestResponseIsText,
-              redteamTargetMetadata: bestTargetMetadata,
-              highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
-              stopReason: 'ATTACKER_ERROR',
-              storedGraderResult: getBestGraderResult(),
-              sessionIds: extractSessionIds(treeOutputs),
+          return restoreNumericSourceOutput<RedteamTreeResponse>(
+            {
+              output: bestResponse,
+              prompt: bestNode.prompt,
+              error: error.message,
+              metadata: {
+                redteamOutputIsText: bestResponseIsText,
+                redteamTargetMetadata: bestTargetMetadata,
+                highestScore: maxScore,
+                redteamFinalPrompt:
+                  bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+                messages: treeOutputs as Record<string, any>[],
+                attempts,
+                redteamTreeHistory: treeOutputs,
+                stopReason: 'ATTACKER_ERROR',
+                storedGraderResult: getBestGraderResult(),
+                sessionIds: extractSessionIds(treeOutputs),
+              },
+              tokenUsage: totalTokenUsage,
             },
-            tokenUsage: totalTokenUsage,
-          };
+            bestTargetOutput,
+          );
         }
 
         let {
@@ -855,11 +861,16 @@ async function runRedteamConversation({
           options,
         );
         const targetMetadata = snapshotTargetMetadata(targetResponse, test);
-        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-          evalId: context?.evaluationId,
-          testIdx: context?.testIdx,
-          promptIdx: context?.promptIdx,
-        });
+        const targetOutput = targetMetadata === undefined ? undefined : targetResponse.output;
+        targetResponse = await externalizeResponseForRedteamHistory(
+          targetResponse,
+          {
+            evalId: context?.evaluationId,
+            testIdx: context?.testIdx,
+            promptIdx: context?.promptIdx,
+          },
+          targetOutput,
+        );
         // Count the target request even when the target returns an error.
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
@@ -905,6 +916,7 @@ async function runRedteamConversation({
           prompt,
           context,
           targetMetadata,
+          targetOutput,
         };
         const numericGradingContext: RedteamGradingContext = {
           providerResponse: targetResponse,
@@ -969,6 +981,7 @@ async function runRedteamConversation({
         if (isNewBest) {
           maxScore = score;
           bestResponse = targetResponse.output;
+          bestTargetOutput = targetOutput;
           bestResponseIsText = targetResponse.outputIsText;
           bestTargetMetadata = targetMetadata;
           bestNode.prompt = newInjectVar;
@@ -1112,27 +1125,30 @@ async function runRedteamConversation({
             guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
-          return {
-            output: targetResponse.output,
-            prompt: newInjectVar,
-            metadata: {
-              redteamOutputIsText: targetResponse.outputIsText,
-              redteamTargetMetadata: targetMetadata,
-              highestScore: maxScore,
-              redteamFinalPrompt: finalInjectVar,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
-              stopReason: stoppingReason,
-              storedGraderResult,
-              sessionIds: extractSessionIds(treeOutputs),
-              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-              }),
+          return restoreNumericSourceOutput(
+            {
+              output: targetResponse.output,
+              prompt: newInjectVar,
+              metadata: {
+                redteamOutputIsText: targetResponse.outputIsText,
+                redteamTargetMetadata: targetMetadata,
+                highestScore: maxScore,
+                redteamFinalPrompt: finalInjectVar,
+                messages: treeOutputs as Record<string, any>[],
+                attempts,
+                redteamTreeHistory: treeOutputs,
+                stopReason: stoppingReason,
+                storedGraderResult,
+                sessionIds: extractSessionIds(treeOutputs),
+                ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                  transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+                }),
+              },
+              tokenUsage: totalTokenUsage,
+              guardrails: targetResponse?.guardrails,
             },
-            tokenUsage: totalTokenUsage,
-            guardrails: targetResponse?.guardrails,
-          };
+            targetOutput,
+          );
         }
 
         if (noImprovementCount >= MAX_NO_IMPROVEMENT) {
@@ -1157,27 +1173,31 @@ async function runRedteamConversation({
             guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
-          return {
-            output: bestResponse,
-            prompt: bestNode.prompt,
-            metadata: {
-              redteamOutputIsText: bestResponseIsText,
-              redteamTargetMetadata: bestTargetMetadata,
-              highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
-              stopReason: stoppingReason,
-              storedGraderResult: getBestGraderResult(),
-              sessionIds: extractSessionIds(treeOutputs),
-              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-              }),
+          return restoreNumericSourceOutput(
+            {
+              output: bestResponse,
+              prompt: bestNode.prompt,
+              metadata: {
+                redteamOutputIsText: bestResponseIsText,
+                redteamTargetMetadata: bestTargetMetadata,
+                highestScore: maxScore,
+                redteamFinalPrompt:
+                  bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+                messages: treeOutputs as Record<string, any>[],
+                attempts,
+                redteamTreeHistory: treeOutputs,
+                stopReason: stoppingReason,
+                storedGraderResult: getBestGraderResult(),
+                sessionIds: extractSessionIds(treeOutputs),
+                ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                  transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+                }),
+              },
+              tokenUsage: totalTokenUsage,
+              guardrails: targetResponse?.guardrails,
             },
-            tokenUsage: totalTokenUsage,
-            guardrails: targetResponse?.guardrails,
-          };
+            bestTargetOutput,
+          );
         }
 
         if (attempts >= MAX_ATTEMPTS) {
@@ -1203,27 +1223,31 @@ async function runRedteamConversation({
             guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
-          return {
-            output: bestResponse,
-            prompt: bestNode.prompt,
-            metadata: {
-              redteamOutputIsText: bestResponseIsText,
-              redteamTargetMetadata: bestTargetMetadata,
-              highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
-              stopReason: stoppingReason,
-              storedGraderResult: getBestGraderResult(),
-              sessionIds: extractSessionIds(treeOutputs),
-              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-              }),
+          return restoreNumericSourceOutput(
+            {
+              output: bestResponse,
+              prompt: bestNode.prompt,
+              metadata: {
+                redteamOutputIsText: bestResponseIsText,
+                redteamTargetMetadata: bestTargetMetadata,
+                highestScore: maxScore,
+                redteamFinalPrompt:
+                  bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+                messages: treeOutputs as Record<string, any>[],
+                attempts,
+                redteamTreeHistory: treeOutputs,
+                stopReason: stoppingReason,
+                storedGraderResult: getBestGraderResult(),
+                sessionIds: extractSessionIds(treeOutputs),
+                ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                  transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+                }),
+              },
+              tokenUsage: totalTokenUsage,
+              guardrails: targetResponse?.guardrails,
             },
-            tokenUsage: totalTokenUsage,
-            guardrails: targetResponse?.guardrails,
-          };
+            bestTargetOutput,
+          );
         }
 
         redteamHistory.push(
@@ -1351,30 +1375,33 @@ async function runRedteamConversation({
     guardrails: finalTargetResponse?.guardrails,
     sessionId: getSessionId(finalTargetResponse, context),
   });
-  return {
-    output:
-      bestResponse ||
-      (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
-    prompt: bestNode.prompt,
-    metadata: {
-      redteamOutputIsText: bestResponse ? bestResponseIsText : finalTargetResponse.outputIsText,
-      redteamTargetMetadata: bestResponse ? bestTargetMetadata : finalTargetMetadata,
-      highestScore: maxScore,
-      redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-      messages: treeOutputs as Record<string, any>[],
-      attempts,
-      redteamTreeHistory: treeOutputs,
-      stopReason: stoppingReason,
-      storedGraderResult: getBestGraderResult(),
-      sessionIds: extractSessionIds(treeOutputs),
-      ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-        transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-      }),
+  return restoreNumericSourceOutput(
+    {
+      output:
+        bestResponse ||
+        (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
+      prompt: bestNode.prompt,
+      metadata: {
+        redteamOutputIsText: bestResponse ? bestResponseIsText : finalTargetResponse.outputIsText,
+        redteamTargetMetadata: bestResponse ? bestTargetMetadata : finalTargetMetadata,
+        highestScore: maxScore,
+        redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+        messages: treeOutputs as Record<string, any>[],
+        attempts,
+        redteamTreeHistory: treeOutputs,
+        stopReason: stoppingReason,
+        storedGraderResult: getBestGraderResult(),
+        sessionIds: extractSessionIds(treeOutputs),
+        ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+          transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+        }),
+      },
+      tokenUsage: totalTokenUsage,
+      guardrails: finalTargetResponse?.guardrails,
+      ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
     },
-    tokenUsage: totalTokenUsage,
-    guardrails: finalTargetResponse?.guardrails,
-    ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
-  };
+    bestResponse ? bestTargetOutput : undefined,
+  );
 }
 
 /**

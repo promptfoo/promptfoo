@@ -53,6 +53,7 @@ import {
   isConversationEndedResponse,
   type Message,
   prepareNumericGrading,
+  restoreNumericSourceOutput,
   runRedteamGrader,
   snapshotTargetMetadata,
   type TargetResponse,
@@ -358,6 +359,7 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let lastTargetMetadata: TargetResponse['metadata'] | null;
+    let lastNumericOutput: string | undefined;
     let lastResponseMessages: Message[] = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
@@ -687,6 +689,7 @@ export class HydraProvider implements ApiProvider {
         options,
       );
       lastTargetMetadata = snapshotTargetMetadata(targetResponse, test);
+      lastNumericOutput = lastTargetMetadata === undefined ? undefined : targetResponse.output;
       lastTargetResponse = targetResponse;
       lastResponseMessages = [
         ...this.conversationHistory,
@@ -784,11 +787,15 @@ export class HydraProvider implements ApiProvider {
       // Externalize blobs to avoid token bloat in Hydra/meta prompts
       if (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()) {
         const beforeOutput = targetResponse.output;
-        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-          evalId: context?.evaluationId,
-          testIdx: context?.testIdx,
-          promptIdx: context?.promptIdx,
-        });
+        targetResponse = await externalizeResponseForRedteamHistory(
+          targetResponse,
+          {
+            evalId: context?.evaluationId,
+            testIdx: context?.testIdx,
+            promptIdx: context?.promptIdx,
+          },
+          lastNumericOutput,
+        );
         if (targetResponse.output !== beforeOutput) {
           logger.debug(`${this.logPrefix} Externalized binary output`, {
             turn,
@@ -807,7 +814,7 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
-      // Externalization can replace the response object. Return the same output we grade.
+      // Keep the normalized response for conversation history and legacy grading.
       lastTargetResponse = targetResponse;
       const historyOutput =
         isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
@@ -830,6 +837,7 @@ export class HydraProvider implements ApiProvider {
                 prompt,
                 context,
                 targetMetadata: lastTargetMetadata,
+                targetOutput: lastNumericOutput,
               },
               lastFinalAttackPrompt || nextMessage,
               targetResponse.output,
@@ -1084,35 +1092,38 @@ export class HydraProvider implements ApiProvider {
             hydraResult: vulnerabilityAchieved,
           };
 
-    return {
-      output: lastTargetResponse?.output || '',
-      ...(failClosedError
-        ? { error: failClosedError }
-        : lastTargetResponse?.error
-          ? { error: lastTargetResponse.error }
-          : {}),
-      metadata: {
-        redteamOutputIsText: lastTargetResponse?.outputIsText,
-        redteamTargetMetadata: lastTargetMetadata,
-        sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
-        messages,
-        ...strategyMetadata,
-        stopReason,
-        successfulAttacks,
-        totalSuccessfulAttacks: successfulAttacks.length,
-        storedGraderResult,
-        redteamHistory,
-        sessionIds,
-        traceSnapshots:
-          traceSnapshots.length > 0
-            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-            : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-        redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+    return restoreNumericSourceOutput(
+      {
+        output: lastTargetResponse?.output || '',
+        ...(failClosedError
+          ? { error: failClosedError }
+          : lastTargetResponse?.error
+            ? { error: lastTargetResponse.error }
+            : {}),
+        metadata: {
+          redteamOutputIsText: lastTargetResponse?.outputIsText,
+          redteamTargetMetadata: lastTargetMetadata,
+          sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+          messages,
+          ...strategyMetadata,
+          stopReason,
+          successfulAttacks,
+          totalSuccessfulAttacks: successfulAttacks.length,
+          storedGraderResult,
+          redteamHistory,
+          sessionIds,
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+              : undefined,
+          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+          redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: lastTargetResponse?.guardrails,
       },
-      tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
-    };
+      lastNumericOutput,
+    );
   }
 }
 

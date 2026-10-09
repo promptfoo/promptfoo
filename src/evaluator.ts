@@ -27,6 +27,7 @@ import { selectMaxScore } from './matchers/comparison';
 import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
+  preserveResponseOutputProvenance,
   sanitizeResultForJsonlArtifact,
 } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
@@ -1472,18 +1473,23 @@ async function gradeRunEvalResponse({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
-  const { processedResponse, providerTransformedOutput, outputIsText } =
-    await transformRunEvalResponse({
-      evalId,
-      prompt,
-      promptIdx,
-      provider,
-      response,
-      test,
-      testIdx,
-      vars,
-    });
-  if (!outputIsText) {
+  const {
+    processedResponse,
+    gradingResponse,
+    numericOutput,
+    providerTransformedOutput,
+    outputIsText,
+  } = await transformRunEvalResponse({
+    evalId,
+    prompt,
+    promptIdx,
+    provider,
+    response,
+    test,
+    testIdx,
+    vars,
+  });
+  if (processedResponse.metadata?.redteamOutputIsText === false) {
     ret.metadata = { ...ret.metadata, redteamOutputIsText: false };
   }
   const traceId = getTraceId(traceContext);
@@ -1496,7 +1502,7 @@ async function gradeRunEvalResponse({
   }
 
   const assertionProviderResponse = {
-    ...processedResponse,
+    ...gradingResponse,
     // Keep generated audio available to graders after persistence replaces its
     // inline bytes with a blob reference in the saved result.
     ...(response.audio?.data ? { audio: response.audio } : {}),
@@ -1505,12 +1511,18 @@ async function gradeRunEvalResponse({
       response.metadata &&
       Object.prototype.hasOwnProperty.call(response.metadata, 'redteamTargetMetadata') && {
         metadata: {
-          ...processedResponse.metadata,
+          ...gradingResponse.metadata,
           redteamTargetMetadata: response.metadata.redteamTargetMetadata,
         },
       }),
     providerTransformedOutput,
   };
+  const numericGradingInput = hasNumericFinancialAssertions(test.assert)
+    ? { providerResponse: { ...assertionProviderResponse, output: numericOutput }, outputIsText }
+    : undefined;
+  // The normal artifact view may no longer contain the JSON numeric source. An
+  // external legacy reference that resolves numeric must fail closed on that view.
+  const normalizedOutputIsText = outputIsText && Object.is(gradingResponse.output, numericOutput);
   if (
     ret.metadata &&
     response.metadata &&
@@ -1532,7 +1544,8 @@ async function gradeRunEvalResponse({
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
-          outputIsText,
+          numericGradingInput,
+          outputIsText: normalizedOutputIsText,
           test,
           vars,
           latencyMs: response.latencyMs ?? latencyMs,
@@ -1553,7 +1566,8 @@ async function gradeRunEvalResponse({
         prompt: renderedPrompt,
         provider,
         providerResponse: assertionProviderResponse,
-        outputIsText,
+        numericGradingInput,
+        outputIsText: normalizedOutputIsText,
         test,
         vars,
         latencyMs: response.latencyMs ?? latencyMs,
@@ -1585,6 +1599,8 @@ async function transformRunEvalResponse({
   vars: Vars;
 }): Promise<{
   processedResponse: ProviderResponse;
+  gradingResponse: ProviderResponse;
+  numericOutput: ProviderResponse['output'];
   providerTransformedOutput: ProviderResponse['output'];
   outputIsText: boolean;
 }> {
@@ -1623,8 +1639,13 @@ async function transformRunEvalResponse({
     promptIdx,
   });
 
+  const gradingResponse = blobbedResponse || processedResponse;
   return {
-    processedResponse: blobbedResponse || processedResponse,
+    processedResponse:
+      preserveResponseOutputProvenance(gradingResponse, processedResponse.output) ||
+      gradingResponse,
+    gradingResponse,
+    numericOutput: processedResponse.output,
     providerTransformedOutput,
     outputIsText,
   };

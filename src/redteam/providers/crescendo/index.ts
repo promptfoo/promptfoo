@@ -66,6 +66,7 @@ import {
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   resolveStoredGraderResult,
+  restoreNumericSourceOutput,
   runRedteamGrader,
   snapshotTargetMetadata,
   type TargetResponse,
@@ -341,6 +342,7 @@ export class CrescendoProvider implements ApiProvider {
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
     let lastTargetMetadata: TargetResponse['metadata'] | null;
+    let lastNumericOutput: string | undefined;
     let hasTargetResponse = false;
     let lastAttemptError: string | undefined;
     let lastResponseMessages: Message[] = [];
@@ -466,6 +468,7 @@ export class CrescendoProvider implements ApiProvider {
         const {
           response,
           targetMetadata,
+          numericOutput,
           transformResult,
           inputVars: currentInputVars,
         } = await this.sendPrompt(
@@ -491,6 +494,7 @@ export class CrescendoProvider implements ApiProvider {
         }
         lastResponse = response;
         lastTargetMetadata = targetMetadata;
+        lastNumericOutput = numericOutput;
         hasTargetResponse = true;
         lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
@@ -546,6 +550,7 @@ export class CrescendoProvider implements ApiProvider {
                   prompt,
                   context,
                   targetMetadata: lastTargetMetadata,
+                  targetOutput: lastNumericOutput,
                 },
                 lastFinalAttackPrompt ||
                   getLastMessageContent(lastResponseMessages, 'user') ||
@@ -577,6 +582,7 @@ export class CrescendoProvider implements ApiProvider {
           const {
             response: unblockingResponse,
             targetMetadata: unblockingTargetMetadata,
+            numericOutput: unblockingNumericOutput,
             transformResult: unblockingTransform,
           } = await this.sendPrompt(
             unblockingResult.unblockingPrompt,
@@ -608,6 +614,7 @@ export class CrescendoProvider implements ApiProvider {
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
           lastTargetMetadata = unblockingTargetMetadata;
+          lastNumericOutput = unblockingNumericOutput;
           lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
           lastFinalAttackPrompt =
             unblockingTransform?.prompt ||
@@ -757,6 +764,7 @@ export class CrescendoProvider implements ApiProvider {
               output: lastResponse.output,
               outputIsText: lastResponse.outputIsText,
               targetMetadata: lastTargetMetadata,
+              numericOutput: lastNumericOutput,
               messages: lastResponseMessages,
               guardrails: lastResponse.guardrails,
               transformDisplayVars: lastTransformDisplayVars,
@@ -892,6 +900,7 @@ export class CrescendoProvider implements ApiProvider {
       output: lastResponse.output,
       outputIsText: lastResponse.outputIsText,
       targetMetadata: lastTargetMetadata,
+      numericOutput: lastNumericOutput,
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
@@ -901,40 +910,43 @@ export class CrescendoProvider implements ApiProvider {
     const error =
       lastResponse.error ||
       (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
-    return {
-      output: reported.output,
-      ...(!flaggedRound && error ? { error } : {}),
-      prompt: finalPrompt,
-      metadata: {
-        redteamOutputIsText: reported.outputIsText,
-        redteamTargetMetadata: reported.targetMetadata,
-        sessionId: getSessionId(lastResponse, context),
-        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: reported.prompt,
-        messages: reported.messages as Record<string, any>[],
-        crescendoRoundsCompleted: roundNum,
-        crescendoBacktrackCount: backtrackCount,
-        crescendoResult: evalFlag,
-        crescendoConfidence: evalPercentage,
-        stopReason: exitReason,
-        redteamHistory,
-        successfulAttacks: this.successfulAttacks,
-        totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult: resolveStoredGraderResult(
-          flaggedRound?.graderResult,
-          storedGraderResult,
-        ),
-        traceSnapshots:
-          traceSnapshots.length > 0
-            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
-            : undefined,
-        ...(reported.transformDisplayVars && {
-          transformDisplayVars: reported.transformDisplayVars,
-        }),
+    return restoreNumericSourceOutput(
+      {
+        output: reported.output,
+        ...(!flaggedRound && error ? { error } : {}),
+        prompt: finalPrompt,
+        metadata: {
+          redteamOutputIsText: reported.outputIsText,
+          redteamTargetMetadata: reported.targetMetadata,
+          sessionId: getSessionId(lastResponse, context),
+          // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+          redteamFinalPrompt: reported.prompt,
+          messages: reported.messages as Record<string, any>[],
+          crescendoRoundsCompleted: roundNum,
+          crescendoBacktrackCount: backtrackCount,
+          crescendoResult: evalFlag,
+          crescendoConfidence: evalPercentage,
+          stopReason: exitReason,
+          redteamHistory,
+          successfulAttacks: this.successfulAttacks,
+          totalSuccessfulAttacks: this.successfulAttacks.length,
+          storedGraderResult: resolveStoredGraderResult(
+            flaggedRound?.graderResult,
+            storedGraderResult,
+          ),
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+              : undefined,
+          ...(reported.transformDisplayVars && {
+            transformDisplayVars: reported.transformDisplayVars,
+          }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: reported.guardrails,
       },
-      tokenUsage: totalTokenUsage,
-      guardrails: reported.guardrails,
-    };
+      reported.numericOutput,
+    );
   }
 
   private async getAttackPrompt(
@@ -1114,6 +1126,7 @@ export class CrescendoProvider implements ApiProvider {
   ): Promise<{
     response: TargetResponse;
     targetMetadata?: TargetResponse['metadata'] | null;
+    numericOutput?: string;
     transformResult?: TransformResult;
     inputVars?: Record<string, string>;
   }> {
@@ -1334,14 +1347,19 @@ export class CrescendoProvider implements ApiProvider {
       options,
     );
     const targetMetadata = snapshotTargetMetadata(targetResponse, context?.test);
+    const numericOutput = targetMetadata === undefined ? undefined : targetResponse.output;
     for (const message of pendingMessages) {
       this.memory.addMessage(this.targetConversationId, message);
     }
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    targetResponse = await externalizeResponseForRedteamHistory(
+      targetResponse,
+      {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      },
+      numericOutput,
+    );
     logger.debug('[Crescendo] Target response', { response: targetResponse });
 
     invariant(
@@ -1392,6 +1410,7 @@ export class CrescendoProvider implements ApiProvider {
     return {
       response: targetResponse,
       targetMetadata,
+      numericOutput,
       transformResult: lastTransformResult,
       inputVars: currentRenderInputVars,
     };

@@ -22,6 +22,7 @@ import {
   externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
+  restoreNumericSourceOutput,
   snapshotTargetMetadata,
   type TargetResponse,
 } from './shared';
@@ -59,6 +60,7 @@ interface ImageGenerationOutput {
 }
 
 interface BestResponse extends TargetResponse {
+  targetOutput?: string;
   targetMetadata?: ProviderResponse['metadata'] | null;
   imageUrl?: string;
   imageDescription?: string;
@@ -287,6 +289,7 @@ async function runRedteamConversation({
   let highestScore = 0;
   let bestResponse: BestResponse | null = null;
   let lastResponse: TargetResponse | undefined = undefined;
+  let lastTargetOutput: string | undefined;
   let lastTargetMetadata: ProviderResponse['metadata'] | null | undefined;
   const previousOutputs: ImageGenerationOutput[] = [];
   let finalIteration = 0;
@@ -392,12 +395,18 @@ async function runRedteamConversation({
         options,
       );
       const targetMetadata = snapshotTargetMetadata(targetResponse, test);
-      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-        evalId: context?.evaluationId,
-        testIdx: context?.testIdx,
-        promptIdx: context?.promptIdx,
-      });
+      const targetOutput = targetMetadata === undefined ? undefined : targetResponse.output;
+      targetResponse = await externalizeResponseForRedteamHistory(
+        targetResponse,
+        {
+          evalId: context?.evaluationId,
+          testIdx: context?.testIdx,
+          promptIdx: context?.promptIdx,
+        },
+        targetOutput,
+      );
       lastResponse = targetResponse;
+      lastTargetOutput = targetOutput;
       lastTargetMetadata = targetMetadata;
       // Count the target request even when the target returns an error.
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
@@ -545,6 +554,7 @@ async function runRedteamConversation({
           bestResponse = {
             ...targetResponse,
             targetMetadata,
+            targetOutput,
             imageUrl: url[0],
             imageDescription,
             score,
@@ -588,28 +598,31 @@ async function runRedteamConversation({
     }
   }
 
-  return {
-    output:
-      bestResponse?.output ||
-      (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
-    prompt: targetPrompt || undefined,
-    metadata: {
-      redteamTargetMetadata: bestResponse?.output
-        ? bestResponse.targetMetadata
-        : lastTargetMetadata,
-      redteamOutputIsText: bestResponse?.output
-        ? bestResponse.outputIsText
-        : lastResponse?.outputIsText,
-      finalIteration,
-      highestScore,
-      redteamHistory,
-      redteamFinalPrompt: targetPrompt || undefined,
-      bestImageUrl: bestResponse?.imageUrl,
-      bestImageDescription: bestResponse?.imageDescription,
+  return restoreNumericSourceOutput(
+    {
+      output:
+        bestResponse?.output ||
+        (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
+      prompt: targetPrompt || undefined,
+      metadata: {
+        redteamTargetMetadata: bestResponse?.output
+          ? bestResponse.targetMetadata
+          : lastTargetMetadata,
+        redteamOutputIsText: bestResponse?.output
+          ? bestResponse.outputIsText
+          : lastResponse?.outputIsText,
+        finalIteration,
+        highestScore,
+        redteamHistory,
+        redteamFinalPrompt: targetPrompt || undefined,
+        bestImageUrl: bestResponse?.imageUrl,
+        bestImageDescription: bestResponse?.imageDescription,
+      },
+      tokenUsage: totalTokenUsage,
+      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     },
-    tokenUsage: totalTokenUsage,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-  };
+    bestResponse?.output ? bestResponse.targetOutput : lastTargetOutput,
+  );
 }
 
 class RedteamIterativeProvider implements ApiProvider {

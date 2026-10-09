@@ -817,6 +817,26 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } as T;
 }
 
+/** A stored media replacement cannot establish the original JSON numeric tokens. */
+export function preserveResponseOutputProvenance(
+  response: ProviderResponse | null | undefined,
+  originalOutput: ProviderResponse['output'],
+): ProviderResponse | null | undefined {
+  if (!response || Object.is(response.output, originalOutput)) {
+    return response;
+  }
+  return { ...response, metadata: { ...response.metadata, redteamOutputIsText: false } };
+}
+
+function withResponseOutputProvenance(
+  metadata: EvaluateResult['metadata'],
+  response: ProviderResponse | null | undefined,
+): EvaluateResult['metadata'] {
+  return response?.metadata?.redteamOutputIsText === false
+    ? { ...metadata, redteamOutputIsText: false }
+    : metadata;
+}
+
 /** Project the duplicated target snapshot using the same media lifecycle as response metadata. */
 async function externalizeCapturedResultMetadata(
   metadata: EvaluateResult['metadata'],
@@ -876,11 +896,14 @@ export default class EvalResult {
       }),
     };
 
-    const processedResponse = await extractAndStoreBinaryData(result.response, {
-      evalId,
-      testIdx: result.testIdx,
-      promptIdx: result.promptIdx,
-    });
+    const processedResponse = preserveResponseOutputProvenance(
+      await extractAndStoreBinaryData(result.response, {
+        evalId,
+        testIdx: result.testIdx,
+        promptIdx: result.promptIdx,
+      }),
+      result.response?.output,
+    );
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -906,7 +929,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
+      metadata: sanitizeForDb(withResponseOutputProvenance(persistedMetadata, processedResponse)),
       failureReason,
     };
     if (persist) {
@@ -932,21 +955,27 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
-      const processedResponse = isBlobStorageEnabled()
-        ? await extractAndStoreBinaryData(result.response, {
-            evalId,
-            testIdx: result.testIdx,
-            promptIdx: result.promptIdx,
-          })
-        : result.response;
+      const processedResponse = preserveResponseOutputProvenance(
+        isBlobStorageEnabled()
+          ? await extractAndStoreBinaryData(result.response, {
+              evalId,
+              testIdx: result.testIdx,
+              promptIdx: result.promptIdx,
+            })
+          : result.response,
+        result.response?.output,
+      );
       processedResults.push({
         ...result,
         response: processedResponse ?? undefined,
-        metadata: await externalizeCapturedResultMetadata(result.metadata, {
-          evalId,
-          testIdx: result.testIdx,
-          promptIdx: result.promptIdx,
-        }),
+        metadata: withResponseOutputProvenance(
+          await externalizeCapturedResultMetadata(result.metadata, {
+            evalId,
+            testIdx: result.testIdx,
+            promptIdx: result.promptIdx,
+          }),
+          processedResponse,
+        ),
       });
     }
 
@@ -1184,19 +1213,26 @@ export default class EvalResult {
     // explicitly keeps the write payload aligned with the schema.
     const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const blobContext = { evalId: this.evalId, testIdx: this.testIdx, promptIdx: this.promptIdx };
+    const processedResponse =
+      this.response?.metadata &&
+      Object.prototype.hasOwnProperty.call(this.response.metadata, 'redteamTargetMetadata')
+        ? preserveResponseOutputProvenance(
+            await extractAndStoreBinaryData(this.response, blobContext),
+            this.response.output,
+          )
+        : this.response;
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
       ...redactSensitiveResultFieldsForDb(
         {
-          response:
-            this.response?.metadata &&
-            Object.prototype.hasOwnProperty.call(this.response.metadata, 'redteamTargetMetadata')
-              ? await extractAndStoreBinaryData(this.response, blobContext)
-              : this.response,
+          response: processedResponse,
           gradingResult: sanitizeGradingResultForDb(this.gradingResult),
           metadata: persistTraceMetadata(
-            await externalizeCapturedResultMetadata(this.metadata, blobContext),
+            withResponseOutputProvenance(
+              await externalizeCapturedResultMetadata(this.metadata, blobContext),
+              processedResponse,
+            ),
             this.traceId,
             this.evaluationId,
           ),
