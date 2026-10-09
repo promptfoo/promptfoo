@@ -192,16 +192,34 @@ export function parseChangedFileList(output: string): ChangedFile[] {
 }
 
 export function getChangedFiles(cwd: string, baseRef?: string): ChangedFile[] {
+  if (baseRef) {
+    if (baseRef.startsWith('-')) {
+      throw new Error('Coverage base must be a commit or ref, not a git option');
+    }
+
+    // An explicit base is authoritative. Never silently check a different diff
+    // when the requested ref is missing or its merge base is unavailable.
+    fetchGitRef(baseRef, cwd);
+    try {
+      const baseSha = git(
+        ['rev-parse', '--verify', '--end-of-options', `${baseRef}^{commit}`],
+        cwd,
+      ).trim();
+      return parseChangedFileList(
+        git(['diff', '--name-status', '--diff-filter=ACMRTUXB', `${baseSha}...HEAD`, '--'], cwd),
+      );
+    } catch (error) {
+      throw new Error(`Unable to determine changed files from explicit coverage base ${baseRef}`, {
+        cause: error,
+      });
+    }
+  }
+
   fetchGithubBaseRef(cwd);
 
   const diffCommands: string[][] = [];
   const isGithubActions = process.env.GITHUB_ACTIONS === 'true';
   const githubBaseSha = readGithubPullRequestBaseSha();
-
-  if (baseRef) {
-    fetchGitRef(baseRef, cwd);
-    diffCommands.push(['diff', '--name-status', '--diff-filter=ACMRTUXB', `${baseRef}...HEAD`]);
-  }
 
   if (githubBaseSha) {
     fetchGitRef(githubBaseSha, cwd);
