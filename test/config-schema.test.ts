@@ -96,6 +96,112 @@ describe('config-schema.json', () => {
     }
   });
 
+  describe('rating feedback validation', () => {
+    const feedbackCases: Array<[string, Record<string, string>, boolean]> = [
+      ['pass link', { pass: 'https://reviews.example.com/{{resultId}}?rating={{rating}}' }, true],
+      ['fail link', { fail: 'https://reviews.example.com/{{evalId}}#{{testCaseId}}' }, true],
+      ['empty links', {}, false],
+      ['HTTP', { pass: 'http://reviews.example.com/' }, false],
+      ['userinfo', { pass: 'https://user:password@reviews.example.com/' }, false],
+      ['unknown placeholder', { pass: 'https://reviews.example.com/{{unknown}}' }, false],
+      ['incomplete placeholder', { pass: 'https://reviews.example.com/{{resultId}' }, false],
+      ['dynamic host', { pass: 'https://{{evalId}}.example.com/' }, false],
+      ['query credentials', { pass: 'https://reviews.example.com/?API_Key=secret' }, false],
+      ['fragment credentials', { pass: 'https://reviews.example.com/#access-token=secret' }, false],
+      ['encoded credential name', { pass: 'https://reviews.example.com/?%61pi_key=secret' }, false],
+      ['session credential', { pass: 'https://reviews.example.com/?session_token=secret' }, false],
+      ['API header credential', { pass: 'https://reviews.example.com/#x-api-key=secret' }, false],
+      ['AWS credential', { pass: 'https://reviews.example.com/?AWSAccessKeyId=secret' }, false],
+      [
+        'padded credential name',
+        { pass: 'https://reviews.example.com/?_session_token_=secret' },
+        false,
+      ],
+      [
+        'nested credential name',
+        { pass: 'https://reviews.example.com/?settings[api_key]=secret' },
+        false,
+      ],
+      [
+        'dotted credential name',
+        { pass: 'https://reviews.example.com/?settings.api_key=secret' },
+        false,
+      ],
+      ['array credential key', { pass: 'https://reviews.example.com/?api_key[]=secret' }, false],
+      [
+        'named credential child',
+        { pass: 'https://reviews.example.com/?token[primary]=secret' },
+        false,
+      ],
+      [
+        'nested credential child',
+        { pass: 'https://reviews.example.com/?settings[api_key][primary]=secret' },
+        false,
+      ],
+      [
+        'bracket fragment credential',
+        { pass: 'https://reviews.example.com/#session_token[]=secret' },
+        false,
+      ],
+      [
+        'padded bracket credential',
+        { pass: 'https://reviews.example.com/?__API__KEY__[0]=secret' },
+        false,
+      ],
+      [
+        'ordinary bracket key',
+        { pass: 'https://reviews.example.com/?review[category]=quality' },
+        true,
+      ],
+      [
+        'credential word in value',
+        { pass: 'https://reviews.example.com/?category=token[primary]' },
+        true,
+      ],
+      ['credential-like path', { pass: 'https://reviews.example.com/token[primary]=public' }, true],
+      [
+        'long ordinary key within limit',
+        { pass: 'https://reviews.example.com/?' + '.'.repeat(7600) + '=public' },
+        true,
+      ],
+      [
+        'oversized separator key',
+        { pass: 'https://reviews.example.com/?' + '.'.repeat(65536) + '=public' },
+        false,
+      ],
+      [
+        'oversized nested key without equals',
+        { pass: 'https://reviews.example.com/?' + 'token.'.repeat(11000) },
+        false,
+      ],
+      ['trailing newline', { pass: 'https://reviews.example.com/\n' }, false],
+      ['non-numeric port', { pass: 'https://reviews.example.com:bad/' }, false],
+      ['out-of-range port', { pass: 'https://reviews.example.com:65536/' }, false],
+      ['invalid IPv6', { pass: 'https://[bad]/' }, false],
+      ['invalid IPv4', { pass: 'https://999.0.0.1/' }, false],
+      ['encoded host delimiter', { pass: 'https://reviews%2fexample.com/' }, false],
+      ['explicit HTTPS port', { pass: 'https://reviews.example.com:443/{{resultId}}' }, true],
+      ['maximum port', { pass: 'https://reviews.example.com:65535/{{resultId}}' }, true],
+      ['numeric domain suffix', { pass: 'https://reviews.example-1/{{resultId}}' }, true],
+      ['numeric final label', { pass: 'https://reviews.42/{{resultId}}' }, false],
+      ['hexadecimal final label', { pass: 'https://reviews.0xff/{{resultId}}' }, false],
+      ['punycode domain', { pass: 'https://xn--bcher-kva.example/{{resultId}}' }, true],
+      ['IPv4 endpoint', { pass: 'https://127.0.0.1:8443/{{resultId}}' }, true],
+      ['IPv6 endpoint', { pass: 'https://[2001:db8::1]:8443/{{resultId}}' }, true],
+      ['excessive length', { pass: 'https://reviews.example.com/' + 'x'.repeat(8192) }, false],
+    ];
+
+    it.each(feedbackCases)(
+      'agrees between runtime and editor validation: %s',
+      (_name, feedback, valid) => {
+        const config = { prompts: ['hello'], providers: ['echo'], tests: [{ feedback }] };
+        expect(UnifiedConfigSchema.safeParse(config).success).toBe(valid);
+        const validate = ajv.compile(schema);
+        expect(validate(config), JSON.stringify(validate.errors)).toBe(valid);
+      },
+    );
+  });
+
   describe('redteam plugin enums', () => {
     it('should not have duplicate entries in plugin enums', () => {
       const findPluginEnums = (

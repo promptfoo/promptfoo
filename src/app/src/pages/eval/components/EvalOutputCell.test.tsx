@@ -7,7 +7,11 @@ import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
-import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
+import EvalOutputCell, {
+  buildRatingFeedbackUrl,
+  isImageProvider,
+  isVideoProvider,
+} from './EvalOutputCell';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -36,6 +40,7 @@ const dispatchClick = (element: Element) => {
 };
 
 const defaultResultsViewSettings = {
+  inComparisonMode: false,
   prettifyJson: false,
   renderMarkdown: true,
   showPassFail: true,
@@ -2819,6 +2824,107 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
 
     // Verify comment is passed to onRating
     expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Important comment');
+  });
+
+  it('opens the configured feedback link when setting a pass rating', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const props = createPropsForToggleTest();
+    props.evaluationId = 'eval-123';
+    props.testCaseId = 'case/123';
+    props.output.testCase = {
+      feedback: {
+        pass: 'https://reviews.example.com/results/{{resultId}}?eval={{evalId}}&test={{testCaseId}}&rating={{rating}}',
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    await userEvent.click(screen.getByLabelText('Mark test passed'));
+
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://reviews.example.com/results/test-id?eval=eval-123&test=case%2F123&rating=pass',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    openSpy.mockRestore();
+  });
+
+  it('saves ratings without opening links in comparison mode', async () => {
+    mockResultsViewSettings.inComparisonMode = true;
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const props = createPropsForToggleTest();
+    props.output.testCase = {
+      feedback: { pass: 'https://reviews.example.com/{{evalId}}/{{testCaseId}}' },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    await userEvent.click(screen.getByLabelText('Mark test passed'));
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Initial comment');
+    openSpy.mockRestore();
+  });
+
+  it('saves ratings when an imported identifier cannot be URL-encoded', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const props = createPropsForToggleTest();
+    props.testCaseId = '\ud800';
+    props.output.testCase = {
+      feedback: { pass: 'https://reviews.example.com/{{testCaseId}}' },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    await userEvent.click(screen.getByLabelText('Mark test passed'));
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Initial comment');
+    openSpy.mockRestore();
+  });
+
+  it('does not open feedback when clearing an existing rating', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const props = createPropsForToggleTest();
+    props.output.testCase = {
+      feedback: { pass: 'https://reviews.example.com/results/{{resultId}}' },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const thumbsUpButton = screen.getByLabelText('Mark test passed');
+    await userEvent.click(thumbsUpButton);
+    openSpy.mockClear();
+    await userEvent.click(thumbsUpButton);
+
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
+});
+
+describe('buildRatingFeedbackUrl', () => {
+  it('URL-encodes placeholder values', () => {
+    expect(
+      buildRatingFeedbackUrl(
+        'https://reviews.example.com/{{evalId}}/{{resultId}}/{{testCaseId}}?rating={{rating}}',
+        {
+          evalId: 'eval 1',
+          resultId: 'result/1',
+          testCaseId: 'case&1',
+          rating: 'pass',
+        },
+      ),
+    ).toBe('https://reviews.example.com/eval%201/result%2F1/case%261?rating=pass');
+  });
+
+  it('rejects unsafe feedback URLs at runtime', () => {
+    expect(
+      buildRatingFeedbackUrl('http://reviews.example.com/results/{{resultId}}', {
+        resultId: 'result-1',
+        rating: 'fail',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('rejects unsupported placeholders at runtime', () => {
+    expect(
+      buildRatingFeedbackUrl('https://reviews.example.com/results/{{unknown}}', {
+        resultId: 'result-1',
+        rating: 'fail',
+      }),
+    ).toBeUndefined();
   });
 });
 

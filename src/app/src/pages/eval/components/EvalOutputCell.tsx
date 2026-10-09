@@ -14,6 +14,7 @@ import {
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
 import { ResultFailureReason } from '@promptfoo/types/results';
+import { RatingFeedbackUrlSchema } from '@promptfoo/validators/ratingFeedback';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -72,6 +73,32 @@ function stringifyOutputText(text: unknown): string {
   }
 
   return JSON.stringify(text) ?? String(text);
+}
+
+const RATING_FEEDBACK_PLACEHOLDER_PATTERN = /\{\{(evalId|resultId|testCaseId|rating)\}\}/g;
+
+export function buildRatingFeedbackUrl(
+  template: string | undefined,
+  values: {
+    evalId?: string;
+    resultId: string;
+    testCaseId?: string;
+    rating: 'pass' | 'fail';
+  },
+): string | undefined {
+  const parsed = RatingFeedbackUrlSchema.safeParse(template);
+  if (!parsed.success) {
+    return undefined;
+  }
+  try {
+    const urlString = parsed.data.replace(
+      RATING_FEEDBACK_PLACEHOLDER_PATTERN,
+      (_, name: keyof typeof values) => encodeURIComponent(values[name] ?? ''),
+    );
+    return new URL(urlString).href;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -1307,6 +1334,7 @@ function EvalOutputCell({
     showPassFail,
     showMetricPills,
     showPassReasons,
+    inComparisonMode,
     maxImageWidth,
     maxImageHeight,
   } = useResultsViewSettingsStore();
@@ -1457,6 +1485,18 @@ function EvalOutputCell({
   const handleRating = (isPass: boolean) => {
     const newRating = activeRating === isPass ? null : isPass;
     setActiveRating(newRating);
+    const feedbackUrl =
+      newRating === null || inComparisonMode
+        ? undefined
+        : buildRatingFeedbackUrl(output.testCase.feedback?.[isPass ? 'pass' : 'fail'], {
+            evalId: evaluationId,
+            resultId: output.id,
+            testCaseId,
+            rating: isPass ? 'pass' : 'fail',
+          });
+    if (feedbackUrl) {
+      window.open(feedbackUrl, '_blank', 'noopener,noreferrer');
+    }
     // Defer the API call to allow the UI to update first
     queueMicrotask(() => {
       onRating(newRating, undefined, commentText);

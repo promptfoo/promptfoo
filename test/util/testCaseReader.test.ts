@@ -905,11 +905,29 @@ describe('readTest', () => {
     expect(result).toEqual(input);
   });
 
+  it('accepts a test containing only feedback', async () => {
+    const test = { feedback: { pass: 'https://reviews.example.com/{{resultId}}' } };
+    await expect(readTest(test)).resolves.toEqual(test);
+  });
+
+  it.each([false, true])(
+    'rejects feedback credentials before loading tests (default: %s)',
+    async (isDefault) => {
+      await expect(
+        readTest(
+          { feedback: { pass: 'https://reviews.example.com/?api_key=secret' } },
+          '',
+          isDefault,
+        ),
+      ).rejects.toThrow('credential parameters');
+    },
+  );
+
   it('readTest with invalid input', async () => {
     const input: any = 123;
 
     await expect(readTest(input)).rejects.toThrow(
-      'Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.\n\nInstead got:\n{}',
+      'Test case must contain assert, vars, options, metadata, provider, providerOutput, feedback, threshold, or only a description.\n\nInstead got:\n{}',
     );
   });
 

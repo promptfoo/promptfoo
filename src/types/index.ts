@@ -13,6 +13,7 @@ import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/va
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
 import { parseFilterRange } from '../validation/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import { RatingFeedbackSchema } from '../validators/ratingFeedback';
 import {
   CONFIG_PROVIDER_INPUT_ERROR,
   hasValidConfigProviders,
@@ -21,7 +22,7 @@ import {
 
 import type { ResultFailureReason } from './results';
 
-export { ProvidersSchema };
+export { ProvidersSchema, RatingFeedbackSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
 
@@ -895,6 +896,8 @@ export type ScoringFunction = (
 
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 // HEADS UP: When you add a property here, you probably need to load it from `defaultTest` in evaluator.ts.
+export type RatingFeedback = z.infer<typeof RatingFeedbackSchema>;
+
 export const TestCaseSchema = z.object({
   // Optional description of what you're testing
   description: z.string().optional(),
@@ -955,6 +958,9 @@ export const TestCaseSchema = z.object({
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
+
+  // Optional HTTPS links opened when a result is manually marked passed or failed in the web UI.
+  feedback: RatingFeedbackSchema.optional(),
 
   // Use catchall(z.any()) to allow arbitrary metadata keys while still typing known internal properties.
   // Don't use z.intersection() here as it generates allOf with additionalProperties:false

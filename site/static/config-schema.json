@@ -23,52 +23,52 @@
           "$ref": "#/definitions/__schema14"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema31"
-        },
-        "defaultTest": {
-          "$ref": "#/definitions/__schema32"
-        },
-        "outputPath": {
           "$ref": "#/definitions/__schema33"
         },
-        "sharing": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema34"
         },
-        "nunjucksFilters": {
+        "outputPath": {
           "$ref": "#/definitions/__schema35"
         },
-        "env": {
+        "sharing": {
           "$ref": "#/definitions/__schema36"
         },
-        "derivedMetrics": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema37"
         },
-        "extensions": {
+        "env": {
           "$ref": "#/definitions/__schema38"
         },
-        "metadata": {
+        "derivedMetrics": {
           "$ref": "#/definitions/__schema39"
         },
-        "redteam": {
+        "extensions": {
           "$ref": "#/definitions/__schema40"
         },
+        "metadata": {
+          "$ref": "#/definitions/__schema41"
+        },
+        "redteam": {
+          "$ref": "#/definitions/__schema42"
+        },
         "writeLatestResults": {
-          "$ref": "#/definitions/__schema70"
+          "$ref": "#/definitions/__schema72"
         },
         "tracing": {
-          "$ref": "#/definitions/__schema71"
+          "$ref": "#/definitions/__schema73"
         },
         "basePath": {
-          "$ref": "#/definitions/__schema76"
+          "$ref": "#/definitions/__schema78"
         },
         "evaluateOptions": {
-          "$ref": "#/definitions/__schema77"
-        },
-        "commandLineOptions": {
           "$ref": "#/definitions/__schema79"
         },
+        "commandLineOptions": {
+          "$ref": "#/definitions/__schema81"
+        },
         "targets": {
-          "$ref": "#/definitions/__schema80"
+          "$ref": "#/definitions/__schema82"
         }
       },
       "required": ["prompts"],
@@ -851,13 +851,13 @@
                 "$ref": "#/definitions/__schema15"
               },
               {
-                "$ref": "#/definitions/__schema30"
+                "$ref": "#/definitions/__schema32"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema30"
+          "$ref": "#/definitions/__schema32"
         }
       ]
     },
@@ -894,8 +894,11 @@
         "threshold": {
           "$ref": "#/definitions/__schema28"
         },
-        "metadata": {
+        "feedback": {
           "$ref": "#/definitions/__schema29"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema31"
         }
       }
     },
@@ -1267,6 +1270,61 @@
       "type": "number"
     },
     "__schema29": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "pass": {
+              "$ref": "#/definitions/__schema30"
+            },
+            "fail": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema30"
+                }
+              ]
+            }
+          },
+          "required": ["pass"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pass": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema30"
+                }
+              ]
+            },
+            "fail": {
+              "$ref": "#/definitions/__schema30"
+            }
+          },
+          "required": ["fail"]
+        }
+      ]
+    },
+    "__schema30": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "allOf": [
+        {
+          "type": "string",
+          "pattern": "^(?=[\\s\\S]{1,8192}$(?![\\s\\S]))https:\\/\\/(?:(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])|\\[(?:(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)))\\]|(?!(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)*(?:[0-9]+|0[xX][0-9a-fA-F]+)\\.?(?=[:/?#]|$))[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\\.?)(?::(?:[0-5]?[0-9]{1,4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:[/?#](?:[^\\s{}\\\\]|\\{\\{(?:evalId|resultId|testCaseId|rating)\\}\\})*)?$(?![\\s\\S])"
+        },
+        {
+          "type": "string",
+          "pattern": "^(?=[\\s\\S]{1,8192}$(?![\\s\\S]))(?![\\s\\S]*[?&#;](?=[^?&#;=]*=)(?:[^?&#;=]*[.\\[_+-])?(?:[pP][._+-]*[aA][._+-]*[sS][._+-]*[sS][._+-]*[wW][._+-]*[oO][._+-]*[rR][._+-]*[dD]|[pP][._+-]*[aA][._+-]*[sS][._+-]*[sS][._+-]*[wW][._+-]*[dD]|[pP][._+-]*[wW][._+-]*[dD]|[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT]|[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT][._+-]*[sS]|[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[cC][._+-]*[rR][._+-]*[eE][._+-]*[dD][._+-]*[eE][._+-]*[nN][._+-]*[tT][._+-]*[iI][._+-]*[aA][._+-]*[lL][._+-]*[sS]|[aA][._+-]*[pP][._+-]*[iI][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[aA][._+-]*[pP][._+-]*[iI][._+-]*[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT]|[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[aA][._+-]*[cC][._+-]*[cC][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[rR][._+-]*[eE][._+-]*[fF][._+-]*[rR][._+-]*[eE][._+-]*[sS][._+-]*[hH][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[iI][._+-]*[dD][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[bB][._+-]*[eE][._+-]*[aA][._+-]*[rR][._+-]*[eE][._+-]*[rR][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[aA][._+-]*[uU][._+-]*[tT][._+-]*[hH][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[cC][._+-]*[lL][._+-]*[iI][._+-]*[eE][._+-]*[nN][._+-]*[tT][._+-]*[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT]|[wW][._+-]*[eE][._+-]*[bB][._+-]*[hH][._+-]*[oO][._+-]*[oO][._+-]*[kK][._+-]*[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT]|[aA][._+-]*[nN][._+-]*[tT][._+-]*[hH][._+-]*[rR][._+-]*[oO][._+-]*[pP][._+-]*[iI][._+-]*[cC][._+-]*[aA][._+-]*[pP][._+-]*[iI][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[aA][._+-]*[wW][._+-]*[sS][._+-]*[bB][._+-]*[eE][._+-]*[aA][._+-]*[rR][._+-]*[eE][._+-]*[rR][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN][._+-]*[bB][._+-]*[eE][._+-]*[dD][._+-]*[rR][._+-]*[oO][._+-]*[cC][._+-]*[kK]|[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT][._+-]*[aA][._+-]*[cC][._+-]*[cC][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[aA][._+-]*[wW][._+-]*[sS][._+-]*[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT][._+-]*[aA][._+-]*[cC][._+-]*[cC][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[sS][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[iI][._+-]*[oO][._+-]*[nN][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[aA][._+-]*[wW][._+-]*[sS][._+-]*[sS][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[iI][._+-]*[oO][._+-]*[nN][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[aA][._+-]*[cC][._+-]*[cC][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[iI][._+-]*[dD]|[aA][._+-]*[wW][._+-]*[sS][._+-]*[aA][._+-]*[cC][._+-]*[cC][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[iI][._+-]*[dD]|[aA][._+-]*[uU][._+-]*[tT][._+-]*[hH][._+-]*[oO][._+-]*[rR][._+-]*[iI][._+-]*[zZ][._+-]*[aA][._+-]*[tT][._+-]*[iI][._+-]*[oO][._+-]*[nN]|[aA][._+-]*[uU][._+-]*[tT][._+-]*[hH]|[bB][._+-]*[eE][._+-]*[aA][._+-]*[rR][._+-]*[eE][._+-]*[rR]|[aA][._+-]*[pP][._+-]*[iI][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[eE][._+-]*[nN][._+-]*[vV][._+-]*[aA][._+-]*[rR]|[xX][._+-]*[aA][._+-]*[pP][._+-]*[iI][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[xX][._+-]*[aA][._+-]*[uU][._+-]*[tT][._+-]*[hH][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[xX][._+-]*[aA][._+-]*[cC][._+-]*[cC][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[xX][._+-]*[aA][._+-]*[uU][._+-]*[tT][._+-]*[hH]|[xX][._+-]*[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT]|[xX][._+-]*[cC][._+-]*[sS][._+-]*[rR][._+-]*[fF][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[pP][._+-]*[oO][._+-]*[rR][._+-]*[tT][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[aA][._+-]*[pP][._+-]*[iI][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[pP][._+-]*[oO][._+-]*[rR][._+-]*[tT][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[vV][._+-]*[iI][._+-]*[rR][._+-]*[tT][._+-]*[uU][._+-]*[aA][._+-]*[lL][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[xX][._+-]*[pP][._+-]*[oO][._+-]*[rR][._+-]*[tT][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[aA][._+-]*[pP][._+-]*[iI][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[xX][._+-]*[pP][._+-]*[oO][._+-]*[rR][._+-]*[tT][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[vV][._+-]*[iI][._+-]*[rR][._+-]*[tT][._+-]*[uU][._+-]*[aA][._+-]*[lL][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[xX][._+-]*[pP][._+-]*[oO][._+-]*[rR][._+-]*[tT][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[aA][._+-]*[wW][._+-]*[sS][._+-]*[aA][._+-]*[cC][._+-]*[cC][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[iI][._+-]*[dD]|[xX][._+-]*[pP][._+-]*[oO][._+-]*[rR][._+-]*[tT][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[aA][._+-]*[wW][._+-]*[sS][._+-]*[sS][._+-]*[eE][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[tT][._+-]*[aA][._+-]*[cC][._+-]*[cC][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[xX][._+-]*[pP][._+-]*[oO][._+-]*[rR][._+-]*[tT][._+-]*[kK][._+-]*[eE][._+-]*[yY][._+-]*[aA][._+-]*[wW][._+-]*[sS][._+-]*[sS][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[iI][._+-]*[oO][._+-]*[nN][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[xX][._+-]*[sS][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[iI][._+-]*[oO][._+-]*[nN][._+-]*[dD][._+-]*[aA][._+-]*[tT][._+-]*[aA]|[cC][._+-]*[sS][._+-]*[rR][._+-]*[fF][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN]|[sS][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[iI][._+-]*[oO][._+-]*[nN][._+-]*[iI][._+-]*[dD]|[sS][._+-]*[eE][._+-]*[sS][._+-]*[sS][._+-]*[iI][._+-]*[oO][._+-]*[nN]|[cC][._+-]*[oO][._+-]*[oO][._+-]*[kK][._+-]*[iI][._+-]*[eE]|[sS][._+-]*[eE][._+-]*[tT][._+-]*[cC][._+-]*[oO][._+-]*[oO][._+-]*[kK][._+-]*[iI][._+-]*[eE]|[cC][._+-]*[eE][._+-]*[rR][._+-]*[tT][._+-]*[iI][._+-]*[fF][._+-]*[iI][._+-]*[cC][._+-]*[aA][._+-]*[tT][._+-]*[eE][._+-]*[pP][._+-]*[aA][._+-]*[sS][._+-]*[sS][._+-]*[wW][._+-]*[oO][._+-]*[rR][._+-]*[dD]|[kK][._+-]*[eE][._+-]*[yY][._+-]*[sS][._+-]*[tT][._+-]*[oO][._+-]*[rR][._+-]*[eE][._+-]*[pP][._+-]*[aA][._+-]*[sS][._+-]*[sS][._+-]*[wW][._+-]*[oO][._+-]*[rR][._+-]*[dD]|[pP][._+-]*[fF][._+-]*[xX][._+-]*[pP][._+-]*[aA][._+-]*[sS][._+-]*[sS][._+-]*[wW][._+-]*[oO][._+-]*[rR][._+-]*[dD]|[pP][._+-]*[rR][._+-]*[iI][._+-]*[vV][._+-]*[aA][._+-]*[tT][._+-]*[eE][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[cC][._+-]*[eE][._+-]*[rR][._+-]*[tT][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[eE][._+-]*[nN][._+-]*[cC][._+-]*[rR][._+-]*[yY][._+-]*[pP][._+-]*[tT][._+-]*[iI][._+-]*[oO][._+-]*[nN][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[sS][._+-]*[iI][._+-]*[gG][._+-]*[nN][._+-]*[iI][._+-]*[nN][._+-]*[gG][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[sS][._+-]*[iI][._+-]*[gG][._+-]*[nN][._+-]*[aA][._+-]*[tT][._+-]*[uU][._+-]*[rR][._+-]*[eE]|[sS][._+-]*[iI][._+-]*[gG]|[pP][._+-]*[aA][._+-]*[sS][._+-]*[sS][._+-]*[pP][._+-]*[hH][._+-]*[rR][._+-]*[aA][._+-]*[sS][._+-]*[eE]|[cC][._+-]*[eE][._+-]*[rR][._+-]*[tT][._+-]*[iI][._+-]*[fF][._+-]*[iI][._+-]*[cC][._+-]*[aA][._+-]*[tT][._+-]*[eE][._+-]*[cC][._+-]*[oO][._+-]*[nN][._+-]*[tT][._+-]*[eE][._+-]*[nN][._+-]*[tT]|[kK][._+-]*[eE][._+-]*[yY][._+-]*[sS][._+-]*[tT][._+-]*[oO][._+-]*[rR][._+-]*[eE][._+-]*[cC][._+-]*[oO][._+-]*[nN][._+-]*[tT][._+-]*[eE][._+-]*[nN][._+-]*[tT]|[pP][._+-]*[fF][._+-]*[xX]|[pP][._+-]*[fF][._+-]*[xX][._+-]*[cC][._+-]*[oO][._+-]*[nN][._+-]*[tT][._+-]*[eE][._+-]*[nN][._+-]*[tT]|[kK][._+-]*[eE][._+-]*[yY][._+-]*[cC][._+-]*[oO][._+-]*[nN][._+-]*[tT][._+-]*[eE][._+-]*[nN][._+-]*[tT]|[cC][._+-]*[eE][._+-]*[rR][._+-]*[tT][._+-]*[cC][._+-]*[oO][._+-]*[nN][._+-]*[tT][._+-]*[eE][._+-]*[nN][._+-]*[tT]|[kK][._+-]*[eE][._+-]*[yY]|[cC][._+-]*[rR][._+-]*[eE][._+-]*[dD][._+-]*[eE][._+-]*[nN][._+-]*[tT][._+-]*[iI][._+-]*[aA][._+-]*[lL]|[sS][._+-]*[uU][._+-]*[bB][._+-]*[sS][._+-]*[cC][._+-]*[rR][._+-]*[iI][._+-]*[pP][._+-]*[tT][._+-]*[iI][._+-]*[oO][._+-]*[nN][._+-]*[kK][._+-]*[eE][._+-]*[yY]|[xX][._+-]*[aA][._+-]*[mM][._+-]*[zZ][._+-]*[cC][._+-]*[rR][._+-]*[eE][._+-]*[dD][._+-]*[eE][._+-]*[nN][._+-]*[tT][._+-]*[iI][._+-]*[aA][._+-]*[lL]|[xX][._+-]*[aA][._+-]*[mM][._+-]*[zZ][._+-]*[sS][._+-]*[iI][._+-]*[gG][._+-]*[nN][._+-]*[aA][._+-]*[tT][._+-]*[uU][._+-]*[rR][._+-]*[eE]|[xX][._+-]*[aA][._+-]*[mM][._+-]*[zZ][._+-]*[sS][._+-]*[eE][._+-]*[cC][._+-]*[uU][._+-]*[rR][._+-]*[iI][._+-]*[tT][._+-]*[yY][._+-]*[tT][._+-]*[oO][._+-]*[kK][._+-]*[eE][._+-]*[nN])(?:[.\\[\\]_+-][^?&#;=]*)?=)[\\s\\S]*$"
+        },
+        {
+          "type": "string",
+          "pattern": "^(?=[\\s\\S]{1,8192}$(?![\\s\\S]))(?![\\s\\S]*[?&#;][^?&#;=%]*%[^?&#;=]*=)[\\s\\S]*$"
+        }
+      ]
+    },
+    "__schema31": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1274,7 +1332,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema30": {
+    "__schema32": {
       "type": "object",
       "properties": {
         "path": {
@@ -1316,7 +1374,7 @@
       },
       "required": ["path"]
     },
-    "__schema31": {
+    "__schema33": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1404,10 +1462,17 @@
                         }
                       ]
                     },
-                    "metadata": {
+                    "feedback": {
                       "allOf": [
                         {
                           "$ref": "#/definitions/__schema29"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema31"
                         }
                       ]
                     }
@@ -1426,7 +1491,7 @@
         ]
       }
     },
-    "__schema32": {
+    "__schema34": {
       "anyOf": [
         {
           "type": "string"
@@ -1461,14 +1526,17 @@
             "threshold": {
               "$ref": "#/definitions/__schema28"
             },
-            "metadata": {
+            "feedback": {
               "$ref": "#/definitions/__schema29"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema31"
             }
           }
         }
       ]
     },
-    "__schema33": {
+    "__schema35": {
       "anyOf": [
         {
           "type": "string"
@@ -1481,7 +1549,7 @@
         }
       ]
     },
-    "__schema34": {
+    "__schema36": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1499,7 +1567,7 @@
         }
       ]
     },
-    "__schema35": {
+    "__schema37": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1508,7 +1576,7 @@
         "type": "string"
       }
     },
-    "__schema36": {
+    "__schema38": {
       "anyOf": [
         {
           "$ref": "#/definitions/__schema7"
@@ -1524,7 +1592,7 @@
         }
       ]
     },
-    "__schema37": {
+    "__schema39": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1544,7 +1612,7 @@
         "required": ["name", "value"]
       }
     },
-    "__schema38": {
+    "__schema40": {
       "anyOf": [
         {
           "type": "array",
@@ -1557,21 +1625,21 @@
         }
       ]
     },
-    "__schema39": {
+    "__schema41": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema40": {
+    "__schema42": {
       "type": "object",
       "properties": {
         "injectVar": {
           "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema41"
+              "$ref": "#/definitions/__schema43"
             }
           ]
         },
@@ -1579,7 +1647,7 @@
           "description": "Purpose override string - describes the prompt templates",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema44"
             }
           ]
         },
@@ -1587,7 +1655,7 @@
           "description": "Additional instructions for test generation applied to each plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema43"
+              "$ref": "#/definitions/__schema45"
             }
           ]
         },
@@ -1595,7 +1663,7 @@
           "description": "Provider used for generating adversarial inputs",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema44"
+              "$ref": "#/definitions/__schema46"
             }
           ]
         },
@@ -1603,7 +1671,7 @@
           "description": "Number of tests to generate",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema45"
+              "$ref": "#/definitions/__schema47"
             }
           ]
         },
@@ -1611,7 +1679,7 @@
           "description": "Language(s) of tests to generate for this plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema46"
+              "$ref": "#/definitions/__schema48"
             }
           ]
         },
@@ -1619,7 +1687,7 @@
           "description": "Compliance frameworks to include across reports and commands",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema47"
+              "$ref": "#/definitions/__schema49"
             }
           ]
         },
@@ -1627,7 +1695,7 @@
           "description": "Names of people, brands, or organizations related to your LLM application",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema49"
+              "$ref": "#/definitions/__schema51"
             }
           ]
         },
@@ -1635,7 +1703,7 @@
           "description": "Security contexts for testing multiple states - each context has its own purpose",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema50"
+              "$ref": "#/definitions/__schema52"
             }
           ]
         },
@@ -1643,7 +1711,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema53"
+            "$ref": "#/definitions/__schema55"
           },
           "description": "Plugins to use for redteam generation"
         },
@@ -1651,7 +1719,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema61"
+            "$ref": "#/definitions/__schema63"
           },
           "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports arabic-presentation-forms, audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
@@ -1659,7 +1727,7 @@
           "description": "Maximum number of concurrent API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema64"
+              "$ref": "#/definitions/__schema66"
             }
           ]
         },
@@ -1667,7 +1735,7 @@
           "description": "Maximum number of characters allowed per generated user message",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema65"
+              "$ref": "#/definitions/__schema67"
             }
           ]
         },
@@ -1675,7 +1743,7 @@
           "description": "Delay in milliseconds between plugin API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema66"
+              "$ref": "#/definitions/__schema68"
             }
           ]
         },
@@ -1683,7 +1751,7 @@
           "description": "Whether to exclude target output from the agentific attack generation process",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema67"
+              "$ref": "#/definitions/__schema69"
             }
           ]
         },
@@ -1691,7 +1759,7 @@
           "description": "Tracing defaults applied to all strategies unless overridden",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema68"
+              "$ref": "#/definitions/__schema70"
             }
           ]
         },
@@ -1699,22 +1767,22 @@
           "description": "Global grading examples that apply to all plugins",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema69"
+              "$ref": "#/definitions/__schema71"
             }
           ]
         }
       }
     },
-    "__schema41": {
-      "type": "string"
-    },
-    "__schema42": {
-      "type": "string"
-    },
     "__schema43": {
       "type": "string"
     },
     "__schema44": {
+      "type": "string"
+    },
+    "__schema45": {
+      "type": "string"
+    },
+    "__schema46": {
       "anyOf": [
         {
           "type": "string"
@@ -1727,12 +1795,12 @@
         }
       ]
     },
-    "__schema45": {
+    "__schema47": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema46": {
+    "__schema48": {
       "anyOf": [
         {
           "type": "string"
@@ -1745,14 +1813,14 @@
         }
       ]
     },
-    "__schema47": {
+    "__schema49": {
       "minItems": 1,
       "type": "array",
       "items": {
-        "$ref": "#/definitions/__schema48"
+        "$ref": "#/definitions/__schema50"
       }
     },
-    "__schema48": {
+    "__schema50": {
       "type": "string",
       "enum": [
         "mitre:atlas",
@@ -1766,13 +1834,13 @@
         "dod:ai:ethics"
       ]
     },
-    "__schema49": {
+    "__schema51": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema50": {
+    "__schema52": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1785,7 +1853,7 @@
             "description": "Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema51"
+                "$ref": "#/definitions/__schema53"
               }
             ]
           },
@@ -1793,7 +1861,7 @@
             "description": "Variables passed to provider (e.g., context_file, user_role)",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema52"
+                "$ref": "#/definitions/__schema54"
               }
             ]
           }
@@ -1801,10 +1869,10 @@
         "required": ["id"]
       }
     },
-    "__schema51": {
+    "__schema53": {
       "type": "string"
     },
-    "__schema52": {
+    "__schema54": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1813,15 +1881,15 @@
         "type": "string"
       }
     },
-    "__schema53": {
+    "__schema55": {
       "anyOf": [
         {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema54"
+              "$ref": "#/definitions/__schema56"
             },
             {
-              "$ref": "#/definitions/__schema55"
+              "$ref": "#/definitions/__schema57"
             }
           ],
           "description": "Name of the plugin or path to custom plugin"
@@ -1832,10 +1900,10 @@
             "id": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/__schema56"
+                  "$ref": "#/definitions/__schema58"
                 },
                 {
-                  "$ref": "#/definitions/__schema57"
+                  "$ref": "#/definitions/__schema59"
                 }
               ],
               "description": "Name of the plugin"
@@ -1844,7 +1912,7 @@
               "description": "Number of tests to generate for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema58"
+                  "$ref": "#/definitions/__schema60"
                 }
               ]
             },
@@ -1852,7 +1920,7 @@
               "description": "Plugin-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema59"
+                  "$ref": "#/definitions/__schema61"
                 }
               ]
             },
@@ -1860,7 +1928,7 @@
               "description": "Severity level for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema60"
+                  "$ref": "#/definitions/__schema62"
                 }
               ]
             }
@@ -1868,305 +1936,6 @@
           "required": ["id"]
         }
       ]
-    },
-    "__schema54": {
-      "type": "string",
-      "enum": [
-        "aegis",
-        "agentic:memory-poisoning",
-        "ascii-smuggling",
-        "beavertails",
-        "bfla",
-        "bias",
-        "bias:age",
-        "bias:disability",
-        "bias:gender",
-        "bias:race",
-        "bola",
-        "cca",
-        "coding-agent:all",
-        "coding-agent:automation-poisoning",
-        "coding-agent:core",
-        "coding-agent:delayed-ci-exfil",
-        "coding-agent:generated-vulnerability",
-        "coding-agent:network-egress-bypass",
-        "coding-agent:procfs-credential-read",
-        "coding-agent:repo-prompt-injection",
-        "coding-agent:sandbox-read-escape",
-        "coding-agent:sandbox-write-escape",
-        "coding-agent:secret-env-read",
-        "coding-agent:secret-file-read",
-        "coding-agent:steganographic-exfil",
-        "coding-agent:terminal-output-injection",
-        "coding-agent:verifier-sabotage",
-        "competitors",
-        "contracts",
-        "coppa",
-        "cross-session-leak",
-        "cyberseceval",
-        "data-exfil",
-        "debug-access",
-        "default",
-        "divergent-repetition",
-        "dod:ai:ethics",
-        "dod:ai:ethics:01",
-        "dod:ai:ethics:02",
-        "dod:ai:ethics:03",
-        "dod:ai:ethics:04",
-        "dod:ai:ethics:05",
-        "donotanswer",
-        "ecommerce",
-        "ecommerce:compliance-bypass",
-        "ecommerce:order-fraud",
-        "ecommerce:pci-dss",
-        "ecommerce:price-manipulation",
-        "eu:ai-act",
-        "eu:ai-act:annex3:biometric-id",
-        "eu:ai-act:annex3:critical-infrastructure",
-        "eu:ai-act:annex3:education",
-        "eu:ai-act:annex3:employment",
-        "eu:ai-act:annex3:essential-services",
-        "eu:ai-act:annex3:justice-democracy",
-        "eu:ai-act:annex3:law-enforcement",
-        "eu:ai-act:annex3:migration-border",
-        "eu:ai-act:art5:biometric-categorisation",
-        "eu:ai-act:art5:exploitation-of-vulnerabilities",
-        "eu:ai-act:art5:remote-biometric-id-live",
-        "eu:ai-act:art5:remote-biometric-id-post",
-        "eu:ai-act:art5:social-scoring",
-        "eu:ai-act:art5:subliminal-manipulation",
-        "excessive-agency",
-        "ferpa",
-        "financial",
-        "financial:calculation-error",
-        "financial:compliance-violation",
-        "financial:confidential-disclosure",
-        "financial:counterfactual",
-        "financial:data-leakage",
-        "financial:defamation",
-        "financial:hallucination",
-        "financial:impartiality",
-        "financial:japan-fiea-suitability",
-        "financial:misconduct",
-        "financial:sox-compliance",
-        "financial:sycophancy",
-        "foundation",
-        "gdpr",
-        "gdpr:art15",
-        "gdpr:art17",
-        "gdpr:art22",
-        "gdpr:art25",
-        "gdpr:art32",
-        "gdpr:art5",
-        "gdpr:art9",
-        "goal-misalignment",
-        "guardrails-eval",
-        "hallucination",
-        "harmbench",
-        "harmful",
-        "harmful:chemical-biological-weapons",
-        "harmful:child-exploitation",
-        "harmful:copyright-violations",
-        "harmful:cybercrime",
-        "harmful:cybercrime:malicious-code",
-        "harmful:graphic-content",
-        "harmful:harassment-bullying",
-        "harmful:hate",
-        "harmful:illegal-activities",
-        "harmful:illegal-drugs",
-        "harmful:illegal-drugs:meth",
-        "harmful:indiscriminate-weapons",
-        "harmful:insults",
-        "harmful:intellectual-property",
-        "harmful:misinformation-disinformation",
-        "harmful:non-violent-crime",
-        "harmful:privacy",
-        "harmful:profanity",
-        "harmful:radicalization",
-        "harmful:self-harm",
-        "harmful:sex-crime",
-        "harmful:sexual-content",
-        "harmful:specialized-advice",
-        "harmful:unsafe-practices",
-        "harmful:violent-crime",
-        "harmful:weapons:ied",
-        "hijacking",
-        "illegal-activity",
-        "imitation",
-        "indirect-prompt-injection",
-        "insurance",
-        "insurance:coverage-discrimination",
-        "insurance:data-disclosure",
-        "insurance:network-misinformation",
-        "insurance:phi-disclosure",
-        "intent",
-        "iso:42001",
-        "iso:42001:accountability",
-        "iso:42001:fairness",
-        "iso:42001:privacy",
-        "iso:42001:robustness",
-        "iso:42001:safety",
-        "iso:42001:security",
-        "iso:42001:transparency",
-        "mcp",
-        "medical",
-        "medical:anchoring-bias",
-        "medical:fda:ai-disclosure",
-        "medical:fda:cyber-access-control",
-        "medical:fda:cyber-audit-tampering",
-        "medical:hallucination",
-        "medical:incorrect-knowledge",
-        "medical:off-label-use",
-        "medical:prioritization-error",
-        "medical:sycophancy",
-        "misinformation",
-        "mitre:atlas",
-        "mitre:atlas:ai-attack-staging",
-        "mitre:atlas:ai-model-access",
-        "mitre:atlas:collection",
-        "mitre:atlas:command-and-control",
-        "mitre:atlas:credential-access",
-        "mitre:atlas:defense-evasion",
-        "mitre:atlas:discovery",
-        "mitre:atlas:execution",
-        "mitre:atlas:exfiltration",
-        "mitre:atlas:impact",
-        "mitre:atlas:initial-access",
-        "mitre:atlas:lateral-movement",
-        "mitre:atlas:ml-attack-staging",
-        "mitre:atlas:persistence",
-        "mitre:atlas:privilege-escalation",
-        "mitre:atlas:reconnaissance",
-        "mitre:atlas:resource-development",
-        "model-identification",
-        "nist:ai",
-        "nist:ai:measure",
-        "nist:ai:measure:1.1",
-        "nist:ai:measure:1.2",
-        "nist:ai:measure:2.1",
-        "nist:ai:measure:2.10",
-        "nist:ai:measure:2.11",
-        "nist:ai:measure:2.12",
-        "nist:ai:measure:2.13",
-        "nist:ai:measure:2.2",
-        "nist:ai:measure:2.3",
-        "nist:ai:measure:2.4",
-        "nist:ai:measure:2.5",
-        "nist:ai:measure:2.6",
-        "nist:ai:measure:2.7",
-        "nist:ai:measure:2.8",
-        "nist:ai:measure:2.9",
-        "nist:ai:measure:3.1",
-        "nist:ai:measure:3.2",
-        "nist:ai:measure:3.3",
-        "nist:ai:measure:4.1",
-        "nist:ai:measure:4.2",
-        "nist:ai:measure:4.3",
-        "off-topic",
-        "overreliance",
-        "owasp:agentic",
-        "owasp:agentic:asi01",
-        "owasp:agentic:asi02",
-        "owasp:agentic:asi03",
-        "owasp:agentic:asi04",
-        "owasp:agentic:asi05",
-        "owasp:agentic:asi06",
-        "owasp:agentic:asi07",
-        "owasp:agentic:asi08",
-        "owasp:agentic:asi09",
-        "owasp:agentic:asi10",
-        "owasp:api",
-        "owasp:api:01",
-        "owasp:api:02",
-        "owasp:api:03",
-        "owasp:api:04",
-        "owasp:api:05",
-        "owasp:api:06",
-        "owasp:api:07",
-        "owasp:api:08",
-        "owasp:api:09",
-        "owasp:api:10",
-        "owasp:llm",
-        "owasp:llm:01",
-        "owasp:llm:02",
-        "owasp:llm:03",
-        "owasp:llm:04",
-        "owasp:llm:05",
-        "owasp:llm:06",
-        "owasp:llm:07",
-        "owasp:llm:08",
-        "owasp:llm:09",
-        "owasp:llm:10",
-        "owasp:llm:redteam:implementation",
-        "owasp:llm:redteam:model",
-        "owasp:llm:redteam:runtime",
-        "owasp:llm:redteam:system",
-        "personal-safety",
-        "pharmacy",
-        "pharmacy:controlled-substance-compliance",
-        "pharmacy:dosage-calculation",
-        "pharmacy:drug-interaction",
-        "pii",
-        "pii:api-db",
-        "pii:direct",
-        "pii:session",
-        "pii:social",
-        "pliny",
-        "policy",
-        "politics",
-        "prompt-extraction",
-        "rag-document-exfiltration",
-        "rag-poisoning",
-        "rag-source-attribution",
-        "rbac",
-        "realestate",
-        "realestate:accessibility-discrimination",
-        "realestate:advertising-discrimination",
-        "realestate:discriminatory-listings",
-        "realestate:fair-housing-discrimination",
-        "realestate:lending-discrimination",
-        "realestate:source-of-income",
-        "realestate:steering",
-        "realestate:valuation-bias",
-        "reasoning-dos",
-        "religion",
-        "shell-injection",
-        "special-token-injection",
-        "sql-injection",
-        "ssrf",
-        "system-prompt-override",
-        "teen-safety",
-        "teen-safety:age-restricted-goods-and-services",
-        "teen-safety:dangerous-content",
-        "teen-safety:dangerous-roleplay",
-        "teen-safety:harmful-body-ideals",
-        "telecom",
-        "telecom:accessibility-violation",
-        "telecom:account-takeover",
-        "telecom:billing-misinformation",
-        "telecom:coverage-misinformation",
-        "telecom:cpni-disclosure",
-        "telecom:e911-misinformation",
-        "telecom:fraud-enablement",
-        "telecom:law-enforcement-request-handling",
-        "telecom:location-disclosure",
-        "telecom:porting-misinformation",
-        "telecom:tcpa-violation",
-        "telecom:unauthorized-changes",
-        "tool-discovery",
-        "tool-discovery:multi-turn",
-        "toxic-chat",
-        "toxicity",
-        "unsafebench",
-        "unverifiable-claims",
-        "vlguard",
-        "vlsu",
-        "wordplay",
-        "xstest"
-      ]
-    },
-    "__schema55": {
-      "type": "string"
     },
     "__schema56": {
       "type": "string",
@@ -2468,37 +2237,336 @@
       "type": "string"
     },
     "__schema58": {
+      "type": "string",
+      "enum": [
+        "aegis",
+        "agentic:memory-poisoning",
+        "ascii-smuggling",
+        "beavertails",
+        "bfla",
+        "bias",
+        "bias:age",
+        "bias:disability",
+        "bias:gender",
+        "bias:race",
+        "bola",
+        "cca",
+        "coding-agent:all",
+        "coding-agent:automation-poisoning",
+        "coding-agent:core",
+        "coding-agent:delayed-ci-exfil",
+        "coding-agent:generated-vulnerability",
+        "coding-agent:network-egress-bypass",
+        "coding-agent:procfs-credential-read",
+        "coding-agent:repo-prompt-injection",
+        "coding-agent:sandbox-read-escape",
+        "coding-agent:sandbox-write-escape",
+        "coding-agent:secret-env-read",
+        "coding-agent:secret-file-read",
+        "coding-agent:steganographic-exfil",
+        "coding-agent:terminal-output-injection",
+        "coding-agent:verifier-sabotage",
+        "competitors",
+        "contracts",
+        "coppa",
+        "cross-session-leak",
+        "cyberseceval",
+        "data-exfil",
+        "debug-access",
+        "default",
+        "divergent-repetition",
+        "dod:ai:ethics",
+        "dod:ai:ethics:01",
+        "dod:ai:ethics:02",
+        "dod:ai:ethics:03",
+        "dod:ai:ethics:04",
+        "dod:ai:ethics:05",
+        "donotanswer",
+        "ecommerce",
+        "ecommerce:compliance-bypass",
+        "ecommerce:order-fraud",
+        "ecommerce:pci-dss",
+        "ecommerce:price-manipulation",
+        "eu:ai-act",
+        "eu:ai-act:annex3:biometric-id",
+        "eu:ai-act:annex3:critical-infrastructure",
+        "eu:ai-act:annex3:education",
+        "eu:ai-act:annex3:employment",
+        "eu:ai-act:annex3:essential-services",
+        "eu:ai-act:annex3:justice-democracy",
+        "eu:ai-act:annex3:law-enforcement",
+        "eu:ai-act:annex3:migration-border",
+        "eu:ai-act:art5:biometric-categorisation",
+        "eu:ai-act:art5:exploitation-of-vulnerabilities",
+        "eu:ai-act:art5:remote-biometric-id-live",
+        "eu:ai-act:art5:remote-biometric-id-post",
+        "eu:ai-act:art5:social-scoring",
+        "eu:ai-act:art5:subliminal-manipulation",
+        "excessive-agency",
+        "ferpa",
+        "financial",
+        "financial:calculation-error",
+        "financial:compliance-violation",
+        "financial:confidential-disclosure",
+        "financial:counterfactual",
+        "financial:data-leakage",
+        "financial:defamation",
+        "financial:hallucination",
+        "financial:impartiality",
+        "financial:japan-fiea-suitability",
+        "financial:misconduct",
+        "financial:sox-compliance",
+        "financial:sycophancy",
+        "foundation",
+        "gdpr",
+        "gdpr:art15",
+        "gdpr:art17",
+        "gdpr:art22",
+        "gdpr:art25",
+        "gdpr:art32",
+        "gdpr:art5",
+        "gdpr:art9",
+        "goal-misalignment",
+        "guardrails-eval",
+        "hallucination",
+        "harmbench",
+        "harmful",
+        "harmful:chemical-biological-weapons",
+        "harmful:child-exploitation",
+        "harmful:copyright-violations",
+        "harmful:cybercrime",
+        "harmful:cybercrime:malicious-code",
+        "harmful:graphic-content",
+        "harmful:harassment-bullying",
+        "harmful:hate",
+        "harmful:illegal-activities",
+        "harmful:illegal-drugs",
+        "harmful:illegal-drugs:meth",
+        "harmful:indiscriminate-weapons",
+        "harmful:insults",
+        "harmful:intellectual-property",
+        "harmful:misinformation-disinformation",
+        "harmful:non-violent-crime",
+        "harmful:privacy",
+        "harmful:profanity",
+        "harmful:radicalization",
+        "harmful:self-harm",
+        "harmful:sex-crime",
+        "harmful:sexual-content",
+        "harmful:specialized-advice",
+        "harmful:unsafe-practices",
+        "harmful:violent-crime",
+        "harmful:weapons:ied",
+        "hijacking",
+        "illegal-activity",
+        "imitation",
+        "indirect-prompt-injection",
+        "insurance",
+        "insurance:coverage-discrimination",
+        "insurance:data-disclosure",
+        "insurance:network-misinformation",
+        "insurance:phi-disclosure",
+        "intent",
+        "iso:42001",
+        "iso:42001:accountability",
+        "iso:42001:fairness",
+        "iso:42001:privacy",
+        "iso:42001:robustness",
+        "iso:42001:safety",
+        "iso:42001:security",
+        "iso:42001:transparency",
+        "mcp",
+        "medical",
+        "medical:anchoring-bias",
+        "medical:fda:ai-disclosure",
+        "medical:fda:cyber-access-control",
+        "medical:fda:cyber-audit-tampering",
+        "medical:hallucination",
+        "medical:incorrect-knowledge",
+        "medical:off-label-use",
+        "medical:prioritization-error",
+        "medical:sycophancy",
+        "misinformation",
+        "mitre:atlas",
+        "mitre:atlas:ai-attack-staging",
+        "mitre:atlas:ai-model-access",
+        "mitre:atlas:collection",
+        "mitre:atlas:command-and-control",
+        "mitre:atlas:credential-access",
+        "mitre:atlas:defense-evasion",
+        "mitre:atlas:discovery",
+        "mitre:atlas:execution",
+        "mitre:atlas:exfiltration",
+        "mitre:atlas:impact",
+        "mitre:atlas:initial-access",
+        "mitre:atlas:lateral-movement",
+        "mitre:atlas:ml-attack-staging",
+        "mitre:atlas:persistence",
+        "mitre:atlas:privilege-escalation",
+        "mitre:atlas:reconnaissance",
+        "mitre:atlas:resource-development",
+        "model-identification",
+        "nist:ai",
+        "nist:ai:measure",
+        "nist:ai:measure:1.1",
+        "nist:ai:measure:1.2",
+        "nist:ai:measure:2.1",
+        "nist:ai:measure:2.10",
+        "nist:ai:measure:2.11",
+        "nist:ai:measure:2.12",
+        "nist:ai:measure:2.13",
+        "nist:ai:measure:2.2",
+        "nist:ai:measure:2.3",
+        "nist:ai:measure:2.4",
+        "nist:ai:measure:2.5",
+        "nist:ai:measure:2.6",
+        "nist:ai:measure:2.7",
+        "nist:ai:measure:2.8",
+        "nist:ai:measure:2.9",
+        "nist:ai:measure:3.1",
+        "nist:ai:measure:3.2",
+        "nist:ai:measure:3.3",
+        "nist:ai:measure:4.1",
+        "nist:ai:measure:4.2",
+        "nist:ai:measure:4.3",
+        "off-topic",
+        "overreliance",
+        "owasp:agentic",
+        "owasp:agentic:asi01",
+        "owasp:agentic:asi02",
+        "owasp:agentic:asi03",
+        "owasp:agentic:asi04",
+        "owasp:agentic:asi05",
+        "owasp:agentic:asi06",
+        "owasp:agentic:asi07",
+        "owasp:agentic:asi08",
+        "owasp:agentic:asi09",
+        "owasp:agentic:asi10",
+        "owasp:api",
+        "owasp:api:01",
+        "owasp:api:02",
+        "owasp:api:03",
+        "owasp:api:04",
+        "owasp:api:05",
+        "owasp:api:06",
+        "owasp:api:07",
+        "owasp:api:08",
+        "owasp:api:09",
+        "owasp:api:10",
+        "owasp:llm",
+        "owasp:llm:01",
+        "owasp:llm:02",
+        "owasp:llm:03",
+        "owasp:llm:04",
+        "owasp:llm:05",
+        "owasp:llm:06",
+        "owasp:llm:07",
+        "owasp:llm:08",
+        "owasp:llm:09",
+        "owasp:llm:10",
+        "owasp:llm:redteam:implementation",
+        "owasp:llm:redteam:model",
+        "owasp:llm:redteam:runtime",
+        "owasp:llm:redteam:system",
+        "personal-safety",
+        "pharmacy",
+        "pharmacy:controlled-substance-compliance",
+        "pharmacy:dosage-calculation",
+        "pharmacy:drug-interaction",
+        "pii",
+        "pii:api-db",
+        "pii:direct",
+        "pii:session",
+        "pii:social",
+        "pliny",
+        "policy",
+        "politics",
+        "prompt-extraction",
+        "rag-document-exfiltration",
+        "rag-poisoning",
+        "rag-source-attribution",
+        "rbac",
+        "realestate",
+        "realestate:accessibility-discrimination",
+        "realestate:advertising-discrimination",
+        "realestate:discriminatory-listings",
+        "realestate:fair-housing-discrimination",
+        "realestate:lending-discrimination",
+        "realestate:source-of-income",
+        "realestate:steering",
+        "realestate:valuation-bias",
+        "reasoning-dos",
+        "religion",
+        "shell-injection",
+        "special-token-injection",
+        "sql-injection",
+        "ssrf",
+        "system-prompt-override",
+        "teen-safety",
+        "teen-safety:age-restricted-goods-and-services",
+        "teen-safety:dangerous-content",
+        "teen-safety:dangerous-roleplay",
+        "teen-safety:harmful-body-ideals",
+        "telecom",
+        "telecom:accessibility-violation",
+        "telecom:account-takeover",
+        "telecom:billing-misinformation",
+        "telecom:coverage-misinformation",
+        "telecom:cpni-disclosure",
+        "telecom:e911-misinformation",
+        "telecom:fraud-enablement",
+        "telecom:law-enforcement-request-handling",
+        "telecom:location-disclosure",
+        "telecom:porting-misinformation",
+        "telecom:tcpa-violation",
+        "telecom:unauthorized-changes",
+        "tool-discovery",
+        "tool-discovery:multi-turn",
+        "toxic-chat",
+        "toxicity",
+        "unsafebench",
+        "unverifiable-claims",
+        "vlguard",
+        "vlsu",
+        "wordplay",
+        "xstest"
+      ]
+    },
+    "__schema59": {
+      "type": "string"
+    },
+    "__schema60": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema59": {
+    "__schema61": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema60": {
+    "__schema62": {
       "type": "string",
       "enum": ["critical", "high", "medium", "low", "informational"]
     },
-    "__schema61": {
+    "__schema63": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema62"
+          "$ref": "#/definitions/__schema64"
         },
         {
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/definitions/__schema62"
+              "$ref": "#/definitions/__schema64"
             },
             "config": {
               "description": "Strategy-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema63"
+                  "$ref": "#/definitions/__schema65"
                 }
               ]
             }
@@ -2507,7 +2575,7 @@
         }
       ]
     },
-    "__schema62": {
+    "__schema64": {
       "anyOf": [
         {
           "type": "string",
@@ -2560,32 +2628,32 @@
         }
       ]
     },
-    "__schema63": {
+    "__schema65": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema64": {
-      "type": "integer",
-      "exclusiveMinimum": 0,
-      "maximum": 9007199254740991
-    },
-    "__schema65": {
-      "type": "integer",
-      "exclusiveMinimum": 0,
-      "maximum": 9007199254740991
-    },
     "__schema66": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema67": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema68": {
       "type": "integer",
       "minimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema67": {
+    "__schema69": {
       "type": "boolean"
     },
-    "__schema68": {
+    "__schema70": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2637,14 +2705,14 @@
           "additionalProperties": {
             "allOf": [
               {
-                "$ref": "#/definitions/__schema68"
+                "$ref": "#/definitions/__schema70"
               }
             ]
           }
         }
       }
     },
-    "__schema69": {
+    "__schema71": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2665,10 +2733,10 @@
         "required": ["output", "pass", "score", "reason"]
       }
     },
-    "__schema70": {
+    "__schema72": {
       "type": "boolean"
     },
-    "__schema71": {
+    "__schema73": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2779,19 +2847,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema74"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema73"
+                      "$ref": "#/definitions/__schema75"
                     },
                     "username": {
-                      "$ref": "#/definitions/__schema74"
+                      "$ref": "#/definitions/__schema76"
                     },
                     "password": {
-                      "$ref": "#/definitions/__schema75"
+                      "$ref": "#/definitions/__schema77"
                     }
                   }
                 },
@@ -2820,7 +2888,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema74"
                 },
                 "projectId": {
                   "type": "string",
@@ -2862,7 +2930,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema74"
                 },
                 "auth": {
                   "type": "object",
@@ -2908,26 +2976,26 @@
         }
       }
     },
-    "__schema72": {
-      "type": "string",
-      "format": "uri"
-    },
-    "__schema73": {
-      "type": "string",
-      "minLength": 1
-    },
     "__schema74": {
       "type": "string",
-      "minLength": 1
+      "format": "uri"
     },
     "__schema75": {
       "type": "string",
       "minLength": 1
     },
     "__schema76": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "__schema77": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema78": {
+      "type": "string"
+    },
+    "__schema79": {
       "type": "object",
       "properties": {
         "cache": {
@@ -2970,14 +3038,14 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema78"
+          "$ref": "#/definitions/__schema80"
         }
       }
     },
-    "__schema78": {
+    "__schema80": {
       "type": "string"
     },
-    "__schema79": {
+    "__schema81": {
       "type": "object",
       "properties": {
         "description": {
@@ -3109,7 +3177,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema78"
+              "$ref": "#/definitions/__schema80"
             }
           ]
         },
@@ -3182,7 +3250,7 @@
         }
       }
     },
-    "__schema80": {
+    "__schema82": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
