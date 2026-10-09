@@ -38,7 +38,7 @@ After logging in, set your active team using:
 promptfoo auth teams set "Your Team Name"
 ```
 
-All subsequent CLI operations (evaluations, sharing results, etc.) will use this team context.
+This sets the active team for team-scoped CLI operations. Saved scan results retain the configuration's team; see [CLI team selection](./authentication.md#checking-current-team).
 
 ### Verifying Team Context
 
@@ -54,7 +54,7 @@ This displays your current organization and team.
 
 - **Organization selection**: API keys are scoped to one organization. To switch organizations, run `promptfoo auth login --api-key <apiKey>` with a key from that organization
 - **Team selections are isolated per organization**: If you have access to multiple organizations, each organization remembers its own team selection independently
-- **Resources are team-scoped**: Evaluations, configurations, and results are associated with your active team
+- **Resources are team-scoped**: Configurations, targets, and results belong to a team
 
 :::tip
 Always verify your team context with `promptfoo auth whoami` before sharing evaluation results or running scans to ensure they go to the correct team.
@@ -62,7 +62,7 @@ Always verify your team context with `promptfoo auth whoami` before sharing eval
 
 ## Track OpenAI spend by team on-prem
 
-On-prem teams can use separate OpenAI API projects to track test generation and grading spend and set project-level alerts. Configure each team's Red Team Provider with a key from its OpenAI project. The OpenAI key pays for model requests; it is separate from the Promptfoo API key used to log in or upload results.
+On-prem teams can use separate OpenAI API projects to track test generation and grading spend and set project-level alerts. Configure each team's Red Team Provider with a key from its OpenAI project. Requests are billed to the key's OpenAI project. This key is separate from the Promptfoo API key used to log in or upload results.
 
 :::note
 These instructions apply to Promptfoo Enterprise On-Prem versions with team-level Red Team Provider overrides. They do not describe managed Promptfoo Cloud billing. If the controls below are missing, check your permissions and installed version with your administrator or Promptfoo support.
@@ -72,10 +72,11 @@ These instructions apply to Promptfoo Enterprise On-Prem versions with team-leve
 
 1. Create an OpenAI API project for each internal team and an API key scoped to that project. A [project-owned service account](https://developers.openai.com/api/docs/guides/terraform/service-accounts) can provide credentials for automated runs.
 2. As a Promptfoo administrator, open **Organization → Global Providers → Red Team Provider** and enable the team under **Team-level overrides**. You can also enable **Let this team configure its own Red Team Provider** in the team's settings.
+
+   ![Team-level Red Team Provider overrides enabled for Customer Support and disabled for Platform Engineering](/img/enterprise-docs/team-provider-overrides.png)
+
 3. Select the team and open **Red Team Provider** in the sidebar. Choose the OpenAI provider and the model for your red-team workflow.
 4. Under **Advanced Configuration → API Key**, select a team secret containing that project's key, or enter the key directly, then save. Editing requires permission to update providers as well as an enabled team override.
-
-![Red Team Provider settings with team-level overrides enabled for Platform Team and disabled for Support Team](/img/enterprise-docs/team-provider-overrides.png)
 
 Repeat for each team. A shared deployment-level `OPENAI_API_KEY` alone does not separate spend by team. Changing only the [target's credentials](./red-teams.md#creating-targets) also does not configure the models used for test generation and grading.
 
