@@ -91,9 +91,9 @@ function HistogramChart({ table }: ChartProps) {
 
     const maxScore = Math.max(...scores);
     const minScore = Math.min(...scores);
-    const range = Math.max(1, Math.ceil(maxScore) - Math.floor(minScore));
-    const binSize = range / 10; // Define the size of each bin
-    const bins = Array.from({ length: 11 }, (_, i) =>
+    const range = Math.ceil(maxScore) - Math.floor(minScore); // Adjust the range to be between whole numbers
+    const binSize = range === 0 ? 1 : range / 10;
+    const bins = Array.from({ length: range === 0 ? 1 : 11 }, (_, i) =>
       Number.parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
     );
 
