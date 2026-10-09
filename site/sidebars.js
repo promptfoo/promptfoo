@@ -165,6 +165,7 @@ const redTeamSidebar = [
         label: 'Single-Turn',
         collapsed: true,
         items: [
+          'red-team/strategies/arabic-presentation-forms',
           'red-team/strategies/base64',
           'red-team/strategies/basic',
           'red-team/strategies/best-of-n',
@@ -558,10 +559,6 @@ const sidebars = {
     {
       type: 'doc',
       id: 'contributing',
-    },
-    {
-      type: 'doc',
-      id: 'write-for-promptfoo',
     },
     {
       type: 'doc',

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 // `nscale.test.ts` mocks `src/providers/openai` wholesale, so it can only assert
 // the shape of the config object handed to the OpenAI provider — never what is
@@ -12,6 +13,7 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 }));
 
 import { fetchWithCache } from '../../src/cache';
+import { loadApiProvider } from '../../src/providers';
 import { createNscaleProvider } from '../../src/providers/nscale';
 import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { OpenAiGenericProvider } from '../../src/providers/openai';
@@ -20,15 +22,12 @@ import { mockProcessEnv } from '../util/utils';
 import type { ApiProvider } from '../../src/types/providers';
 
 function mockResponse() {
-  vi.mocked(fetchWithCache).mockResolvedValue({
-    data: {
+  vi.mocked(fetchWithCache).mockResolvedValue(
+    createMockFetchResponse({
       choices: [{ message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-    },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  } as any);
+    }) as any,
+  );
 }
 
 async function callWithConfig(config: Record<string, unknown>) {
@@ -58,12 +57,9 @@ describe('Nscale request construction', () => {
   });
 
   it('keeps scoped image credentials out of config and sends them as request authentication', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { data: [{ url: 'https://example.invalid/image.png' }] },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({ data: [{ url: 'https://example.invalid/image.png' }] }),
+    );
     const provider = createNscaleProvider('nscale:image:flux/flux.1-schnell', {
       env: { NSCALE_SERVICE_TOKEN: 'scoped-nscale-secret' },
     });
@@ -149,6 +145,11 @@ describe('Nscale request construction', () => {
       cost: 0.000001,
       inputCost: 0.0000005,
       outputCost: 0.0000015,
+      basePath: '/fixture/local-config',
+      linkedTargetId: 'promptfoo://provider/fixture',
+      mcp: { enabled: false },
+      showThinking: true,
+      omitDefaults: true,
     });
 
     for (const key of [
@@ -162,9 +163,28 @@ describe('Nscale request construction', () => {
       'cost',
       'inputCost',
       'outputCost',
+      'basePath',
+      'linkedTargetId',
+      'mcp',
+      'showThinking',
+      'omitDefaults',
     ]) {
       expect(body).not.toHaveProperty(key);
     }
+  });
+
+  it('does not send the config directory injected by the provider loader', async () => {
+    mockResponse();
+    const provider = await loadApiProvider('nscale:chat:fixture-model', {
+      basePath: '/fixture/private-project',
+      options: { config: { apiKey: 'fixture-token', temperature: 0.3 } },
+    });
+    await provider.callApi('hello');
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse(request?.body as string);
+    expect(body).not.toHaveProperty('basePath');
+    expect(body.temperature).toBe(0.3);
   });
 
   it('merges an explicit passthrough block without nesting it', async () => {
@@ -194,8 +214,8 @@ describe.each([
       MISSING_NSCALE_KEY: undefined,
     });
     vi.mocked(fetchWithCache).mockReset();
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data:
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse(
         mode === 'embedding'
           ? { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } }
           : {
@@ -208,10 +228,8 @@ describe.each([
               ],
               usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
             },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      ),
+    );
   });
 
   afterEach(() => {
