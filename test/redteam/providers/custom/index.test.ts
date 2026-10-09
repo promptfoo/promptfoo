@@ -1,10 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
+import { runEval } from '../../../../src/evaluator';
+import logger from '../../../../src/logger';
+import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
+import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
+import { CustomProvider } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
+import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
+import { isResponseHeadersObserverErrorResponse } from '../../../../src/util/fetch/responseHeadersObserver';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
+import {
+  createPredispatchAbortTarget,
+  createSelectedToolErrorTarget,
+} from '../../../util/selectedToolErrorTarget';
 
-import type { Message } from '../../../../src/redteam/providers/shared';
+import type { ProviderResponse } from '../../../../src/types/providers';
 
 // Hoisted mocks for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -70,49 +82,6 @@ vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal
   };
 });
 
-describe('MemorySystem', () => {
-  let memorySystem: MemorySystem;
-
-  beforeEach(() => {
-    memorySystem = new MemorySystem();
-  });
-
-  it('should add and retrieve messages for a conversation', () => {
-    const conversationId = 'test-convo';
-    const message: Message = { role: 'user', content: 'test message' };
-
-    memorySystem.addMessage(conversationId, message);
-    const conversation = memorySystem.getConversation(conversationId);
-
-    expect(conversation).toHaveLength(1);
-    expect(conversation[0]).toEqual(message);
-  });
-
-  it('should return empty array for non-existent conversation', () => {
-    const conversation = memorySystem.getConversation('non-existent');
-    expect(conversation).toEqual([]);
-  });
-
-  it('should duplicate conversation excluding last turn', () => {
-    const conversationId = 'test-convo';
-    const messages: Message[] = [
-      { role: 'system', content: 'system message' },
-      { role: 'user', content: 'user message 1' },
-      { role: 'assistant', content: 'assistant message 1' },
-      { role: 'user', content: 'user message 2' },
-      { role: 'assistant', content: 'assistant message 2' },
-    ];
-
-    messages.forEach((msg) => memorySystem.addMessage(conversationId, msg));
-
-    const newConversationId = memorySystem.duplicateConversationExcludingLastTurn(conversationId);
-    const newConversation = memorySystem.getConversation(newConversationId);
-
-    expect(newConversation).toHaveLength(3);
-    expect(newConversation).toEqual(messages.slice(0, 3));
-  });
-});
-
 describe('CustomProvider', () => {
   let customProvider: CustomProvider;
   let mockRedTeamProvider: MockApiProvider;
@@ -175,6 +144,28 @@ describe('CustomProvider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('keeps an explicit redteamProvider local for the attacker and scorer when remote generation is enabled', async () => {
+    // Regression test for https://github.com/promptfoo/promptfoo/issues/10977:
+    // a configured redteamProvider must not be swapped for the cloud provider.
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'test strategy',
+      redteamProvider: 'ollama:chat:llama3.1:8b',
+    });
+
+    const attacker = await (provider as any).getRedTeamProvider();
+    const scorer = await (provider as any).getScoringProvider();
+
+    expect(redteamProviderManager.getProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'ollama:chat:llama3.1:8b' }),
+    );
+    expect(vi.mocked(PromptfooChatCompletionProvider)).not.toHaveBeenCalled();
+    expect(attacker).toBe(mockRedTeamProvider);
+    expect(scorer).toBe(mockScoringProvider);
   });
 
   it('should initialize with default config values', () => {
@@ -288,6 +279,35 @@ describe('CustomProvider', () => {
     expect(result.metadata?.sessionId).toBe('context-session-id');
   });
 
+  it('passes the rendered turn variables and session context to the target', async () => {
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'original objective', sessionId: 'existing-session', literal: 'value\n' },
+      prompt: { raw: '{{objective}}', label: 'test' },
+    };
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'target response' });
+
+    await (customProvider as any).sendPrompt(
+      'rendered attack',
+      context.prompt,
+      context.vars,
+      undefined,
+      mockTargetProvider,
+      1,
+      context,
+    );
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      'rendered attack',
+      expect.objectContaining({
+        ...context,
+        vars: { ...context.vars, objective: 'rendered attack' },
+      }),
+      undefined,
+    );
+    expect(context.vars.objective).toBe('original objective');
+  });
+
   it('should include sessionId from target response when stateful is true', async () => {
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
 
@@ -327,6 +347,321 @@ describe('CustomProvider', () => {
 
     expect(result.metadata?.sessionId).toBe('response-session-id');
   });
+
+  it('preserves caller reason at target entry through the custom outer catch', async () => {
+    const reason = Object.freeze(
+      Object.assign(new Error('caller stopped at target entry'), {
+        name: 'AbortException',
+      }),
+    );
+    const fixture = createPredispatchAbortTarget(reason);
+
+    mockRedTeamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+      options?.abortSignal?.throwIfAborted();
+      fixture.events.push('attacker response');
+      return {
+        output: JSON.stringify({
+          generatedQuestion: 'Say hello.',
+          rationaleBehindJailbreak: 'Harmless entry fixture',
+          lastResponseSummary: 'A greeting',
+        }),
+      };
+    });
+    try {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Ask for a greeting.',
+        maxTurns: 2,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+      const outcome = await fixture.run(() =>
+        provider.callApi(
+          'Say hello.',
+          {
+            originalProvider: fixture.target,
+            vars: { objective: 'Say hello.' },
+            prompt: { raw: '{{objective}}', label: 'greeting' },
+          },
+          { abortSignal: fixture.controller.signal },
+        ),
+      );
+      await fixture.expectRejected(outcome);
+      expect(fixture.events).toEqual(['attacker response', 'target entered', 'caller abort']);
+      expect(mockRedTeamProvider.callApi).toHaveBeenCalledOnce();
+      expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+      expect(tryUnblocking).not.toHaveBeenCalled();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it.each(['normal', 'unblocking'] as const)(
+    'finalizes a completed %s target error before canceled follow-up work',
+    async (path) => {
+      const fixture = createSelectedToolErrorTarget(path === 'unblocking' ? 1 : 0);
+      mockRedTeamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return {
+          output: JSON.stringify({
+            generatedQuestion: 'Say hello.',
+            rationaleBehindJailbreak: 'Harmless fixture',
+            lastResponseSummary: 'A greeting',
+          }),
+        };
+      });
+      mockScoringProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue' }) };
+      });
+      vi.mocked(tryUnblocking)
+        .mockReset()
+        .mockResolvedValue({ success: true, unblockingPrompt: 'The reference is 123.' });
+
+      try {
+        const provider = new CustomProvider({
+          injectVar: 'objective',
+          strategyText: 'Ask for a greeting.',
+          maxTurns: 2,
+          maxBacktracks: 0,
+          redteamProvider: mockRedTeamProvider,
+          stateful: true,
+        });
+        const result = await fixture.run(() =>
+          provider.callApi(
+            'Say hello.',
+            {
+              originalProvider: fixture.target,
+              vars: { objective: 'Say hello.' },
+              prompt: { raw: '{{objective}}', label: 'greeting' },
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockRedTeamProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+        expect(tryUnblocking).toHaveBeenCalledTimes(path === 'unblocking' ? 1 : 0);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
+
+  describe.each(['normal', 'unblocking'] as const)('%s target error provenance', (path) => {
+    it.each([
+      { name: 'projects the selected tool error', marked: true, later: 'none' },
+      { name: 'retains the stored tool origin after success', marked: true, later: 'success' },
+      {
+        name: 'does not borrow the origin of a later success',
+        marked: false,
+        later: 'marked success',
+      },
+      {
+        name: 'clears the stored origin when a later unmarked error is selected',
+        marked: true,
+        later: 'error',
+      },
+    ] as const)('$name', async ({ marked, later }) => {
+      const firstError = marked
+        ? 'Tool lookup failed: downstream 429 rate limit'
+        : 'Target inference failed: HTTP 503';
+      const laterError = 'Target rejected the later request';
+      const childMetadata = {
+        http: { status: 200, statusText: 'OK', headers: { 'x-ratelimit-remaining': '0' } },
+        headers: { 'retry-after': '60' },
+        rateLimitKind: 'rate_limit',
+        arbitraryTargetMetadata: 'belongs to the child',
+      };
+      const responses: ProviderResponse[] = [
+        {
+          output: 'First target output',
+          error: firstError,
+          metadata: { ...childMetadata, ...(marked ? { errorOrigin: 'tool' } : {}) },
+        },
+      ];
+      if (later !== 'none') {
+        responses.push({
+          output: 'Later target output',
+          ...(later === 'error' ? { error: laterError } : {}),
+          metadata: {
+            ...childMetadata,
+            ...(later === 'marked success' ? { errorOrigin: 'tool' } : {}),
+          },
+        });
+      }
+      const targetResponses: ProviderResponse[] = [];
+      for (const response of responses) {
+        if (path === 'unblocking' && response.error) {
+          targetResponses.push({ output: 'Please provide the example reference number.' });
+          vi.mocked(tryUnblocking).mockResolvedValueOnce({
+            success: true,
+            unblockingPrompt: 'The example reference is 123.',
+          });
+        } else if (!response.error) {
+          vi.mocked(tryUnblocking).mockResolvedValueOnce({ success: false });
+        }
+        targetResponses.push(response);
+      }
+      for (const response of targetResponses) {
+        mockTargetProvider.callApi.mockResolvedValueOnce({
+          ...response,
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        });
+      }
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'Say hello.',
+          rationaleBehindJailbreak: 'Harmless result projection fixture',
+          lastResponseSummary: 'Continue the greeting.',
+        }),
+      });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue.' }),
+      });
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Ask for a greeting.',
+        maxTurns: responses.length,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+
+      const result = await provider.callApi('Say hello.', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Say hello.' },
+        prompt: { raw: '{{objective}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(targetResponses.length);
+      expect(mockRedTeamProvider.callApi).toHaveBeenCalledTimes(responses.length);
+      expect(tryUnblocking).toHaveBeenCalledTimes(
+        targetResponses.length - responses.filter((response) => response.error).length,
+      );
+      expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(
+        later === 'success' || later === 'marked success' ? 2 : 0,
+      );
+      expect(result.error).toBe(responses[responses.length - 1].error);
+      expect(result.output).toBe(responses[responses.length - 1].output);
+      if (marked && later === 'none') {
+        expect(result.metadata).toHaveProperty('errorOrigin', 'tool');
+      } else {
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+      }
+      for (const key of Object.keys(childMetadata)) {
+        expect(result.metadata).not.toHaveProperty(key);
+      }
+      expect(result.metadata?.customRoundsCompleted).toBe(responses.length);
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.redteamHistory).toHaveLength(
+        later === 'success' || later === 'marked success' ? 1 : 0,
+      );
+      expect(result.tokenUsage).toMatchObject({
+        total: targetResponses.length * 5,
+        prompt: targetResponses.length * 3,
+        completion: targetResponses.length * 2,
+        numRequests: targetResponses.length,
+      });
+    });
+  });
+
+  describe.each(['normal', 'unblocking'] as const)(
+    '%s selected caller-observer provenance',
+    (path) => {
+      it.each([
+        { name: 'projects the stored observer error', later: 'none' },
+        { name: 'retains the stored observer error after success', later: 'success' },
+        { name: 'clears the stored origin when a new provider error is selected', later: 'error' },
+      ] as const)('$name', async ({ later }) => {
+        const observerError = 'metrics rate limit exceeded';
+        const laterError = 'Target inference failed: rate limit exceeded';
+        const observerResponse: ProviderResponse = {
+          output: 'Completed observer diagnostic',
+          error: observerError,
+        };
+        const responses: ProviderResponse[] = [observerResponse];
+        if (later !== 'none') {
+          responses.push({
+            output: 'Later target output',
+            ...(later === 'error' ? { error: laterError } : {}),
+          });
+        }
+        const targetResponses: ProviderResponse[] = [];
+        for (const response of responses) {
+          if (path === 'unblocking' && response.error) {
+            targetResponses.push({ output: 'Please provide the example reference number.' });
+            vi.mocked(tryUnblocking).mockResolvedValueOnce({
+              success: true,
+              unblockingPrompt: 'The example reference is 123.',
+            });
+          } else if (!response.error) {
+            vi.mocked(tryUnblocking).mockResolvedValueOnce({ success: false });
+          }
+          targetResponses.push(response);
+        }
+        for (const response of targetResponses) {
+          mockTargetProvider.callApi.mockImplementationOnce(async () => {
+            const delivered: ProviderResponse = {
+              ...response,
+              tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+            };
+            return response === observerResponse
+              ? createSelectedObserverErrorResponse(delivered)
+              : delivered;
+          });
+        }
+        mockRedTeamProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({
+            generatedQuestion: 'Say hello.',
+            rationaleBehindJailbreak: 'Harmless observer result projection fixture',
+            lastResponseSummary: 'Continue the greeting.',
+          }),
+        });
+        mockScoringProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue.' }),
+        });
+        const provider = new CustomProvider({
+          injectVar: 'objective',
+          strategyText: 'Ask for a greeting.',
+          maxTurns: responses.length,
+          maxBacktracks: 0,
+          redteamProvider: mockRedTeamProvider,
+          stateful: true,
+        });
+
+        const result = await provider.callApi('Say hello.', {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'Say hello.' },
+          prompt: { raw: '{{objective}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(targetResponses.length);
+        expect(mockRedTeamProvider.callApi).toHaveBeenCalledTimes(responses.length);
+        expect(tryUnblocking).toHaveBeenCalledTimes(
+          targetResponses.length - responses.filter((response) => response.error).length,
+        );
+        expect(
+          mockScoringProvider.callApi.mock.calls.map(([, context]) => context?.prompt.label),
+        ).toEqual(later === 'success' ? ['refusal', 'eval'] : []);
+        expect(result.error).toBe(responses[responses.length - 1].error);
+        expect(result.output).toBe(responses[responses.length - 1].output);
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(later === 'none');
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(later === 'error');
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata?.customRoundsCompleted).toBe(responses.length);
+        expect(result.metadata?.stopReason).toBe('Max rounds reached');
+        expect(result.metadata?.redteamHistory).toHaveLength(later === 'success' ? 1 : 0);
+        expect(result.tokenUsage).toMatchObject({
+          total: targetResponses.length * 5,
+          prompt: targetResponses.length * 3,
+          completion: targetResponses.length * 2,
+          numRequests: targetResponses.length,
+        });
+      });
+    },
+  );
 
   describe('Unblocking functionality', () => {
     it('should detect blocking question and send unblocking response', async () => {
@@ -917,40 +1252,136 @@ describe('CustomProvider', () => {
     expect(result.metadata?.successfulAttacks?.length).toBeGreaterThan(0);
   });
 
-  it('should surface final target error while preserving mapped output', async () => {
+  it.each(['HTTP 504', { status: 504 }])(
+    'surfaces final target error %j while preserving output',
+    async (error) => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'simple',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'p', label: 'l' },
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'attack',
+          rationaleBehindJailbreak: 'r',
+          lastResponseSummary: 's',
+        }),
+      });
+
+      // final target returns error with output
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'This is 504',
+        error: error as unknown as string,
+      });
+
+      // refusal false, eval not 100
+      mockScoringProvider.callApi
+        .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 0 }) })
+        .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 50 }) });
+
+      const result = await provider.callApi('p', context);
+      expect(result.output).toBe('This is 504');
+      expect(result.error).toBe(typeof error === 'string' ? error : 'Error');
+    },
+  );
+
+  it.each([
+    { unblocking: false, ended: false },
+    { unblocking: true, ended: false },
+    { unblocking: false, ended: true },
+  ])('clears a prior missing-output error after recovery: %j', async ({ unblocking, ended }) => {
     const provider = new CustomProvider({
       injectVar: 'objective',
-      strategyText: 'simple',
-      maxTurns: 1,
+      strategyText: 'Local recovery fixture',
+      maxTurns: 2,
+      maxBacktracks: 1,
       redteamProvider: mockRedTeamProvider,
       stateful: false,
     });
-
-    const context = {
-      originalProvider: mockTargetProvider,
-      vars: { objective: 'test objective' },
-      prompt: { raw: 'p', label: 'l' },
-    };
-
+    const infoSpy = vi.spyOn(logger, 'info');
     mockRedTeamProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
         generatedQuestion: 'attack',
-        rationaleBehindJailbreak: 'r',
-        lastResponseSummary: 's',
+        rationaleBehindJailbreak: 'rationale',
+        lastResponseSummary: 'summary',
       }),
+      tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
+    });
+    if (unblocking) {
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'Please confirm the request',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+      vi.mocked(tryUnblocking).mockResolvedValueOnce({
+        success: true,
+        unblockingPrompt: 'Confirmed',
+      });
+    }
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, numRequests: 1 },
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: { authorization: 'Bearer CUSTOM_SECRET_CANARY' },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        output: ended ? '' : 'I cannot help with that request.',
+        ...(ended ? { conversationEnded: true } : {}),
+        tokenUsage: { total: 8, prompt: 6, completion: 2, numRequests: 1 },
+      });
+    const prompt = { raw: 'Test prompt', label: 'test' };
+    const [result] = await runEval({
+      provider: {
+        id: () => 'custom-recovery-fixture',
+        callApi: () =>
+          provider.callApi('Test prompt', {
+            originalProvider: mockTargetProvider,
+            prompt,
+            vars: { objective: 'Test objective' },
+          }),
+      },
+      prompt,
+      test: { assert: [{ type: 'is-refusal' }] },
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: true,
     });
 
-    // final target returns error with output
-    mockTargetProvider.callApi.mockResolvedValue({ output: 'This is 504', error: 'HTTP 504' });
-
-    // refusal false, eval not 100
-    mockScoringProvider.callApi
-      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 0 }) })
-      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 50 }) });
-
-    const result = await provider.callApi('p', context);
-    expect(result.output).toBe('This is 504');
-    expect(result.error).toBe('HTTP 504');
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.tokenUsage).toMatchObject({
+      total: unblocking ? 16 : 13,
+      numRequests: unblocking ? 3 : 2,
+      attacker: { total: 40, numRequests: 2 },
+    });
+    expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+    expect(
+      infoSpy.mock.calls.some(([message]) => String(message).includes('CUSTOM_SECRET_CANARY')),
+    ).toBe(false);
+    if (!unblocking) {
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Target error'),
+        expect.objectContaining({
+          response: expect.objectContaining({ metadata: expect.any(Object) }),
+        }),
+      );
+    }
   });
 
   it('should handle custom strategy text with round-specific logic', async () => {
@@ -1377,9 +1808,9 @@ describe('CustomProvider', () => {
       }),
     });
 
-    mockTargetProvider.callApi.mockResolvedValue({
-      output: 'target response',
-    });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: false } })
+      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: true } });
 
     // Mock scoring provider responses for both turns
     mockScoringProvider.callApi.mockResolvedValue({
@@ -1392,18 +1823,27 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Should continue to max turns and store the LAST grader result (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
       metadata: {
         redteamGradingInputHash: expect.any(String),
         redteamGradingAssertionHash: expect.any(String),
       },
-      ...secondGraderResult,
+      ...firstGraderResult,
       assertion: { type: 'mock-grader', value: testRubric },
     });
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
+    expect(result.guardrails).toEqual({ flagged: false });
+    expect(result.metadata?.messages).toHaveLength(2);
+    expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+      getGradingInputHash(
+        result.metadata?.redteamFinalPrompt as string,
+        result.output as string,
+        result.metadata?.messages,
+        'mock',
+      ),
+    );
   });
 
   it('should include modifiers in system prompt from test metadata', async () => {

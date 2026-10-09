@@ -680,13 +680,7 @@ function appendMediaToChatPrompt(
   }
   if (isChatMessageArray(parsed)) {
     const messages = parsed.map((message) => ({ ...message }));
-    let userMessageIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        userMessageIndex = i;
-        break;
-      }
-    }
+    const userMessageIndex = messages.map((message) => message.role).lastIndexOf('user');
 
     if (userMessageIndex >= 0) {
       const userMessage = messages[userMessageIndex];
@@ -847,6 +841,7 @@ export async function runJsonGradingPrompt({
   grading,
   label,
   providerCallContext,
+  providerPromptConfig,
   throwOnError,
   vars,
   images,
@@ -858,6 +853,8 @@ export async function runJsonGradingPrompt({
   grading: GradingConfig;
   label: string;
   providerCallContext?: CallApiContextParams;
+  /** Prompt config for the grader call, which providers merge over their own config. */
+  providerPromptConfig?: Record<string, unknown>;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
@@ -886,6 +883,7 @@ export async function runJsonGradingPrompt({
     label,
     vars,
     providerCallContext,
+    providerPromptConfig,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {
