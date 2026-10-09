@@ -240,3 +240,5 @@ tests:
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for other model-based assertions
 - [Select best](/docs/configuration/expected-outputs/model-graded/select-best) for subjective selection
 - [Assertions](/docs/configuration/expected-outputs) for all available assertion types
+
+Responses with target execution errors retain their error status and are excluded from winner selection. On resume, completed comparisons are preserved even when another response has a terminal target error.

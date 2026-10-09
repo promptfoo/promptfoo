@@ -362,7 +362,11 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
   /**
    * Override callEmbeddingApi to add TrueFoundry-specific headers
    */
-  async callEmbeddingApi(text: string): Promise<ProviderResponse> {
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const tfConfig = this.config as TrueFoundryCompletionOptions;
 
     // Add TrueFoundry-specific headers
@@ -383,7 +387,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
       config: { ...this.config, headers },
       env: this.env,
     });
-    return super.callEmbeddingApi.call(providerForRequest, text);
+    return super.callEmbeddingApi.call(providerForRequest, text, context, options);
   }
 
   id(): string {
