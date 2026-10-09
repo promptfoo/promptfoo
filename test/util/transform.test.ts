@@ -403,7 +403,7 @@ describe('util', () => {
           context,
         );
         expect(transformedOutput).toBe('HELLO');
-        const calledPath = mockedImportModule.mock.calls[0][0] as string;
+        const calledPath = (mockedImportModule.mock.calls[0][0] as string).replace(/\\/g, '/');
         expect(calledPath).toContain('runs/2026-05-27T12:00/transform.js');
       });
 
@@ -421,7 +421,7 @@ describe('util', () => {
           context,
         );
         expect(transformedOutput).toBe('HELLO NAMED');
-        const calledPath = mockedImportModule.mock.calls[0][0] as string;
+        const calledPath = (mockedImportModule.mock.calls[0][0] as string).replace(/\\/g, '/');
         expect(calledPath).toContain('runs/2026-05-27T12:00/transform.js');
         expect(calledPath).not.toContain('customTransform');
       });
@@ -436,11 +436,12 @@ describe('util', () => {
           context,
         );
         expect(transformedOutput).toBe('HELLO FROM PYTHON');
-        expect(runPython).toHaveBeenCalledWith(
-          expect.stringContaining('runs/2026-05-27T12:00/transform.py'),
-          'get_transform',
-          [output, expect.any(Object)],
-        );
+        expect(runPython).toHaveBeenCalledWith(expect.any(String), 'get_transform', [
+          output,
+          expect.any(Object),
+        ]);
+        const pythonPath = (vi.mocked(runPython).mock.lastCall?.[0] as string).replace(/\\/g, '/');
+        expect(pythonPath).toContain('runs/2026-05-27T12:00/transform.py');
       });
     });
 
