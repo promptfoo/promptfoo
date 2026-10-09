@@ -39,7 +39,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
-| [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [cost](#cost)                                                   | Inference cost limit or zero-weight cost metric                    |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
@@ -308,6 +308,21 @@ assert:
   - type: cost
     threshold: 0.001
 ```
+
+To record the provider's cost in USD without a pass/fail limit, omit `threshold` and set a named `metric` with `weight: 0`. The measurement is reported without contributing to the aggregate quality score. Missing, negative, or non-finite costs produce an error instead of a zero measurement.
+
+```yaml
+defaultTest:
+  assert:
+    - type: cost
+      metric: inference_cost
+      weight: 0
+derivedMetrics:
+  - name: average_inference_cost
+    value: 'inference_cost / __count'
+```
+
+Threshold-based `cost` assertions, including `not-cost`, continue to report binary pass/fail scores.
 
 ### Equality
 
@@ -1337,6 +1352,8 @@ BLEU (Bilingual Evaluation Understudy) is a **precision-oriented** metric origin
 
 BLEU also includes a brevity penalty to discourage overly short outputs. [See Wikipedia](https://en.wikipedia.org/wiki/BLEU) for more background.
 
+Empty or whitespace-only references are ignored. If every reference is blank, the BLEU score is `0`.
+
 Example:
 
 ```yaml
@@ -1447,7 +1464,7 @@ METEOR requires the optional `natural` package. Install it before using METEOR a
 npm install natural@^8.1.0
 ```
 
-If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
 :::
 
 #### How METEOR Works
@@ -1565,21 +1582,28 @@ To calculate F-score, you first need to track the base classification metrics. W
 
 ```yaml
 assert:
-  # Track true positives, false positives, etc
-  - type: javascript
-    value: "output.sentiment === 'positive' && context.vars.sentiment === 'positive' ? 1 : 0"
-    metric: true_positives
-    weight: 0
+  # Basic JSON validation
+  - type: is-json
 
+  # Return the confusion matrix with the accuracy grade so zero-valued
+  # counters do not count as failed assertions or change the overall score.
   - type: javascript
-    value: "output.sentiment === 'positive' && context.vars.sentiment === 'negative' ? 1 : 0"
-    metric: false_positives
-    weight: 0
-
-  - type: javascript
-    value: "output.sentiment === 'negative' && context.vars.sentiment === 'positive' ? 1 : 0"
-    metric: false_negatives
-    weight: 0
+    value: |
+      const predicted = output.sentiment;
+      const expected = context.vars.sentiment;
+      const correct = predicted === expected;
+      return {
+        pass: correct,
+        score: Number(correct),
+        reason: correct ? 'Correct sentiment' : `Expected ${expected}, got ${predicted}`,
+        namedScores: {
+          accuracy: Number(correct),
+          true_positives: Number(predicted === 'positive' && expected === 'positive'),
+          false_positives: Number(predicted === 'positive' && expected === 'negative'),
+          false_negatives: Number(predicted === 'negative' && expected === 'positive'),
+          true_negatives: Number(predicted === 'negative' && expected === 'negative'),
+        },
+      };
 ```
 
 Then define derived metrics to calculate precision, recall and F-score:
@@ -1588,16 +1612,18 @@ Then define derived metrics to calculate precision, recall and F-score:
 derivedMetrics:
   # Precision = TP / (TP + FP)
   - name: precision
-    value: true_positives / (true_positives + false_positives)
+    value: 'true_positives + false_positives > 0 ? true_positives / (true_positives + false_positives) : 0'
 
   # Recall = TP / (TP + FN)
   - name: recall
-    value: true_positives / (true_positives + false_negatives)
+    value: 'true_positives + false_negatives > 0 ? true_positives / (true_positives + false_negatives) : 0'
 
   # F1 Score = 2 * (precision * recall) / (precision + recall)
   - name: f1_score
-    value: 2 * true_positives / (2 * true_positives + false_positives + false_negatives)
+    value: '2 * true_positives + false_positives + false_negatives > 0 ? 2 * true_positives / (2 * true_positives + false_positives + false_negatives) : 0'
 ```
+
+These formulas return 0 when their denominator is zero, including an all-negative batch. The named counters do not affect the classification grade.
 
 The F-score will be calculated automatically after the eval completes. A score closer to 1 indicates better performance.
 
@@ -1765,7 +1791,9 @@ The assertion detects common refusal patterns like:
 - "That would not be ethical"
 - "As an AI, I cannot..."
 - Content filter blocks
-- Empty or null responses
+- Intentional empty responses
+
+A provider that omits `output` or returns `null` or `undefined` produces an eval error. The literal strings `"null"` and `"undefined"` are evaluated as response text and do not automatically count as refusals.
 
 Example:
 

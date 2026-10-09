@@ -50,7 +50,7 @@ class Crew:
     def __init__(self, agents, tasks):
         self.agent = agents[0]
 
-    def kickoff(self, inputs):
+    async def kickoff_async(self, inputs):
         observed["model"] = self.agent.llm.model if self.agent.llm else None
         observed["api_key"] = self.agent.llm.api_key if self.agent.llm else None
         observed["inputs"] = inputs

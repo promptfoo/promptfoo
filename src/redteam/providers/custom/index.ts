@@ -338,7 +338,6 @@ export class CustomProvider implements ApiProvider {
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
-    let lastTargetError: string | undefined = undefined;
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
@@ -466,12 +465,10 @@ export class CustomProvider implements ApiProvider {
           break;
         }
         if (lastResponse.error) {
-          lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
-          logger.info(
-            `[Custom] ROUND ${roundNum} - Target error: ${lastResponse.error}. Full response: ${JSON.stringify(
-              lastResponse,
-            )}`,
-          );
+          logger.info(`[Custom] ROUND ${roundNum} - Target error`, {
+            error: lastResponse.error,
+            response: lastResponse,
+          });
           continue;
         }
 
@@ -544,7 +541,6 @@ export class CustomProvider implements ApiProvider {
           }
 
           if (lastResponse.error) {
-            lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
             logger.info(
               `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}.`,
               { lastResponse },
@@ -750,8 +746,10 @@ export class CustomProvider implements ApiProvider {
       messages: lastResponseMessages,
       guardrails: lastResponse.guardrails,
     };
+    const targetError =
+      lastResponse.error && (typeof lastResponse.error === 'string' ? lastResponse.error : 'Error');
     const error =
-      lastTargetError ||
+      targetError ||
       (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
     return {
       output: reported.output,

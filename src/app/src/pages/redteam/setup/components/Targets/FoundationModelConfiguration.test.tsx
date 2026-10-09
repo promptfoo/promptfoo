@@ -126,7 +126,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6-sol, openai:gpt-6-luna, openai:gpt-6-astra',
+      'openai:gpt-6.1-sol, openai:gpt-6-luna, openai:gpt-6-astra',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
@@ -136,7 +136,10 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
-  it('should call updateCustomTarget with undefined when Temperature field is cleared', async () => {
+  it.each([
+    ['Temperature', 'temperature'],
+    ['Top P', 'top_p'],
+  ])('should unset %s when cleared and keep an explicit 0', async (label, field) => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
@@ -146,12 +149,14 @@ describe('FoundationModelConfiguration', () => {
       />,
     );
 
-    const accordionSummary = screen.getByRole('button', { name: /Advanced Configuration/ });
-    await user.click(accordionSummary);
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    const input = screen.getByLabelText(label);
+    await user.clear(input);
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(field, undefined);
 
-    const temperatureInput = screen.getByLabelText('Temperature');
-    await user.clear(temperatureInput);
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', undefined);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(field, 0);
   });
 
   it('should call updateCustomTarget with undefined when API Base URL field is cleared', async () => {
@@ -199,7 +204,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-4.7',
+      'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-5.5',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenRouter documentation/ });
@@ -251,7 +256,7 @@ describe('FoundationModelConfiguration', () => {
     let modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6-sol, openai:gpt-6-luna, openai:gpt-6-astra',
+      'openai:gpt-6.1-sol, openai:gpt-6-luna, openai:gpt-6-astra',
     );
     let documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
     expect(documentationLink).toHaveAttribute(
