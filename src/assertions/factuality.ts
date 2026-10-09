@@ -1,10 +1,12 @@
 import { matchesFactuality } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
+import { finalizeGradedAssertion } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleFactuality = async ({
   assertion,
+  inverse,
   renderedValue,
   outputString,
   test,
@@ -19,15 +21,14 @@ export const handleFactuality = async ({
   // Note: rubricPrompt will be rendered later in matchesFactuality with proper variables
   // (input, ideal, completion) available at that point
 
-  return {
-    assertion,
-    ...(await matchesFactuality(
-      prompt,
-      renderedValue,
-      outputString,
-      test.options,
-      test.vars,
-      providerCallContext,
-    )),
-  };
+  const resp = await matchesFactuality(
+    prompt,
+    renderedValue,
+    outputString,
+    test.options,
+    test.vars,
+    providerCallContext,
+  );
+
+  return finalizeGradedAssertion(resp, assertion, inverse, true);
 };

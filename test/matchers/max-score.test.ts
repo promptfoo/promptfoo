@@ -50,6 +50,32 @@ describe('selectMaxScore', () => {
     type: 'max-score',
   };
 
+  it('excludes target errors even when the only available score is negative', async () => {
+    const available = createMockResult(0, 1);
+    available.gradingResult!.componentResults!.forEach((component) => {
+      component.score = -1;
+    });
+    const results = await selectMaxScore(
+      ['unavailable', 'available'],
+      [{ unavailable: true, gradingResult: null }, available],
+      mockAssertion,
+    );
+    expect(results[0]).toMatchObject({ pass: false, score: 0 });
+    expect(results[1]).toMatchObject({ pass: true, score: 1 });
+  });
+
+  it('returns no winner when every target failed', async () => {
+    const results = await selectMaxScore(
+      ['', ''],
+      [{ unavailable: true }, { unavailable: true }],
+      mockAssertion,
+    );
+    expect(results.map(({ pass, score }) => ({ pass, score }))).toEqual([
+      { pass: false, score: 0 },
+      { pass: false, score: 0 },
+    ]);
+  });
+
   it('should select the output with the highest score', async () => {
     const outputs = ['Output 0', 'Output 1', 'Output 2'];
     const results = [createMockResult(0.5, 0), createMockResult(1.0, 1), createMockResult(0.75, 2)];

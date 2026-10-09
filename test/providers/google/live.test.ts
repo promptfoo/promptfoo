@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -7,8 +9,82 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
+import { getGoogleAccessToken } from '../../../src/providers/google/util';
 import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
+
+const createTextLiveOptions = () => ({
+  config: {
+    generationConfig: createTextResponseModalities(),
+    timeoutMs: 500,
+    apiKey: 'test-api-key',
+  },
+});
+
+const createAudioLiveOptions = () => ({
+  config: {
+    generationConfig: { response_modalities: ['audio'] },
+    timeoutMs: 500,
+    apiKey: 'test-api-key',
+  },
+});
+
+const createTextResponseModalities = () => ({
+  response_modalities: ['text'],
+});
+
+const createCleanSocketClose = () => ({
+  wasClean: true,
+  code: 1000,
+  reason: 'Test close',
+});
+
+const createExternalFunctionTool = () => ({
+  functionDeclarations: [
+    {
+      name: 'external_function',
+      description: 'An external function',
+      parameters: {
+        type: 'OBJECT',
+        properties: { param: { type: 'STRING' } },
+        required: ['param'],
+      },
+    },
+  ],
+});
+
+const createAddNumbersTool = () => ({
+  functionDeclarations: [
+    {
+      name: 'addNumbers',
+      description: 'Add two numbers together',
+    },
+  ],
+});
+
+const createVideoFrameContent = () => ({
+  role: 'user',
+  parts: [
+    { inline_data: { mime_type: 'image/jpeg', data: 'ZnJhbWUx' } },
+    { inline_data: { mime_type: 'image/png', data: 'ZnJhbWUy' } },
+  ],
+});
+
+const createLiveTokenUsage = () => ({
+  promptTokenCount: 100,
+  responseTokenCount: 20,
+  totalTokenCount: 120,
+});
+
+const createCounterApiOptions = (url: string) => ({
+  file: 'mock-counter-api.py',
+  url,
+});
+
+const createCompletedTranscription = () => ({
+  serverContent: { outputTranscription: { text: 'Done' }, turnComplete: true },
+  interactionStatus: 'IDLE',
+});
 
 const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
 
@@ -108,7 +184,53 @@ const flushAsyncEvents = async () => {
   await Promise.resolve();
 };
 
+const createStatefulApiOptions = () => ({
+  config: {
+    generationConfig: createTextResponseModalities(),
+    timeoutMs: 500,
+    apiKey: 'test-api-key',
+    functionToolStatefulApi: createCounterApiOptions('http://127.0.0.1:8765'),
+  },
+});
+
+const createAudioTranscriptionOptions = () => ({
+  config: {
+    generationConfig: {
+      response_modalities: ['audio'],
+      outputAudioTranscription: {},
+    },
+    timeoutMs: 500,
+    apiKey: 'test-api-key',
+  },
+});
+
 describe('GoogleLiveProvider', () => {
+  const createRespondingSocket = (text?: string, complete = true) =>
+    function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        if (text !== undefined) {
+          simulateTextMessage(mockWs, text);
+        }
+        if (complete) {
+          simulateCompletionMessage(mockWs);
+        }
+      });
+      return mockWs;
+    };
+
+  const createGracefulClosingSocket = () =>
+    function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setImmediate(() => {
+          mockWs.onclose?.({ wasClean: true, code: 1000 } as WebSocket.CloseEvent);
+        });
+      });
+      return mockWs;
+    };
+
   let mockWs: Mocked<WebSocket>;
   let provider: GoogleLiveProvider;
 
@@ -121,6 +243,8 @@ describe('GoogleLiveProvider', () => {
     // call history but preserves implementations, and async work scheduled by
     // a prior test can still record calls before the next test runs.
     mockFetchWithProxy.mockReset();
+    mockImportModule.mockReset();
+    vi.mocked(getGoogleAccessToken).mockReset().mockResolvedValue(undefined);
 
     const spawnMock = vi.mocked((await import('child_process')).spawn);
     spawnMock.mockReset();
@@ -159,18 +283,11 @@ describe('GoogleLiveProvider', () => {
       return pythonPath;
     });
 
-    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
-      config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', createTextLiveOptions());
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     global.setTimeout = originalSetTimeout;
     vi.clearAllMocks();
   });
@@ -184,16 +301,1218 @@ describe('GoogleLiveProvider', () => {
     expect(provider.id()).toBe('google:live:gemini-2.0-flash-exp');
   });
 
-  it('should send client_content for older Live models', async () => {
+  it('keeps final state retrieval alive after the expected Live socket close', async () => {
+    let releaseState!: (state: { counter: number }) => void;
+    const stateResponse = new Promise<{ counter: number }>((resolve) => {
+      releaseState = resolve;
+    });
+    let signalStateRequest!: () => void;
+    const stateRequested = new Promise<void>((resolve) => {
+      signalStateRequest = resolve;
+    });
+    mockFetchWithProxy.mockImplementation(async () => {
+      signalStateRequest();
+      return { ok: true, json: () => stateResponse } as any;
+    });
+    const mockProcess = {
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      on: vi.fn(),
+      kill: vi.fn(),
+      killed: false,
+    };
+    vi.mocked((await import('child_process')).spawn).mockReturnValueOnce(mockProcess as any);
+    Object.defineProperty(mockWs, 'readyState', { value: WebSocket.OPEN });
+    mockWs.close.mockImplementation(() => {
+      setImmediate(() => {
+        mockWs.onclose?.({ wasClean: true, code: 1000, reason: '' } as WebSocket.CloseEvent);
+      });
+    });
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
-        simulateTextMessage(mockWs, 'test');
+        simulateTextMessage(mockWs, 'Completed movement.');
         simulateCompletionMessage(mockWs);
       });
       return mockWs;
     });
+    const statefulProvider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        apiKey: 'test-key',
+        timeoutMs: 500,
+        functionToolStatefulApi: {
+          file: 'examples/google-live/counter_api.py',
+          url: 'http://127.0.0.1:8765/',
+        },
+      },
+    });
+    let settled = false;
+    const responsePromise = statefulProvider.callApi('Move the block.').then((response) => {
+      settled = true;
+      return response;
+    });
+
+    await stateRequested;
+    await flushAsyncEvents();
+    try {
+      expect(mockWs.close).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+      expect(mockProcess.kill).not.toHaveBeenCalled();
+    } finally {
+      releaseState({ counter: 7 });
+    }
+    const response = await responsePromise;
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({
+      text: 'Completed movement.',
+      statefulApiState: { counter: 7 },
+    });
+    expect(mockFetchWithProxy).toHaveBeenCalledWith('http://127.0.0.1:8765/get_state', {
+      signal: expect.any(AbortSignal),
+    });
+    expect(mockProcess.kill).toHaveBeenCalledTimes(1);
+  });
+
+  describe('final state retrieval deadline', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    });
+
+    async function createStatefulTurn(stage: 'headers' | 'body') {
+      let resolveHeaders!: (response: Response) => void;
+      let rejectHeaders!: (error: Error) => void;
+      const headers = new Promise<Response>((resolve, reject) => {
+        resolveHeaders = resolve;
+        rejectHeaders = reject;
+      });
+      let resolveState!: (state: { counter: number }) => void;
+      let rejectState!: (error: Error) => void;
+      const state = new Promise<{ counter: number }>((resolve, reject) => {
+        resolveState = resolve;
+        rejectState = reject;
+      });
+      const json = vi.fn(() => state);
+      const httpResponse = { ok: true, json } as unknown as Response;
+      if (stage === 'body') {
+        resolveHeaders(httpResponse);
+      }
+      let requestStarted!: () => void;
+      const stateRequested = new Promise<void>((resolve) => {
+        requestStarted = resolve;
+      });
+      let signal: AbortSignal | null | undefined;
+      mockFetchWithProxy.mockImplementation((_url, options) => {
+        signal = options?.signal;
+        requestStarted();
+        // Deliberately ignore abort here: settlement must not depend on a cooperative fetch.
+        return headers;
+      });
+
+      const child = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        kill: vi.fn((_signal: string): boolean => {
+          child.killed = true;
+          return true;
+        }),
+        killed: false,
+      };
+      vi.mocked((await import('child_process')).spawn).mockReturnValueOnce(child as any);
+      let readyState: number = WebSocket.OPEN;
+      Object.defineProperty(mockWs, 'readyState', { get: () => readyState });
+      let socketClosed!: () => void;
+      const expectedClose = new Promise<void>((resolve) => {
+        socketClosed = resolve;
+      });
+      mockWs.close.mockImplementation(() => {
+        readyState = WebSocket.CLOSING;
+        setImmediate(() => {
+          readyState = WebSocket.CLOSED;
+          mockWs.onclose?.({ wasClean: true, code: 1000, reason: '' } as WebSocket.CloseEvent);
+          socketClosed();
+        });
+      });
+
+      const statefulProvider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+        config: {
+          apiKey: 'test-key',
+          timeoutMs: 500,
+          functionToolStatefulApi: {
+            file: 'examples/google-live/counter_api.py',
+            url: 'http://127.0.0.1:8765/',
+          },
+        },
+      });
+      let settled = false;
+      const responsePromise = statefulProvider.callApi('Move the block.').then((response) => {
+        settled = true;
+        return response;
+      });
+      const emit = (message: unknown) =>
+        Promise.resolve(
+          mockWs.onmessage?.({ data: JSON.stringify(message) } as WebSocket.MessageEvent),
+        );
+      let completion: Promise<unknown> | undefined;
+      const releaseState = (counter = 7) => {
+        resolveHeaders(httpResponse);
+        resolveState({ counter });
+      };
+
+      return {
+        child,
+        json,
+        responsePromise,
+        get signal() {
+          return signal;
+        },
+        get settled() {
+          return settled;
+        },
+        async start() {
+          // Fake timers replace the suite's startup shortcut; install and advance the real delay.
+          await flushAsyncEvents();
+          await vi.advanceTimersByTimeAsync(1000);
+          await flushAsyncEvents();
+          await Promise.resolve(mockWs.onopen?.({ type: 'open' } as WebSocket.Event));
+          await emit({ setupComplete: {} });
+        },
+        async text(text: string) {
+          await emit({ serverContent: { modelTurn: { parts: [{ text }] } } });
+        },
+        async finish() {
+          await emit({
+            serverContent: { modelTurn: { parts: [{ text: 'Completed movement.' }] } },
+          });
+          await emit({
+            usageMetadata: { promptTokenCount: 2, responseTokenCount: 3, totalTokenCount: 5 },
+          });
+          // The final message handler itself waits for state; keep it available for cleanup.
+          completion = emit({ serverContent: { turnComplete: true } });
+          void completion.catch(() => {});
+          await flushAsyncEvents();
+          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+          expect(mockWs.close).toHaveBeenCalledTimes(1);
+          await stateRequested;
+          await expectedClose;
+          await flushAsyncEvents();
+        },
+        releaseState,
+        rejectPending() {
+          if (stage === 'headers') {
+            rejectHeaders(new Error('Late state headers failure'));
+            resolveState({ counter: 7 });
+          } else {
+            rejectState(new Error('Late state JSON failure'));
+          }
+        },
+        failHttp() {
+          resolveHeaders({ ok: false, status: 500 } as Response);
+          resolveState({ counter: 7 });
+        },
+        async drain() {
+          // Also releases the unchanged implementation after an expected-red assertion fails.
+          releaseState();
+          await completion;
+          await responsePromise;
+          await flushAsyncEvents();
+        },
+      };
+    }
+
+    it.each([
+      { stage: 'headers', late: 'success' },
+      { stage: 'headers', late: 'rejection' },
+      { stage: 'body', late: 'success' },
+      { stage: 'body', late: 'rejection' },
+    ] as const)(
+      'bounds pending $stage and ignores late $late after the state deadline',
+      async ({ stage, late }) => {
+        const turn = await createStatefulTurn(stage);
+        try {
+          await turn.start();
+          await turn.finish();
+          expect(turn.json).toHaveBeenCalledTimes(stage === 'body' ? 1 : 0);
+          expect(mockWs.close).toHaveBeenCalledTimes(1);
+
+          await vi.advanceTimersByTimeAsync(499);
+          expect(turn.settled).toBe(false);
+          expect(turn.child.kill).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(1);
+
+          expect(turn.settled).toBe(true);
+          expect(turn.signal?.aborted).toBe(true);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+          const response = await turn.responsePromise;
+          expect(response.error).toBeUndefined();
+          expect(response.output).toMatchObject({
+            text: 'Completed movement.',
+            toolCall: { functionCalls: [] },
+            statefulApiState: undefined,
+          });
+          expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+          const beforeLateState = JSON.stringify(response);
+          const sends = mockWs.send.mock.calls.length;
+
+          if (late === 'success') {
+            turn.releaseState(99);
+          } else {
+            turn.rejectPending();
+          }
+          await turn.drain();
+          await vi.advanceTimersByTimeAsync(1000);
+          expect(JSON.stringify(response)).toBe(beforeLateState);
+          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+          expect(mockWs.send).toHaveBeenCalledTimes(sends);
+          expect(mockWs.close).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+        } finally {
+          await turn.drain();
+        }
+      },
+    );
+
+    it('preserves delayed state success after close before the state deadline', async () => {
+      const turn = await createStatefulTurn('body');
+      try {
+        await turn.start();
+        await turn.finish();
+        await vi.advanceTimersByTimeAsync(250);
+        expect(turn.settled).toBe(false);
+        expect(turn.signal?.aborted).toBe(false);
+        expect(turn.child.kill).not.toHaveBeenCalled();
+
+        turn.releaseState();
+        const response = await turn.responsePromise;
+        expect(response.error).toBeUndefined();
+        expect(response.output).toMatchObject({
+          text: 'Completed movement.',
+          toolCall: { functionCalls: [] },
+          statefulApiState: { counter: 7 },
+        });
+        expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+        expect(turn.child.kill).toHaveBeenCalledTimes(1);
+        expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+      } finally {
+        await turn.drain();
+      }
+    });
+
+    it.each(['network', 'HTTP', 'JSON'] as const)(
+      'keeps completed output after an ordinary state %s failure',
+      async (failure) => {
+        const turn = await createStatefulTurn(failure === 'JSON' ? 'body' : 'headers');
+        try {
+          await turn.start();
+          await turn.finish();
+          if (failure === 'HTTP') {
+            turn.failHttp();
+          } else {
+            turn.rejectPending();
+          }
+          const response = await turn.responsePromise;
+          expect(response.error).toBeUndefined();
+          expect(response.output).toMatchObject({
+            text: 'Completed movement.',
+            statefulApiState: undefined,
+          });
+          expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+          await vi.advanceTimersByTimeAsync(1000);
+          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+        } finally {
+          await turn.drain();
+        }
+      },
+    );
+
+    it.each([
+      { stage: 'headers', late: 'success' },
+      { stage: 'headers', late: 'rejection' },
+      { stage: 'body', late: 'success' },
+      { stage: 'body', late: 'rejection' },
+    ] as const)(
+      'cleans up a WebSocket error during pending $stage before late $late',
+      async ({ stage, late }) => {
+        const turn = await createStatefulTurn(stage);
+        try {
+          await turn.start();
+          await turn.finish();
+          mockWs.onerror?.({
+            type: 'error',
+            error: new Error('State-read socket failure'),
+            message: 'State-read socket failure',
+          } as WebSocket.ErrorEvent);
+          await flushAsyncEvents();
+
+          expect(turn.settled).toBe(true);
+          expect(turn.signal?.aborted).toBe(true);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+          const response = await turn.responsePromise;
+          expect(response.error).toContain('WebSocket error');
+          const beforeLateState = JSON.stringify(response);
+          const sends = mockWs.send.mock.calls.length;
+          mockWs.onclose?.({
+            wasClean: false,
+            code: 1006,
+            reason: 'Late close',
+          } as WebSocket.CloseEvent);
+          if (late === 'success') {
+            turn.releaseState(99);
+          } else {
+            turn.rejectPending();
+          }
+          await turn.drain();
+          await vi.advanceTimersByTimeAsync(1000);
+          expect(JSON.stringify(response)).toBe(beforeLateState);
+          expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+          expect(mockWs.send).toHaveBeenCalledTimes(sends);
+          expect(turn.child.kill).toHaveBeenCalledTimes(1);
+          expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+        } finally {
+          await turn.drain();
+        }
+      },
+    );
+
+    it('starts the full state deadline only after healthy streaming finishes', async () => {
+      const turn = await createStatefulTurn('body');
+      try {
+        await turn.start();
+        for (let index = 1; index <= 3; index++) {
+          await vi.advanceTimersByTimeAsync(200);
+          await turn.text(`chunk${index} `);
+        }
+        expect(turn.settled).toBe(false);
+        expect(mockFetchWithProxy).not.toHaveBeenCalled();
+        expect(turn.child.kill).not.toHaveBeenCalled();
+        await turn.finish();
+        await vi.advanceTimersByTimeAsync(499);
+        expect(turn.settled).toBe(false);
+        expect(turn.signal?.aborted).toBe(false);
+        expect(turn.child.kill).not.toHaveBeenCalled();
+
+        turn.releaseState();
+        const response = await turn.responsePromise;
+        expect(response.error).toBeUndefined();
+        expect(response.output).toMatchObject({
+          text: 'chunk1 chunk2 chunk3 Completed movement.',
+          statefulApiState: { counter: 7 },
+        });
+        expect(turn.child.kill).toHaveBeenCalledTimes(1);
+        expect(turn.child.kill).toHaveBeenCalledWith('SIGTERM');
+      } finally {
+        await turn.drain();
+      }
+    });
+  });
+
+  it.each([
+    {
+      owner: 'provider',
+      promptConfig: (promptBasePath: string) => ({ basePath: promptBasePath }),
+      expectedInstruction: 'Provider instruction.',
+    },
+    {
+      owner: 'prompt',
+      promptConfig: (promptBasePath: string) => ({
+        basePath: promptBasePath,
+        systemInstruction: 'file://instruction.txt',
+      }),
+      expectedInstruction: 'Prompt instruction.',
+    },
+  ])(
+    'resolves $owner-owned systemInstruction against its Google Live basePath',
+    async ({ promptConfig, expectedInstruction }) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-live-instruction-'));
+      const providerBasePath = path.join(root, 'provider');
+      const promptBasePath = path.join(root, 'prompt');
+      const globalBasePath = path.join(root, 'global');
+      fs.mkdirSync(providerBasePath);
+      fs.mkdirSync(promptBasePath);
+      fs.mkdirSync(globalBasePath);
+      fs.writeFileSync(path.join(providerBasePath, 'instruction.txt'), 'Provider instruction.');
+      fs.writeFileSync(path.join(promptBasePath, 'instruction.txt'), 'Prompt instruction.');
+      fs.writeFileSync(path.join(globalBasePath, 'instruction.txt'), 'Global instruction.');
+      const originalBasePath = cliState.basePath;
+      cliState.basePath = globalBasePath;
+      provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          apiKey: 'test-api-key',
+          basePath: providerBasePath,
+          generationConfig: { response_modalities: ['text'] },
+          systemInstruction: 'file://instruction.txt',
+          timeoutMs: 500,
+        },
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateTextMessage(mockWs, 'test');
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      try {
+        await provider.callApi('test prompt', {
+          prompt: {
+            raw: 'test prompt',
+            label: 'test',
+            config: promptConfig(promptBasePath),
+          },
+          vars: {},
+        });
+
+        const setup = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup;
+        expect(setup.systemInstruction).toEqual({
+          parts: [{ text: expectedInstruction }],
+        });
+      } finally {
+        cliState.basePath = originalBasePath;
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+  describe('Gemini 3.8 Live', () => {
+    const extendedModel = 'gemini-3.8-live-extended-thinking';
+    const emit = async (message: object) => {
+      await mockWs.onmessage?.({ data: JSON.stringify(message) } as WebSocket.MessageEvent);
+    };
+    const connect = (run: () => Promise<void>) => {
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(async () => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          await emit({ setupComplete: {} });
+          await run();
+        });
+        return mockWs;
+      });
+    };
+
+    it.each([true, false])(
+      'prefers a Gemini API key over incidental Cloud ADC (explicit=%s)',
+      async (explicit) => {
+        const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: 'env-gemini-key' });
+        try {
+          vi.mocked(getGoogleAccessToken).mockResolvedValue('cloud-only-token');
+          provider = new GoogleLiveProvider('gemini-3.8-live', {
+            config: explicit ? { apiKey: 'explicit-gemini-key' } : {},
+          });
+          connect(() =>
+            emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+          );
+          expect((await provider.callApi('Hello')).error).toBeUndefined();
+          expect(getGoogleAccessToken).not.toHaveBeenCalled();
+          expect(WebSocket).toHaveBeenCalledWith(
+            expect.stringContaining(`?key=${explicit ? 'explicit-gemini-key' : 'env-gemini-key'}`),
+          );
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('uses explicit OAuth credentials instead of an environment API key', async () => {
+      const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: 'env-gemini-key' });
+      const credentials = '{"type":"service_account"}';
+      try {
+        vi.mocked(getGoogleAccessToken).mockResolvedValue('gemini-oauth-token');
+        provider = new GoogleLiveProvider('gemini-3.8-live', { config: { credentials } });
+        connect(() =>
+          emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+        );
+        expect((await provider.callApi('Hello')).error).toBeUndefined();
+        expect(getGoogleAccessToken).toHaveBeenCalledWith(credentials);
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('?access_token=gemini-oauth-token'),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('does not fall back to another identity when explicit OAuth credentials fail', async () => {
+      const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: 'env-gemini-key' });
+      try {
+        provider = new GoogleLiveProvider('gemini-3.8-live', {
+          config: { credentials: '{"type":"service_account"}' },
+        });
+        await expect(provider.callApi('Hello')).rejects.toThrow(
+          'Google authentication is not configured',
+        );
+        expect(WebSocket).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('uses ADC when no API key or explicit credentials are configured', async () => {
+      const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: undefined, GEMINI_API_KEY: undefined });
+      try {
+        vi.mocked(getGoogleAccessToken).mockResolvedValue('gemini-oauth-token');
+        provider = new GoogleLiveProvider('gemini-3.8-live', {});
+        connect(() =>
+          emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+        );
+        expect((await provider.callApi('Hello')).error).toBeUndefined();
+        expect(getGoogleAccessToken).toHaveBeenCalledWith(undefined);
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('?access_token=gemini-oauth-token'),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('honors an effective prompt API-key override', async () => {
+      provider = new GoogleLiveProvider('gemini-3.8-live', { config: { apiKey: 'base-key' } });
+      connect(() =>
+        emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+      );
+      await provider.callApi('Hello', {
+        prompt: { raw: 'Hello', label: 'Hello', config: { apiKey: 'prompt-key' } },
+        vars: {},
+      });
+      expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('?key=prompt-key'));
+    });
+
+    it.each(['gemini-3.8-live', extendedModel])(
+      'defaults %s to audio with transcription',
+      async (modelName) => {
+        provider = new GoogleLiveProvider(modelName, { config: { apiKey: 'test-api-key' } });
+        connect(async () => {
+          await emit({
+            serverContent: {
+              outputTranscription: { text: 'Hello' },
+              turnComplete: true,
+              interactionStatus: 'IDLE',
+            },
+          });
+        });
+
+        const result = await provider.callApi('Hello');
+        expect(result.error).toBeUndefined();
+        expect(result.output).toMatchObject({ text: 'Hello' });
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('generativelanguage.v1alpha.'),
+        );
+        expect(JSON.parse(mockWs.send.mock.calls[0][0] as string)).toMatchObject({
+          setup: {
+            model: `models/${modelName}`,
+            generationConfig: { responseModalities: ['AUDIO'] },
+            outputAudioTranscription: {},
+          },
+        });
+        expect(JSON.parse(mockWs.send.mock.calls[1][0] as string)).toEqual({
+          realtimeInput: { text: 'Hello' },
+        });
+        const generationConfig = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup
+          .generationConfig;
+        if (modelName === extendedModel) {
+          expect(generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'LOW' });
+        } else {
+          expect(generationConfig).not.toHaveProperty('thinkingConfig');
+        }
+      },
+    );
+
+    it.each([
+      ['gemini-3.8-live', false],
+      [extendedModel, false],
+      ['gemini-3.8-live', true],
+      [extendedModel, true],
+    ] as const)(
+      'sanitizes snake-case tool parameters in the %s setup frame (single external tool: %s)',
+      async (modelName, singleExternalTool) => {
+        const tools = [
+          {
+            function_declarations: [
+              {
+                name: 'lookup',
+                parameters: {
+                  type: 'object' as const,
+                  additionalProperties: false,
+                  $schema: 'https://json-schema.org/draft/2020-12/schema',
+                  properties: { code: { type: 'string' as const, default: 'ignored' } },
+                  required: ['code'],
+                },
+              },
+            ],
+          },
+        ];
+        const original = structuredClone(tools);
+        if (singleExternalTool) {
+          mockImportModule.mockResolvedValueOnce({ getTools: () => tools[0] });
+        }
+        provider = new GoogleLiveProvider(modelName, {
+          config: {
+            apiKey: 'test-api-key',
+            tools: singleExternalTool ? 'file://tools.js:getTools' : tools,
+          },
+        });
+        connect(() => emit(createCompletedTranscription()));
+        expect((await provider.callApi('Look up the code')).error).toBeUndefined();
+        const tool = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup.tools[0];
+        expect(tool).not.toHaveProperty('function_declarations');
+        expect(tool.functionDeclarations[0].parameters).toEqual({
+          type: 'OBJECT',
+          properties: { code: { type: 'STRING' } },
+          required: ['code'],
+        });
+        if (modelName === extendedModel) {
+          expect(tool.functionDeclarations[0].behavior).toBe('NON_BLOCKING');
+        }
+        expect(tools).toEqual(original);
+      },
+    );
+
+    it.each([
+      ['gemini-3.8-live', true],
+      ['gemini-3.8-live', false],
+      [extendedModel, true],
+      [extendedModel, false],
+    ] as const)(
+      'deduplicates declarations across %s setup tools (canonical first: %s)',
+      async (modelName, canonicalFirst) => {
+        const canonical = {
+          name: 'lookup',
+          behavior: 'NON_BLOCKING' as const,
+          parameters: {
+            type: 'object' as const,
+            properties: { code: { type: 'string' as const } },
+            required: ['code'],
+            additionalProperties: false,
+          },
+        };
+        const camelTool = { functionDeclarations: [canonical] };
+        const snakeTool = {
+          function_declarations: [{ name: 'lookup', behavior: 'BLOCKING' as const }],
+        };
+        const tools = canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool];
+        const original = structuredClone(tools);
+        provider = new GoogleLiveProvider(modelName, {
+          config: { apiKey: 'test-api-key', tools },
+        });
+        connect(() => emit(createCompletedTranscription()));
+
+        expect((await provider.callApi('Look up the code')).error).toBeUndefined();
+        expect(JSON.parse(mockWs.send.mock.calls[0][0] as string).setup.tools).toEqual([
+          {
+            functionDeclarations: [
+              {
+                ...canonical,
+                parameters: {
+                  type: 'OBJECT',
+                  properties: { code: { type: 'STRING' } },
+                  required: ['code'],
+                },
+              },
+            ],
+          },
+        ]);
+        expect(tools).toEqual(original);
+      },
+    );
+
+    it.each(['gemini-3.8-live', extendedModel])(
+      'maps TEXT to audio transcription for %s on v1beta',
+      async (modelName) => {
+        provider = new GoogleLiveProvider(modelName, {
+          config: {
+            apiKey: 'test-api-key',
+            apiVersion: 'v1beta',
+            generationConfig: { responseModalities: ['TEXT'] },
+          },
+        });
+        connect(async () => {
+          await emit({
+            serverContent: { turnComplete: true, outputTranscription: { text: 'Done' } },
+            interactionStatus: 'IDLE',
+          });
+        });
+        expect((await provider.callApi('Hello')).output).toMatchObject({ text: 'Done' });
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('generativelanguage.v1beta.'),
+        );
+        expect(
+          JSON.parse(mockWs.send.mock.calls[0][0] as string).setup.generationConfig
+            .responseModalities,
+        ).toEqual(['AUDIO']);
+      },
+    );
+
+    it.each(['top-level', 'server-content'])(
+      'waits for %s IDLE after filler, reasoning, and tools',
+      async (location) => {
+        const callback = vi.fn().mockResolvedValue({ code: 'ORCHID' });
+        const tools = [
+          {
+            functionDeclarations: [
+              { name: 'lookup', parameters: { type: 'object' as const, properties: {} } },
+            ],
+          },
+        ];
+        provider = new GoogleLiveProvider(extendedModel, {
+          config: {
+            apiKey: 'test-api-key',
+            tools,
+            functionToolCallbacks: { lookup: callback },
+            generationConfig: { thinkingConfig: { thinkingLevel: 'HIGH' } },
+          },
+        });
+        connect(async () => {
+          await emit({
+            serverContent: {
+              outputTranscription: { text: 'Checking. ' },
+              turnComplete: true,
+              interactionStatus: 'IN_PROGRESS',
+            },
+            usageMetadata: { promptTokenCount: 10, responseTokenCount: 2, totalTokenCount: 12 },
+          });
+          expect(mockWs.close).not.toHaveBeenCalled();
+          await emit({ interactionStatus: 'IN_PROGRESS' });
+          expect(mockWs.close).not.toHaveBeenCalled();
+          await emit({
+            toolCall: { functionCalls: [{ id: 'lookup-1', name: 'lookup', args: {} }] },
+            interactionStatus: 'IN_PROGRESS',
+          });
+          expect(callback).toHaveBeenCalledWith('{}');
+          expect(JSON.parse(mockWs.send.mock.calls[2][0] as string)).toEqual({
+            toolResponse: {
+              functionResponses: [{ id: 'lookup-1', name: 'lookup', response: { code: 'ORCHID' } }],
+            },
+          });
+          await emit({
+            serverContent: {
+              modelTurn: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/pcm;rate=24000',
+                      data: Buffer.from([1, 0, 2, 0]).toString('base64'),
+                    },
+                  },
+                ],
+              },
+              outputTranscription: { text: 'ORCHID' },
+              turnComplete: true,
+            },
+          });
+          expect(mockWs.close).not.toHaveBeenCalled();
+          const status =
+            location === 'top-level'
+              ? { interactionStatus: 'IDLE' }
+              : { serverContent: { interactionStatus: 'IDLE' } };
+          await emit({
+            ...status,
+            usageMetadata: {
+              promptTokenCount: 12,
+              responseTokenCount: 4,
+              thoughtsTokenCount: 3,
+              totalTokenCount: 19,
+            },
+          });
+        });
+        const result = await provider.callApi('Look up the code');
+        expect(result.error).toBeUndefined();
+        expect(result.output).toMatchObject({
+          text: 'Checking. ORCHID',
+          toolCall: { functionCalls: [{ name: 'lookup' }] },
+        });
+        expect(result.audio?.transcript).toBe('Checking. ORCHID');
+        expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(
+          Buffer.from([1, 0, 2, 0]),
+        );
+        expect(result.tokenUsage).toMatchObject({
+          prompt: 22,
+          completion: 6,
+          total: 31,
+          numRequests: 2,
+          completionDetails: { reasoning: 3 },
+        });
+        expect(result.cost).toBeCloseTo((22 * 0.75 + 9 * 4.5) / 1e6);
+        const setup = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup;
+        expect(setup.tools[0].functionDeclarations[0].behavior).toBe('NON_BLOCKING');
+        expect(setup.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'HIGH' });
+        expect(tools[0].functionDeclarations[0]).not.toHaveProperty('behavior');
+      },
+    );
+
+    it('does not send the next user input until Extended Thinking becomes idle', async () => {
+      provider = new GoogleLiveProvider(extendedModel, { config: { apiKey: 'test-api-key' } });
+      connect(async () => {
+        await emit({
+          serverContent: {
+            outputTranscription: { text: 'Working. ' },
+            turnComplete: true,
+            interactionStatus: 'IN_PROGRESS',
+          },
+        });
+        expect(mockWs.send).toHaveBeenCalledTimes(2);
+        await emit({
+          serverContent: { outputTranscription: { text: 'First. ' }, turnComplete: true },
+          interaction_status: 'IDLE',
+        });
+        expect(mockWs.send).toHaveBeenCalledTimes(3);
+        expect(JSON.parse(mockWs.send.mock.calls[2][0] as string)).toEqual({
+          realtimeInput: { text: 'Second question' },
+        });
+        expect(mockWs.close).not.toHaveBeenCalled();
+        await emit({
+          serverContent: { outputTranscription: { text: 'Second.' }, interactionStatus: 'IDLE' },
+        });
+      });
+      const result = await provider.callApi(
+        JSON.stringify([
+          { role: 'user', content: 'First question' },
+          { role: 'user', content: 'Second question' },
+        ]),
+      );
+      expect(result.output).toMatchObject({ text: 'Working. First. Second.' });
+    });
+
+    it('does not truncate standard Live speech when empty or unknown frames arrive', async () => {
+      provider = new GoogleLiveProvider('gemini-3.8-live', { config: { apiKey: 'test-api-key' } });
+      connect(async () => {
+        await emit({ serverContent: { outputTranscription: { text: 'The capital of ' } } });
+        await emit({});
+        await emit({ futureMessage: {} });
+        expect(mockWs.close).not.toHaveBeenCalled();
+        await emit({
+          serverContent: { outputTranscription: { text: 'France is Paris.' }, turnComplete: true },
+        });
+      });
+      expect((await provider.callApi('What is the capital of France?')).output).toMatchObject({
+        text: 'The capital of France is Paris.',
+      });
+    });
+
+    it.each(['gemini-3.8-live', extendedModel])(
+      'marks finite audio boundaries for %s',
+      async (modelName) => {
+        provider = new GoogleLiveProvider(modelName, { config: { apiKey: 'test-api-key' } });
+        connect(async () => {
+          await emit({
+            serverContent: {
+              outputTranscription: { text: 'Paris' },
+              turnComplete: true,
+              interactionStatus: 'IDLE',
+            },
+          });
+        });
+        const result = await provider.callApi(
+          JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                { inlineData: { mimeType: 'audio/pcm;rate=16000', data: 'AQACAA==' } },
+                { text: 'Name the city' },
+              ],
+            },
+          ]),
+        );
+        expect(result.output).toMatchObject({ text: 'Paris' });
+        const sent = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+        expect(sent[0].setup.realtimeInputConfig).toEqual({
+          automaticActivityDetection: { disabled: true },
+        });
+        expect(sent.slice(1)).toEqual([
+          { realtimeInput: { activityStart: {} } },
+          { realtimeInput: { audio: { mimeType: 'audio/pcm;rate=16000', data: 'AQACAA==' } } },
+          { realtimeInput: { text: 'Name the city' } },
+          { realtimeInput: { activityEnd: {} } },
+        ]);
+      },
+    );
+
+    it('waits for the standard Live answer after tool generationComplete and turnComplete', async () => {
+      provider = new GoogleLiveProvider('gemini-3.8-live', {
+        config: {
+          apiKey: 'test-api-key',
+          functionToolCallbacks: { lookup: () => ({ code: 'ORCHID' }) },
+        },
+      });
+      connect(async () => {
+        await emit({ toolCall: { functionCalls: [{ id: '1', name: 'lookup', args: {} }] } });
+        await emit({ serverContent: { generationComplete: true } });
+        await emit({ serverContent: { turnComplete: true } });
+        expect(mockWs.close).not.toHaveBeenCalled();
+        await emit({ serverContent: { outputTranscription: { text: 'ORCHID' } } });
+        await emit({ serverContent: { generationComplete: true } });
+        await emit({ serverContent: { turnComplete: true } });
+      });
+      expect((await provider.callApi('Look up the code')).output).toMatchObject({ text: 'ORCHID' });
+    });
+
+    it.each([false, true])(
+      'waits for a fresh IDLE and answer after a delayed tool response (multi-turn: %s)',
+      async (multiTurn) => {
+        let resolveTool!: (value: { code: string }) => void;
+        const callback = vi.fn(
+          () =>
+            new Promise<{ code: string }>((resolve) => {
+              resolveTool = resolve;
+            }),
+        );
+        let finishFrames!: () => void;
+        const framesFinished = new Promise<void>((resolve) => {
+          finishFrames = resolve;
+        });
+        let closedWhileWaiting = false;
+        let sentWhileWaiting = 0;
+        let closedAfterStaleIdle = false;
+        let sentAfterStaleIdle = 0;
+        let closedBeforeFreshIdle = false;
+        let sentBeforeFreshIdle = 0;
+        const pcm = Buffer.from([1, 0, 2, 0]);
+        provider = new GoogleLiveProvider(extendedModel, {
+          config: { apiKey: 'test-api-key', functionToolCallbacks: { lookup: callback } },
+        });
+        connect(async () => {
+          const toolFrame = emit({
+            toolCall: { functionCalls: [{ id: '1', name: 'lookup', args: {} }] },
+          });
+          // Queue one IDLE before the callback starts, then another with filler
+          // content while it is running. Neither can acknowledge the tool result.
+          const earlyIdleFrame = emit({ interactionStatus: 'IDLE' });
+          await flushAsyncEvents();
+          const idleFrame = emit({
+            serverContent: {
+              outputTranscription: { text: 'Checking. ' },
+              interaction_status: 'IDLE',
+            },
+          });
+          await flushAsyncEvents();
+          closedWhileWaiting = mockWs.close.mock.calls.length > 0;
+          sentWhileWaiting = mockWs.send.mock.calls.length;
+          resolveTool({ code: 'ORCHID' });
+          await Promise.all([toolFrame, earlyIdleFrame, idleFrame]);
+          closedAfterStaleIdle = mockWs.close.mock.calls.length > 0;
+          sentAfterStaleIdle = mockWs.send.mock.calls.length;
+          await emit({
+            serverContent: {
+              modelTurn: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/pcm;rate=24000',
+                      data: pcm.toString('base64'),
+                    },
+                  },
+                ],
+              },
+              outputTranscription: { text: 'ORCHID' },
+              turnComplete: true,
+            },
+          });
+          closedBeforeFreshIdle = mockWs.close.mock.calls.length > 0;
+          sentBeforeFreshIdle = mockWs.send.mock.calls.length;
+          await emit({ interactionStatus: 'IDLE' });
+          if (multiTurn) {
+            await emit({
+              serverContent: { outputTranscription: { text: ' Done' } },
+              interactionStatus: 'IDLE',
+            });
+          }
+          finishFrames();
+        });
+        const result = await provider.callApi(
+          multiTurn
+            ? JSON.stringify([
+                { role: 'user', content: 'Look up the code' },
+                { role: 'user', content: 'Next' },
+              ])
+            : 'Look up the code',
+        );
+        await framesFinished;
+        expect(result.error).toBeUndefined();
+        expect(result.output).toMatchObject({
+          text: multiTurn ? 'Checking. ORCHID Done' : 'Checking. ORCHID',
+        });
+        expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(pcm);
+        expect(closedWhileWaiting).toBe(false);
+        expect(sentWhileWaiting).toBe(2);
+        expect(closedAfterStaleIdle).toBe(false);
+        expect(sentAfterStaleIdle).toBe(3);
+        expect(closedBeforeFreshIdle).toBe(false);
+        expect(sentBeforeFreshIdle).toBe(3);
+        expect(JSON.parse(mockWs.send.mock.calls[2][0] as string)).toEqual({
+          toolResponse: {
+            functionResponses: [{ id: '1', name: 'lookup', response: { code: 'ORCHID' } }],
+          },
+        });
+        if (multiTurn) {
+          expect(JSON.parse(mockWs.send.mock.calls[3][0] as string)).toEqual({
+            realtimeInput: { text: 'Next' },
+          });
+        }
+      },
+    );
+
+    it('waits for a fresh IDLE after the last response in a tool-call batch', async () => {
+      let resolveFirst!: (value: { code: string }) => void;
+      let resolveSecond!: (value: { code: string }) => void;
+      const firstResult = new Promise<{ code: string }>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const secondResult = new Promise<{ code: string }>((resolve) => {
+        resolveSecond = resolve;
+      });
+      const callback = vi
+        .fn()
+        .mockImplementationOnce(() => firstResult)
+        .mockImplementationOnce(() => secondResult);
+      let sentBeforeSecondResult = 0;
+      let closedAfterStaleIdle = false;
+      provider = new GoogleLiveProvider(extendedModel, {
+        config: { apiKey: 'test-api-key', functionToolCallbacks: { lookup: callback } },
+      });
+      connect(async () => {
+        const toolFrame = emit({
+          toolCall: {
+            functionCalls: [
+              { id: '1', name: 'lookup', args: { reservation: 'first' } },
+              { id: '2', name: 'lookup', args: { reservation: 'second' } },
+            ],
+          },
+        });
+        await flushAsyncEvents();
+        resolveFirst({ code: 'ORCHID' });
+        await flushAsyncEvents();
+        const staleIdle = emit({ interactionStatus: 'IDLE' });
+        sentBeforeSecondResult = mockWs.send.mock.calls.length;
+        resolveSecond({ code: 'LILY' });
+        await Promise.all([toolFrame, staleIdle]);
+        closedAfterStaleIdle = mockWs.close.mock.calls.length > 0;
+        await emit({
+          serverContent: { outputTranscription: { text: 'ORCHID and LILY' } },
+          interactionStatus: 'IDLE',
+        });
+      });
+      const result = await provider.callApi('Look up both codes');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toMatchObject({ text: 'ORCHID and LILY' });
+      expect(callback).toHaveBeenCalledTimes(2);
+      expect(sentBeforeSecondResult).toBe(3);
+      expect(closedAfterStaleIdle).toBe(false);
+      expect(
+        mockWs.send.mock.calls.slice(2).map(([message]) => JSON.parse(message as string)),
+      ).toEqual([
+        {
+          toolResponse: {
+            functionResponses: [{ id: '1', name: 'lookup', response: { code: 'ORCHID' } }],
+          },
+        },
+        {
+          toolResponse: {
+            functionResponses: [{ id: '2', name: 'lookup', response: { code: 'LILY' } }],
+          },
+        },
+      ]);
+    });
+
+    it('completes a standard Live tool follow-up containing only binary audio', async () => {
+      const pcm = Buffer.from([1, 0, 2, 0]);
+      provider = new GoogleLiveProvider('gemini-3.8-live', {
+        config: {
+          apiKey: 'test-api-key',
+          timeoutMs: 500,
+          functionToolCallbacks: { lookup: () => ({ code: 'ORCHID' }) },
+        },
+      });
+      connect(async () => {
+        await emit({ toolCall: { functionCalls: [{ id: '1', name: 'lookup', args: {} }] } });
+        await mockWs.onmessage?.({ data: pcm } as WebSocket.MessageEvent);
+        await emit({ serverContent: { generationComplete: true } });
+        await emit({ serverContent: { turnComplete: true } });
+      });
+      const result = await provider.callApi('Look up the code');
+      expect(result.error).toBeUndefined();
+      expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(pcm);
+    });
+
+    it.each([
+      [
+        'gemini-3.8-live',
+        { thinkingConfig: { thinkingLevel: 'LOW' as const } },
+        'gemini-3.8-live does not support thinkingConfig. Use gemini-3.8-live-extended-thinking instead.',
+      ],
+      [
+        extendedModel,
+        { thinkingConfig: { thinkingLevel: 'MINIMAL' as const } },
+        'gemini-3.8-live-extended-thinking supports thinkingLevel LOW, MEDIUM, or HIGH.',
+      ],
+      [
+        extendedModel,
+        { thinkingConfig: { thinkingBudget: 100 } },
+        'gemini-3.8-live-extended-thinking does not support thinkingBudget. Use thinkingLevel LOW, MEDIUM, or HIGH.',
+      ],
+      [
+        'gemini-3.8-live',
+        { proactivity: { proactiveAudio: false } },
+        'Gemini 3.8 Live has permanently enabled proactive audio; proactivity.proactiveAudio cannot be false.',
+      ],
+      [
+        extendedModel,
+        { enableAffectiveDialog: true },
+        'Gemini 3.8 Live does not support enableAffectiveDialog.',
+      ],
+    ])(
+      'rejects unsupported configuration for %s: %j',
+      async (modelName, generationConfig, error) => {
+        provider = new GoogleLiveProvider(modelName, {
+          config: { apiKey: 'test-api-key', generationConfig },
+        });
+        expect((await provider.callApi('Hello')).error).toBe(error);
+        expect(WebSocket).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects blocking tools for Extended Thinking', async () => {
+      provider = new GoogleLiveProvider(extendedModel, {
+        config: {
+          apiKey: 'test-api-key',
+          tools: [{ functionDeclarations: [{ name: 'lookup', behavior: 'BLOCKING' }] }],
+        },
+      });
+      expect((await provider.callApi('Hello')).error).toContain('requires NON_BLOCKING');
+      expect(WebSocket).not.toHaveBeenCalled();
+    });
+
+    it('reports an error if the connection closes after a filler without IDLE', async () => {
+      provider = new GoogleLiveProvider(extendedModel, { config: { apiKey: 'test-api-key' } });
+      connect(async () => {
+        await emit({
+          serverContent: {
+            outputTranscription: { text: 'Working' },
+            turnComplete: true,
+            interactionStatus: 'IN_PROGRESS',
+          },
+        });
+        mockWs.onclose?.({
+          code: 1006,
+          reason: 'Disconnected',
+          wasClean: false,
+        } as WebSocket.CloseEvent);
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.error).toContain('closed unexpectedly');
+      expect(result.output).toBeUndefined();
+    });
+  });
+
+  it('should send client_content for older Live models', async () => {
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket('test'));
 
     await provider.callApi('test prompt');
 
@@ -212,25 +1531,9 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send v1beta realtimeInput for Gemini 3.1 Live prompts', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createTextLiveOptions());
 
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-        simulateTextMessage(mockWs, 'test');
-        simulateCompletionMessage(mockWs);
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket('test'));
 
     await provider.callApi('test prompt');
 
@@ -257,22 +1560,8 @@ describe('GoogleLiveProvider', () => {
     'gemini-2.5-flash-native-audio-preview-12-2025',
     'gemini-live-2.5-flash-preview-native-audio-09-2025',
   ])('should use the v1beta Live protocol for %s', async (modelName) => {
-    provider = new GoogleLiveProvider(modelName, {
-      config: {
-        generationConfig: { response_modalities: ['text'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-        simulateTextMessage(mockWs, 'test');
-        simulateCompletionMessage(mockWs);
-      });
-      return mockWs;
-    });
+    provider = new GoogleLiveProvider(modelName, createTextLiveOptions());
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket('test'));
 
     await provider.callApi('test prompt');
 
@@ -289,6 +1578,1369 @@ describe('GoogleLiveProvider', () => {
     expect(sentMessages[1]).toEqual({ realtimeInput: { text: 'test prompt' } });
   });
 
+  it.each([
+    ['camel-case Google Search', { googleSearch: {} }],
+    ['snake-case Google Search', { google_search: {} }],
+  ])(
+    'should allow function declarations with %s for Gemini Robotics ER 2 Streaming',
+    async (_case, googleSearchTool) => {
+      provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+        config: {
+          generationConfig: { response_modalities: ['text'] },
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'locate_object',
+                  description: 'Locate an object in the current scene.',
+                },
+              ],
+            },
+            googleSearchTool,
+          ],
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateTextMessage(mockWs, 'Object centered at [500, 500].');
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi('Locate the object.');
+
+      expect(WebSocket).toHaveBeenCalledWith(
+        expect.stringContaining('generativelanguage.v1beta.GenerativeService.BidiGenerateContent'),
+      );
+      const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+      expect(sentMessages[0]).toMatchObject({
+        setup: {
+          model: 'models/gemini-robotics-er-2-streaming-preview',
+          generationConfig: { responseModalities: ['TEXT'] },
+        },
+      });
+      expect(sentMessages[0].setup.tools).toEqual([
+        {
+          functionDeclarations: [
+            {
+              name: 'locate_object',
+              description: 'Locate an object in the current scene.',
+            },
+          ],
+        },
+        { googleSearch: {} },
+      ]);
+      expect(sentMessages[0].setup).not.toHaveProperty('outputAudioTranscription');
+      expect(sentMessages[1]).toEqual({ realtimeInput: { text: 'Locate the object.' } });
+      expect(response.output).toMatchObject({ text: 'Object centered at [500, 500].' });
+    },
+  );
+
+  it('should normalize a singleton Google Search tool loaded from an external file', async () => {
+    mockImportModule.mockReset();
+    mockImportModule.mockResolvedValue({
+      getTools: () => ({ google_search: {} }),
+    });
+    provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        generationConfig: { responseModalities: ['TEXT'] },
+        tools: 'file://tools.js:getTools',
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('Locate the object.');
+    mockImportModule.mockReset();
+
+    expect(response.error).toBeUndefined();
+    expect(WebSocket).toHaveBeenCalledTimes(1);
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0].setup.tools).toEqual([{ googleSearch: {} }]);
+  });
+
+  it.each([
+    ['empty response_modalities', { response_modalities: [] }],
+    ['AUDIO responseModalities', { responseModalities: ['AUDIO'] }],
+    ['mixed response_modalities', { response_modalities: ['TEXT', 'AUDIO'] }],
+  ])(
+    'should reject %s for Gemini Robotics ER 2 Streaming before opening a socket',
+    async (_case, generationConfig) => {
+      provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+        config: {
+          generationConfig,
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi('Locate the object.');
+
+      expect(response.error).toContain('only supports TEXT response modality');
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['v1alpha API version', { apiVersion: 'v1alpha' }, 'requires apiVersion v1beta'],
+    ['camel-case code execution', { tools: [{ codeExecution: {} }] }, 'code execution'],
+    ['snake-case code execution', { tools: [{ code_execution: {} }] }, 'code execution'],
+    ['camel-case file search', { tools: [{ fileSearch: {} }] }, 'file search or computer use'],
+    ['snake-case file search', { tools: [{ file_search: {} }] }, 'file search or computer use'],
+    ['camel-case computer use', { tools: [{ computerUse: {} }] }, 'file search or computer use'],
+    ['snake-case computer use', { tools: [{ computer_use: {} }] }, 'file search or computer use'],
+    [
+      'camel-case Google Search retrieval',
+      { tools: [{ googleSearchRetrieval: { dynamicRetrievalConfig: {} } }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'snake-case Google Search retrieval',
+      { tools: [{ google_search_retrieval: { dynamic_retrieval_config: {} } }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'retrieval',
+      { tools: [{ retrieval: {} }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'camel-case MCP server',
+      { tools: [{ mcpServer: { name: 'robot-context' } }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'snake-case MCP server',
+      { tools: [{ mcp_server: { name: 'robot-context' } }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'unknown tool',
+      { tools: [{ customRobotTool: {} }] },
+      'only supports function declarations and Google Search',
+    ],
+    ['empty tool', { tools: [{}] }, 'only supports function declarations and Google Search'],
+    ['top-level responseSchema', { responseSchema: '{"type":"object"}' }, 'structured output'],
+    [
+      'generationConfig.response_schema',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          response_schema: { type: 'OBJECT' },
+        },
+      },
+      'structured output',
+    ],
+    [
+      'generationConfig.response_mime_type',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          response_mime_type: 'application/json',
+        },
+      },
+      'structured output',
+    ],
+    [
+      'generationConfig.responseSchema',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          responseSchema: { type: 'OBJECT' },
+        },
+      },
+      'structured output',
+    ],
+    [
+      'generationConfig.responseMimeType',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          responseMimeType: 'application/json',
+        },
+      },
+      'structured output',
+    ],
+  ])(
+    'should reject unsupported %s for Gemini Robotics ER 2 Streaming before opening a socket',
+    async (_case, unsupportedConfig, error) => {
+      provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+        config: {
+          generationConfig: { responseModalities: ['TEXT'] },
+          ...unsupportedConfig,
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        } as any,
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi('Locate the object.');
+
+      expect(response.error).toContain(error);
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      'response modality',
+      { generationConfig: { responseModalities: ['AUDIO'] } },
+      'only supports TEXT response modality',
+      undefined,
+    ],
+    [
+      'structured output',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          response_mime_type: 'application/json',
+        },
+      },
+      'structured output',
+      undefined,
+    ],
+    [
+      'code execution',
+      {
+        tools: [{ codeExecution: {} }],
+      },
+      'code execution',
+      undefined,
+    ],
+    [
+      'camel-case Google Maps',
+      {
+        tools: [{ googleMaps: {} }],
+      },
+      'Google Maps or URL context',
+      undefined,
+    ],
+    [
+      'camel-case URL context',
+      {
+        tools: [{ urlContext: {} }],
+      },
+      'Google Maps or URL context',
+      undefined,
+    ],
+    [
+      'external snake-case Google Maps',
+      {
+        tools: 'file://tools.js:getTools',
+      },
+      'Google Maps or URL context',
+      [{ google_maps: {} }],
+    ],
+    [
+      'external snake-case URL context',
+      {
+        tools: 'file://tools.js:getTools',
+      },
+      'Google Maps or URL context',
+      [{ url_context: {} }],
+    ],
+  ])(
+    'should reject Robotics ER 2 Streaming %s before starting a worker or opening a socket',
+    async (_case, rejectedConfig, error, externalTools) => {
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      mockSpawn.mockClear();
+      mockImportModule.mockReset();
+      if (externalTools) {
+        mockImportModule.mockResolvedValue({
+          getTools: () => externalTools,
+        });
+      }
+
+      provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+        config: {
+          generationConfig: { responseModalities: ['TEXT'] },
+          ...rejectedConfig,
+          functionToolStatefulApi: {
+            file: 'examples/google-live/counter_api.py',
+            url: 'http://127.0.0.1:8765',
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        } as any,
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi('Locate the object.');
+
+      expect(response.error).toContain(error);
+      expect(mockSpawn).not.toHaveBeenCalled();
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
+
+  it('should default Gemini Robotics ER 2 Streaming to text output', async () => {
+    provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'Object centered at [500, 500].');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('Locate the object.');
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        model: 'models/gemini-robotics-er-2-streaming-preview',
+        generationConfig: { responseModalities: ['TEXT'] },
+      },
+    });
+    expect(sentMessages[0].setup).not.toHaveProperty('outputAudioTranscription');
+    expect(response.output).toMatchObject({ text: 'Object centered at [500, 500].' });
+  });
+
+  it('should serialize Gemini 3.5 Live Translate setup and raw PCM audio input', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+          translationConfig: {
+            targetLanguageCode: 'pl',
+            echoTargetLanguage: true,
+          },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: {
+            outputTranscription: { text: 'Dzien dobry.' },
+            turnComplete: true,
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(WebSocket).toHaveBeenCalledWith(
+      expect.stringContaining('generativelanguage.v1beta.GenerativeService.BidiGenerateContent'),
+    );
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        model: 'models/gemini-3.5-live-translate-preview',
+        generationConfig: {
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+          responseModalities: ['AUDIO'],
+          translationConfig: {
+            targetLanguageCode: 'pl',
+            echoTargetLanguage: true,
+          },
+        },
+      },
+    });
+    expect(sentMessages[0].setup).not.toHaveProperty('inputAudioTranscription');
+    expect(sentMessages[0].setup).not.toHaveProperty('outputAudioTranscription');
+    expect(sentMessages.slice(1)).toEqual([
+      {
+        realtimeInput: {
+          audio: { mimeType: 'audio/pcm;rate=16000', data: 'YXVkaW8=' },
+        },
+      },
+      { realtimeInput: { audioStreamEnd: true } },
+    ]);
+    expect(response.output).toMatchObject({ text: 'Dzien dobry.' });
+  });
+
+  it('should finalize finite Live Translate output after meaningful output becomes quiet', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 120,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        setTimeout(() => {
+          simulateMessage(mockWs, {
+            serverContent: { outputTranscription: { text: 'Dzien ' } },
+          });
+        }, 5);
+        setTimeout(() => {
+          simulateMessage(mockWs, {
+            usageMetadata: {
+              promptTokenCount: 2,
+              responseTokenCount: 3,
+              totalTokenCount: 5,
+            },
+          });
+        }, 20);
+        setTimeout(() => {
+          simulateMessage(mockWs, {
+            serverContent: { outputTranscription: { text: 'dobry.' } },
+          });
+        }, 35);
+      });
+      return mockWs;
+    });
+
+    const responsePromise = provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(35);
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(60);
+    const response = await responsePromise;
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'Dzien dobry.' });
+    expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+  });
+
+  it('should wait through initial Live Translate silence for delayed output', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        setTimeout(() => {
+          simulateMessage(mockWs, {
+            serverContent: { outputTranscription: { text: 'Spóźnione.' } },
+          });
+        }, 440);
+      });
+      return mockWs;
+    });
+
+    const responsePromise = provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(440);
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(250);
+    const response = await responsePromise;
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'Spóźnione.' });
+  });
+
+  it('should enforce a hard deadline while Live Translate streams only silent PCM', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 60,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      mockWs.send.mockImplementation((raw) => {
+        const message = JSON.parse(raw as string);
+        if (!message.realtimeInput?.audioStreamEnd) {
+          return;
+        }
+        for (const delayMs of [15, 30, 45, 60, 75, 90]) {
+          setTimeout(() => {
+            mockWs.onmessage?.({
+              data: Buffer.from([0, 0, 0, 0]),
+            } as WebSocket.MessageEvent);
+          }, delayMs);
+        }
+      });
+      return mockWs;
+    });
+
+    let response: Awaited<ReturnType<GoogleLiveProvider['callApi']>> | undefined;
+    const responsePromise = provider
+      .callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'audio/pcm;rate=16000',
+                  data: 'YXVkaW8=',
+                },
+              },
+            ],
+          },
+        ]),
+      )
+      .then((result) => {
+        response = result;
+        return result;
+      });
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(100);
+    await flushAsyncEvents();
+
+    expect(response?.error).toBe(
+      'WebSocket request timed out after 90ms waiting for Live Translate output',
+    );
+    await responsePromise;
+  });
+
+  it('should allow active Live Translate output to continue beyond the initial hard deadline', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 60,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      mockWs.send.mockImplementation((raw) => {
+        const message = JSON.parse(raw as string);
+        if (!message.realtimeInput?.audioStreamEnd) {
+          return;
+        }
+        for (const delayMs of [15, 30, 45, 60, 75, 90, 105]) {
+          setTimeout(() => {
+            void mockWs.onmessage?.({
+              data: Buffer.from([0xff, 0x7f, 0, 0]),
+            } as WebSocket.MessageEvent);
+          }, delayMs);
+        }
+      });
+      return mockWs;
+    });
+
+    const responsePromise = provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(150);
+    const response = await responsePromise;
+
+    expect(response.error).toBeUndefined();
+    expect(response.audio?.data).toBeTruthy();
+  });
+
+  it('should time out a silent Live Translate response instead of returning empty success', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 80,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const responsePromise = provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(80);
+    const response = await responsePromise;
+
+    expect(response.error).toBe('WebSocket request timed out after 80ms of inactivity');
+    expect(response.output).toBeUndefined();
+  });
+
+  it('should ignore low-amplitude PCM while waiting for Live Translate completion', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 120,
+        apiKey: 'test-api-key',
+      },
+    });
+    const lowAmplitudeTimers: ReturnType<typeof setTimeout>[] = [];
+    let lowAmplitudeFramesSent = 0;
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: { outputTranscription: { text: 'Cicho.' } },
+        });
+        for (const delayMs of [20, 40, 60, 80, 100]) {
+          lowAmplitudeTimers.push(
+            setTimeout(() => {
+              lowAmplitudeFramesSent += 1;
+              mockWs.onmessage?.({
+                data: Buffer.from([1, 0, 0xff, 0xff]),
+              } as WebSocket.MessageEvent);
+            }, delayMs),
+          );
+        }
+      });
+      return mockWs;
+    });
+
+    const responsePromise = provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(60);
+    const response = await responsePromise;
+    for (const timer of lowAmplitudeTimers) {
+      clearTimeout(timer);
+    }
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'Cicho.' });
+    expect(lowAmplitudeFramesSent).toBeLessThan(5);
+  });
+
+  it('should wait for the final Live Translate input before completing a multi-input request', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 200,
+        apiKey: 'test-api-key',
+      },
+    });
+    let completedInputs = 0;
+    let signalSecondInputSent!: () => void;
+    const secondInputSent = new Promise<void>((resolve) => {
+      signalSecondInputSent = resolve;
+    });
+    let releaseSecondFrame!: () => void;
+    const secondFrameReleased = new Promise<void>((resolve) => {
+      releaseSecondFrame = resolve;
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      mockWs.send.mockImplementation((raw) => {
+        const message = JSON.parse(raw as string);
+        if (!message.realtimeInput?.audioStreamEnd) {
+          return;
+        }
+        completedInputs += 1;
+        const inputNumber = completedInputs;
+        if (inputNumber === 2) {
+          signalSecondInputSent();
+        }
+        void (inputNumber === 1 ? Promise.resolve() : secondFrameReleased).then(() => {
+          simulateMessage(mockWs, {
+            serverContent: {
+              outputTranscription: {
+                text: inputNumber === 1 ? 'Pierwsze. ' : 'Drugie.',
+              },
+              turnComplete: true,
+            },
+          });
+        });
+      });
+      return mockWs;
+    });
+
+    const input = {
+      role: 'user',
+      parts: [
+        {
+          inline_data: {
+            mime_type: 'audio/pcm;rate=16000',
+            data: 'YXVkaW8=',
+          },
+        },
+      ],
+    };
+    let requestSettled = false;
+    const responsePromise = provider.callApi(JSON.stringify([input, input])).finally(() => {
+      requestSettled = true;
+    });
+    await secondInputSent;
+    await flushAsyncEvents();
+
+    expect(requestSettled).toBe(false);
+    releaseSecondFrame();
+    const response = await responsePromise;
+
+    expect(completedInputs).toBe(2);
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'Pierwsze. Drugie.' });
+  });
+
+  it('should serialize the English default when Live Translate omits a target language', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          translationConfig: { echoTargetLanguage: true },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        generationConfig: {
+          translationConfig: {
+            targetLanguageCode: 'en',
+            echoTargetLanguage: true,
+          },
+        },
+      },
+    });
+  });
+
+  it.each([
+    ['empty', '   '],
+    ['non-string', 42],
+  ])(
+    'should reject a %s Live Translate target language before opening a socket',
+    async (_case, targetLanguageCode) => {
+      provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+        config: {
+          generationConfig: {
+            translationConfig: { targetLanguageCode },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        } as any,
+      });
+
+      const response = await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'audio/pcm;rate=16000',
+                  data: 'YXVkaW8=',
+                },
+              },
+            ],
+          },
+        ]),
+      );
+
+      expect(response.error).toContain('non-empty targetLanguageCode');
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['IMAGE response_modalities', { response_modalities: ['IMAGE'] }],
+    ['mixed responseModalities', { responseModalities: ['AUDIO', 'IMAGE'] }],
+    ['empty response_modalities', { response_modalities: [] }],
+  ])(
+    'should reject Live Translate with %s before opening a socket',
+    async (_case, responseModalities) => {
+      provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+        config: {
+          generationConfig: {
+            ...responseModalities,
+            translationConfig: { targetLanguageCode: 'es' },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'audio/pcm;rate=16000',
+                  data: 'YXVkaW8=',
+                },
+              },
+            ],
+          },
+        ]),
+      );
+
+      expect(response.error).toContain('only supports AUDIO response modality');
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['tool_choice', { tool_choice: 'none' }],
+    ['toolConfig', { toolConfig: { functionCallingConfig: { mode: 'NONE' } } }],
+    ['tool_config', { tool_config: { function_calling_config: { mode: 'NONE' } } }],
+  ])(
+    'should reject Live Translate %s without tools before opening a socket',
+    async (_case, toolPolicy) => {
+      provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+        config: {
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            translationConfig: { targetLanguageCode: 'es' },
+          },
+          ...toolPolicy,
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        } as any,
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'audio/pcm;rate=16000',
+                  data: 'YXVkaW8=',
+                },
+              },
+            ],
+          },
+        ]),
+      );
+
+      expect(response.error).toContain('does not support tools or instructions');
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['audio/pcm', 'audio/pcm;rate=8000'])(
+    'should reject Live Translate input MIME type %s before opening a socket',
+    async (mimeType) => {
+      provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+        config: {
+          generationConfig: {
+            response_modalities: ['audio'],
+            translationConfig: { targetLanguageCode: 'es' },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: 'YXVkaW8=',
+                },
+              },
+            ],
+          },
+        ]),
+      );
+
+      expect(response.error).toContain('audio/pcm;rate=16000');
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+  ])(
+    'should reject Live Translate PCM input with %s data before opening a socket',
+    async (_case, data) => {
+      provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+        config: {
+          generationConfig: {
+            response_modalities: ['audio'],
+            translationConfig: { targetLanguageCode: 'es' },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'audio/pcm;rate=16000',
+                  data,
+                },
+              },
+            ],
+          },
+        ]),
+      );
+
+      expect(response.error).toContain('non-empty base64 data');
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
+
+  it('should reject non-audio input for Gemini 3.5 Live Translate before opening a socket', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    await expect(provider.callApi('Translate this text')).resolves.toMatchObject({
+      error: expect.stringContaining('only supports raw PCM audio input'),
+    });
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'a translationConfig',
+      { response_modalities: ['audio'] },
+      'requires generationConfig.translationConfig',
+    ],
+    [
+      'tool configuration',
+      {
+        response_modalities: ['audio'],
+        translationConfig: { targetLanguageCode: 'es' },
+      },
+      'does not support tools or instructions',
+    ],
+  ])(
+    'should reject Gemini 3.5 Live Translate with invalid %s',
+    async (_case, generationConfig, error) => {
+      provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+        config: {
+          generationConfig,
+          ...(_case === 'tool configuration'
+            ? { tools: [{ functionDeclarations: [{ name: 'translate_with_tool' }] }] }
+            : {}),
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      await expect(
+        provider.callApi(
+          JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  inline_data: {
+                    mime_type: 'audio/pcm;rate=16000',
+                    data: 'YXVkaW8=',
+                  },
+                },
+              ],
+            },
+          ]),
+        ),
+      ).resolves.toMatchObject({ error: expect.stringContaining(error) });
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      'thinking configuration',
+      {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+          thinkingConfig: { thinkingBudget: 128 },
+        },
+      },
+      'does not support generationConfig.thinkingConfig or generationConfig.thinking_config',
+    ],
+    [
+      'snake-case thinking configuration',
+      {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+          thinking_config: { thinking_budget: 128 },
+        },
+      },
+      'does not support generationConfig.thinkingConfig or generationConfig.thinking_config',
+    ],
+    [
+      'a v1alpha API version override',
+      {
+        apiVersion: 'v1alpha',
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+      },
+      'requires apiVersion v1beta; remove the override or set apiVersion to v1beta',
+    ],
+    [
+      'flex inference',
+      {
+        service_tier: 'flex',
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+      },
+      'does not support flex, priority, batch, or other non-standard inference tiers',
+    ],
+    [
+      'the passthrough priority alias',
+      {
+        passthrough: { serviceTier: 'priority' },
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+      },
+      'does not support flex, priority, batch, or other non-standard inference tiers',
+    ],
+    [
+      'top-level structured output',
+      {
+        responseSchema: '{"type":"object"}',
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+      },
+      'does not support structured output',
+    ],
+    [
+      'snake-case structured output',
+      {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+          response_schema: { type: 'OBJECT' },
+          response_mime_type: 'application/json',
+        },
+      },
+      'does not support structured output',
+    ],
+  ])('should reject Live Translate with unsupported %s', async (_case, config, error) => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        ...config,
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      } as any,
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toContain(error);
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a top-level standard tier', { service_tier: 'standard' }],
+    ['replacement passthrough without a tier', { passthrough: { request_id: 'prompt' } }],
+  ])(
+    'should allow %s to replace provider passthrough tier defaults',
+    async (_case, promptConfig) => {
+      provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+        config: {
+          passthrough: { serviceTier: 'priority' },
+          generationConfig: {
+            outputAudioTranscription: {},
+            translationConfig: { targetLanguageCode: 'es' },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateMessage(mockWs, {
+            serverContent: {
+              outputTranscription: { text: 'Hola.' },
+              turnComplete: true,
+            },
+          });
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'audio/pcm;rate=16000',
+                  data: 'YXVkaW8=',
+                },
+              },
+            ],
+          },
+        ]),
+        { prompt: { config: promptConfig } } as any,
+      );
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toMatchObject({ text: 'Hola.' });
+    },
+  );
+
   it('should honor an explicit v1beta Live protocol override for older models', async () => {
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
@@ -298,15 +2950,7 @@ describe('GoogleLiveProvider', () => {
         apiKey: 'test-api-key',
       },
     });
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-        simulateTextMessage(mockWs, 'test');
-        simulateCompletionMessage(mockWs);
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket('test'));
 
     await provider.callApi('test prompt');
 
@@ -335,14 +2979,7 @@ describe('GoogleLiveProvider', () => {
         apiKey: 'test-api-key',
       },
     });
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-        simulateCompletionMessage(mockWs);
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket());
 
     await provider.callApi('test prompt');
 
@@ -376,14 +3013,7 @@ describe('GoogleLiveProvider', () => {
         apiKey: 'test-api-key',
       },
     });
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-        simulateCompletionMessage(mockWs);
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket());
 
     await provider.callApi('test prompt');
 
@@ -396,22 +3026,9 @@ describe('GoogleLiveProvider', () => {
 
   it('should send mixed text and image parts as Gemini 3.1 realtime input', async () => {
     const debugSpy = vi.spyOn(logger, 'debug');
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['audio'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createAudioLiveOptions());
 
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-        simulateCompletionMessage(mockWs);
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket());
 
     await provider.callApi(
       JSON.stringify([
@@ -441,21 +3058,8 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should terminate finite Gemini 3.1 Live audio input', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['audio'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-        simulateCompletionMessage(mockWs);
-      });
-      return mockWs;
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createAudioLiveOptions());
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket());
 
     await provider.callApi(
       JSON.stringify([
@@ -471,21 +3075,8 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send mixed Gemini 3.1 Live text before ending the audio stream', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['audio'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-        simulateCompletionMessage(mockWs);
-      });
-      return mockWs;
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createAudioLiveOptions());
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket());
 
     await provider.callApi(
       JSON.stringify([
@@ -544,16 +3135,10 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should process Gemini 3.1 multi-field server content before finalizing', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: {
-          response_modalities: ['audio'],
-          outputAudioTranscription: {},
-        },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider(
+      'gemini-3.1-flash-live-preview',
+      createAudioTranscriptionOptions(),
+    );
 
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
@@ -592,16 +3177,10 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('does not attach an empty WAV when only a transcription arrives without audio bytes', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: {
-          response_modalities: ['audio'],
-          outputAudioTranscription: {},
-        },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider(
+      'gemini-3.1-flash-live-preview',
+      createAudioTranscriptionOptions(),
+    );
 
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
@@ -626,13 +3205,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should preserve padded Gemini Live audio chunks when assembling the WAV response', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['audio'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createAudioLiveOptions());
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -663,13 +3236,7 @@ describe('GoogleLiveProvider', () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: { apiKey: 'test-api-key', timeoutMs: 500 },
     });
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket(undefined, false));
 
     const response = await provider.callApi(
       JSON.stringify([
@@ -686,13 +3253,7 @@ describe('GoogleLiveProvider', () => {
     provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
       config: { apiKey: 'test-api-key', timeoutMs: 500 },
     });
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        simulateSetupMessage(mockWs);
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket(undefined, false));
 
     const response = await provider.callApi(
       JSON.stringify([
@@ -711,13 +3272,7 @@ describe('GoogleLiveProvider', () => {
       provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
         config: { apiKey: 'test-api-key', timeoutMs: 500 },
       });
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          simulateSetupMessage(mockWs);
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createRespondingSocket(undefined, false));
 
       const response = await provider.callApi(
         JSON.stringify([
@@ -748,17 +3303,7 @@ describe('GoogleLiveProvider', () => {
       return mockWs;
     });
 
-    const response = await provider.callApi(
-      JSON.stringify([
-        {
-          role: 'user',
-          parts: [
-            { inline_data: { mime_type: 'image/jpeg', data: 'ZnJhbWUx' } },
-            { inline_data: { mime_type: 'image/png', data: 'ZnJhbWUy' } },
-          ],
-        },
-      ]),
-    );
+    const response = await provider.callApi(JSON.stringify([createVideoFrameContent()]));
 
     expect(response.error).toBeUndefined();
     expect(mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string))).toEqual([
@@ -771,13 +3316,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should report Gemini 3.1 Live token usage and modality-aware cost', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['text'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createTextLiveOptions());
 
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
@@ -822,13 +3361,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should not double-bill a Gemini 3.1 Live still image as a video frame', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['text'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createTextLiveOptions());
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -862,13 +3395,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should bill Gemini 3.1 Live video frames using the per-second input rate', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['text'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createTextLiveOptions());
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -891,29 +3418,13 @@ describe('GoogleLiveProvider', () => {
       return mockWs;
     });
 
-    const response = await provider.callApi(
-      JSON.stringify([
-        {
-          role: 'user',
-          parts: [
-            { inline_data: { mime_type: 'image/jpeg', data: 'ZnJhbWUx' } },
-            { inline_data: { mime_type: 'image/png', data: 'ZnJhbWUy' } },
-          ],
-        },
-      ]),
-    );
+    const response = await provider.callApi(JSON.stringify([createVideoFrameContent()]));
 
     expect(response.cost).toBeCloseTo(2 * 0.000033333333333333335 + (100 * 4.5) / 1e6, 12);
   });
 
   it('should not count a Gemini 3.1 Live still image as an additional video second', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['text'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createTextLiveOptions());
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -992,13 +3503,10 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should price a documented Gemini 2.5 Live model when usage metadata is returned', async () => {
-    provider = new GoogleLiveProvider('gemini-live-2.5-flash-preview-native-audio-09-2025', {
-      config: {
-        generationConfig: { response_modalities: ['audio'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider(
+      'gemini-live-2.5-flash-preview-native-audio-09-2025',
+      createAudioLiveOptions(),
+    );
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -1024,13 +3532,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should not double-bill Gemini Live thinking tokens included in the response count', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['text'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createTextLiveOptions());
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -1065,13 +3567,10 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should apply the Gemini Live cached-input rate and report cached usage', async () => {
-    provider = new GoogleLiveProvider('gemini-live-2.5-flash-preview-native-audio-09-2025', {
-      config: {
-        generationConfig: { response_modalities: ['audio'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider(
+      'gemini-live-2.5-flash-preview-native-audio-09-2025',
+      createAudioLiveOptions(),
+    );
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -1112,13 +3611,10 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should infer fully cached Gemini Live audio usage without cache modality details', async () => {
-    provider = new GoogleLiveProvider('gemini-live-2.5-flash-preview-native-audio-09-2025', {
-      config: {
-        generationConfig: { response_modalities: ['audio'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider(
+      'gemini-live-2.5-flash-preview-native-audio-09-2025',
+      createAudioLiveOptions(),
+    );
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -1145,14 +3641,167 @@ describe('GoogleLiveProvider', () => {
     expect(response.cost).toBeCloseTo((1_000 * 0.075 + 500 * 12) / 1e6, 12);
   });
 
-  it('should prefer closing Gemini Live usage over an interim usage frame', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+  it('should bill only audio modality tokens for Gemini 3.5 Live Translate', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
-        generationConfig: { response_modalities: ['audio'] },
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
         timeoutMs: 500,
         apiKey: 'test-api-key',
       },
     });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: {
+            outputTranscription: { text: 'Dzien dobry.' },
+            turnComplete: true,
+          },
+          usageMetadata: {
+            promptTokenCount: 110,
+            responseTokenCount: 20,
+            totalTokenCount: 130,
+            promptTokensDetails: [
+              { modality: 'TEXT', tokenCount: 100 },
+              { modality: 'AUDIO', tokenCount: 10 },
+            ],
+            responseTokensDetails: [{ modality: 'AUDIO', tokenCount: 20 }],
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.tokenUsage).toMatchObject({ prompt: 110, completion: 20, total: 130 });
+    expect(response.cost).toBeCloseTo((10 * 3.5 + 20 * 21) / 1e6, 12);
+  });
+
+  it.each([
+    { name: 'first turn', detailedTurn: 1, snakeCase: false, modality: 'AUDIO', empty: false },
+    {
+      name: 'last turn with snake-case usage',
+      detailedTurn: 2,
+      snakeCase: true,
+      modality: 'AUDIO',
+      empty: false,
+    },
+    {
+      name: 'an audio rate override',
+      detailedTurn: 1,
+      snakeCase: false,
+      modality: 'AUDIO',
+      empty: false,
+      audioCost: 0.001,
+    },
+    {
+      name: 'text-only details',
+      detailedTurn: 1,
+      snakeCase: false,
+      modality: 'TEXT',
+      empty: false,
+    },
+    { name: 'empty details', detailedTurn: 1, snakeCase: false, modality: 'AUDIO', empty: true },
+  ])(
+    'should apply Live Translate audio fallback per turn with $name',
+    async ({ detailedTurn, snakeCase, modality, empty, audioCost }) => {
+      provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+        config: {
+          generationConfig: {
+            outputAudioTranscription: {},
+            translationConfig: { targetLanguageCode: 'pl' },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          ...(audioCost === undefined ? {} : { audioCost }),
+        },
+      });
+      let completedInputs = 0;
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+        });
+        mockWs.send.mockImplementation((raw) => {
+          if (!JSON.parse(raw as string).realtimeInput?.audioStreamEnd) {
+            return;
+          }
+          completedInputs += 1;
+          const promptDetails = empty ? [] : [{ modality, tokenCount: 100 }];
+          const responseDetails = empty ? [] : [{ modality, tokenCount: 20 }];
+          const usage = snakeCase
+            ? {
+                prompt_token_count: 100,
+                response_token_count: 20,
+                total_token_count: 120,
+                ...(completedInputs === detailedTurn && {
+                  prompt_tokens_details: promptDetails,
+                  response_tokens_details: responseDetails,
+                }),
+              }
+            : {
+                promptTokenCount: 100,
+                responseTokenCount: 20,
+                totalTokenCount: 120,
+                ...(completedInputs === detailedTurn && {
+                  promptTokensDetails: promptDetails,
+                  responseTokensDetails: responseDetails,
+                }),
+              };
+          simulateMessage(mockWs, {
+            serverContent: {
+              outputTranscription: { text: 'Dzien dobry.' },
+              turnComplete: true,
+            },
+            [snakeCase ? 'usage_metadata' : 'usageMetadata']: usage,
+          });
+        });
+        return mockWs;
+      });
+      const input = {
+        role: 'user',
+        parts: [{ inline_data: { mime_type: 'audio/pcm;rate=16000', data: 'YXVkaW8=' } }],
+      };
+
+      const response = await provider.callApi(JSON.stringify([input, input]));
+
+      expect(completedInputs).toBe(2);
+      expect(response.error).toBeUndefined();
+      expect(response.tokenUsage).toMatchObject({
+        prompt: 200,
+        completion: 40,
+        total: 240,
+        numRequests: 2,
+      });
+      const audioTurns = modality === 'TEXT' ? 1 : 2;
+      expect(response.cost).toBeCloseTo(
+        audioTurns * (100 * (audioCost ?? 3.5 / 1e6) + 20 * (audioCost ?? 21 / 1e6)),
+        12,
+      );
+    },
+  );
+
+  it('should prefer closing Gemini Live usage over an interim usage frame', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createAudioLiveOptions());
 
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
@@ -1168,11 +3817,7 @@ describe('GoogleLiveProvider', () => {
         simulateMessage(mockWs, { serverContent: { generationComplete: true } });
         simulateMessage(mockWs, {
           serverContent: { turnComplete: true },
-          usageMetadata: {
-            promptTokenCount: 100,
-            responseTokenCount: 20,
-            totalTokenCount: 120,
-          },
+          usageMetadata: createLiveTokenUsage(),
         });
       });
       return mockWs;
@@ -1190,13 +3835,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should aggregate per-turn Gemini Live usage including tool and thought tokens', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['text'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createTextLiveOptions());
 
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
@@ -1252,13 +3891,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should preserve Gemini Live usage reported with a tool-call frame', async () => {
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: { response_modalities: ['text'] },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', createTextLiveOptions());
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -1267,11 +3900,7 @@ describe('GoogleLiveProvider', () => {
           toolCall: {
             functionCalls: [{ name: 'lookup', args: { q: 'test' }, id: 'tool-1' }],
           },
-          usageMetadata: {
-            promptTokenCount: 100,
-            responseTokenCount: 20,
-            totalTokenCount: 120,
-          },
+          usageMetadata: createLiveTokenUsage(),
         });
         simulateTextMessage(mockWs, 'done');
         simulateMessage(mockWs, { serverContent: { generationComplete: true } });
@@ -1300,16 +3929,10 @@ describe('GoogleLiveProvider', () => {
 
   it('should advance Gemini 3.1 multi-turn prompts after generationComplete', async () => {
     const debugSpy = vi.spyOn(logger, 'debug');
-    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
-      config: {
-        generationConfig: {
-          response_modalities: ['audio'],
-          outputAudioTranscription: {},
-        },
-        timeoutMs: 500,
-        apiKey: 'test-api-key',
-      },
-    });
+    provider = new GoogleLiveProvider(
+      'gemini-3.1-flash-live-preview',
+      createAudioTranscriptionOptions(),
+    );
 
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
@@ -1766,9 +4389,7 @@ describe('GoogleLiveProvider', () => {
   it('should handle timeout', async () => {
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
         timeoutMs: 100,
         apiKey: 'test-api-key',
       },
@@ -1866,9 +4487,7 @@ describe('GoogleLiveProvider', () => {
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
         timeoutMs: 500,
         apiKey: 'test-api-key',
         tools: [
@@ -1940,15 +4559,10 @@ describe('GoogleLiveProvider', () => {
     try {
       provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
         config: {
-          generationConfig: {
-            response_modalities: ['text'],
-          },
+          generationConfig: createTextResponseModalities(),
           timeoutMs: 500,
           apiKey: 'test-api-key',
-          functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
-            url: 'http://127.0.0.1:5000',
-          },
+          functionToolStatefulApi: createCounterApiOptions('http://127.0.0.1:5000'),
         },
       });
 
@@ -1957,14 +4571,7 @@ describe('GoogleLiveProvider', () => {
         json: vi.fn().mockResolvedValue({ counter: 5 }),
       } as any);
 
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          simulateSetupMessage(mockWs);
-          simulateCompletionMessage(mockWs);
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createRespondingSocket());
 
       const response = await provider.callApi('test prompt');
       await flushAsyncEvents();
@@ -1976,29 +4583,70 @@ describe('GoogleLiveProvider', () => {
     }
   });
 
+  it.each([
+    { keyName: 'GOOGLE_API_KEY', ambientKeys: false },
+    { keyName: 'GEMINI_API_KEY', ambientKeys: false },
+    { keyName: 'GOOGLE_API_KEY', ambientKeys: true },
+    { keyName: 'GEMINI_API_KEY', ambientKeys: true },
+  ])(
+    'uses provider-scoped $keyName with ambient keys=$ambientKeys for Live',
+    async ({ keyName, ambientKeys }) => {
+      const restoreEnv = mockProcessEnv({
+        GOOGLE_API_KEY: ambientKeys ? 'ambient-google-key' : undefined,
+        GEMINI_API_KEY: ambientKeys ? 'ambient-gemini-key' : undefined,
+      });
+      try {
+        vi.mocked(WebSocket).mockImplementation(function () {
+          setImmediate(() => {
+            mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+            simulateSetupMessage(mockWs);
+            simulateTextMessage(mockWs, 'Move forward.');
+            simulateCompletionMessage(mockWs);
+          });
+          return mockWs;
+        });
+        const scopedProvider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+          config: { timeoutMs: 500 },
+          env: { [keyName]: 'provider-key' },
+        });
+
+        const result = await scopedProvider.callApi('Plan the next movement.');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toMatchObject({ text: 'Move forward.' });
+        expect(vi.mocked(WebSocket).mock.calls[0][0]).toBe(
+          'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=provider-key',
+        );
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
+  it('prefers an explicit Live API key over provider-scoped keys', () => {
+    const scopedProvider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: { apiKey: 'explicit-key' },
+      env: { GOOGLE_API_KEY: 'provider-google-key', GEMINI_API_KEY: 'provider-gemini-key' },
+    });
+
+    expect(scopedProvider.getApiKey()).toBe('explicit-key');
+  });
+
   it('should throw an error if API key is not set', async () => {
     const providerWithoutKey = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
       },
     });
 
-    const originalGoogleApiKey = process.env.GOOGLE_API_KEY;
-    const originalGeminiApiKey = process.env.GEMINI_API_KEY;
-    mockProcessEnv({ GOOGLE_API_KEY: undefined });
-    mockProcessEnv({ GEMINI_API_KEY: undefined });
-
-    await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
-      'Google authentication is not configured',
-    );
-
-    if (originalGoogleApiKey) {
-      mockProcessEnv({ GOOGLE_API_KEY: originalGoogleApiKey });
-    }
-    if (originalGeminiApiKey) {
-      mockProcessEnv({ GEMINI_API_KEY: originalGeminiApiKey });
+    const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: undefined, GEMINI_API_KEY: undefined });
+    try {
+      await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
+        'For the Live API, set apiKey in the provider config, GOOGLE_API_KEY, or GEMINI_API_KEY.',
+      );
+      expect(WebSocket).not.toHaveBeenCalled();
+    } finally {
+      restoreEnv();
     }
   });
 
@@ -2031,9 +4679,7 @@ describe('GoogleLiveProvider', () => {
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
         timeoutMs: 500,
         apiKey: 'test-api-key',
         tools: [
@@ -2106,9 +4752,7 @@ describe('GoogleLiveProvider', () => {
     });
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
         timeoutMs: 500,
         apiKey: 'test-api-key',
         tools: [
@@ -2160,29 +4804,16 @@ describe('GoogleLiveProvider', () => {
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
         timeoutMs: 500,
         apiKey: 'test-api-key',
         tool_choice: 'none',
         tools: 'file://tools.js:getTools',
-        functionToolStatefulApi: {
-          file: 'examples/google-live/counter_api.py',
-          url: 'http://127.0.0.1:8765',
-        },
+        functionToolStatefulApi: createCounterApiOptions('http://127.0.0.1:8765'),
       },
     });
 
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        setImmediate(() => {
-          mockWs.onclose?.({ wasClean: true, code: 1000 } as WebSocket.CloseEvent);
-        });
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createGracefulClosingSocket());
 
     await provider.callApi('Do not use tools');
 
@@ -2201,9 +4832,7 @@ describe('GoogleLiveProvider', () => {
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
         timeoutMs: 500,
         apiKey: 'test-api-key',
         tool_choice: 'none',
@@ -2214,15 +4843,7 @@ describe('GoogleLiveProvider', () => {
       },
     });
 
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        setImmediate(() => {
-          mockWs.onclose?.({ wasClean: true, code: 1000 } as WebSocket.CloseEvent);
-        });
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createGracefulClosingSocket());
 
     await provider.callApi('Do not use tools');
 
@@ -2236,9 +4857,7 @@ describe('GoogleLiveProvider', () => {
   it('should preserve non-function tools when function calling is disabled', async () => {
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
         timeoutMs: 500,
         apiKey: 'test-api-key',
         tool_choice: 'none',
@@ -2246,15 +4865,7 @@ describe('GoogleLiveProvider', () => {
       },
     });
 
-    vi.mocked(WebSocket).mockImplementation(function () {
-      setImmediate(() => {
-        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-        setImmediate(() => {
-          mockWs.onclose?.({ wasClean: true, code: 1000 } as WebSocket.CloseEvent);
-        });
-      });
-      return mockWs;
-    });
+    vi.mocked(WebSocket).mockImplementation(createGracefulClosingSocket());
 
     await provider.callApi('Use search but no functions');
 
@@ -2268,21 +4879,10 @@ describe('GoogleLiveProvider', () => {
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
         timeoutMs: 500,
         apiKey: 'test-api-key',
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                name: 'addNumbers',
-                description: 'Add two numbers together',
-              },
-            ],
-          },
-        ],
+        tools: [createAddNumbersTool()],
         functionToolCallbacks: {
           addNumbers: mockAddNumbers,
         },
@@ -2386,16 +4986,7 @@ describe('GoogleLiveProvider', () => {
     const response = await provider.callApi('What is the sum?', {
       prompt: {
         config: {
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'addNumbers',
-                  description: 'Add two numbers together',
-                },
-              ],
-            },
-          ],
+          tools: [createAddNumbersTool()],
           functionToolCallbacks: {
             addNumbers: promptAddNumbers,
           },
@@ -2471,15 +5062,10 @@ describe('GoogleLiveProvider', () => {
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
-        generationConfig: {
-          response_modalities: ['text'],
-        },
+        generationConfig: createTextResponseModalities(),
         timeoutMs: 500,
         apiKey: 'test-api-key',
-        functionToolStatefulApi: {
-          file: 'examples/google-live/counter_api.py',
-          url: 'http://127.0.0.1:5000',
-        },
+        functionToolStatefulApi: createCounterApiOptions('http://127.0.0.1:5000'),
         tools: [
           {
             functionDeclarations: [
@@ -2564,36 +5150,26 @@ describe('GoogleLiveProvider', () => {
 
       const providerWithCustomPython = new GoogleLiveProvider('gemini-2.0-flash-exp', {
         config: {
-          generationConfig: {
-            response_modalities: ['text'],
-          },
+          generationConfig: createTextResponseModalities(),
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
+            file: 'mock-counter-api.py',
             url: 'http://127.0.0.1:8765',
             pythonExecutable: '/custom/python/path',
           },
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          simulateSetupMessage(mockWs);
-          simulateTextMessage(mockWs, 'Test response');
-          simulateCompletionMessage(mockWs);
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createRespondingSocket('Test response'));
 
       await providerWithCustomPython.callApi('Test prompt');
 
       expect(validatePythonPathMock).toHaveBeenCalledWith('/custom/python/path', true);
 
-      expect(mockSpawn).toHaveBeenCalledWith('/custom/python/bin', [
-        'examples/google-live/counter_api.py',
-      ]);
+      expect(mockSpawn).toHaveBeenCalledWith('/custom/python/bin', ['mock-counter-api.py'], {
+        env: process.env,
+      });
     });
 
     it('should handle errors when spawning Python process', async () => {
@@ -2610,29 +5186,12 @@ describe('GoogleLiveProvider', () => {
       console.error = mockError;
 
       try {
-        const providerWithPythonError = new GoogleLiveProvider('gemini-2.0-flash-exp', {
-          config: {
-            generationConfig: {
-              response_modalities: ['text'],
-            },
-            timeoutMs: 500,
-            apiKey: 'test-api-key',
-            functionToolStatefulApi: {
-              file: 'examples/google-live/counter_api.py',
-              url: 'http://127.0.0.1:8765',
-            },
-          },
-        });
+        const providerWithPythonError = new GoogleLiveProvider(
+          'gemini-2.0-flash-exp',
+          createStatefulApiOptions(),
+        );
 
-        vi.mocked(WebSocket).mockImplementation(function () {
-          setImmediate(() => {
-            mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-            simulateSetupMessage(mockWs);
-            simulateTextMessage(mockWs, 'Test response');
-            simulateCompletionMessage(mockWs);
-          });
-          return mockWs;
-        });
+        vi.mocked(WebSocket).mockImplementation(createRespondingSocket('Test response'));
 
         await providerWithPythonError.callApi('Test prompt');
 
@@ -2661,31 +5220,19 @@ describe('GoogleLiveProvider', () => {
       );
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
-      const providerWithStatefulApi = new GoogleLiveProvider('gemini-2.0-flash-exp', {
-        config: {
-          generationConfig: {
-            response_modalities: ['text'],
-          },
-          timeoutMs: 500,
-          apiKey: 'test-api-key',
-          functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
-            url: 'http://127.0.0.1:8765',
-          },
-        },
-      });
+      const providerWithStatefulApi = new GoogleLiveProvider(
+        'gemini-2.0-flash-exp',
+        createStatefulApiOptions(),
+      );
 
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          simulateSetupMessage(mockWs);
-          simulateTextMessage(mockWs, 'Test response');
-          simulateCompletionMessage(mockWs);
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createRespondingSocket('Test response'));
 
-      await providerWithStatefulApi.callApi('Test prompt');
+      await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+        providerWithStatefulApi.callApi('Test prompt'),
+      );
+      expect(mockSpawn).toHaveBeenCalledWith(expect.any(String), expect.any(Array), {
+        env: expect.objectContaining({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }),
+      });
 
       expect(mockStdout.on).toHaveBeenCalledWith('data', expect.any(Function));
       expect(mockStderr.on).toHaveBeenCalledWith('data', expect.any(Function));
@@ -2702,37 +5249,20 @@ describe('GoogleLiveProvider', () => {
       validatePythonPathMock.mockResolvedValueOnce('/env/python3');
 
       try {
-        const providerWithEnvPython = new GoogleLiveProvider('gemini-2.0-flash-exp', {
-          config: {
-            generationConfig: {
-              response_modalities: ['text'],
-            },
-            timeoutMs: 500,
-            apiKey: 'test-api-key',
-            functionToolStatefulApi: {
-              file: 'examples/google-live/counter_api.py',
-              url: 'http://127.0.0.1:8765',
-            },
-          },
-        });
+        const providerWithEnvPython = new GoogleLiveProvider(
+          'gemini-2.0-flash-exp',
+          createStatefulApiOptions(),
+        );
 
-        vi.mocked(WebSocket).mockImplementation(function () {
-          setImmediate(() => {
-            mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-            simulateSetupMessage(mockWs);
-            simulateTextMessage(mockWs, 'Test response');
-            simulateCompletionMessage(mockWs);
-          });
-          return mockWs;
-        });
+        vi.mocked(WebSocket).mockImplementation(createRespondingSocket('Test response'));
 
         await providerWithEnvPython.callApi('Test prompt');
 
         expect(validatePythonPathMock).toHaveBeenCalledWith('/env/python3', true);
 
-        expect(mockSpawn).toHaveBeenCalledWith('/env/python3', [
-          'examples/google-live/counter_api.py',
-        ]);
+        expect(mockSpawn).toHaveBeenCalledWith('/env/python3', ['mock-counter-api.py'], {
+          env: process.env,
+        });
       } finally {
         if (originalEnv) {
           mockProcessEnv({ PROMPTFOO_PYTHON: originalEnv });
@@ -2759,19 +5289,10 @@ describe('GoogleLiveProvider', () => {
       );
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
-      const providerWithCleanup = new GoogleLiveProvider('gemini-2.0-flash-exp', {
-        config: {
-          generationConfig: {
-            response_modalities: ['text'],
-          },
-          timeoutMs: 500,
-          apiKey: 'test-api-key',
-          functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
-            url: 'http://127.0.0.1:8765',
-          },
-        },
-      });
+      const providerWithCleanup = new GoogleLiveProvider(
+        'gemini-2.0-flash-exp',
+        createStatefulApiOptions(),
+      );
 
       vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
@@ -2792,6 +5313,18 @@ describe('GoogleLiveProvider', () => {
   });
 
   describe('Audio configurations', () => {
+    const createClosingSocket = () =>
+      function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          // Trigger onclose immediately to resolve the promise
+          setImmediate(() => {
+            mockWs.onclose?.(createCleanSocketClose() as WebSocket.CloseEvent);
+          });
+        });
+        return mockWs;
+      };
+
     it('should correctly format proactivity configuration', async () => {
       provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
         config: {
@@ -2807,20 +5340,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createClosingSocket());
 
       await provider.callApi('test prompt');
 
@@ -2842,20 +5362,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createClosingSocket());
 
       await provider.callApi('test prompt');
 
@@ -2881,20 +5388,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createClosingSocket());
 
       await provider.callApi('test prompt');
 
@@ -2921,20 +5415,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createClosingSocket());
 
       await provider.callApi('test prompt');
 
@@ -2965,20 +5446,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createClosingSocket());
 
       await provider.callApi('test prompt');
 
@@ -2992,30 +5460,12 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should not include audio configurations when they are not specified', async () => {
-      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
-        config: {
-          generationConfig: {
-            response_modalities: ['audio'],
-          },
-          timeoutMs: 500,
-          apiKey: 'test-api-key',
-        },
-      });
+      provider = new GoogleLiveProvider(
+        'gemini-2.5-flash-preview-native-audio-dialog',
+        createAudioLiveOptions(),
+      );
 
-      vi.mocked(WebSocket).mockImplementation(function () {
-        setImmediate(() => {
-          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
-          // Trigger onclose immediately to resolve the promise
-          setImmediate(() => {
-            mockWs.onclose?.({
-              wasClean: true,
-              code: 1000,
-              reason: 'Test close',
-            } as WebSocket.CloseEvent);
-          });
-        });
-        return mockWs;
-      });
+      vi.mocked(WebSocket).mockImplementation(createClosingSocket());
 
       await provider.callApi('test prompt');
 
@@ -3063,21 +5513,7 @@ describe('GoogleLiveProvider', () => {
           generationConfig: { response_modalities: ['text'] },
           timeoutMs: 500,
           apiKey: 'test-api-key',
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'external_function',
-                  description: 'An external function',
-                  parameters: {
-                    type: 'OBJECT',
-                    properties: { param: { type: 'STRING' } },
-                    required: ['param'],
-                  },
-                },
-              ],
-            },
-          ],
+          tools: [createExternalFunctionTool()],
           functionToolCallbacks: {
             external_function: 'file://test/callbacks.js:testFunction',
           },
@@ -3125,21 +5561,7 @@ describe('GoogleLiveProvider', () => {
             generationConfig: { response_modalities: ['text'] },
             timeoutMs: 500,
             apiKey: 'test-api-key',
-            tools: [
-              {
-                functionDeclarations: [
-                  {
-                    name: 'external_function',
-                    description: 'An external function',
-                    parameters: {
-                      type: 'OBJECT',
-                      properties: { param: { type: 'STRING' } },
-                      required: ['param'],
-                    },
-                  },
-                ],
-              },
-            ],
+            tools: [createExternalFunctionTool()],
             functionToolCallbacks: {
               external_function: 'file://C:/test/callbacks.js:testFunction',
             },

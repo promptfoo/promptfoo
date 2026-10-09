@@ -7,20 +7,13 @@ import { fetchWithProxy } from './fetch/index';
 export const TOKEN_REFRESH_BUFFER_MS = 60000;
 
 /**
- * A lock object used to deduplicate concurrent token refresh attempts.
- * Callers acquire the lock by creating one and storing it; subsequent callers
- * await the existing lock's promise instead of starting a new refresh.
- */
-export interface TokenRefreshLock {
-  promise: Promise<void>;
-}
-
-/**
  * Configuration for OAuth token requests.
  * Values should already be rendered/resolved (no templates).
  */
 export interface OAuthTokenConfig {
   tokenUrl: string;
+  /** Discovered endpoints must not redirect configured credentials elsewhere. */
+  redirect?: RequestRedirect;
   grantType: 'client_credentials' | 'password';
   clientId?: string;
   clientSecret?: string;
@@ -74,6 +67,7 @@ export async function fetchOAuthToken(config: OAuthTokenConfig): Promise<OAuthTo
 
   const response = await fetchWithProxy(config.tokenUrl, {
     method: 'POST',
+    redirect: config.redirect,
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },

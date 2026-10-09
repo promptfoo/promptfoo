@@ -2,14 +2,14 @@ import { useCallback } from 'react';
 
 import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
-import { SpanData } from '@promptfoo/tracing/store';
 import { Download } from 'lucide-react';
 import TraceTimeline from './TraceTimeline';
+import type { TraceSpan } from '@promptfoo/types/tracing';
 
 export interface Trace {
   traceId: string;
   testCaseId?: string | number;
-  spans?: Partial<SpanData>[];
+  spans?: Partial<TraceSpan>[];
 }
 
 interface TraceViewProps {

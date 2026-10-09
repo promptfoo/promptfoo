@@ -211,6 +211,40 @@ describe('docker model runner provider', () => {
     );
 
     describe('DMRChatCompletionProvider', () => {
+      it.each(['docker:chat:ai/model', 'docker:completion:ai/model'])(
+        'cancels %s during model discovery without dispatching inference',
+        async (id) => {
+          const controller = new AbortController();
+          vi.mocked(fetchWithCache).mockImplementationOnce(async (_url, options) => {
+            expect(options?.signal).toBe(controller.signal);
+            controller.abort();
+            return {
+              data: { data: [{ id: 'ai/model' }] },
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            };
+          });
+          const provider = createDockerProvider(id) as DMRChatCompletionProvider;
+          await expect(
+            provider.callApi('fixture', undefined, { abortSignal: controller.signal }),
+          ).rejects.toMatchObject({ name: 'AbortError' });
+          expect(fetchWithCache).toHaveBeenCalledOnce();
+        },
+      );
+
+      it('does not inspect models after cancellation', async () => {
+        const provider = createDockerProvider('docker:chat:ai/model');
+
+        await expect(
+          (provider as DMRChatCompletionProvider).callApi('test prompt', undefined, {
+            abortSignal: AbortSignal.abort(),
+          }),
+        ).rejects.toMatchObject({ name: 'AbortError' });
+
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      });
+
       it('warns when model is not found but continues execution', async () => {
         // First call is for model check, second is for actual API call
         vi.mocked(fetchWithCache)
