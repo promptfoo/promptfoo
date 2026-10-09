@@ -8,6 +8,12 @@ import { SnowflakeCortexProvider } from '../../src/providers/snowflake';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { mockProcessEnv } from '../util/utils';
 
+const createUncachedPromptContext = () => ({
+  vars: {},
+  prompt: { raw: 'Hello', label: 'Hello' },
+  bustCache: true,
+});
+
 const model = 'tenant/custom-model:stable';
 const providerId = `snowflake:${model}`;
 const completion = {
@@ -67,11 +73,7 @@ describe('Snowflake public provider loading', () => {
 
     expect(provider).toBeInstanceOf(SnowflakeCortexProvider);
     expect(provider.id()).toBe('customer-cortex');
-    const result = await provider.callApi('Hello', {
-      vars: {},
-      prompt: { raw: 'Hello', label: 'Hello' },
-      bustCache: true,
-    });
+    const result = await provider.callApi('Hello', createUncachedPromptContext());
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe(
@@ -110,11 +112,7 @@ describe('Snowflake public provider loading', () => {
       { env: { SNOWFLAKE_API_KEY: 'suite-token' } },
     );
 
-    await provider.callApi('Hello', {
-      vars: {},
-      prompt: { raw: 'Hello', label: 'Hello' },
-      bustCache: true,
-    });
+    await provider.callApi('Hello', createUncachedPromptContext());
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:1234/cortex/api/v2/cortex/inference:complete',
       expect.objectContaining({
@@ -140,11 +138,7 @@ describe('Snowflake public provider loading', () => {
         { env: { SNOWFLAKE_API_KEY: 'suite-token', OPENAI_ORGANIZATION: 'suite-organization' } },
       );
 
-      await provider.callApi('Hello', {
-        vars: {},
-        prompt: { raw: 'Hello', label: 'Hello' },
-        bustCache: true,
-      });
+      await provider.callApi('Hello', createUncachedPromptContext());
       expect(fetchMock).toHaveBeenCalledWith(
         'https://configured-account.snowflakecomputing.com/api/v2/cortex/inference:complete',
         expect.objectContaining({
@@ -157,7 +151,18 @@ describe('Snowflake public provider loading', () => {
     },
   );
 
-  it('loads a YAML provider file with caller environment overriding file defaults', async () => {
+  it.each([
+    {
+      name: 'uses caller env before provider-file defaults',
+      override: undefined,
+      token: 'suite-token',
+    },
+    {
+      name: 'uses explicit provider options before file env',
+      override: 'caller-token',
+      token: 'caller-token',
+    },
+  ])('$name', async ({ override, token }) => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'snowflake-loader-'));
     fs.writeFileSync(
       path.join(tempDir, 'provider.yaml'),
@@ -165,18 +170,15 @@ describe('Snowflake public provider loading', () => {
     );
     const provider = await loadApiProvider('file://provider.yaml', {
       basePath: tempDir,
-      env: { SNOWFLAKE_API_KEY: 'caller-token' },
+      env: { SNOWFLAKE_API_KEY: 'suite-token' },
+      options: override ? { env: { SNOWFLAKE_API_KEY: override } } : undefined,
     });
 
-    await provider.callApi('Hello', {
-      vars: {},
-      prompt: { raw: 'Hello', label: 'Hello' },
-      bustCache: true,
-    });
+    await provider.callApi('Hello', createUncachedPromptContext());
     expect(fetchMock).toHaveBeenCalledWith(
       'https://file-account.snowflakecomputing.com/api/v2/cortex/inference:complete',
       expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer caller-token' }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${token}` }),
       }),
     );
   });
@@ -213,11 +215,7 @@ describe('Snowflake public provider loading', () => {
           },
         ]);
         const pending = registry.execute(provider, () =>
-          provider.callApi('Hello', {
-            vars: {},
-            prompt: { raw: 'Hello', label: 'Hello' },
-            bustCache: true,
-          }),
+          provider.callApi('Hello', createUncachedPromptContext()),
         );
         await vi.runAllTimersAsync();
         const result = await pending;

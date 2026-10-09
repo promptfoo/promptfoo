@@ -15,6 +15,22 @@ import { TELEMETRY_EVENTS, Telemetry, TelemetryEventSchema } from '../src/teleme
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
+const { loadPostHog } = vi.hoisted(() => ({ loadPostHog: vi.fn() }));
+
+vi.mock('node:module', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:module')>();
+  return {
+    ...actual,
+    createRequire: (url: string | URL) => {
+      const require = actual.createRequire(url);
+      return Object.assign(
+        (id: string) => (id === 'posthog-node' ? loadPostHog() : require(id)),
+        require,
+      );
+    },
+  };
+});
+
 vi.mock('../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
   fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
@@ -126,6 +142,7 @@ describe('Telemetry', () => {
   let sendEventSpy: MockInstance;
 
   beforeEach(() => {
+    loadPostHog.mockReset();
     originalEnv = { ...process.env };
     setupTelemetryEnv(originalEnv);
 
@@ -160,6 +177,24 @@ describe('Telemetry', () => {
     telemetry.record('eval_ran', { foo: 'bar' });
     expect(sendEventSpy).not.toHaveBeenCalled();
     expect(fetchWithProxySpy).not.toHaveBeenCalled();
+    expect(loadPostHog).not.toHaveBeenCalled();
+  });
+
+  it('does not load the SDK for testing or deferred initialization', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0', IS_TESTING: 'true' });
+    const telemetry = new Telemetry(false);
+    expect(loadPostHog).not.toHaveBeenCalled();
+    telemetry.record('eval_ran', {});
+    await telemetry.shutdown();
+    expect(loadPostHog).not.toHaveBeenCalled();
+  });
+
+  it('does not load an unused SDK during shutdown when telemetry is enabled', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0', IS_TESTING: undefined });
+    resetModulesAndMockFetch();
+    const { Telemetry } = await import('../src/telemetry');
+    await new Telemetry(false).shutdown();
+    expect(loadPostHog).not.toHaveBeenCalled();
   });
 
   it('should defer identity until explicit initialization when requested', () => {
@@ -348,9 +383,7 @@ describe('Telemetry', () => {
 
       resetModulesAndMockFetch();
 
-      vi.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
+      loadPostHog.mockReturnValue({ PostHog: mockPostHog });
 
       const telemetryModule = await import('../src/telemetry');
       const telemetry = new telemetryModule.Telemetry();
@@ -375,9 +408,7 @@ describe('Telemetry', () => {
 
       resetModulesAndMockFetch();
 
-      vi.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
+      loadPostHog.mockReturnValue({ PostHog: mockPostHog });
 
       const telemetryModule = await import('../src/telemetry');
       const telemetry = new telemetryModule.Telemetry();
@@ -413,9 +444,7 @@ describe('Telemetry', () => {
       resetModulesAndMockFetch();
       vi.clearAllMocks();
 
-      vi.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
+      loadPostHog.mockReturnValue({ PostHog: mockPostHog });
 
       vi.doMock('../src/constants', async () => {
         const actual = await vi.importActual('../src/constants');
@@ -716,6 +745,97 @@ describe('Telemetry', () => {
 
       await expect(telemetry.shutdown()).resolves.not.toThrow();
     });
+  });
+
+  describe('reporting request lifecycle', () => {
+    beforeEach(() => {
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0', IS_TESTING: 'true' });
+      fetchWithProxySpy.mockReset();
+    });
+
+    afterEach(() => {
+      fetchWithProxySpy.mockReset();
+    });
+
+    it('aborts a stalled reporting request without retrying it', async () => {
+      let signal: AbortSignal | undefined;
+      fetchWithProxySpy.mockImplementation((_url, options) => {
+        signal = options?.signal ?? undefined;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal?.reason), { once: true });
+        });
+      });
+
+      new Telemetry(false).record('eval_ran', {});
+
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(false);
+      expect(fetchWithProxySpy).toHaveBeenCalledWith(
+        'https://r.promptfoo.app/',
+        expect.objectContaining({ disableTransientRetries: true }),
+      );
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(signal?.aborted).toBe(true);
+      expect(fetchWithProxySpy).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('cancels an unused streaming response body and clears its deadline', async () => {
+      const cancel = vi.fn();
+      const response = new Response(new ReadableStream({ cancel }));
+      fetchWithProxySpy.mockResolvedValue(response);
+
+      new Telemetry(false).record('eval_ran', {});
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(fetchWithProxySpy.mock.calls[0][1]?.signal?.aborted).toBe(false);
+    });
+
+    it('keeps the deadline active while response disposal is pending', async () => {
+      let signal: AbortSignal | undefined;
+      const cancel = vi.fn(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(signal?.reason), { once: true });
+          }),
+      );
+      fetchWithProxySpy.mockImplementation((_url, options) => {
+        signal = options?.signal ?? undefined;
+        return Promise.resolve(new Response(new ReadableStream({ cancel })));
+      });
+
+      new Telemetry(false).record('eval_ran', {});
+      await vi.advanceTimersByTimeAsync(0);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(signal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(signal?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each(['request', 'body'])(
+      'silently clears the deadline after a %s failure',
+      async (failure) => {
+        if (failure === 'request') {
+          fetchWithProxySpy.mockRejectedValue(new Error('Synthetic reporting failure'));
+        } else {
+          fetchWithProxySpy.mockResolvedValue(
+            new Response(
+              new ReadableStream({
+                cancel: () => Promise.reject(new Error('Synthetic disposal failure')),
+              }),
+            ),
+          );
+        }
+
+        expect(() => new Telemetry(false).record('eval_ran', {})).not.toThrow();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
   });
 
   describe('telemetry disabled opt-out', () => {

@@ -15,9 +15,15 @@ import CodexSecurityConfiguration, {
 } from './CodexSecurityConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
-import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+import {
+  isBedrockAgentProviderId,
+  isLocalOpenAiProviderType,
+  isOpenAiChatProviderId,
+  withLocalProviderType,
+} from './helpers';
+import { getProviderEditorKind } from './providerCatalog';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -98,6 +104,7 @@ function ProviderConfigEditor({
     clearTargetConfigValidation,
   } = useRedTeamTargetConfigValidation();
   const isRedTeam = mode === 'redteam';
+  const editorKind = getProviderEditorKind(providerType);
   const isTargetConfigInvalid = useCallback(
     () => isRedTeam && Boolean(useRedTeamTargetConfigValidation.getState().targetConfigError),
     [isRedTeam],
@@ -112,7 +119,7 @@ function ProviderConfigEditor({
   const [rawConfigJson, setRawConfigJson] = useState<string>(() =>
     isRedTeam && targetConfigDraft !== null
       ? targetConfigDraft
-      : JSON.stringify(provider.config, null, 2),
+      : (JSON.stringify(provider.config, null, 2) ?? '{}'),
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
   const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
@@ -171,7 +178,7 @@ function ProviderConfigEditor({
   useEffect(() => {
     if (previousProviderType.current !== providerType) {
       previousProviderType.current = providerType;
-      setRawConfigJson(JSON.stringify(provider.config, null, 2));
+      setRawConfigJson(JSON.stringify(provider.config, null, 2) ?? '{}');
       if (isRedTeam) {
         let cleared = false;
         try {
@@ -307,6 +314,11 @@ function ProviderConfigEditor({
       updatedTarget.config[field] = value;
     }
 
+    updatedTarget.config = withLocalProviderType(
+      updatedTarget.id,
+      updatedTarget.config,
+      providerType,
+    );
     providerRef.current = updatedTarget;
     setProvider(updatedTarget);
   };
@@ -433,23 +445,7 @@ function ProviderConfigEditor({
       if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
         errors.push('Maximum scan cost must be greater than 0');
       }
-    } else if (
-      [
-        'openai',
-        'anthropic',
-        'google',
-        'vertex',
-        'mistral',
-        'cohere',
-        'groq',
-        'deepseek',
-        'azure',
-        'bedrock',
-        'openrouter',
-        'perplexity',
-        'cerebras',
-      ].includes(providerType || '')
-    ) {
+    } else if (editorKind === 'foundation') {
       // Foundation model providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Model ID is required');
@@ -472,7 +468,7 @@ function ProviderConfigEditor({
       ) {
         errors.push('Top P must be between 0 and 1');
       }
-    } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
+    } else if (editorKind === 'agent') {
       // Agent frameworks validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Python file path is required');
@@ -480,13 +476,60 @@ function ProviderConfigEditor({
         errors.push('Provider ID must start with file:// for Python agent files');
       }
     } else if (
-      ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec', 'openinterpreter'].includes(
-        providerType || '',
-      )
+      isLocalOpenAiProviderType(providerType) ||
+      [
+        'a2a',
+        'javascript',
+        'python',
+        'go',
+        'custom',
+        'mcp',
+        'exec',
+        'openinterpreter',
+        'bedrock-agent',
+        'claude-agent-sdk',
+      ].includes(providerType || '')
     ) {
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Provider ID is required');
+      }
+      if (isLocalOpenAiProviderType(providerType)) {
+        if (isOpenAiChatProviderId(provider.id)) {
+          const servedModel = provider.id.slice('openai:chat:'.length);
+          if (
+            (servedModel && !servedModel.trim()) ||
+            (!servedModel &&
+              (typeof provider.config?.model !== 'string' || !provider.config.model.trim()))
+          ) {
+            errors.push('A served model is required in the provider ID or config.model');
+          }
+        } else {
+          errors.push(
+            'Local provider ID must be openai:chat:<model> or openai:chat with config.model',
+          );
+        }
+      }
+      if (providerType === 'bedrock-agent') {
+        if (isBedrockAgentProviderId(provider.id)) {
+          const pathAgentId = provider.id
+            .split(':')
+            .slice(provider.id.startsWith('bedrock:') ? 2 : 1)
+            .join(':');
+          // Match the constructor: an explicit configured ID takes precedence.
+          const agentId = provider.config?.agentId || pathAgentId;
+          if (typeof agentId !== 'string' || !agentId.trim()) {
+            errors.push('Agent ID is required in the provider path or config.agentId');
+          }
+        } else {
+          errors.push('Bedrock agent ID must use bedrock:agents or bedrock-agent:');
+        }
+        if (
+          typeof provider.config?.agentAliasId !== 'string' ||
+          !provider.config.agentAliasId.trim()
+        ) {
+          errors.push('Agent Alias ID is required');
+        }
       }
       if (
         providerType === 'openinterpreter' &&
@@ -557,6 +600,7 @@ function ProviderConfigEditor({
     return !hasErrors;
   }, [
     providerType,
+    editorKind,
     provider,
     structuredProvider,
     bodyError,
@@ -584,7 +628,7 @@ function ProviderConfigEditor({
 
   return (
     <div>
-      {(providerType === 'custom' || providerType === 'openinterpreter') && (
+      {editorKind === 'custom' && (
         <CustomTargetConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
@@ -597,7 +641,7 @@ function ProviderConfigEditor({
         />
       )}
 
-      {providerType === 'http' && (
+      {editorKind === 'http' && (
         <HttpEndpointConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
@@ -611,7 +655,7 @@ function ProviderConfigEditor({
         />
       )}
 
-      {providerType === 'websocket' && (
+      {editorKind === 'websocket' && (
         <WebSocketEndpointConfiguration
           selectedTarget={structuredProvider}
           updateWebSocketTarget={updateWebSocketTarget}
@@ -619,14 +663,14 @@ function ProviderConfigEditor({
         />
       )}
 
-      {providerType === 'browser' && (
+      {editorKind === 'browser' && (
         <BrowserAutomationConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
         />
       )}
 
-      {providerType === 'a2a' && (
+      {editorKind === 'a2a' && (
         <A2AEndpointConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
@@ -637,55 +681,18 @@ function ProviderConfigEditor({
         />
       )}
 
-      {providerType === 'codex-security' && (
+      {editorKind === 'codex-security' && (
         <CodexSecurityConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
         />
       )}
 
-      {/* Foundation model providers */}
-      {[
-        'openai',
-        'anthropic',
-        'google',
-        'vertex',
-        'mistral',
-        'cohere',
-        'groq',
-        'deepseek',
-        'azure',
-        'bedrock',
-        'openrouter',
-        'perplexity',
-        'cerebras',
-      ].includes(providerType || '') && (
+      {editorKind === 'foundation' && (
         <FoundationModelConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           providerType={providerType || ''}
-        />
-      )}
-
-      {/* Cloud and enterprise providers - use custom config for now */}
-      {[
-        'sagemaker',
-        'databricks',
-        'cloudflare-ai',
-        'fireworks',
-        'together',
-        'replicate',
-        'huggingface',
-      ].includes(providerType || '') && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={handleCustomRawConfigJsonChange}
-          bodyError={customConfigError ?? bodyError}
-          providerType={providerType}
-          onConfigErrorChange={handleCustomConfigErrorChange}
-          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
@@ -712,56 +719,12 @@ function ProviderConfigEditor({
         </Alert>
       )}
 
-      {/* Specialized providers - use custom config for now */}
-      {['xai', 'ai21', 'aimlapi', 'hyperbolic', 'fal', 'voyage'].includes(providerType || '') && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={handleCustomRawConfigJsonChange}
-          bodyError={customConfigError ?? bodyError}
-          providerType={providerType}
-          onConfigErrorChange={handleCustomConfigErrorChange}
-          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
-        />
-      )}
-
-      {/* Local model providers - use custom config for now */}
-      {['ollama', 'vllm', 'localai', 'llamafile', 'llama.cpp', 'text-generation-webui'].includes(
-        providerType || '',
-      ) && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={handleCustomRawConfigJsonChange}
-          bodyError={customConfigError ?? bodyError}
-          providerType={providerType}
-          onConfigErrorChange={handleCustomConfigErrorChange}
-          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
-        />
-      )}
-
       {/* Agent frameworks */}
-      {AGENT_FRAMEWORKS.includes(providerType || '') && (
+      {editorKind === 'agent' && (
         <AgentFrameworkConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           agentType={providerType || ''}
-        />
-      )}
-
-      {/* Custom providers */}
-      {['javascript', 'python', 'go', 'mcp', 'exec'].includes(providerType || '') && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={handleCustomRawConfigJsonChange}
-          bodyError={customConfigError ?? bodyError}
-          providerType={providerType}
-          onConfigErrorChange={handleCustomConfigErrorChange}
-          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 

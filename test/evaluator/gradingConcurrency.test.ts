@@ -5,7 +5,9 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { clearCache, getCache } from '../../src/cache';
 import { evaluate, runEval } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import telemetry from '../../src/telemetry';
 import {
   type ApiProvider,
   type RateLimitRegistryRef,
@@ -249,7 +251,7 @@ describeEvaluator('evaluator grading concurrency', () => {
             statusText: 'Forbidden',
           },
         },
-        tokenUsage: createEmptyTokenUsage(),
+        tokenUsage: { ...createEmptyTokenUsage(), prompt: 7, total: 7, numRequests: 1 },
       })),
     };
     const judge: ApiProvider = {
@@ -282,6 +284,9 @@ describeEvaluator('evaluator grading concurrency', () => {
     expect(judge.callApi).toHaveBeenCalledTimes(1);
     expect(summary.results).toHaveLength(1);
     expect(summary.results[0].vars.topic).toBe('alpha');
+    expect(evalRecord.prompts[0].metrics?.testPassCount).toBe(1);
+    expect(evalRecord.prompts[0].metrics?.tokenUsage?.prompt).toBe(7);
+    expect(evalRecord.prompts[0].metrics?.tokenUsage?.numRequests).toBe(1);
   });
 
   it('groups model-graded assert-set children by provider id when maxConcurrency is 1', async () => {
@@ -618,6 +623,74 @@ describeEvaluator('evaluator grading concurrency', () => {
     errorSpy.mockRestore();
   });
 
+  it.each(['grouped', 'serial', 'concurrent'] as const)(
+    'preserves interruption when the last %s row is cancelled during embedding grading',
+    async (mode) => {
+      const { default: logger } = await import('../../src/logger');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      const controller = new AbortController();
+      const reason = new Error('custom embedding shutdown');
+      const target: ApiProvider = {
+        id: () => 'target-provider',
+        callApi: async () => ({ output: 'Target output', tokenUsage: createEmptyTokenUsage() }),
+      };
+      const embedding: ApiProvider = {
+        id: () => 'embedding-judge',
+        callApi: async () => ({ output: '' }),
+        supportsEmbeddingCancellation: true,
+        callEmbeddingApi: async (
+          _input: string,
+          _context?: unknown,
+          options?: { abortSignal?: AbortSignal },
+        ) => {
+          controller.abort(reason);
+          options?.abortSignal?.throwIfAborted();
+          throw new Error('Expected grading signal');
+        },
+      };
+      const suite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('Test prompt')],
+        extensions: ['file://unused-extension.js'],
+        tests: [
+          {
+            vars: { topic: 'alpha' },
+            options: { runSerially: mode === 'serial' },
+            assert: [{ type: 'similar', value: 'Expected', provider: embedding }],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const recordEvent = vi.spyOn(telemetry, 'record');
+      const save = vi.spyOn(evalRecord, 'save');
+      try {
+        await evaluate(suite, evalRecord, {
+          maxConcurrency: mode === 'grouped' ? 1 : 2,
+          abortSignal: controller.signal,
+        });
+        const result = (await evalRecord.toEvaluateSummary()).results.find(
+          (row) => row.vars.topic === 'alpha',
+        );
+        expect(result?.error).toBe('Aborted: custom embedding shutdown');
+        expect(result?.response?.output).toBe('Target output');
+        expect(vi.mocked(runExtensionHook).mock.calls.map((call) => call[1])).not.toContain(
+          'afterAll',
+        );
+        expect(recordEvent.mock.calls.some(([event]) => event === 'eval_ran')).toBe(false);
+        expect(save).not.toHaveBeenCalled();
+        expect(
+          errorSpy.mock.calls.some(([message]) =>
+            String(message).includes('Assertion grading failed'),
+          ),
+        ).toBe(false);
+      } finally {
+        errorSpy.mockRestore();
+        recordEvent.mockRestore();
+        save.mockRestore();
+      }
+    },
+  );
+
   it('suppresses the error log when deferred grading throws AbortException under abort', async () => {
     const { default: logger } = await import('../../src/logger');
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
@@ -883,7 +956,7 @@ describeEvaluator('evaluator grading concurrency', () => {
   });
 
   it('keeps parallel assertion dispatch when the grouping queue is NOT active', async () => {
-    // Regression guard for the `? 1 : ASSERTIONS_MAX_CONCURRENCY` ternary in
+    // Regression guard for the `? 1 : PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` ternary in
     // runAssertions. Without the queue present (non-deferred concurrent eval),
     // per-test assertions must still fan out so we don't silently 3x-throttle
     // normal eval users.
