@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { and, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreResultMedia, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -39,6 +40,7 @@ import {
   accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
+  getErrorTokenUsage,
 } from '../util/tokenUsageUtils';
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
@@ -75,8 +77,27 @@ function projectOutputMetadata<T>(
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
 ): T {
+  if (options.checkpointOutput && options.stripOutput && !asRecord(metadata)) {
+    return stripMediaReferences(sanitizeForDb(metadata)) as T;
+  }
+  const metadataIsMedia =
+    options.checkpointOutput &&
+    options.stripOutput &&
+    extractBlobHashesFromValue(metadata).length > 0;
   let projected = metadata;
-  if (options.stripOutput && metadata && responseMetadata && typeof metadata === 'object') {
+  if (metadataIsMedia) {
+    // A media record can carry bytes under arbitrary payload keys. Keep only
+    // an explicitly owned checkpoint wrapper for independent input projection.
+    const record = asRecord(metadata)!;
+    projected = (
+      record.interruptedStrategy === true
+        ? {
+            interruptedStrategy: true,
+            completedTargetResponses: record.completedTargetResponses,
+          }
+        : stripMediaReferences(sanitizeForDb(metadata))
+    ) as T;
+  } else if (options.stripOutput && metadata && responseMetadata && typeof metadata === 'object') {
     projected = Object.fromEntries(
       Object.entries(metadata).flatMap(([key, value]) => {
         if (
@@ -100,7 +121,7 @@ function projectOutputMetadata<T>(
       ...entry,
       ...('prompt' in entry && options.stripPromptText ? { prompt: '[prompt stripped]' } : {}),
       // Old stored rows and non-persisted JSON/JSONL exports also cross this boundary.
-      response: projectProviderResponse(entry.response, options)!,
+      response: projectProviderResponse(entry.response, { ...options, checkpointOutput: true })!,
     }),
     options.stripOutput ? (value) => stripMediaReferences(sanitizeForDb(value)) : undefined,
   );
@@ -110,7 +131,35 @@ interface ResponseProjectionOptions {
   stripMetadata: boolean;
   stripOutput: boolean;
   stripPromptText: boolean;
+  checkpointOutput?: boolean;
 }
+
+const CHECKPOINT_INPUT_FIELDS = new Set([
+  'prompt',
+  'input',
+  'materializedVars',
+  'inputMaterialization',
+]);
+
+// Numeric/boolean ProviderResponse controls have an unambiguous non-output role
+// on a media record. Validate them independently so malformed payload aliases
+// cannot hide in them. Ordinary non-media responses keep their diagnostics.
+const CHECKPOINT_CONTROL_SCHEMAS = {
+  cached: z.boolean(),
+  cost: z.number(),
+  incurredCost: z.number(),
+  materializationHandled: z.boolean(),
+  isBase64: z.boolean(),
+  logProbs: z.array(z.number()),
+  latencyMs: z.number(),
+  isRefusal: z.boolean(),
+  conversationEnded: z.boolean(),
+  guardrails: z.object({
+    flaggedInput: z.boolean().optional(),
+    flaggedOutput: z.boolean().optional(),
+    flagged: z.boolean().optional(),
+  }),
+};
 
 function projectProviderResponse(
   response: ProviderResponse | undefined,
@@ -129,7 +178,7 @@ function projectProviderResponse(
     return response;
   }
 
-  const projectedResponse: ProviderResponse & { turns?: unknown } = options.stripMetadata
+  let projectedResponse: ProviderResponse & { turns?: unknown } = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
 
@@ -143,6 +192,41 @@ function projectProviderResponse(
   }
   if (options.stripPromptText && 'prompt' in projectedResponse) {
     projectedResponse.prompt = '[prompt stripped]';
+  }
+  if (options.checkpointOutput && options.stripOutput) {
+    if (extractBlobHashesFromValue(projectedResponse).length > 0) {
+      // Direct media records may contain unknown inline payload aliases. Retain
+      // only declared inputs, controls, and independently projected children.
+      const tokenUsage = getErrorTokenUsage(projectedResponse);
+      projectedResponse = {
+        ...Object.fromEntries(
+          Object.entries(projectedResponse).filter(
+            ([key]) => CHECKPOINT_INPUT_FIELDS.has(key) || key === 'metadata' || key === 'turns',
+          ),
+        ),
+        ...Object.fromEntries(
+          Object.entries(CHECKPOINT_CONTROL_SCHEMAS).flatMap(([key, schema]) => {
+            const parsed = schema.safeParse(projectedResponse[key as keyof ProviderResponse]);
+            return parsed.success ? [[key, parsed.data]] : [];
+          }),
+        ),
+        ...(tokenUsage && { tokenUsage }),
+        output: '[output stripped]',
+      };
+    }
+    for (const [key, value] of Object.entries(projectedResponse)) {
+      // Inputs and recursively projected metadata/turns retain their own
+      // controls, even when the response also carries a direct BlobRef.
+      if (CHECKPOINT_INPUT_FIELDS.has(key) || key === 'metadata' || key === 'turns') {
+        continue;
+      }
+      Object.defineProperty(projectedResponse, key, {
+        value: stripMediaReferences(sanitizeForDb(value)),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
   }
   if (projectedResponse.metadata) {
     projectedResponse.metadata = projectOutputMetadata(
@@ -460,6 +544,73 @@ function sanitizeForDb<T>(obj: T): T {
 }
 
 /**
+ * Detach JSON-compatible fields without joining their binary strings into one
+ * JSON string. Native traversal preserves toJSON and circular/undefined behavior;
+ * string values are restored by path so user data cannot collide with a sentinel.
+ */
+function snapshotForMediaExtraction<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  const ancestors: object[] = [];
+  const paths: string[][] = [];
+  const strings: Array<{ path: string[]; value: string }> = [];
+  try {
+    const serialized = JSON.stringify(obj, function (key, value: unknown) {
+      while (ancestors.length && ancestors[ancestors.length - 1] !== this) {
+        ancestors.pop();
+        paths.pop();
+      }
+      const path = ancestors.length ? [...paths[paths.length - 1], key] : [];
+      if (typeof value === 'string') {
+        strings.push({ path, value });
+        return '';
+      }
+      if (value && typeof value === 'object') {
+        if (ancestors.includes(value)) {
+          return undefined;
+        }
+        ancestors.push(value);
+        paths.push(path);
+      }
+      return value;
+    });
+    if (serialized === undefined) {
+      return (Array.isArray(obj) ? [] : null) as T;
+    }
+    let snapshot: unknown = JSON.parse(serialized);
+    for (const entry of strings) {
+      if (entry.path.length === 0) {
+        snapshot = entry.value;
+        continue;
+      }
+      let holder = snapshot as Record<string, unknown>;
+      for (const key of entry.path.slice(0, -1)) {
+        holder = holder[key] as Record<string, unknown>;
+      }
+      Object.defineProperty(holder, entry.path[entry.path.length - 1], {
+        value: entry.value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return snapshot as T;
+  } catch (error) {
+    // Never silently truncate payloads if even their string-free structure is
+    // too large. Other non-serializable SDK values keep the existing fallback.
+    if (error instanceof RangeError && error.message.includes('Invalid string length')) {
+      throw error;
+    }
+    logger.debug('snapshotForMediaExtraction: Failed to serialize object, using fallback', {
+      valueType: typeof obj,
+      isArray: Array.isArray(obj),
+    });
+    return (Array.isArray(obj) ? [] : null) as T;
+  }
+}
+
+/**
  * Sanitize a per-test-case field for persistence: strips circular refs,
  * collapses class instances (e.g. live SDK clients that leaked in via
  * `defaultTest.options.provider`), and redacts credential fields (`apiKey`,
@@ -675,7 +826,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
 }
 
 function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(response: T): T {
-  if (!response) {
+  if (!response || !asRecord(response)) {
     return response;
   }
 
@@ -1047,8 +1198,8 @@ export default class EvalResult {
     // In-memory evaluations and failed-write reconstruction have no persisted
     // parent guaranteed to own blob references. Keep their media inline.
     const fields = {
-      response: sanitizeForDb(result.response),
-      metadata: sanitizeForDb(persistedMetadata),
+      response: snapshotForMediaExtraction(result.response),
+      metadata: snapshotForMediaExtraction(persistedMetadata),
     };
     const processed = persist
       ? await extractAndStoreResultMedia(fields, {
@@ -1110,7 +1261,10 @@ export default class EvalResult {
     for (const result of results) {
       const processed = isBlobStorageEnabled()
         ? await extractAndStoreResultMedia(
-            { response: sanitizeForDb(result.response), metadata: sanitizeForDb(result.metadata) },
+            {
+              response: snapshotForMediaExtraction(result.response),
+              metadata: snapshotForMediaExtraction(result.metadata),
+            },
             { evalId, testIdx: result.testIdx, promptIdx: result.promptIdx },
           )
         : { response: result.response, metadata: result.metadata };
@@ -1361,8 +1515,8 @@ export default class EvalResult {
     } = serializeResultProviderRefs(this);
     const processed = await extractAndStoreResultMedia(
       {
-        response: sanitizeForDb(rest.response),
-        metadata: sanitizeForDb(
+        response: snapshotForMediaExtraction(rest.response),
+        metadata: snapshotForMediaExtraction(
           persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
         ),
       },

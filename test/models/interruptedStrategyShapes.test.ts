@@ -1,0 +1,494 @@
+import { createHash, randomUUID } from 'node:crypto';
+
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getBlobByHash } from '../../src/blobs';
+import { collectBlobHashes } from '../../src/blobs/blobRefs';
+import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
+import EvalResult, {
+  getStripFlags,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
+import { safeJsonStringify } from '../../src/util/json';
+import { createEvaluateResult } from '../factories/eval';
+
+import type { BlobRef } from '../../src/contracts/blobs';
+import type { EvaluateResult } from '../../src/types';
+
+const bytes = Buffer.alloc(2048, 81);
+const outputHash = createHash('sha256').update(bytes).digest('hex');
+const outputRef: BlobRef = {
+  hash: outputHash,
+  uri: `promptfoo://blob/${outputHash}`,
+  mimeType: 'image/png',
+  sizeBytes: bytes.length,
+  provider: 'filesystem',
+};
+const outputData = `data:image/png;base64,${bytes.toString('base64')}`;
+const promptMedia = `data:image/png;base64,${Buffer.alloc(2048, 82).toString('base64')}`;
+const inputMedia = `data:image/png;base64,${Buffer.alloc(2048, 83).toString('base64')}`;
+
+// Legacy imports deserialize permissive JSON rows without widening the runtime DTO.
+function legacyResult(response: unknown, metadata: unknown = {}): EvaluateResult {
+  return JSON.parse(JSON.stringify({ ...createEvaluateResult(), response, metadata }));
+}
+
+const outputShapes: Array<{ name: string; response: unknown }> = [
+  { name: 'direct reference', response: outputRef },
+  {
+    name: 'direct media payload',
+    response: {
+      ...outputRef,
+      data: bytes.toString('base64'),
+      payload: { opaque: bytes.toString('base64') },
+    },
+  },
+  { name: 'reference wrapper', response: { blobRef: outputRef } },
+  { name: 'opaque attachment', response: { attachment: { nested: outputRef } } },
+  { name: 'scalar metadata URI', response: { metadata: outputRef.uri } },
+  { name: 'scalar metadata data URL', response: { metadata: outputData } },
+  { name: 'array metadata', response: { metadata: ['ordinary', outputRef] } },
+  { name: 'direct metadata reference', response: { metadata: outputRef } },
+  {
+    name: 'direct metadata payload',
+    response: {
+      metadata: {
+        ...outputRef,
+        data: bytes.toString('base64'),
+        prompt: bytes.toString('base64'),
+        cost: bytes.toString('base64'),
+      },
+    },
+  },
+  { name: 'turn reference', response: { turns: [outputRef] } },
+  {
+    name: 'direct turn payload',
+    response: {
+      turns: [{ ...outputRef, data: bytes.toString('base64'), b64_json: bytes.toString('base64') }],
+    },
+  },
+  { name: 'turn reference wrapper', response: { turns: [{ blobRef: outputRef }] } },
+  { name: 'turn scalar metadata', response: { turns: [{ metadata: outputData }] } },
+  { name: 'turn array metadata', response: { turns: [{ metadata: ['ordinary', outputRef] }] } },
+  {
+    name: 'reference with response input and accounting',
+    response: { ...outputRef, prompt: promptMedia, cost: 0.25, tokenUsage: { total: 5 } },
+  },
+  {
+    name: 'reference with turn input and accounting',
+    response: {
+      turns: [{ ...outputRef, prompt: promptMedia, input: inputMedia, cost: 0.25 }],
+    },
+  },
+  {
+    name: 'reference metadata with a nested checkpoint',
+    response: {
+      metadata: {
+        ...outputRef,
+        interruptedStrategy: true,
+        completedTargetResponses: [{ prompt: promptMedia, response: { output: 'text' } }],
+      },
+    },
+  },
+  ...[
+    { cost: { ...outputRef, data: bytes.toString('base64') } },
+    { cost: bytes.toString('base64') },
+    { cached: { data: bytes.toString('base64') } },
+    { tokenUsage: { total: 5, data: bytes.toString('base64') } },
+    { logProbs: [{ data: bytes.toString('base64') }] },
+    { guardrails: { flagged: false, payload: bytes.toString('base64') } },
+    { error: { data: bytes.toString('base64') } },
+    {
+      error: bytes.toString('base64'),
+      format: bytes.toString('base64'),
+      conversationEndReason: bytes.toString('base64'),
+      sessionId: bytes.toString('base64'),
+      finishReason: bytes.toString('base64'),
+      guardrails: { reason: bytes.toString('base64') },
+    },
+  ].map((control, index) => ({
+    name: `media record with malformed control ${index}`,
+    response: { ...outputRef, ...control },
+  })),
+];
+
+describe('interrupted checkpoint JSON and media shapes', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  describe.each(['single', 'batch', 'save'] as const)('%s legacy responses', (mode) => {
+    it.each([
+      undefined,
+      null,
+      false,
+      true,
+      0,
+      1,
+      '',
+      'legacy',
+      [],
+      ['legacy'],
+      {},
+      { output: 'text' },
+    ])('preserves accepted JSON shape %#', async (response) => {
+      const input = legacyResult(response);
+      const record = await Eval.create({}, [input.prompt], { id: randomUUID() });
+      let row: EvalResult;
+      if (mode === 'batch') {
+        [row] = await EvalResult.createManyFromEvaluateResult([input], record.id);
+      } else {
+        row = await EvalResult.createFromEvaluateResult(record.id, input, {
+          persist: mode === 'single',
+        });
+        if (mode === 'save') {
+          await row.save();
+        }
+      }
+      const saved = await EvalResult.findById(row.id);
+      expect(saved).toBeDefined();
+      expect(saved!.response).toEqual(response || undefined);
+      expect(() => saved!.toEvaluateResult()).not.toThrow();
+      expect(() => sanitizeResultForJsonlArtifact(input)).not.toThrow();
+    });
+  });
+
+  describe.each(['model', 'jsonl'] as const)('%s owned output shapes', (boundary) => {
+    it.each(outputShapes)('projects $name without stripping inputs', async ({ response }) => {
+      const valid = {
+        prompt: promptMedia,
+        response: {
+          prompt: promptMedia,
+          output: 'ordinary output',
+          materializedVars: { image: inputMedia },
+          inputMaterialization: { image: inputMedia },
+          turns: [{ input: inputMedia, prompt: promptMedia, output: 'turn output' }],
+          cost: 0.25,
+          tokenUsage: { total: 5 },
+        },
+      };
+      for (const mirrored of [false, true]) {
+        const metadata = {
+          interruptedStrategy: true,
+          completedTargetResponses: [{ response }, valid],
+        };
+        const input = legacyResult(
+          { output: 'text', metadata: mirrored ? metadata : {} },
+          metadata,
+        );
+        const original = structuredClone(input);
+        const row = await EvalResult.createFromEvaluateResult(randomUUID(), input, {
+          persist: false,
+        });
+        for (const [stripPrompt, stripOutput] of [
+          [false, false],
+          [false, true],
+          [true, false],
+          [true, true],
+        ]) {
+          const flags = {
+            ...getStripFlags(),
+            shouldStripPromptText: stripPrompt,
+            shouldStripResponseOutput: stripOutput,
+          };
+          const projected =
+            boundary === 'model'
+              ? row.toEvaluateResult(flags)
+              : sanitizeResultForJsonlArtifact(input, flags);
+          expect(collectBlobHashes(projected).has(outputHash)).toBe(
+            !stripOutput && JSON.stringify(input).includes(outputHash),
+          );
+          expect(JSON.stringify(projected).includes(outputData)).toBe(
+            !stripOutput && JSON.stringify(input).includes(outputData),
+          );
+          expect(JSON.stringify(projected).includes(bytes.toString('base64'))).toBe(
+            !stripOutput && JSON.stringify(input).includes(bytes.toString('base64')),
+          );
+          const neighbor = projected.metadata!.completedTargetResponses[1];
+          expect(neighbor.prompt).toBe(stripPrompt ? '[prompt stripped]' : promptMedia);
+          expect(neighbor.response.prompt).toBe(stripPrompt ? '[prompt stripped]' : promptMedia);
+          expect(neighbor.response.materializedVars.image).toBe(inputMedia);
+          expect(neighbor.response.inputMaterialization.image).toBe(inputMedia);
+          expect(neighbor.response.turns[0].input).toBe(inputMedia);
+          expect(neighbor.response.cost).toBe(0.25);
+          expect(neighbor.response.tokenUsage).toEqual({ total: 5 });
+        }
+        expect(input).toEqual(original);
+      }
+    });
+  });
+
+  it.each([
+    undefined,
+    null,
+    false,
+    true,
+    0,
+    1,
+    '',
+    'ordinary',
+    [],
+    ['ordinary'],
+    {},
+    { ordinary: 'value' },
+  ])('preserves opaque nonmedia checkpoint metadata shape %#', async (value) => {
+    const metadata = {
+      interruptedStrategy: true,
+      completedTargetResponses: [{ response: { metadata: value } }],
+    };
+    const input = legacyResult({ metadata }, metadata);
+    const projected = sanitizeResultForJsonlArtifact(input, {
+      ...getStripFlags(),
+      shouldStripResponseOutput: true,
+    });
+    expect(projected.metadata!.completedTargetResponses[0].response.metadata).toEqual(value);
+  });
+
+  it.each(['model', 'jsonl'])('keeps ordinary diagnostics at the %s boundary', async (boundary) => {
+    const diagnostics = {
+      error: 'synthetic diagnostic',
+      format: 'json',
+      conversationEndReason: 'completed',
+      sessionId: 'synthetic-session',
+      finishReason: 'stop',
+      guardrails: { flagged: true, reason: 'synthetic reason' },
+    };
+    for (const mediaRecord of [false, true]) {
+      const metadata = {
+        interruptedStrategy: true,
+        completedTargetResponses: [
+          { response: { ...(mediaRecord ? outputRef : {}), ...diagnostics } },
+        ],
+      };
+      const input = legacyResult({ metadata }, metadata);
+      const row = await EvalResult.createFromEvaluateResult(randomUUID(), input, {
+        persist: false,
+      });
+      const flags = { ...getStripFlags(), shouldStripResponseOutput: true };
+      const projected =
+        boundary === 'model'
+          ? row.toEvaluateResult(flags)
+          : sanitizeResultForJsonlArtifact(input, flags);
+      const response = projected.metadata!.completedTargetResponses[0].response;
+      if (mediaRecord) {
+        for (const key of Object.keys(diagnostics).filter((key) => key !== 'guardrails')) {
+          expect(response[key]).toBeUndefined();
+        }
+        expect(response.guardrails).toEqual({ flagged: true });
+      } else {
+        expect(response).toMatchObject(diagnostics);
+      }
+    }
+  });
+
+  describe.each([false, true])('malformed media with inline=%s', (inline) => {
+    it.each([
+      { images: null },
+      { images: false },
+      { images: true },
+      { images: 0 },
+      { images: 1 },
+      { images: 'legacy' },
+      { images: {} },
+      { images: { length: 1 } },
+      { images: [null, false, 1, 'legacy', {}, []] },
+      { audio: { data: bytes.toString('base64'), format: null } },
+      { audio: { data: bytes.toString('base64'), format: false } },
+      { audio: { data: bytes.toString('base64'), format: true } },
+      { audio: { data: bytes.toString('base64'), format: 0 } },
+      { audio: { data: bytes.toString('base64'), format: 1 } },
+      { audio: { data: bytes.toString('base64'), format: [] } },
+      { audio: { data: bytes.toString('base64'), format: {} } },
+      { turns: [{ audio: { data: bytes.toString('base64'), format: 1 } }] },
+    ])('preserves malformed nested media without aborting persistence %#', async (response) => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
+      const metadata = { interruptedStrategy: true, completedTargetResponses: [{ response }] };
+      const input = legacyResult({ metadata }, metadata);
+      const original = structuredClone(input);
+      const record = await Eval.create(
+        { env: { PROMPTFOO_INLINE_MEDIA: String(inline) } },
+        [input.prompt],
+        { id: randomUUID() },
+      );
+      const row = await EvalResult.createFromEvaluateResult(record.id, input);
+      row.score = 0.5;
+      await row.save();
+      const saved = await EvalResult.findById(row.id);
+      expect(saved!.score).toBe(0.5);
+      if ('images' in response) {
+        expect(saved!.metadata.completedTargetResponses[0].response.images).toEqual(
+          response.images,
+        );
+      } else {
+        expect(collectBlobHashes(saved!.metadata).has(outputHash)).toBe(!inline);
+      }
+      expect(input).toEqual(original);
+    });
+  });
+
+  it.each(['single', 'batch', 'save'] as const)(
+    'preserves byte-complete media before %s serialization',
+    async (mode) => {
+      const media = Buffer.alloc(128 * 1024, 84);
+      const data = `data:image/png;base64,${media.toString('base64')}`;
+      const response = {
+        output: 'images',
+        images: Array.from({ length: 16 }, () => ({ data, mimeType: 'image/png' })),
+      };
+      const input = createEvaluateResult({ response });
+      const record = await Eval.create({}, [input.prompt], { id: randomUUID() });
+      const pending =
+        mode === 'save'
+          ? await EvalResult.createFromEvaluateResult(record.id, input, { persist: false })
+          : undefined;
+      const stringify = JSON.stringify;
+      const encodedSizes: number[] = [];
+      vi.spyOn(JSON, 'stringify').mockImplementation((...args) => {
+        const encoded = Reflect.apply(stringify, JSON, args);
+        if (encoded) {
+          encodedSizes.push(encoded.length);
+        }
+        return encoded;
+      });
+      let row: EvalResult;
+      if (pending) {
+        await pending.save();
+        row = pending;
+      } else if (mode === 'batch') {
+        [row] = await EvalResult.createManyFromEvaluateResult([input], record.id);
+      } else {
+        row = await EvalResult.createFromEvaluateResult(record.id, input);
+      }
+      vi.restoreAllMocks();
+      expect(Math.max(...encodedSizes)).toBeLessThan(64 * 1024);
+      const saved = await EvalResult.findById(row.id);
+      expect(saved!.response!.images).toHaveLength(16);
+      const expectedHash = createHash('sha256').update(media).digest('hex');
+      for (const image of saved!.response!.images!) {
+        expect(image.data).toBeUndefined();
+        expect(image.blobRef!.hash).toBe(expectedHash);
+      }
+      expect((await getBlobByHash(expectedHash))!.data.equals(media)).toBe(true);
+      expect(response.images.every((image) => image.data === data)).toBe(true);
+    },
+  );
+
+  it('keeps native JSON semantics for cycles, shared aliases, toJSON and special keys', async () => {
+    const shared = { message: 'shared string' };
+    const raw = {
+      first: shared,
+      second: shared,
+      date: new Date('2026-01-01T00:00:00Z'),
+      buffer: Buffer.from([1, 2, 3]),
+      hole: [undefined, () => 'ignored'],
+      custom: {
+        toJSON() {
+          return { value: 'custom string' };
+        },
+      },
+      special: JSON.parse('{"__proto__":"ordinary own value","":"empty key"}'),
+      self: undefined as unknown,
+    };
+    raw.self = raw;
+    const expected = JSON.parse(safeJsonStringify(raw)!);
+    const input = createEvaluateResult({
+      response: { output: 'text', raw, audio: { data: bytes.toString('base64'), format: 'wav' } },
+    });
+    const record = await Eval.create({}, [input.prompt], { id: randomUUID() });
+    const row = await EvalResult.createFromEvaluateResult(record.id, input);
+    expect((await EvalResult.findById(row.id))!.response!.raw).toEqual(expected);
+    expect(raw.self).toBe(raw);
+    expect(raw.first).toBe(raw.second);
+    expect(Object.getPrototypeOf(raw.special)).toBe(Object.prototype);
+  });
+
+  it('keeps the native root toJSON key during pre-extraction normalization', async () => {
+    const keys: string[] = [];
+    const response = {
+      output: 'before toJSON',
+      toJSON(key: string) {
+        keys.push(key);
+        return { output: key, audio: { data: bytes.toString('base64'), format: 'wav' } };
+      },
+    };
+    const input = createEvaluateResult({ response });
+    const record = await Eval.create({}, [input.prompt], { id: randomUUID() });
+    const row = await EvalResult.createFromEvaluateResult(record.id, input);
+    expect(keys).toEqual(['']);
+    expect((await EvalResult.findById(row.id))!.response!.output).toBe('');
+  });
+
+  it('rejects a serialization size failure instead of storing truncated media', async () => {
+    const response = { images: Array.from({ length: 16 }, () => ({ data: outputData })) };
+    const input = createEvaluateResult({ response });
+    const record = await Eval.create({}, [input.prompt], { id: randomUUID() });
+    const stringify = JSON.stringify;
+    const failure = new RangeError('Invalid string length');
+    vi.spyOn(JSON, 'stringify').mockImplementation((value, ...args) => {
+      if (value === response) {
+        throw failure;
+      }
+      return Reflect.apply(stringify, JSON, [value, ...args]);
+    });
+    await expect(EvalResult.createFromEvaluateResult(record.id, input)).rejects.toBe(failure);
+    vi.restoreAllMocks();
+    expect(await record.getResults()).toEqual([]);
+    expect(response.images).toHaveLength(16);
+    expect(response.images.every((image) => image.data === outputData)).toBe(true);
+  });
+
+  it('keeps inputs and accounting on media-bearing response and turn records', async () => {
+    const response = {
+      ...outputRef,
+      prompt: promptMedia,
+      cost: 0.25,
+      incurredCost: 0.5,
+      cached: false,
+      materializationHandled: true,
+      sessionId: 'synthetic-session',
+      conversationEnded: true,
+      finishReason: 'stop',
+      tokenUsage: { total: 5 },
+      turns: [
+        {
+          ...outputRef,
+          prompt: promptMedia,
+          input: inputMedia,
+          cost: 0.125,
+          tokenUsage: { total: 2 },
+        },
+      ],
+    };
+    const metadata = { interruptedStrategy: true, completedTargetResponses: [{ response }] };
+    const input = legacyResult({ metadata }, metadata);
+    for (const stripPrompt of [false, true]) {
+      const projected = sanitizeResultForJsonlArtifact(input, {
+        ...getStripFlags(),
+        shouldStripResponseOutput: true,
+        shouldStripPromptText: stripPrompt,
+      });
+      const target = projected.metadata!.completedTargetResponses[0].response;
+      expect(target).toMatchObject({
+        prompt: stripPrompt ? '[prompt stripped]' : promptMedia,
+        cost: 0.25,
+        incurredCost: 0.5,
+        cached: false,
+        materializationHandled: true,
+        conversationEnded: true,
+        tokenUsage: { total: 5 },
+      });
+      expect(target.turns[0]).toMatchObject({
+        prompt: stripPrompt ? '[prompt stripped]' : promptMedia,
+        input: inputMedia,
+        cost: 0.125,
+        tokenUsage: { total: 2 },
+      });
+      expect(collectBlobHashes(target).has(outputHash)).toBe(false);
+    }
+  });
+});

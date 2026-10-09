@@ -49,7 +49,7 @@ function getKindFromMimeType(mimeType: string): BlobKind {
  * @internal Exported for testing
  */
 export function normalizeAudioMimeType(format: string | undefined): string {
-  if (!format) {
+  if (typeof format !== 'string' || !format) {
     return 'audio/wav';
   }
 
@@ -472,10 +472,16 @@ async function extractResponseBinaryData(
   }
 
   // Images array
-  if (response.images?.length) {
+  if (Array.isArray(response.images)) {
     const externalizedImages = await Promise.all(
       response.images.map(async (img, idx) => {
-        if (!img.data || typeof img.data !== 'string' || !isDataUrl(img.data)) {
+        if (
+          !img ||
+          typeof img !== 'object' ||
+          Array.isArray(img) ||
+          typeof img.data !== 'string' ||
+          !isDataUrl(img.data)
+        ) {
           return img;
         }
         const stored = await storeOnce(
