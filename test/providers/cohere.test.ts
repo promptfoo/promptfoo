@@ -1,8 +1,13 @@
 import { type Span, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import EvalResult, {
+  getStripFlags,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from '../../src/providers/cohere';
 import { loadApiProvider } from '../../src/providers/index';
+import { ResultFailureReason } from '../../src/types/index';
 
 vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
@@ -378,7 +383,69 @@ describe('CohereChatCompletionProvider', () => {
       });
       expect(result.output).toBeUndefined();
       if (output !== undefined) {
-        expect(result.metadata?.cohere).toEqual({ partialOutput: output });
+        expect(result.raw).toEqual(output);
+      }
+    },
+  );
+
+  it.each(
+    ['ERROR', 'TIMEOUT'].flatMap((finishReason) =>
+      [false, true].map((stripOutput) => ({ finishReason, stripOutput })),
+    ),
+  )(
+    'keeps $finishReason partial diagnostics within response-output stripping (strip: $stripOutput)',
+    async ({ finishReason, stripOutput }) => {
+      const diagnostic = 'private partial completion fixture';
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        cached: false,
+        data: {
+          finish_reason: finishReason,
+          message: { role: 'assistant', content: [{ type: 'text', text: diagnostic }] },
+          usage: { tokens: { input_tokens: 3, output_tokens: 2 } },
+        },
+      } as any);
+      const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+        config: { apiKey: 'test-key' },
+      });
+      const response = await provider.callApi('Hello');
+      const model = new EvalResult({
+        id: 'cohere-strip-result',
+        evalId: 'cohere-strip-eval',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        prompt: { raw: 'Hello', label: 'fixture' },
+        provider: { id: provider.id() },
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        error: response.error,
+        response,
+        // The evaluator copies provider metadata onto the result as well.
+        metadata: response.metadata,
+        gradingResult: null,
+      });
+      const flags = getStripFlags({
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(stripOutput),
+        PROMPTFOO_STRIP_METADATA: 'false',
+      });
+      for (const projected of [
+        model.toEvaluateResult(flags),
+        sanitizeResultForJsonlArtifact(model.toEvaluateResult(getStripFlags()), flags),
+      ]) {
+        expect(projected.error).toBe(response.error);
+        expect(projected.response?.tokenUsage).toMatchObject({
+          prompt: 3,
+          completion: 2,
+          total: 5,
+        });
+        if (stripOutput) {
+          expect(JSON.stringify(projected)).not.toContain(diagnostic);
+          expect(projected.response?.output).toBe('[output stripped]');
+        } else {
+          expect(JSON.stringify(projected)).toContain(diagnostic);
+          expect(projected.response?.output).toBeUndefined();
+        }
       }
     },
   );

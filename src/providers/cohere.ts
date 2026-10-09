@@ -896,7 +896,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
           cached,
           tokenUsage,
           finishReason,
-          metadata: { cohere: { partialOutput: output } },
+          raw: output,
         };
       }
       if (output === undefined) {
