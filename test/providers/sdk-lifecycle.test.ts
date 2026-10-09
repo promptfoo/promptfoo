@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -7,6 +9,7 @@ import { BedrockRuntime, BedrockRuntimeClient } from '@aws-sdk/client-bedrock-ru
 import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { evaluate } from '../../src/node/evaluate';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 import { AwsBedrockKnowledgeBaseProvider } from '../../src/providers/bedrock/knowledgeBase';
@@ -419,6 +422,69 @@ describe('SDK client lifecycle', () => {
     await pending!;
     await vi.waitFor(() => expect(destroy!).toHaveBeenCalledOnce());
   });
+
+  it.each(['getter', 'client'] as const)(
+    'retains a client prepared by a beforeAll %s hook until its timed-out call settles',
+    async (setup) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-sdk-setup-'));
+      const extension = path.join(directory, 'extension.mjs');
+      fs.writeFileSync(
+        extension,
+        `export async function beforeAll({ suite }) {
+        ${setup === 'getter' ? 'void suite.providers[0].bedrock;' : 'await suite.providers[0].getBedrockInstance();'}
+      }`,
+      );
+      const provider = new AwsBedrockCompletionProvider('fixture');
+      const release = createDeferred<void>();
+      const finished = createDeferred<void>();
+      const ready = createDeferred<void>();
+      let destroy: ReturnType<typeof vi.spyOn> | undefined;
+      const call = vi.spyOn(provider, 'callApi').mockImplementation(async () => {
+        try {
+          const client = await provider.getBedrockInstance();
+          destroy = vi.spyOn(client, 'destroy');
+          ready.resolve();
+          await release.promise;
+          return { output: 'finished' };
+        } finally {
+          finished.resolve();
+        }
+      });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const evaluation = evaluate(
+          {
+            providers: [provider],
+            prompts: ['fixture'],
+            tests: [{ vars: {} }],
+            extensions: [`file://${extension}:beforeAll`],
+            writeLatestResults: false,
+          },
+          { cache: false, showProgressBar: false, timeoutMs: 50 },
+        );
+        await Promise.race([
+          ready.promise,
+          evaluation.then(() => {
+            throw new Error('Provider call did not become ready');
+          }),
+        ]);
+        await vi.advanceTimersByTimeAsync(50);
+        const summary = await (await evaluation).toEvaluateSummary();
+        expect(summary.results[0].error).toContain('Evaluation timed out after 50ms');
+        expect(call).toHaveBeenCalledOnce();
+        expect(destroy).toBeDefined();
+        expect(destroy).not.toHaveBeenCalled();
+      } finally {
+        release.resolve();
+        vi.useRealTimers();
+        if (call.mock.calls.length) {
+          await finished.promise;
+          await vi.waitFor(() => expect(destroy).toHaveBeenCalledOnce());
+        }
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   const pendingClients = [
     [...providers[0], 'getBedrockAuthOptions', BedrockRuntime.prototype],
