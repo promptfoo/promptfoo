@@ -47,9 +47,7 @@ describe('System Purpose Extractor', () => {
       }),
     });
     vi.clearAllMocks();
-    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
-      return 'https://api.promptfoo.app/api/v1/task';
-    });
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
   });
 
   afterEach(() => {
