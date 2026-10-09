@@ -1160,8 +1160,8 @@ export const TestSuiteSchema = z.object({
   // One or more prompt strings
   prompts: z.array(PromptSchema),
 
-  // Optional mapping of provider to prompt display strings.  If not provided,
-  // all prompts are used for all providers.
+  // Optional prompt-filter overrides keyed by provider label or ID.
+  // Otherwise each provider uses its own prompts filter, or all prompts when absent.
   providerPromptMap: ProviderPromptMapSchema.optional(),
   // Test cases
   tests: z.array(TestCaseSchema).optional(),

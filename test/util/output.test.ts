@@ -370,7 +370,16 @@ describe('writeOutput', () => {
       const restoreEnv = mockProcessEnv(
         Object.fromEntries(Object.keys(flags).map((key) => [key, String(!strip)])),
       );
+      const grader = { id: 'echo', prompts: ['private-nested-selector'] };
+      const application = { prompts: ['ordinary-map-application'] };
+      const graderMap = {
+        text: grader,
+        label: 'ordinary map label',
+        config: { prompts: ['ordinary map configuration'] },
+        application,
+      };
       const testCase = {
+        options: { provider: graderMap },
         vars: { input: 'private-input' },
         metadata: { note: 'private-note' },
         providerOutput: 'private-output',
@@ -394,10 +403,25 @@ describe('writeOutput', () => {
           ],
         },
       ]);
-      const eval_ = new Eval({ env: flags, tests: [testCase], prompts: ['private-config-prompt'] });
+      const provider = { id: 'echo', prompts: ['private-provider-selector'] };
+      const providerPromptMap = { echo: ['private-explicit-selector'] };
+      const config = {
+        providerPromptMap,
+        env: flags,
+        tests: [testCase],
+        prompts: ['private-config-prompt'],
+        providers: [provider],
+      };
+      const eval_ = new Eval(config);
       await eval_.addResult(
         createEvaluateResult({
-          prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
+          prompt: {
+            raw: 'private-prompt',
+            template: 'private-template',
+            label: 'label',
+            config: { provider: grader },
+          },
+          provider,
           testCase,
           response: { output: 'private-output', raw: 'private-raw-output' },
           metadata: { note: 'private-note' },
@@ -418,8 +442,13 @@ describe('writeOutput', () => {
         expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
         const output = await createOutputData(eval_, null);
         expect(JSON.stringify(output).includes('private-')).toBe(!strip);
+        expect(Object.hasOwn(output.config, 'providerPromptMap')).toBe(!strip);
         expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
+        expect(output.config).toMatchObject({
+          tests: [{ options: { provider: { application, config: graderMap.config } } }],
+        });
         if (!strip) {
+          expect(output.config).toMatchObject({ providerPromptMap });
           expect(output.results.results[0]).toMatchObject({
             prompt: { raw: 'private-prompt' },
             testCase,
@@ -441,8 +470,13 @@ describe('writeOutput', () => {
             .join('');
           expect(contents, extension).not.toBe('');
           expect(contents.includes('private-'), extension).toBe(!strip);
+          expect(contents, extension).toContain('ordinary-map-application');
         }
 
+        expect(grader.prompts).toEqual(['private-nested-selector']);
+        expect(provider.prompts).toEqual(['private-provider-selector']);
+        expect(eval_.config.providers).toEqual([provider]);
+        expect(eval_.config).toMatchObject({ providerPromptMap });
         expect(eval_.config.tests).toEqual([testCase]);
         expect(eval_.config.prompts).toEqual(['private-config-prompt']);
         expect(eval_.prompts[0].template).toBe('private-template');
