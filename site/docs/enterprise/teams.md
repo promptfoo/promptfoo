@@ -81,10 +81,10 @@ Repeat for each team. A shared deployment-level `OPENAI_API_KEY` alone does not 
 
 The team's Red Team Provider supplies generation and grading unless a separate global provider is configured for that role:
 
-| Workflow        | Provider used                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------- |
-| Test generation | Global **Redteam Generation Provider**, otherwise the team's effective **Red Team Provider** |
-| Grading         | Global **Grading Provider**, otherwise the team's effective **Red Team Provider**            |
+| Workflow        | Provider used                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| Test generation | Global **Test Generation Provider**, otherwise the team's effective **Red Team Provider** |
+| Grading         | Global **Grading Provider**, otherwise the team's effective **Red Team Provider**         |
 
 The effective Red Team Provider is the team's saved override when enabled, otherwise the global Red Team Provider. Deployment-level OpenAI defaults can be used when neither is configured.
 
