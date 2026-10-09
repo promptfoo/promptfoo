@@ -57,7 +57,7 @@ This displays your current organization and team.
 - **Resources are team-scoped**: Configurations, targets, and results belong to a team
 
 :::tip
-Always verify your team context with `promptfoo auth whoami` before sharing evaluation results or running scans to ensure they go to the correct team.
+Before sharing local eval results, verify your active team with `promptfoo auth whoami`. For saved scans, check the configuration's team instead.
 :::
 
 ## Track OpenAI spend by team on-prem
