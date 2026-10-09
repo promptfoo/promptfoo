@@ -8,7 +8,7 @@ import {
   ImageDatasetPluginBase,
   type ImageDatasetPluginConfig,
 } from './imageDatasetPluginBase';
-import { fetchImageAsBase64, fisherYatesShuffle, ImageDatasetManager } from './imageDatasetUtils';
+import { fetchImageAsBase64, fisherYatesShuffle } from './imageDatasetUtils';
 
 import type { ApiProvider, Assertion, AtomicTestCase, TestCase } from '../../types';
 
@@ -235,22 +235,15 @@ function normalizeGrade(grade: string): VLSUGrade {
 }
 
 /**
- * DatasetManager to handle VLSU dataset caching and filtering
- * Fetches CSV from GitHub and images from web URLs
+ * Caches VLSU CSV records and filters them before fetching images.
  */
-export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
+export class VLSUDatasetManager {
   private static instance: VLSUDatasetManager | null = null;
-
-  protected pluginId = 'vlsu';
-  protected datasetPath = VLSU_CSV_URL;
-  protected fetchLimit = 10000; // CSV is ~8K rows
 
   // CSV data cache
   private csvCache: VLSURawRecord[] | null = null;
 
-  private constructor() {
-    super();
-  }
+  private constructor() {}
 
   /**
    * Get singleton instance
@@ -263,20 +256,12 @@ export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
   }
 
   /**
-   * Clear all caches
+   * Clear the CSV cache.
    */
   static clearCache(): void {
     if (VLSUDatasetManager.instance) {
       VLSUDatasetManager.instance.csvCache = null;
-      VLSUDatasetManager.instance.datasetCache = null;
     }
-  }
-
-  /**
-   * Required by base class but not used since we override ensureDatasetLoaded
-   */
-  protected async processRecords(_records: unknown[]): Promise<VLSUInput[]> {
-    throw new Error('processRecords should not be called directly - use getFilteredRecords');
   }
 
   /**

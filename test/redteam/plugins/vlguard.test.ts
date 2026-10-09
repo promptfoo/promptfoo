@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, MockedFunction, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, MockedFunction, vi } from 'vitest';
 import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import * as imageDatasetUtils from '../../../src/redteam/plugins/imageDatasetUtils';
@@ -814,6 +814,57 @@ describe('VLGuardPlugin', () => {
         expect.any(Object),
       );
     });
+  });
+});
+
+describe('VLGuardDatasetManager cache', () => {
+  beforeEach(() => {
+    vi.mocked(cache.fetchWithCache).mockReset();
+    vi.mocked(imageDatasetUtils.fetchImageAsBase64).mockReset();
+    VLGuardDatasetManager.clearCache();
+  });
+
+  afterEach(() => {
+    VLGuardDatasetManager.clearCache();
+    vi.resetAllMocks();
+  });
+
+  it('reuses processed records until the cache is cleared', async () => {
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url) => ({
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      data: String(url).includes('datasets-server')
+        ? {
+            rows: [{ row_idx: 0, row: { image: { src: 'https://example.com/fixture.png' } } }],
+          }
+        : [
+            {
+              id: 'cache-fixture',
+              image: 'fixture.png',
+              safe: true,
+              'instr-resp': [{ safe_instruction: 'Describe the blue square.' }],
+            },
+          ],
+    }));
+    vi.mocked(imageDatasetUtils.fetchImageAsBase64).mockResolvedValue(
+      'data:image/png;base64,c3ludGhldGlj',
+    );
+
+    const manager = VLGuardDatasetManager.getInstance();
+    const config = { split: 'train' as const, includeSafe: true, includeUnsafe: false };
+    const first = await manager.getFilteredRecords(1, config);
+    expect(first).toHaveLength(1);
+    expect(first[0].question).toBe('Describe the blue square.');
+    expect(await manager.getFilteredRecords(1, config)).toEqual(first);
+    expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+    expect(imageDatasetUtils.fetchImageAsBase64).toHaveBeenCalledOnce();
+
+    VLGuardDatasetManager.clearCache();
+    expect(VLGuardDatasetManager.getInstance()).toBe(manager);
+    expect(await manager.getFilteredRecords(1, config)).toEqual(first);
+    expect(cache.fetchWithCache).toHaveBeenCalledTimes(4);
+    expect(imageDatasetUtils.fetchImageAsBase64).toHaveBeenCalledTimes(2);
   });
 });
 
