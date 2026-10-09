@@ -26,9 +26,221 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import {
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+  isDirectTemplateReference,
+  isSimpleInputTemplate,
+} from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
+
+/** Select generated values with a direct static path into the target request. */
+export function getRenderedInputVariables(
+  inputVars: Record<string, string>,
+  injectVar: string,
+  request: {
+    forwardsPrompt: boolean;
+    body?: unknown;
+    jsonBody?: boolean;
+    parsesPrompt?: boolean;
+    reservedVariables?: string[];
+  },
+  prompt?: Prompt,
+  filters?: NunjucksFilterMap,
+  renderedPrompt?: string,
+  renderVariables: Record<string, VarValue> = inputVars,
+): { vars: Record<string, string>; forwardsPrompt: boolean } {
+  const referencesInput = (
+    body: unknown,
+    name: string,
+    templateFilters?: NunjucksFilterMap,
+    wholeValueOnly = false,
+  ): boolean => {
+    if (typeof body === 'string') {
+      return isDirectTemplateReference(body, name, templateFilters, wholeValueOnly);
+    }
+    return (
+      body !== null &&
+      typeof body === 'object' &&
+      Object.entries(body).some(
+        ([key, value]) =>
+          // renderVarsInObject copies into ordinary objects; this setter does
+          // not create an own field and JSON serialization drops the value.
+          key !== '__proto__' && referencesInput(value, name, templateFilters, wholeValueOnly),
+      )
+    );
+  };
+  // String bodies may use HTTP's text renderer, which returns the entire raw
+  // template on error. Only complete references are provable without its mode.
+  const body = request.body;
+  let promptTemplate: unknown = prompt?.raw;
+  let parsedPromptTemplate = false;
+  const hasSafeJsonLeaves = (value: unknown): boolean =>
+    typeof value === 'string'
+      ? isSimpleInputTemplate(value, renderVariables, filters)
+      : value === null ||
+        typeof value !== 'object' ||
+        Object.values(value).every(hasSafeJsonLeaves);
+  if (prompt && !getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+    try {
+      promptTemplate = JSON.parse(prompt.raw);
+      // Any failing leaf makes renderPrompt retry the whole JSON as raw text.
+      // Do not attribute even a simple sibling interpolation in that case.
+      if (!hasSafeJsonLeaves(promptTemplate)) {
+        promptTemplate = undefined;
+      }
+      parsedPromptTemplate = true;
+    } catch {
+      // Non-JSON prompts render as text.
+    }
+  }
+  if (prompt && !parsedPromptTemplate && autoWrapRawIfPartialNunjucks(prompt.raw) !== prompt.raw) {
+    // Use the renderer's exact decision: valid multiline Nunjucks can also be
+    // wrapped as raw, so AST interpolation alone is not delivery evidence.
+    promptTemplate = undefined;
+  }
+  let renderedJson = renderedPrompt === undefined;
+  if (renderedPrompt !== undefined) {
+    try {
+      JSON.parse(renderedPrompt);
+      renderedJson = true;
+    } catch {
+      // Plain text cannot lose members through JSON parsing.
+    }
+  }
+  const reserved = request.reservedVariables ?? [];
+  let forwardsPrompt =
+    // parseChatPrompt interprets this prefix as YAML, which can discard input
+    // comments and scalars. Its textual inputs are not safe attribution evidence.
+    !(request.parsesPrompt && renderedPrompt?.trimStart().startsWith('- role:')) &&
+    (request.forwardsPrompt ||
+      referencesInput(body, 'prompt', undefined, true) ||
+      (!reserved.includes(injectVar) && referencesInput(body, injectVar, undefined, true)));
+  const projectJsonValue = (
+    value: string,
+    objectsOnly: boolean,
+    omitRootStrings = false,
+  ): string | undefined => {
+    try {
+      const parsed = JSON.parse(value);
+      if (objectsOnly && (parsed === null || typeof parsed !== 'object')) {
+        return value;
+      }
+      // HTTP omits a null root body. Parsing is deliberately only one level:
+      // JSON strings inside a parsed object remain literal in the actual request.
+      if (parsed === null || (omitRootStrings && typeof parsed === 'string')) {
+        return undefined;
+      }
+      return typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+    } catch {
+      return value;
+    }
+  };
+  const renderBodyInputs = (variables: Record<string, string>): string[] => {
+    const renderedValues: string[] = [];
+    const visit = (template: unknown) => {
+      if (typeof template === 'string') {
+        const name = Object.keys(variables).find((name) =>
+          isDirectTemplateReference(template, name, undefined, true),
+        );
+        if (name) {
+          // Use HTTP's renderer before its JSON boundary, including builtin trim.
+          renderedValues.push(renderVarsInObject(template, variables));
+        }
+      } else if (template && typeof template === 'object') {
+        for (const [key, child] of Object.entries(template)) {
+          if (key !== '__proto__') {
+            visit(child);
+          }
+        }
+      }
+    };
+    visit(body);
+    return renderedValues;
+  };
+  const projectBodyInput = (variables: Record<string, string>): string | undefined => {
+    const renderedValues = renderBodyInputs(variables);
+    const projected = renderedValues.map((rendered) =>
+      projectJsonValue(rendered, typeof body !== 'string', typeof body === 'string'),
+    );
+    // A second body field can deliver the same input literally even when another
+    // field parses it. Prefer that unchanged, actually delivered representation.
+    return (
+      projected.find((value, index) => value === renderedValues[index]) ??
+      projected.find((value) => value !== undefined)
+    );
+  };
+  if (request.jsonBody && renderedPrompt !== undefined) {
+    const forwarded = renderBodyInputs({
+      prompt: renderedPrompt,
+      ...(reserved.includes(injectVar) ? {} : { [injectVar]: renderedPrompt }),
+    });
+    let allForwardedValuesParse = forwarded.length > 0;
+    for (const value of forwarded) {
+      try {
+        const parsed = JSON.parse(value);
+        if (typeof body === 'string' && (parsed === null || typeof parsed === 'string')) {
+          // HTTP sends an unwrapped root string verbatim. Its interpretation at
+          // the endpoint is unknown; a JSON Content-Type cannot prove another parse.
+          forwardsPrompt = false;
+        }
+        if (typeof body !== 'string' && (parsed === null || typeof parsed !== 'object')) {
+          allForwardedValuesParse = false;
+        }
+      } catch {
+        allForwardedValuesParse = false;
+      }
+    }
+    // Body filters can make composed text parseable. Keep a literal forwarding
+    // copy when present, but do not credit components discarded by JSON parsing.
+    if (forwarded.length > 0) {
+      renderedJson = allForwardedValuesParse;
+    }
+  }
+  const vars = Object.fromEntries(
+    Object.entries(inputVars).flatMap(([name, value]) => {
+      const throughPrompt =
+        forwardsPrompt &&
+        (!prompt ||
+          (!prompt.function &&
+            !/^(?:portkey|langfuse|helicone):\/\//.test(prompt.raw) &&
+            referencesInput(promptTemplate, name, filters) &&
+            // A text template can construct JSON that discards interpolated
+            // members. Only a complete value has a conservative JSON projection.
+            (!renderedJson ||
+              parsedPromptTemplate ||
+              isDirectTemplateReference(prompt.raw, name, filters, true))));
+      const throughBody =
+        name !== injectVar &&
+        !reserved.includes(name) &&
+        referencesInput(body, name, undefined, true);
+      if (throughPrompt) {
+        // A value embedded in text or a rendered JSON string is not itself parsed.
+        // Only the complete prompt crosses the provider's JSON parsing boundary.
+        const wholePrompt = !prompt || isDirectTemplateReference(prompt.raw, name, filters, true);
+        if (!wholePrompt || (!request.parsesPrompt && !request.jsonBody)) {
+          return [[name, value]];
+        }
+        const renderedValue = prompt && renderedPrompt !== undefined ? renderedPrompt : value;
+        const projected = request.parsesPrompt
+          ? projectJsonValue(renderedValue, false)
+          : projectBodyInput({
+              prompt: renderedValue,
+              ...(reserved.includes(injectVar) ? {} : { [injectVar]: renderedValue }),
+              ...(throughBody ? { [name]: value } : {}),
+            });
+        return projected === undefined ? [] : [[name, projected]];
+      }
+      if (throughBody) {
+        const projected = request.jsonBody ? projectBodyInput({ [name]: value }) : value;
+        return projected === undefined ? [] : [[name, projected]];
+      }
+      return [];
+    }),
+  );
+  return { vars, forwardsPrompt };
+}
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 

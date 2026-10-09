@@ -1370,7 +1370,14 @@ describe('CrescendoProvider', () => {
       providerResponse: { output: 'second response' },
       redteamHistory: [{ prompt: 'first question', output: 'first response' }],
       conversationHistory: [{ prompt: 'first question', output: 'first response' }],
-      conversationTranscript: 'Turn 1:\nUser: first question\nAssistant: first response',
+      conversationTranscript: JSON.stringify(
+        [
+          { role: 'user', content: 'first question' },
+          { role: 'assistant', content: 'first response' },
+        ],
+        null,
+        2,
+      ),
     });
   });
 

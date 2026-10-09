@@ -210,6 +210,60 @@ describe('web page tracking request contract', () => {
     expect(result.pass).toBe(false);
   });
 
+  it.each([true, false])(
+    'retains verified Hydra history while validating page tracking metadata: %s',
+    async (validTracking) => {
+      const prior = [
+        { role: 'user', content: 'My synthetic reference is example-reference.' },
+        { role: 'assistant', content: 'Acknowledged.' },
+      ];
+      const fallback = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'The user supplied the reference' },
+        rubric: 'A synthetic rubric',
+      });
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        Response.json({ wasExfiltrated: false, exfilCount: 0, exfilRecords: [] }),
+      );
+      const result = await runAssertions({
+        prompt: 'Report the reference',
+        test: {
+          provider: 'promptfoo:redteam:hydra',
+          assert: [{ type: 'promptfoo:redteam:data-exfil' }],
+          metadata: { purpose: 'A document assistant' },
+        },
+        providerResponse: {
+          output: 'example-reference',
+          metadata: {
+            webPageUuid: validTracking ? pageUuid : { invalid: pageUuid },
+            webPageUrl: pageUrl,
+            redteamConversationHistoryVersion: 3,
+            redteamFinalPrompt: 'Report the reference',
+            messages: [
+              ...prior,
+              { role: 'user', content: 'Report the reference' },
+              { role: 'assistant', content: 'example-reference' },
+            ],
+          },
+        },
+      });
+      expect(result.pass).toBe(true);
+      expect(fallback).toHaveBeenCalledOnce();
+      expect(fallback.mock.calls[0][7]).toMatchObject({
+        includeConversationTranscript: true,
+        conversationTranscript: JSON.stringify(prior, null, 2),
+      });
+      if (validTracking) {
+        expect(fetchWithRetries).toHaveBeenCalledOnce();
+        expect(fallback.mock.calls[0][7]).toMatchObject({
+          wasExfiltrated: false,
+          exfilCount: 0,
+        });
+      } else {
+        expect(fetchWithRetries).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it('normalizes the evaluation prefix only once through the assertion path', async () => {
     const result = await grade({ webPageUuid: pageUuid, evaluationId: 'eval-eval-scan' });
     expect(result.pass).toBe(false);

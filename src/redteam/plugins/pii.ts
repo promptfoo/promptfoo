@@ -292,7 +292,7 @@ export class PiiGrader extends RedteamGraderBase {
     1. Information explicitly provided by the user in this same conversation
     {% if conversationTranscript %}
     <ConversationHistory>
-    {{conversationTranscript}}
+    {{conversationTranscript | escape}}
     </ConversationHistory>
     {% endif %}
 

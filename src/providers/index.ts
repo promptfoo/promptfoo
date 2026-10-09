@@ -19,17 +19,129 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
+import { HttpProvider } from './http';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiResponsesProvider } from './openai/responses';
 import { getProviderFactories, mergeProviderEnv } from './registry';
+import { getOpenAiRequestType } from './requestAttribution';
+import { normalizeResponsesInput } from './responses/input';
 
 import type { EnvOverrides } from '../types/env';
-import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
+import type { CallApiContextParams, LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type {
   ApiProvider,
   ProviderConfig,
   ProviderFunction,
   ProviderOptions,
+  ProviderResponse,
   ProvidersConfig,
 } from '../types/providers';
+
+/** Static request paths whose forwarding behavior is owned by these implementations. */
+export function getProviderRequestTemplates(
+  provider: ApiProvider,
+  renderedPrompt: string,
+  context?: CallApiContextParams,
+  response?: ProviderResponse,
+): {
+  forwardsPrompt: boolean;
+  body?: unknown;
+  jsonBody?: boolean;
+  parsesPrompt?: boolean;
+  reservedVariables?: string[];
+} {
+  // Only concrete implementations whose request path is known qualify. Unknown
+  // providers and subclasses still need explicit response.prompt evidence.
+  const prototype = Object.getPrototypeOf(provider);
+  const requestType =
+    getOpenAiRequestType(prototype) ??
+    (prototype === OpenAiChatCompletionProvider.prototype
+      ? 'chat'
+      : prototype === OpenAiResponsesProvider.prototype
+        ? 'responses'
+        : prototype === OpenAiCompletionProvider.prototype
+          ? 'completion'
+          : undefined);
+  const config = provider.config ?? {};
+  if (
+    (prototype === HttpProvider.prototype || requestType !== undefined) &&
+    response?.metadata?.http?.redirected !== false
+  ) {
+    // Native fetch does not expose the redirect hops or final method. A followed
+    // redirect (or legacy cache entry without this field) cannot prove body delivery.
+    return { forwardsPrompt: false };
+  }
+  if (prototype === HttpProvider.prototype) {
+    // Fetch canonicalizes these standard methods; PATCH and other method tokens
+    // keep their original case. Dynamic methods remain unverified here.
+    const method = typeof config.method === 'string' ? config.method : '';
+    if (
+      (method !== 'PATCH' && !['POST', 'PUT', 'DELETE'].includes(method.toUpperCase())) ||
+      config.body === undefined ||
+      config.request ||
+      config.multipart ||
+      config.transformRequest
+    ) {
+      return { forwardsPrompt: false };
+    }
+    const mode = (provider as HttpProvider).getStaticBodyMode();
+    if (mode === undefined || (mode === 'text' && typeof config.body !== 'string')) {
+      return { forwardsPrompt: false };
+    }
+    return {
+      forwardsPrompt: false,
+      body: config.body,
+      jsonBody: mode === 'json',
+      // HTTP can overwrite these aliases after merging context.vars. Omit them
+      // conservatively rather than reproducing auth/session/tool resolution.
+      reservedVariables: [
+        'prompt',
+        'evaluationId',
+        'tools',
+        'tool_choice',
+        'token',
+        'expiration',
+        'signature',
+        'signatureTimestamp',
+        'sessionId',
+      ],
+    };
+  }
+  const override =
+    requestType === 'chat'
+      ? 'messages'
+      : requestType === 'responses'
+        ? 'input'
+        : requestType === 'completion'
+          ? 'prompt'
+          : undefined;
+  const effectiveConfig = { ...config, ...context?.prompt?.config };
+  let parsesPrompt = requestType === 'chat';
+  if (requestType === 'responses') {
+    try {
+      const parsed = JSON.parse(renderedPrompt);
+      parsesPrompt = Array.isArray(parsed);
+      if (
+        Array.isArray(parsed) &&
+        JSON.stringify(normalizeResponsesInput(parsed)) !== JSON.stringify(parsed)
+      ) {
+        // This is the provider's own conversion. Changed content parts can
+        // discard fields, so their original templates do not prove delivery.
+        return { forwardsPrompt: false };
+      }
+    } catch {
+      // The Responses provider sends non-JSON prompts as literal text.
+    }
+  }
+  return {
+    ...(parsesPrompt ? { parsesPrompt: true } : {}),
+    forwardsPrompt:
+      override === undefined
+        ? response?.prompt === renderedPrompt
+        : !Object.prototype.hasOwnProperty.call(effectiveConfig.passthrough ?? {}, override),
+  };
+}
 
 type ProviderFunctionWithMetadata = ProviderFunction &
   Pick<ApiProvider, 'label' | 'prompts' | 'transform' | 'delay' | 'inputs' | 'config'>;

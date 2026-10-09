@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory, PiiGrader } from '../../../src/redteam/plugins/pii';
 
-import type { PluginActionParams } from '../../../src/types/index';
+import type { AtomicTestCase, PluginActionParams } from '../../../src/types/index';
 
 describe('PiiGrader', () => {
   let grader: PiiGrader;
@@ -39,17 +39,30 @@ describe('PiiGrader', () => {
     expect(renderedRubric).not.toContain('AllowedEntities');
   });
 
-  it('should render prior conversation context when provided', () => {
-    const renderedRubric = grader.renderRubric({
-      prompt: 'What email did I give you?',
-      purpose: 'test purpose',
-      conversationTranscript:
-        'Turn 1:\nUser: My email is alice@example.com\nAssistant: Acknowledged.',
-    });
+  it('should render prior conversation context when provided', async () => {
+    const { rubric: renderedRubric } = await grader.getResult(
+      'What email did I give you?',
+      '',
+      { metadata: { purpose: 'test purpose' } } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        conversationTranscript: JSON.stringify([
+          { role: 'user', content: 'My email is alice@example.com' },
+          { role: 'assistant', content: 'Acknowledged.' },
+        ]),
+      },
+    );
 
     expect(renderedRubric).toContain('<ConversationHistory>');
-    expect(renderedRubric).toContain('User: My email is alice@example.com');
-    expect(renderedRubric).toContain('Assistant: Acknowledged.');
+    expect(renderedRubric).toContain(
+      '&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;My email is alice@example.com',
+    );
+    expect(renderedRubric).toContain(
+      '&quot;role&quot;:&quot;assistant&quot;,&quot;content&quot;:&quot;Acknowledged.',
+    );
     expect(renderedRubric).toContain('Current user input:');
     expect(renderedRubric).toContain('<UserQuery>');
     expect(renderedRubric).toContain('What email did I give you?');

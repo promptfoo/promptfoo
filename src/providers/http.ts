@@ -2355,6 +2355,32 @@ export class HttpProvider implements ApiProvider {
     return {};
   }
 
+  /** Determine the body renderer without evaluating dynamic headers a second time. */
+  getStaticBodyMode(): 'json' | 'text' | undefined {
+    const headers = {
+      ...this.getDefaultHeaders(this.config.body),
+      ...Object.fromEntries(
+        Object.entries(this.config.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]),
+      ),
+    };
+    const auth = this.config.auth;
+    if (auth?.type === 'api_key' && auth.placement === 'header') {
+      // A templated name could replace Content-Type after ordinary headers render.
+      if (auth.keyName.includes('{')) {
+        return undefined;
+      }
+      headers[auth.keyName.toLowerCase()] = auth.value;
+    }
+    if (
+      Object.entries(headers).some(
+        ([key, value]) => key.startsWith('content-type') && value.includes('{'),
+      )
+    ) {
+      return undefined;
+    }
+    return contentTypeIsJson(headers) ? 'json' : 'text';
+  }
+
   private validateContentTypeAndBody(headers: Record<string, string>, body: any): void {
     if (body != null) {
       if (typeof body == 'object' && !contentTypeIsJson(headers)) {
@@ -2671,6 +2697,7 @@ export class HttpProvider implements ApiProvider {
       status,
       statusText,
       responseHeaders,
+      redirected: boolean | undefined,
       latencyMs: number | undefined;
     try {
       ({
@@ -2679,6 +2706,7 @@ export class HttpProvider implements ApiProvider {
         status,
         statusText,
         headers: responseHeaders,
+        redirected,
         latencyMs,
       } = await fetchWithCache(
         url,
@@ -2771,6 +2799,7 @@ export class HttpProvider implements ApiProvider {
       transformedPrompt,
       prompt,
       parsedData,
+      redirected,
     );
   }
 
@@ -2913,6 +2942,7 @@ export class HttpProvider implements ApiProvider {
       status,
       statusText,
       responseHeaders,
+      redirected: boolean | undefined,
       latencyMs: number | undefined;
     try {
       ({
@@ -2921,6 +2951,7 @@ export class HttpProvider implements ApiProvider {
         status,
         statusText,
         headers: responseHeaders,
+        redirected,
         latencyMs,
       } = await fetchWithCache(
         url,
@@ -3017,6 +3048,7 @@ export class HttpProvider implements ApiProvider {
       transformedPrompt,
       prompt,
       parsedData,
+      redirected,
     );
   }
 
@@ -3043,6 +3075,7 @@ export class HttpProvider implements ApiProvider {
     transformedPrompt: any,
     prompt: string,
     originalResponse?: unknown,
+    redirected?: boolean,
   ): Promise<ProviderResponse> {
     const originalTokenUsage =
       originalResponse &&
@@ -3064,6 +3097,18 @@ export class HttpProvider implements ApiProvider {
     const result = {
       ...ret,
       ...normalizedOutput,
+    };
+    // Response transforms may supply metadata, but cannot rewrite native
+    // transport evidence used to determine whether the request body arrived.
+    const nativeHttp = ret.metadata?.http;
+    invariant(nativeHttp, 'HTTP response is missing transport metadata');
+    const transformedHttp = result.metadata?.http ?? {
+      status: nativeHttp.status,
+      statusText: nativeHttp.statusText,
+    };
+    result.metadata = {
+      ...result.metadata,
+      http: { ...transformedHttp, redirected },
     };
     // Add estimated token usage if available
     if (!result.tokenUsage) {

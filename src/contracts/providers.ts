@@ -66,6 +66,8 @@ export interface ProviderResponse {
     http?: {
       status: number;
       statusText: string;
+      /** Whether native fetch followed redirects; absent for older cached responses. */
+      redirected?: boolean;
       headers?: Record<string, string>;
       requestHeaders?: Record<string, string>;
     };

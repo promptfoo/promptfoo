@@ -361,6 +361,61 @@ describe('fetchWithCache', () => {
     enableCache(); // Reset to default state
   });
 
+  describe('native redirect evidence', () => {
+    it.each([false, true])(
+      'preserves redirected=%s through coalescing, cache hits, and data updates',
+      async (redirected) => {
+        const upstream = new Response(JSON.stringify(response));
+        Object.defineProperty(upstream, 'redirected', { value: redirected });
+        mockFetchWithRetries.mockResolvedValueOnce(upstream);
+        const options = { cacheKey: 'redirect-evidence' };
+        const [first, coalesced] = await Promise.all([
+          fetchWithCache(url, {}, 1000, 'json', options),
+          fetchWithCache(url, {}, 1000, 'json', options),
+        ]);
+        expect(first.redirected).toBe(redirected);
+        expect(coalesced).toMatchObject({ coalesced: true, redirected });
+        await first.updateCache?.({ data: 'completed' }, 201, 'Created');
+        const cached = await fetchWithCache(url, {}, 1000, 'json', options);
+        expect(cached).toMatchObject({
+          cached: true,
+          redirected,
+          data: { data: 'completed' },
+          status: 201,
+        });
+        expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      },
+    );
+
+    it.each([false, true])(
+      'preserves redirected=%s when bypassing the cache',
+      async (redirected) => {
+        const upstream = new Response(JSON.stringify(response));
+        Object.defineProperty(upstream, 'redirected', { value: redirected });
+        mockFetchWithRetries.mockResolvedValueOnce(upstream);
+        expect(await fetchWithCache(url, {}, 1000, 'json', { bust: true })).toMatchObject({
+          cached: false,
+          redirected,
+        });
+      },
+    );
+
+    it('keeps an unknown legacy redirect value unknown after a cache update', async () => {
+      await getCache().set(
+        'fetch:v3:legacy-redirect',
+        JSON.stringify({ data: response, status: 200, statusText: 'OK' }),
+      );
+      const options = { cacheKey: 'legacy-redirect' };
+      const first = await fetchWithCache(url, {}, 1000, 'json', options);
+      expect(first.cached).toBe(true);
+      expect(first.redirected).toBeUndefined();
+      await first.updateCache?.({ data: 'completed' }, 200, 'OK');
+      const updated = await fetchWithCache(url, {}, 1000, 'json', options);
+      expect(updated.redirected).toBeUndefined();
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
+    });
+  });
+
   describe('response sanitization', () => {
     const secret = 'sensitive-response-credential';
     const rawData = {

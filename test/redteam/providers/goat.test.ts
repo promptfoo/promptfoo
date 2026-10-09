@@ -921,7 +921,14 @@ describe('RedteamGoatProvider', () => {
       expect(result.metadata?.successfulAttacks?.[1].response).toBe('harmful response 2');
       expect(mockGrader.getResult.mock.calls[1][0]).toBe('test prompt');
       expect(mockGrader.getResult.mock.calls[1][7]).toMatchObject({
-        conversationTranscript: 'User: test prompt\n\nAssistant: safe response 1',
+        conversationTranscript: JSON.stringify(
+          [
+            { role: 'user', content: 'test prompt' },
+            { role: 'assistant', content: 'safe response 1' },
+          ],
+          null,
+          2,
+        ),
       });
     });
   });

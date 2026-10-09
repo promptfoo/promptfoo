@@ -3,6 +3,7 @@ import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -76,6 +77,8 @@ export class NovitaChatCompletionProvider extends OpenAiChatCompletionProvider {
   }
 }
 
+registerOpenAiRequestType(NovitaChatCompletionProvider.prototype, 'chat');
+
 export class NovitaCompletionProvider extends OpenAiCompletionProvider {
   constructor(modelName: string, options: NovitaProviderOptions = {}) {
     super(modelName, {
@@ -104,6 +107,8 @@ export class NovitaCompletionProvider extends OpenAiCompletionProvider {
     return getNovitaMissingApiKeyErrorMessage(this.config);
   }
 }
+
+registerOpenAiRequestType(NovitaCompletionProvider.prototype, 'completion');
 
 export class NovitaEmbeddingProvider extends OpenAiEmbeddingProvider {
   declare config: OpenAiCompletionOptions;

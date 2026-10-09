@@ -1,5 +1,6 @@
 import logger from '../../logger';
 import { OpenAiResponsesProvider } from '../openai/responses';
+import { registerOpenAiRequestType } from '../requestAttribution';
 import {
   getBedrockMantleOrigin,
   resolveBedrockMantleApiKey,
@@ -314,6 +315,8 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   }
 }
 
+registerOpenAiRequestType(BedrockOpenAiResponsesProvider.prototype, 'responses');
+
 /**
  * Responses provider for xAI Grok on Bedrock (`xai.grok-4.3`). Shares the mantle Responses
  * transport with the OpenAI frontier provider, but Grok has its own request semantics:
@@ -360,6 +363,8 @@ export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider
     return result;
   }
 }
+
+registerOpenAiRequestType(BedrockGrokResponsesProvider.prototype, 'responses');
 
 /**
  * Responses provider for open-weight GPT OSS models on Bedrock mantle.
@@ -427,6 +432,8 @@ export class BedrockGptOssResponsesProvider extends BedrockOpenAiResponsesProvid
     return result;
   }
 }
+
+registerOpenAiRequestType(BedrockGptOssResponsesProvider.prototype, 'responses');
 
 function getBedrockResponsesBaseUrl(
   modelName: string,

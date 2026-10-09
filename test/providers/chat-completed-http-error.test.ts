@@ -73,7 +73,12 @@ describe.each([
         ...(hasHttpMetadata
           ? {
               metadata: {
-                http: { status: 503, statusText: 'Service Unavailable', headers: responseHeaders },
+                http: {
+                  status: 503,
+                  statusText: 'Service Unavailable',
+                  headers: responseHeaders,
+                  ...(type === OpenAiChatCompletionProvider ? { redirected: false } : {}),
+                },
               },
             }
           : {}),
@@ -184,7 +189,14 @@ describe('Chat completed HTTP refusal', () => {
           latencyMs: expect.any(Number),
           isRefusal: true,
           guardrails: { flagged: true, flaggedInput: true },
-          metadata: { http: { status: 400, statusText: 'Bad Request', headers: responseHeaders } },
+          metadata: {
+            http: {
+              status: 400,
+              statusText: 'Bad Request',
+              headers: responseHeaders,
+              redirected: false,
+            },
+          },
         });
         expect(controller.signal.aborted).toBe(abort);
         expect(response.bodyUsed).toBe(true);

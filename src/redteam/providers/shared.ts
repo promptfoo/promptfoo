@@ -107,8 +107,10 @@ export type RedteamProviderLoader = (
   providers: LoadableRedteamProvider[],
 ) => Promise<ApiProvider[]>;
 
+const loadProviderModule = () => import('../../providers');
+
 const defaultRedteamProviderLoader: RedteamProviderLoader = async (providers) => {
-  const { loadApiProviders } = await import('../../providers');
+  const { loadApiProviders } = await loadProviderModule();
   return loadApiProviders(providers);
 };
 
@@ -600,6 +602,24 @@ export function callGradingProvider(
   );
 }
 
+/** Combine static provider ownership with an explicitly reported actual prompt. */
+export async function getTargetRequestTemplates(
+  provider: ApiProvider,
+  prompt: string,
+  response: ProviderResponse,
+  context?: CallApiContextParams,
+) {
+  if (response.error) {
+    // An attempted call may fail locally before sending anything (for example,
+    // while rendering HTTP headers). It cannot prove current-input delivery.
+    return { forwardsPrompt: false };
+  }
+  const { getProviderRequestTemplates } = await loadProviderModule();
+  // Exact string equality is evidence for opaque adapters only; it must not
+  // override a known built-in request replacement or normalization.
+  return getProviderRequestTemplates(provider, prompt, context, response);
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -743,6 +763,7 @@ export function accumulateGraderResult(
     prompt: string;
     output: string;
     messages?: unknown;
+    currentTurnStart?: number;
     pluginId?: string;
     assertion?: AssertionOrSet;
   },
@@ -758,6 +779,7 @@ export function accumulateGraderResult(
           input.output,
           input.messages,
           input.pluginId,
+          input.currentTurnStart,
         ),
       },
     };
@@ -920,9 +942,11 @@ export const messagesToRedteamHistory = (
 export function formatRedteamHistoryAsTranscript(
   history: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>,
 ): string {
-  return history
-    .map((turn, index) => `Turn ${index + 1}:\nUser: ${turn.prompt}\nAssistant: ${turn.output}`)
-    .join('\n\n');
+  const messages = history.flatMap((turn) => [
+    { role: 'user', content: turn.prompt },
+    { role: 'assistant', content: turn.output },
+  ]);
+  return messages.length ? JSON.stringify(messages, null, 2) : '';
 }
 
 export function checkPenalizedPhrases(output: string): boolean {

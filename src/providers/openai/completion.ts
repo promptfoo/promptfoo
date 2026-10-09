@@ -138,9 +138,12 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     let data,
       cached = false,
+      status: number,
+      statusText: string,
+      redirected: boolean | undefined,
       latencyMs: number | undefined;
     try {
-      ({ data, cached, latencyMs } = (await fetchWithCache(
+      ({ data, cached, latencyMs, status, statusText, redirected } = (await fetchWithCache(
         appendOpenAiApiPath(this.getApiUrl(), 'completions'),
         {
           method: 'POST',
@@ -179,6 +182,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
+        metadata: { http: { status, statusText, redirected } },
         cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
           cachedResponse: cached,
           serviceTier: data.service_tier ?? body.service_tier,

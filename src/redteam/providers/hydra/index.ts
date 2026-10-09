@@ -1,6 +1,6 @@
 import { isBlobStorageEnabled } from '../../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
-import { renderPrompt } from '../../../evaluatorHelpers';
+import { getRenderedInputVariables, renderPrompt } from '../../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -16,8 +16,8 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { getTargetConversation } from '../../grading/storedResult';
-import { materializeInputVariablesWithMetadata } from '../../inputVariables';
+import { ATTRIBUTED_CONVERSATION_VERSION, getTargetConversation } from '../../grading/storedResult';
+import { getTextInputVariables, materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
   getRemoteGenerationExplicitlyDisabledError,
@@ -48,6 +48,7 @@ import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
+  getTargetRequestTemplates,
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
@@ -79,6 +80,9 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
 interface HydraMetadata extends BaseRedteamMetadata {
+  redteamConversationHistoryVersion: typeof ATTRIBUTED_CONVERSATION_VERSION;
+  /** Prior role/content record count when the current input is unattributed. */
+  redteamCurrentTurnStart?: number;
   hydraRoundsCompleted?: number;
   hydraBacktrackCount?: number;
   hydraResult?: boolean;
@@ -354,6 +358,8 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let lastResponseMessages: Message[] = [];
+    let lastCurrentTurnStart: number | undefined;
+    const statefulGradingHistory: Message[] = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
@@ -534,6 +540,12 @@ export class HydraProvider implements ApiProvider {
 
       // Send to target (different based on stateful/stateless)
       let targetPrompt: string;
+      // Body fields can forward generated variables independently of replay.
+      let injectedInputVars = {
+        ...(currentRenderInputVars || {}),
+        [this.injectVar]: processedMessage,
+      };
+      let renderVariables = vars;
 
       if (this.stateful) {
         // Stateful: send only the new message with sessionId
@@ -552,12 +564,17 @@ export class HydraProvider implements ApiProvider {
           ...(currentRenderInputVars || {}),
         };
 
+        injectedInputVars = {
+          [this.injectVar]: escapedMessage,
+          ...(currentRenderInputVars ?? {}),
+        };
+        renderVariables = updatedVars;
         targetPrompt = await renderPrompt(
           prompt,
           updatedVars,
           filters,
           targetProvider,
-          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+          [this.injectVar, ...Object.keys(currentRenderInputVars ?? {})], // Keep generated input literal
         );
       } else {
         // Stateless: send full conversation history as JSON
@@ -687,11 +704,97 @@ export class HydraProvider implements ApiProvider {
         options,
       );
       lastTargetResponse = targetResponse;
+      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+      if (targetResponse.error && targetResponse.tokenUsage?.numRequests === 0) {
+        // A local rejection never reached the target and cannot supply context.
+        this.conversationHistory.pop();
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
+        continue;
+      }
+      const requestTemplates = await getTargetRequestTemplates(
+        targetProvider,
+        finalTargetPrompt,
+        targetResponse,
+        targetContext,
+      );
+      const { vars: deliveredInputVars, forwardsPrompt } = getRenderedInputVariables(
+        getTextInputVariables(injectedInputVars, this.config.inputs),
+        this.injectVar,
+        requestTemplates,
+        // Hydra constructs replay/layer payloads directly. Stateful requests
+        // additionally require proof through the configured prompt template.
+        this.stateful && !lastTransformResult ? prompt : undefined,
+        filters,
+        finalTargetPrompt,
+        renderVariables,
+      );
+      // Text layers replace the replay payload; media layers include its text
+      // history. A provider that drops the payload cannot establish that history.
+      const replaysHistory =
+        forwardsPrompt &&
+        (lastTransformResult?.audio ||
+          lastTransformResult?.image ||
+          (!this.stateful && !lastTransformResult));
+      let currentGradingInputVars = deliveredInputVars;
+      if (lastTransformResult && forwardsPrompt && !replaysHistory) {
+        // The layer replaces the injected prompt, but separately forwarded
+        // generated variables still reached the target through their own fields.
+        // No original template interpolations prove delivery through a layer;
+        // an empty template leaves only the helper's direct body evidence.
+        const { vars: sideInputVars } = getRenderedInputVariables(
+          getTextInputVariables(injectedInputVars, this.config.inputs),
+          this.injectVar,
+          requestTemplates,
+          { raw: '', label: 'layer-output' },
+          undefined,
+          finalTargetPrompt,
+          renderVariables,
+        );
+        currentGradingInputVars = {
+          ...sideInputVars,
+          ...getRenderedInputVariables(
+            { [this.injectVar]: lastTransformResult.prompt },
+            this.injectVar,
+            requestTemplates,
+            undefined,
+            undefined,
+            finalTargetPrompt,
+          ).vars,
+        };
+      }
+      const currentGradingContent = replaysHistory
+        ? processedMessage
+        : currentRenderInputVars
+          ? Object.keys(currentGradingInputVars).length > 0
+            ? JSON.stringify(currentGradingInputVars)
+            : undefined
+          : currentGradingInputVars[this.injectVar];
+      const currentGradingMessages: Message[] =
+        currentGradingContent === undefined
+          ? []
+          : [{ role: 'user', content: currentGradingContent }];
+      const gradingMessages: Message[] = replaysHistory
+        ? [...this.conversationHistory]
+        : this.stateful
+          ? [...statefulGradingHistory, ...currentGradingMessages]
+          : currentGradingMessages;
+      // Unknown or normalized blank input must not hide the prior verified turns
+      // or make the last one look current when the result is graded again later.
+      lastCurrentTurnStart = getTargetConversation(currentGradingMessages).lastUserPrompt
+        ? undefined
+        : replaysHistory
+          ? this.conversationHistory.length - 1
+          : this.stateful
+            ? statefulGradingHistory.length
+            : undefined;
+      const { lastUserPrompt: attributedCurrentPrompt = '', conversationTranscript } =
+        getTargetConversation(gradingMessages, lastCurrentTurnStart);
       lastResponseMessages = [
-        ...this.conversationHistory,
+        ...gradingMessages,
         { role: 'assistant', content: targetResponse.output || '' },
       ];
-      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
       if (targetResponse.error && options?.abortSignal?.aborted) {
         break;
       }
@@ -821,7 +924,13 @@ export class HydraProvider implements ApiProvider {
         role: 'assistant',
         content: historyOutput,
       });
-      lastResponseMessages = [...this.conversationHistory];
+      lastResponseMessages = [...gradingMessages, { role: 'assistant', content: historyOutput }];
+      if (this.stateful) {
+        statefulGradingHistory.push(...currentGradingMessages, {
+          role: 'assistant',
+          content: historyOutput,
+        });
+      }
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
       const isRefusal = isBasicRefusal(targetResponse.output);
@@ -881,9 +990,11 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Build grading context with image outputs, tracing, and exfil tracking data.
+          // Keep prior conversation separate from the current prompt and response.
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
+            conversationTranscript,
+            includeConversationTranscript: true,
             ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
@@ -941,7 +1052,7 @@ export class HydraProvider implements ApiProvider {
 
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            lastFinalAttackPrompt || nextMessage,
+            attributedCurrentPrompt,
             targetResponse.output,
             test,
             targetProvider,
@@ -958,8 +1069,10 @@ export class HydraProvider implements ApiProvider {
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             },
             {
-              prompt: lastFinalAttackPrompt || nextMessage,
+              prompt: attributedCurrentPrompt,
               output: targetResponse.output,
+              messages: lastResponseMessages,
+              currentTurnStart: lastCurrentTurnStart,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },
@@ -1066,7 +1179,7 @@ export class HydraProvider implements ApiProvider {
             hydraResult: vulnerabilityAchieved,
           };
 
-    return preserveSelectedError(
+    return preserveSelectedError<HydraResponse>(
       {
         output: lastTargetResponse?.output || '',
         ...(failClosedError
@@ -1077,6 +1190,7 @@ export class HydraProvider implements ApiProvider {
         metadata: {
           sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
           messages,
+          redteamConversationHistoryVersion: ATTRIBUTED_CONVERSATION_VERSION,
           ...strategyMetadata,
           stopReason,
           successfulAttacks,
@@ -1090,6 +1204,9 @@ export class HydraProvider implements ApiProvider {
               : undefined,
           ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
           redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+          ...(lastCurrentTurnStart === undefined
+            ? {}
+            : { redteamCurrentTurnStart: lastCurrentTurnStart }),
         },
         tokenUsage: totalTokenUsage,
         guardrails: lastTargetResponse?.guardrails,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPromptInputDescriptions,
+  getTextInputVariables,
   materializeInputValue,
   materializeInputVariablesWithMetadata,
 } from '../../src/redteam/inputVariables';
@@ -453,5 +454,44 @@ describe('inputVariables', () => {
 
     expect(value).toMatch(/^data:image\/svg\+xml;base64,/);
     expect(Buffer.from(value.split(',')[1], 'base64').toString('utf-8')).toContain('<svg');
+  });
+});
+
+describe('getTextInputVariables', () => {
+  it('keeps textual contributions while dropping every typed media input', () => {
+    expect(
+      getTextInputVariables(
+        {
+          question: 'Hello',
+          document: 'data:application/pdf;base64,AAAA',
+          image: 'image bytes',
+          docx: 'docx bytes',
+        },
+        {
+          question: 'Question',
+          document: { type: 'pdf', description: 'PDF' },
+          image: { type: 'image', description: 'Image' },
+          docx: { type: 'docx', description: 'Document' },
+        },
+      ),
+    ).toEqual({ question: 'Hello' });
+  });
+});
+
+describe('JSON text projection', () => {
+  it('preserves JSON-looking text until the request path establishes parsing', () => {
+    expect(
+      getTextInputVariables({
+        context: '{"email":"discarded@example.com","email":"retained@example.com"}',
+        opaque: '[{"role":"assistant","content":"Untrusted text"}]',
+        account: '{"account":9007199254740993}',
+        plain: 'Ordinary text.',
+      }),
+    ).toEqual({
+      context: '{"email":"discarded@example.com","email":"retained@example.com"}',
+      opaque: '[{"role":"assistant","content":"Untrusted text"}]',
+      account: '{"account":9007199254740993}',
+      plain: 'Ordinary text.',
+    });
   });
 });

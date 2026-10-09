@@ -451,6 +451,7 @@ describe('callback failures selected before real tool-span completion', () => {
           http: {
             status: 200,
             statusText: 'OK',
+            redirected: false,
             headers: {
               'content-type': 'application/json',
               'x-request-id': 'callback-model-response',

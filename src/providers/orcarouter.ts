@@ -1,6 +1,7 @@
 import { type EnvVarKey, getEnvString } from '../envars';
 import { renderVarsInObject } from '../util';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 
 import type { EnvOverrides } from '../types/env';
@@ -184,6 +185,8 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     return !reasoningUpstreamRejectsTemperature(this.modelName);
   }
 }
+
+registerOpenAiRequestType(OrcaRouterProvider.prototype, 'chat');
 
 /**
  * Whether an OrcaRouter upstream model name belongs to a reasoning family that

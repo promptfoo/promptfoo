@@ -1448,7 +1448,16 @@ describe('shared redteam provider utilities', () => {
       ]);
 
       expect(result).toBe(
-        'Turn 1:\nUser: first question\nAssistant: first response\n\nTurn 2:\nUser: second question\nAssistant: second response',
+        JSON.stringify(
+          [
+            { role: 'user', content: 'first question' },
+            { role: 'assistant', content: 'first response' },
+            { role: 'user', content: 'second question' },
+            { role: 'assistant', content: 'second response' },
+          ],
+          null,
+          2,
+        ),
       );
     });
 

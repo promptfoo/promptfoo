@@ -859,6 +859,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     let data: OpenAIChatCompletionResponse;
     let status: number;
     let statusText: string;
+    let redirected: boolean | undefined;
     let cached = false;
     let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
@@ -871,6 +872,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       statusText,
       headers,
       latencyMs,
+      redirected,
     }: FetchWithCacheResult<OpenAIChatCompletionResponse>): ProviderResponse | undefined => {
       const choice = data?.choices?.[0];
       const message = choice?.message;
@@ -890,7 +892,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         guardrails: { flagged: true },
         metadata: {
           ...this.getProviderResponseMetadata(data),
-          http: { status, statusText, headers: headers ?? {} },
+          http: { status, statusText, headers: headers ?? {}, redirected },
         },
       };
     };
@@ -903,6 +905,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
         deleteFromCache,
         headers: responseHeaders,
+        redirected,
       } = await fetchWithCache<OpenAIChatCompletionResponse>(
         appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
         {
@@ -959,7 +962,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           metadata: {
             ...this.getProviderResponseMetadata(data),
             ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
-            http: { status, statusText, headers: responseHeaders ?? {} },
+            http: { status, statusText, headers: responseHeaders ?? {}, redirected },
           },
         };
       }
@@ -983,7 +986,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           metadata: {
             ...this.getProviderResponseMetadata(data),
             ...(rateLimitKind ? { rateLimitKind } : {}),
-            http: { status, statusText, headers: responseHeaders ?? {} },
+            http: { status, statusText, headers: responseHeaders ?? {}, redirected },
           },
         };
       }
@@ -1018,6 +1021,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 status,
                 statusText,
                 headers: responseHeaders ?? {},
+                redirected,
               },
             },
           };
@@ -1031,6 +1035,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               status,
               statusText,
               headers: responseHeaders ?? {},
+              redirected,
             },
           },
         };
@@ -1070,6 +1075,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             status: 0,
             statusText: 'Error',
             headers: responseHeaders ?? {},
+            redirected,
           },
         },
       });
@@ -1089,6 +1095,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           statusText,
           headers: responseHeaders,
           latencyMs,
+          redirected,
         });
       if (refusal) {
         return refusal;
@@ -1320,6 +1327,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 status,
                 statusText,
                 headers: responseHeaders ?? {},
+                redirected,
               },
               ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
             },
@@ -1359,6 +1367,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               status,
               statusText,
               headers: responseHeaders ?? {},
+              redirected,
             },
             ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
           },
@@ -1382,6 +1391,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             status,
             statusText,
             headers: responseHeaders ?? {},
+            redirected,
           },
           // Include all choices for multi-response requests (n > 1)
           ...(data.choices.length > 1 && { choices: data.choices }),
@@ -1407,6 +1417,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             status,
             statusText,
             headers: responseHeaders ?? {},
+            redirected,
           },
         },
       };

@@ -2,6 +2,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { renderVarsInObject } from '../util/render';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 import { clampCachedTokens } from './shared';
 
@@ -229,6 +230,8 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
     );
   }
 }
+
+registerOpenAiRequestType(DeepSeekProvider.prototype, 'chat');
 
 export function createDeepSeekProvider(
   providerPath: string,

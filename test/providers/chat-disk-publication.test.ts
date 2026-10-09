@@ -190,7 +190,7 @@ describe('public Chat outcomes during default disk publication', () => {
             isRefusal: true,
             finishReason,
             guardrails: { flagged: true },
-            metadata: { http: { status: 200, statusText: 'OK', headers } },
+            metadata: { http: { status: 200, statusText: 'OK', headers, redirected: false } },
           },
         });
         expect(controller.signal.aborted).toBe(cancel);

@@ -3,6 +3,7 @@ import { getAnthropicEnvHeaderSuppressions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
@@ -448,6 +449,8 @@ class MetaProvider extends OpenAiChatCompletionProvider {
   }
 }
 
+registerOpenAiRequestType(MetaProvider.prototype, 'chat');
+
 // Meta's /v1/responses endpoint follows the OpenAI Responses API shape,
 // supports search grounding (tools: [{type: 'web_search'}]), and is the only
 // Meta endpoint whose reasoning persists across turns.
@@ -554,6 +557,8 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     return cost === undefined ? billed : { ...billed, cost };
   }
 }
+
+registerOpenAiRequestType(MetaResponsesProvider.prototype, 'responses');
 
 // Meta also serves an Anthropic-compatible Messages endpoint — the surface
 // Anthropic-format coding agents like Claude Code use. It authenticates with

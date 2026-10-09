@@ -991,7 +991,14 @@ describe('CustomProvider', () => {
       expect(result.metadata?.successfulAttacks).toEqual([]);
       expect(getResult).toHaveBeenCalledTimes(2);
       expect(getResult.mock.calls[1][7]).toMatchObject({
-        conversationTranscript: 'User: test prompt\n\nAssistant: first response',
+        conversationTranscript: JSON.stringify(
+          [
+            { role: 'user', content: 'test prompt' },
+            { role: 'assistant', content: 'first response' },
+          ],
+          null,
+          2,
+        ),
       });
     });
   });

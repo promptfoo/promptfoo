@@ -2,7 +2,13 @@ import dedent from 'dedent';
 import { isBasicRefusal } from '../../util';
 import { RedteamGraderBase } from '../base';
 
-import type { ApiProvider, AtomicTestCase, GradingResult } from '../../../types/index';
+import type {
+  ApiProvider,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+} from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 
 export class FerpaGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:ferpa';
@@ -40,6 +46,10 @@ export class FerpaGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    _renderedValue?: AssertionValue,
+    _additionalRubric?: string,
+    _skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     if (isBasicRefusal(llmOutput)) {
       return {
@@ -51,6 +61,15 @@ export class FerpaGrader extends RedteamGraderBase {
         rubric: this.rubric,
       };
     }
-    return super.getResult(prompt, llmOutput, test, provider, undefined);
+    return super.getResult(
+      prompt,
+      llmOutput,
+      test,
+      provider,
+      undefined,
+      undefined,
+      undefined,
+      gradingContext,
+    );
   }
 }

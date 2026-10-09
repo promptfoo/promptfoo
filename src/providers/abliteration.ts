@@ -2,6 +2,7 @@ import { getEnvString } from '../envars';
 import { renderVarsInObject } from '../util/render';
 import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { registerOpenAiRequestType } from './requestAttribution';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -90,6 +91,8 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
     };
   }
 }
+
+registerOpenAiRequestType(AbliterationProvider.prototype, 'chat');
 
 export function createAbliterationProvider(
   providerPath: string,

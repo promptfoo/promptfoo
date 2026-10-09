@@ -599,6 +599,98 @@ export function analyzeTemplateReference(
   };
 }
 
+/** Prove a JSON template leaf cannot fail into the raw-text rendering fallback. */
+export function isSimpleInputTemplate(
+  template: string,
+  variables: Record<string, unknown>,
+  filters?: NunjucksFilterMap,
+): boolean {
+  const parsed = parseNunjucksTemplate(template);
+  if (!parsed.ok || !Array.isArray(parsed.ast.children)) {
+    return false;
+  }
+  const isVariable = (node: unknown, stringOnly = false) => {
+    const name = getSymbolName(node);
+    if (name === undefined || !Object.prototype.hasOwnProperty.call(variables, name)) {
+      return false;
+    }
+    const value = variables[name];
+    return (
+      typeof value === 'string' ||
+      (!stringOnly && (value == null || typeof value === 'number' || typeof value === 'boolean'))
+    );
+  };
+  return parsed.ast.children.every(
+    (output) =>
+      isNunjucksAstNode(output) &&
+      output.typename === 'Output' &&
+      Array.isArray(output.children) &&
+      output.children.every(
+        (node) =>
+          isVariable(node) ||
+          (isNunjucksAstNode(node) &&
+            (node.typename === 'TemplateData' ||
+              (node.typename === 'Filter' &&
+                getSymbolName(node.name) === 'trim' &&
+                !filters?.trim &&
+                isNunjucksAstNode(node.args) &&
+                Array.isArray(node.args.children) &&
+                node.args.children.length === 1 &&
+                isVariable(node.args.children[0], true)))),
+      ),
+  );
+}
+
+/** Only unconditional, value-preserving interpolation establishes input provenance. */
+export function isDirectTemplateReference(
+  template: string,
+  variableName: string,
+  filters?: NunjucksFilterMap,
+  wholeValueOnly = false,
+): boolean {
+  if (!variableName || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return false;
+  }
+  const parsed = parseNunjucksTemplate(template);
+  if (
+    !parsed.ok ||
+    !Array.isArray(parsed.ast.children) ||
+    !parsed.ast.children.every((node) => isNunjucksAstNode(node) && node.typename === 'Output')
+  ) {
+    return false;
+  }
+  const isReference = (node: unknown): boolean => {
+    if (getSymbolName(node) === variableName) {
+      return true;
+    }
+    if (
+      !isNunjucksAstNode(node) ||
+      node.typename !== 'Filter' ||
+      getSymbolName(node.name) !== 'trim' ||
+      filters?.trim ||
+      !isNunjucksAstNode(node.args) ||
+      !Array.isArray(node.args.children)
+    ) {
+      return false;
+    }
+    return node.args.children.length === 1 && getSymbolName(node.args.children[0]) === variableName;
+  };
+  const nodes: unknown[] = parsed.ast.children.flatMap((output) =>
+    Array.isArray(output.children) ? output.children : [],
+  );
+  return wholeValueOnly
+    ? nodes.filter(isReference).length === 1 &&
+        nodes.every(
+          (node) =>
+            isReference(node) ||
+            (isNunjucksAstNode(node) &&
+              node.typename === 'TemplateData' &&
+              typeof node.value === 'string' &&
+              !node.value.trim()),
+        )
+    : nodes.some(isReference);
+}
+
 /**
  * Check whether a Nunjucks template references a variable as a real expression
  * symbol (not a string literal, comment, object key, filter/test name, property

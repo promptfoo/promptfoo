@@ -19,6 +19,8 @@ export interface RedteamGradingContext {
   redteamHistory?: RedteamHistoryEntry[];
   conversationHistory?: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>;
   conversationTranscript?: string;
+  // Opt in to shared rendering after the strategy has selected its grading history.
+  includeConversationTranscript?: boolean;
   // Data exfiltration tracking (for data-exfil grader)
   wasExfiltrated?: boolean;
   exfilCount?: number;

@@ -1,4 +1,5 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 
 import type { EnvOverrides } from '../types/env';
@@ -30,6 +31,8 @@ export class AtlasCloudProvider extends OpenAiChatCompletionProvider {
     return serializeProvider(this, 'atlascloud');
   }
 }
+
+registerOpenAiRequestType(AtlasCloudProvider.prototype, 'chat');
 
 export function createAtlasCloudProvider(
   providerPath: string,

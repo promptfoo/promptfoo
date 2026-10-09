@@ -4,6 +4,7 @@ import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { registerOpenAiRequestType } from './requestAttribution';
 import { throwIfAborted } from './shared';
 
 import type {
@@ -146,6 +147,8 @@ export class DMRChatCompletionProvider extends OpenAiChatCompletionProvider {
   }
 }
 
+registerOpenAiRequestType(DMRChatCompletionProvider.prototype, 'chat');
+
 export class DMRCompletionProvider extends OpenAiCompletionProvider {
   protected override getGenAISystem(): string {
     return 'docker';
@@ -166,6 +169,8 @@ export class DMRCompletionProvider extends OpenAiCompletionProvider {
     return super.callApi(prompt, context, callApiOptions);
   }
 }
+
+registerOpenAiRequestType(DMRCompletionProvider.prototype, 'completion');
 
 export class DMREmbeddingProvider extends OpenAiEmbeddingProvider {
   async callEmbeddingApi(

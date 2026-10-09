@@ -678,6 +678,18 @@ function buildDocxDataFromRenderPlan(plan: DocxRenderPlan): Buffer {
   return createZip(entries);
 }
 
+/** Project generated inputs to text without materialized document/image bytes. */
+export function getTextInputVariables(
+  variables: Record<string, string>,
+  inputs?: Inputs,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(variables).filter(
+      ([name]) => inputs?.[name] === undefined || getInputType(inputs[name]) === 'text',
+    ),
+  );
+}
+
 export function buildPromptInputDescriptions(inputs?: Inputs): Record<string, string> | undefined {
   if (!inputs) {
     return undefined;

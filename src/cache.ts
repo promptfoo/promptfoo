@@ -306,6 +306,8 @@ export type FetchWithCacheResult<T> = {
   coalesced?: boolean;
   status: number;
   statusText: string;
+  /** Native fetch redirect state; absent on cache entries written before it was recorded. */
+  redirected?: boolean;
   headers?: Record<string, string>;
   latencyMs?: number;
   deleteFromCache?: () => Promise<void>;
@@ -673,6 +675,7 @@ function serializeFetchResponse(
   headers: Record<string, string> | undefined,
   latencyMs: number | undefined,
   sanitizeResponse?: CacheOptions['sanitizeResponse'],
+  redirected?: boolean,
 ): SerializedFetchResponse {
   const sanitized = getSanitizedResponse(data, statusText, headers, sanitizeResponse);
   return JSON.stringify({
@@ -681,6 +684,7 @@ function serializeFetchResponse(
     statusText: sanitized.statusText,
     headers: sanitized.headers,
     latencyMs,
+    redirected,
   });
 }
 
@@ -705,6 +709,7 @@ function deserializeFetchResponse<T>(
     statusText: sanitized.statusText,
     headers: sanitized.headers,
     latencyMs: parsedResponse.latencyMs,
+    redirected: parsedResponse.redirected,
     deleteFromCache: async () => {
       await cache.del(cacheKey);
       logger.debug(`Evicted from cache: ${cacheKey}`);
@@ -724,6 +729,7 @@ function deserializeFetchResponse<T>(
           headers ?? {},
           parsedResponse.latencyMs,
           sanitizeResponse,
+          parsedResponse.redirected,
         ),
       );
       logger.debug(`Updated cached response: ${cacheKey}`);
@@ -857,6 +863,7 @@ async function prepareFetchResponse(
     Object.fromEntries(response.headers.entries()),
     fetchLatencyMs,
     sanitizeResponse,
+    response.redirected,
   );
 
   if (!response.ok) {
@@ -1019,6 +1026,7 @@ export async function fetchWithCache<T = unknown>(
       statusText: sanitized.statusText,
       headers: sanitized.headers,
       latencyMs: fetchLatencyMs,
+      redirected: resp.redirected,
       deleteFromCache: async () => {},
     };
     onResponsePrepared?.(result);
@@ -1048,6 +1056,8 @@ export async function fetchWithCache<T = unknown>(
             result.statusText,
             result.headers,
             result.latencyMs,
+            undefined,
+            result.redirected,
           )
         : cachedResponse;
       logger.debug(

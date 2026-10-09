@@ -1,4 +1,5 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { registerOpenAiRequestType } from '../requestAttribution';
 import {
   getBedrockMantleOrigin,
   resolveBedrockMantleApiKey,
@@ -202,6 +203,8 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 }
+
+registerOpenAiRequestType(BedrockMantleChatProvider.prototype, 'chat');
 
 /**
  * Construct a Chat Completions provider configured for the Bedrock mantle endpoint. Resolves the

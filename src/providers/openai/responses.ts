@@ -140,7 +140,8 @@ interface BackgroundResponseResult {
   statusText: string;
   headers?: Record<string, string>;
   error?: string;
-  retried?: boolean;
+  /** Replacement creation response, including its native transport evidence and cache writer. */
+  retried?: FetchWithCacheResult<OpenAIResponsesResponse>;
   cancelled?: boolean;
   shared?: boolean;
   timedOut?: boolean;
@@ -576,7 +577,7 @@ async function resolveBackgroundResponse(
       statusText: retried.statusText,
       headers: retried.headers,
       error: `API error: ${retried.status} ${retried.statusText}\n${JSON.stringify(retried.data)}`,
-      retried: true,
+      retried,
     };
   }
 
@@ -592,7 +593,7 @@ async function resolveBackgroundResponse(
         deadline,
         cancelOnStop,
       )),
-      retried: true,
+      retried,
     };
   }
 
@@ -601,7 +602,7 @@ async function resolveBackgroundResponse(
     status: retried.status,
     statusText: retried.statusText,
     headers: retried.headers,
-    retried: true,
+    retried,
   };
 }
 
@@ -695,7 +696,7 @@ async function coalesceBackgroundResponse(
         inFlightBackgroundResponses.delete(cacheKey);
       }
       release();
-      return await coalesceBackgroundResponse(
+      const resumed = await coalesceBackgroundResponse(
         result.data,
         url,
         request,
@@ -706,6 +707,9 @@ async function coalesceBackgroundResponse(
         cancelOnStop,
         deadline,
       );
+      // A later subscriber may continue polling a replacement created by the
+      // first subscriber. Keep that POST's evidence unless another POST replaces it.
+      return result.retried && !resumed.retried ? { ...resumed, retried: result.retried } : resumed;
     }
     if (result.error) {
       return result;
@@ -956,6 +960,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     status: number,
     statusText: string,
     headers?: Record<string, string>,
+    redirected?: boolean,
   ): ProviderResponse | undefined {
     const policy = getOpenAiPolicyRefusal(data, this.usesGatewayErrorFormat());
     if (!policy) {
@@ -983,7 +988,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           ...(response.id ? { responseId: response.id } : {}),
           ...(response.model ? { model: response.model } : {}),
           ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
-          http: { status, statusText, headers: headers ?? {} },
+          http: { status, statusText, headers: headers ?? {}, redirected },
         },
       },
       billingData,
@@ -1376,6 +1381,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let data: OpenAIResponsesResponse;
     let status: number;
     let statusText: string;
+    // Keep the creation POST's transport evidence when background GETs replace its data.
+    let redirected: boolean | undefined;
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let updateCache:
@@ -1472,6 +1479,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status: number;
           statusText: string;
           headers: Record<string, string>;
+          redirected: boolean;
         }> => {
           try {
             const response = await fetchWithRetries(
@@ -1519,6 +1527,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               status: response.status,
               statusText: response.statusText,
               headers: Object.fromEntries(response.headers.entries()),
+              redirected: response.redirected,
             };
           } catch (err) {
             if (backgroundResponseId) {
@@ -1539,6 +1548,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status,
           statusText,
           headers: responseHeaders,
+          redirected,
         } = await Promise.race([streamCompletion, pendingCreationCancellation]));
       } else if (body.stream) {
         const controller = new AbortController();
@@ -1558,6 +1568,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status = response.status;
           statusText = response.statusText;
           responseHeaders = response.headers;
+          redirected = response.redirected;
           if (status >= 200 && status < 300) {
             data = await readResponsesStream(
               new Response(response.data),
@@ -1593,6 +1604,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           deleteFromCache,
           updateCache,
           headers: responseHeaders,
+          redirected,
         } = body.background
           ? await createBackgroundResponseWithCancellation(
               url,
@@ -1624,6 +1636,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         status,
         statusText,
         responseHeaders,
+        redirected,
       );
       if (policyResponse) {
         return policyResponse;
@@ -1649,6 +1662,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 status,
                 statusText,
                 headers: responseHeaders ?? {},
+                redirected,
               },
             },
           };
@@ -1661,6 +1675,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               status,
               statusText,
               headers: responseHeaders ?? {},
+              redirected,
             },
           },
         };
@@ -1683,6 +1698,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           cancelOnStop,
           backgroundDeadline,
         );
+        if (polled.retried) {
+          redirected = polled.retried.redirected;
+          updateCache = polled.retried.updateCache;
+        }
         if (polled.shared) {
           cached = true;
         } else if (
@@ -1707,6 +1726,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status,
           statusText,
           responseHeaders,
+          redirected,
         );
         if (polledPolicy) {
           await deleteFromCache?.();
@@ -1764,6 +1784,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             status: 0,
             statusText: 'Error',
             headers: responseHeaders ?? {},
+            redirected,
           },
         },
       };
@@ -1778,6 +1799,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             status,
             statusText,
             headers: responseHeaders ?? {},
+            redirected,
           },
         },
       };
@@ -1798,6 +1820,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           status,
           statusText,
           headers: responseHeaders ?? {},
+          redirected,
         },
       },
     };

@@ -1,6 +1,7 @@
 import { getEnvString } from '../../envars';
 import { resolveProviderEnv } from '../env';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { registerOpenAiRequestType } from '../requestAttribution';
 import { serializeProvider } from '../serialization';
 
 import type { EnvVarKey } from '../../envars';
@@ -124,6 +125,8 @@ export class NvidiaProvider extends OpenAiChatCompletionProvider {
     return serializeProvider(this, 'nvidia');
   }
 }
+
+registerOpenAiRequestType(NvidiaProvider.prototype, 'chat');
 
 export function createNvidiaProvider(
   providerPath: string,

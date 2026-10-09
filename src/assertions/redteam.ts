@@ -2,6 +2,7 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
+  ATTRIBUTED_CONVERSATION_VERSION,
   getGradingAssertionHash,
   getGradingInputHash,
   getTargetConversation,
@@ -177,15 +178,36 @@ export const handleRedteam = async (
   }: AssertionParams,
   claimStoredGradingUsage: () => boolean = () => true,
 ): Promise<GradingResult> => {
+  const providerId = getConfiguredProviderId(test, provider);
+  const usesHydraHistory =
+    providerId === 'promptfoo:redteam:hydra' ||
+    providerId === 'promptfoo:redteam:goblin' ||
+    ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
+      test.metadata?.strategyId ?? '',
+    );
+  const hasAttributedHistory =
+    usesHydraHistory &&
+    providerResponse.metadata?.redteamConversationHistoryVersion ===
+      ATTRIBUTED_CONVERSATION_VERSION;
+  const hasOutdatedHistory =
+    usesHydraHistory &&
+    providerResponse.metadata?.redteamConversationHistoryVersion !== undefined &&
+    !hasAttributedHistory;
   // Skip grading if stored result exists from strategy execution for this specific assertion
-  const savedConversation = getTargetConversation(providerResponse.metadata?.messages);
+  const savedConversation = getTargetConversation(
+    providerResponse.metadata?.messages,
+    hasAttributedHistory ? providerResponse.metadata?.redteamCurrentTurnStart : undefined,
+  );
   const reportedConversation = getTargetConversation(providerResponse.prompt);
   const hasFinalPrompt =
     typeof providerResponse.metadata?.redteamFinalPrompt === 'string' &&
     providerResponse.metadata.redteamFinalPrompt.trim();
   let conversation = savedConversation;
   let gradingMessages = providerResponse.metadata?.messages;
-  if (!hasFinalPrompt || !savedConversation.lastUserPrompt) {
+  if (
+    !hasFinalPrompt ||
+    (!savedConversation.lastUserPrompt && savedConversation.currentTurnStart === undefined)
+  ) {
     if (typeof providerResponse.prompt === 'string' && providerResponse.prompt.trim()) {
       // A reported string supplies no prior turns. Do not combine it with unrelated
       // saved messages unless the strategy supplied an authoritative final prompt.
@@ -198,19 +220,33 @@ export const handleRedteam = async (
       gradingMessages = reportedConversation.lastUserPrompt ? providerResponse.prompt : undefined;
     }
   }
-  const { lastUserPrompt, conversationTranscript } = conversation;
-  const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
-  invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
-
-  // Hydra and Goblin retain their current-turn grading behavior. Their saved
-  // messages are still available for attack generation and reporting.
-  const providerId = getConfiguredProviderId(test, provider);
-  const gradesCurrentTurnOnly =
-    providerId === 'promptfoo:redteam:hydra' ||
-    providerId === 'promptfoo:redteam:goblin' ||
-    ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
-      test.metadata?.strategyId ?? '',
+  if (usesHydraHistory && (!hasAttributedHistory || conversation !== savedConversation)) {
+    // Old Hydra/Goblin records contain raw attacks, including unsent variables.
+    // The marker also cannot transfer to a different reported-prompt source.
+    // Preserve current-turn-only grading and cache inputs in either case.
+    conversation = { lastUserPrompt: conversation.lastUserPrompt };
+    gradingMessages = undefined;
+  }
+  const { lastUserPrompt, conversationTranscript, currentTurnStart } = conversation;
+  const usesAttributedPrompt =
+    hasAttributedHistory &&
+    conversation === savedConversation &&
+    Array.isArray(gradingMessages) &&
+    gradingMessages.every(
+      (message) =>
+        (message?.role === 'user' || message?.role === 'assistant') &&
+        typeof message.content === 'string',
     );
+  let effectivePrompt: string;
+  if (usesAttributedPrompt) {
+    // The raw attack remains useful for display, but cannot establish that the
+    // target received it. An absent attributed current input is deliberately empty.
+    effectivePrompt = lastUserPrompt ?? '';
+  } else {
+    const reportedPrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
+    invariant(reportedPrompt, `Grader ${baseType} must have a prompt`);
+    effectivePrompt = reportedPrompt;
+  }
 
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
@@ -221,14 +257,16 @@ export const handleRedteam = async (
       : undefined;
   if (
     hasStrategyGrade &&
+    !hasOutdatedHistory &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===
       getGradingInputHash(
         effectivePrompt,
         outputString,
-        gradesCurrentTurnOnly ? undefined : gradingMessages,
+        gradingMessages,
         test.metadata?.pluginId,
+        currentTurnStart,
       )
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
@@ -263,8 +301,11 @@ export const handleRedteam = async (
   let gradingContext = createInitialGradingContext({
     assertionValueContext,
     providerResponse,
-    conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
+    conversationTranscript,
   });
+  if (usesHydraHistory) {
+    gradingContext.includeConversationTranscript = true;
+  }
   const trackingIds =
     getWebPageTrackingIds(
       providerResponse.metadata,

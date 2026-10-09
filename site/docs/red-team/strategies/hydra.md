@@ -57,8 +57,34 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 1. **Goal selection** – Hydra pulls the red team goal from the plugin metadata or injected variable.
 2. **Agent decisioning** – A coordinating agent in Promptfoo Cloud evaluates prior turns and chooses the next attack message.
 3. **Target probing** – The selected message is sent either as a replayed transcript or as the newest turn in a target-managed session.
-4. **Outcome grading** – Responses are graded with the configured plugin assertions and stored for later learning.
+4. **Outcome grading** – Responses are graded with the configured plugin assertions and recorded attack contributions and observed target responses. Rendered system or template content is not attributed to the user. Backtracked and locally rejected turns are excluded. Text-only layers that replace the replay payload provide prior context only in target-managed session mode.
 5. **Adaptive branching** – On refusals, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`.
+
+Grading history records attack contributions and observed replies. Stateful input attribution supports direct or trimmed interpolation in static prompt templates. Forwarding is established for built-in OpenAI chat, Responses, and completion requests and explicitly qualified compatible providers, including Groq, Cerebras, and LiteLLM, without replacement `passthrough` inputs, or static HTTP POST/PUT/PATCH/DELETE body values consisting of a complete direct or trimmed interpolation, such as `{{prompt}}` or `{{user_context | trim}}`. Responses inputs must also remain unchanged by the provider's content-part normalization; ordinary role/content text messages are supported. Custom providers can report the exact sent prompt using `ProviderResponse.prompt`.
+
+Stateful multi-input runs retain the combined generated payload when the injection variable forwards it, alongside any independently forwarded named inputs. Stateless runs also attribute generated text forwarded through separate body fields. Earlier stateless turns are included only when the request actually forwards the replay payload.
+
+Generated inputs remain literal during prompt rendering. JSON-looking text stays unchanged unless the target request path parses that complete rendered value; then grading retains only the parsed value, including when trimming makes JSON parseable. JSON strings inside a parsed object remain literal, and input contents never redefine message roles.
+
+Text layers retain the verified transformed prompt and any generated variables independently forwarded through the target request. Uploading content to an indirect page does not establish that the target consumed it.
+
+HTTP root bodies produced by unwrapping a JSON string remain unattributed because the endpoint may parse the resulting bytes as JSON or consume them literally. Explicit text bodies and strings nested inside JSON objects remain supported.
+
+YAML-looking text is retained when the target sends it literally. YAML chat parsing remains unattributed because it can discard comments. Static HTTP method spellings normalized by Fetch, such as `post` or `PuT`, are supported; `PATCH` remains case-sensitive.
+
+Verified earlier turns remain available when a later input is blank or cannot be attributed, including inputs from failed target requests. Disabling target-prompt templating does not disable this grading history.
+
+The grader's current user input also contains only attributed text. It is empty when no current input can be established, while the original attack remains available in the result for inspection. Live grading, saved-verdict checks, and regrading use the same current input; previously saved verdicts are recomputed when that input differs.
+
+Saved runs without verified history continue to grade only the current turn. Older history formats without complete rendering or transport verification are also excluded, and their stored verdicts are recomputed during regrading. Rerun these tests to record verified history for later regrading.
+
+COPPA, FERPA, and wordplay verdicts saved before conversation context was forwarded to their graders are recomputed using the existing verified history. Regrading cannot reconstruct fields missing from saved history, including previously omitted compatible-provider input, stateful aggregate inputs, or stateless body fields; run the red team again to capture them.
+
+Built-in providers require a response from a direct request to establish input delivery. Followed redirects are excluded, even when a redirect may preserve the request body, because the final response does not describe every redirect hop. Cached responses without this transport evidence also leave the input unattributed; run with `--no-cache` to record fresh evidence.
+
+Inputs with uncertain forwarding remain unattributed: arbitrary prompt functions, conditional or raw-wrapped templates, YAML chat payloads, JSON templates with unsupported expressions or malformed leaves, text templates that construct JSON structures, stringified or embedded JSON body templates, dynamic HTTP Content-Type headers, HTTP request transforms, raw or multipart HTTP requests, and unqualified provider wrappers without sent-prompt evidence. Unused variables, discarded fields, operator variables, and materialized media are excluded. This conservative history is not a normalized copy of the full provider conversation.
+
+Compatibility depends on the concrete provider implementation, not its model ID or base class. OpenRouter and Snowflake use separate transports that remain unverified here. Hugging Face direct chat is supported; its text-generation provider can switch request formats and remains unverified, including when it delegates to chat. These unqualified paths can provide explicit sent-prompt evidence through `ProviderResponse.prompt`.
 
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
 

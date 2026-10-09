@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { registerOpenAiRequestType } from '../requestAttribution';
 import { serializeProvider } from '../serialization';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
@@ -282,6 +283,8 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
     return response;
   }
 }
+
+registerOpenAiRequestType(HyperbolicProvider.prototype, 'chat');
 
 export function createHyperbolicProvider(
   providerPath: string,

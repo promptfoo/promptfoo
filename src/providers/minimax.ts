@@ -2,6 +2,7 @@ import logger from '../logger';
 import { resolveConfiguredApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getOpenAICompletionTokenDetails } from './openai/util';
+import { registerOpenAiRequestType } from './requestAttribution';
 import { serializeProvider } from './serialization';
 import { clampCachedTokens } from './shared';
 
@@ -268,6 +269,8 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
     );
   }
 }
+
+registerOpenAiRequestType(MiniMaxProvider.prototype, 'chat');
 
 export function createMiniMaxProvider(
   providerPath: string,
