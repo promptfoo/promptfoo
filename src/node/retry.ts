@@ -388,6 +388,7 @@ async function retryWithConfig(
   // Enable retry mode so getCompletedIndexPairs excludes ERROR results
   cliState.resume = true;
   cliState.retryMode = true;
+  cliState._retryErrorResultIds = errorResultIds;
 
   // Calculate effective maxConcurrency from CLI or config (commandLineOptions)
   // Priority: CLI flag > config file's commandLineOptions
@@ -417,6 +418,7 @@ async function retryWithConfig(
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
+    restorePromptColumns: !cmdObj.config,
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
 
@@ -498,6 +500,7 @@ async function retryWithConfig(
     // Always clear the state flags to prevent stale state
     cliState.resume = false;
     cliState.retryMode = false;
+    delete cliState._retryErrorResultIds;
     cliState.maxConcurrency = undefined;
   }
 }
