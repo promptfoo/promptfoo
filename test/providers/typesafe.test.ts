@@ -158,6 +158,7 @@ describe('TypeSafeProvider', () => {
     it.each([
       { type: 'image_url', image_url: { url: imageUrl } },
       { type: 'input_image', image_url: imageUrl },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aW1hZ2U=' } },
       { inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' } },
       { type: 'input_audio', input_audio: { data: 'YXVkaW8=', format: 'wav' } },
     ])('rejects nontext grading content %# before network', async (part) => {
@@ -173,6 +174,44 @@ describe('TypeSafeProvider', () => {
 
       expect(result.error).toContain('supports text output only');
       expect(mockedFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    describe.each([
+      { content: ['Custom text-only prompt'] },
+      { content: [{ text: 'Custom text-only prompt' }] },
+    ])('custom text-only rubric prompt %#', ({ content }) => {
+      it('continues grading the output directly', async () => {
+        mockAnswer({ type: 'noul', noul: 0.9 });
+
+        const result = await matchesLlmRubric('Is polite', 'Thanks!', {
+          provider: createProvider(),
+          rubricPrompt: JSON.stringify([{ role: 'user', content }]),
+        });
+
+        expect(result).toMatchObject({ pass: true, score: 0.9 });
+        expect(lastRequest().body.state).toBe('Thanks!');
+      });
+
+      it('still rejects attached image evidence', async () => {
+        mockAnswer({ type: 'noul', noul: 0.99 });
+
+        const result = await matchesLlmRubric(
+          'The image contains a red circle',
+          imageUrl,
+          { provider: createProvider(), rubricPrompt: JSON.stringify([{ role: 'user', content }]) },
+          {},
+          undefined,
+          { providerResponse: { images: [{ data: imageUrl, mimeType: 'image/png' }] } },
+        );
+
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          metadata: { graderError: true },
+        });
+        expect(result.reason).toContain('supports text output only');
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      });
     });
 
     it.each(['text', 'input_text', 'output_text'])(

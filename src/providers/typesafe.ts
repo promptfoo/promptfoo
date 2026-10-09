@@ -93,7 +93,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function hasNonTextGradingContent(prompt: string): boolean {
+function hasMediaGradingContent(prompt: string): boolean {
   try {
     const messages: unknown = JSON.parse(prompt);
     return (
@@ -104,12 +104,12 @@ function hasNonTextGradingContent(prompt: string): boolean {
           Array.isArray(message.content) &&
           message.content.some(
             (part) =>
-              !(
-                isPlainObject(part) &&
-                typeof part.type === 'string' &&
-                ['text', 'input_text', 'output_text'].includes(part.type) &&
-                typeof part.text === 'string'
-              ),
+              isPlainObject(part) &&
+              ((typeof part.type === 'string' &&
+                ['image_url', 'input_image', 'image', 'input_audio'].includes(part.type)) ||
+                (isPlainObject(part.inlineData) &&
+                  typeof part.inlineData.mimeType === 'string' &&
+                  typeof part.inlineData.data === 'string')),
           ),
       )
     );
@@ -232,7 +232,7 @@ export class TypeSafeProvider implements ApiProvider {
     // instead of the rendered grading prompt, which is written for a text-generation model.
     if (label === 'llm-rubric' && context?.vars?.rubric !== undefined) {
       // Attachments live in the rendered prompt; vars.output can be only a placeholder.
-      if (hasNonTextGradingContent(prompt)) {
+      if (hasMediaGradingContent(prompt)) {
         return {
           error:
             'TypeSafe `llm-rubric` supports text output only; media attachments are not supported.',
