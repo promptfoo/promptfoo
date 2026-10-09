@@ -1,21 +1,24 @@
+const { createWarningLoggerModule } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the base class
+const createStreamingToolConfig = () => ({
+  streaming: true,
+  toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+});
+
 vi.mock('../../../src/envars', () => ({
   getEnvString: vi.fn(),
   getEnvInt: vi.fn().mockReturnValue(300000),
   getEnvBool: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createWarningLoggerModule());
 
 vi.mock('../../../src/cliState', () => ({
   default: {
@@ -633,10 +636,7 @@ describe('GoogleGenericProvider', () => {
           { text: 'after first call' },
           { functionCall: { name: 'second', args: {} }, thoughtSignature: 'second-signature' },
         ],
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 
@@ -980,10 +980,7 @@ describe('GoogleGenericProvider', () => {
             },
           },
         ],
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 
@@ -1009,10 +1006,7 @@ describe('GoogleGenericProvider', () => {
           inlineData,
           { text: 'After the call' },
         ],
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 
@@ -1034,10 +1028,7 @@ describe('GoogleGenericProvider', () => {
 
       const result = await provider['executeFunctionToolCallbacks'](
         output,
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 
@@ -1278,10 +1269,7 @@ describe('GoogleGenericProvider', () => {
             thoughtSignature: 'late-signature',
           },
         ],
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 

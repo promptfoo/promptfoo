@@ -1,3 +1,5 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../../factories/logger'));
+
 import * as fs from 'fs';
 import path from 'path';
 
@@ -52,14 +54,7 @@ vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createLoggerModule());
 
 const durationConstrainedConfigs = [
   ['reference images', { referenceImages: ['file://reference.png'] }],
