@@ -387,9 +387,17 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
+  protected override isReasoningCapabilityModel(_modelName: string): boolean {
+    return true;
+  }
+
   // Unlike OpenAI's o-series, Muse Spark accepts temperature (0-2), so keep
   // promptfoo's deterministic default instead of suppressing the parameter.
   protected override supportsTemperature(): boolean {
+    return true;
+  }
+
+  protected override supportsTemperatureForCapabilityModel(_modelName: string): boolean {
     return true;
   }
 
@@ -440,10 +448,17 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const response = await super.callApi(prompt, context, callApiOptions);
-    if (!response || response.error) {
+    if (
+      !response ||
+      (response.error && (response.metadata?.errorOrigin !== 'tool' || !response.tokenUsage))
+    ) {
       return response;
     }
-    return applyMetaCost(response, this.modelName, this.config, context);
+    const modelName = this.getBillingModelName({
+      ...this.config,
+      ...context?.prompt?.config,
+    });
+    return applyMetaCost(response, modelName, this.config, context);
   }
 }
 
@@ -485,7 +500,15 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     return true;
   }
 
+  protected override isReasoningCapabilityModel(_modelName: string): boolean {
+    return true;
+  }
+
   protected override supportsTemperature(): boolean {
+    return true;
+  }
+
+  protected override supportsTemperatureForCapabilityModel(_modelName: string): boolean {
     return true;
   }
 
@@ -541,7 +564,7 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
     }
     const usage = data?.usage;
     const cost = calculateMetaCost(
-      this.modelName,
+      this.getBillingModelName(config),
       config as MetaConfig,
       usage?.input_tokens,
       usage?.output_tokens,
@@ -663,9 +686,8 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
 
     const response = await super.callApi(prompt, context);
 
-    // Unlike the chat provider, do NOT skip error responses: the base class
-    // deliberately bills errors that carry tokenUsage (e.g. an MCP loop that
-    // exceeded max_tool_calls) so spent tokens don't vanish from cost totals.
+    // The base class bills usage-bearing errors (e.g. an MCP loop that
+    // exceeded max_tool_calls), so preserve that completed work's cost.
     return applyMetaCost(response, this.modelName, this.config as MetaMessagesConfig, context);
   }
 }

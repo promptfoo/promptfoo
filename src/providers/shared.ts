@@ -1,7 +1,44 @@
 import { getEnvBool, getEnvInt } from '../envars';
+import { getCallerAbortError } from '../util/fetch/requestSignal';
 import { loadYaml } from '../util/yamlLoad';
 
 import type { ApiProvider } from '../types/index';
+
+export function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) {
+    throw getCallerAbortError(signal);
+  }
+}
+
+/** Stop only this caller's wait; shared work keeps running and its rejection is observed. */
+export function waitForPromiseWithAbort<T>(
+  promise: PromiseLike<T>,
+  signal?: AbortSignal | null,
+): Promise<T> {
+  if (!signal) {
+    return Promise.resolve(promise);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(getCallerAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+}
 
 /** Returns the complete model suffix after the given number of provider/type segments. */
 export function modelNameFromProviderPath(providerPath: string, segments: number): string {
