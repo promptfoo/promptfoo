@@ -203,7 +203,7 @@ const mockGetUnifiedConfig = vi.hoisted(() =>
     strategies: [],
   }),
 );
-vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
+vi.mock('@promptfoo/presentation/redteamConfig', () => ({
   getUnifiedConfig: mockGetUnifiedConfig,
 }));
 
@@ -333,8 +333,8 @@ describe('Review Component', () => {
       restoreTestTimers();
       const user = userEvent.setup();
       const { getUnifiedConfig } = await vi.importActual<
-        typeof import('@promptfoo/redteam/sharedFrontend')
-      >('@promptfoo/redteam/sharedFrontend');
+        typeof import('@promptfoo/presentation/redteamConfig')
+      >('@promptfoo/presentation/redteamConfig');
       mockGetUnifiedConfig.mockImplementation(getUnifiedConfig);
       const config = { ...defaultConfig, target, prompts: ['Hello'] };
       const original = JSON.parse(JSON.stringify(config));
