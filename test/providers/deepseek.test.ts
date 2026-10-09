@@ -914,8 +914,7 @@ describe('completed model callback billing', () => {
     );
     await withCacheEnabled(false, async () => {
       const ordinary = response(await fixture.run('fallback', 'ordinary'));
-      const expected =
-        item.boundary === 'zero' && !item.route.startsWith('hyperbolic:') ? 0 : undefined;
+      const expected = item.boundary === 'zero' ? 0 : undefined;
       cost(ordinary.cost, expected);
       const selected = response(await fixture.run('selected-error', 'selected'));
       cost(selected.cost, expected);

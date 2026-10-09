@@ -167,6 +167,100 @@ describe('OpenAI Provider', () => {
       expect(mockClient.beta.threads.messages.retrieve).toHaveBeenCalledTimes(1);
     });
 
+    describe('caller cancellation', () => {
+      const run = { id: 'run_cancel', thread_id: 'thread_cancel', status: 'completed' };
+
+      beforeEach(() => {
+        mockClient.beta.threads.createAndRun.mockResolvedValue(run);
+        mockClient.beta.threads.runs.retrieve.mockResolvedValue(run);
+        mockClient.beta.threads.runs.steps.list.mockResolvedValue({
+          data: [
+            {
+              id: 'step_cancel',
+              step_details: {
+                type: 'message_creation',
+                message_creation: { message_id: 'msg_cancel' },
+              },
+            },
+          ],
+        });
+        mockClient.beta.threads.messages.retrieve.mockResolvedValue({
+          role: 'assistant',
+          content: [{ type: 'text', text: { value: 'done' } }],
+        });
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('does not start an already cancelled invocation', async () => {
+        const controller = new AbortController();
+        controller.abort(new Error('caller stopped'));
+        await expect(
+          provider.callApi('prompt', undefined, { abortSignal: controller.signal }),
+        ).rejects.toMatchObject({ name: 'AbortError', message: 'caller stopped' });
+        expect(mockClient.beta.threads.createAndRun).not.toHaveBeenCalled();
+      });
+
+      it('passes the caller signal to every SDK request', async () => {
+        const controller = new AbortController();
+        await expect(
+          provider.callApi('prompt', undefined, { abortSignal: controller.signal }),
+        ).resolves.toMatchObject({ output: '[Assistant] done' });
+        for (const mock of [
+          mockClient.beta.threads.createAndRun,
+          mockClient.beta.threads.runs.retrieve,
+          mockClient.beta.threads.runs.steps.list,
+          mockClient.beta.threads.messages.retrieve,
+        ]) {
+          expect(mock.mock.calls[0].at(-1)).toEqual({ signal: controller.signal });
+        }
+      });
+
+      it('cancels the polling delay without retrieving another run', async () => {
+        vi.useFakeTimers();
+        const controller = new AbortController();
+        mockClient.beta.threads.runs.retrieve.mockResolvedValueOnce({
+          ...run,
+          status: 'in_progress',
+        });
+        const result = provider.callApi('prompt', undefined, { abortSignal: controller.signal });
+        // Observe rejection immediately so cancellation cannot become unhandled.
+        const settled = result.then(
+          (value) => value,
+          (error) => error,
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+        controller.abort(new Error('stop polling'));
+        await vi.runAllTimersAsync();
+        expect(await settled).toMatchObject({ name: 'AbortError', message: 'stop polling' });
+        expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+        expect(mockClient.beta.threads.runs.steps.list).not.toHaveBeenCalled();
+      });
+
+      it.each(['create', 'retrieve', 'steps', 'message'])(
+        'propagates cancellation during the %s request',
+        async (stage) => {
+          const controller = new AbortController();
+          const request = {
+            create: mockClient.beta.threads.createAndRun,
+            retrieve: mockClient.beta.threads.runs.retrieve,
+            steps: mockClient.beta.threads.runs.steps.list,
+            message: mockClient.beta.threads.messages.retrieve,
+          }[stage];
+          request.mockImplementationOnce(async () => {
+            controller.abort(new Error('transport cancelled'));
+            throw Object.assign(new Error('SDK request aborted'), { name: 'AbortError' });
+          });
+          await expect(
+            provider.callApi('prompt', undefined, { abortSignal: controller.signal }),
+          ).rejects.toMatchObject({ name: 'AbortError', message: 'transport cancelled' });
+        },
+      );
+    });
+
     it('drops the SDK organization option when a case-variant org header overrides it', async () => {
       const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
       const mockSteps = {
@@ -349,6 +443,7 @@ describe('OpenAI Provider', () => {
         expect.objectContaining({
           temperature: 0,
         }),
+        { signal: undefined },
       );
     });
 
@@ -541,6 +636,169 @@ describe('OpenAI Provider', () => {
       });
     });
 
+    function setUpFunctionCall(functionName: string) {
+      const run = {
+        id: 'run_test',
+        thread_id: 'thread_test',
+        status: 'requires_action',
+        required_action: {
+          type: 'submit_tool_outputs',
+          submit_tool_outputs: {
+            tool_calls: [
+              {
+                id: 'call_test',
+                type: 'function',
+                function: { name: functionName, arguments: '{}' },
+              },
+            ],
+          },
+        },
+      };
+      mockClient.beta.threads.createAndRun.mockResolvedValue(run);
+      mockClient.beta.threads.runs.retrieve
+        .mockResolvedValueOnce(run)
+        .mockResolvedValue({ ...run, status: 'completed' });
+      mockClient.beta.threads.runs.submitToolOutputs.mockResolvedValue({
+        ...run,
+        status: 'completed',
+      });
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue({ data: [] });
+    }
+
+    it.each(['toString', 'constructor', 'valueOf', 'inherited_tool'])(
+      'does not dispatch inherited callback %s',
+      async (functionName) => {
+        const inheritedCallback = vi.fn().mockResolvedValue('inherited result');
+        const callbacks = Object.create({ inherited_tool: inheritedCallback });
+        const provider = new OpenAiAssistantProvider('asst_test', {
+          config: { apiKey: 'test-key', functionToolCallbacks: callbacks },
+        });
+        setUpFunctionCall(functionName);
+        await provider.callApi('prompt');
+        expect(inheritedCallback).not.toHaveBeenCalled();
+        expect(mockClient.beta.threads.runs.submitToolOutputs).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['toString', 'constructor', '__proto__'])(
+      'dispatches an explicitly configured own callback %s',
+      async (functionName) => {
+        const callback = vi.fn().mockResolvedValue('own result');
+        const provider = new OpenAiAssistantProvider('asst_test', {
+          config: { apiKey: 'test-key', functionToolCallbacks: { [functionName]: callback } },
+        });
+        setUpFunctionCall(functionName);
+        await provider.callApi('prompt');
+        expect(callback).toHaveBeenCalledTimes(1);
+        expect(
+          mockClient.beta.threads.runs.submitToolOutputs.mock.calls[0][1].tool_outputs,
+        ).toEqual([{ tool_call_id: 'call_test', output: 'own result' }]);
+      },
+    );
+
+    it('forwards cancellation to callbacks and stops waiting without submitting late output', async () => {
+      const controller = new AbortController();
+      let finishCallback!: (value: string) => void;
+      const pendingCallback = new Promise<string>((resolve) => {
+        finishCallback = resolve;
+      });
+      const callback = vi.fn().mockReturnValue(pendingCallback);
+      const provider = new OpenAiAssistantProvider('asst_test', {
+        config: { apiKey: 'test-key', functionToolCallbacks: { test_function: callback } },
+      });
+      setUpFunctionCall('test_function');
+      const result = provider.callApi('prompt', undefined, { abortSignal: controller.signal });
+      const settled = result.then(
+        (value) => value,
+        (error) => error,
+      );
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledTimes(1));
+      controller.abort(new Error('stop callback'));
+      // Cancellation should settle even if the user callback ignores its signal.
+      let outcome: unknown;
+      void settled.then((value) => {
+        outcome = value;
+      });
+      try {
+        await vi.waitFor(() =>
+          expect(outcome).toMatchObject({ name: 'AbortError', message: 'stop callback' }),
+        );
+        expect(callback).toHaveBeenCalledWith(
+          {},
+          expect.objectContaining({ abortSignal: controller.signal }),
+        );
+      } finally {
+        finishCallback('late output');
+        await settled;
+      }
+      expect(mockClient.beta.threads.runs.submitToolOutputs).not.toHaveBeenCalled();
+      expect(mockClient.beta.threads.runs.steps.list).not.toHaveBeenCalled();
+    });
+
+    it('does not execute a callback whose import completes after cancellation', async () => {
+      const controller = new AbortController();
+      const provider = new OpenAiAssistantProvider('asst_test', { config: { apiKey: 'test-key' } });
+      provider.assistantConfig.functionToolCallbacks = { test_function: 'file://callback.js' };
+      let finishImport!: (callback: Function) => void;
+      const pendingImport = new Promise<Function>((resolve) => {
+        finishImport = resolve;
+      });
+      const load = vi.spyOn(provider as any, 'loadExternalFunction').mockReturnValue(pendingImport);
+      const callback = vi.fn().mockResolvedValue('late result');
+      setUpFunctionCall('test_function');
+      const result = provider.callApi('prompt', undefined, { abortSignal: controller.signal });
+      const settled = result.then(
+        (value) => value,
+        (error) => error,
+      );
+      await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+      controller.abort(new Error('stop import'));
+      try {
+        expect(await settled).toMatchObject({ name: 'AbortError', message: 'stop import' });
+      } finally {
+        finishImport(callback);
+        load.mockRestore();
+      }
+      await Promise.resolve();
+      expect(callback).not.toHaveBeenCalled();
+      expect(mockClient.beta.threads.runs.submitToolOutputs).not.toHaveBeenCalled();
+    });
+
+    it('passes the signal to tool output submission', async () => {
+      const controller = new AbortController();
+      const provider = new OpenAiAssistantProvider('asst_test', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: { test_function: async () => 'result' },
+        },
+      });
+      setUpFunctionCall('test_function');
+      await provider.callApi('prompt', undefined, { abortSignal: controller.signal });
+      expect(mockClient.beta.threads.runs.submitToolOutputs.mock.calls[0][2]).toEqual({
+        signal: controller.signal,
+      });
+    });
+
+    it('propagates cancellation during tool output submission', async () => {
+      const controller = new AbortController();
+      const provider = new OpenAiAssistantProvider('asst_test', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: { test_function: async () => 'result' },
+        },
+      });
+      setUpFunctionCall('test_function');
+      mockClient.beta.threads.runs.submitToolOutputs.mockImplementationOnce(async () => {
+        controller.abort(new Error('stop submitting'));
+        throw Object.assign(new Error('SDK request aborted'), { name: 'AbortError' });
+      });
+      await expect(
+        provider.callApi('prompt', undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'stop submitting' });
+      expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
+      expect(mockClient.beta.threads.runs.steps.list).not.toHaveBeenCalled();
+    });
+
     it('should pass context to function callbacks', async () => {
       const mockCallback = vi.fn().mockResolvedValue('test result');
 
@@ -730,15 +988,19 @@ describe('OpenAI Provider', () => {
       await provider.callApi('test prompt');
 
       // Check that the tool output was submitted correctly
-      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledWith('run_test', {
-        thread_id: 'thread_test',
-        tool_outputs: [
-          {
-            tool_call_id: 'call_test',
-            output: expect.stringContaining('received: {"test":"data"}'),
-          },
-        ],
-      });
+      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledWith(
+        'run_test',
+        {
+          thread_id: 'thread_test',
+          tool_outputs: [
+            {
+              tool_call_id: 'call_test',
+              output: expect.stringContaining('received: {"test":"data"}'),
+            },
+          ],
+        },
+        { signal: undefined },
+      );
     });
 
     it('should handle callbacks that access context properties', async () => {
@@ -810,21 +1072,25 @@ describe('OpenAI Provider', () => {
       );
 
       // Verify the tool output contains the context information
-      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledWith('run_test', {
-        thread_id: 'thread_test',
-        tool_outputs: [
-          {
-            tool_call_id: 'call_test',
-            output: JSON.stringify({
-              originalArgs: { user_id: '123' },
-              contextInfo: {
-                threadId: 'thread_test',
-                provider: 'openai',
-              },
-            }),
-          },
-        ],
-      });
+      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledWith(
+        'run_test',
+        {
+          thread_id: 'thread_test',
+          tool_outputs: [
+            {
+              tool_call_id: 'call_test',
+              output: JSON.stringify({
+                originalArgs: { user_id: '123' },
+                contextInfo: {
+                  threadId: 'thread_test',
+                  provider: 'openai',
+                },
+              }),
+            },
+          ],
+        },
+        { signal: undefined },
+      );
     });
 
     it('should handle function callback errors gracefully', async () => {
@@ -873,17 +1139,21 @@ describe('OpenAI Provider', () => {
       await provider.callApi('test prompt');
 
       // Verify error was handled and submitted as tool output
-      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledWith('run_test', {
-        thread_id: 'thread_test',
-        tool_outputs: [
-          {
-            tool_call_id: 'call_test',
-            output: JSON.stringify({
-              error: 'Error in error_function: Callback error',
-            }),
-          },
-        ],
-      });
+      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledWith(
+        'run_test',
+        {
+          thread_id: 'thread_test',
+          tool_outputs: [
+            {
+              tool_call_id: 'call_test',
+              output: JSON.stringify({
+                error: 'Error in error_function: Callback error',
+              }),
+            },
+          ],
+        },
+        { signal: undefined },
+      );
     });
   });
 });
