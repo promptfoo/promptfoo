@@ -5,7 +5,9 @@ import {
   type Plugin,
   riskCategorySeverityMap,
   type Severity,
+  SeveritySchema,
 } from '../redteam/constants';
+import { RedteamConfigSchema } from '../validators/redteam';
 
 import type { RedteamPluginObject, SavedRedteamConfig } from '../redteam/types';
 import type { UnifiedConfig, Vars } from '../types/index';
@@ -33,6 +35,60 @@ export function getRiskCategorySeverityMap(
     ...riskCategorySeverityMap,
     ...overrides,
   };
+}
+
+function getValidPluginNumTests(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function getValidPluginSeverity(value: unknown) {
+  const parsed = SeveritySchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/** Normalize the workload preview with the same aliases and duplicate precedence as generation. */
+export function normalizeRedteamConfigForPreview(
+  config: Pick<SavedRedteamConfig, 'plugins' | 'strategies' | 'numTests' | 'language'>,
+) {
+  const numTests = config.numTests ?? 5;
+  const plugins = config.plugins.map((entry) => {
+    if (typeof entry === 'string') {
+      return entry;
+    }
+    const {
+      numTests,
+      severity,
+      config: pluginConfig,
+      ...options
+    } = {
+      numTests: undefined,
+      severity: undefined,
+      ...entry,
+    };
+    const validNumTests = getValidPluginNumTests(numTests);
+    const validSeverity = getValidPluginSeverity(severity);
+    return {
+      ...options,
+      ...(pluginConfig && Object.keys(pluginConfig).length > 0 && { config: pluginConfig }),
+      ...(validNumTests !== undefined && { numTests: validNumTests }),
+      ...(validSeverity !== undefined && { severity: validSeverity }),
+    };
+  });
+  const normalized = RedteamConfigSchema.safeParse({
+    plugins,
+    numTests,
+    strategies: config.strategies,
+    language: config.language,
+  });
+  // Keep a best-effort preview while plugin or strategy fields are incomplete in the editor.
+  return normalized.success
+    ? {
+        ...normalized.data,
+        numTests: normalized.data.numTests ?? numTests,
+        plugins: normalized.data.plugins ?? [],
+        strategies: normalized.data.strategies ?? [],
+      }
+    : { plugins, numTests, strategies: config.strategies, language: config.language };
 }
 
 export function getUnifiedConfig(
@@ -75,9 +131,19 @@ export function getUnifiedConfig(
         if (typeof plugin === 'string') {
           return { id: plugin };
         }
+        const {
+          config: pluginConfig,
+          numTests,
+          severity,
+          ...pluginOptions
+        } = { numTests: undefined, severity: undefined, ...plugin };
+        const validNumTests = getValidPluginNumTests(numTests);
+        const validSeverity = getValidPluginSeverity(severity);
         return {
-          id: plugin.id,
-          ...(plugin.config && Object.keys(plugin.config).length > 0 && { config: plugin.config }),
+          ...pluginOptions,
+          ...(validSeverity !== undefined && { severity: validSeverity }),
+          ...(validNumTests !== undefined && { numTests: validNumTests }),
+          ...(pluginConfig && Object.keys(pluginConfig).length > 0 && { config: pluginConfig }),
         };
       }),
       strategies: config.strategies.map((strategy) => {

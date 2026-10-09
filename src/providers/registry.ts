@@ -26,7 +26,6 @@ import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
 import { getBedrockTextRoute } from './bedrock/routing';
 import { BrowserProvider } from './browser';
-import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
@@ -40,7 +39,6 @@ import {
   ElevenLabsSTTProvider,
   ElevenLabsTTSProvider,
 } from './elevenlabs';
-import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
@@ -71,8 +69,6 @@ import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistr
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
 import { createMoonshotProvider } from './moonshot';
 import { createN8nProvider } from './n8n';
-import { createNovitaProvider } from './novita';
-import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { resolveOpenAiApiUrl } from './openai';
 import { loadOpenAiAgentsModule } from './openai/agents-availability';
@@ -113,7 +109,6 @@ import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
 import { loadSlackProviderModule } from './slack-availability';
 import { createSnowflakeProvider } from './snowflake';
-import { createTogetherAiProvider } from './togetherai';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
 import { createVercelProvider } from './vercel';
@@ -689,8 +684,6 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  configuredProviderFactory('cerebras:', () => createCerebrasProvider),
-  configuredProviderFactory('novita:', () => createNovitaProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('cloudera:'),
     create: async (
@@ -844,7 +837,6 @@ export const providerMap: ProviderFactory[] = [
       }
     },
   },
-  configuredProviderFactory('envoy:', () => createEnvoyProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('f5:'),
     create: async (
@@ -997,20 +989,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('litellm:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const { createLiteLLMProvider } = await import('./litellm');
-      return createLiteLLMProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('localai:'),
     create: async (
       providerPath: string,
@@ -1075,15 +1053,6 @@ export const providerMap: ProviderFactory[] = [
       return createMoonshotProvider(providerPath, {
         ...providerOptions,
         env: providerOptions.env ?? context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('nscale:'),
-    create: async (providerPath: string, providerOptions: ProviderOptions) => {
-      return createNscaleProvider(providerPath, {
-        config: providerOptions,
-        env: providerOptions.env,
       });
     },
   },
@@ -1485,7 +1454,6 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  configuredProviderFactory('togetherai:', () => createTogetherAiProvider),
   configuredProviderFactory('truefoundry:', () => createTrueFoundryProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('typesafe:'),
@@ -1982,6 +1950,19 @@ function isGoogleProviderPath(providerPath: string): boolean {
 }
 
 const providerFamilies: ProviderFamily[] = [
+  {
+    canHandle: (value) => /^(cerebras|envoy|litellm|novita|nscale|togetherai):/.test(value),
+    factories: async () => {
+      const { getCompatibleProviderFactories } = await import('./families/compatible');
+      return getCompatibleProviderFactories((path, providerOptions, context) =>
+        mergeProviderEnv(
+          { id: path, config: providerOptions.config },
+          context.env,
+          providerOptions.env,
+        ),
+      );
+    },
+  },
   {
     canHandle: isAwsProviderPath,
     factories: async () => {
