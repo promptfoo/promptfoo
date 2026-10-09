@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -57,14 +58,14 @@ describe('PythonWorker shutdown during startup or execution', () => {
     const validate = vi.spyOn(pythonUtils, 'validatePythonPath').mockReturnValueOnce(validation);
     const worker = new PythonWorker(path.join(os.tmpdir(), 'provider.py'), 'call_api');
     const initialization = worker.initialize();
-    const rejection = expect(initialization).rejects.toThrow('shut down during initialization');
+    const rejection = expect(initialization).rejects.toThrow('Worker shutting down');
     try {
       expect(validate).toHaveBeenCalledOnce();
       await worker.shutdown();
       finishValidation(path.join(os.tmpdir(), 'nonexistent-promptfoo-python'));
       await rejection;
       expect(worker.isReady()).toBe(false);
-      await expect(worker.initialize()).rejects.toThrow('shut down during initialization');
+      await expect(worker.initialize()).rejects.toThrow('Worker shutting down');
       expect(validate).toHaveBeenCalledOnce();
     } finally {
       finishValidation(path.join(os.tmpdir(), 'nonexistent-promptfoo-python'));
@@ -80,15 +81,20 @@ describe('PythonWorker shutdown during startup or execution', () => {
     'immediately terminates a child that is %s instead of waiting for it to read shutdown',
     async (_stage, ready, busy) => {
       const worker = new PythonWorker(path.join(os.tmpdir(), 'provider.py'), 'call_api');
-      const child = { kill: vi.fn(), send: vi.fn() };
-      const cancelInitialization = vi.fn();
-      Object.assign(worker, { process: child, ready, busy, cancelInitialization });
+      const processEvents = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+      const child = { kill: vi.fn(), send: vi.fn(), childProcess: processEvents };
+      Object.assign(worker, { process: child, ready, busy });
+      let finished = false;
+      const shutdown = worker.shutdown().then(() => {
+        finished = true;
+      });
 
-      await worker.shutdown();
-
-      expect(cancelInitialization).toHaveBeenCalledOnce();
       expect(child.kill).toHaveBeenCalledExactlyOnceWith('SIGTERM');
       expect(child.send).not.toHaveBeenCalled();
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      processEvents.emit('close');
+      await shutdown;
       expect(worker.isReady()).toBe(false);
       expect(worker.isBusy()).toBe(false);
     },
