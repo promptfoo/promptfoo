@@ -156,7 +156,12 @@ export class SlotQueue {
     if (parsed.resetAtTokens !== undefined) {
       this.resetAtTokens = parsed.resetAtTokens;
     }
-    this.scheduleResetProcessing();
+    if (isRateLimited) {
+      // The caller applies the response-wide backoff after updating its headers.
+      this.scheduleResetProcessing();
+    } else {
+      this.processQueue();
+    }
   }
 
   /** Apply request-wide backoff without inventing exhaustion of an available quota. */
@@ -212,7 +217,7 @@ export class SlotQueue {
   }
 
   getResetAt(): number | null {
-    const deadlines = [this.resetAt, this.rateLimitedUntil, ...this.getQuotaResetTimes()].filter(
+    const deadlines = [this.rateLimitedUntil, ...this.getQuotaResetTimes()].filter(
       (deadline): deadline is number => deadline !== null,
     );
     return deadlines.length > 0 ? Math.max(...deadlines) : null;

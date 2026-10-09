@@ -462,9 +462,11 @@ describe('loaded Chat selected fetch backoff and same-key quota', () => {
     { existingSeconds: 60, selectedSeconds: 2, cancel: true },
     { existingSeconds: 60, selectedSeconds: 2, cancel: false },
     { existingSeconds: 2, selectedSeconds: 60, cancel: true },
+    { existingSeconds: 2, selectedSeconds: 1, cancel: true, availableDimension: 'requests' },
+    { existingSeconds: 2, selectedSeconds: 1, cancel: true, availableDimension: 'tokens' },
   ])(
-    'retains the later pool deadline across existing $existingSeconds s and selected $selectedSeconds s (cancel=$cancel)',
-    async ({ existingSeconds, selectedSeconds, cancel }) => {
+    'retains the later pool deadline across existing $existingSeconds s and selected $selectedSeconds s (cancel=$cancel, available=$availableDimension)',
+    async ({ existingSeconds, selectedSeconds, cancel, availableDimension }) => {
       const { registry, wrapped } = await createTarget({}, 2);
       const selected = observeSelectedWait(selectedSeconds * 1000 + 500);
       const held = createDeferred<Response>();
@@ -480,8 +482,24 @@ describe('loaded Chat selected fetch backoff and same-key quota', () => {
           const response = success('C');
           // Generic successful-response quota is learned by the scheduler, but
           // does not itself cause the lower fetch layer to select a backoff.
-          response.headers.set('ratelimit-remaining', '0');
-          response.headers.set('ratelimit-reset', `${existingSeconds}s`);
+          if (availableDimension) {
+            for (const dimension of ['requests', 'tokens']) {
+              const available = dimension === availableDimension;
+              // Gateway quota headers are learned by the scheduler without
+              // selecting a transport retry for this successful response.
+              response.headers.set(
+                `anthropic-ratelimit-${dimension}-remaining`,
+                available ? '100' : '0',
+              );
+              response.headers.set(
+                `anthropic-ratelimit-${dimension}-reset`,
+                available ? '60s' : `${existingSeconds}s`,
+              );
+            }
+          } else {
+            response.headers.set('ratelimit-remaining', '0');
+            response.headers.set('ratelimit-reset', `${existingSeconds}s`);
+          }
           return response;
         }
         return success(prompt);
