@@ -49,7 +49,7 @@ function output(amount: number, size: 'small' | 'large' = 'large', turn = 1, ima
     amount,
     turn,
     data: [{ b64_json: images[size] }],
-    ...(imageUrl ? { image: `https://example.com/chart-${turn}.png` } : {}),
+    ...(imageUrl ? { image: `![chart](https://example.com/chart-${turn}.png)` } : {}),
   });
 }
 
@@ -325,9 +325,7 @@ describe('original numeric JSON in iterative media responses', () => {
       expect(response?.output).toBe(raw);
       expect(row.success).toBe(amount === 100);
       expect(row.failureReason).toBe(amount === 100 ? 0 : 1);
-      if (strategy !== 'image') {
-        expect(response?.metadata?.storedGraderResult.pass).toBe(amount === 100);
-      }
+      expect(response?.metadata?.storedGraderResult.pass).toBe(amount === 100);
       if (!inline && size === 'large') {
         expect(row.response?.output).toMatch(/^promptfoo:\/\/blob\//);
         expect(judgeInputs.every((request) => !request.includes(images.large))).toBe(true);
@@ -352,9 +350,7 @@ describe('original numeric JSON in iterative media responses', () => {
     expect(response?.metadata?.redteamTargetMetadata.turn).toBe(2);
     expect(row.success).toBe(false);
     expect(row.failureReason).toBe(1);
-    if (strategy !== 'image') {
-      expect(response?.metadata?.storedGraderResult.pass).toBe(false);
-    }
+    expect(response?.metadata?.storedGraderResult.pass).toBe(false);
   });
 
   it.each(
@@ -406,7 +402,7 @@ describe('original numeric JSON in iterative media responses', () => {
       vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
       const values = [
         output(100, inline ? 'large' : 'small', 1, true),
-        output(101, 'large', 2, true),
+        output(100, 'large', 2, true),
       ];
       const result = await evaluate('image', values, { includeAudio: true });
       const { row, response, target, visionInputs } = result;
@@ -417,6 +413,95 @@ describe('original numeric JSON in iterative media responses', () => {
       expect(visionInputs).toHaveLength(inline ? 2 : 1);
       expect(row.success).toBe(true);
       await expectSelectedAudio(result, 1, inline);
+    },
+  );
+
+  it.each(
+    [false, true].flatMap((inline) =>
+      [false, true].flatMap((external) =>
+        [false, true].flatMap((wrongFirst) =>
+          [false, true].map((higherFirst) => ({ inline, external, wrongFirst, higherFirst })),
+        ),
+      ),
+    ),
+  )(
+    'image retains numeric failure (inline=$inline, external=$external, wrongFirst=$wrongFirst, higherFirst=$higherFirst)',
+    async ({ inline, external, wrongFirst, higherFirst }) => {
+      vi.stubEnv('PROMPTFOO_INLINE_MEDIA', String(inline));
+      const callsPath = path.join(directory, 'reference-calls.txt');
+      await fs.writeFile(callsPath, '');
+      await fs.writeFile(
+        path.join(directory, 'reference.cjs'),
+        `module.exports = () => {
+          require('node:fs').appendFileSync(${JSON.stringify(callsPath)}, 'call\\n');
+          return { type: 'numeric', expected: { amount: 100 } };
+        };`,
+      );
+      const assertion: Assertion = external
+        ? { ...numericAssertion, value: 'file://reference.cjs', config: { numeric: true } }
+        : numericAssertion;
+      const amounts = wrongFirst ? [101, 100] : [100, 101];
+      const values = amounts.map((amount, index) => output(amount, 'small', index + 1, true));
+      const result = await evaluate('image', values, {
+        assertion,
+        ratings: higherFirst ? [8, 2] : [2, 8],
+        includeAudio: true,
+      });
+      const selectedTurn = wrongFirst ? 1 : 2;
+      expect(result.target.callApi).toHaveBeenCalledTimes(selectedTurn);
+      expect(result.response?.output).toBe(values[selectedTurn - 1]);
+      expect(result.row).toMatchObject({ success: false, score: 0, failureReason: 1 });
+      expect(result.response?.metadata?.storedGraderResult).toMatchObject({ pass: false });
+      expect(result.visionInputs).toHaveLength(selectedTurn - 1);
+      expect(result.judgeInputs).toHaveLength(selectedTurn - 1);
+      await expectSelectedAudio(result, selectedTurn, inline);
+      expect(await fs.readFile(callsPath, 'utf8')).toBe(
+        external ? 'call\n'.repeat(selectedTurn + 1) : '',
+      );
+    },
+  );
+
+  it.each([true, false])(
+    'image preserves legacy heuristic selection (higher first: %s)',
+    async (higherFirst) => {
+      const values = [output(101, 'small', 1, true), output(100, 'small', 2, true)];
+      const result = await evaluate('image', values, {
+        assertion: { type: 'contains', value: '"amount":100' },
+        ratings: higherFirst ? [8, 2] : [2, 8],
+      });
+      expect(result.target.callApi).toHaveBeenCalledTimes(2);
+      expect(result.response?.output).toBe(values[higherFirst ? 0 : 1]);
+      expect(result.row.success).toBe(!higherFirst);
+      expect(result.visionInputs).toHaveLength(2);
+      expect(result.judgeInputs).toHaveLength(2);
+      expect(result.response?.metadata).not.toHaveProperty('storedGraderResult');
+    },
+  );
+
+  it.each(['reference', 'script', 'transform'] as const)(
+    'image propagates a numeric %s error before vision scoring',
+    async (kind) => {
+      await fs.writeFile(
+        path.join(directory, 'reference.cjs'),
+        'module.exports = () => { throw new Error("Synthetic network reference failure"); };',
+      );
+      const assertion: Assertion =
+        kind === 'reference'
+          ? { ...numericAssertion, value: { type: 'numeric', expected: { amount: 'invalid' } } }
+          : kind === 'script'
+            ? { ...numericAssertion, value: 'file://reference.cjs', config: { numeric: true } }
+            : {
+                ...numericAssertion,
+                transform: '(() => { throw new Error("Synthetic timeout transform failure"); })()',
+              };
+      const result = await evaluate('image', [output(100, 'small', 1, true), output(100)], {
+        assertion,
+      });
+      expect(result.target.callApi).toHaveBeenCalledTimes(1);
+      expect(result.row).toMatchObject({ success: false, score: 0, failureReason: 2 });
+      expect(result.row.error).toContain('RedteamGradingConfigError');
+      expect(result.visionInputs).toHaveLength(0);
+      expect(result.judgeInputs).toHaveLength(0);
     },
   );
 

@@ -94,7 +94,7 @@ describe('RedteamIterativeImageProvider', () => {
   });
 
   it.each([true, false])(
-    'preserves the selected earlier output type for exact numeric assertions (text: %s)',
+    'preserves the source type before numeric image grading (text: %s)',
     async (outputIsText) => {
       const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
         '../../../src/redteam/providers/shared',
@@ -102,7 +102,8 @@ describe('RedteamIterativeImageProvider', () => {
       vi.mocked(getTargetResponse).mockImplementation(shared.getTargetResponse);
       const { getEnvInt } = await import('../../../src/envars');
       vi.mocked(getEnvInt).mockReturnValue(2);
-      const json = '{"amount":9007199254740993,"image":"https://example.com/generated.png"}';
+      const json =
+        '{"amount":9007199254740993,"image":"![preview](https://example.com/generated.png)"}';
       const parsed = JSON.parse(json);
       const sourceMetadata = {
         encoding: { format: 'json' },
@@ -141,7 +142,7 @@ describe('RedteamIterativeImageProvider', () => {
           });
       }
       const provider = new RedteamIterativeProvider({});
-      const result = await provider.callApi('Return the amount as JSON', {
+      const pendingResult = provider.callApi('Return the amount as JSON', {
         originalProvider: mockTargetProvider,
         vars: { goal: 'Return the amount as JSON' },
         prompt: { raw: '{{goal}}', label: 'test' },
@@ -155,15 +156,24 @@ describe('RedteamIterativeImageProvider', () => {
         } as AtomicTestCase,
       });
 
-      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
-      expect(result.output).toBe(outputIsText ? json : JSON.stringify(parsed));
+      if (!outputIsText) {
+        await expect(pendingResult).rejects.toThrow(/requires raw JSON text/);
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        return;
+      }
+      const result = await pendingResult;
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe(json);
       expect(result.metadata.redteamOutputIsText).toBe(outputIsText);
       expect(result.metadata?.redteamTargetMetadata).toEqual({
         ...sourceMetadata,
         encoding: { format: 'json' },
       });
       expect(result.metadata?.redteamFinalPrompt).not.toBe('forged prompt');
-      expect(result.metadata).not.toHaveProperty('storedGraderResult');
+      expect(result.metadata?.storedGraderResult).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Numeric reference check failed'),
+      });
       const { runAssertion } = await import('../../../src/assertions/index');
       const numericResult = runAssertion({
         prompt: 'Return the amount as JSON',
@@ -181,11 +191,7 @@ describe('RedteamIterativeImageProvider', () => {
           },
         },
       });
-      if (outputIsText) {
-        expect((await numericResult).pass).toBe(true);
-      } else {
-        await expect(numericResult).rejects.toThrow(/requires raw JSON text/);
-      }
+      expect((await numericResult).pass).toBe(true);
     },
   );
 
