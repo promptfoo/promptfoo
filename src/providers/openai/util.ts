@@ -370,15 +370,13 @@ function excludeRetiredModels(models: OpenAIModelInfo[]): OpenAIModelInfo[] {
 
 // Models served by /v1/audio/speech, not Chat Completions.
 const OPENAI_TTS_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
-  ...['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15', 'gpt-4o-mini-tts-2025-03-20'].map(
-    (model) => ({
-      id: model,
-      cost: {
-        input: 0.6 / 1e6,
-        output: 0,
-        audioOutput: 12 / 1e6,
-      },
-    }),
+  ...modelsWithCost(
+    ['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15', 'gpt-4o-mini-tts-2025-03-20'],
+    {
+      input: 0.6 / 1e6,
+      output: 0,
+      audioOutput: 12 / 1e6,
+    },
   ),
   ...['tts-1', 'tts-1-1106', 'tts-1-hd', 'tts-1-hd-1106'].map((model) => ({
     id: model,
@@ -389,398 +387,269 @@ export const OPENAI_TTS_MODELS = excludeRetiredModels(OPENAI_TTS_AND_RETIRED_MOD
 // see https://platform.openai.com/docs/models
 const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   // Search preview models
-  ...['gpt-4o-search-preview', 'gpt-4o-search-preview-2025-03-11'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-4o-mini-search-preview', 'gpt-4o-mini-search-preview-2025-03-11'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.15 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  })),
-  ...['gpt-5-search-api', 'gpt-5-search-api-2025-10-14'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['chatgpt-4o-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1e6,
-      output: 15 / 1e6,
-    },
-  })),
+  ...modelsWithCost(['gpt-4o-search-preview', 'gpt-4o-search-preview-2025-03-11'], {
+    input: 2.5 / 1e6,
+    output: 10 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-4o-mini-search-preview', 'gpt-4o-mini-search-preview-2025-03-11'], {
+    input: 0.15 / 1e6,
+    output: 0.6 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5-search-api', 'gpt-5-search-api-2025-10-14'], {
+    input: 1.25 / 1e6,
+    output: 10 / 1e6,
+  }),
+  ...modelsWithCost(['chatgpt-4o-latest'], {
+    input: 5 / 1e6,
+    output: 15 / 1e6,
+  }),
   // `chat-latest` is the bare alias for the latest Instant model used in ChatGPT
   // (the pricing page's "Specialized models › ChatGPT" row).
-  ...['chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1e6,
-      output: 30 / 1e6,
-    },
-  })),
-  ...['gpt-4.1', 'gpt-4.1-2025-04-14'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2 / 1e6,
-      output: 8 / 1e6,
-    },
-  })),
-  ...['gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.4 / 1e6,
-      output: 1.6 / 1e6,
-    },
-  })),
-  ...['gpt-4.1-nano', 'gpt-4.1-nano-2025-04-14'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.1 / 1e6,
-      output: 0.4 / 1e6,
-    },
-  })),
-  ...['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'].map((model) => ({
-    id: model,
-    cost: {
-      input: 15 / 1e6,
-      output: 60 / 1e6,
-    },
-  })),
+  ...modelsWithCost(['chat-latest'], {
+    input: 5 / 1e6,
+    output: 30 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-4.1', 'gpt-4.1-2025-04-14'], {
+    input: 2 / 1e6,
+    output: 8 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14'], {
+    input: 0.4 / 1e6,
+    output: 1.6 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-4.1-nano', 'gpt-4.1-nano-2025-04-14'], {
+    input: 0.1 / 1e6,
+    output: 0.4 / 1e6,
+  }),
+  ...modelsWithCost(['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'], {
+    input: 15 / 1e6,
+    output: 60 / 1e6,
+  }),
   // o1-mini pricing per Standard tier
-  ...['o1-mini', 'o1-mini-2024-09-12'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.1 / 1e6,
-      output: 4.4 / 1e6,
-    },
-  })),
-  ...['o3', 'o3-2025-04-16'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2 / 1e6,
-      output: 8 / 1e6,
-    },
-  })),
-  ...['o3-mini', 'o3-mini-2025-01-31'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.1 / 1e6,
-      output: 4.4 / 1e6,
-    },
-  })),
-  ...['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-4o-2024-05-13'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1e6,
-      output: 15 / 1e6,
-    },
-  })),
-  ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.15 / 1e6,
-      output: 0.6 / 1e6,
-    },
-  })),
-  ...['gpt-4', 'gpt-4-0613', 'gpt-4-0314'].map((model) => ({
-    id: model,
-    cost: {
-      input: 30 / 1e6,
-      output: 60 / 1e6,
-    },
-  })),
-  ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
-    id: model,
-    cost: {
-      input: 60 / 1e6,
-      output: 120 / 1e6,
-    },
-  })),
-  ...[
-    'gpt-4-turbo',
-    'gpt-4-turbo-2024-04-09',
-    'gpt-4-turbo-preview',
-    'gpt-4-0125-preview',
-    'gpt-4-1106-preview',
-    'gpt-4-1106-vision-preview',
-    'gpt-4-vision-preview',
-  ].map((model) => ({
-    id: model,
-    cost: {
+  ...modelsWithCost(['o1-mini', 'o1-mini-2024-09-12'], {
+    input: 1.1 / 1e6,
+    output: 4.4 / 1e6,
+  }),
+  ...modelsWithCost(['o3', 'o3-2025-04-16'], {
+    input: 2 / 1e6,
+    output: 8 / 1e6,
+  }),
+  ...modelsWithCost(['o3-mini', 'o3-mini-2025-01-31'], {
+    input: 1.1 / 1e6,
+    output: 4.4 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06'], {
+    input: 2.5 / 1e6,
+    output: 10 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-4o-2024-05-13'], {
+    input: 5 / 1e6,
+    output: 15 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'], {
+    input: 0.15 / 1e6,
+    output: 0.6 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-4', 'gpt-4-0613', 'gpt-4-0314'], {
+    input: 30 / 1e6,
+    output: 60 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'], {
+    input: 60 / 1e6,
+    output: 120 / 1e6,
+  }),
+  ...modelsWithCost(
+    [
+      'gpt-4-turbo',
+      'gpt-4-turbo-2024-04-09',
+      'gpt-4-turbo-preview',
+      'gpt-4-0125-preview',
+      'gpt-4-1106-preview',
+      'gpt-4-1106-vision-preview',
+      'gpt-4-vision-preview',
+    ],
+    {
       input: 10 / 1e6,
       output: 30 / 1e6,
     },
-  })),
-  {
-    id: 'gpt-3.5-turbo',
-    cost: {
-      input: 0.5 / 1e6,
-      output: 1.5 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-3.5-turbo-0125',
-    cost: {
-      input: 0.5 / 1e6,
-      output: 1.5 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-3.5-turbo-1106',
-    cost: {
-      input: 1 / 1e6,
-      output: 2 / 1e6,
-    },
-  },
-  ...['gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.5 / 1e6,
-      output: 2 / 1e6,
-    },
-  })),
-  ...['gpt-3.5-turbo-16k', 'gpt-3.5-turbo-16k-0613'].map((model) => ({
-    id: model,
-    cost: {
-      input: 3 / 1e6,
-      output: 4 / 1e6,
-    },
-  })),
-  ...['o4-mini', 'o4-mini-2025-04-16'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.1 / 1e6,
-      output: 4.4 / 1e6,
-    },
-  })),
+  ),
+  ...modelsWithCost(['gpt-3.5-turbo'], {
+    input: 0.5 / 1e6,
+    output: 1.5 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-3.5-turbo-0125'], {
+    input: 0.5 / 1e6,
+    output: 1.5 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-3.5-turbo-1106'], {
+    input: 1 / 1e6,
+    output: 2 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'], {
+    input: 1.5 / 1e6,
+    output: 2 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-3.5-turbo-16k', 'gpt-3.5-turbo-16k-0613'], {
+    input: 3 / 1e6,
+    output: 4 / 1e6,
+  }),
+  ...modelsWithCost(['o4-mini', 'o4-mini-2025-04-16'], {
+    input: 1.1 / 1e6,
+    output: 4.4 / 1e6,
+  }),
   // GPT-5 models
-  ...['gpt-5', 'gpt-5-2025-08-07', 'gpt-5-chat', 'gpt-5-chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-5-nano', 'gpt-5-nano-2025-08-07'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.05 / 1e6,
-      output: 0.4 / 1e6,
-    },
-  })),
-  ...['gpt-5-mini', 'gpt-5-mini-2025-08-07'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.25 / 1e6,
-      output: 2 / 1e6,
-    },
-  })),
-  ...['codex-mini-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.5 / 1e6,
-      output: 6.0 / 1e6,
-    },
-  })),
+  ...modelsWithCost(['gpt-5', 'gpt-5-2025-08-07', 'gpt-5-chat', 'gpt-5-chat-latest'], {
+    input: 1.25 / 1e6,
+    output: 10 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5-nano', 'gpt-5-nano-2025-08-07'], {
+    input: 0.05 / 1e6,
+    output: 0.4 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5-mini', 'gpt-5-mini-2025-08-07'], {
+    input: 0.25 / 1e6,
+    output: 2 / 1e6,
+  }),
+  ...modelsWithCost(['codex-mini-latest'], {
+    input: 1.5 / 1e6,
+    output: 6.0 / 1e6,
+  }),
   // GPT-5.1 models
-  ...['gpt-5.1', 'gpt-5.1-2025-11-13', 'gpt-5.1-chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
+  ...modelsWithCost(['gpt-5.1', 'gpt-5.1-2025-11-13', 'gpt-5.1-chat-latest'], {
+    input: 1.25 / 1e6,
+    output: 10 / 1e6,
+  }),
   // GPT-5.2 models
-  ...['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.75 / 1e6,
-      output: 14 / 1e6,
-    },
-  })),
+  ...modelsWithCost(['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest'], {
+    input: 1.75 / 1e6,
+    output: 14 / 1e6,
+  }),
   // GPT-5.3 models
-  ...['gpt-5.3-chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.75 / 1e6,
-      output: 14 / 1e6,
+  ...modelsWithCost(['gpt-5.3-chat-latest'], {
+    input: 1.75 / 1e6,
+    output: 14 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-6-astra'], {
+    input: 10 / 1e6,
+    output: 50 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 20 / 1e6,
+      output: 75 / 1e6,
     },
-  })),
-  {
-    id: 'gpt-6-astra',
-    cost: {
-      input: 10 / 1e6,
-      output: 50 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 20 / 1e6,
-        output: 75 / 1e6,
-      },
-    },
-  },
-  ...['gpt-6-sol', 'gpt-6.1-sol'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2 / 1e6,
-      output: 10 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 4 / 1e6,
-        output: 15 / 1e6,
-      },
-    },
-  })),
-  {
-    id: 'gpt-6-luna',
-    cost: {
-      input: 0.1 / 1e6,
-      output: 0.5 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 0.2 / 1e6,
-        output: 0.75 / 1e6,
-      },
-    },
-  },
-  // GPT-5.6 models
-  ...['gpt-5.6', 'gpt-5.6-sol'].map((model) => ({
-    id: model,
-    cost: {
+  }),
+  ...modelsWithCost(['gpt-6-sol', 'gpt-6.1-sol'], {
+    input: 2 / 1e6,
+    output: 10 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
       input: 4 / 1e6,
-      output: 20 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 8 / 1e6,
-        output: 30 / 1e6,
-      },
-    },
-  })),
-  {
-    id: 'gpt-5.6-terra',
-    cost: {
-      input: 2 / 1e6,
-      output: 12 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 4 / 1e6,
-        output: 18 / 1e6,
-      },
-    },
-  },
-  {
-    id: 'gpt-5.6-luna',
-    cost: {
-      input: 0.2 / 1e6,
-      output: 1.2 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 0.4 / 1e6,
-        output: 1.8 / 1e6,
-      },
-    },
-  },
-  // GPT-5.5 models
-  ...['gpt-5.5', 'gpt-5.5-2026-04-23'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1e6,
-      output: 30 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 10 / 1e6,
-        output: 45 / 1e6,
-      },
-    },
-  })),
-  // GPT-5.4 models
-  ...['gpt-5.4', 'gpt-5.4-2026-03-05'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2.5 / 1e6,
       output: 15 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 5 / 1e6,
-        output: 22.5 / 1e6,
-      },
     },
-  })),
-  ...['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.75 / 1e6,
-      output: 4.5 / 1e6,
-    },
-  })),
-  ...['gpt-5.4-nano', 'gpt-5.4-nano-2026-03-17'].map((model) => ({
-    id: model,
-    cost: {
+  }),
+  ...modelsWithCost(['gpt-6-luna'], {
+    input: 0.1 / 1e6,
+    output: 0.5 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
       input: 0.2 / 1e6,
-      output: 1.25 / 1e6,
+      output: 0.75 / 1e6,
     },
-  })),
+  }),
+  // GPT-5.6 models
+  ...modelsWithCost(['gpt-5.6', 'gpt-5.6-sol'], {
+    input: 4 / 1e6,
+    output: 20 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 8 / 1e6,
+      output: 30 / 1e6,
+    },
+  }),
+  ...modelsWithCost(['gpt-5.6-terra'], {
+    input: 2 / 1e6,
+    output: 12 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 4 / 1e6,
+      output: 18 / 1e6,
+    },
+  }),
+  ...modelsWithCost(['gpt-5.6-luna'], {
+    input: 0.2 / 1e6,
+    output: 1.2 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 0.4 / 1e6,
+      output: 1.8 / 1e6,
+    },
+  }),
+  // GPT-5.5 models
+  ...modelsWithCost(['gpt-5.5', 'gpt-5.5-2026-04-23'], {
+    input: 5 / 1e6,
+    output: 30 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 10 / 1e6,
+      output: 45 / 1e6,
+    },
+  }),
+  // GPT-5.4 models
+  ...modelsWithCost(['gpt-5.4', 'gpt-5.4-2026-03-05'], {
+    input: 2.5 / 1e6,
+    output: 15 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 5 / 1e6,
+      output: 22.5 / 1e6,
+    },
+  }),
+  ...modelsWithCost(['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'], {
+    input: 0.75 / 1e6,
+    output: 4.5 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5.4-nano', 'gpt-5.4-nano-2026-03-17'], {
+    input: 0.2 / 1e6,
+    output: 1.25 / 1e6,
+  }),
   // gpt-audio models
-  ...['gpt-audio', 'gpt-audio-2025-08-28', 'gpt-audio-1.5'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
-      audioInput: 32 / 1e6,
-      audioOutput: 64 / 1e6,
-    },
-  })),
-  ...['gpt-audio-mini', 'gpt-audio-mini-2025-12-15', 'gpt-audio-mini-2025-10-06'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
-    },
-  })),
+  ...modelsWithCost(['gpt-audio', 'gpt-audio-2025-08-28', 'gpt-audio-1.5'], {
+    input: 2.5 / 1e6,
+    output: 10 / 1e6,
+    audioInput: 32 / 1e6,
+    audioOutput: 64 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-audio-mini', 'gpt-audio-mini-2025-12-15', 'gpt-audio-mini-2025-10-06'], {
+    input: 0.6 / 1e6,
+    output: 2.4 / 1e6,
+    audioInput: 10 / 1e6,
+    audioOutput: 20 / 1e6,
+  }),
 ];
 
 // Retired previews remain for historical billing; the dated mini preview remains routable until
 // OpenAI publishes its shutdown date.
 const LEGACY_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
-  ...[
-    'gpt-4o-audio-preview',
-    'gpt-4o-audio-preview-2024-12-17',
-    'gpt-4o-audio-preview-2024-10-01',
-    'gpt-4o-audio-preview-2025-06-03',
-  ].map((model) => ({
-    id: model,
-    cost: {
+  ...modelsWithCost(
+    [
+      'gpt-4o-audio-preview',
+      'gpt-4o-audio-preview-2024-12-17',
+      'gpt-4o-audio-preview-2024-10-01',
+      'gpt-4o-audio-preview-2025-06-03',
+    ],
+    {
       input: 2.5 / 1e6,
       output: 10 / 1e6,
       audioInput: 40 / 1e6,
       audioOutput: 80 / 1e6,
     },
-  })),
-  ...['gpt-4o-mini-audio-preview', 'gpt-4o-mini-audio-preview-2024-12-17'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.15 / 1e6,
-      output: 0.6 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
-    },
-  })),
+  ),
+  ...modelsWithCost(['gpt-4o-mini-audio-preview', 'gpt-4o-mini-audio-preview-2024-12-17'], {
+    input: 0.15 / 1e6,
+    output: 0.6 / 1e6,
+    audioInput: 10 / 1e6,
+    audioOutput: 20 / 1e6,
+  }),
 ];
 
 export const OPENAI_CHAT_MODELS = excludeRetiredModels([
@@ -912,101 +781,65 @@ export function assertOpenAiApiModel(
 }
 
 const OPENAI_RESPONSES_ONLY_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
-  ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
-    id: model,
-    cost: {
-      input: 3 / 1e6,
-      output: 12 / 1e6,
+  ...modelsWithCost(['computer-use-preview', 'computer-use-preview-2025-03-11'], {
+    input: 3 / 1e6,
+    output: 12 / 1e6,
+  }),
+  ...modelsWithCost(['o1-pro', 'o1-pro-2025-03-19'], {
+    input: 150 / 1e6,
+    output: 600 / 1e6,
+  }),
+  ...modelsWithCost(['o3-pro', 'o3-pro-2025-06-10'], {
+    input: 20 / 1e6,
+    output: 80 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5-codex'], {
+    input: 1.25 / 1e6,
+    output: 10 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5-codex-mini'], {
+    input: 0.5 / 1e6,
+    output: 2 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5-pro', 'gpt-5-pro-2025-10-06'], {
+    input: 15 / 1e6,
+    output: 120 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5.1-codex', 'gpt-5.1-codex-max'], {
+    input: 1.25 / 1e6,
+    output: 10 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5.1-codex-mini'], {
+    input: 0.25 / 1e6,
+    output: 2 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5.2-codex', 'gpt-5.3-codex'], {
+    input: 1.75 / 1e6,
+    output: 14 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'], {
+    input: 21 / 1e6,
+    output: 168 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05'], {
+    input: 30 / 1e6,
+    output: 180 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 60 / 1e6,
+      output: 270 / 1e6,
     },
-  })),
-  ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
-    id: model,
-    cost: {
-      input: 150 / 1e6,
-      output: 600 / 1e6,
-    },
-  })),
-  ...['o3-pro', 'o3-pro-2025-06-10'].map((model) => ({
-    id: model,
-    cost: {
-      input: 20 / 1e6,
-      output: 80 / 1e6,
-    },
-  })),
-  ...['gpt-5-codex'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-5-codex-mini'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.5 / 1e6,
-      output: 2 / 1e6,
-    },
-  })),
-  ...['gpt-5-pro', 'gpt-5-pro-2025-10-06'].map((model) => ({
-    id: model,
-    cost: {
-      input: 15 / 1e6,
-      output: 120 / 1e6,
-    },
-  })),
-  ...['gpt-5.1-codex', 'gpt-5.1-codex-max'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-5.1-codex-mini'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.25 / 1e6,
-      output: 2 / 1e6,
-    },
-  })),
-  ...['gpt-5.2-codex', 'gpt-5.3-codex'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.75 / 1e6,
-      output: 14 / 1e6,
-    },
-  })),
-  ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((model) => ({
-    id: model,
-    cost: {
-      input: 21 / 1e6,
-      output: 168 / 1e6,
-    },
-  })),
-  ...['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05'].map((model) => ({
-    id: model,
-    cost: {
-      input: 30 / 1e6,
-      output: 180 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 60 / 1e6,
-        output: 270 / 1e6,
-      },
-    },
-  })),
+  }),
   // GPT-5.5 Pro is Responses-only
-  ...['gpt-5.5-pro', 'gpt-5.5-pro-2026-04-23'].map((model) => ({
-    id: model,
-    cost: {
-      input: 30 / 1e6,
-      output: 180 / 1e6,
-      longContext: {
-        threshold: GPT_LONG_CONTEXT_THRESHOLD,
-        input: 60 / 1e6,
-        output: 270 / 1e6,
-      },
+  ...modelsWithCost(['gpt-5.5-pro', 'gpt-5.5-pro-2026-04-23'], {
+    input: 30 / 1e6,
+    output: 180 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 60 / 1e6,
+      output: 270 / 1e6,
     },
-  })),
+  }),
 ];
 export const OPENAI_RESPONSES_ONLY_MODELS = excludeRetiredModels(
   OPENAI_RESPONSES_ONLY_AND_RETIRED_MODELS,
@@ -1014,54 +847,36 @@ export const OPENAI_RESPONSES_ONLY_MODELS = excludeRetiredModels(
 
 // Deep research models for Responses API
 const OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
-  ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
-    id: model,
-    cost: {
-      input: 10 / 1e6,
-      output: 40 / 1e6,
-    },
-  })),
-  ...['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2 / 1e6,
-      output: 8 / 1e6,
-    },
-  })),
+  ...modelsWithCost(['o3-deep-research', 'o3-deep-research-2025-06-26'], {
+    input: 10 / 1e6,
+    output: 40 / 1e6,
+  }),
+  ...modelsWithCost(['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'], {
+    input: 2 / 1e6,
+    output: 8 / 1e6,
+  }),
 ];
 /** @deprecated Historical billing metadata only; these native models retired July 23, 2026. */
 export const OPENAI_DEEP_RESEARCH_MODELS = OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS;
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
 export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
-  {
-    id: 'gpt-3.5-turbo-instruct',
-    cost: {
-      input: 1.5 / 1e6,
-      output: 2 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-3.5-turbo-instruct-0914',
-    cost: {
-      input: 1.5 / 1e6,
-      output: 2 / 1e6,
-    },
-  },
-  {
-    id: 'babbage-002',
-    cost: {
-      input: 0.4 / 1e6,
-      output: 0.4 / 1e6,
-    },
-  },
-  {
-    id: 'davinci-002',
-    cost: {
-      input: 2 / 1e6,
-      output: 2 / 1e6,
-    },
-  },
+  ...modelsWithCost(['gpt-3.5-turbo-instruct'], {
+    input: 1.5 / 1e6,
+    output: 2 / 1e6,
+  }),
+  ...modelsWithCost(['gpt-3.5-turbo-instruct-0914'], {
+    input: 1.5 / 1e6,
+    output: 2 / 1e6,
+  }),
+  ...modelsWithCost(['babbage-002'], {
+    input: 0.4 / 1e6,
+    output: 0.4 / 1e6,
+  }),
+  ...modelsWithCost(['davinci-002'], {
+    input: 2 / 1e6,
+    output: 2 / 1e6,
+  }),
 ];
 
 /**
@@ -1088,124 +903,81 @@ export const NON_CONVERSATIONAL_REALTIME_MODELS: ReadonlySet<string> = new Set([
 // Realtime models for WebSocket API
 const OPENAI_REALTIME_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   // GA gpt-realtime models
-  ...['gpt-realtime', 'gpt-realtime-2025-08-28', 'gpt-realtime-1.5'].map((model) => ({
-    id: model,
-    type: 'chat',
-    cost: {
-      input: 4 / 1e6,
-      output: 16 / 1e6,
-      audioInput: 32 / 1e6,
-      audioOutput: 64 / 1e6,
-    },
-  })),
-  {
-    id: 'gpt-realtime-2',
-    type: 'chat',
-    cost: {
-      input: 4 / 1e6,
-      output: 24 / 1e6,
-      audioInput: 32 / 1e6,
-      audioOutput: 64 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-realtime-2.1',
-    type: 'chat',
-    cost: {
-      input: 4 / 1e6,
-      output: 24 / 1e6,
-      audioInput: 32 / 1e6,
-      audioOutput: 64 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-realtime-2.1-mini',
-    type: 'chat',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
-    },
-  },
+  ...realtimeModelsWithCost(['gpt-realtime', 'gpt-realtime-2025-08-28', 'gpt-realtime-1.5'], {
+    input: 4 / 1e6,
+    output: 16 / 1e6,
+    audioInput: 32 / 1e6,
+    audioOutput: 64 / 1e6,
+  }),
+  ...realtimeModelsWithCost(['gpt-realtime-2'], {
+    input: 4 / 1e6,
+    output: 24 / 1e6,
+    audioInput: 32 / 1e6,
+    audioOutput: 64 / 1e6,
+  }),
+  ...realtimeModelsWithCost(['gpt-realtime-2.1'], {
+    input: 4 / 1e6,
+    output: 24 / 1e6,
+    audioInput: 32 / 1e6,
+    audioOutput: 64 / 1e6,
+  }),
+  ...realtimeModelsWithCost(['gpt-realtime-2.1-mini'], {
+    input: 0.6 / 1e6,
+    output: 2.4 / 1e6,
+    audioInput: 10 / 1e6,
+    audioOutput: 20 / 1e6,
+  }),
   // Deprecated preview snapshot; OpenAI has not published a shutdown date.
-  {
-    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
-    type: 'chat',
-    cost: {
+  ...realtimeModelsWithCost(['gpt-4o-mini-realtime-preview-2024-12-17'], {
+    input: 0.6 / 1e6,
+    output: 2.4 / 1e6,
+    audioInput: 10 / 1e6,
+    audioOutput: 20 / 1e6,
+  }),
+  // gpt-realtime-mini models
+  ...realtimeModelsWithCost(
+    ['gpt-realtime-mini', 'gpt-realtime-mini-2025-12-15', 'gpt-realtime-mini-2025-10-06'],
+    {
       input: 0.6 / 1e6,
       output: 2.4 / 1e6,
       audioInput: 10 / 1e6,
       audioOutput: 20 / 1e6,
     },
-  },
-  // gpt-realtime-mini models
-  ...['gpt-realtime-mini', 'gpt-realtime-mini-2025-12-15', 'gpt-realtime-mini-2025-10-06'].map(
-    (model) => ({
-      id: model,
-      type: 'chat',
-      cost: {
-        input: 0.6 / 1e6,
-        output: 2.4 / 1e6,
-        audioInput: 10 / 1e6,
-        audioOutput: 20 / 1e6,
-      },
-    }),
   ),
 ];
 
 // Retired previews preserved only for historical billing.
 const RETIRED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
-  {
-    id: 'gpt-4o-realtime-preview',
-    type: 'chat',
-    cost: {
-      input: 5 / 1e6,
-      output: 20 / 1e6,
-      audioInput: 40 / 1e6,
-      audioOutput: 80 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-4o-realtime-preview-2024-12-17',
-    type: 'chat',
-    cost: {
-      input: 5 / 1e6,
-      output: 20 / 1e6,
-      audioInput: 40 / 1e6,
-      audioOutput: 80 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-4o-realtime-preview-2025-06-03',
-    type: 'chat',
-    cost: {
-      input: 5 / 1e6,
-      output: 20 / 1e6,
-      audioInput: 40 / 1e6,
-      audioOutput: 80 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-4o-realtime-preview-2024-10-01',
-    type: 'chat',
-    cost: {
-      input: 5 / 1e6,
-      output: 20 / 1e6,
-      audioInput: 100 / 1e6,
-      audioOutput: 200 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-4o-mini-realtime-preview',
-    type: 'chat',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
-    },
-  },
+  ...realtimeModelsWithCost(['gpt-4o-realtime-preview'], {
+    input: 5 / 1e6,
+    output: 20 / 1e6,
+    audioInput: 40 / 1e6,
+    audioOutput: 80 / 1e6,
+  }),
+  ...realtimeModelsWithCost(['gpt-4o-realtime-preview-2024-12-17'], {
+    input: 5 / 1e6,
+    output: 20 / 1e6,
+    audioInput: 40 / 1e6,
+    audioOutput: 80 / 1e6,
+  }),
+  ...realtimeModelsWithCost(['gpt-4o-realtime-preview-2025-06-03'], {
+    input: 5 / 1e6,
+    output: 20 / 1e6,
+    audioInput: 40 / 1e6,
+    audioOutput: 80 / 1e6,
+  }),
+  ...realtimeModelsWithCost(['gpt-4o-realtime-preview-2024-10-01'], {
+    input: 5 / 1e6,
+    output: 20 / 1e6,
+    audioInput: 100 / 1e6,
+    audioOutput: 200 / 1e6,
+  }),
+  ...realtimeModelsWithCost(['gpt-4o-mini-realtime-preview'], {
+    input: 0.6 / 1e6,
+    output: 2.4 / 1e6,
+    audioInput: 10 / 1e6,
+    audioOutput: 20 / 1e6,
+  }),
 ];
 
 export const OPENAI_REALTIME_MODELS = excludeRetiredModels([
@@ -1270,72 +1042,48 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
   id: string;
   cost: { perMinute: number; input?: number; audioInput?: number; output?: number };
 }> = [
-  {
-    id: 'gpt-transcribe',
-    cost: {
-      perMinute: 0.0045,
-    },
-  },
-  {
-    id: 'gpt-4o-transcribe',
-    cost: {
-      input: 2.5 / 1e6, // text tokens
-      audioInput: 6 / 1e6, // audio tokens (~1000 audio tokens/min * $6/M = $0.006/min)
-      output: 10 / 1e6,
-      perMinute: 0.006, // $0.006 per minute
-    },
-  },
-  {
-    id: 'gpt-4o-mini-transcribe',
-    cost: {
-      input: 1.25 / 1e6, // text tokens
-      audioInput: 3 / 1e6, // audio tokens (~1000 audio tokens/min * $3/M = $0.003/min)
-      output: 5 / 1e6,
-      perMinute: 0.003, // $0.003 per minute
-    },
-  },
-  {
-    id: 'gpt-4o-mini-transcribe-2025-12-15',
-    cost: {
-      input: 1.25 / 1e6,
-      audioInput: 3 / 1e6,
-      output: 5 / 1e6,
-      perMinute: 0.003,
-    },
-  },
-  {
-    id: 'gpt-4o-mini-transcribe-2025-03-20',
-    cost: {
-      input: 1.25 / 1e6,
-      audioInput: 3 / 1e6,
-      output: 5 / 1e6,
-      perMinute: 0.003,
-    },
-  },
-  {
-    id: 'gpt-4o-transcribe-diarize',
-    cost: {
-      input: 2.5 / 1e6,
-      audioInput: 6 / 1e6,
-      output: 10 / 1e6,
-      perMinute: 0.006, // $0.006 per minute (same as base gpt-4o-transcribe)
-    },
-  },
-  {
-    id: 'gpt-4o-transcribe-diarize-2025-10-15',
-    cost: {
-      input: 2.5 / 1e6,
-      audioInput: 6 / 1e6,
-      output: 10 / 1e6,
-      perMinute: 0.006,
-    },
-  },
-  {
-    id: 'whisper-1',
-    cost: {
-      perMinute: 0.006, // $0.006 per minute
-    },
-  },
+  ...transcriptionModelsWithCost(['gpt-transcribe'], {
+    perMinute: 0.0045,
+  }),
+  ...transcriptionModelsWithCost(['gpt-4o-transcribe'], {
+    input: 2.5 / 1e6, // text tokens
+    audioInput: 6 / 1e6, // audio tokens (~1000 audio tokens/min * $6/M = $0.006/min)
+    output: 10 / 1e6,
+    perMinute: 0.006, // $0.006 per minute
+  }),
+  ...transcriptionModelsWithCost(['gpt-4o-mini-transcribe'], {
+    input: 1.25 / 1e6, // text tokens
+    audioInput: 3 / 1e6, // audio tokens (~1000 audio tokens/min * $3/M = $0.003/min)
+    output: 5 / 1e6,
+    perMinute: 0.003, // $0.003 per minute
+  }),
+  ...transcriptionModelsWithCost(['gpt-4o-mini-transcribe-2025-12-15'], {
+    input: 1.25 / 1e6,
+    audioInput: 3 / 1e6,
+    output: 5 / 1e6,
+    perMinute: 0.003,
+  }),
+  ...transcriptionModelsWithCost(['gpt-4o-mini-transcribe-2025-03-20'], {
+    input: 1.25 / 1e6,
+    audioInput: 3 / 1e6,
+    output: 5 / 1e6,
+    perMinute: 0.003,
+  }),
+  ...transcriptionModelsWithCost(['gpt-4o-transcribe-diarize'], {
+    input: 2.5 / 1e6,
+    audioInput: 6 / 1e6,
+    output: 10 / 1e6,
+    perMinute: 0.006, // $0.006 per minute (same as base gpt-4o-transcribe)
+  }),
+  ...transcriptionModelsWithCost(['gpt-4o-transcribe-diarize-2025-10-15'], {
+    input: 2.5 / 1e6,
+    audioInput: 6 / 1e6,
+    output: 10 / 1e6,
+    perMinute: 0.006,
+  }),
+  ...transcriptionModelsWithCost(['whisper-1'], {
+    perMinute: 0.006, // $0.006 per minute
+  }),
 ];
 
 export function calculateOpenAICost(
@@ -1346,7 +1094,7 @@ export function calculateOpenAICost(
   audioPromptTokens?: number,
   audioCompletionTokens?: number,
 ): number | undefined {
-  if (!audioPromptTokens && !audioCompletionTokens) {
+  if (audioPromptTokens === undefined && audioCompletionTokens === undefined) {
     return calculateCost(modelName, config, promptTokens, completionTokens, OPENAI_BILLING_MODELS);
   }
 
@@ -1369,11 +1117,17 @@ export function calculateOpenAICost(
     return undefined;
   }
 
-  let totalCost = 0;
-
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  totalCost += inputCost * promptTokens + outputCost * completionTokens;
+  const textCost = calculateCost(
+    modelName,
+    config,
+    promptTokens,
+    completionTokens,
+    OPENAI_BILLING_MODELS,
+  );
+  if (textCost === undefined) {
+    return undefined;
+  }
+  let totalCost = textCost;
 
   if ('audioInput' in model.cost || 'audioOutput' in model.cost) {
     const modelAudioInputCost: number =
@@ -1524,6 +1278,24 @@ export function validateFunctionCall(
   }
 }
 
+/** A completed provider error without a competing nonempty choice. */
+export function isOpenAiErrorOnlyResponse(data: unknown): data is { error: { message: string } } {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    'error' in data &&
+    data.error !== null &&
+    typeof data.error === 'object' &&
+    !Array.isArray(data.error) &&
+    'message' in data.error &&
+    typeof data.error.message === 'string' &&
+    (!('choices' in data) ||
+      data.choices == null ||
+      (Array.isArray(data.choices) && data.choices.length === 0))
+  );
+}
+
 export function formatOpenAiError(data: {
   error: { message: string; type?: string; code?: string };
 }): string {
@@ -1536,4 +1308,25 @@ export function formatOpenAiError(data: {
   }
   errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
   return errorMessage;
+}
+
+function realtimeModelsWithCost(ids: string[], cost: OpenAIModelCost): OpenAIModelInfo[] {
+  return ids.map((id) => ({ id, type: 'chat', cost: { ...cost } }));
+}
+
+function modelsWithCost(ids: string[], cost: OpenAIModelCost): OpenAIModelInfo[] {
+  return ids.map((id) => ({
+    id,
+    cost: {
+      ...cost,
+      ...(cost.longContext && { longContext: { ...cost.longContext } }),
+    },
+  }));
+}
+
+function transcriptionModelsWithCost(
+  ids: string[],
+  cost: (typeof OPENAI_TRANSCRIPTION_MODELS)[number]['cost'],
+) {
+  return ids.map((id) => ({ id, cost: { ...cost } }));
 }

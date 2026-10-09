@@ -12,7 +12,7 @@ import {
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { WebPageTrackingIdsSchema } from '../types/webPage';
-import { getTargetResponse } from './shared';
+import { getTargetResponse, isTargetCallAbortError } from './shared';
 
 import type {
   ApiProvider,
@@ -383,7 +383,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         logger.debug('[IndirectWebPwn] Page not fetched yet, trying again...');
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isTargetCallAbortError(error, options?.abortSignal)) {
         logger.debug('[IndirectWebPwn] Operation aborted');
         throw error;
       }

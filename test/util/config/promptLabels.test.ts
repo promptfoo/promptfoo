@@ -83,7 +83,7 @@ describe('file prompt labels', () => {
     // Provider and test `prompts:` filters use the group-prefix rule against the label.
     expect(doesPromptRefMatch(docPrompt, testSuite.prompts[2])).toBe(true);
     expect(doesPromptRefMatch(multiPrompt, testSuite.prompts[0])).toBe(true);
-    expect(testSuite.providerPromptMap).toEqual({ echo: [docPrompt] });
+    expect(testSuite.providers[0].prompts).toEqual([docPrompt]);
   });
 
   it.each([
@@ -116,7 +116,7 @@ describe('file prompt labels', () => {
 
       expect(testSuite.prompts[0].label).toBe(label);
       expect(doesPromptRefMatch(label, testSuite.prompts[0])).toBe(true);
-      expect(testSuite.providerPromptMap).toEqual({ echo: [label] });
+      expect(testSuite.providers[0].prompts).toEqual([label]);
     },
   );
 

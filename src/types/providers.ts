@@ -120,6 +120,15 @@ export interface CallApiOptionsParams {
    * Signal that can be used to abort the request
    */
   abortSignal?: AbortSignal;
+  /**
+   * @internal Notify the scheduler before cancellable post-processing or a
+   * selected target-fetch backoff. Backoff observations retain their original
+   * quota deadline even when a coalesced consumer joins later.
+   */
+  onResponseHeaders?: (
+    headers: Record<string, string>,
+    backoff?: { headers: Record<string, string>; status: number; resetAt: number },
+  ) => void;
 }
 
 export interface ProviderCleanupContext {
@@ -133,6 +142,8 @@ export interface ApiProvider extends MinimalApiProvider {
     options?: CallApiOptionsParams,
   ) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  /** Opt in to receiving evaluation cancellation through CancellableEmbeddingProvider. */
+  supportsEmbeddingCancellation?: boolean;
   config?: any;
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
@@ -149,6 +160,8 @@ export interface ApiProvider extends MinimalApiProvider {
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
+  /** Effective prompt selectors after provider configuration has been resolved. */
+  prompts?: string[];
   transform?: string | TransformFunction;
   toJSON?: () => any;
   /**
@@ -165,6 +178,16 @@ export interface ApiProvider extends MinimalApiProvider {
 
 export interface ApiEmbeddingProvider extends ApiProvider {
   callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+}
+
+/** Embedding calls that explicitly reserve the third argument for evaluation cancellation. */
+export interface CancellableEmbeddingProvider extends ApiEmbeddingProvider {
+  supportsEmbeddingCancellation: true;
+  callEmbeddingApi: (
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
