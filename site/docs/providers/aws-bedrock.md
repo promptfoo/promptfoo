@@ -1445,6 +1445,48 @@ providers:
 
 :::
 
+### Runtime Chat Completions and Responses
+
+Use `bedrock:runtime:chat:<model-id>` or `bedrock:runtime:responses:<model-id>` to
+select the OpenAI-compatible APIs on `bedrock-runtime`. These routes preserve Runtime
+model IDs, including supported geographic/global inference profiles and model ARNs.
+They use `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` and accept the
+same Bedrock API key or AWS credential configuration as the Mantle adapters.
+
+```yaml
+providers:
+  - id: bedrock:runtime:chat:openai.gpt-oss-120b-1:0
+    config:
+      region: us-east-1
+      max_completion_tokens: 256
+  - id: bedrock:runtime:responses:us.openai.gpt-5.6-sol
+    config:
+      region: us-east-1
+      max_output_tokens: 256
+      reasoning_effort: low
+      passthrough:
+        store: false
+```
+
+The adapters inherit [OpenAI provider options](./openai.md), including streaming,
+client-side functions, structured output, multimodal input, and request fields through
+`passthrough`. Support depends on the chosen model and API. Use `config.headers` for
+Bedrock guardrail headers and `passthrough` for additional body fields; do not put SDK
+`extra_headers` or `extra_body` wrappers inside the request body.
+
+Runtime Responses supports stored conversations (`previous_response_id`) and streaming,
+but does not support `background: true`, server-side tools, or application inference
+profiles. Only the account's default project is supported. Set `passthrough.store: false`
+when conversation storage is unnecessary. Keep a model ID on continuation requests.
+Automatic cost reporting requires known Bedrock rates and sufficient token usage details;
+use `inputCost` and `outputCost` for models whose rates are not yet in promptfoo.
+
+Check AWS's [Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
+and [Responses](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html)
+references for current endpoint and model support. Runtime does not expose `GET /models`;
+use `aws bedrock list-foundation-models` and `aws bedrock list-inference-profiles`.
+Existing `bedrock:mantle:<id>` and bare frontier-model selectors continue to use Mantle.
+
 ### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
 
 The Bedrock **Mantle** endpoint also exposes an OpenAI-compatible **Chat Completions** API. Most
