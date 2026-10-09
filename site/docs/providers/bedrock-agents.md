@@ -199,6 +199,9 @@ config:
 
 ### Native Runtime Controls and Results
 
+Agent Runtime requires AWS credentials (SigV4). Bedrock API keys are unsupported and
+do not override a configured AWS profile or the default credential chain.
+
 The provider forwards `streamingConfigurations` (`streamFinalResponse` and
 `applyGuardrailInterval`), `promptCreationConfigurations`,
 `bedrockModelConfigurations`, and `sourceArn` using the
@@ -279,9 +282,6 @@ tests:
 :::
 
 ## Authentication
-
-Agent Runtime requires AWS credentials (SigV4). Bedrock API keys are unsupported and
-do not override a configured AWS profile or the default credential chain.
 
 The provider supports multiple authentication methods:
 
