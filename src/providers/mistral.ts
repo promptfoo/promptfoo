@@ -5,6 +5,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
+import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -19,6 +20,25 @@ import type {
 
 function modelsWithCost(ids: string[], cost: { input: number; output: number }) {
   return ids.map((id) => ({ id, cost: { ...cost } }));
+}
+
+function getMistralApiUrl(
+  config: { apiHost?: string; apiBaseUrl?: string },
+  env: EnvOverrides | undefined,
+  defaultUrl: string,
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const endpoint = resolveProviderEnv(env, ['MISTRAL_API_HOST', 'MISTRAL_API_BASE_URL']);
+  return endpoint
+    ? endpoint.name === 'MISTRAL_API_HOST'
+      ? `https://${endpoint.value}/v1`
+      : endpoint.value
+    : defaultUrl;
 }
 
 const MISTRAL_CHAT_MODELS = [
@@ -472,35 +492,17 @@ function calculateMistralCost(
   return tokenCost + (promptAudioSeconds / 60) * 0.004;
 }
 
-function resolveMistralApiUrl(
-  provider: MistralChatCompletionProvider | MistralEmbeddingProvider,
-): string {
-  const apiHost =
-    provider.config.apiHost || provider.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
-  if (apiHost) {
-    return `https://${apiHost}/v1`;
-  }
-  return (
-    provider.config.apiBaseUrl ||
-    provider.env?.MISTRAL_API_BASE_URL ||
-    getEnvString('MISTRAL_API_BASE_URL') ||
-    provider.getApiUrlDefault()
-  );
-}
-
 function resolveMistralApiKey(
   provider: MistralChatCompletionProvider | MistralEmbeddingProvider,
 ): string | undefined {
-  logger.debug(`Mistral apiKeyEnvar: ${provider.config.apiKeyEnvar}`);
-  const apiKeyCandidate =
-    provider.config?.apiKey ||
-    (provider.config?.apiKeyEnvar
-      ? getEnvString(provider.config.apiKeyEnvar as EnvVarKey) ||
-        provider.env?.[provider.config.apiKeyEnvar as keyof EnvOverrides]
-      : undefined) ||
-    provider.env?.MISTRAL_API_KEY ||
-    getEnvString('MISTRAL_API_KEY');
-  return apiKeyCandidate;
+  const namedKey = provider.config.apiKeyEnvar
+    ? (provider.env?.[provider.config.apiKeyEnvar] ??
+      getEnvString(provider.config.apiKeyEnvar as EnvVarKey))
+    : undefined;
+  return (
+    provider.config.apiKey ||
+    (namedKey ?? provider.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+  );
 }
 
 export class MistralChatCompletionProvider implements ApiProvider {
@@ -539,7 +541,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    return resolveMistralApiUrl(this);
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {
@@ -750,7 +752,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    return resolveMistralApiUrl(this);
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {

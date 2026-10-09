@@ -5,6 +5,7 @@ import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { resolveProviderApiKey } from '../credentials';
 import { loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
 import { withGenAIToolSpan } from '../tracing';
 import { GOOGLE_MODELS } from './shared';
@@ -444,8 +445,8 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 
 export class GoogleLiveProvider implements ApiProvider {
   config: GoogleProviderConfig;
-  env?: ProviderOptions['env'];
   modelName: string;
+  readonly env?: ProviderOptions['env'];
   protected readonly isVertex: boolean = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
@@ -497,13 +498,11 @@ export class GoogleLiveProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GEMINI_API_KEY ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GEMINI_API_KEY')
-    );
+    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'GOOGLE_API_KEY',
+      'GEMINI_API_KEY',
+    ]);
   }
 
   private async getAccessToken(config: CompletionOptions): Promise<string | undefined> {

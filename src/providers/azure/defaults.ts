@@ -570,6 +570,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
   ...modelsWithCost(['claude-opus-5'], { input: 5 / 1000000, output: 25 / 1000000 }),
   ...modelsWithCost(['claude-opus-4-8'], { input: 5 / 1000000, output: 25 / 1000000 }),
   ...modelsWithCost(['claude-opus-4-7'], { input: 5 / 1000000, output: 25 / 1000000 }),
+  // Foundry bills Claude at Anthropic's API rates (see ANTHROPIC_MODELS).
   ...modelsWithCost(['claude-sonnet-5'], { input: 2 / 1000000, output: 10 / 1000000 }),
   ...modelsWithCost(['claude-sonnet-4-6'], { input: 3 / 1000000, output: 15 / 1000000 }),
   ...modelsWithCost(['claude-opus-4-6'], { input: 5 / 1000000, output: 25 / 1000000 }),
@@ -777,10 +778,17 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // ids like `MAI-Image-2.5`) to enable cost reporting. Rates marked
   // "provisional" are estimates pending published pricing.
   // =============================================================================
+  // Reasoning chat model (DeepSeek-R1 lineage). Provisional pricing mirrors
+  // DeepSeek-R1 on Foundry pending a published MAI-DS-R1 rate.
   ...modelsWithCost(['MAI-DS-R1'], { input: 0.55 / 1000000, output: 2.19 / 1000000 }),
+  // Text-to-image. Text input $5/1M; image output $33/1M (Microsoft).
   ...modelsWithCost(['MAI-Image-2'], { input: 5 / 1000000, output: 33 / 1000000 }),
+  // Efficient image. Text input $5/1M; image output $19.50/1M (Microsoft).
   ...modelsWithCost(['MAI-Image-2e'], { input: 5 / 1000000, output: 19.5 / 1000000 }),
+  // Flagship text-to-image + image edits. Text input $5/1M confirmed; image
+  // output rate provisional.
   ...modelsWithCost(['MAI-Image-2.5'], { input: 5 / 1000000, output: 33 / 1000000 }),
+  // Efficient flagship image variant. Pricing provisional (flash tier).
   ...modelsWithCost(['MAI-Image-2.5-Flash'], { input: 5 / 1000000, output: 19.5 / 1000000 }),
 ];
 

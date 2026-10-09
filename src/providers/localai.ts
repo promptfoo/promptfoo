@@ -1,5 +1,6 @@
 import { fetchWithCache } from '../cache';
-import { getEnvFloat, getEnvString, parseEnvFloat } from '../envars';
+import { getEnvFloat, parseEnvFloat } from '../envars';
+import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -30,8 +31,7 @@ class LocalAiGenericProvider implements ApiProvider {
     this.env = env;
     this.apiBaseUrl =
       config?.apiBaseUrl ||
-      env?.LOCALAI_BASE_URL ||
-      getEnvString('LOCALAI_BASE_URL') ||
+      resolveProviderEnv(env, ['LOCALAI_BASE_URL'])?.value ||
       'http://localhost:8080/v1';
     this.config = config || {};
     this.id = id ? () => id : this.id;
