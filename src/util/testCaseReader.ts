@@ -554,7 +554,7 @@ async function readTestWithEnv(
   if (!loadProviders) {
     // Env templates in file vars are rendered here, for the default test as for any other
     // row. The references stay relative; `readTestConfigs` pins the ones that need it.
-    testCase.vars = prepareVarsFileReferences(testCase.vars);
+    testCase.vars = mapVarFileReferences(testCase.vars, renderEnvOnlyInObject);
     if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
       testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
     } else if (
@@ -758,14 +758,16 @@ export async function readTests(
 }
 
 /**
- * Prepares the file references in a row's vars for the evaluation.
+ * Maps the file references in a row's vars without changing nested data.
  *
  * Only top-level strings and the members of top-level arrays are file references; strings
- * nested inside objects are data and stay as written. Environment templates in a reference
- * are rendered. With `pinTo`, a relative reference is made absolute from that directory;
- * without it the reference keeps its authored, relative form.
+ * nested inside objects are data and stay as written. Returns the original vars object when
+ * no reference changes, so callers can preserve unchanged test rows too.
  */
-function prepareVarsFileReferences(vars: TestCase['vars'], pinTo?: string): TestCase['vars'] {
+export function mapVarFileReferences(
+  vars: TestCase['vars'],
+  mapReference: (reference: string) => string,
+): TestCase['vars'] {
   if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
     return vars;
   }
@@ -774,9 +776,7 @@ function prepareVarsFileReferences(vars: TestCase['vars'], pinTo?: string): Test
     if (typeof value !== 'string' || !value.startsWith('file://')) {
       return value;
     }
-    const reference = renderEnvOnlyInObject(value);
-    const prepared =
-      pinTo === undefined ? reference : `file://${path.resolve(pinTo, reference.slice(7))}`;
+    const prepared = mapReference(value);
     changed ||= prepared !== value;
     return prepared;
   };
@@ -812,7 +812,12 @@ export async function readTestConfigs(
         if (isRemoteTestCase(row)) {
           return row;
         }
-        const vars = prepareVarsFileReferences(row.vars, pinTo);
+        const vars = mapVarFileReferences(row.vars, (value) => {
+          const reference = renderEnvOnlyInObject(value);
+          return pinTo === undefined
+            ? reference
+            : `file://${path.resolve(pinTo, reference.slice(7))}`;
+        });
         return vars === row.vars ? row : { ...row, vars };
       });
     }),

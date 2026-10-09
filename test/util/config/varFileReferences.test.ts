@@ -171,7 +171,15 @@ describe('file:// var references in loaded configs', () => {
       ],
       scenarios: [
         {
-          config: [{}],
+          config: [
+            {
+              vars: {
+                doc: 'file://docs/a.txt',
+                list: ['file://docs/a.txt', { source: 'file://docs/a.txt' }],
+                meta: { source: 'file://docs/a.txt' },
+              },
+            },
+          ],
           tests: [{ vars: { doc: 'file://docs/a.txt', meta: { source: 'file://docs/a.txt' } } }],
         },
       ],
@@ -190,6 +198,11 @@ describe('file:// var references in loaded configs', () => {
       meta: { source: 'file://docs/a.txt', files: ['file://docs/a.txt'] },
     });
     const [scenario] = testSuite.scenarios as Scenario[];
+    expect(scenario.config[0].vars).toEqual({
+      doc: pinned,
+      list: [pinned, { source: 'file://docs/a.txt' }],
+      meta: { source: 'file://docs/a.txt' },
+    });
     expect((scenario.tests as TestCase[])[0].vars).toEqual({
       doc: pinned,
       meta: { source: 'file://docs/a.txt' },

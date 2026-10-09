@@ -47,6 +47,7 @@ import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
   isRemoteTestsReference,
+  mapVarFileReferences,
   readTest,
   readTestConfig,
   readTestConfigs,
@@ -734,22 +735,6 @@ async function prepareCombinedConfig(
       return prompt;
     }
     throw new Error(`Invalid prompt object: ${JSON.stringify(prompt)}`);
-  };
-
-  // In vars, only top-level strings and the members of top-level arrays are file references.
-  // Strings nested inside objects are data and stay as written.
-  const mapVarFileReferences = (
-    vars: Record<string, unknown>,
-    mapReference: (reference: string) => string,
-  ) => {
-    const mapValue = (value: unknown) =>
-      typeof value === 'string' && value.startsWith('file://') ? mapReference(value) : value;
-    return Object.fromEntries(
-      Object.entries(vars).map(([name, value]) => [
-        name,
-        Array.isArray(value) ? value.map(mapValue) : mapValue(value),
-      ]),
-    );
   };
 
   const suiteBasePath = configSources[0] ? path.resolve(configSources[0].basePath) : undefined;
