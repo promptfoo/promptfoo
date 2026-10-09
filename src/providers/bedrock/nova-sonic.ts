@@ -3,9 +3,14 @@ import { Readable } from 'node:stream';
 
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  getAwsCredentialProviderOptions,
+  getAwsSdkProfile,
+  resolveAwsCredentials,
+} from '../awsCredentials';
+import { createEnvironmentScopedState, destroyScopedClient } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
-import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 import type {
@@ -115,6 +120,16 @@ const TOOL_EXECUTION_UNSUPPORTED_ERROR =
 export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private sessions = new Map<string, SessionState>();
   private bedrockClient?: BedrockRuntimeClient;
+  private readonly getClientState = createEnvironmentScopedState(
+    () => ({
+      client: undefined as BedrockRuntimeClient | undefined,
+      initialization: undefined as Promise<BedrockRuntimeClient> | undefined,
+    }),
+    (state) =>
+      destroyScopedClient(state.client, state.initialization, (error) =>
+        logger.warn('Error destroying late SDK client', { error }),
+      ),
+  );
   private readonly inferenceConfiguration: typeof DEFAULT_CONFIG.inference;
   config: BedrockAmazonNovaSonicGenerationOptions;
 
@@ -133,64 +148,63 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     };
   }
 
-  private async getSigV4Credentials(): Promise<
-    AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
-  > {
-    if (this.config.accessKeyId && this.config.secretAccessKey) {
-      return {
-        accessKeyId: this.config.accessKeyId,
-        secretAccessKey: this.config.secretAccessKey,
-        sessionToken: this.config.sessionToken,
-      };
-    }
-
-    if (this.config.profile) {
-      const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
-      return fromSSO({ profile: this.config.profile });
-    }
-
-    return undefined;
-  }
-
   private async getBedrockClient(): Promise<BedrockRuntimeClient> {
     if (this.bedrockClient) {
       return this.bedrockClient;
     }
-
-    const region = this.getRegion();
-    this.validateRegionConfig(region);
-
-    // Use configurable timeouts (defaults: session=300000ms, request=300000ms)
-    const sessionTimeout = this.config?.sessionTimeout ?? 300000;
-    const requestTimeout = this.config?.requestTimeout ?? 300000;
-    const credentials = await this.getSigV4Credentials();
-
-    try {
-      const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
-      const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
-      const requestHandler = new NodeHttp2Handler({
-        requestTimeout,
-        sessionTimeout,
-        disableConcurrentStreams: false,
-        maxConcurrentStreams: 20,
-      });
-
-      this.bedrockClient = new BedrockRuntimeClient({
-        region,
-        authSchemePreference: ['sigv4'],
-        requestHandler,
-        ...(credentials ? { credentials } : {}),
-        ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
-      });
-
-      return this.bedrockClient;
-    } catch (err) {
-      const categorized = categorizeError(err);
-      logger.error(`Error loading AWS SDK packages: ${categorized.message}`, { error: err });
-      throw new Error(
-        'The @aws-sdk/client-bedrock-runtime and @smithy/node-http-handler packages are required for Nova Sonic provider. Please install them: npm install @aws-sdk/client-bedrock-runtime @smithy/node-http-handler',
-      );
+    const state = this.getClientState();
+    if (state.client) {
+      return state.client;
     }
+    return (state.initialization ??= (async () => {
+      const region = this.getRegion();
+      this.validateRegionConfig(region);
+
+      // Use configurable timeouts (defaults: session=300000ms, request=300000ms)
+      const sessionTimeout = this.config?.sessionTimeout ?? 300000;
+      const requestTimeout = this.config?.requestTimeout ?? 300000;
+
+      // Bidirectional streaming requires IAM credentials, even when a bearer
+      // token is present. Keep explicit configuration ahead of scoped discovery.
+      const credentials = await resolveAwsCredentials(this.config, this.env);
+      const profile = getAwsSdkProfile(this.config, this.env);
+      const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
+      const endpointOptions = await this.getScopedEndpointOptions('Bedrock Runtime', {
+        ...sdkOptions,
+        endpoint: this.config.endpoint,
+      });
+      try {
+        const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
+        const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
+
+        state.client = new BedrockRuntimeClient({
+          region,
+          authSchemePreference: ['sigv4'],
+          ...endpointOptions,
+          ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
+          ...getAwsCredentialProviderOptions(this.env),
+          ...(credentials ? { credentials } : {}),
+          ...(profile === undefined ? {} : { profile }),
+          requestHandler: new NodeHttp2Handler({
+            requestTimeout,
+            sessionTimeout,
+            disableConcurrentStreams: false,
+            maxConcurrentStreams: 20,
+          }),
+        });
+
+        return state.client;
+      } catch (err) {
+        const categorized = categorizeError(err);
+        logger.error(`Error loading AWS SDK packages: ${categorized.message}`, { error: err });
+        throw new Error(
+          'The @aws-sdk/client-bedrock-runtime and @smithy/node-http-handler packages are required for Nova Sonic provider. Please install them: npm install @aws-sdk/client-bedrock-runtime @smithy/node-http-handler',
+        );
+      }
+    })().catch((error) => {
+      state.initialization = undefined;
+      throw error;
+    }));
   }
 
   private createSession(sessionId: string = crypto.randomUUID()): SessionState {

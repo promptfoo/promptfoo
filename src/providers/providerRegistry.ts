@@ -62,6 +62,11 @@ export class ProviderRegistry {
 
   constructor(private readonly installProcessHandlers = true) {}
 
+  /** Opaque identity for SDK state owned by the current evaluation, including its continuations. */
+  get currentScope(): object | undefined {
+    return this.evaluation.getStore();
+  }
+
   /** Nested entry points share a scope; independent evaluations own their own providers. */
   async withEvaluation<T>(run: () => Promise<T>): Promise<T> {
     if (this.processShuttingDown) {

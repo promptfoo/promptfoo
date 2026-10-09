@@ -1346,15 +1346,18 @@ export const TestSuiteConfigSchema = z.object({
   // Envvar overrides
   env: z
     .union([
-      ProviderEnvOverridesSchema,
-      z.record(
-        z.string(),
-        z.union([
+      // Preserve primitive SDK overrides, but keep the process-only database test switch private.
+      z
+        .record(
           z.string(),
-          z.number().transform((n) => String(n)),
-          z.boolean().transform((b) => String(b)),
-        ]),
-      ),
+          z.union([
+            z.string(),
+            z.number().transform((n) => String(n)),
+            z.boolean().transform((b) => String(b)),
+          ]),
+        )
+        .transform(({ IS_TESTING: _internal, ...env }) => env),
+      ProviderEnvOverridesSchema,
     ])
     .optional(),
 

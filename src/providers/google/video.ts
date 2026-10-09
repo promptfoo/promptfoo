@@ -402,7 +402,11 @@ export class GoogleVideoProvider implements ApiProvider {
 
   private async getClientWithCredentials(config: GoogleVideoOptions) {
     const credentials = loadCredentials(config.credentials);
-    const { client } = await getGoogleClient({ credentials });
+    const { client } = await getGoogleClient({
+      credentials,
+      env: this.env,
+      projectId: config.projectId,
+    });
     return client;
   }
 

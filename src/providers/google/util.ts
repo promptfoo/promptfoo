@@ -3,6 +3,7 @@ import path from 'path';
 
 import Clone from 'rfdc';
 import { z } from 'zod';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { getLoadedFileMimeType, maybeLoadFromExternalFile } from '../../util/file';
@@ -11,6 +12,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { createEnvironmentScopedState } from '../scopedState';
 import {
   calculateCost,
   clampCachedTokens,
@@ -18,7 +20,7 @@ import {
   parseChatPrompt,
   transformToolChoice,
 } from '../shared';
-import { loadCredentials } from './auth';
+import { GoogleAuthManager } from './auth';
 import {
   GEMINI_FLASH_MODELS,
   GOOGLE_MODELS,
@@ -28,6 +30,7 @@ import {
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
+import type { EnvOverrides } from '../../types/env';
 import type { VarValue } from '../../types/shared';
 import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
 
@@ -1124,52 +1127,66 @@ export {
   resolveProjectId,
 } from './auth';
 
-// Separate cached auth client for Generative Language API with specific scopes
-let cachedGenerativeLanguageAuth: InstanceType<
-  typeof import('google-auth-library').GoogleAuth
-> | null = null;
-
-/**
- * Gets an OAuth2 access token for Google APIs.
- * Used by providers that need to authenticate via OAuth2 instead of API keys.
- * @param credentials - Optional credentials JSON string or file:// path
- * @param scopes - Optional scopes to use. Defaults to cloud-platform + generative-language scopes
- * @returns The access token string, or undefined if authentication fails
- */
-export async function getGoogleAccessToken(credentials?: string): Promise<string | undefined> {
-  try {
-    // Try with generative-language scopes first (required for Live API)
-    if (!cachedGenerativeLanguageAuth) {
-      let GoogleAuth;
-      try {
-        const importedModule = await import('google-auth-library');
-        GoogleAuth = importedModule.GoogleAuth;
-        cachedGenerativeLanguageAuth = new GoogleAuth({
-          scopes: [
-            'https://www.googleapis.com/auth/cloud-platform',
-            'https://www.googleapis.com/auth/generative-language.retriever',
-            'https://www.googleapis.com/auth/generative-language.tuning',
-          ],
-        });
-      } catch {
-        throw new Error(
-          'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
-        );
+const getAccessTokenState = createEnvironmentScopedState(() => ({
+  cached: undefined as
+    | {
+        inputs: (string | undefined)[];
+        result: ReturnType<typeof GoogleAuthManager.getOAuthClient>;
       }
+    | undefined,
+}));
+
+/** Reuse the scoped OAuth client so the SDK can refresh and cache its own access tokens. */
+export async function getGoogleAccessToken(
+  credentials?: string,
+  env?: EnvOverrides,
+): Promise<string | undefined> {
+  const scopedAdc =
+    env?.GOOGLE_APPLICATION_CREDENTIALS ??
+    getEnvOverrides()?.GOOGLE_APPLICATION_CREDENTIALS ??
+    getEnvOverrides('file')?.GOOGLE_APPLICATION_CREDENTIALS;
+  try {
+    const resolvedCredentials = GoogleAuthManager.loadCredentials(credentials);
+    const inputs = [
+      resolvedCredentials,
+      // A scoped empty filename is a mask; an empty host variable still permits SDK discovery.
+      scopedAdc,
+      scopedAdc ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
+      env?.GOOGLE_CLOUD_PROJECT ?? getEnvString('GOOGLE_CLOUD_PROJECT'),
+      env?.GOOGLE_CLOUD_QUOTA_PROJECT ?? getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT'),
+    ];
+    const state = getAccessTokenState();
+    let cached = state.cached;
+    const matches = cached?.inputs.every((value, index) => value === inputs[index]);
+    if (!cached || !matches) {
+      const result: ReturnType<typeof GoogleAuthManager.getOAuthClient> =
+        GoogleAuthManager.getOAuthClient(
+          {
+            credentials: resolvedCredentials,
+            env,
+            scopes: [
+              'https://www.googleapis.com/auth/cloud-platform',
+              'https://www.googleapis.com/auth/generative-language.retriever',
+              'https://www.googleapis.com/auth/generative-language.tuning',
+            ],
+          },
+          false,
+        ).catch((error) => {
+          if (state.cached?.result === result) {
+            state.cached = undefined;
+          }
+          throw error;
+        });
+      cached = { inputs, result };
+      state.cached = cached;
     }
-
-    const processedCredentials = loadCredentials(credentials);
-
-    let client;
-    if (processedCredentials) {
-      client = await cachedGenerativeLanguageAuth.fromJSON(JSON.parse(processedCredentials));
-    } else {
-      client = await cachedGenerativeLanguageAuth.getClient();
-    }
-
+    const { client } = await cached.result;
     const tokenResponse = await client.getAccessToken();
     return tokenResponse.token || undefined;
   } catch (error) {
+    if (scopedAdc !== undefined) {
+      throw error;
+    }
     logger.debug('[GoogleAuth] Could not get access token', {
       error: error instanceof Error ? error.message : String(error),
     });

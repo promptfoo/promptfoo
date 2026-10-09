@@ -501,6 +501,22 @@ export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides
   }
 }
 
+/** Merge scoped defaults without letting an unset higher-priority value clear them. */
+export function getMergedEnvOverrides(env?: EnvOverrides): EnvOverrides {
+  const merged: EnvOverrides = {};
+  for (const layer of [getEnvOverrides('file'), getEnvOverrides(), env]) {
+    for (const [key, value] of Object.entries(layer ?? {})) {
+      if (value !== undefined) {
+        // YAML config keeps its original primitive values after validation.
+        // SDK environment selectors expect the strings process.env would hold.
+        merged[key] =
+          typeof value === 'boolean' || typeof value === 'number' ? String(value) : value;
+      }
+    }
+  }
+  return merged;
+}
+
 /** Environment inherited by child processes, including invocation-local file values. */
 export function getProcessEnv(): NodeJS.ProcessEnv {
   const fileEnv = getEnvOverrides('file');

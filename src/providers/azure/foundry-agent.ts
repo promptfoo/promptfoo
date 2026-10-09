@@ -1,9 +1,10 @@
 import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString } from '../../envars';
+import { getEnvString, getMergedEnvOverrides } from '../../envars';
 import logger from '../../logger';
 import { setGenAIResponseAttributes } from '../../tracing/genaiTracer';
+import { createAzureCredential } from '../../util/azureCredentials';
 import { rateLimitTimingFromHeaders } from '../../util/fetch';
 import {
   extractRateLimitErrorCode,
@@ -23,9 +24,11 @@ import {
 } from '../../util/index';
 import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { getCredentialCacheNamespace } from '../credentialCache';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
+import { createEnvironmentScopedState } from '../scopedState';
 import {
   buildChatSpanContext,
   emitTurnMarkerSpan,
@@ -74,6 +77,13 @@ type ResponseFunctionCallItem = Extract<
 >;
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
 type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
+interface FoundryClientState {
+  projectClient?: Promise<AzureAIProjectClient>;
+  agentPromise?: Promise<FoundryAgent>;
+  resolvedAgent?: FoundryAgent;
+  cacheNamespace?: string;
+}
+
 const MAX_REQUEST_TIMEOUT_MS = 2_147_483_647;
 // Match the scheduler's default maximum wait without retrying before a longer server hint.
 const MAX_RETRY_DELAY_MS = 60_000;
@@ -281,31 +291,23 @@ function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {
-  assistantConfig: AzureAssistantOptions;
+  assistantConfig: NonNullable<AzureAssistantProviderOptions['config']>;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
-  private projectClient?: Promise<AzureAIProjectClient>;
-  private projectUrl: string;
-  private agentPromise?: Promise<FoundryAgent>;
-  private resolvedAgent: FoundryAgent | null = null;
+  private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({
+    cacheNamespace: this.selectResponseCacheNamespace(),
+  }));
   private warnedUnsupportedFields = new Set<string>();
 
   override async initialize(): Promise<void> {
-    // Foundry authenticates through DefaultAzureCredential in initializeClient().
+    // Foundry initializes its scoped Azure credential in initializeClient().
   }
 
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};
-    this.projectUrl =
-      options.config?.projectUrl ||
-      (options.env?.AZURE_AI_PROJECT_URL ?? getEnvString('AZURE_AI_PROJECT_URL') ?? '');
-
-    if (!this.projectUrl) {
-      throw new Error(
-        'Azure AI Project URL must be provided via projectUrl option or AZURE_AI_PROJECT_URL environment variable',
-      );
-    }
+    // Validate at construction while resolving ambient endpoints in each invocation.
+    this.getProjectUrl();
 
     this.processor = new ResponsesProcessor({
       modelName: this.assistantConfig.modelName || deploymentName,
@@ -320,22 +322,98 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
+  private getResponseCacheNamespace(): string | undefined {
+    return this.getClientState().cacheNamespace;
+  }
+
+  private selectResponseCacheNamespace(): string | undefined {
+    const env = getMergedEnvOverrides(this.env);
+    const names = [
+      'AZURE_CLIENT_ID',
+      'AZURE_CLIENT_SECRET',
+      'AZURE_TENANT_ID',
+      'AZURE_FEDERATED_TOKEN_FILE',
+      'AZURE_CLIENT_CERTIFICATE_PATH',
+      'AZURE_CLIENT_CERTIFICATE_PASSWORD',
+      'AZURE_CLIENT_SEND_CERTIFICATE_CHAIN',
+      'AZURE_AUTHORITY_HOST',
+      'AZURE_USERNAME',
+      'AZURE_PASSWORD',
+    ];
+    const hasConfiguredIdentity = [
+      this.config.azureClientId,
+      this.config.azureTenantId,
+      this.config.azureClientSecret,
+      this.config.azureAuthorityHost,
+    ].some((value) => value !== undefined);
+    if (!hasConfiguredIdentity && !names.some((name) => env[name] !== undefined)) {
+      return undefined;
+    }
+    const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
+    const clientSecret =
+      this.config.azureClientSecret ??
+      env.AZURE_CLIENT_SECRET ??
+      getEnvString('AZURE_CLIENT_SECRET');
+    const password = env.AZURE_PASSWORD ?? getEnvString('AZURE_PASSWORD');
+    const usernameIdentity =
+      (!selector || ['prod', 'environmentcredential'].includes(selector)) &&
+      !clientSecret &&
+      !(env.AZURE_CLIENT_CERTIFICATE_PATH ?? getEnvString('AZURE_CLIENT_CERTIFICATE_PATH')) &&
+      password
+        ? (env.AZURE_USERNAME ?? getEnvString('AZURE_USERNAME'))
+        : undefined;
+    return getCredentialCacheNamespace(
+      [
+        this.config.azureClientId ?? env.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID'),
+        this.config.azureTenantId ?? env.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'),
+        usernameIdentity,
+        this.config.azureAuthorityHost ??
+          env.AZURE_AUTHORITY_HOST ??
+          getEnvString('AZURE_AUTHORITY_HOST'),
+        // Availability changes can select a different native fallback identity.
+        // Partition those paths without persisting secrets or their fingerprints.
+        selector,
+        clientSecret
+          ? clientSecret.trim()
+            ? 'secret-present'
+            : 'secret-invalid'
+          : 'secret-absent',
+        password ? 'password-present' : 'password-absent',
+      ],
+      ['AZURE_FEDERATED_TOKEN_FILE', 'AZURE_CLIENT_CERTIFICATE_PATH']
+        .map((name) => env[name] ?? getEnvString(name))
+        .filter((file): file is string => file !== undefined),
+    );
+  }
+
+  private getProjectUrl(): string {
+    const projectUrl =
+      this.assistantConfig.projectUrl ||
+      (this.env?.AZURE_AI_PROJECT_URL ?? getEnvString('AZURE_AI_PROJECT_URL'));
+    if (!projectUrl) {
+      throw new Error(
+        'Azure AI Project URL must be provided via projectUrl option or AZURE_AI_PROJECT_URL environment variable',
+      );
+    }
+    return projectUrl;
+  }
+
   private initializeClient(): Promise<AzureAIProjectClient> {
-    this.projectClient ??= this.createProjectClient().catch((error) => {
-      this.projectClient = undefined;
+    const state = this.getClientState();
+    state.projectClient ??= this.createProjectClient().catch((error) => {
+      state.projectClient = undefined;
       throw error;
     });
-    return this.projectClient;
+    return state.projectClient;
   }
 
   private async createProjectClient(): Promise<AzureAIProjectClient> {
     try {
       const { AIProjectClient } = await import('@azure/ai-projects');
-      const { DefaultAzureCredential } = await import('@azure/identity');
 
       const projectClient = new AIProjectClient(
-        this.projectUrl,
-        new DefaultAzureCredential(),
+        this.getProjectUrl(),
+        await createAzureCredential(this.config, this.env),
       ) as AzureAIProjectClient;
       logger.debug('Azure AI Project client initialized successfully');
       return projectClient;
@@ -347,16 +425,17 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private resolveAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
-    this.agentPromise ??= this.lookupAgent(client)
+    const state = this.getClientState();
+    state.agentPromise ??= this.lookupAgent(client)
       .then((agent) => {
-        this.resolvedAgent = agent;
+        state.resolvedAgent = agent;
         return agent;
       })
       .catch((error) => {
-        this.agentPromise = undefined;
+        state.agentPromise = undefined;
         throw error;
       });
-    return this.agentPromise;
+    return state.agentPromise;
   }
 
   private async lookupAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
@@ -378,7 +457,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
 
     throw new Error(
-      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.projectUrl}'. The Azure AI Projects v2 SDK resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
+      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.getProjectUrl()}'. The Azure AI Projects v2 SDK resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
     );
   }
 
@@ -1029,8 +1108,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       {
         ...spanContext,
         operationName: 'invoke_agent',
-        agentName: this.resolvedAgent?.name ?? this.deploymentName,
-        agentId: this.resolvedAgent?.id,
+        agentName: this.getClientState().resolvedAgent?.name ?? this.deploymentName,
+        agentId: this.getClientState().resolvedAgent?.id,
       },
       (span) => this.callApiInternal(prompt, span, context, callApiOptions),
       extractProviderResponseAttributes,
@@ -1055,8 +1134,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       return { error: configError };
     }
     const maxToolIterations = resolveMaxToolIterations(effectiveConfig.maxToolIterations);
-    const projectScope = hashFoundryAgentCacheValue(this.projectUrl);
-    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
+    const projectScope = hashFoundryAgentCacheValue(this.getProjectUrl());
+    const cacheNamespace = this.getResponseCacheNamespace();
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${cacheNamespace ? `${cacheNamespace}:` : ''}${projectScope}:${hashFoundryAgentCacheValue(body)}`;
 
     // Client-side tool behavior is absent from the serialized request body.
     // Callback closures cannot be safely represented in a persistent cache key.

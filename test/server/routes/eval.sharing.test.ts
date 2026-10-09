@@ -92,6 +92,43 @@ describe('Eval Routes - Sharing behavior', () => {
     return { messages, restore: () => setLogCallback(previous) };
   };
 
+  it('preserves suite endpoint and credential-process variables when creating a job', async () => {
+    const env = {
+      AWS_CONFIG_FILE: '/fixture/scoped-config',
+      AWS_PROFILE: 'scoped',
+      AWS_ENDPOINT_URL: 'https://fixture.example',
+      AWS_ENDPOINT_URL_BEDROCK_RUNTIME: 'https://bedrock.fixture.example',
+      AWS_USE_FIPS_ENDPOINT: false,
+      VAULT_SELECTOR: 'suite-account',
+      CUSTOM_PORT: 1234,
+      CUSTOM_EMPTY_MASK: '',
+    };
+    await postJob({ ...minimalTestSuite, env }).expect(200);
+    expect(mockedEvaluateWithSource).toHaveBeenCalledOnce();
+    expect(mockedEvaluateWithSource.mock.calls[0][0].env).toEqual({
+      ...env,
+      AWS_USE_FIPS_ENDPOINT: 'false',
+      CUSTOM_PORT: '1234',
+    });
+  });
+
+  it('does not forward the internal database test switch from job environment overrides', async () => {
+    await postJob({
+      ...minimalTestSuite,
+      env: { IS_TESTING: 'true', AWS_PROFILE: 'scoped', VAULT_SELECTOR: 'suite-account' },
+    }).expect(200);
+    expect(mockedEvaluateWithSource).toHaveBeenCalledOnce();
+    expect(mockedEvaluateWithSource.mock.calls[0][0].env).toEqual({
+      AWS_PROFILE: 'scoped',
+      VAULT_SELECTOR: 'suite-account',
+    });
+  });
+
+  it('rejects malformed known environment values before creating an eval', async () => {
+    await postJob({ ...minimalTestSuite, env: { AWS_ACCESS_KEY_ID: null } }).expect(400);
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
   it('does not let a job request change the server file-resolution directory', async () => {
     await postJob({ ...minimalTestSuite, basePath: '/' }).expect(200);
     expect(mockedEvaluateWithSource).toHaveBeenCalledOnce();

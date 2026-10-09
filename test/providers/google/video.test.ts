@@ -878,7 +878,7 @@ describe('GoogleVideoProvider', () => {
       );
       expect(mockGetGoogleClient).toHaveBeenCalledTimes(3);
       for (const [config] of mockGetGoogleClient.mock.calls) {
-        expect(config).toEqual({ credentials: '/base-credentials.json' });
+        expect(config).toMatchObject({ credentials: '/base-credentials.json' });
       }
       expect(provider.config).toEqual({
         vertexai: true,
@@ -904,9 +904,9 @@ describe('GoogleVideoProvider', () => {
       });
 
       expect(result.error).toBe('Failed to create video job: Invalid provider credentials');
-      expect(mockGetGoogleClient).toHaveBeenCalledExactlyOnceWith({
-        credentials: '/base-credentials.json',
-      });
+      expect(mockGetGoogleClient).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ credentials: '/base-credentials.json' }),
+      );
       expect(mockRequest).not.toHaveBeenCalled();
     });
 

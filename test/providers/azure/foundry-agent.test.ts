@@ -1189,6 +1189,58 @@ describe('AzureFoundryAgentProvider', () => {
       expect(vi.mocked(logger.warn)).toHaveBeenCalledTimes(1);
     });
 
+    it.each(['environment', 'config'])(
+      'isolates %s principals at the same project while reusing matching responses',
+      async (source) => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockResolvedValue(createMessageResponse('fixture response'));
+        const stored = new Map<string, unknown>();
+        const mockCache = {
+          get: vi.fn(async (key: string) => stored.get(key)),
+          set: vi.fn(async (key: string, value: unknown) => {
+            stored.set(key, value);
+          }),
+        };
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
+        vi.mocked(getCache).mockResolvedValue(mockCache as any);
+        const first = new AzureFoundryAgentProvider('weather-agent', {
+          config: {
+            projectUrl,
+            ...(source === 'config'
+              ? {
+                  azureClientId: 'principal-a',
+                  azureTenantId: 'tenant',
+                  azureClientSecret: 'fixture-secret',
+                }
+              : {}),
+          },
+          env: source === 'environment' ? { AZURE_CLIENT_ID: 'principal-a' } : undefined,
+        });
+        const second = new AzureFoundryAgentProvider('weather-agent', {
+          config: {
+            projectUrl,
+            ...(source === 'config'
+              ? {
+                  azureClientId: 'principal-b',
+                  azureTenantId: 'tenant',
+                  azureClientSecret: 'fixture-secret',
+                }
+              : {}),
+          },
+          env: source === 'environment' ? { AZURE_CLIENT_ID: 'principal-b' } : undefined,
+        });
+        await first.callApi('same prompt');
+        expect(await first.callApi('same prompt')).toMatchObject({
+          output: 'fixture response',
+          cached: true,
+        });
+        expect(mockResponsesCreate).toHaveBeenCalledTimes(1);
+        expect((await second.callApi('same prompt')).cached).not.toBe(true);
+        expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+        expect(stored.size).toBe(2);
+      },
+    );
+
     it('uses effective timeout with request-local SDK signals and disabled internal retries', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate

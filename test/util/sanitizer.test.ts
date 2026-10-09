@@ -1,4 +1,6 @@
+import { BlobServiceClient } from '@azure/storage-blob';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CreateJobRequestSchema } from '../../src/types/api/eval';
 import {
   isCredentialHeader,
   isSecretEnvVarName,
@@ -262,6 +264,46 @@ describe('stripProviderPromptSelectors', () => {
 });
 
 describe('sanitizeConfigForOutput', () => {
+  it.each([';', '; '])(
+    'redacts parsed Azure storage credentials with %j separators',
+    (separator) => {
+      const accountKey = Buffer.from('fixture-account-key-'.repeat(4)).toString('base64');
+      const connectionString = [
+        'DefaultEndpointsProtocol=https',
+        'AccountName=fixtureaccount',
+        `AccountKey=${accountKey}`,
+        'EndpointSuffix=core.windows.net',
+      ].join(separator);
+      // Exercise the SDK's accepted syntax without making a request.
+      expect(BlobServiceClient.fromConnectionString(connectionString).accountName).toBe(
+        'fixtureaccount',
+      );
+      const env = {
+        AZURE_STORAGE_CONNECTION_STRING: connectionString,
+        AZURE_AI_PROJECT_URL: 'https://project.example.test',
+      };
+      const config = CreateJobRequestSchema.parse({
+        prompts: ['fixture'],
+        providers: [{ id: 'echo', env }],
+        env,
+      });
+      expect(config.env?.AZURE_STORAGE_CONNECTION_STRING).toBe(connectionString);
+
+      const exported = sanitizeConfigForOutput({ env: config.env, providers: config.providers });
+      expect(exported).toMatchObject({
+        env: { ...env, AZURE_STORAGE_CONNECTION_STRING: '[REDACTED]' },
+        providers: [{ env: { ...env, AZURE_STORAGE_CONNECTION_STRING: '[REDACTED]' } }],
+      });
+      const requestLog = sanitizeObject(config, { context: 'evaluation job request' });
+      const logContext = sanitizeObject({ body: requestLog });
+      for (const output of [exported, requestLog, logContext]) {
+        expect(JSON.stringify(output)).not.toContain(accountKey);
+        expect(JSON.stringify(output)).toContain('https://project.example.test');
+      }
+      expect(config.env?.AZURE_STORAGE_CONNECTION_STRING).toBe(connectionString);
+    },
+  );
+
   it.each([
     { prompts: 'private literal' },
     { prompts: ['private literal'] },

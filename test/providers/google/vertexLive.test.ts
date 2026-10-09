@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
+import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { VertexLiveProvider } from '../../../src/providers/google/vertexLive';
@@ -206,6 +207,8 @@ describe('VertexLiveProvider', () => {
       },
     } as CallApiContextParams);
     expect(mockAuth).toHaveBeenCalledWith({
+      env: undefined,
+      projectId: 'override-project',
       credentials: '{"type":"service_account"}',
       keyFilename: '/test/key.json',
       scopes: ['https://www.googleapis.com/auth/cloud-platform'],
@@ -251,6 +254,39 @@ describe('VertexLiveProvider', () => {
     await expect(
       new VertexLiveProvider(model, { config: { apiKey: 'explicit-key' } }).callApi('Hello'),
     ).rejects.toThrow('Vertex Live requires Google Cloud OAuth credentials');
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it.each(['provider', 'suite', 'file'] as const)(
+    'preserves explicit %s ADC diagnostics before connecting',
+    async (source) => {
+      for (const filename of ['', '/fixture/missing-adc.json']) {
+        const env = { GOOGLE_APPLICATION_CREDENTIALS: filename };
+        const error = new Error(filename ? 'ADC file does not exist' : 'Scoped ADC is empty');
+        mockAuth.mockRejectedValue(error);
+        const provider = new VertexLiveProvider(model, source === 'provider' ? { env } : {});
+        const call = () => provider.callApi('Hello');
+        const result =
+          source === 'suite'
+            ? cliState.withEnv(env, call)
+            : source === 'file'
+              ? cliState.withEnvFileOverrides(env, call)
+              : call();
+        await expect(result).rejects.toBe(error);
+        expect(WebSocket).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('does not expose unrelated credential errors when scoped ADC is overridden', async () => {
+    mockAuth.mockRejectedValue(new Error('credential details must not be exposed'));
+    const provider = new VertexLiveProvider(model, {
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/unused/adc.json' },
+      config: { credentials: '{"type":"service_account"}' },
+    });
+    await expect(provider.callApi('Hello')).rejects.toThrow(
+      'Vertex Live requires Google Cloud OAuth credentials',
+    );
     expect(WebSocket).not.toHaveBeenCalled();
   });
 

@@ -354,6 +354,8 @@ export class GeminiImageProvider implements ApiProvider {
       const credentials = loadCredentials(this.config.credentials);
       const { client } = await getGoogleClient({
         credentials,
+        env: this.env,
+        projectId: this.config.projectId,
         googleAuthOptions: this.config.googleAuthOptions,
         scopes: this.config.scopes,
         keyFilename: this.config.keyFilename,

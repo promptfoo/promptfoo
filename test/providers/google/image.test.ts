@@ -257,6 +257,8 @@ describe('GoogleImageProvider', async () => {
       expect(result.error).toBeUndefined();
       expect(mockGetGoogleClient).toHaveBeenCalledWith({
         credentials: undefined,
+        env: undefined,
+        projectId: 'test-project',
         googleAuthOptions: { universeDomain: 'provider.example' },
         scopes: ['scope-a', 'scope-b'],
         keyFilename: '/keys/provider.json',

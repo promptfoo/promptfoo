@@ -41,7 +41,7 @@ vi.mock('../../src/envars', async () => ({
 
 describe('Azure Blob test-set loading', () => {
   beforeEach(() => {
-    vi.mocked(getEnvString).mockReset().mockReturnValue('');
+    vi.mocked(getEnvString).mockReset();
     mocks.downloadToBuffer.mockReset().mockResolvedValue(Buffer.from('blob text', 'utf8'));
     mocks.getBlobClient.mockReset().mockReturnValue({
       downloadToBuffer: mocks.downloadToBuffer,

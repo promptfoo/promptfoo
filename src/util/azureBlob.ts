@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { createAzureCredential } from './azureCredentials';
 
 type AzureBlobServiceClient = {
   getContainerClient(containerName: string): {
@@ -184,8 +185,7 @@ async function createAzureBlobServiceClient(
   }
 
   try {
-    const { DefaultAzureCredential } = await import('@azure/identity');
-    return new BlobServiceClient(accountUrl, new DefaultAzureCredential());
+    return new BlobServiceClient(accountUrl, await createAzureCredential());
   } catch (error) {
     throw formatAzureBlobReadError(
       uri,
