@@ -10,14 +10,16 @@ import {
 import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
-import { parseFilterRange } from '../util/filterRange';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
+import { parseFilterRange } from '../validation/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import {
   CONFIG_PROVIDER_INPUT_ERROR,
   hasValidConfigProviders,
   normalizeConfigProviderAlias,
 } from './configAliases';
+
+import type { ResultFailureReason } from './results';
 
 export { ProvidersSchema };
 
@@ -41,6 +43,7 @@ import type {
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
@@ -55,8 +58,9 @@ import type { TraceData } from './tracing';
 export interface RateLimitRegistryRef {
   execute: <T>(
     provider: ApiProvider,
-    callFn: () => Promise<T>,
+    callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
     options?: {
+      abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
@@ -69,7 +73,7 @@ export interface RateLimitRegistryRef {
  * Minimal interface for deferred provider-call queues used by serial grading orchestration.
  */
 export interface ProviderCallQueueRef {
-  enqueue: <T>(providerId: string, call: () => Promise<T>) => Promise<T>;
+  enqueue: <T>(providerId: string, call: () => Promise<T>, abortSignal?: AbortSignal) => Promise<T>;
 }
 
 export * from '../redteam/types';
@@ -230,6 +234,8 @@ export interface RunEvalOptions {
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+  /** Stable identifier shared by repeated executions of the same expanded test case. */
+  repeatGroupId?: string;
 
   conversations?: EvalConversations;
   registers?: EvalRegisters;
@@ -378,21 +384,8 @@ export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'
   recentEvalDate: string;
 };
 
-export const ResultFailureReason = {
-  // The test passed, or we don't know exactly why the test case failed.
-  NONE: 0,
-  // The test case failed because an assertion rejected it.
-  ASSERT: 1,
-  // Test case failed due to some other error.
-  ERROR: 2,
-} as const;
-export type ResultFailureReason = (typeof ResultFailureReason)[keyof typeof ResultFailureReason];
-
-const validResultFailureReasons = new Set<number>(Object.values(ResultFailureReason));
-
-export function isResultFailureReason(value: number): value is ResultFailureReason {
-  return validResultFailureReasons.has(value);
-}
+// Compatibility exports for existing public and source consumers.
+export { isResultFailureReason, ResultFailureReason } from './results';
 
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
@@ -424,6 +417,10 @@ export interface EvaluateResult {
   evaluationId?: string;
   /** W3C trace ID generated for this row when tracing is enabled. */
   traceId?: string;
+  /** Zero-based execution index when this row is part of a repeated test. */
+  repeatIndex?: number;
+  /** Stable identifier shared by repeated executions of the same expanded test case. */
+  repeatGroupId?: string;
 }
 
 export interface EvaluateTableOutput {
@@ -474,12 +471,44 @@ export interface EvaluateStats {
   evaluationDurationMs?: number;
 }
 
+export interface RepeatStabilityConfidenceInterval {
+  /** Confidence level used for this interval. */
+  confidenceLevel: 0.95;
+  lower: number;
+  upper: number;
+}
+
+export interface RepeatStabilityGroup {
+  repeatGroupId: string;
+  promptIdx: number;
+  provider: Pick<ProviderOptions, 'id' | 'label'>;
+  description?: string;
+  promptLabel?: string;
+  repetitions: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  cached: number;
+  passRate?: number;
+  passRateConfidenceInterval?: RepeatStabilityConfidenceInterval;
+  unstable: boolean;
+}
+
+export interface RepeatStabilitySummary {
+  totalGroups: number;
+  unstableGroups: number;
+  groupsWithErrors: number;
+  cachedResults: number;
+  groups: RepeatStabilityGroup[];
+}
+
 export interface EvaluateSummaryV3 {
   version: 3;
   timestamp: string;
   results: EvaluateResult[];
   prompts: CompletedPrompt[];
   stats: EvaluateStats;
+  repeatStability?: RepeatStabilitySummary;
 }
 
 export interface EvaluateSummaryV2 {
@@ -684,7 +713,9 @@ export const BaseAssertionTypesSchema = z.enum([
   'perplexity-score',
   'python',
   'regex',
+  'rouge-l',
   'rouge-n',
+  'rouge-s',
   'ruby',
   'similar',
   'similar:cosine',
@@ -1157,8 +1188,8 @@ export const TestSuiteSchema = z.object({
   // One or more prompt strings
   prompts: z.array(PromptSchema),
 
-  // Optional mapping of provider to prompt display strings.  If not provided,
-  // all prompts are used for all providers.
+  // Optional prompt-filter overrides keyed by provider label or ID.
+  // Otherwise each provider uses its own prompts filter, or all prompts when absent.
   providerPromptMap: ProviderPromptMapSchema.optional(),
   // Test cases
   tests: z.array(TestCaseSchema).optional(),

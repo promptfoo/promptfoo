@@ -199,6 +199,7 @@ describe('ElevenLabsAgentsProvider', () => {
             }),
           }),
         }),
+        { signal: expect.any(AbortSignal) },
       );
 
       // Verify response structure
@@ -339,6 +340,7 @@ describe('ElevenLabsAgentsProvider', () => {
         expect.objectContaining({
           new_turns_limit: 0,
         }),
+        { signal: expect.any(AbortSignal) },
       );
     });
 
@@ -379,6 +381,7 @@ describe('ElevenLabsAgentsProvider', () => {
             tool_mock_config: expect.any(Object),
           }),
         }),
+        { signal: expect.any(AbortSignal) },
       );
     });
   });

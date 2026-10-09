@@ -84,9 +84,7 @@ vi.mock('../../src/logger', () => ({
 }));
 
 // Import after mocks are set up
-const { RateLimitRegistry, createRateLimitRegistry } = await import(
-  '../../src/scheduler/rateLimitRegistry'
-);
+const { RateLimitRegistry } = await import('../../src/scheduler/rateLimitRegistry');
 
 describe('RateLimitRegistry', () => {
   let mockProvider: ApiProvider;
@@ -146,18 +144,6 @@ describe('RateLimitRegistry', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
-  });
-
-  describe('createRateLimitRegistry - factory function', () => {
-    it('should create a new RateLimitRegistry instance', () => {
-      const registry = createRateLimitRegistry({ maxConcurrency: 10 });
-      expect(registry).toBeInstanceOf(RateLimitRegistry);
-    });
-
-    it('should pass options to constructor', () => {
-      const registry = createRateLimitRegistry({ maxConcurrency: 20, minConcurrency: 2 });
-      expect(registry).toBeInstanceOf(RateLimitRegistry);
-    });
   });
 
   describe('Constructor - options handling', () => {
@@ -260,14 +246,19 @@ describe('RateLimitRegistry', () => {
 
       expect(mockState.executeWithRetry).toHaveBeenCalledWith(
         expect.stringContaining('test-provider-'),
-        callFn,
+        expect.any(Function),
         {
-          getHeaders: undefined,
+          abortSignal: undefined,
+          getHeaders: expect.any(Function),
+          canRetry: expect.any(Function),
           isRateLimited: undefined,
           getRetryAfter: undefined,
           maxRetriesOverride: undefined,
         },
       );
+      const observer = vi.fn();
+      await mockState.executeWithRetry.mock.calls[0][1](observer);
+      expect(callFn).toHaveBeenCalledExactlyOnceWith(observer);
       expect(result).toBe('state-result');
     });
 
@@ -286,12 +277,18 @@ describe('RateLimitRegistry', () => {
         getRetryAfter,
       });
 
-      expect(mockState.executeWithRetry).toHaveBeenCalledWith(expect.any(String), callFn, {
-        getHeaders,
-        isRateLimited,
-        getRetryAfter,
-        maxRetriesOverride: undefined,
-      });
+      expect(mockState.executeWithRetry).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        {
+          abortSignal: undefined,
+          getHeaders: expect.any(Function),
+          canRetry: expect.any(Function),
+          isRateLimited,
+          getRetryAfter,
+          maxRetriesOverride: undefined,
+        },
+      );
     });
 
     it.each([
