@@ -1039,41 +1039,119 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it.each(['success', 'completed error'] as const)(
+      'retains a completed %s when cancellation interrupts target delay',
+      async (outcome) => {
+        const realTime =
+          await vi.importActual<typeof import('../../../src/util/time')>('../../../src/util/time');
+        mockedSleep.mockImplementation(realTime.sleep);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const caller = new AbortController();
+        const reason = new Error('caller stopped target delay');
+        const response = {
+          output: 'Completed local response',
+          cost: 0.25,
+          tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+          ...(outcome === 'completed error' && {
+            error: 'Completed tool failure',
+            metadata: { errorOrigin: 'tool' },
+          }),
+        };
+        const provider = createMockProvider({ delay: 1000, response });
+        const pending = getTargetResponse(provider, 'harmless prompt', undefined, {
+          abortSignal: caller.signal,
+        });
+        let settled = false;
+        void pending.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        try {
+          await vi.advanceTimersByTimeAsync(0);
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+          await vi.advanceTimersByTimeAsync(999);
+          expect(settled).toBe(false);
+          caller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+          expect(settled, 'Caller cancellation must release the completed target delay').toBe(true);
+          expect(await pending).toMatchObject(response);
+          expect(caller.signal.reason).toBe(reason);
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          caller.abort(reason);
+          await vi.runAllTimersAsync();
+          await Promise.allSettled([pending]);
+          mockedSleep.mockReset();
+          vi.useRealTimers();
+        }
+      },
+    );
+
     it('respects provider delay for non-cached responses', async () => {
+      const realTime =
+        await vi.importActual<typeof import('../../../src/util/time')>('../../../src/util/time');
+      mockedSleep.mockImplementation(realTime.sleep);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const mockProvider = createMockProvider({
         delay: 100,
-        response: {
-          output: 'test response',
-          tokenUsage: { numRequests: 1 },
-        },
+        response: { output: 'test response' },
       });
-
-      await getTargetResponse(mockProvider, 'test prompt');
-
-      expect(mockedSleep).toHaveBeenCalledWith(100);
+      const pending = getTargetResponse(mockProvider, 'test prompt');
+      let settled = false;
+      void pending.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(99);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await pending).toMatchObject({ output: 'test response' });
+        expect(settled).toBe(true);
+      } finally {
+        await vi.runAllTimersAsync();
+        await Promise.allSettled([pending]);
+        mockedSleep.mockReset();
+        vi.useRealTimers();
+      }
     });
 
     it('skips delay for cached responses', async () => {
-      const mockProvider = createMockProvider({
-        delay: 100,
-        response: {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const mockProvider = createMockProvider({
+          delay: 100,
+          response: { output: 'test response', cached: true },
+        });
+        expect(await getTargetResponse(mockProvider, 'test prompt')).toMatchObject({
           output: 'test response',
           cached: true,
-          tokenUsage: { numRequests: 1 },
-        },
-      });
-
-      await getTargetResponse(mockProvider, 'test prompt');
-
-      expect(mockedSleep).not.toHaveBeenCalled();
+        });
+        expect(vi.getTimerCount()).toBe(0);
+        expect(mockedSleep).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
-    it('throws error when neither output nor error is set', async () => {
+    it('returns an error when neither output nor error is set', async () => {
       const mockProvider = createMockProvider({ response: {} });
 
-      await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-        /Target returned malformed response: expected either `output` or `error` property to be set/,
-      );
+      await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+        output: '',
+        error: expect.stringContaining('Target returned malformed response'),
+        tokenUsage: { numRequests: 1 },
+      });
     });
 
     it('uses default tokenUsage when not provided', async () => {
@@ -1158,21 +1236,106 @@ describe('shared redteam provider utilities', () => {
         });
       });
 
-      it('handles null output correctly', async () => {
+      it.each([null, undefined])(
+        'rejects output %s even with an undefined error field',
+        async (output) => {
+          const mockProvider = createMockProvider({
+            response: { output, error: undefined, tokenUsage: { numRequests: 1 } },
+          });
+
+          await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+            output: '',
+            error: expect.stringContaining('Target returned malformed response'),
+            tokenUsage: { numRequests: 1 },
+          });
+        },
+      );
+
+      it('keeps malformed-response diagnostics free of raw provider metadata', async () => {
         const mockProvider = createMockProvider({
           response: {
-            output: null, // Null value
-            tokenUsage: { numRequests: 1 },
+            output: undefined,
+            cost: 0.1,
+            cached: true,
+            sessionId: 'retained-session',
+            tokenUsage: { total: 17, numRequests: 2 },
+            metadata: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  authorization: 'Bearer FAKE_TOKEN_CANARY',
+                  'set-cookie': 'session=FAKE_COOKIE_CANARY',
+                },
+              },
+              opaque: 'FAKE_OPAQUE_CANARY',
+            },
           },
         });
 
-        const result = await getTargetResponse(mockProvider, 'test prompt');
+        const response = await getTargetResponse(mockProvider, 'test prompt');
 
-        expect(result).toEqual({
-          output: 'null', // Should be stringified
+        expect(response.error).toContain('expected either `output` or `error` property to be set');
+        expect(response.error).toContain('null and undefined are not');
+        expect(response.error).not.toContain('CANARY');
+        expect(response.error).not.toContain('metadata');
+        expect(response).toMatchObject({
+          output: '',
+          cost: 0.1,
+          cached: true,
+          sessionId: 'retained-session',
+          tokenUsage: { total: 17, numRequests: 2 },
+          metadata: { http: { status: 200 } },
+        });
+      });
+
+      it.each(['null', 'undefined'])('preserves literal response text %s', async (output) => {
+        const mockProvider = createMockProvider({ response: { output } });
+
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+          output,
           tokenUsage: { numRequests: 1 },
         });
       });
+
+      it.each([null, undefined])('preserves provider errors with output %s', async (output) => {
+        const mockProvider = createMockProvider({
+          response: {
+            output,
+            error: 'Target request failed',
+            sessionId: 'error-session',
+            tokenUsage: { total: 12 },
+          },
+        });
+
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
+          output: '',
+          error: 'Target request failed',
+          sessionId: 'error-session',
+          tokenUsage: { numRequests: 1, total: 12 },
+        });
+      });
+
+      it.each([null, undefined, 'Goodbye'])(
+        'preserves conversation termination with output %s',
+        async (output) => {
+          const mockProvider = createMockProvider({
+            response: {
+              output,
+              conversationEnded: true,
+              conversationEndReason: 'thread_closed',
+              tokenUsage: { total: 12 },
+            },
+          });
+
+          await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toEqual({
+            output: output ?? '',
+            conversationEnded: true,
+            conversationEndReason: 'thread_closed',
+            tokenUsage: { numRequests: 1, total: 12 },
+          });
+        },
+      );
 
       it('still fails when output property is missing', async () => {
         const mockProvider = createMockProvider({
@@ -1182,9 +1345,11 @@ describe('shared redteam provider utilities', () => {
           },
         });
 
-        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-          /Target returned malformed response: expected either `output` or `error` property to be set/,
-        );
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+          output: '',
+          error: expect.stringContaining('Target returned malformed response'),
+          tokenUsage: { numRequests: 1 },
+        });
       });
 
       it('still fails when both output and error are missing', async () => {
@@ -1194,9 +1359,11 @@ describe('shared redteam provider utilities', () => {
           } as any,
         });
 
-        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-          /Target returned malformed response/,
-        );
+        await expect(getTargetResponse(mockProvider, 'test prompt')).resolves.toMatchObject({
+          output: '',
+          error: expect.stringContaining('Target returned malformed response'),
+          tokenUsage: { numRequests: 1 },
+        });
       });
     });
   });

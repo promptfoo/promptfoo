@@ -5,6 +5,7 @@ import { evalResultsTable } from '../database/tables';
 import {
   getStripFlags,
   persistTraceMetadata,
+  projectGradingResult,
   projectOutputMetadata,
   projectPrompt,
   projectProviderResponse,
@@ -14,6 +15,7 @@ import {
   sanitizeForDbWithSecrets,
   sanitizeGradingResultForDb,
   sanitizeProvider,
+  serializeResultProviderRefs,
   surfaceTraceMetadata,
 } from '../evaluator/resultProcessing';
 import { hashPrompt } from '../prompts/utils';
@@ -58,19 +60,11 @@ export default class EvalResult {
       testCase,
       traceId,
       evaluationId,
-    } = result;
+    } = serializeResultProviderRefs(result);
 
     // Persist trace linkage inside a private metadata namespace so it survives
     // EvalResult round-trips without a Drizzle schema migration.
     const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
-
-    // Normalize provider for storage and extract blobs from responses.
-    const preSanitizeTestCase = {
-      ...testCase,
-      ...(testCase.provider && {
-        provider: sanitizeProvider(testCase.provider),
-      }),
-    };
 
     const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
@@ -88,7 +82,7 @@ export default class EvalResult {
     const args = {
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizeForDbWithSecrets(preSanitizeTestCase),
+      testCase: sanitizeForDbWithSecrets(testCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt: sanitizeForDbWithSecrets(prompt),
@@ -135,7 +129,10 @@ export default class EvalResult {
             promptIdx: result.promptIdx,
           })
         : result.response;
-      processedResults.push({ ...result, response: processedResponse ?? undefined });
+      processedResults.push({
+        ...serializeResultProviderRefs(result),
+        response: processedResponse ?? undefined,
+      });
     }
 
     await db.transaction(async (tx) => {
@@ -370,11 +367,16 @@ export default class EvalResult {
     // testCase metadata in the constructor, and trace linkage travels inside the metadata
     // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
     // explicitly keeps the write payload aligned with the schema.
-    const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
+    const {
+      traceId: _traceId,
+      evaluationId: _evaluationId,
+      pluginId: _pluginId,
+      ...rest
+    } = serializeResultProviderRefs(this);
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
-      gradingResult: sanitizeGradingResultForDb(this.gradingResult),
+      gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
     };
     //check if this exists in the db
@@ -412,6 +414,7 @@ export default class EvalResult {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
       stripOutput: shouldStripResponseOutput,
+      stripPromptText: shouldStripPromptText,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one
@@ -433,7 +436,9 @@ export default class EvalResult {
       }),
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: shouldStripGradingResult
+        ? null
+        : projectGradingResult(this.gradingResult, shouldStripPromptText),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
@@ -482,4 +487,5 @@ export {
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
   stripTraceLinkageFromMetadata,
+  toSerializableProviderRef,
 } from '../evaluator/resultProcessing';
