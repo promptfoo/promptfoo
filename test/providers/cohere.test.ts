@@ -305,6 +305,7 @@ describe('CohereChatCompletionProvider', () => {
     expect(result).toEqual({
       cached: false,
       output: 'Hello world',
+      finishReason: 'stop',
       tokenUsage: {
         cached: 0,
         completion: 2,
@@ -314,6 +315,68 @@ describe('CohereChatCompletionProvider', () => {
       },
     });
   });
+
+  it.each([
+    ['STOP_SEQUENCE', 'stop'],
+    ['MAX_TOKENS', 'length'],
+    ['FUTURE_REASON', 'future_reason'],
+    [undefined, undefined],
+  ])('preserves the v2 finish reason %s as %s', async (rawReason, finishReason) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        finish_reason: rawReason,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Partial answer' }] },
+        usage: { tokens: { input_tokens: 5, output_tokens: 2 } },
+      },
+    } as any);
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Hello');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Partial answer');
+    expect(result.finishReason).toBe(finishReason);
+  });
+
+  it.each(
+    ['command-a-plus-05-2026', 'north-mini-code-1-0'].flatMap((modelName) =>
+      ['ERROR', 'TIMEOUT'].flatMap((finishReason) =>
+        ['Partial answer', undefined].map((output) => ({ modelName, finishReason, output })),
+      ),
+    ),
+  )(
+    'reports $finishReason for $modelName with output $output as a provider error',
+    async ({ modelName, finishReason, output }) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        cached: false,
+        status: 200,
+        data: {
+          finish_reason: finishReason,
+          message: {
+            role: 'assistant',
+            content: output === undefined ? [] : [{ type: 'text', text: output }],
+          },
+          usage: { tokens: { input_tokens: 5, output_tokens: 2 }, cached_tokens: 3 },
+        },
+      } as any);
+      const provider = new CohereChatCompletionProvider(modelName, {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(result).toMatchObject({
+        error: `Cohere v2 Chat API generation failed with finish_reason ${finishReason}.`,
+        finishReason: finishReason.toLowerCase(),
+        cached: false,
+        tokenUsage: { prompt: 5, completion: 2, total: 7, cached: 3, numRequests: 1 },
+      });
+      expect(result.output).toBe(output);
+    },
+  );
 
   it('preserves and normalizes citations from v2 text responses', async () => {
     const citations = [
@@ -920,6 +983,7 @@ describe('CohereChatCompletionProvider', () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       data: {
+        finish_reason: 'TOOL_CALL',
         message: { role: 'assistant', content: [], tool_calls: toolCalls },
         usage: { tokens: { input_tokens: 6, output_tokens: 3 } },
       },
@@ -931,6 +995,7 @@ describe('CohereChatCompletionProvider', () => {
 
     await expect(provider.callApi('What is the weather?')).resolves.toMatchObject({
       output: toolCalls,
+      finishReason: 'tool_calls',
       tokenUsage: { prompt: 6, completion: 3, total: 9 },
     });
   });
