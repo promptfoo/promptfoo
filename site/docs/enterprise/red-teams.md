@@ -69,13 +69,15 @@ Save your scan configuration, then select **Run Scan From Template** in its **Re
 
 If server-side execution is enabled and the target supports it, select **Server**, then **Run scan**. The scan executes on your deployment's runner. Follow its status, probe progress, and logs in **Run History** or the target's run history. On-prem scans need a configured Red Team Provider; if setup is missing, the run screen links to the relevant provider settings.
 
+![Run scan controls with the Server tab selected and the Run scan button](/img/enterprise-docs/run-scan-server-tab.png)
+
 To stop a running server scan, open its details and select **Stop**. With permission to update jobs, you can choose **Cancel Run** to stop without publishing, or **Publish Partial Report** to publish the completed probes. Partial reports require at least one completed probe and do not represent a completed scan. Open the available results with **View Report** or **View Partial Report**.
 
 For programmatic runs, the **Jobs** section of the [API reference](/docs/api-reference/) documents **Start job**, **Get job**, **Stream job logs**, and **Stop job**, including the request fields for canceling a run or publishing a partial report.
 
 To execute from your machine, select **CLI** and use the generated command, or download the YAML configuration. [Authenticate](./authentication.md) to the correct deployment and team before running the command.
 
-![CLI command and YAML download controls](/img/enterprise-docs/run-scan.png)
+![Run scan controls with the CLI tab selected and the generated command](/img/enterprise-docs/run-scan-cli-tab.png)
 
 When you enter the command into your terminal, Promptfoo will generate the adversarial probes and write the test cases locally.
 
