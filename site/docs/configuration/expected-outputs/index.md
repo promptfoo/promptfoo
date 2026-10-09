@@ -25,6 +25,8 @@ Red team strategies can grade responses during an attack. The final assertion ch
 
 When no final strategy prompt is available, a provider-reported chat array without a usable user message uses the original prompt fallback instead of unrelated saved messages. Historical strategy grading usage is counted once across matching assertions, including assertion sets. Replayed grading responses count their full token usage as cached.
 
+For [data-exfil red team assertions](/docs/red-team/plugins/data-exfil#grading), valid page tracking can supply deterministic evidence of exfiltration. Missing or malformed tracking identifiers leave model grading in place and do not automatically pass the test.
+
 In machine learning, "Accuracy" is a metric that measures the proportion of correct predictions made by a model out of the total number of predictions. With `promptfoo`, accuracy is defined as the proportion of prompts that produce the expected or desired output.
 
 ## Using assertions
@@ -141,7 +143,9 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                             |
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                               |
 | [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | webhook returns a boolean `pass` and an optional score from 0 to 1        |
+| [rouge-l](/docs/configuration/expected-outputs/deterministic/#rouge-l)                                             | Rouge-L (LCS) score is at least the threshold (default 0.75)              |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)                   |
+| [rouge-s](/docs/configuration/expected-outputs/deterministic/#rouge-s)                                             | Rouge-S (skip-bigram) score is at least the threshold (default 0.75)      |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU >= threshold (default 0.5); blank references are ignored             |
 | [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU >= threshold (default 0.5); empty output scores 0                    |
 | [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                                 |
@@ -169,7 +173,7 @@ Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascr
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
-When a `not-javascript`, `not-python`, or `not-ruby` assertion returns a full grading result, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty. A negated pass reports `Assertion passed`; the script's score is preserved in either case.
+When a `not-javascript` assertion returns a full grading result, its `reason` is preserved verbatim, including an empty string, for either inverted outcome. For `not-python` and `not-ruby`, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty; a negated pass reports `Assertion passed`. All three preserve the script's score.
 
 The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.
 
