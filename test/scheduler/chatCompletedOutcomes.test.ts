@@ -223,13 +223,17 @@ describe('real Chat completed outcomes through the rate-limit wrapper', () => {
         expect(updateQuota.mock.invocationCallOrder[0]).toBeLessThan(
           release.mock.invocationCallOrder[0],
         );
-        expect(updateQuota).toHaveBeenNthCalledWith(1, {
-          remainingRequests: 0,
-          remainingTokens: undefined,
-          limitRequests: 10,
-          limitTokens: undefined,
-          resetAt,
-        });
+        expect(updateQuota).toHaveBeenNthCalledWith(
+          1,
+          {
+            remainingRequests: 0,
+            remainingTokens: undefined,
+            limitRequests: 10,
+            limitTokens: undefined,
+            resetAt,
+          },
+          false,
+        );
         expect(Object.values(registry.getMetrics())[0]).toMatchObject({
           activeRequests: 0,
           queueDepth: 1,
@@ -252,12 +256,16 @@ describe('real Chat completed outcomes through the rate-limit wrapper', () => {
         expect(release).toHaveBeenCalledTimes(2);
         expect(learned).toHaveBeenCalledOnce();
         expect(updateQuota).toHaveBeenCalledTimes(2);
-        expect(updateQuota).toHaveBeenNthCalledWith(2, {
-          remainingRequests: undefined,
-          remainingTokens: undefined,
-          limitRequests: undefined,
-          limitTokens: undefined,
-        });
+        expect(updateQuota).toHaveBeenNthCalledWith(
+          2,
+          {
+            remainingRequests: undefined,
+            remainingTokens: undefined,
+            limitRequests: undefined,
+            limitTokens: undefined,
+          },
+          false,
+        );
         expect(retrying).not.toHaveBeenCalled();
         expect(Object.values(registry.getMetrics())[0]).toMatchObject({
           activeRequests: 0,

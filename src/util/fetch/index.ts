@@ -415,20 +415,31 @@ export function isRateLimited(response: Response): boolean {
 export function computeRateLimitWaitMs(response: Response): number {
   const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-  const openaiReset =
-    response.headers.get('x-ratelimit-reset-requests') ||
-    response.headers.get('x-ratelimit-reset-tokens');
+  const now = Date.now();
+  const specificResets = [
+    { resetAt: parsedHeaders.resetAtRequests, remaining: parsedHeaders.remainingRequests },
+    { resetAt: parsedHeaders.resetAtTokens, remaining: parsedHeaders.remainingTokens },
+  ].filter(
+    ({ resetAt, remaining }) =>
+      resetAt !== undefined && (remaining === undefined || remaining <= 0),
+  );
 
-  if (openaiReset) {
-    if (parsedHeaders.resetAt !== undefined) {
-      return Math.max(parsedHeaders.resetAt - Date.now(), 0);
-    }
+  if (parsedHeaders.resetAtRequests !== undefined || parsedHeaders.resetAtTokens !== undefined) {
+    // The transport retries inside a held scheduler slot. Honor every exhausted or
+    // unknown dimension here too, without waiting on explicitly available quota.
+    return specificResets.length > 0 || parsedHeaders.retryAfterMs !== undefined
+      ? Math.max(
+          0,
+          parsedHeaders.retryAfterMs ?? 0,
+          ...specificResets.map(({ resetAt }) => resetAt! - now),
+        )
+      : 60_000;
   }
 
   if (rateLimitReset) {
     const resetAt = Number.parseInt(rateLimitReset, 10) * 1000;
     if (Number.isFinite(resetAt) && resetAt >= 0) {
-      return Math.max(resetAt - Date.now() + 1000, 0);
+      return Math.max(resetAt - now + 1000, parsedHeaders.retryAfterMs ?? 0, 0);
     }
   }
 

@@ -1524,18 +1524,36 @@ describe('computeRateLimitWaitMs', () => {
     expect(computeRateLimitWaitMs(response)).toBe(expected);
   });
 
-  it('prefers OpenAI reset headers when present', () => {
-    const response = createMockResponse({
-      headers: new Headers({
-        'x-ratelimit-reset-requests': '3s',
-        'Retry-After': '60',
-      }),
-    });
-    const wait = computeRateLimitWaitMs(response);
-    // resolves close to 3000ms; allow a few ms of clock drift
-    expect(wait).toBeGreaterThanOrEqual(2_900);
-    expect(wait).toBeLessThanOrEqual(3_100);
-  });
+  it.each([
+    ['requests exhausted', 0, 100, '1s', '60s', '100', 1000],
+    ['tokens exhausted', 100, 0, '60s', '1s', '100', 1000],
+    ['both exhausted', 0, 0, '1s', '60s', '100', 60000],
+    ['unknown quotas', undefined, undefined, '1s', '60s', '100', 60000],
+    ['Retry-After floor', 0, 100, '3s', '60s', '60000', 60000],
+  ] as const)(
+    'uses the effective quota deadline for transport retries: %s',
+    (_name, requests, tokens, requestReset, tokenReset, retryAfter, expected) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-09T00:00:00Z'));
+      try {
+        const headers = new Headers({
+          'x-ratelimit-reset-requests': requestReset,
+          'x-ratelimit-reset-tokens': tokenReset,
+          'retry-after-ms': retryAfter,
+        });
+        if (requests !== undefined) {
+          headers.set('x-ratelimit-remaining-requests', String(requests));
+        }
+        if (tokens !== undefined) {
+          headers.set('x-ratelimit-remaining-tokens', String(tokens));
+        }
+        const wait = computeRateLimitWaitMs(createMockResponse({ headers }));
+        expect(wait).toBe(expected);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('falls back to Retry-After when a reset header is non-finite', () => {
     const response = createMockResponse({

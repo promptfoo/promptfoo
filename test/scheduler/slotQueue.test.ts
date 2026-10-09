@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseRateLimitHeaders } from '../../src/scheduler/headerParser';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
 
 import type { ParsedRateLimitHeaders } from '../../src/scheduler/headerParser';
@@ -313,7 +314,7 @@ describe('SlotQueue', () => {
       expect(ratio.tokens).toBe(0.5); // 50000/100000
     });
 
-    it('should update resetAt timestamp', () => {
+    it('does not report a reset-only successful response as an active backoff', () => {
       const resetTime = Date.now() + 60000;
       const parsed: ParsedRateLimitHeaders = {
         resetAt: resetTime,
@@ -321,7 +322,7 @@ describe('SlotQueue', () => {
 
       queue.updateRateLimitState(parsed);
 
-      expect(queue.getResetAt()).toBe(resetTime);
+      expect(queue.getResetAt()).toBeNull();
     });
 
     it('should update all fields together', () => {
@@ -339,7 +340,7 @@ describe('SlotQueue', () => {
       const ratio = queue.getRemainingRatio();
       expect(ratio.requests).toBe(0.9);
       expect(ratio.tokens).toBe(0.8);
-      expect(queue.getResetAt()).toBe(resetTime);
+      expect(queue.getResetAt()).toBeNull();
     });
   });
 
@@ -568,6 +569,266 @@ describe('SlotQueue', () => {
 
       expect(queue.getActiveCount()).toBe(0);
       expect(queue.getQueueDepth()).toBe(1);
+    });
+
+    it('keeps a token-exhausted request queued until the token reset', () => {
+      const now = Date.now();
+      const parsed = parseRateLimitHeaders({
+        'x-ratelimit-remaining-requests': '1',
+        'x-ratelimit-remaining-tokens': '0',
+        'x-ratelimit-reset-requests': '1s',
+        'x-ratelimit-reset-tokens': '10s',
+      });
+
+      queue.updateRateLimitState(parsed);
+      trackAcquire(queue.acquire('token-limited'));
+
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(1000);
+
+      expect(Date.now()).toBe(now + 1000);
+      expect(queue.getActiveCount()).toBe(0);
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(9000);
+
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
+    });
+
+    it('does not let Retry-After be bypassed by shorter quota reset clocks', () => {
+      const parsed = parseRateLimitHeaders({
+        'x-ratelimit-remaining-requests': '1',
+        'x-ratelimit-remaining-tokens': '0',
+        'x-ratelimit-reset-requests': '1s',
+        'x-ratelimit-reset-tokens': '10s',
+      });
+
+      queue.updateRateLimitState(parsed);
+      queue.markRateLimited(30000);
+      trackAcquire(queue.acquire('retry-after-limited'));
+
+      vi.advanceTimersByTime(10000);
+
+      expect(queue.getActiveCount()).toBe(0);
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(20000);
+
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
+    });
+
+    it('does not let Retry-After shorten a longer quota reset clock', () => {
+      const resetAt = Date.now() + 60000;
+      queue.updateRateLimitState({
+        remainingTokens: 0,
+        resetAt,
+        resetAtTokens: resetAt,
+      });
+      queue.markRateLimited(30000);
+      trackAcquire(queue.acquire('longer-quota-reset'));
+
+      vi.advanceTimersByTime(30000);
+
+      expect(queue.getActiveCount()).toBe(0);
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(30000);
+
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
+    });
+  });
+
+  describe('quota clocks and independent 429 backoff', () => {
+    beforeEach(() => {
+      queue = new SlotQueue({ maxConcurrency: 5, minConcurrency: 1 });
+    });
+
+    it.each(['requests', 'tokens'] as const)(
+      'wakes queued work when successful headers restore %s quota',
+      async (dimension) => {
+        const remaining = dimension === 'requests' ? 'remainingRequests' : 'remainingTokens';
+        await queue.acquire('still-active');
+        queue.updateRateLimitState({ [remaining]: 0, resetAt: Date.now() + 60000 });
+        const waiting = trackAcquire(queue.acquire('waiting'));
+        expect(queue.getQueueDepth()).toBe(1);
+
+        queue.updateRateLimitState({ [remaining]: 10 });
+
+        expect(queue.getQueueDepth()).toBe(0);
+        expect(queue.getActiveCount()).toBe(2);
+        await waiting;
+      },
+    );
+
+    it('retains a request-wide backoff when successful headers restore quota', () => {
+      queue.updateRateLimitState({ remainingRequests: 0, resetAtRequests: Date.now() + 60000 });
+      queue.markRateLimited(5000);
+      trackAcquire(queue.acquire('waiting'));
+      queue.updateRateLimitState({ remainingRequests: 10 });
+      expect(queue.getQueueDepth()).toBe(1);
+      vi.advanceTimersByTime(4999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it('does not admit queued work before a 429 backoff is applied', () => {
+      queue.updateRateLimitState({ remainingRequests: 0, resetAtRequests: Date.now() + 60000 });
+      trackAcquire(queue.acquire('waiting'));
+      queue.updateRateLimitState({ remainingRequests: 10 }, true);
+      expect(queue.getQueueDepth()).toBe(1);
+      queue.markRateLimited(5000);
+      vi.advanceTimersByTime(4999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it.each(['requests', 'tokens'] as const)(
+      'reports only the exhausted %s deadline when another quota has a longer reset',
+      (dimension) => {
+        const now = Date.now();
+        queue.updateRateLimitState({
+          remainingRequests: dimension === 'requests' ? 0 : 100,
+          remainingTokens: dimension === 'tokens' ? 0 : 100,
+          resetAt: now + 60000,
+          resetAtRequests: now + (dimension === 'requests' ? 1000 : 60000),
+          resetAtTokens: now + (dimension === 'tokens' ? 1000 : 60000),
+        });
+        expect(queue.getResetAt()).toBe(now + 1000);
+      },
+    );
+
+    it('uses the conservative backoff after positive quota clocks have expired', () => {
+      queue.updateRateLimitState({
+        remainingRequests: 10,
+        remainingTokens: 100,
+        resetAt: Date.now() + 1000,
+        resetAtRequests: Date.now() + 1000,
+        resetAtTokens: Date.now() + 2000,
+      });
+      vi.advanceTimersByTime(3000);
+      queue.markRateLimited();
+      trackAcquire(queue.acquire('bare-429'));
+      vi.advanceTimersByTime(59999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it.each(['requests', 'tokens'] as const)(
+      'does not exhaust the available quota when %s are limited',
+      (dimension) => {
+        queue.updateRateLimitState({
+          remainingRequests: dimension === 'requests' ? 0 : 100,
+          remainingTokens: dimension === 'tokens' ? 0 : 100,
+          resetAt: Date.now() + (dimension === 'requests' ? 1000 : 60000),
+          resetAtRequests: Date.now() + (dimension === 'requests' ? 1000 : 60000),
+          resetAtTokens: Date.now() + (dimension === 'tokens' ? 1000 : 60000),
+        });
+        queue.markRateLimited(1000);
+        trackAcquire(queue.acquire('one-quota-429'));
+        vi.advanceTimersByTime(999);
+        expect(queue.getActiveCount()).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(queue.getActiveCount()).toBe(1);
+      },
+    );
+
+    it.each([
+      ['requests', undefined],
+      ['tokens', undefined],
+      ['requests', 30000],
+      ['tokens', 30000],
+    ] as const)('honors reset-only %s headers with Retry-After %s', (dimension, retryAfter) => {
+      const now = Date.now();
+      queue.updateRateLimitState(
+        parseRateLimitHeaders({
+          [`x-ratelimit-reset-${dimension}`]: '2m',
+        }),
+      );
+      queue.markRateLimited(retryAfter);
+      trackAcquire(queue.acquire('reset-only-429'));
+      expect(queue.getResetAt()).toBe(now + 120000);
+      vi.advanceTimersByTime(119999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it.each(['requests', 'tokens'] as const)(
+      'invalidates cached positive %s quota when a 429 supplies only its reset',
+      (dimension) => {
+        queue.updateRateLimitState({ remainingRequests: 50, remainingTokens: 50 });
+        const now = Date.now();
+        queue.updateRateLimitState(
+          parseRateLimitHeaders({
+            [`x-ratelimit-reset-${dimension}`]: '2m',
+          }),
+          true,
+        );
+        queue.markRateLimited(30000);
+        trackAcquire(queue.acquire('cached-positive-reset-only'));
+        expect(queue.getResetAt()).toBe(now + 120000);
+        vi.advanceTimersByTime(119999);
+        expect(queue.getActiveCount()).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(queue.getActiveCount()).toBe(1);
+      },
+    );
+
+    it('retains cached positive quota for a successful reset-only response', () => {
+      queue.updateRateLimitState({ remainingRequests: 50, limitRequests: 100 });
+      queue.updateRateLimitState(parseRateLimitHeaders({ 'x-ratelimit-reset-requests': '2m' }));
+      expect(queue.getRemainingRatio().requests).toBe(0.5);
+      trackAcquire(queue.acquire('successful-reset-only'));
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it('uses an explicit reset-only deadline instead of the generic 60-second fallback', () => {
+      const now = Date.now();
+      queue.updateRateLimitState(parseRateLimitHeaders({ 'x-ratelimit-reset-tokens': '20s' }));
+      queue.markRateLimited();
+      trackAcquire(queue.acquire('short-reset-only-429'));
+      expect(queue.getResetAt()).toBe(now + 20000);
+      vi.advanceTimersByTime(19999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it('reports the longest active exhausted quota deadline', () => {
+      const now = Date.now();
+      queue.updateRateLimitState(
+        parseRateLimitHeaders({
+          'x-ratelimit-remaining-requests': '0',
+          'x-ratelimit-reset-requests': '1s',
+          'x-ratelimit-remaining-tokens': '0',
+          'x-ratelimit-reset-tokens': '60s',
+        }),
+      );
+      queue.markRateLimited(30000);
+      expect(queue.getResetAt()).toBe(now + 60000);
+    });
+
+    it('keeps Retry-After active when an in-flight successful response updates quota headers', () => {
+      queue.markRateLimited(30000);
+      queue.updateRateLimitState({
+        remainingRequests: 100,
+        remainingTokens: 100,
+        resetAt: Date.now() + 1000,
+        resetAtRequests: Date.now() + 1000,
+        resetAtTokens: Date.now() + 1000,
+      });
+      trackAcquire(queue.acquire('late-response'));
+      vi.advanceTimersByTime(29999);
+      expect(queue.getActiveCount()).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(queue.getActiveCount()).toBe(1);
     });
   });
 
