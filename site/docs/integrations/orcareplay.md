@@ -42,6 +42,10 @@ OpenAI providers support this variable, but an explicit `config.apiHost` or
 precedence over `OPENAI_BASE_URL`.
 
 Remove those conflicting settings from the configuration used for recording and replay.
+Also remove `OPENAI_BASE_URL` from top-level `env`, provider `env`, and environment files
+loaded with `--env-file`: these scopes override the child-process variable set by OrcaReplay.
+Otherwise, recording and replay can bypass the recorder and send billable requests to
+the configured endpoint.
 If you need a custom upstream gateway, configure it through OrcaReplay and verify the
 captured request count. Setting only `OPENAI_API_BASE` does not change promptfoo's OpenAI
 endpoint.
