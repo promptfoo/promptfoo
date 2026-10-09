@@ -215,6 +215,14 @@ vi.mock('../utils/yamlHelpers', async (importOriginal) => ({
 vi.mock('./strategies/utils', () => ({
   getEstimatedDuration: vi.fn(() => '~5m'),
   getEstimatedProbes: vi.fn(() => 150),
+  estimateProbeRange: vi.fn(() => ({
+    min: 120,
+    likely: 150,
+    max: 180,
+    ceiling: 220,
+    assumptions: [],
+    breakdown: [],
+  })),
 }));
 
 vi.mock('./DefaultTestVariables', () => ({
