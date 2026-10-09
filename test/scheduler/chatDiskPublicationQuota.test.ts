@@ -112,7 +112,9 @@ describe('Chat completed quota during default disk publication', () => {
       expect(cache.stores).toHaveLength(1);
       const disk = cache.stores[0].store as KeyvFile;
       expect(disk).toBeInstanceOf(modules.disk.KeyvFile);
-      expect(disk.opts.filename).toBe(path.join(await realpath(cacheDirectory), 'cache.json'));
+      // Windows may retain an 8.3 alias in the configured path.
+      expect(await realpath(path.dirname(disk.opts.filename))).toBe(await realpath(cacheDirectory));
+      expect(path.basename(disk.opts.filename)).toBe('cache.json');
       expect(disk.opts.writeDelay).toBe(100);
       const cacheSet = vi.spyOn(cache, 'set');
       const publicationStarted = createDeferred<void>();
