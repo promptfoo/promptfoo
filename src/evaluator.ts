@@ -19,7 +19,7 @@ import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import logger, { globalLogCallback, setLogCallback } from './logger';
+import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import {
   getResultIndexKey,
@@ -759,7 +759,6 @@ function createRunEvalState({
  * producer in lockstep.
  */
 const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
-const EVAL_RUNTIME_VAR_KEY_SET: ReadonlySet<string> = new Set(EVAL_RUNTIME_VAR_KEYS);
 type EvalRuntimeVars = Partial<Record<(typeof EVAL_RUNTIME_VAR_KEYS)[number], Vars[string]>>;
 
 function getEvalRuntimeVars({
@@ -790,11 +789,10 @@ function getEvalRuntimeVars({
  * with the provider call context.
  */
 function omitEvalRuntimeVars(vars: Vars): Vars {
-  const result: Vars = {};
-  for (const [key, value] of Object.entries(vars)) {
-    if (!EVAL_RUNTIME_VAR_KEY_SET.has(key)) {
-      result[key] = value;
-    }
+  // Keep non-serialized metadata needed by assertion and grader providers.
+  const result: Vars = { ...vars };
+  for (const key of EVAL_RUNTIME_VAR_KEYS) {
+    delete result[key];
   }
   return result;
 }
@@ -1327,7 +1325,6 @@ async function applyRunEvalResponseOutcome({
   abortSignal,
   deferGrading,
   evalId,
-  isRedteam,
   latencyMs,
   prompt,
   promptIdx,
@@ -1346,7 +1343,6 @@ async function applyRunEvalResponseOutcome({
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
   evalId?: string;
-  isRedteam: boolean;
   latencyMs: number;
   prompt: Prompt;
   promptIdx: number;
@@ -1370,7 +1366,12 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    applyEmptyResponseOutcome(ret, isRedteam);
+    // An absent provider result is an integration error, including in redteam
+    // scans. An intentional empty string still proceeds to the assertions.
+    ret.success = false;
+    ret.score = 0;
+    ret.error = 'No output';
+    ret.failureReason = ResultFailureReason.ERROR;
     return;
   }
 
@@ -1393,16 +1394,6 @@ async function applyRunEvalResponseOutcome({
     traceContext,
     vars,
   });
-}
-
-function applyEmptyResponseOutcome(ret: EvaluateResult, isRedteam: boolean) {
-  if (isRedteam) {
-    ret.success = true;
-  } else {
-    ret.success = false;
-    ret.score = 0;
-    ret.error = 'No output';
-  }
 }
 
 async function gradeRunEvalResponse({
@@ -1793,7 +1784,6 @@ async function runEvalInternal({
             abortSignal,
             deferGrading,
             evalId,
-            isRedteam,
             latencyMs,
             prompt,
             promptIdx: promptIndex,
@@ -3982,10 +3972,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       await this.persistEvalRow(row);
 
-      if (this.abortIfTargetUnavailable(row, context)) {
-        break;
-      }
-
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
@@ -3996,6 +3982,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
       });
+
+      // The row that stops the eval is counted first, like any other error. Otherwise the
+      // summary and the exit code would report only the rows that passed before it.
+      if (this.abortIfTargetUnavailable(row, context)) {
+        break;
+      }
 
       context.options.progressCallback?.(
         context.numComplete,
@@ -4676,9 +4668,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         throw error;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
-      // Provider errors can contain credentials or config source snippets.
+      // Provider errors can contain credentials or config source snippets, so saved results get
+      // a generic reason. The run's log file records debug messages even without --verbose, so
+      // the cause is logged only when debug output was asked for.
+      if (isDebugEnabled()) {
+        logger.debug('[Evaluator] select-best grading failed', {
+          error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+          graderId,
+          testIdx,
+        });
+      }
       const message =
-        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation.';
+        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
       for (const result of resultsToCompare) {
@@ -5467,6 +5468,39 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
   }
 
+  private async acquireOtlpReceiver(signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted();
+    const startup = startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
+    if (!signal) {
+      return startup;
+    }
+    return new Promise<boolean>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+      startup.then(
+        (acquired) => {
+          signal.removeEventListener('abort', onAbort);
+          if (signal.aborted) {
+            // The shared startup can finish after this evaluation has returned. Release only
+            // its reservation without delaying cancellation or closing another evaluation's receiver.
+            void stopOtlpReceiverIfNeeded(acquired, this.store.id).catch((error) => {
+              logger.warn('Failed to release tracing receiver after evaluation cancellation', {
+                error,
+              });
+            });
+            reject(signal.reason);
+          } else {
+            resolve(acquired);
+          }
+        },
+        (error) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(error);
+        },
+      );
+    });
+  }
+
   private async evaluateWithResources(deadline: EvaluationDeadline): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
@@ -5486,7 +5520,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           providerRegistry.useProvider(provider, deadline.providerAbortSignal),
         ),
       );
-      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
+      otlpReceiverAcquired = await this.acquireOtlpReceiver(deadline.providerAbortSignal);
+      deadline.providerAbortSignal?.throwIfAborted();
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
         const otelConfig = getDefaultOtelConfig();

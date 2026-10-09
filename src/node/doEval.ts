@@ -547,6 +547,9 @@ async function doEvalWithEnv(
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
     cliState.basePath = _basePath;
+    if (commandLineOptions?.safeMode) {
+      cliState.safeMode = true;
+    }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';
@@ -1238,9 +1241,11 @@ async function doEvalWithEnv(
         const cliTests = cmdObj.tests || cmdObj.vars;
         const varPaths: string[] = [];
         if (cliTests) {
-          // resolveConfigs loads `--tests` with no base path, so it resolves against the
-          // working directory rather than the directory holding the config file.
-          varPaths.push(...resolveTestsWatchPaths(cliTests, process.cwd()));
+          // Preserve the released path bases: --tests uses CWD, while --vars uses
+          // the config directory. --tests takes precedence when both are supplied.
+          varPaths.push(
+            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
+          );
         } else {
           varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
           for (const source of testSources ?? []) {
@@ -1282,11 +1287,12 @@ async function doEvalWithEnv(
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
-      if (
-        isCliInvocation &&
-        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)
-      ) {
-        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+      const belowThreshold =
+        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
+      // An eval stopped because its target is unavailable did not run every test, so it
+      // fails whatever the tests before the stop did.
+      if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
+        if (belowThreshold && getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
           logger.info(
             chalk.white(
               `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
@@ -1294,7 +1300,11 @@ async function doEvalWithEnv(
           );
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
+        // A run that failed its tests returns here, as it always has. A run stopped by its
+        // target goes on to clean up its providers, as it did when it still exited with 0.
+        if (targetErrorStatus == null) {
+          return ret;
+        }
       }
     }
     if (testSuite.redteam) {
@@ -1314,23 +1324,27 @@ async function doEvalWithEnv(
     const runCommand = { ...cmdObj };
     const runDefaults = { ...defaultConfig };
     const runOptions = { ...evaluateOptions };
-    return cliState.withConfig(undefined, () =>
-      cliState.withBasePath(undefined, () =>
-        cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
-          cliState.withEnv(runEnv, () =>
-            providerRegistry.withEvaluation(() =>
-              runEvaluationWithEnv(
-                runEnv,
-                runEnvFileOverrides,
-                runCommand,
-                runDefaults,
-                runOptions,
-                initialization,
+    return cliState.withSafeMode(
+      Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
+      () =>
+        cliState.withConfig(undefined, () =>
+          cliState.withBasePath(undefined, () =>
+            cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
+              cliState.withEnv(runEnv, () =>
+                providerRegistry.withEvaluation(() =>
+                  runEvaluationWithEnv(
+                    runEnv,
+                    runEnvFileOverrides,
+                    runCommand,
+                    runDefaults,
+                    runOptions,
+                    initialization,
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      ),
     );
   };
 

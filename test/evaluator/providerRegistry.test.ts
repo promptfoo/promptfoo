@@ -20,6 +20,35 @@ function deferred() {
   return { promise, resolve };
 }
 
+it('keeps the registry reusable across nonterminal beforeExit events', async () => {
+  const events = ['beforeExit', 'SIGINT', 'SIGTERM'] as const;
+  const existing = new Map(events.map((event) => [event, new Set(process.rawListeners(event))]));
+  const registry = new ProviderRegistry();
+  const resource = { shutdown: vi.fn(async () => {}) };
+  try {
+    registry.register(resource);
+    for (const round of [1, 2]) {
+      const idle = process
+        .rawListeners('beforeExit')
+        .find((listener) => !existing.get('beforeExit')!.has(listener));
+      expect(idle).toBeDefined();
+      idle!.call(process, 0);
+      await vi.waitFor(() => expect(resource.shutdown).toHaveBeenCalledTimes(round));
+      await expect(registry.withEvaluation(async () => 'resumed')).resolves.toBe('resumed');
+      registry.register(resource);
+    }
+  } finally {
+    for (const event of events) {
+      for (const listener of process.rawListeners(event)) {
+        if (!existing.get(event)!.has(listener)) {
+          process.removeListener(event, listener as (...args: unknown[]) => void);
+        }
+      }
+    }
+    await registry.shutdownAll();
+  }
+});
+
 it('drains an active call that registers a resource after process shutdown starts', async () => {
   const registry = new ProviderRegistry(false);
   const callStarted = deferred();

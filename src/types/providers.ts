@@ -87,6 +87,8 @@ export interface CallApiContextParams {
   prompt: Prompt;
   vars: Record<string, VarValue>;
   debug?: boolean;
+  /** True for assertion-grader calls, independent of the prompt label. */
+  isGrading?: boolean;
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
   test?: AtomicTestCase;
@@ -126,7 +128,10 @@ export interface ProviderCleanupContext {
 
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi?: (
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
@@ -167,7 +172,10 @@ export interface ApiSimilarityProvider extends ApiProvider {
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: (
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
 }
 
 export interface ApiModerationProvider extends ApiProvider {

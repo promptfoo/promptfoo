@@ -273,6 +273,10 @@ export class ProviderRegistry {
     }
   }
 
+  has(resource: unknown): boolean {
+    return this.resources.get(resource as CleanupProvider)?.registered === true;
+  }
+
   /** Close the currently known resources; embedded callers can continue using the registry. */
   async shutdownAll(): Promise<void> {
     const releases = [...this.resources.values()].map((state) => this.forceResource(state));
@@ -580,10 +584,18 @@ export class ProviderRegistry {
         } else {
           const registration = state.registration;
           state.registered = false;
-          actual = Promise.resolve()
-            .then(() =>
-              this.releasingResource.run({ state, registration }, () => state.resource.shutdown()),
-            )
+          // Begin cleanup before returning to callers. Deferring the call itself would let a
+          // direct reuse start first, then be interrupted by this older shutdown.
+          actual = promise;
+          let shutdown: Promise<void>;
+          try {
+            shutdown = this.releasingResource.run({ state, registration }, () =>
+              state.resource.shutdown(),
+            );
+          } catch (error) {
+            shutdown = Promise.reject(error);
+          }
+          void Promise.resolve(shutdown)
             .catch((error) => {
               logger.warn('Error shutting down provider: ' + String(error));
             })
@@ -639,7 +651,8 @@ export class ProviderRegistry {
     };
     process.once('SIGINT', () => void shutdown('SIGINT'));
     process.once('SIGTERM', () => void shutdown('SIGTERM'));
-    process.once('beforeExit', () => void shutdown('beforeExit'));
+    // beforeExit can schedule more work in an embedded host; only termination is permanent.
+    process.on('beforeExit', () => void this.shutdownAll());
   }
 }
 
