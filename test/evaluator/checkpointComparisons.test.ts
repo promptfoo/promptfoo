@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -24,9 +24,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it.each(['persisted', 'in-memory'] as const)(
-  'grades the configured provider columns after %s checkpoint replacement',
-  async (mode) => {
+it.each(
+  (['persisted', 'in-memory'] as const).flatMap((mode) =>
+    [0, 1].map((retainedColumn) => ({ mode, retainedColumn })),
+  ),
+)(
+  'grades provider columns after $mode replacement with the assertion on column $retainedColumn',
+  async ({ mode, retainedColumn }) => {
     const directory = await mkdtemp(path.join(tmpdir(), 'promptfoo-checkpoint-comparison-'));
     const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' });
     const previous = { resume: cliState.resume, retryMode: cliState.retryMode };
@@ -43,7 +47,7 @@ it.each(['persisted', 'in-memory'] as const)(
         `let calls = 0;
 export function beforeEach({ test }) {
   const visit = ++calls;
-  return { test: { ...test, assert: visit === 2 ? [] : test.assert,
+  return { test: { ...test, assert: (visit - 1) % 2 === ${retainedColumn} ? test.assert : [],
     metadata: { ...test.metadata, fixtureHookVisit: visit } } };
 }
 `,
@@ -137,8 +141,12 @@ export function beforeEach({ test }) {
         failureReason: ResultFailureReason.ERROR,
         metadata: { fixtureHookVisit: 1, __promptfoo: { resumable: true } },
       });
-      expect(checkpoint.testCase.assert?.[0].type).toBe('select-best');
-      expect(sibling.testCase.assert).toEqual([]);
+      expect(
+        checkpoint.testCase.assert?.some((assertion) => assertion.type === 'select-best'),
+      ).toBe(retainedColumn === 0);
+      expect(sibling.testCase.assert?.some((assertion) => assertion.type === 'select-best')).toBe(
+        retainedColumn === 1,
+      );
       expect(sibling.metadata?.fixtureHookVisit).toBe(2);
       expect(grader.callApi).not.toHaveBeenCalled();
       if (record) {
@@ -188,6 +196,200 @@ export function beforeEach({ test }) {
       controller.abort(new Error('Fixture cleanup'));
       release.resolve({ output: 'Fixture cleanup' });
       await initial?.catch(() => {});
+      Object.assign(cliState, previous);
+      restoreEnv();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+const comparisonCases = (['persisted', 'in-memory'] as const).flatMap((mode) =>
+  (['select-best', 'max-score'] as const).flatMap((handler) =>
+    [0, 1].flatMap((firstToFinish) =>
+      (['first', 'second', 'both', 'none'] as const).map((retained) => ({
+        mode,
+        handler,
+        firstToFinish,
+        retained,
+      })),
+    ),
+  ),
+);
+
+it.each(comparisonCases)(
+  '$handler keeps criteria and provider mapping with $mode, column $firstToFinish first, assertions on $retained',
+  async ({ mode, handler, firstToFinish, retained }) => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'promptfoo-comparison-criteria-'));
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' });
+    const previous = { resume: cliState.resume, retryMode: cliState.retryMode };
+    cliState.resume = false;
+    cliState.retryMode = false;
+    const gates = [createDeferred<ProviderResponse>(), createDeferred<ProviderResponse>()];
+    const entered = createDeferred<void>();
+    let running: Promise<unknown> | undefined;
+    try {
+      const gradingLog = path.join(directory, 'grading.json');
+      const graderPath = path.join(directory, 'grader.mjs');
+      await writeFile(
+        graderPath,
+        `import fs from 'node:fs';
+export default class Grader {
+  constructor(options) { this.config = options.config; }
+  id() { return 'file://' + new URL(import.meta.url).pathname; }
+  async callApi(prompt, context) {
+    fs.writeFileSync(this.config.log, JSON.stringify({
+      owner: this.config.owner, prompt: JSON.parse(prompt), promptIdx: context.promptIdx,
+      originalProvider: context.originalProvider.id(), vars: context.vars,
+    }));
+    return { output: '1' };
+  }
+}
+`,
+      );
+      const hookPath = path.join(directory, 'criteria.mjs');
+      await writeFile(
+        hookPath,
+        `let calls = 0;
+export function beforeEach({ test }) {
+  const column = calls++;
+  const retained = ${JSON.stringify(retained)};
+  const keep = retained === 'both' || (retained === 'first' && column === 0) || (retained === 'second' && column === 1);
+  return { test: {
+    ...test,
+    vars: { ...test.vars, basis: 'saved-vars-' + column },
+    options: { ...test.options, rubricPrompt: '{"outputs": {{ outputs | dump }}, "criteria": {{ criteria | dump }}, "basis": {{ basis | dump }}, "optionColumn": ' + column + '}' },
+    assert: test.assert.flatMap(assertion => assertion.type !== ${JSON.stringify(handler)} ? [assertion] : keep ? [{
+      ...assertion,
+      value: ${JSON.stringify(handler)} === 'select-best' ? 'saved-criterion-' + column : { method: 'average' },
+      metric: 'comparison-column-' + column,
+      ...(${JSON.stringify(handler)} === 'select-best' ? { provider: { id: ${JSON.stringify('file://' + graderPath)}, config: { owner: column, log: ${JSON.stringify(gradingLog)} } } } : {}),
+    }] : []),
+  } };
+}
+`,
+      );
+      let calls = 0;
+      const providers = [0, 1].map((index) => ({
+        id: () => `criteria-column-${index}`,
+        callApi: vi.fn(async () => {
+          if (++calls === 2) {
+            entered.resolve();
+          }
+          return gates[index].promise;
+        }),
+      }));
+      const suite: TestSuite = {
+        providers,
+        prompts: [{ raw: 'Synthetic criteria comparison', label: 'Comparison' }],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'javascript',
+                value: (output) => ({
+                  pass: true,
+                  score: output === 'Completed A' ? 0.2 : 0.8,
+                  reason: 'Synthetic scoring control',
+                }),
+              },
+              { type: handler },
+            ],
+          },
+        ],
+        extensions: [`file://${hookPath}:beforeEach`],
+      };
+      const record =
+        mode === 'persisted'
+          ? await Eval.create({}, suite.prompts, { id: randomUUID() })
+          : undefined;
+      const memory: InMemoryEvaluation = {
+        id: randomUUID(),
+        config: {},
+        persisted: true,
+        prompts: [],
+        results: [],
+        vars: [],
+        resultPersistenceFailed: false,
+        finalResults: [],
+        failedResults: [],
+      };
+      const runtime = {
+        createEvaluationStore: () => new InMemoryEvaluationStore(memory),
+        createResultWriters: () => [],
+      };
+      const rows = async (): Promise<EvaluateResult[]> =>
+        record
+          ? (await record.fetchResultsByTestIdx(0)).map((row) => row.toEvaluateResult())
+          : memory.results;
+      const options = {
+        cache: false,
+        maxConcurrency: 2,
+        timeoutMs: 0,
+        maxEvalTimeMs: 0,
+        showProgressBar: false,
+      };
+      running = record
+        ? evaluate(suite, record, options)
+        : evaluate(suite, memory, options, runtime);
+      await entered.promise;
+      const response = (index: number) => ({
+        output: index === 0 ? 'Completed A' : 'Completed B',
+        tokenUsage: { total: index === 0 ? 5 : 7, numRequests: 1 },
+      });
+      gates[firstToFinish].resolve(response(firstToFinish));
+      await vi.waitFor(async () =>
+        expect((await rows()).map((row) => row.promptIdx)).toEqual([firstToFinish]),
+      );
+      gates[1 - firstToFinish].resolve(response(1 - firstToFinish));
+      await running;
+      const results = await rows();
+      const comparisonApplied = retained !== 'none';
+      const sourceColumn = retained === 'second' ? 1 : 0;
+      expect(results.map((row) => row.promptIdx).sort()).toEqual([0, 1]);
+      for (const index of [0, 1]) {
+        const row = results.find((result) => result.promptIdx === index)!;
+        expect(row.provider.id).toBe(providers[index].id());
+        expect(row.response?.output).toBe(response(index).output);
+        expect(row.success).toBe(!comparisonApplied || index === 1);
+        expect(row.failureReason).toBe(
+          comparisonApplied && index === 0 ? ResultFailureReason.ASSERT : ResultFailureReason.NONE,
+        );
+        const comparison = row.gradingResult?.componentResults?.find(
+          (result) => result.assertion?.type === handler,
+        );
+        if (comparisonApplied) {
+          expect(comparison?.pass).toBe(index === 1);
+          expect(comparison?.assertion?.metric).toBe(`comparison-column-${sourceColumn}`);
+        } else {
+          expect(comparison).toBeUndefined();
+        }
+        expect((record ?? memory).prompts[index].metrics).toMatchObject({
+          testPassCount: !comparisonApplied || index === 1 ? 1 : 0,
+          testFailCount: comparisonApplied && index === 0 ? 1 : 0,
+          testErrorCount: 0,
+          tokenUsage: { total: index === 0 ? 5 : 7, numRequests: 1 },
+        });
+      }
+      if (handler === 'select-best' && comparisonApplied) {
+        expect(JSON.parse(await readFile(gradingLog, 'utf8'))).toMatchObject({
+          owner: sourceColumn,
+          prompt: {
+            outputs: ['Completed A', 'Completed B'],
+            criteria: `saved-criterion-${sourceColumn}`,
+            basis: `saved-vars-${sourceColumn}`,
+            optionColumn: sourceColumn,
+          },
+          promptIdx: sourceColumn,
+          originalProvider: providers[sourceColumn].id(),
+          vars: { basis: `saved-vars-${sourceColumn}` },
+        });
+      } else {
+        await expect(readFile(gradingLog, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      }
+    } finally {
+      gates[0].resolve({ output: 'Fixture cleanup A' });
+      gates[1].resolve({ output: 'Fixture cleanup B' });
+      await running?.catch(() => {});
       Object.assign(cliState, previous);
       restoreEnv();
       await rm(directory, { recursive: true, force: true });

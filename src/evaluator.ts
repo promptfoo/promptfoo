@@ -5522,8 +5522,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
-    const firstResult = resultsToCompare[0];
-    const savedTest = firstResult.testCase;
+    const assertionResult = resultsToCompare.find((result) =>
+      result.testCase.assert?.some((assertion) => assertion.type === 'select-best'),
+    );
+    if (!assertionResult) {
+      return;
+    }
+    const savedTest = assertionResult.testCase;
     const assertion = savedTest.assert?.find((a): a is Assertion => a.type === 'select-best');
     if (!assertion) {
       return;
@@ -5558,7 +5563,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
     let gradingResults: GradingResult[];
     try {
-      const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
+      const providers = this.comparisonProviders.get(getResultIndexKey(assertionResult));
       // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
       // references and redacted credentials need to come from the current configuration.
       const comparisonTestCase = {
@@ -5594,7 +5599,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
                 comparisonTestCase,
                 compareAssertion,
                 outputs,
-                this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
+                this.getComparisonCallApiContext(assertionResult, repeatCacheContext),
               ),
           ),
       );
@@ -5732,9 +5737,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
-    const maxScoreAssertion = resultsToCompare[0].testCase.assert?.find(
-      (a) => a.type === 'max-score',
-    ) as Assertion;
+    const assertionResult = resultsToCompare.find((result) =>
+      result.testCase.assert?.some((assertion) => assertion.type === 'max-score'),
+    );
+    const maxScoreAssertion = assertionResult?.testCase.assert?.find(
+      (assertion): assertion is Assertion => assertion.type === 'max-score',
+    );
     if (!maxScoreAssertion) {
       return;
     }
