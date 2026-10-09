@@ -3,7 +3,7 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { mockCallApiResponse } from '@app/tests/apiMocks';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalsTable from './EvalsTable';
 
