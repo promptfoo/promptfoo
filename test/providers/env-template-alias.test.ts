@@ -70,6 +70,38 @@ describe('explicit environment templates across credential aliases', () => {
   });
 });
 
+describe('referenced Vertex Express credentials', () => {
+  it.each(['file', 'cloud'])(
+    'keeps the explicit provider alias above %s defaults',
+    async (source) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-vertex-alias-'));
+      try {
+        const referenced = {
+          id: 'google:gemini-2.5-flash-image',
+          config: { vertexai: true },
+          env: { VERTEX_API_KEY: 'referenced-key' },
+        };
+        const file = path.join(dir, 'provider.json');
+        fs.writeFileSync(file, JSON.stringify(referenced));
+        vi.mocked(getProviderFromCloud).mockResolvedValue(referenced);
+        const provider = await loadApiProvider(
+          source === 'file'
+            ? `file://${file}`
+            : 'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+          {
+            options: { env: { GOOGLE_API_KEY: 'explicit-provider-key' } },
+          },
+        );
+        expect(Reflect.get(provider, 'getVertexApiKey').call(provider)).toBe(
+          'explicit-provider-key',
+        );
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
 describe('referenced provider template boundaries', () => {
   const cloudPath = 'promptfoo://provider/00000000-0000-0000-0000-000000000001';
   it.each(['PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'PROMPTFOO_DISABLE_TEMPLATING'])(

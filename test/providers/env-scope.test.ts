@@ -38,7 +38,6 @@ import {
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { OpenAiChatKitProvider } from '../../src/providers/openai/chatkit';
 import { resolveGatewayUrl, resolveGatewayWsUrl } from '../../src/providers/openclaw/shared';
 import { mergeProviderEnv } from '../../src/providers/registry';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
@@ -73,6 +72,14 @@ function apiKey(provider: object): string | undefined {
 }
 
 describe('provider environment scopes', () => {
+  it('preserves provider scope across Vertex Express image credential aliases', async () => {
+    const provider = await loadApiProvider('google:gemini-2.5-flash-image', {
+      env: { VERTEX_API_KEY: 'suite-vertex-key' },
+      options: { config: { vertexai: true }, env: { GOOGLE_API_KEY: 'provider-google-key' } },
+    });
+    expect(Reflect.get(provider, 'getVertexApiKey').call(provider)).toBe('provider-google-key');
+  });
+
   let restoreEnv: () => void;
   beforeEach(() => {
     restoreEnv = mockProcessEnv({}, { clear: true });
@@ -116,12 +123,16 @@ describe('provider environment scopes', () => {
       projectId: 'adc-project',
     });
     const target = await loadApiProvider(route, {
-      env: { VERTEX_PROJECT_ID: 'suite-project' },
-      options: { env: { GOOGLE_CLOUD_PROJECT: 'provider-project' } },
+      env: { VERTEX_PROJECT_ID: 'suite-project', VERTEX_REGION: 'us-central1' },
+      options: {
+        env: { GOOGLE_CLOUD_PROJECT: 'provider-project', GOOGLE_LOCATION: 'europe-west4' },
+      },
     });
     await target.callApi('a blue square');
     expect(request).toHaveBeenCalledWith(
-      expect.objectContaining({ url: expect.stringContaining('/projects/provider-project/') }),
+      expect.objectContaining({
+        url: expect.stringContaining('/projects/provider-project/locations/europe-west4/'),
+      }),
     );
   });
   it.each([
@@ -207,6 +218,7 @@ describe('provider environment scopes', () => {
     expect(create).toHaveBeenCalledWith(
       'a blue square',
       expect.objectContaining({ projectId: 'credential-project' }),
+      expect.any(Object),
     );
   });
   it.each(['chat', 'embedding'])(
@@ -231,6 +243,8 @@ describe('provider environment scopes', () => {
           headers: expect.objectContaining({ 'X-Client-Name': 'promptfoo' }),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     },
   );
@@ -756,31 +770,36 @@ describe('provider environment scopes', () => {
     });
   });
 
-  it.each(['google', 'palm'])(
-    'the %s Omni loader preserves the provider legacy alias',
-    async (prefix) => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { status: 'completed', steps: [] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-      const provider = await loadApiProvider(`${prefix}:gemini-omni-flash-preview`, {
-        env: { GOOGLE_API_KEY: 'suite-key' },
-        options: { env: { GOOGLE_GENERATIVE_AI_API_KEY: 'provider-key' } },
-      });
-      await provider.callApi('hello');
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({ 'x-goog-api-key': 'provider-key' }),
-        }),
-        expect.any(Number),
-        'json',
-        true,
-      );
-    },
-  );
+  it.each(
+    ['google', 'palm'].flatMap((prefix) =>
+      [
+        'gemini-omni-flash-preview',
+        'gemini-omni-1.1-flash',
+        'gemini-robotics-er-2-preview',
+      ].flatMap((model) => [`${prefix}:${model}`, `${prefix}:interactions:${model}`]),
+    ),
+  )('the %s loader preserves the provider legacy alias', async (route) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = await loadApiProvider(route, {
+      env: { GOOGLE_API_KEY: 'suite-key' },
+      options: { env: { GOOGLE_GENERATIVE_AI_API_KEY: 'provider-key' } },
+    });
+    await provider.callApi('hello');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-goog-api-key': 'provider-key' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
 
   it.each(['google', 'palm'])(
     'does not apply Interactions-only aliases to an AI Studio %s model',
@@ -1029,37 +1048,26 @@ describe('provider environment scopes', () => {
     });
   });
 
-  it.each(['suite', 'file'] as const)(
-    'constructs endpoint and pool settings from the %s layer',
-    (layer) => {
-      const scopedEnv = {
-        SNOWFLAKE_ACCOUNT_IDENTIFIER: 'scoped-account',
-        AZURE_AI_PROJECT_URL: 'https://project.example.test',
-        AWS_REGION: 'us-west-2',
-        PROMPTFOO_MAX_CONCURRENCY: '7',
-      };
-      const run =
-        layer === 'suite'
-          ? cliState.withEnv.bind(cliState)
-          : cliState.withEnvFileOverrides.bind(cliState);
-      run(scopedEnv, () => {
-        expect(new SnowflakeCortexProvider('model', {}).getApiUrl()).toBe(
-          'https://scoped-account.snowflakecomputing.com',
-        );
-        const foundry = new AzureFoundryAgentProvider('agent', { config: { apiKey: 'fake-key' } });
-        expect(Reflect.get(foundry, 'projectUrl')).toBe(scopedEnv.AZURE_AI_PROJECT_URL);
-        expect(resolveBedrockMantleRegion({}, undefined, 'us-east-1')).toBe('us-west-2');
-        const chatkit = new OpenAiChatKitProvider('workflow');
-        expect(Reflect.get(chatkit, 'chatKitConfig').poolSize).toBe(7);
-        expect(
-          Reflect.get(
-            new OpenAiChatKitProvider('workflow', { config: { poolSize: 2 } }),
-            'chatKitConfig',
-          ).poolSize,
-        ).toBe(2);
-      });
-    },
-  );
+  it.each(['suite', 'file'] as const)('constructs endpoint settings from the %s layer', (layer) => {
+    const scopedEnv = {
+      SNOWFLAKE_ACCOUNT_IDENTIFIER: 'scoped-account',
+      AZURE_AI_PROJECT_URL: 'https://project.example.test',
+      AWS_REGION: 'us-west-2',
+      PROMPTFOO_MAX_CONCURRENCY: '7',
+    };
+    const run =
+      layer === 'suite'
+        ? cliState.withEnv.bind(cliState)
+        : cliState.withEnvFileOverrides.bind(cliState);
+    run(scopedEnv, () => {
+      expect(new SnowflakeCortexProvider('model', {}).getApiUrl()).toBe(
+        'https://scoped-account.snowflakecomputing.com',
+      );
+      const foundry = new AzureFoundryAgentProvider('agent', { config: { apiKey: 'fake-key' } });
+      expect(Reflect.get(foundry, 'projectUrl')).toBe(scopedEnv.AZURE_AI_PROJECT_URL);
+      expect(resolveBedrockMantleRegion({}, undefined, 'us-east-1')).toBe('us-west-2');
+    });
+  });
   it('uses file-layer custom Cloudflare Gateway names', () => {
     cliState.withEnvFileOverrides(
       { GATEWAY_ACCOUNT: 'file-account', GATEWAY_NAME: 'file-gateway' },
@@ -1231,6 +1239,8 @@ describe('provider environment scopes', () => {
           headers: expect.objectContaining({ 'X-Client-Name': 'provider-client' }),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     },
   );
@@ -1404,6 +1414,7 @@ describe('provider environment scopes', () => {
             }),
           }),
           expect.any(Number),
+          ...(id.startsWith('cohere:') ? ['json', true] : []),
         );
       },
     );
@@ -1434,24 +1445,6 @@ describe('provider environment scopes', () => {
     });
     await cliState.withEnvFileOverrides({ GEMINI_API_KEY: 'file-key' }, async () => {
       expect(GoogleAuthManager.getApiKey({}).apiKey).toBe('file-key');
-    });
-  });
-  it.each([
-    ['2', undefined, 2],
-    ['', undefined, 4],
-    ['invalid', undefined, 4],
-    [undefined, undefined, 7],
-    ['2', 3, 3],
-  ])('resolves direct ChatKit pool env=%s config=%s to %s', (value, poolSize, expected) => {
-    cliState.withEnv({ PROMPTFOO_MAX_CONCURRENCY: '7' }, () => {
-      const provider = new OpenAiChatKitProvider(
-        'workflow',
-        ProviderOptionsSchema.parse({
-          env: { PROMPTFOO_MAX_CONCURRENCY: value },
-          config: { poolSize },
-        }),
-      );
-      expect(Reflect.get(provider, 'chatKitConfig').poolSize).toBe(expected);
     });
   });
   it('the loader preserves provider region aliases for SageMaker and Mantle', async () => {

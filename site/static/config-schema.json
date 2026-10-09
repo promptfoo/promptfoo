@@ -300,6 +300,9 @@
         "COMETAPI_KEY": {
           "type": "string"
         },
+        "COHERE_API_BASE_URL": {
+          "type": "string"
+        },
         "COHERE_API_KEY": {
           "type": "string"
         },
@@ -598,6 +601,9 @@
           "type": "string"
         },
         "TOGETHER_API_KEY": {
+          "type": "string"
+        },
+        "TYPESAFE_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -3025,6 +3031,9 @@
           "type": "boolean"
         },
         "watch": {
+          "type": "boolean"
+        },
+        "safeMode": {
           "type": "boolean"
         },
         "filterErrorsOnly": {

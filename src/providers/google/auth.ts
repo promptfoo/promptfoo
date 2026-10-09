@@ -228,6 +228,10 @@ export class GoogleAuthManager {
     const useVertexEnv =
       env?.GOOGLE_GENAI_USE_VERTEXAI ?? getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
     const cloudProject = env?.GOOGLE_CLOUD_PROJECT ?? getEnvString('GOOGLE_CLOUD_PROJECT');
+    const hasProjectEnvironment = Boolean(
+      resolveProviderEnv(env, ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'])
+        ?.value,
+    );
 
     // SDK alignment: project/location and apiKey are mutually exclusive
     // Only applies to explicit config values, not env vars (matching SDK behavior)
@@ -267,7 +271,7 @@ export class GoogleAuthManager {
     }
 
     // Vertex mode requires either API key or project ID
-    if (vertexai && !apiKey && !projectId && !cloudProject && !credentials) {
+    if (vertexai && !apiKey && !projectId && !hasProjectEnvironment && !credentials) {
       const hasAdc = Boolean(
         env?.GOOGLE_APPLICATION_CREDENTIALS ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
       );
@@ -461,10 +465,9 @@ export class GoogleAuthManager {
    *
    * Priority:
    * 1. config.projectId
-   * 2. VERTEX_PROJECT_ID env var
-   * 3. GOOGLE_PROJECT_ID env var
-   * 4. GOOGLE_CLOUD_PROJECT env var (Python SDK compatibility)
-   * 5. Auto-detected from OAuth credentials
+   * 2. Provider-scoped VERTEX_PROJECT_ID / GOOGLE_PROJECT_ID / GOOGLE_CLOUD_PROJECT
+   * 3. Process-wide VERTEX_PROJECT_ID / GOOGLE_PROJECT_ID / GOOGLE_CLOUD_PROJECT
+   * 4. Auto-detected from OAuth credentials
    *
    * @param config - Provider configuration
    * @param env - Environment overrides
@@ -480,13 +483,6 @@ export class GoogleAuthManager {
     },
     env?: EnvOverrides,
   ): Promise<string> {
-    const { projectId: authProjectId } = await this.getOAuthClient({
-      credentials: config.credentials,
-      googleAuthOptions: config.googleAuthOptions,
-      keyFilename: config.keyFilename,
-      scopes: config.scopes,
-    });
-
     const project = resolveProviderEnv(env, [
       'VERTEX_PROJECT_ID',
       'GOOGLE_PROJECT_ID',
@@ -497,7 +493,18 @@ export class GoogleAuthManager {
         `[Google] ${project.name} is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.`,
       );
     }
-    return config.projectId || project?.value || authProjectId || '';
+    const configuredProjectId = config.projectId || project?.value;
+    if (configuredProjectId) {
+      return configuredProjectId;
+    }
+
+    const { projectId: authProjectId } = await this.getOAuthClient({
+      credentials: config.credentials,
+      googleAuthOptions: config.googleAuthOptions,
+      keyFilename: config.keyFilename,
+      scopes: config.scopes,
+    });
+    return authProjectId || '';
   }
 
   /**
@@ -505,19 +512,22 @@ export class GoogleAuthManager {
    *
    * Priority:
    * 1. config.region
-   * 2. VERTEX_REGION env var
-   * 3. GOOGLE_CLOUD_LOCATION env var (Python SDK compatibility)
-   * 4. Default: 'global' for Vertex AI without API key (SDK aligned), 'us-central1' otherwise
+   * 2. Provider-scoped VERTEX_REGION / GOOGLE_CLOUD_LOCATION overrides
+   * 3. Process-wide VERTEX_REGION / GOOGLE_CLOUD_LOCATION env vars
+   * 4. Model-specific fallback region
+   * 5. Default: 'global' for Vertex AI without API key (SDK aligned), 'us-central1' otherwise
    *
    * @param config - Provider configuration
    * @param env - Environment overrides
    * @param hasApiKey - Whether an API key is configured (affects default region)
+   * @param modelDefaultRegion - Model-specific fallback region
    * @returns Resolved region
    */
   static resolveRegion(
     config: { region?: string },
     env?: EnvOverrides,
     hasApiKey?: boolean,
+    modelDefaultRegion?: string,
   ): string {
     const region = resolveProviderEnv(env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION']);
     if (region?.name === 'VERTEX_REGION' && !config.region) {
@@ -529,6 +539,10 @@ export class GoogleAuthManager {
 
     if (configuredRegion) {
       return configuredRegion;
+    }
+
+    if (modelDefaultRegion) {
+      return modelDefaultRegion;
     }
 
     // SDK alignment: default to 'global' when Vertex AI mode without API key
