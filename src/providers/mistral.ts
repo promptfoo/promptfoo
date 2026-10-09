@@ -500,6 +500,19 @@ function calculateMistralCost(
   return tokenCost + (promptAudioSeconds / 60) * 0.004;
 }
 
+function resolveMistralApiKey(
+  provider: MistralChatCompletionProvider | MistralEmbeddingProvider,
+): string | undefined {
+  const namedKey = provider.config.apiKeyEnvar
+    ? (provider.env?.[provider.config.apiKeyEnvar] ??
+      getEnvString(provider.config.apiKeyEnvar as EnvVarKey))
+    : undefined;
+  return (
+    provider.config.apiKey ||
+    (namedKey ?? provider.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+  );
+}
+
 export class MistralChatCompletionProvider implements ApiProvider {
   modelName: string;
   config: MistralChatCompletionOptions;
@@ -544,13 +557,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
-      : undefined;
-    return (
-      this.config.apiKey ||
-      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
-    );
+    return resolveMistralApiKey(this);
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
@@ -776,13 +783,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
-      : undefined;
-    return (
-      this.config.apiKey ||
-      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
-    );
+    return resolveMistralApiKey(this);
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
