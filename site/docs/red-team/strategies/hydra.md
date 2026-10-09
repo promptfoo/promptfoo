@@ -62,6 +62,8 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 
 Grading history records attack contributions and observed replies. Stateful input attribution supports direct or trimmed interpolation in static prompt templates. Forwarding is established for built-in OpenAI chat, Responses, and completion requests without replacement `passthrough` inputs, or static HTTP POST/PUT/PATCH/DELETE body values consisting of a complete direct or trimmed interpolation, such as `{{prompt}}` or `{{user_context | trim}}`. Responses inputs must also remain unchanged by the provider's content-part normalization; ordinary role/content text messages are supported. Custom providers can report the exact sent prompt using `ProviderResponse.prompt`.
 
+Stateless runs also attribute generated text forwarded through separate body fields. Earlier turns are included only when the request actually forwards the replay payload.
+
 Generated inputs remain literal during prompt rendering. JSON-looking text stays unchanged unless the target request path parses that complete rendered value; then grading retains only the parsed value, including when trimming makes JSON parseable. JSON strings inside a parsed object remain literal, and input contents never redefine message roles.
 
 Text layers retain the verified transformed prompt and any generated variables independently forwarded through the target request. Uploading content to an indirect page does not establish that the target consumed it.
@@ -76,7 +78,7 @@ The grader's current user input also contains only attributed text. It is empty 
 
 Saved runs without verified history continue to grade only the current turn. Older history formats without complete rendering or transport verification are also excluded, and their stored verdicts are recomputed during regrading. Rerun these tests to record verified history for later regrading.
 
-COPPA, FERPA, and wordplay verdicts saved before conversation context was forwarded to their graders are recomputed using the existing verified history. Inputs already omitted from a saved history require a new run to capture them.
+COPPA, FERPA, and wordplay verdicts saved before conversation context was forwarded to their graders are recomputed using the existing verified history. Regrading cannot reconstruct fields missing from saved history, including previously omitted stateless body fields; run the red team again to capture them.
 
 Built-in providers require a response from a direct request to establish input delivery. Followed redirects are excluded, even when a redirect may preserve the request body, because the final response does not describe every redirect hop. Cached responses without this transport evidence also leave the input unattributed; run with `--no-cache` to record fresh evidence.
 

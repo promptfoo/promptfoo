@@ -540,7 +540,11 @@ export class HydraProvider implements ApiProvider {
 
       // Send to target (different based on stateful/stateless)
       let targetPrompt: string;
-      let injectedInputVars = { [this.injectVar]: processedMessage };
+      // Body fields can forward generated variables independently of replay.
+      let injectedInputVars = {
+        ...(currentRenderInputVars || {}),
+        [this.injectVar]: processedMessage,
+      };
       let renderVariables = vars;
 
       if (this.stateful) {

@@ -12,6 +12,7 @@ import {
 } from '../../src/redteam/grading/storedResult';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
+import preStatelessAttribution from '../redteam/providers/hydra/fixtures/pre-stateless-attribution.json';
 
 import type {
   Assertion,
@@ -1581,6 +1582,214 @@ describe('handleRedteam attributed current input', () => {
     },
   );
 });
+
+describe.each(['hydra', 'goblin'] as const)(
+  'handleRedteam %s stateless saved-record compatibility',
+  (strategy) => {
+    // These frozen responses lack user messages even though the captured HTTP body
+    // contained both inputs. Regrading cannot recover evidence absent from the record.
+    const fixture = preStatelessAttribution.cases[strategy];
+    const frozenResponse = fixture.response;
+    const oldStoredResult = frozenResponse.metadata.storedGraderResult;
+    const assertion: Assertion = { type: 'promptfoo:redteam:pii', metric: 'PIILeak' };
+    const test: AtomicTestCase = {
+      assert: [assertion],
+      provider: `promptfoo:redteam:${strategy}`,
+      metadata: {
+        pluginId: 'pii',
+        strategyId: `jailbreak:${strategy}`,
+        purpose: 'Protect private account contact information.',
+      },
+    };
+    // Model a new run using the separately captured wire values, without filling
+    // missing user messages from the old record's display-only attack fields.
+    const attributedPrompt = JSON.stringify({
+      question: fixture.requestBody.question,
+      user_context: fixture.requestBody.context,
+    });
+    const fullerMessages = [
+      { role: 'user', content: attributedPrompt },
+      ...frozenResponse.metadata.messages,
+    ];
+
+    function params(providerResponse: ProviderResponse): AssertionParams {
+      return {
+        assertion,
+        baseType: assertion.type,
+        test,
+        prompt: 'configured seed',
+        output: frozenResponse.output,
+        outputString: frozenResponse.output,
+        inverse: false,
+        providerResponse,
+        assertionValueContext: {
+          prompt: 'configured seed',
+          vars: {},
+          test,
+          provider: undefined,
+          providerResponse,
+          logProbs: undefined,
+        },
+      };
+    }
+
+    function mockContactGrader() {
+      return vi
+        .spyOn(RedteamGraderBase.prototype, 'getResult')
+        .mockImplementation(async (prompt, output) => {
+          const pass = prompt.includes(output);
+          return {
+            grade: {
+              pass,
+              score: pass ? 1 : 0,
+              reason: pass ? 'The user supplied the contact.' : 'No attributed user contact.',
+            },
+            rubric: 'Deterministic supplied-contact rubric',
+          };
+        });
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('reuses the frozen incomplete verdict without another judge call', async () => {
+      const getResult = mockContactGrader();
+      const providerResponse = structuredClone(frozenResponse);
+
+      const result = await handleRedteam(params(providerResponse));
+
+      expect(getResult).not.toHaveBeenCalled();
+      expect(result).toMatchObject(oldStoredResult);
+      expect(result.pass).toBe(false);
+      expect(providerResponse.metadata.redteamConversationHistoryVersion).toBe(3);
+      expect(providerResponse.metadata.messages).toEqual([
+        { role: 'assistant', content: frozenResponse.output },
+      ]);
+      expect(providerResponse.metadata).not.toHaveProperty('redteamCurrentTurnStart');
+      expect(getGradingAssertionHash(assertion)).toBe(
+        oldStoredResult.metadata.redteamGradingAssertionHash,
+      );
+      expect(
+        getGradingInputHash('', frozenResponse.output, providerResponse.metadata.messages, 'pii'),
+      ).toBe(oldStoredResult.metadata.redteamGradingInputHash);
+      expect(providerResponse).toEqual(frozenResponse);
+    });
+
+    it('keeps a forced fresh grade empty rather than recovering input from raw display', async () => {
+      const getResult = mockContactGrader();
+      const { storedGraderResult: _storedGraderResult, ...metadata } = frozenResponse.metadata;
+      const providerResponse = structuredClone({ ...frozenResponse, metadata });
+      const before = structuredClone(providerResponse);
+
+      const result = await handleRedteam(params(providerResponse));
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'No attributed user contact.',
+      });
+      expect(getResult).toHaveBeenCalledExactlyOnceWith(
+        '',
+        frozenResponse.output,
+        test,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { providerResponse, includeConversationTranscript: true },
+      );
+      expect(providerResponse.metadata.redteamFinalPrompt).toContain(frozenResponse.output);
+      expect(providerResponse).toEqual(before);
+    });
+
+    it('reuses a new verdict bound to fuller attributed input with the same history version', async () => {
+      const getResult = mockContactGrader();
+      const { storedGraderResult: _storedGraderResult, ...metadata } = frozenResponse.metadata;
+      const providerResponse = structuredClone({
+        ...frozenResponse,
+        metadata: { ...metadata, messages: fullerMessages },
+      });
+      const freshResult = await handleRedteam(params(providerResponse));
+      const newHash = getGradingInputHash(
+        attributedPrompt,
+        frozenResponse.output,
+        fullerMessages,
+        'pii',
+      );
+
+      expect(freshResult).toMatchObject({ pass: true, score: 1 });
+      expect(getResult).toHaveBeenCalledOnce();
+      expect(getResult.mock.calls[0][0]).toBe(attributedPrompt);
+      expect(getResult.mock.calls[0][7]?.conversationTranscript).toBe('');
+      expect(newHash).not.toBe(oldStoredResult.metadata.redteamGradingInputHash);
+      getResult.mockClear();
+      const savedResponse = structuredClone({
+        ...providerResponse,
+        metadata: {
+          ...providerResponse.metadata,
+          storedGraderResult: {
+            ...freshResult,
+            metadata: {
+              ...freshResult.metadata,
+              redteamGradingAssertionHash: getGradingAssertionHash(assertion),
+              redteamGradingInputHash: newHash,
+            },
+          },
+        },
+      });
+      const before = structuredClone(savedResponse);
+
+      const reusedResult = await handleRedteam(params(savedResponse));
+
+      expect(reusedResult).toMatchObject({ pass: true, score: 1 });
+      expect(reusedResult.metadata?.redteamGradingInputHash).toBe(newHash);
+      expect(getResult).not.toHaveBeenCalled();
+      expect(savedResponse.metadata.redteamConversationHistoryVersion).toBe(3);
+      expect(savedResponse).toEqual(before);
+    });
+
+    it.each([
+      { name: 'an incomplete hash for fuller evidence', hasFullerEvidence: true },
+      { name: 'a fuller hash for incomplete evidence', hasFullerEvidence: false },
+    ])('rejects $name', async ({ hasFullerEvidence }) => {
+      const getResult = mockContactGrader();
+      const newHash = getGradingInputHash(
+        attributedPrompt,
+        frozenResponse.output,
+        fullerMessages,
+        'pii',
+      );
+      const providerResponse = structuredClone({
+        ...frozenResponse,
+        metadata: {
+          ...frozenResponse.metadata,
+          messages: hasFullerEvidence ? fullerMessages : frozenResponse.metadata.messages,
+          storedGraderResult: {
+            ...oldStoredResult,
+            pass: !hasFullerEvidence,
+            score: hasFullerEvidence ? 0 : 1,
+            metadata: {
+              ...oldStoredResult.metadata,
+              redteamGradingInputHash: hasFullerEvidence
+                ? oldStoredResult.metadata.redteamGradingInputHash
+                : newHash,
+            },
+          },
+        },
+      });
+      const before = structuredClone(providerResponse);
+
+      const result = await handleRedteam(params(providerResponse));
+
+      expect(getResult).toHaveBeenCalledOnce();
+      expect(getResult.mock.calls[0][0]).toBe(hasFullerEvidence ? attributedPrompt : '');
+      expect(result.pass).toBe(hasFullerEvidence);
+      expect(result.score).toBe(hasFullerEvidence ? 1 : 0);
+      expect(providerResponse).toEqual(before);
+    });
+  },
+);
 
 describe('handleRedteam', () => {
   afterEach(() => {
